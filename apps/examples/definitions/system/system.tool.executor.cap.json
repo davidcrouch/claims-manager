@@ -1,0 +1,63 @@
+{
+  "name": "system.tool.executor",
+  "display_name": "System Tool Executor",
+  "type": "tool",
+  "version": "1.0.0",
+  "description": "Dynamically resolves and invokes a tool capability by name. Used by agent workflows to execute LLM-requested tool calls.",
+  "tags": [
+    "system",
+    "tool",
+    "executor",
+    "agent"
+  ],
+  "isSystem": true,
+  "methods": {
+    "info": {
+      "description": "Tool executor capability metadata",
+      "channels": [
+        "sync"
+      ]
+    },
+    "execute": {
+      "description": "Resolve a tool by name and invoke it with the provided arguments",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "required": [
+          "tool_name",
+          "tool_call_id"
+        ],
+        "properties": {
+          "tool_name": {
+            "type": "string",
+            "description": "Fully-qualified or unqualified tool capability name"
+          },
+          "tool_call_id": {
+            "type": "string",
+            "description": "LLM-assigned tool call identifier"
+          },
+          "arguments": {
+            "type": "object",
+            "description": "Arguments to pass to the tool"
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "tool_call_id": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

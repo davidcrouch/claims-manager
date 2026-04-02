@@ -1,0 +1,38 @@
+{
+  "name": "workspace.runner-execution",
+  "display_name": "Runner Execution",
+  "type": "workspace",
+  "version": "1.0.0",
+  "description": "Execution workspace for inline-ts and inline-py runners. Maps to the structured execution directory on the worker node. Contains pre-installed node_modules, per-dependency cached installs, Python venvs, and per-invocation execution directories.",
+  "tags": [
+    "workspace",
+    "runner",
+    "execution",
+    "internal"
+  ],
+  "store_type": "fs",
+  "config": {
+    "inline_ts_root": "/opt/inline-ts",
+    "inline_py_root": "/opt/inline-py"
+  },
+  "methods": {
+    "info": {
+      "description": "Returns runner execution workspace configuration.",
+      "semantics": "query",
+      "channels": [
+        "sync"
+      ],
+      "output": {
+        "type": "object",
+        "properties": {
+          "store_type": {
+            "type": "string"
+          },
+          "config": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  }
+}

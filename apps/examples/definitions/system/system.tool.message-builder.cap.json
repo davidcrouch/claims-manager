@@ -1,0 +1,53 @@
+{
+  "name": "system.tool.message-builder",
+  "display_name": "System Tool Message Builder",
+  "type": "tool",
+  "version": "1.0.0",
+  "description": "Appends assistant tool-call messages and tool results to a conversation history. Used by agent workflows to maintain message state across tool-calling iterations.",
+  "tags": [
+    "system",
+    "tool",
+    "message",
+    "agent"
+  ],
+  "isSystem": true,
+  "methods": {
+    "info": {
+      "description": "Message builder capability metadata",
+      "channels": [
+        "sync"
+      ]
+    },
+    "append": {
+      "description": "Append assistant message and tool results to the message history",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "required": [
+          "messages",
+          "tool_results"
+        ],
+        "properties": {
+          "messages": {
+            "type": "array",
+            "description": "Existing conversation messages"
+          },
+          "assistant_message": {
+            "type": "object",
+            "description": "The assistant message containing tool_calls"
+          },
+          "tool_results": {
+            "type": "array",
+            "description": "Array of tool execution results"
+          }
+        }
+      },
+      "output": {
+        "type": "array",
+        "description": "Updated message array with assistant and tool messages appended"
+      }
+    }
+  }
+}

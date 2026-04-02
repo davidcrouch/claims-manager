@@ -1,0 +1,40 @@
+{
+  "name": "workspace.default",
+  "display_name": "Default",
+  "type": "workspace",
+  "version": "1.0.0",
+  "description": "Default agent workspace for file operations. Maps to a local filesystem directory. All file paths are resolved relative to the workspace root with traversal protection.",
+  "tags": [
+    "workspace",
+    "filesystem",
+    "default"
+  ],
+  "store_type": "fs",
+  "providerRef": "more0ai/tool.os.filesystem",
+  "config": {
+    "root": "/workspaces"
+  },
+  "methods": {
+    "info": {
+      "description": "Returns workspace configuration (store_type, config, providerRef).",
+      "semantics": "query",
+      "channels": [
+        "sync"
+      ],
+      "output": {
+        "type": "object",
+        "properties": {
+          "store_type": {
+            "type": "string"
+          },
+          "config": {
+            "type": "object"
+          },
+          "providerRef": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

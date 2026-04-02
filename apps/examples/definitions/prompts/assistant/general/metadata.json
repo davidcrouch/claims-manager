@@ -1,0 +1,49 @@
+{
+  "name": "prompt.assistant.general",
+  "display_name": "General Prompt",
+  "type": "prompt",
+  "version": "1.0.0",
+  "description": "General-purpose system prompt for the assistant agent",
+  "tags": [
+    "assistant",
+    "general",
+    "conversation"
+  ],
+  "category": "assistant",
+  "parameters": [],
+  "definitions": [
+    "prompt.md"
+  ],
+  "methods": {
+    "render": {
+      "description": "Render the prompt template with provided parameters",
+      "semantics": "declarative",
+      "input": {
+        "type": "object",
+        "properties": {
+          "parameters": {
+            "type": "object"
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "info": {
+      "description": "Get prompt metadata",
+      "semantics": "informational"
+    }
+  }
+}

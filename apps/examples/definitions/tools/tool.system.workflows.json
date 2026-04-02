@@ -1,0 +1,328 @@
+{
+   "name": "tool.system.workflows",
+   "display_name": "System Workflows",
+   "type": "tool",
+   "version": "1.0.0",
+   "description": "Manage workflow definitions in the capability registry. A workflow is a state machine (ASL format) that orchestrates tool calls and agent invocations in a defined sequence with branching, parallel execution, and error handling. Workflows reference tools and agents by name.",
+   "tags": [
+      "system",
+      "management",
+      "workflows"
+   ],
+   "methods": {
+      "info": {
+         "description": "Tool capability metadata",
+         "channels": [
+            "sync"
+         ]
+      },
+      "create": {
+         "description": "Create a workflow definition. A workflow is an ASL (Amazon States Language) state machine that orchestrates steps: tool calls, agent invocations, branching (Choice), parallel execution, and error handling. Each state references a tool or agent by name via the 'Resource' field. Example: a state { Type: 'Task', Resource: 'tool.math.operations', Parameters: { method: 'add', a.$: '$.x', b.$: '$.y' } } calls the add method.",
+         "input": {
+            "type": "object",
+            "properties": {
+               "app": {
+                  "type": "string",
+                  "description": "App key that owns this workflow. Example: 'my-app'"
+               },
+               "name": {
+                  "type": "string",
+                  "description": "Workflow name. Example: 'workflow.support.ticket-flow'"
+               },
+               "description": {
+                  "type": "string",
+                  "description": "What the workflow does. Example: 'Triage a support ticket then route to the correct team'"
+               },
+               "asl": {
+                  "type": "object",
+                  "description": "Full Amazon States Language (ASL) workflow definition. Must include StartAt (string: entry state name) and States (object: state name to state definition). May include Comment, TimeoutSeconds, and other ASL top-level fields. State types include Task, Choice, Parallel, Pass, Wait, Fail, Succeed."
+               },
+               "input_schema": {
+                  "type": "object",
+                  "description": "Optional JSON Schema for workflow input"
+               },
+               "output_schema": {
+                  "type": "object",
+                  "description": "Optional JSON Schema for workflow output"
+               },
+               "tags": {
+                  "type": "array",
+                  "items": {
+                     "type": "string"
+                  },
+                  "description": "Optional tags for discovery"
+               },
+               "version": {
+                  "type": "object",
+                  "properties": {
+                     "major": {
+                        "type": "number"
+                     },
+                     "minor": {
+                        "type": "number"
+                     },
+                     "patch": {
+                        "type": "number"
+                     }
+                  },
+                  "description": "Optional version. Defaults to 1.0.0 if omitted."
+               }
+            },
+            "required": [
+               "app",
+               "name",
+               "description",
+               "asl"
+            ]
+         },
+         "output": {
+            "type": "object",
+            "properties": {
+               "cap": {
+                  "type": "string"
+               },
+               "name": {
+                  "type": "string"
+               },
+               "version": {
+                  "type": "string"
+               },
+               "action": {
+                  "type": "string"
+               },
+               "error": {
+                  "type": "string"
+               }
+            }
+         },
+         "semantics": "work",
+         "channels": [
+            "sync"
+         ]
+      },
+      "get": {
+         "description": "Get full details of a workflow definition by name.",
+         "input": {
+            "type": "object",
+            "properties": {
+               "name": {
+                  "type": "string",
+                  "description": "Workflow name or capability reference. Example: 'workflow.support.ticket-flow'"
+               }
+            },
+            "required": [
+               "name"
+            ]
+         },
+         "output": {
+            "type": "object",
+            "properties": {
+               "cap": {
+                  "type": "string"
+               },
+               "name": {
+                  "type": "string"
+               },
+               "description": {
+                  "type": "string"
+               },
+               "version": {
+                  "type": "string"
+               },
+               "tags": {
+                  "type": "array",
+                  "items": {
+                     "type": "string"
+                  }
+               },
+               "methods": {
+                  "type": "array"
+               },
+               "error": {
+                  "type": "string"
+               }
+            }
+         },
+         "semantics": "informational",
+         "channels": [
+            "sync"
+         ]
+      },
+      "list": {
+         "description": "List workflow definitions. Optionally filter by app or tags.",
+         "input": {
+            "type": "object",
+            "properties": {
+               "app": {
+                  "type": "string",
+                  "description": "Filter by app key"
+               },
+               "tags": {
+                  "type": "array",
+                  "items": {
+                     "type": "string"
+                  },
+                  "description": "Filter by tags"
+               },
+               "query": {
+                  "type": "string",
+                  "description": "Free-text search query"
+               }
+            }
+         },
+         "output": {
+            "type": "object",
+            "properties": {
+               "workflows": {
+                  "type": "array",
+                  "items": {
+                     "type": "object",
+                     "properties": {
+                        "cap": {
+                           "type": "string"
+                        },
+                        "name": {
+                           "type": "string"
+                        },
+                        "description": {
+                           "type": "string"
+                        },
+                        "tags": {
+                           "type": "array",
+                           "items": {
+                              "type": "string"
+                           }
+                        },
+                        "version": {
+                           "type": "string"
+                        }
+                     }
+                  }
+               },
+               "total": {
+                  "type": "number"
+               },
+               "error": {
+                  "type": "string"
+               }
+            }
+         },
+         "semantics": "informational",
+         "channels": [
+            "sync"
+         ]
+      },
+      "update": {
+         "description": "Update an existing workflow definition. Provide only the fields you want to change. The version patch number is auto-incremented.",
+         "input": {
+            "type": "object",
+            "properties": {
+               "app": {
+                  "type": "string",
+                  "description": "App key. Example: 'my-app'"
+               },
+               "name": {
+                  "type": "string",
+                  "description": "Workflow name to update"
+               },
+               "description": {
+                  "type": "string",
+                  "description": "Updated description (optional)"
+               },
+               "asl": {
+                  "type": "object",
+                  "description": "Updated full ASL definition (optional; replaces stored workflow definition)"
+               },
+               "tags": {
+                  "type": "array",
+                  "items": {
+                     "type": "string"
+                  },
+                  "description": "Updated tags (optional)"
+               }
+            },
+            "required": [
+               "app",
+               "name"
+            ]
+         },
+         "output": {
+            "type": "object",
+            "properties": {
+               "cap": {
+                  "type": "string"
+               },
+               "name": {
+                  "type": "string"
+               },
+               "version": {
+                  "type": "string"
+               },
+               "action": {
+                  "type": "string"
+               },
+               "error": {
+                  "type": "string"
+               }
+            }
+         },
+         "semantics": "work",
+         "channels": [
+            "sync"
+         ]
+      },
+      "delete": {
+         "description": "Deprecate a workflow definition.",
+         "input": {
+            "type": "object",
+            "properties": {
+               "name": {
+                  "type": "string",
+                  "description": "Workflow name or capability reference"
+               },
+               "reason": {
+                  "type": "string",
+                  "description": "Reason for deprecation"
+               }
+            },
+            "required": [
+               "name",
+               "reason"
+            ]
+         },
+         "output": {
+            "type": "object",
+            "properties": {
+               "success": {
+                  "type": "boolean"
+               },
+               "affected_versions": {
+                  "type": "array",
+                  "items": {
+                     "type": "string"
+                  }
+               },
+               "error": {
+                  "type": "string"
+               }
+            }
+         },
+         "semantics": "work",
+         "channels": [
+            "sync"
+         ]
+      }
+   },
+   "implementation": {
+      "kind": "ts-module",
+      "entrypoint": "implementations/workflows.ts",
+      "execution": {
+         "kind": "inline-ts",
+         "config": {
+            "npm_packages": [
+               "@more0ai/client@workspace:*"
+            ]
+         }
+      }
+   }
+}

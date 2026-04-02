@@ -1,0 +1,8 @@
+{
+  "id": "550e8400-e29b-41d4-a716-446655440001",
+  "claimNumber": "CLM-2026-001",
+  "externalReference": "ext-claim-001",
+  "status": { "id": "status-1", "name": "Open", "externalReference": "OPEN" },
+  "account": { "id": "acc-1", "name": "Test Account", "externalReference": "ACC001" },
+  "address": { "postcode": "2000", "suburb": "Sydney", "state": "NSW" }
+}

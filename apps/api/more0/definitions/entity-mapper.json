@@ -1,0 +1,52 @@
+{
+  "name": "tool.claims-manager.entity-mapper",
+  "display_name": "Entity Mapper",
+  "type": "tool",
+  "version": "1.0.0",
+  "description": "Map an external object to an internal entity. Dispatches to the correct CW mapper based on entity type.",
+  "tags": ["claims-manager", "mapper", "projection"],
+  "methods": {
+    "info": {
+      "description": "Tool capability metadata",
+      "channels": ["sync"]
+    },
+    "execute": {
+      "description": "Map external object to internal entity record",
+      "input": {
+        "type": "object",
+        "properties": {
+          "externalObjectId": { "type": "string" },
+          "tenantId": { "type": "string" },
+          "connectionId": { "type": "string" },
+          "entityType": {
+            "type": "string",
+            "enum": ["job", "claim", "purchase_order", "invoice", "task", "message", "attachment"]
+          }
+        },
+        "required": ["externalObjectId", "tenantId", "connectionId", "entityType"]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "internalEntityId": { "type": "string" },
+          "internalEntityType": { "type": "string" }
+        }
+      },
+      "semantics": "work",
+      "channels": ["sync"]
+    }
+  },
+  "implementation": {
+    "kind": "http",
+    "entrypoint": "{CLAIMS_MANAGER_BASE_URL}/api/v1/tools/mappers/{entityType}",
+    "execution": {
+      "kind": "external-http",
+      "config": {
+        "method": "POST",
+        "headers": {
+          "X-Tool-Secret": "{TOOL_SECRET}"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+---
+description: Crunchwork Insurance REST API — consult official PDF spec (v17)
+globs:
+  - "apps/api/src/crunchwork/**"
+  - "apps/api/src/config/crunchwork.config.ts"
+  - "apps/api/src/modules/external/mappers/crunchwork*.ts"
+  - "docs/implementation/05_CRUNCHWORK_CLIENT.md"
+alwaysApply: false
+---
+
+# Crunchwork Insurance REST API
+
+Work that touches the **Crunchwork Insurance REST API** (endpoints, payloads, auth, entity types, pagination, errors, or versioning) must be aligned with the canonical specification.
+
+## Required reference
+
+- **Open and use** `@docs/Insurance REST API-v17-20260304_100318.pdf` when designing, implementing, or changing Crunchwork integration code (including client calls, DTOs, mappers, and webhook handling that reflects API shapes).
+
+Do not rely on memory or informal notes for request/response fields, HTTP methods, or resource paths when that PDF defines the contract.
+
+## Scope note
+
+This rule attaches when the globs above match. If you are editing other files (for example services that call `CrunchworkService`) and the change is **about Crunchwork REST behavior**, manually **@** mention `docs/Insurance REST API-v17-20260304_100318.pdf` (or this rule) so the spec stays in context.

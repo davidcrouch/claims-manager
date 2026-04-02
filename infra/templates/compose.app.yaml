@@ -1,0 +1,103 @@
+# More0AI Application Template
+#
+# Copy this to your application directory and customize.
+# IMPORTANT: Replace ${APP_NAME} with your app's unique name throughout this file.
+#
+# Prerequisites:
+#   Start shared infrastructure first:
+#     cd ../infrastructure && ./start.sh
+#
+# Usage:
+#   docker compose up -d
+
+services:
+    app:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        image: ${APP_NAME:-more0ai-app}/app
+        hostname: ${APP_NAME:-more0ai-app}  # Unique hostname on shared network
+        ports:
+            - '${APP_PORT:-8001}:80'
+        environment:
+            # Database
+            DB_CONNECTION: pgsql
+            DB_HOST: pgsql
+            DB_PORT: 5432
+            DB_DATABASE: ${DB_DATABASE:-your_database}
+            DB_USERNAME: ${DB_USERNAME:-more0ai}
+            DB_PASSWORD: ${DB_PASSWORD:-secret}
+            # Redis
+            REDIS_HOST: redis
+            REDIS_PORT: 6379
+            # MinIO
+            AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-sail}
+            AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-password}
+            AWS_DEFAULT_REGION: us-east-1
+            AWS_BUCKET: ${AWS_BUCKET:-your-bucket}
+            AWS_ENDPOINT: http://minio:9000
+            AWS_USE_PATH_STYLE_ENDPOINT: true
+            # Email
+            MAIL_MAILER: smtp
+            MAIL_HOST: mailpit
+            MAIL_PORT: 1025
+            # OpenTelemetry
+            OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+            OTEL_SERVICE_NAME: ${APP_NAME:-more0ai-app}
+            # Reverb (use unique hostname)
+            REVERB_SERVER_HOST: ${APP_NAME:-more0ai-app}-reverb
+        volumes:
+            - '.:/var/www/html'
+        networks:
+            more0ai-infra:
+                aliases:
+                    - ${APP_NAME:-more0ai-app}
+
+    # Queue worker (if using Horizon)
+    horizon:
+        image: ${APP_NAME:-more0ai-app}/app
+        hostname: ${APP_NAME:-more0ai-app}-horizon  # Unique hostname
+        command: php artisan horizon
+        environment:
+            DB_HOST: pgsql
+            DB_DATABASE: ${DB_DATABASE:-your_database}
+            DB_USERNAME: ${DB_USERNAME:-more0ai}
+            DB_PASSWORD: ${DB_PASSWORD:-secret}
+            REDIS_HOST: redis
+        volumes:
+            - '.:/var/www/html'
+        networks:
+            more0ai-infra:
+                aliases:
+                    - ${APP_NAME:-more0ai-app}-horizon
+        depends_on:
+            - app
+        restart: unless-stopped
+
+    # WebSocket server (if using Reverb)
+    reverb:
+        image: ${APP_NAME:-more0ai-app}/app
+        hostname: ${APP_NAME:-more0ai-app}-reverb  # Unique hostname - CRITICAL for multi-app
+        command: php artisan reverb:start --host=0.0.0.0 --port=8080
+        ports:
+            - '${REVERB_PORT:-8080}:8080'
+        environment:
+            DB_HOST: pgsql
+            REDIS_HOST: redis
+            REVERB_APP_ID: '${REVERB_APP_ID}'
+            REVERB_APP_KEY: '${REVERB_APP_KEY}'
+            REVERB_APP_SECRET: '${REVERB_APP_SECRET}'
+        volumes:
+            - '.:/var/www/html'
+        networks:
+            more0ai-infra:
+                aliases:
+                    - ${APP_NAME:-more0ai-app}-reverb  # Apps connect via this name
+        depends_on:
+            - app
+        restart: unless-stopped
+
+networks:
+    more0ai-infra:
+        external: true
+        name: more0ai-infra

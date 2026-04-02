@@ -1,0 +1,108 @@
+{
+  "name": "tool.system.apps",
+  "display_name": "System Apps",
+  "type": "tool",
+  "version": "1.0.0",
+  "description": "Manage applications in the capability registry. An application is a namespace that groups related capabilities (tools, agents, prompts, models, workflows). Every capability belongs to an app. You must create an app before creating capabilities within it.",
+  "tags": [
+    "system",
+    "management",
+    "apps"
+  ],
+  "methods": {
+    "info": {
+      "description": "Tool capability metadata",
+      "channels": [
+        "sync"
+      ]
+    },
+    "create": {
+      "description": "Create a new application. An application is a namespace that groups related capabilities. Every capability belongs to an app. You must create an app before creating capabilities within it. Example: create app with app_key='my-support-app', display_name='My Support App'.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "app_key": {
+            "type": "string",
+            "description": "Unique app identifier. Lowercase, hyphens allowed. Example: 'my-support-app'"
+          },
+          "display_name": {
+            "type": "string",
+            "description": "Human-readable name. Example: 'My Support App'"
+          }
+        },
+        "required": [
+          "app_key"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "app_key": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "semantics": "work",
+      "channels": [
+        "sync"
+      ]
+    },
+    "list": {
+      "description": "List all registered applications.",
+      "input": {
+        "type": "object",
+        "properties": {}
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "apps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "app_key": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "created_at": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "semantics": "informational",
+      "channels": [
+        "sync"
+      ]
+    }
+  },
+  "implementation": {
+    "kind": "ts-module",
+    "entrypoint": "implementations/apps.ts",
+    "execution": {
+      "kind": "inline-ts",
+      "config": {
+        "npm_packages": [
+          "@more0ai/client@workspace:*"
+        ]
+      }
+    }
+  }
+}

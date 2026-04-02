@@ -1,0 +1,72 @@
+{
+  "name": "schema.llm.chat-input",
+  "display_name": "LLM Chat Input",
+  "type": "schema",
+  "version": "1.0.0",
+  "description": "Shared input schema for LLM chat completion methods across providers",
+  "tags": [
+    "llm",
+    "chat",
+    "validation",
+    "provider"
+  ],
+  "definitions": [
+    "metadata.json"
+  ],
+  "methods": {
+    "validate": {
+      "description": "Validate chat completion input parameters",
+      "semantics": "query",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "description": "Data to validate against the chat input schema"
+          }
+        },
+        "required": [
+          "data"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "valid": {
+            "type": "boolean"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "description": "Get schema definition and metadata",
+      "semantics": "query",
+      "channels": [
+        "sync"
+      ],
+      "output": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "definition": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  }
+}

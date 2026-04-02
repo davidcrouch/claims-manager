@@ -1,0 +1,43 @@
+{
+  "name": "provider.llm.openai",
+  "display_name": "OpenAI LLM Provider",
+  "type": "provider",
+  "version": "1.0.0",
+  "description": "OpenAI chat completion provider implemented as inline Python. Supports GPT-4o, GPT-4o-mini, o1, and other OpenAI models.",
+  "tags": [
+    "provider",
+    "openai",
+    "llm",
+    "inline-py"
+  ],
+  "isSystem": false,
+  "methods": {
+    "chat": {
+      "description": "Chat completion via OpenAI API (sync or streaming by channel)",
+      "channels": [
+        "sync",
+        "stream"
+      ],
+      "inputSchema": "schema.llm.chat-input",
+      "outputSchema": "schema.llm.chat-output"
+    },
+    "info": {
+      "description": "Provider metadata: supported models and features",
+      "channels": [
+        "sync"
+      ]
+    }
+  },
+  "implementation": {
+    "kind": "python-module",
+    "entrypoint": "openai_provider.py",
+    "execution": {
+      "kind": "inline-py",
+      "config": {
+        "pip_packages": [
+          "openai"
+        ]
+      }
+    }
+  }
+}

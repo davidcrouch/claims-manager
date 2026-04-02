@@ -1,0 +1,102 @@
+{
+  "name": "system.registry.resolve",
+  "display_name": "System Registry Resolve",
+  "type": "tool",
+  "version": "1.0.0",
+  "description": "Resolves a capability reference to a NATS subject and server URL. This is the only capability returned by bootstrap — all other capabilities are resolved through it.",
+  "tags": [
+    "platform",
+    "registry",
+    "system",
+    "bootstrap"
+  ],
+  "isSystem": true,
+  "methods": {
+    "info": {
+      "description": "Registry resolve capability metadata",
+      "channels": [
+        "sync"
+      ]
+    },
+    "resolve": {
+      "description": "Resolve a capability reference to a NATS subject and server URL",
+      "semantics": "query",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "cap": {
+            "type": "string",
+            "description": "Capability reference (e.g. more0ai/system.registry)"
+          },
+          "ver": {
+            "type": "string",
+            "description": "Optional version constraint (e.g. ^1, 1.0.0)"
+          },
+          "ctx": {
+            "type": "object",
+            "properties": {
+              "tenantId": {
+                "type": "string"
+              },
+              "env": {
+                "type": "string"
+              },
+              "aud": {
+                "type": "string"
+              },
+              "features": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "includeMethods": {
+            "type": "boolean",
+            "description": "Include method list in response"
+          },
+          "includeSchemas": {
+            "type": "boolean",
+            "description": "Include method schemas in response"
+          }
+        },
+        "required": [
+          "cap"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "canonicalIdentity": {
+            "type": "string"
+          },
+          "natsUrl": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "major": {
+            "type": "integer"
+          },
+          "resolvedVersion": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "ttlSeconds": {
+            "type": "integer"
+          },
+          "etag": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

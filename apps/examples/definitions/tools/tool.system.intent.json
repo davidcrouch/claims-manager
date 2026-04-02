@@ -1,0 +1,101 @@
+{
+  "name": "tool.system.intent",
+  "display_name": "System Intent",
+  "type": "tool",
+  "version": "1.0.0",
+  "description": "Discover relevant tools by describing what you want to accomplish. Uses semantic search across all registered capability methods to find tools that match your intent. Call this when you need a capability you don't already have in your tool list.",
+  "tags": [
+    "system",
+    "discovery",
+    "intent",
+    "search",
+    "tools"
+  ],
+  "methods": {
+    "info": {
+      "description": "Tool capability metadata",
+      "channels": [
+        "sync"
+      ]
+    },
+    "search": {
+      "description": "Describe what you want to accomplish in natural language. Returns relevant capability methods (tools, workflows, agents) ranked by semantic similarity. The discovered tools will be automatically added to your available tool list. Example: search({intent: 'read and parse a CSV file'}) might return tool.os.filesystem::read and tool.data.csv::parse.",
+      "input": {
+        "type": "object",
+        "required": [
+          "intent"
+        ],
+        "properties": {
+          "intent": {
+            "type": "string",
+            "description": "What you want to do, described naturally. Be specific about the task. Example: 'send an email with an attachment' or 'query a PostgreSQL database for user records'."
+          },
+          "type": {
+            "type": "string",
+            "description": "Optionally restrict to a capability type: 'tool', 'agent', 'workflow', 'model', 'prompt'. Omit to search all types."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Maximum number of tools to return. Default 6."
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "tools_found": {
+            "type": "number",
+            "description": "Number of relevant tools discovered"
+          },
+          "tools": {
+            "type": "array",
+            "description": "Discovered tools, ranked by relevance. These have been added to your available tool list — you can call them directly in subsequent turns.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "ref": {
+                  "type": "string",
+                  "description": "Tool reference in cap::method format"
+                },
+                "description": {
+                  "type": "string",
+                  "description": "What this tool method does"
+                },
+                "similarity": {
+                  "type": "number",
+                  "description": "Relevance score 0.0-1.0"
+                }
+              }
+            }
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable summary"
+          }
+        }
+      },
+      "semantics": "informational",
+      "channels": [
+        "sync"
+      ]
+    },
+    "health": {
+      "description": "Check intent search health and embedding index status",
+      "channels": [
+        "sync"
+      ]
+    }
+  },
+  "implementation": {
+    "kind": "ts-module",
+    "entrypoint": "implementations/intent.ts",
+    "execution": {
+      "kind": "inline-ts",
+      "config": {
+        "npm_packages": [
+          "@more0ai/client@workspace:*"
+        ]
+      }
+    }
+  }
+}

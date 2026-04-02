@@ -1,0 +1,44 @@
+{
+  "name": "model.assistant.openai",
+  "display_name": "OpenAI GPT-4o Mini",
+  "type": "model",
+  "version": "1.0.0",
+  "description": "OpenAI gpt-4o-mini for the general assistant agent",
+  "tags": [
+    "assistant",
+    "openai",
+    "conversation"
+  ],
+  "providerRef": "more0ai/provider.llm.openai",
+  "modelId": "gpt-4o-mini",
+  "parameters": {
+    "temperature": 0.7,
+    "max_tokens": 4096
+  },
+  "methods": {
+    "info": {
+      "description": "Get model configuration and parameters",
+      "semantics": "informational",
+      "output": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "providerRef": {
+            "type": "string"
+          },
+          "modelId": {
+            "type": "string"
+          },
+          "llm": {
+            "type": "string"
+          },
+          "parameters": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  }
+}

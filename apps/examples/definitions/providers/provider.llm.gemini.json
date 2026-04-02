@@ -1,0 +1,68 @@
+{
+  "name": "provider.llm.gemini",
+  "display_name": "Gemini LLM Provider",
+  "type": "provider",
+  "version": "1.0.0",
+  "description": "Google Gemini chat completion provider implemented as inline Python. Supports Gemini 1.5 Flash/Pro, 2.0, and other Gemini models.",
+  "tags": [
+    "provider",
+    "gemini",
+    "google",
+    "llm",
+    "inline-py"
+  ],
+  "isSystem": false,
+  "methods": {
+    "chat": {
+      "description": "Synchronous chat completion via Gemini API",
+      "channels": [
+        "sync"
+      ],
+      "inputSchema": "schema.llm.chat-input",
+      "outputSchema": "schema.llm.chat-output"
+    },
+    "stream": {
+      "description": "Streaming chat completion via Gemini API",
+      "channels": [
+        "sync",
+        "stream"
+      ],
+      "input": {
+        "type": "object",
+        "required": [
+          "modelId",
+          "messages"
+        ],
+        "properties": {
+          "modelId": {
+            "type": "string"
+          },
+          "messages": {
+            "type": "array"
+          },
+          "parameters": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "info": {
+      "description": "Provider metadata: supported models and features",
+      "channels": [
+        "sync"
+      ]
+    }
+  },
+  "implementation": {
+    "kind": "python-module",
+    "entrypoint": "gemini_provider.py",
+    "execution": {
+      "kind": "inline-py",
+      "config": {
+        "pip_packages": [
+          "google-generativeai"
+        ]
+      }
+    }
+  }
+}

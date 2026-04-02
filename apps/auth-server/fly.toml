@@ -1,0 +1,104 @@
+app = "morezero-auth-server"
+primary_region = "syd"
+
+[env]
+ PORT = "4000"
+  NODE_ENV = "production"
+  HOST = "0.0.0.0"
+  OIDC_ISSUER = "https://morezero-auth-server.fly.dev"
+  JWT_SECRET = "d3c6255ece6129f44b123d7d7eac73ada6ff2a3c6a9c17b7c67d1469070b4673bba010dced7291ce8eb39eed0e72f364559b77f5cff02f7e7e5cac803f296627"
+  JWT_PUBLIC_KEY_N = "oLGOBt7W-LlayVvGSfCpdqpClU1s20zCQ-P72OAnf0cQX8oyNRM0aIQ3EwfMUjosZJP99oCiAtAs3oNVdLoRQdzcvbZrKTM66NNYa8kRh4txlHuFsc2sVx5B4qT2ILzSkuUc_nBr-AeflXCUKioWUZP6-bkrWoDeDD09lPqhJD4XO0Afw6AilyF067mJYt4n4KSDd9Qe4nCgOGTILxZ0LEpXjAWSxQpzN8wdb2q78af3SnwBhrRFJWSCfXiR_z9F3bMRvk4dVRQ6V9UMRGORexHHy_KUv2esC_sZJLd7VawCZi3nBZ57zeig89hMErLBitJQ8E898QimOZwqR0NBoQ"
+  JWT_PUBLIC_KEY_E = "AQAB"
+  JWT_PRIVATE_KEY_D = "D3FbdvvlszZ2QUFGxOanaoYslZZAvrHZk4ED5tDiitVEqhKk5jvdE_7sygaRqK9QLS7vFPLstDzXAF_6ZO2Cvg51z5eJzzD4rtUCENhcYmcmDavHP-dGR4MFYudmgzk85VgLrsTADjCGshZabtOSRy8OS1RzvvlWctz_H45B0S6Cn-HtfLrX9dFukydpudimG_zUpN0lZr6H7u4rku3Gtr4p35_c2bQrB98SL2q9HMVUVNHHJkRTUa_3p_e6Hv3pyGW5AvxUk8xfHhCv6a27YM5gBjW_7UlW4IjBCSDUhR9H80_35P6gNjB5jMfsNR9njs3zbEUpzDtH829mz9DJ9w"
+  JWT_PRIVATE_KEY_P = "2uG752nNrQOpgEVMR3WgokEHVPedmaLwEi5t8BZnv8uxyBNsGVdwO7Tcq-uIF1WjKUWO5_SE5Pw9qh76Q5n1tGQV-BmMwXzZvCNWp15W_bow-wiZORi2FqOIRckH-wwbjMYoezhyvWxHCqvdtiDxwcqW99HEAd2BtcMlnKEnxbs"
+  JWT_PRIVATE_KEY_Q = "u_G1l0Sm6zwrpwuR58uqF1tbY7hHt4Mgp7jzeGO-JQI5142cbdPa9t_wDr57D3L0UX-nkyu1dzvpgIcAq5i1_TQS2cksqCdXumtEMhbAaNzfmdRJoQGvJRsuNghtF4P5mJrGNrmedDcgoCCq89KsxtZDE0d6eoqCry6bC0d1ElM"
+  JWT_PRIVATE_KEY_DP = "a6cEjP-7ufGIJ19t8eOHmuXS3lZe_BZobvjI94F9i5Z6nQX4b8pSl_sPYbsZFyj2c7ETZUAdMKZjCc3slt0dPJjROVIPqYZnbKIQ14aN0IMH3h_PhIaD4ESUHIaQV0gQML-xX1FXFZUwp636AL7ZSNAESmSwO56fUi9ly1BzyEs"
+  JWT_PRIVATE_KEY_DQ = "pCukIumeIPdjbjxmDCNUhaiQsQ_E3aFWQgwF6RC_hJZoLkkN7sXTjDja-hYbashQcGxg1ealUezssA-9Xyc7OV1mZgUb1Brhv_55CIPlOPRPAZF1a4YMFw6iFCLSIGtw-IOiRyVnKz8Iabd_fRJ3SAzbdJjIfQhG1X2Rg428zu8"
+  JWT_PRIVATE_KEY_QI = "r8x94woFx59nqq2LOErA6rmMyssOA-pRXlbydJArLZzV6uyW2zcSkRjGV7XhgRbSZj4wRQIitl-kV_dGz8Q93iBUGMvJOg0p3xcQOMGd49dnYXpMeT69YNVU17tebqAN0iemOD_Y4f_zDQVKCeaNk40jqusubLoD03S7O_4a3sU"
+  JWT_EC_PRIVATE_KEY_D = "PFESw4zNylcBi1jWNcF7fbE4c-oiC47S7IlyxeDlBXU"
+  JWT_EC_PUBLIC_KEY_X = "cTrERzHcOM-_LS1cxOTH5dXgaZCUwqvW_3fLb9L7l3U"
+  JWT_EC_PUBLIC_KEY_Y = "crzRpAOcIvefy-YvqCgj3bK4oniDvd95uxs0T4TUqgw"
+  DYNAMIC_REGISTRATION_SECRET = "a7ecc2a16c2c141be7db656c426875e2a6582f8aad53f0e5bed53f40bfd0b122"
+  DCR_IAT_SIGNING_KEY = "PuJQOoqZHs0YGiO0hoZsOW9/4e3lXfDq9YkrFb4jqvQ="
+  UPSTASH_REDIS_REST_URL = "https://helpful-dinosaur-23436.upstash.io"
+  UPSTASH_REDIS_REST_TOKEN = "AVuMAAIncDIxMmZmNzk5MzI5NWM0MDAwYmZhYzExMTMzZWM2NzY4OXAyMjM0MzY"
+  BASE_URL = "https://morezero-auth-server.fly.dev"
+  GOOGLE_CLIENT_ID = "your-google-client-id"
+  GOOGLE_CLIENT_SECRET = "your-google-client-secret"
+  CORS_ORIGINS = "http://localhost:3020,https://chat.aussiedavecrouch.com,https://morezero-chat-ui.fly.dev"
+  RATE_LIMIT_WINDOW_MS = "60"
+  RATE_LIMIT_MAX_REQUESTS = "1000"
+  RATE_LIMIT_AUTH_MAX_REQUESTS = "50"
+  RATE_LIMIT_TOKEN_MAX_REQUESTS = "200"
+  RATE_LIMIT_OAUTH_MAX_REQUESTS = "300"
+  AUDIENCE = "http://more0.ai"
+  MOREZERO_NODEJS_API_URL = "https://morezero-alb-dev-s3.wonderbricks.com:6040"
+  MOREZERO_KOTLIN_API_URL = "https://morezero-alb-dev-s3.wonderbricks.com:6070"
+  MOREZERO_API_URL = "https://morezero-api-server.fly.dev"
+  MOREZERO_MCP_URL = "https://morezero-mcp-server.fly.dev"
+  MOREZERO_LOG_LEVEL = "warn"
+  MOREZERO_LOG_LEVELS = "auth-server:auth-routes=warn, auth-server:oidc-provider=warn, auth-server:oidc-provider-events=warn, auth-server:oidc-provider:custom-grant-handler=warn, auth-server:token-exchange-service=warn, auth-server:token-exchange-service:exchangeToken=warn, auth-server:token-exchange-service:validateSubjectToken=warn, auth-server:backend-token-exchange-service=warn"
+  MOREZERO_FORMAT_LOG = "false"
+  OIDC_COOKIES_KEYS = "['53AQq0/OrW0tIbr0Sz+dXr7uU/TGoczLvNZCt3Un9X0=','+UuVG0gy9nGVzB26TksLta94luUzojtW2FybEaVLakM=']"
+  OIDC_CLIENT_ID = "morezero-chat-ui"
+  OIDC_CLIENT_SECRET = "cs_7f8a9b2c4d5e6f7g8h9i0j1k2l3m4n5o6p7q8r9s0t1u2v3w4x5y6z7a8b9c0d1e2f3g4h"
+  OIDC_CLIENT_CALLBACK_URI = "https://morezero-chat-ui.fly.dev/api/auth/oidc/callback"
+  OIDC_POST_LOGIN_URI = "https://morezero-chat-ui.fly.dev/app"  
+  OIDC_POST_LOGOUT_URI = "https://morezero-chat-ui.fly.dev"
+  OIDC_ACCESS_TOKEN_TTL = "900"
+  OIDC_REFRESH_TOKEN_TTL = "604800"
+  OIDC_ID_TOKEN_TTL = "3600"
+  OIDC_AUTHORIZATION_CODE_TTL = "600"
+  OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4318"
+  OTEL_EXPORTER_OTLP_PROTOCOL = "http/protobuf"
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = "http://localhost:4318/v1/traces" 
+  OTEL_RESOURCE_ATTRIBUTES = "service.name=morezero-auth-server,service.version=0.3.1"
+  OTEL_SERVICE_NAME = "morezero-auth-server"
+  SERVICE_NAME = "morezero-auth-server"
+  SERVICE_VERSION = "0.3.1"
+ 
+[[services]]
+  internal_port = 4000
+  protocol = "tcp"
+  processes = ["app"]
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 25
+    soft_limit = 20
+
+  [[services.tcp_checks]]
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "1s"
+    restart_limit = 0
+
+  [[services.http_checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/health"
+    protocol = "http"
+    tls_skip_verify = false
+
+[deploy]
+  strategy = "rolling"
+  max_unavailable = 1
+
+[metrics]
+  port = 9090
+  path = "/metrics"
+
+[experimental]
+  enable_consul = true
+

@@ -1,0 +1,145 @@
+{
+  "name": "tool.os.filesystem",
+  "display_name": "Workspace Filesystem Access",
+  "type": "tool",
+  "version": "1.0.0",
+  "description": "Read and write files within a workspace. A workspace is a storage abstraction (e.g. local filesystem, S3) that provides a sandboxed root directory. The workspace capability's info method is called to resolve the storage root. All paths are relative to the workspace root; path traversal outside the root is rejected.",
+  "tags": [
+    "system",
+    "os",
+    "filesystem",
+    "io",
+    "workspace"
+  ],
+  "methods": {
+    "info": {
+      "description": "Tool capability metadata",
+      "channels": [
+        "sync"
+      ]
+    },
+    "read": {
+      "description": "Read the contents of a file within a workspace. Returns the text content and file size. Supports text files with configurable encoding. Example: read workspace='more0ai/workspace.default' path='config.json' to read from the default workspace.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "workspace": {
+            "type": "string",
+            "description": "Workspace capability name that defines the storage root. Example: 'more0ai/workspace.default'. The workspace info method is called to resolve the root directory."
+          },
+          "path": {
+            "type": "string",
+            "description": "File path relative to the workspace root. Example: 'src/app.ts' or 'data/config.json'"
+          },
+          "encoding": {
+            "type": "string",
+            "description": "Text encoding to use. Default: 'utf-8'. Other options: 'ascii', 'base64', 'latin1'"
+          },
+          "max_bytes": {
+            "type": "number",
+            "description": "Maximum bytes to read. Omit to read the entire file. Use to limit memory for large files. Example: 10000"
+          }
+        },
+        "required": [
+          "workspace",
+          "path"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "File content as text"
+          },
+          "size": {
+            "type": "number",
+            "description": "File size in bytes"
+          },
+          "path": {
+            "type": "string",
+            "description": "Path of the file relative to workspace root"
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "True if content was truncated due to max_bytes"
+          },
+          "error": {
+            "type": "string",
+            "description": "Error message if the read failed"
+          }
+        }
+      },
+      "semantics": "informational",
+      "channels": [
+        "sync"
+      ]
+    },
+    "write": {
+      "description": "Write content to a file within a workspace. Creates the file and any missing parent directories if they don't exist. Supports overwrite (default) and append modes. Example: write workspace='more0ai/workspace.default' path='output/result.txt' content='Hello world'.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "workspace": {
+            "type": "string",
+            "description": "Workspace capability name that defines the storage root. Example: 'more0ai/workspace.default'. The workspace info method is called to resolve the root directory."
+          },
+          "path": {
+            "type": "string",
+            "description": "File path relative to the workspace root. Example: 'output/result.txt' or 'data/export.csv'"
+          },
+          "content": {
+            "type": "string",
+            "description": "Text content to write to the file"
+          },
+          "encoding": {
+            "type": "string",
+            "description": "Text encoding to use. Default: 'utf-8'. Other options: 'ascii', 'base64', 'latin1'"
+          },
+          "mode": {
+            "type": "string",
+            "description": "Write mode: 'overwrite' (default) replaces the file, 'append' adds to the end"
+          }
+        },
+        "required": [
+          "workspace",
+          "path",
+          "content"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Path of the written file relative to workspace root"
+          },
+          "bytes_written": {
+            "type": "number",
+            "description": "Number of bytes written"
+          },
+          "error": {
+            "type": "string",
+            "description": "Error message if the write failed"
+          }
+        }
+      },
+      "semantics": "work",
+      "channels": [
+        "sync"
+      ]
+    }
+  },
+  "implementation": {
+    "kind": "ts-module",
+    "entrypoint": "implementations/filesystem.ts",
+    "execution": {
+      "kind": "inline-ts",
+      "config": {
+        "npm_packages": [
+          "@more0ai/client@workspace:*"
+        ]
+      }
+    }
+  }
+}

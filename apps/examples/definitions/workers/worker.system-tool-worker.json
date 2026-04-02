@@ -1,0 +1,33 @@
+{
+  "name": "system-tool-worker",
+  "display_name": "System Tool Worker",
+  "type": "worker",
+  "version": "1.0.0",
+  "description": "Worker hosting system tools for LLM-driven capability management.",
+  "tags": ["system", "tools", "worker"],
+  "capabilities_hosted": [
+    { "name": "tool.system.prompts", "type": "tool" },
+    { "name": "tool.system.models", "type": "tool" },
+    { "name": "tool.system.tools", "type": "tool" },
+    { "name": "tool.system.agents", "type": "tool" },
+    { "name": "tool.system.workflows", "type": "tool" },
+    { "name": "tool.system.apps", "type": "tool" },
+    { "name": "tool.system.registry", "type": "tool" },
+    { "name": "tool.system.intent", "type": "tool" },
+    { "name": "tool.os.filesystem", "type": "tool" },
+    { "name": "tool.os.web", "type": "tool" },
+    { "name": "workspace.default", "type": "workspace" }
+  ],
+  "metadata": {
+    "runtime": "go",
+    "runner": "inline-ts",
+    "entrypoint": "workers/capabilities-worker"
+  },
+  "methods": {
+    "info": {
+      "description": "Worker metadata and capabilities_hosted list.",
+      "semantics": "query",
+      "channels": ["sync"]
+    }
+  }
+}

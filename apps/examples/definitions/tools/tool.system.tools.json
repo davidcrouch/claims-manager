@@ -1,0 +1,349 @@
+{
+  "name": "tool.system.tools",
+  "display_name": "System Tools",
+  "type": "tool",
+  "version": "1.0.0",
+  "description": "Manage tool capability definitions in the registry. A tool capability defines methods that can be called by agents or workflows. This registers the tool's metadata and method schemas; the actual implementation code must be deployed separately via a worker.",
+  "tags": [
+    "system",
+    "management",
+    "tools"
+  ],
+  "methods": {
+    "info": {
+      "description": "Tool capability metadata",
+      "channels": [
+        "sync"
+      ]
+    },
+    "create": {
+      "description": "Register a tool capability definition. This registers the tool's name, methods, and input/output schemas so it can be discovered and referenced by agents. Note: this does not create the tool implementation code — only the registry entry. The implementation must be deployed separately. Example: register a tool named 'tool.crm.search' with a 'search' method.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "description": "App key that owns this tool. Example: 'my-app'"
+          },
+          "name": {
+            "type": "string",
+            "description": "Tool name. Example: 'tool.crm.search'"
+          },
+          "description": {
+            "type": "string",
+            "description": "What the tool does. Example: 'Search CRM records by customer name or ticket ID'"
+          },
+          "methods": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Method name. Example: 'search'"
+                },
+                "description": {
+                  "type": "string",
+                  "description": "What this method does. Example: 'Search CRM records by query'"
+                },
+                "input_schema": {
+                  "type": "object",
+                  "description": "JSON Schema for method input. Example: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] }"
+                },
+                "output_schema": {
+                  "type": "object",
+                  "description": "JSON Schema for method output. Example: { type: 'object', properties: { results: { type: 'array' } } }"
+                },
+                "semantics": {
+                  "type": "string",
+                  "description": "Method semantics: 'work' (mutates/produces), 'informational' (read-only), or 'declarative' (config). Default: 'work'"
+                }
+              },
+              "required": [
+                "name",
+                "description"
+              ]
+            },
+            "description": "Array of method definitions with name, description, input/output schemas"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional tags for discovery"
+          },
+          "version": {
+            "type": "object",
+            "properties": {
+              "major": {
+                "type": "number"
+              },
+              "minor": {
+                "type": "number"
+              },
+              "patch": {
+                "type": "number"
+              }
+            },
+            "description": "Optional version. Defaults to 1.0.0 if omitted."
+          }
+        },
+        "required": [
+          "app",
+          "name",
+          "description",
+          "methods"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "cap": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "semantics": "work",
+      "channels": [
+        "sync"
+      ]
+    },
+    "get": {
+      "description": "Get full details of a tool capability by name, including all method schemas.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Tool name or capability reference. Example: 'tool.crm.search' or 'my-app/tool.crm.search'"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "cap": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "methods": {
+            "type": "array"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "semantics": "informational",
+      "channels": [
+        "sync"
+      ]
+    },
+    "list": {
+      "description": "List tool capability definitions. Optionally filter by app or tags.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "description": "Filter by app key"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Filter by tags"
+          },
+          "query": {
+            "type": "string",
+            "description": "Free-text search query"
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "tools": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "cap": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "version": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "semantics": "informational",
+      "channels": [
+        "sync"
+      ]
+    },
+    "update": {
+      "description": "Update an existing tool definition. Provide only the fields you want to change. The version patch number is auto-incremented.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "description": "App key. Example: 'my-app'"
+          },
+          "name": {
+            "type": "string",
+            "description": "Tool name to update"
+          },
+          "description": {
+            "type": "string",
+            "description": "Updated description (optional)"
+          },
+          "methods": {
+            "type": "array",
+            "description": "Updated method definitions (optional, replaces all methods)"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Updated tags (optional)"
+          }
+        },
+        "required": [
+          "app",
+          "name"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "cap": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "semantics": "work",
+      "channels": [
+        "sync"
+      ]
+    },
+    "delete": {
+      "description": "Deprecate a tool capability definition.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Tool name or capability reference"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Reason for deprecation"
+          }
+        },
+        "required": [
+          "name",
+          "reason"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "affected_versions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "semantics": "work",
+      "channels": [
+        "sync"
+      ]
+    }
+  },
+  "implementation": {
+    "kind": "ts-module",
+    "entrypoint": "implementations/tools.ts",
+    "execution": {
+      "kind": "inline-ts",
+      "config": {
+        "npm_packages": [
+          "@more0ai/client@workspace:*"
+        ]
+      }
+    }
+  }
+}

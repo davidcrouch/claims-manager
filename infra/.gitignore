@@ -1,0 +1,5 @@
+# Environment files (keep example)
+.env
+
+# Docker volumes (if any local mounts)
+data/

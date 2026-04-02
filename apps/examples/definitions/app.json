@@ -1,0 +1,67 @@
+{
+  "name": "more0ai",
+  "display_name": "More0 AI Platform",
+  "type": "application",
+  "version": "1.0.0",
+  "description": "Core platform capabilities: system workers, providers, and system tools for the more0ai registry",
+  "tags": [
+    "app",
+    "platform",
+    "more0ai",
+    "system",
+    "provider",
+    "tools"
+  ],
+  "app_key": "more0ai",
+  "exposure": {
+    "publish": [
+      {
+        "match": "system.*"
+      },
+      {
+        "match": "provider.*"
+      },
+      {
+        "match": "tool.system.*"
+      },
+      {
+        "match": "tool.os.*"
+      },
+      {
+        "match": "workspace.*"
+      },
+      {
+        "match": "agent.*"
+      },
+      {
+        "match": "model.*"
+      },
+      {
+        "match": "prompt.*"
+      }
+    ]
+  },
+  "methods": {
+    "info": {
+      "description": "Application metadata",
+      "semantics": "query",
+      "channels": [
+        "sync"
+      ],
+      "output": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "app_key": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

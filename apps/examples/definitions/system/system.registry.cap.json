@@ -1,0 +1,1464 @@
+{
+  "name": "system.registry",
+  "display_name": "System Registry",
+  "type": "tool",
+  "version": "1.0.0",
+  "description": "Core registry service for capability resolution, discovery, and lifecycle management",
+  "tags": [
+    "platform",
+    "registry",
+    "system"
+  ],
+  "isSystem": true,
+  "methods": {
+    "info": {
+      "description": "Registry capability metadata and configuration",
+      "channels": [
+        "sync"
+      ]
+    },
+    "resolve": {
+      "description": "Resolve a capability reference to a NATS subject and server URL. Supports local and federated resolution.",
+      "semantics": "query",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "cap": {
+            "type": "string",
+            "description": "Capability reference (e.g. more0ai/system.registry)"
+          },
+          "ver": {
+            "type": "string",
+            "description": "Optional version constraint (e.g. ^1, 1.0.0)"
+          },
+          "ctx": {
+            "type": "object",
+            "properties": {
+              "tenantId": {
+                "type": "string"
+              },
+              "env": {
+                "type": "string"
+              },
+              "aud": {
+                "type": "string"
+              },
+              "features": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "includeMethods": {
+            "type": "boolean",
+            "description": "Include method list in response"
+          },
+          "includeSchemas": {
+            "type": "boolean",
+            "description": "Include method schemas in response"
+          }
+        },
+        "required": [
+          "cap"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "canonicalIdentity": {
+            "type": "string"
+          },
+          "natsUrl": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "major": {
+            "type": "integer"
+          },
+          "resolvedVersion": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "ttlSeconds": {
+            "type": "integer"
+          },
+          "etag": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string"
+          },
+          "methods": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "channels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "schemas": {
+            "type": "object"
+          },
+          "metaSubject": {
+            "type": "string"
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "discover": {
+      "description": "List capabilities matching filters (app, tags, query, status, supportsMethod).",
+      "semantics": "query",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "description": "Filter by application key"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Filter by tags"
+          },
+          "query": {
+            "type": "string",
+            "description": "Search query"
+          },
+          "status": {
+            "type": "string",
+            "description": "Filter by status (e.g. Active)"
+          },
+          "supportsMethod": {
+            "type": "string",
+            "description": "Filter capabilities that support this method"
+          },
+          "ctx": {
+            "type": "object",
+            "properties": {
+              "tenantId": {
+                "type": "string"
+              },
+              "env": {
+                "type": "string"
+              },
+              "aud": {
+                "type": "string"
+              },
+              "features": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "page": {
+            "type": "integer",
+            "description": "Page number (1-based)"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Items per page"
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "cap": {
+                  "type": "string"
+                },
+                "app": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "defaultMajor": {
+                  "type": "integer"
+                },
+                "latestVersion": {
+                  "type": "string"
+                },
+                "majors": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  }
+                },
+                "status": {
+                  "type": "string"
+                },
+                "methods": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "channels": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "pagination": {
+            "type": "object",
+            "properties": {
+              "page": {
+                "type": "integer"
+              },
+              "limit": {
+                "type": "integer"
+              },
+              "total": {
+                "type": "integer"
+              },
+              "totalPages": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        "required": [
+          "capabilities",
+          "pagination"
+        ]
+      }
+    },
+    "subscribe": {
+      "description": "Resolve capability names/patterns to NATS subscriptions. Supports three AND'd filter dimensions: capabilities (name patterns), types, and tags. Primary entry point for workers.",
+      "semantics": "work",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Name filters: exact names (e.g. more0.doc-ingest) or patterns with * and > wildcards. Defaults to all when types or tags are provided."
+          },
+          "types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Type filters: only include capabilities whose type matches (e.g. tool, workflow, agent). AND'd with capabilities and tags."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Tag filters: only include capabilities that have at least one matching tag. AND'd with capabilities and types."
+          },
+          "pool": {
+            "type": "string",
+            "description": "NATS queue group name for load balancing. Defaults to workerName if omitted."
+          },
+          "workerName": {
+            "type": "string",
+            "description": "Worker instance identifier (used as default pool name)"
+          },
+          "group": {
+            "type": "string",
+            "description": "Legacy alias for pool"
+          },
+          "includeSystem": {
+            "type": "boolean",
+            "description": "Include system capabilities in wildcard pattern expansions"
+          },
+          "include": {
+            "type": "object",
+            "properties": {
+              "detail": {
+                "type": "string",
+                "enum": [
+                  "routing",
+                  "standard",
+                  "full"
+                ],
+                "description": "Preset: routing (default), standard, or full"
+              },
+              "schemas": {
+                "type": "boolean",
+                "description": "Include method schemas"
+              },
+              "definitions": {
+                "type": "boolean",
+                "description": "Include definition files"
+              },
+              "manifest": {
+                "type": "boolean",
+                "description": "Include manifest blob"
+              }
+            }
+          },
+          "ctx": {
+            "type": "object",
+            "properties": {
+              "tenantId": {
+                "type": "string"
+              },
+              "env": {
+                "type": "string"
+              },
+              "aud": {
+                "type": "string"
+              },
+              "features": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "subscriptions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "capability": {
+                  "type": "string"
+                },
+                "subject": {
+                  "type": "string"
+                },
+                "natsUrl": {
+                  "type": "string"
+                },
+                "group": {
+                  "type": "string"
+                },
+                "metadata": {
+                  "type": "object",
+                  "properties": {
+                    "app": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "major": {
+                      "type": "integer"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "methods": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "inputSchema": {
+                            "type": "object"
+                          },
+                          "outputSchema": {
+                            "type": "object"
+                          },
+                          "channels": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "tags": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "examples": {
+                            "type": "array",
+                            "items": {
+                              "type": "object"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "changelog": {
+                      "type": "string"
+                    },
+                    "definitions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "contentType": {
+                            "type": "string"
+                          },
+                          "content": {
+                            "type": "string"
+                          },
+                          "sha256": {
+                            "type": "string"
+                          },
+                          "sizeBytes": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    },
+                    "manifest": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "group": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "subscriptions",
+          "group"
+        ]
+      }
+    },
+    "upsert": {
+      "description": "Create or update a capability and its version. Creates working revision; use publish to promote to immutable.",
+      "semantics": "work",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "version": {
+            "type": "object",
+            "properties": {
+              "major": {
+                "type": "integer"
+              },
+              "minor": {
+                "type": "integer"
+              },
+              "patch": {
+                "type": "integer"
+              },
+              "prerelease": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "changelog": {
+                "type": "string"
+              },
+              "metadata": {
+                "type": "object"
+              }
+            }
+          },
+          "methods": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "semantics": {
+                  "type": "string"
+                },
+                "inputSchema": {
+                  "type": "object"
+                },
+                "outputSchema": {
+                  "type": "object"
+                },
+                "channels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "policies": {
+                  "type": "object"
+                },
+                "examples": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "setAsDefault": {
+            "type": "boolean"
+          },
+          "env": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "app",
+          "name",
+          "type",
+          "version",
+          "methods"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "capabilityId": {
+            "type": "string"
+          },
+          "versionId": {
+            "type": "string"
+          },
+          "cap": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "publish": {
+      "description": "Promote the current working revision of a capability to an immutable published version.",
+      "semantics": "work",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "app_key": {
+            "type": "string",
+            "description": "Application key"
+          },
+          "capability_name": {
+            "type": "string",
+            "description": "Capability name"
+          },
+          "version": {
+            "type": "string",
+            "description": "Version to publish (e.g. 1.0.0)"
+          },
+          "changelog": {
+            "type": "string",
+            "description": "Release notes"
+          }
+        },
+        "required": [
+          "app_key",
+          "capability_name",
+          "version"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "app_key": {
+            "type": "string"
+          },
+          "capability_name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "content_hash": {
+            "type": "string"
+          },
+          "method_count": {
+            "type": "integer"
+          },
+          "file_count": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "deprecate": {
+      "description": "Mark versions of a capability as deprecated.",
+      "semantics": "work",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "cap": {
+            "type": "string",
+            "description": "Capability reference"
+          },
+          "version": {
+            "type": "string",
+            "description": "Specific version to deprecate"
+          },
+          "major": {
+            "type": "integer",
+            "description": "Major version to deprecate"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Deprecation reason"
+          }
+        },
+        "required": [
+          "cap",
+          "reason"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "affectedVersions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "disable": {
+      "description": "Disable versions of a capability.",
+      "semantics": "work",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "cap": {
+            "type": "string",
+            "description": "Capability reference"
+          },
+          "version": {
+            "type": "string",
+            "description": "Specific version to disable"
+          },
+          "major": {
+            "type": "integer",
+            "description": "Major version to disable"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Disable reason"
+          }
+        },
+        "required": [
+          "cap",
+          "reason"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "affectedVersions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "setDefaultMajor": {
+      "description": "Set the default major version for a capability in an environment.",
+      "semantics": "work",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "cap": {
+            "type": "string",
+            "description": "Capability reference"
+          },
+          "major": {
+            "type": "integer",
+            "description": "Major version to set as default"
+          },
+          "env": {
+            "type": "string",
+            "description": "Environment (defaults to production)"
+          }
+        },
+        "required": [
+          "cap",
+          "major"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "previousMajor": {
+            "type": "integer"
+          },
+          "newMajor": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "listMajors": {
+      "description": "List all major versions for a capability.",
+      "semantics": "query",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "cap": {
+            "type": "string",
+            "description": "Capability reference"
+          },
+          "includeInactive": {
+            "type": "boolean",
+            "description": "Include deprecated/disabled majors"
+          }
+        },
+        "required": [
+          "cap"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "majors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "major": {
+                  "type": "integer"
+                },
+                "latestVersion": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "versionCount": {
+                  "type": "integer"
+                },
+                "isDefault": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "majors"
+        ]
+      }
+    },
+    "intent-search": {
+      "description": "Search for capability methods by natural language intent. Uses vector similarity to find methods that match what you want to accomplish.",
+      "semantics": "query",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "required": [
+          "intent"
+        ],
+        "properties": {
+          "intent": {
+            "type": "string",
+            "description": "Natural language description of what you want to do"
+          },
+          "type": {
+            "type": "string",
+            "description": "Filter by capability type: tool, agent, model, workflow, prompt"
+          },
+          "app": {
+            "type": "string",
+            "description": "Filter by app key"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum results to return (default 6)"
+          },
+          "threshold": {
+            "type": "number",
+            "description": "Minimum similarity score 0.0-1.0 (default 0.65)"
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "methods": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "ref": {
+                  "type": "string",
+                  "description": "cap::method reference string"
+                },
+                "cap": {
+                  "type": "string"
+                },
+                "method": {
+                  "type": "string"
+                },
+                "app": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "similarity": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "backfill-embeddings": {
+      "description": "Generate embeddings for methods that are missing them. Used for initial setup or re-indexing.",
+      "semantics": "work",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {}
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "processed": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "health": {
+      "description": "Check registry service health (database, comms).",
+      "semantics": "query",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {}
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "healthy",
+              "unhealthy"
+            ]
+          },
+          "checks": {
+            "type": "object",
+            "properties": {
+              "database": {
+                "type": "boolean"
+              },
+              "comms": {
+                "type": "boolean"
+              }
+            }
+          },
+          "timestamp": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "checks",
+          "timestamp"
+        ]
+      }
+    },
+    "createApp": {
+      "description": "Create a new application with its app.definition capability.",
+      "semantics": "work",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "app_key": {
+            "type": "string",
+            "description": "Application key"
+          },
+          "display_name": {
+            "type": "string",
+            "description": "Display name for the application"
+          }
+        },
+        "required": [
+          "app_key"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "app_key": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "capability_id": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "listApps": {
+      "description": "List all applications in the registry.",
+      "semantics": "query",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {}
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "applications": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "app_key": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "created_at": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "applications"
+        ]
+      }
+    },
+    "export": {
+      "description": "Export an application and all its capabilities to portable format (manifests or archive).",
+      "semantics": "query",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "app_key": {
+            "type": "string",
+            "description": "Application key"
+          },
+          "revision_mode": {
+            "type": "string",
+            "enum": [
+              "working",
+              "version",
+              "immutable",
+              "latest"
+            ],
+            "description": "working, version, or immutable/latest"
+          },
+          "version": {
+            "type": "string",
+            "description": "Required when revision_mode is version"
+          },
+          "output_format": {
+            "type": "string",
+            "enum": [
+              "manifests",
+              "archive"
+            ],
+            "description": "manifests or archive"
+          }
+        },
+        "required": [
+          "app_key"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "app_key": {
+            "type": "string"
+          },
+          "revision_mode": {
+            "type": "string"
+          },
+          "capabilities_count": {
+            "type": "integer"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                },
+                "sha256": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "archive": {
+            "type": "string",
+            "description": "Base64-encoded zip when output_format is archive"
+          }
+        }
+      }
+    },
+    "import": {
+      "description": "Import capabilities from portable format (files or archive) into an application.",
+      "semantics": "work",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "app_key": {
+            "type": "string",
+            "description": "Target application key (optional, can be inferred from manifests)"
+          },
+          "target_revision": {
+            "type": "string",
+            "description": "working or version (default: working)"
+          },
+          "version": {
+            "type": "string",
+            "description": "Version when target_revision is version"
+          },
+          "conflict_strategy": {
+            "type": "string",
+            "description": "overwrite, skip, or fail (default: overwrite)"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "archive": {
+            "type": "string",
+            "description": "Base64-encoded zip archive"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "description": "Validate without applying"
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "app_key": {
+            "type": "string"
+          },
+          "imported": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "action": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "dry_run": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "importStart": {
+      "description": "Start a chunked import session. Returns session_id for importChunk and importCommit. Use for large imports to avoid NATS max payload.",
+      "semantics": "work",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "app_key": {
+            "type": "string"
+          },
+          "target_revision": {
+            "type": "string",
+            "default": "working"
+          },
+          "version": {
+            "type": "string"
+          },
+          "conflict_strategy": {
+            "type": "string",
+            "default": "overwrite"
+          },
+          "dry_run": {
+            "type": "boolean"
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "expires_in_seconds": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "importChunk": {
+      "description": "Append files to an existing import session. Call one or more times before importCommit.",
+      "semantics": "work",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "session_id",
+          "files"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "files_count": {
+            "type": "integer"
+          },
+          "total_size_bytes": {
+            "type": "integer"
+          },
+          "expires_in_seconds": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "importCommit": {
+      "description": "Run the import with all accumulated files and remove the session.",
+      "semantics": "work",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "app_key": {
+            "type": "string"
+          },
+          "imported": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "action": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "dry_run": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "importAbort": {
+      "description": "Discard an import session without committing.",
+      "semantics": "work",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

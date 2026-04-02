@@ -1,0 +1,446 @@
+{
+  "name": "system.registry.meta",
+  "display_name": "System Registry Meta",
+  "type": "tool",
+  "version": "1.0.0",
+  "description": "Standard capability methods served from registry metadata",
+  "tags": [
+    "platform",
+    "registry",
+    "system",
+    "introspection"
+  ],
+  "isSystem": true,
+  "methods": {
+    "info": {
+      "description": "Registry meta capability metadata",
+      "channels": [
+        "sync"
+      ]
+    },
+    "describe": {
+      "description": "Return rich capability metadata including identity, methods, schemas, examples, docs, cost, auth, and policy. By default returns all available information. Use 'include' to select specific sections, or 'method' to focus on a single method.",
+      "semantics": "query",
+      "channels": [
+        "sync"
+      ],
+      "tags": [
+        "introspection"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "capability": {
+            "type": "string",
+            "description": "FQCN of the capability to describe (e.g. more0ai/system.registry)"
+          },
+          "method": {
+            "type": "string",
+            "description": "Optional method name to focus on. When set, methods array is filtered to this method only."
+          },
+          "include": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "schemas",
+                "examples",
+                "docs",
+                "cost",
+                "auth",
+                "policy",
+                "definitions",
+                "changelog"
+              ]
+            },
+            "description": "Sections to include beyond the base response. Omit to include all sections."
+          }
+        },
+        "required": [
+          "capability"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "capability": {
+            "type": "string",
+            "description": "Fully-qualified capability name (e.g. more0ai/system.registry)"
+          },
+          "app": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "major": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "deprecated",
+              "disabled"
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "methods": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "channels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "inputSchema": {
+                  "type": "object",
+                  "description": "JSON Schema for method input (when schemas included)"
+                },
+                "outputSchema": {
+                  "type": "object",
+                  "description": "JSON Schema for method output (when schemas included)"
+                },
+                "examples": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  },
+                  "description": "Usage examples (when examples included)"
+                }
+              }
+            }
+          },
+          "changelog": {
+            "type": "string",
+            "description": "Release notes (when changelog included)"
+          },
+          "definitions": {
+            "type": "array",
+            "description": "Definition files such as handler.ts (when definitions included)",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "contentType": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                },
+                "sha256": {
+                  "type": "string"
+                },
+                "sizeBytes": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "docs": {
+            "type": "object",
+            "description": "Documentation content (when docs included)"
+          },
+          "cost": {
+            "type": "object",
+            "description": "Cost/pricing information (when cost included)"
+          },
+          "auth": {
+            "type": "object",
+            "description": "Auth requirements (when auth included)"
+          },
+          "policy": {
+            "type": "object",
+            "description": "Policy topology (when policy included)"
+          }
+        },
+        "required": [
+          "capability",
+          "app",
+          "name",
+          "type",
+          "version",
+          "major",
+          "status",
+          "tags",
+          "methods"
+        ]
+      }
+    },
+    "schema": {
+      "description": "Return input and output JSON schemas for a capability's methods. Use optional 'method' to get schemas for a single method only.",
+      "semantics": "query",
+      "channels": [
+        "sync"
+      ],
+      "tags": [
+        "introspection"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "capability": {
+            "type": "string",
+            "description": "FQCN of the capability (e.g. more0ai/system.registry)"
+          },
+          "method": {
+            "type": "string",
+            "description": "Optional method name to focus on. When set, returns only that method's schemas."
+          }
+        },
+        "required": [
+          "capability"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "When method is specified: {input, output}. Otherwise: map of method names to {input, output}.",
+        "additionalProperties": {
+          "type": "object",
+          "properties": {
+            "input": {
+              "type": "object",
+              "description": "JSON Schema for method input"
+            },
+            "output": {
+              "type": "object",
+              "description": "JSON Schema for method output"
+            }
+          }
+        }
+      }
+    },
+    "examples": {
+      "description": "Return usage examples for a capability. Includes example files from definitions and per-method embedded examples. Use optional 'method' to filter to a single method.",
+      "semantics": "query",
+      "channels": [
+        "sync"
+      ],
+      "tags": [
+        "introspection"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "capability": {
+            "type": "string",
+            "description": "FQCN of the capability (e.g. more0ai/system.registry)"
+          },
+          "method": {
+            "type": "string",
+            "description": "Optional method name to filter examples."
+          }
+        },
+        "required": [
+          "capability"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "files": {
+            "type": "array",
+            "description": "Example files from capability definitions",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "contentType": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "methods": {
+            "type": "array",
+            "description": "Per-method embedded examples",
+            "items": {
+              "type": "object",
+              "properties": {
+                "method": {
+                  "type": "string"
+                },
+                "examples": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "docs": {
+      "description": "Return documentation content for a capability. May be a URL or inline content (markdown, text, or html).",
+      "semantics": "query",
+      "channels": [
+        "sync"
+      ],
+      "tags": [
+        "introspection"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "capability": {
+            "type": "string",
+            "description": "FQCN of the capability (e.g. more0ai/system.registry)"
+          }
+        },
+        "required": [
+          "capability"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "External documentation URL when docs reference is http(s)"
+          },
+          "content": {
+            "type": "string",
+            "description": "Inline documentation content"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "markdown",
+              "text",
+              "html"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "description": "Path to the documentation file"
+          },
+          "message": {
+            "type": "string",
+            "description": "Error or status message when docs not found"
+          }
+        }
+      }
+    },
+    "cost": {
+      "description": "Return cost and pricing information for a capability from its manifest.",
+      "semantics": "query",
+      "channels": [
+        "sync"
+      ],
+      "tags": [
+        "introspection"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "capability": {
+            "type": "string",
+            "description": "FQCN of the capability (e.g. more0ai/system.registry)"
+          }
+        },
+        "required": [
+          "capability"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "Cost/pricing object from capability manifest. Structure varies by capability."
+      }
+    },
+    "auth": {
+      "description": "Return authentication requirements for a capability from its manifest.",
+      "semantics": "query",
+      "channels": [
+        "sync"
+      ],
+      "tags": [
+        "introspection"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "capability": {
+            "type": "string",
+            "description": "FQCN of the capability (e.g. more0ai/system.registry)"
+          }
+        },
+        "required": [
+          "capability"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "Auth requirements object from capability manifest. Structure varies by capability."
+      }
+    },
+    "policy": {
+      "description": "Return policy topology for a capability. Currently returns empty attachments; policy topology is a future feature.",
+      "semantics": "query",
+      "channels": [
+        "sync"
+      ],
+      "tags": [
+        "introspection"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "capability": {
+            "type": "string",
+            "description": "FQCN of the capability (e.g. more0ai/system.registry)"
+          }
+        },
+        "required": [
+          "capability"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "attachments": {
+            "type": "array",
+            "description": "Policy attachments (empty for now)"
+          }
+        }
+      }
+    }
+  }
+}

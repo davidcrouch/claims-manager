@@ -1,0 +1,57 @@
+{
+  "name": "provider.test",
+  "display_name": "Test Provider",
+  "type": "provider",
+  "version": "1.0.0",
+  "description": "Test/echo provider for integration testing. Echoes back the last user message.",
+  "tags": [
+    "system",
+    "provider",
+    "test"
+  ],
+  "isSystem": true,
+  "methods": {
+    "chat": {
+      "description": "Echo chat completion for testing",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "required": [
+          "llm",
+          "messages"
+        ],
+        "properties": {
+          "llm": {
+            "type": "string"
+          },
+          "messages": {
+            "type": "array"
+          },
+          "parameters": {
+            "type": "object"
+          },
+          "tools": {
+            "type": "array"
+          },
+          "tool_choice": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "stream": {
+      "description": "Echo streaming for testing",
+      "channels": [
+        "stream"
+      ]
+    },
+    "info": {
+      "description": "Test provider metadata",
+      "channels": [
+        "sync"
+      ]
+    }
+  }
+}

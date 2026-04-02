@@ -1,0 +1,47 @@
+{
+  "definition": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "schema://llm/chat-input",
+    "title": "LLM Chat Completion Input",
+    "type": "object",
+    "required": ["modelId", "messages"],
+    "properties": {
+      "modelId": {
+        "type": "string",
+        "description": "Model identifier (e.g. gpt-4o, gemini-1.5-flash)"
+      },
+      "messages": {
+        "type": "array",
+        "description": "Chat messages array",
+        "minItems": 1,
+        "items": {
+          "type": "object",
+          "required": ["role", "content"],
+          "properties": {
+            "role": {
+              "type": "string",
+              "enum": ["system", "user", "assistant", "tool"],
+              "description": "Message role"
+            },
+            "content": {
+              "type": "string",
+              "description": "Message content"
+            }
+          }
+        }
+      },
+      "parameters": {
+        "type": "object",
+        "description": "Additional model parameters (temperature, maxOutputTokens, etc.)"
+      },
+      "tools": {
+        "type": "array",
+        "description": "Tool definitions for function calling"
+      },
+      "tool_choice": {
+        "type": "string",
+        "description": "Tool choice strategy (auto, none, required)"
+      }
+    }
+  }
+}

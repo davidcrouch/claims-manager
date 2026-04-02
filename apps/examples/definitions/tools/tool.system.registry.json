@@ -1,0 +1,154 @@
+{
+  "name": "tool.system.registry",
+  "display_name": "Registry Search Inspect",
+  "type": "tool",
+  "version": "1.0.0",
+  "description": "Search and inspect the capability registry. Use this to discover existing tools, agents, prompts, models, or workflows, and to check registry health.",
+  "tags": [
+    "system",
+    "management",
+    "registry",
+    "discovery"
+  ],
+  "methods": {
+    "info": {
+      "description": "Tool capability metadata",
+      "channels": [
+        "sync"
+      ]
+    },
+    "discover": {
+      "description": "Search the registry for capabilities of any type. Use this to find existing tools, agents, prompts, models, or workflows before creating new ones. Returns paginated results.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "description": "Filter by app key. Example: 'my-app'"
+          },
+          "type": {
+            "type": "string",
+            "description": "Filter by capability type: 'tool', 'agent', 'prompt', 'model', 'workflow'"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Filter by tags. Example: ['support']"
+          },
+          "query": {
+            "type": "string",
+            "description": "Free-text search query. Example: 'triage'"
+          },
+          "page": {
+            "type": "number",
+            "description": "Page number (default: 1)"
+          },
+          "limit": {
+            "type": "number",
+            "description": "Results per page (default: 20)"
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "cap": {
+                  "type": "string"
+                },
+                "app": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "version": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "page": {
+            "type": "number"
+          },
+          "total_pages": {
+            "type": "number"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "semantics": "informational",
+      "channels": [
+        "sync"
+      ]
+    },
+    "health": {
+      "description": "Check the health of the registry. Returns status and database connectivity.",
+      "input": {
+        "type": "object",
+        "properties": {}
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "checks": {
+            "type": "object",
+            "properties": {
+              "database": {
+                "type": "boolean"
+              }
+            }
+          },
+          "timestamp": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "semantics": "informational",
+      "channels": [
+        "sync"
+      ]
+    }
+  },
+  "implementation": {
+    "kind": "ts-module",
+    "entrypoint": "implementations/registry.ts",
+    "execution": {
+      "kind": "inline-ts",
+      "config": {
+        "npm_packages": [
+          "@more0ai/client@workspace:*"
+        ]
+      }
+    }
+  }
+}

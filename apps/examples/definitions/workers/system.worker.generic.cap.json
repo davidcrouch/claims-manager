@@ -1,0 +1,69 @@
+{
+  "name": "system.worker.generic",
+  "display_name": "Worker Generic",
+  "type": "worker",
+  "version": "1.0.0",
+  "description": "System generic capability worker: default handler for all capability types except workflows and tools.",
+  "tags": [
+    "system",
+    "worker",
+    "generic"
+  ],
+  "isSystem": true,
+  "metadata": {
+    "runtime": "node",
+    "entrypoint": "workers/generic-worker/worker.ts",
+    "subscribe": {
+      "types": [
+        "agent",
+        "model",
+        "prompt",
+        "policy",
+        "role",
+        "schema",
+        "skill",
+        "subscription",
+        "provider"
+      ]
+    }
+  },
+  "methods": {
+    "info": {
+      "description": "Worker metadata and capability types supported",
+      "channels": [
+        "sync"
+      ]
+    },
+    "execute": {
+      "description": "Execute a capability by type-specific routing",
+      "channels": [
+        "sync",
+        "stream"
+      ],
+      "input": {
+        "type": "object",
+        "required": [
+          "capability",
+          "method"
+        ],
+        "properties": {
+          "capability": {
+            "type": "string",
+            "description": "Fully-qualified capability name"
+          },
+          "method": {
+            "type": "string",
+            "description": "Method to invoke"
+          },
+          "params": {
+            "type": "object",
+            "description": "Method parameters"
+          }
+        }
+      },
+      "output": {
+        "type": "object"
+      }
+    }
+  }
+}

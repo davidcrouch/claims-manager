@@ -1,0 +1,58 @@
+{
+  "name": "provider.openai",
+  "display_name": "OpenAI Provider",
+  "type": "provider",
+  "version": "1.0.0",
+  "description": "OpenAI chat completion provider. Supports GPT-4o, GPT-4o-mini, o1, and other OpenAI models.",
+  "tags": [
+    "system",
+    "provider",
+    "openai",
+    "llm"
+  ],
+  "isSystem": false,
+  "methods": {
+    "chat": {
+      "description": "Synchronous chat completion",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "required": [
+          "llm",
+          "messages"
+        ],
+        "properties": {
+          "llm": {
+            "type": "string"
+          },
+          "messages": {
+            "type": "array"
+          },
+          "parameters": {
+            "type": "object"
+          },
+          "tools": {
+            "type": "array"
+          },
+          "tool_choice": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "stream": {
+      "description": "Streaming chat completion",
+      "channels": [
+        "stream"
+      ]
+    },
+    "info": {
+      "description": "Provider metadata and supported models",
+      "channels": [
+        "sync"
+      ]
+    }
+  }
+}

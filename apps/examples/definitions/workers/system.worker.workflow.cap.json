@@ -1,0 +1,68 @@
+{
+  "name": "system.worker.workflow",
+  "display_name": "Worker Workflow",
+  "type": "worker",
+  "version": "1.0.0",
+  "description": "System workflow worker: default handler for all workflow capabilities, delegates execution to the workflow engine.",
+  "tags": [
+    "system",
+    "worker",
+    "workflow"
+  ],
+  "isSystem": true,
+  "metadata": {
+    "runtime": "go",
+    "entrypoint": "workers/workflow-worker/main.go",
+    "subscribe": {
+      "types": [
+        "workflow"
+      ]
+    }
+  },
+  "methods": {
+    "info": {
+      "description": "Workflow worker metadata and supported types",
+      "channels": [
+        "sync"
+      ]
+    },
+    "execute": {
+      "description": "Execute a workflow via the workflow engine",
+      "channels": [
+        "sync",
+        "async",
+        "stream"
+      ],
+      "input": {
+        "type": "object",
+        "required": [
+          "capability"
+        ],
+        "properties": {
+          "capability": {
+            "type": "string",
+            "description": "Fully-qualified workflow capability name"
+          },
+          "input": {
+            "type": "object",
+            "description": "Workflow input payload"
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "type": "object"
+          },
+          "status": {
+            "type": "string"
+          },
+          "execution_id": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

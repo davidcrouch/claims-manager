@@ -1,0 +1,74 @@
+{
+  "name": "system.tool.resolve-schemas",
+  "display_name": "System Tool Resolve Schemas",
+  "type": "tool",
+  "version": "1.0.0",
+  "description": "Resolves agent tool references (cap::method format) into OpenAI function-calling tool schemas by describing each capability and extracting method input schemas.",
+  "tags": [
+    "system",
+    "tool",
+    "schema",
+    "agent"
+  ],
+  "isSystem": true,
+  "methods": {
+    "info": {
+      "description": "Resolve-schemas capability metadata",
+      "channels": [
+        "sync"
+      ]
+    },
+    "execute": {
+      "description": "Resolve tool references into OpenAI-format tool schemas",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "required": [
+          "tools"
+        ],
+        "properties": {
+          "tools": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Array of tool references in cap::method format (e.g. 'tool.math.operations::add'). Bare names without '::' default to the 'execute' method."
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "tools": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string"
+                },
+                "function": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "parameters": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OpenAI function-calling tool definitions"
+          }
+        }
+      }
+    }
+  }
+}

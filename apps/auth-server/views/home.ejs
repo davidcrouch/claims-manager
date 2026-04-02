@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <title>
+      <%= title %>
+   </title>
+   <link rel="icon" type="image/x-icon" href="/favicon.ico">
+   <style>
+      * {
+         margin: 0;
+         padding: 0;
+         box-sizing: border-box;
+      }
+
+      body {
+         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+         line-height: 1.6;
+         color: #1a1a1a;
+         background: #ffffff;
+         min-height: 100vh;
+      }
+
+      .container {
+         max-width: 1200px;
+         margin: 0 auto;
+         padding: 20px;
+      }
+
+      .header {
+         text-align: center;
+         color: #1a1a1a;
+         margin-bottom: 10px;
+         padding: 10px 0;
+         border-bottom: 1px solid #e5e7eb;
+      }
+
+      .header h1 {
+         font-size: 2.5rem;
+         margin-bottom: 5;
+         font-weight: 700;
+         display: flex;
+         align-items: center;
+         justify-content: center;
+         gap: 10px;
+         flex-wrap: wrap;
+      }
+
+      .logo {
+         width: 200px;
+         height: 100px;
+         object-fit: contain;
+      }
+
+      .header p {
+         font-size: 1.3rem;
+         color: #6b7280;
+         font-weight: 400;
+      }
+
+      .content {
+         display: grid;
+         grid-template-columns: 1fr 1fr;
+         gap: 20px;
+         margin-bottom: 20px;
+      }
+
+      .card {
+         background: white;
+         border-radius: 8px;
+         padding: 20px;
+         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+         border: 1px solid #e5e7eb;
+         transition: all 0.2s ease;
+      }
+
+      .card:hover {
+         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+         border-color: #d1d5db;
+      }
+
+      .card h2 {
+         color: #1f2937;
+         margin-bottom: 16px;
+         font-size: 1.5rem;
+         font-weight: 600;
+         border-bottom: 2px solid #f3f4f6;
+         padding-bottom: 8px;
+      }
+
+      .health-status {
+         display: flex;
+         align-items: center;
+         margin-bottom: 15px;
+      }
+
+      .status-indicator {
+         width: 12px;
+         height: 12px;
+         border-radius: 50%;
+         margin-right: 10px;
+      }
+
+      .status-ok {
+         background-color: #48bb78;
+      }
+
+      .status-error {
+         background-color: #f56565;
+      }
+
+      .health-info {
+         display: grid;
+         grid-template-columns: 1fr 1fr;
+         gap: 10px;
+      }
+
+      .health-item {
+         background: #f9fafb;
+         padding: 12px;
+         border-radius: 6px;
+         border-left: 3px solid #3b82f6;
+      }
+
+      .health-item strong {
+         display: block;
+         color: #374151;
+         margin-bottom: 6px;
+         font-weight: 500;
+      }
+
+      .endpoints-section {
+         margin-bottom: 20px;
+      }
+
+      .endpoints-section h3 {
+         color: #374151;
+         margin-bottom: 16px;
+         font-size: 1.1rem;
+         font-weight: 600;
+      }
+
+      .endpoint-list {
+         list-style: none;
+      }
+
+      .endpoint-list li {
+         margin-bottom: 8px;
+         padding: 12px;
+         background: #f9fafb;
+         border-radius: 6px;
+         border-left: 3px solid #3b82f6;
+         transition: all 0.2s ease;
+      }
+
+      .endpoint-list li:hover {
+         background: #f3f4f6;
+         border-left-color: #2563eb;
+      }
+
+      .endpoint-list a {
+         color: #3b82f6;
+         text-decoration: none;
+         font-weight: 500;
+      }
+
+      .endpoint-list a:hover {
+         color: #2563eb;
+         text-decoration: underline;
+      }
+
+      .endpoint-method {
+         display: inline-block;
+         background: #3b82f6;
+         color: white;
+         padding: 3px 8px;
+         border-radius: 4px;
+         font-size: 0.75rem;
+         margin-right: 10px;
+         font-weight: 600;
+         text-transform: uppercase;
+      }
+
+      .footer {
+         text-align: center;
+         color: #6b7280;
+         margin-top: 20px;
+         padding: 20px 0;
+         border-top: 1px solid #e5e7eb;
+      }
+
+      .footer p {
+         margin-bottom: 8px;
+         font-size: 0.9rem;
+      }
+
+      .version-badge {
+         display: inline-block;
+         background: #f3f4f6;
+         color: #6b7280;
+         padding: 6px 12px;
+         border-radius: 6px;
+         font-size: 0.8rem;
+         margin-top: 12px;
+         font-weight: 500;
+      }
+
+      @media (max-width: 768px) {
+         .content {
+            grid-template-columns: 1fr;
+         }
+
+         .header h1 {
+            font-size: 2rem;
+            flex-direction: column;
+            gap: 15px;
+         }
+
+         .logo {
+            width: 100px;
+            height: 100px;
+         }
+
+         .health-info {
+            grid-template-columns: 1fr;
+         }
+      }
+   </style>
+</head>
+
+<body>
+   <div class="container">
+      <div class="header">
+         <h1>
+            <img src="/large_logo.png" alt="More0 Logo" class="logo">
+            <%= title %>
+         </h1>
+         <p>OAuth 2.1 / OIDC Authorization Server with Dynamic Client Registration</p>
+      </div>
+
+      <div class="content">
+         <!-- Health Status Card -->
+         <div class="card">
+            <h2>System Health</h2>
+            <div class="health-status">
+               <div class="status-indicator <%= health.status === 'ok' ? 'status-ok' : 'status-error' %>"></div>
+               <strong>Status: <%= health.status.toUpperCase() %></strong>
+            </div>
+
+            <div class="health-info">
+               <div class="health-item">
+                  <strong>Uptime</strong>
+                  <%= Math.floor(health.uptime / 3600) %>h <%= Math.floor((health.uptime % 3600) / 60) %>m
+               </div>
+               <div class="health-item">
+                  <strong>Environment</strong>
+                  <%= health.environment %>
+               </div>
+               <div class="health-item">
+                  <strong>Version</strong>
+                  <%= health.version %>
+               </div>
+               <div class="health-item">
+                  <strong>Service</strong>
+                  <%= health.service %>
+               </div>
+            </div>
+         </div>
+
+         <!-- API Endpoints Card -->
+         <div class="card">
+            <h2>API Endpoints</h2>
+
+            <div class="endpoints-section">
+               <h3>Health & Status</h3>
+               <ul class="endpoint-list">
+                  <li>
+                     <span class="endpoint-method">GET</span>
+                     <a href="<%= endpoints.health %>">Health Check</a>
+                  </li>
+               </ul>
+            </div>
+
+            <div class="endpoints-section">
+               <h3>OIDC Discovery</h3>
+               <ul class="endpoint-list">
+                  <li>
+                     <span class="endpoint-method">GET</span>
+                     <a href="<%= endpoints.oidc %>" target="_blank">OpenID Configuration</a>
+                  </li>
+                  <li>
+                     <span class="endpoint-method">GET</span>
+                     <a href="<%= endpoints.oauth %>" target="_blank">OAuth Authorization Server</a>
+                  </li>
+                  <li>
+                     <span class="endpoint-method">GET</span>
+                     <a href="<%= endpoints.jwks %>" target="_blank">JSON Web Key Set (JWKS)</a>
+                  </li>
+               </ul>
+            </div>
+
+            <div class="endpoints-section">
+               <h3>OAuth 2.1 / OIDC</h3>
+               <ul class="endpoint-list">
+                  <li>
+                     <span class="endpoint-method">GET</span>
+                     <a href="<%= endpoints.auth %>">Authorization Endpoint</a>
+                  </li>
+                  <li>
+                     <span class="endpoint-method">POST</span>
+                     <a href="<%= endpoints.token %>">Token Endpoint</a>
+                  </li>
+                  <li>
+                     <span class="endpoint-method">GET</span>
+                     <a href="<%= endpoints.userinfo %>">UserInfo Endpoint</a>
+                  </li>
+                  <li>
+                     <span class="endpoint-method">POST</span>
+                     <a href="<%= endpoints.introspect %>">Token Introspection</a>
+                  </li>
+                  <li>
+                     <span class="endpoint-method">POST</span>
+                     <a href="<%= endpoints.revoke %>">Token Revocation</a>
+                  </li>
+               </ul>
+            </div>
+
+            <div class="endpoints-section">
+               <h3>Dynamic Registration</h3>
+               <ul class="endpoint-list">
+                  <li>
+                     <span class="endpoint-method">GET</span>
+                     <a href="<%= endpoints.reg %>">Client Registration</a>
+                  </li>
+               </ul>
+            </div>
+
+         </div>
+      </div>
+
+   </div>
+
+   <script>
+      // Set current timestamp
+      document.getElementById('timestamp').textContent = new Date().toLocaleString();
+   </script>
+</body>
+
+</html>

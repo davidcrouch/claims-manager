@@ -1,0 +1,60 @@
+{
+  "name": "system.worker.tool",
+  "display_name": "Worker Tool",
+  "type": "worker",
+  "version": "1.0.0",
+  "description": "System tool worker: default handler for all tool capabilities.",
+  "tags": [
+    "system",
+    "worker",
+    "tool"
+  ],
+  "isSystem": true,
+  "metadata": {
+    "runtime": "go",
+    "entrypoint": "workers/capabilities-worker/main.go",
+    "subscribe": {
+      "types": [
+        "tool"
+      ]
+    }
+  },
+  "methods": {
+    "info": {
+      "description": "Tool worker metadata and supported types",
+      "channels": [
+        "sync"
+      ]
+    },
+    "execute": {
+      "description": "Execute a tool capability with provided arguments",
+      "channels": [
+        "sync"
+      ],
+      "input": {
+        "type": "object",
+        "required": [
+          "capability",
+          "method"
+        ],
+        "properties": {
+          "capability": {
+            "type": "string",
+            "description": "Fully-qualified tool capability name"
+          },
+          "method": {
+            "type": "string",
+            "description": "Method to invoke on the tool"
+          },
+          "params": {
+            "type": "object",
+            "description": "Method parameters"
+          }
+        }
+      },
+      "output": {
+        "type": "object"
+      }
+    }
+  }
+}

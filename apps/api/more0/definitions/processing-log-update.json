@@ -1,0 +1,48 @@
+{
+  "name": "tool.claims-manager.processing-log-update",
+  "display_name": "Processing Log Update",
+  "type": "tool",
+  "version": "1.0.0",
+  "description": "Update the external processing log with status, timestamps, and optional error info.",
+  "tags": ["claims-manager", "processing-log", "audit"],
+  "methods": {
+    "info": {
+      "description": "Tool capability metadata",
+      "channels": ["sync"]
+    },
+    "execute": {
+      "description": "Update processing log entry status",
+      "input": {
+        "type": "object",
+        "properties": {
+          "processingLogId": { "type": "string" },
+          "status": { "type": "string", "enum": ["processing", "completed", "failed"] },
+          "externalObjectId": { "type": "string", "nullable": true },
+          "errorMessage": { "type": "string", "nullable": true }
+        },
+        "required": ["processingLogId", "status"]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" }
+        }
+      },
+      "semantics": "work",
+      "channels": ["sync"]
+    }
+  },
+  "implementation": {
+    "kind": "http",
+    "entrypoint": "{CLAIMS_MANAGER_BASE_URL}/api/v1/tools/processing-log/update",
+    "execution": {
+      "kind": "external-http",
+      "config": {
+        "method": "POST",
+        "headers": {
+          "X-Tool-Secret": "{TOOL_SECRET}"
+        }
+      }
+    }
+  }
+}

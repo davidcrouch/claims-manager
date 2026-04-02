@@ -1,0 +1,60 @@
+{
+  "name": "agent.assistant",
+  "display_name": "Assistant Agent",
+  "type": "agent",
+  "version": "1.0.0",
+  "description": "General-purpose conversational assistant using OpenAI",
+  "tags": [
+    "assistant",
+    "conversation",
+    "general"
+  ],
+  "prompt": "prompt.assistant.general",
+  "model": "model.assistant.openai",
+  "tools": [],
+  "tool_loop_config": {
+    "max_iterations": 15,
+    "max_concurrency": 1,
+    "tool_choice": "auto"
+  },
+  "config": {},
+  "methods": {
+    "execute": {
+      "description": "Invoke the assistant with a user message",
+      "input": {
+        "type": "object",
+        "properties": {
+          "userMessage": {
+            "type": "string",
+            "description": "User message or question"
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "finish_reason": {
+            "type": "string"
+          },
+          "usage": {
+            "type": "object"
+          }
+        }
+      },
+      "semantics": "work",
+      "channels": [
+        "sync",
+        "stream"
+      ]
+    }
+  },
+  "implementation": {
+    "kind": "data",
+    "execution": {
+      "kind": "agent-runner"
+    }
+  }
+}

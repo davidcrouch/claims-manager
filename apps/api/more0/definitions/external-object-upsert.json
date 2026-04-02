@@ -1,0 +1,54 @@
+{
+  "name": "tool.claims-manager.external-object-upsert",
+  "display_name": "External Object Upsert",
+  "type": "tool",
+  "version": "1.0.0",
+  "description": "Upsert an external object from a fetched CW entity payload. Computes hash, creates version if changed.",
+  "tags": ["claims-manager", "external-object", "upsert"],
+  "methods": {
+    "info": {
+      "description": "Tool capability metadata",
+      "channels": ["sync"]
+    },
+    "execute": {
+      "description": "Upsert external object with payload hash and versioning",
+      "input": {
+        "type": "object",
+        "properties": {
+          "tenantId": { "type": "string" },
+          "connectionId": { "type": "string" },
+          "providerCode": { "type": "string" },
+          "providerEntityType": { "type": "string" },
+          "providerEntityId": { "type": "string" },
+          "normalizedEntityType": { "type": "string" },
+          "payload": { "type": "object" },
+          "sourceEventId": { "type": "string", "nullable": true }
+        },
+        "required": ["tenantId", "connectionId", "providerCode", "providerEntityType", "providerEntityId", "payload"]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "externalObject": { "type": "object" },
+          "isNew": { "type": "boolean" },
+          "hashChanged": { "type": "boolean" }
+        }
+      },
+      "semantics": "work",
+      "channels": ["sync"]
+    }
+  },
+  "implementation": {
+    "kind": "http",
+    "entrypoint": "{CLAIMS_MANAGER_BASE_URL}/api/v1/tools/external-objects/upsert",
+    "execution": {
+      "kind": "external-http",
+      "config": {
+        "method": "POST",
+        "headers": {
+          "X-Tool-Secret": "{TOOL_SECRET}"
+        }
+      }
+    }
+  }
+}

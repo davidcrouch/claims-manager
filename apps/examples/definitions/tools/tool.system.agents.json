@@ -1,0 +1,369 @@
+{
+  "name": "tool.system.agents",
+  "display_name": "System Agents",
+  "type": "tool",
+  "version": "1.0.0",
+  "description": "Manage agent definitions in the capability registry. An agent orchestrates an LLM conversation by combining a prompt (system instruction), a model (LLM provider and configuration), and optionally tool capabilities the LLM can call. IMPORTANT: Before creating an agent, create the prompt and model first using tool.system.prompts and tool.system.models.",
+  "tags": [
+    "system",
+    "management",
+    "agents"
+  ],
+  "methods": {
+    "info": {
+      "description": "Tool capability metadata",
+      "channels": [
+        "sync"
+      ]
+    },
+    "create": {
+      "description": "Create an agent definition. An agent combines: (1) a prompt — the system instruction, (2) a model — the LLM provider and config, and optionally (3) tool capabilities the LLM can call. PREREQUISITES: You must first create the prompt (tool.system.prompts::create) and model (tool.system.models::create). The agent references them by name. Example: create agent 'agent.support.triage' with prompt_ref='prompt.support.triage' and model_ref='model.support.gpt4o'.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "description": "App key that owns this agent. Example: 'my-app'"
+          },
+          "name": {
+            "type": "string",
+            "description": "Agent name. Example: 'agent.support.triage'"
+          },
+          "description": {
+            "type": "string",
+            "description": "What the agent does. Example: 'Triage incoming support tickets by priority'"
+          },
+          "prompt_ref": {
+            "type": "string",
+            "description": "Name of the prompt to use. Must already exist in the same app. Example: 'prompt.support.triage'"
+          },
+          "model_ref": {
+            "type": "string",
+            "description": "Name of the model config to use. Must already exist in the same app. Example: 'model.support.gpt4o'"
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Tool methods this agent can call, formatted as 'tool.name::method'. Example: ['tool.crm.search::search', 'tool.email.send::send']"
+          },
+          "tool_choice": {
+            "type": "string",
+            "description": "Tool-calling behavior: 'auto' (LLM decides, default), 'required' (must call a tool), 'none' (tools disabled)"
+          },
+          "max_tool_iterations": {
+            "type": "number",
+            "description": "Maximum tool-call rounds before stopping. Default: 5"
+          },
+          "temperature": {
+            "type": "number",
+            "description": "Override the model's temperature for this agent (0.0–2.0)"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional tags for discovery"
+          },
+          "version": {
+            "type": "object",
+            "properties": {
+              "major": {
+                "type": "number"
+              },
+              "minor": {
+                "type": "number"
+              },
+              "patch": {
+                "type": "number"
+              }
+            },
+            "description": "Optional version. Defaults to 1.0.0 if omitted."
+          }
+        },
+        "required": [
+          "app",
+          "name",
+          "description",
+          "prompt_ref",
+          "model_ref"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "cap": {
+            "type": "string",
+            "description": "Full capability reference (app/name)"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "description": "'created' or 'updated'"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "semantics": "work",
+      "channels": [
+        "sync"
+      ]
+    },
+    "get": {
+      "description": "Get full details of an agent, including its prompt, model, tools, and configuration.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Agent name or capability reference. Example: 'agent.support.triage' or 'my-app/agent.support.triage'"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "cap": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "methods": {
+            "type": "array"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "semantics": "informational",
+      "channels": [
+        "sync"
+      ]
+    },
+    "list": {
+      "description": "List agent definitions. Optionally filter by app or tags.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "description": "Filter by app key"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Filter by tags"
+          },
+          "query": {
+            "type": "string",
+            "description": "Free-text search query"
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "agents": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "cap": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "version": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "semantics": "informational",
+      "channels": [
+        "sync"
+      ]
+    },
+    "update": {
+      "description": "Update an existing agent definition. Provide only the fields you want to change. The version patch number is auto-incremented.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "description": "App key. Example: 'my-app'"
+          },
+          "name": {
+            "type": "string",
+            "description": "Agent name to update"
+          },
+          "description": {
+            "type": "string",
+            "description": "Updated description (optional)"
+          },
+          "prompt_ref": {
+            "type": "string",
+            "description": "Updated prompt reference (optional)"
+          },
+          "model_ref": {
+            "type": "string",
+            "description": "Updated model reference (optional)"
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Updated tool list (optional)"
+          },
+          "tool_choice": {
+            "type": "string",
+            "description": "Updated tool choice (optional)"
+          },
+          "max_tool_iterations": {
+            "type": "number",
+            "description": "Updated max iterations (optional)"
+          },
+          "temperature": {
+            "type": "number",
+            "description": "Updated temperature (optional)"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Updated tags (optional)"
+          }
+        },
+        "required": [
+          "app",
+          "name"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "cap": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "semantics": "work",
+      "channels": [
+        "sync"
+      ]
+    },
+    "delete": {
+      "description": "Deprecate an agent definition. It remains in the registry but is marked as deprecated.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Agent name or capability reference"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Reason for deprecation"
+          }
+        },
+        "required": [
+          "name",
+          "reason"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "affected_versions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "semantics": "work",
+      "channels": [
+        "sync"
+      ]
+    }
+  },
+  "implementation": {
+    "kind": "ts-module",
+    "entrypoint": "implementations/agents.ts",
+    "execution": {
+      "kind": "inline-ts",
+      "config": {
+        "npm_packages": [
+          "@more0ai/client@workspace:*"
+        ]
+      }
+    }
+  }
+}

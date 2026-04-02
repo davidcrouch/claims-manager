@@ -1,0 +1,355 @@
+{
+  "name": "tool.system.models",
+  "display_name": "System Models",
+  "type": "tool",
+  "version": "1.0.0",
+  "description": "Manage model configurations in the capability registry. A model configuration specifies which LLM provider and model to use (e.g. OpenAI gpt-4o, Gemini 2.0 Flash) along with parameters like temperature and max tokens. Models are referenced by agents.",
+  "tags": [
+    "system",
+    "management",
+    "models"
+  ],
+  "methods": {
+    "info": {
+      "description": "Tool capability metadata",
+      "channels": [
+        "sync"
+      ]
+    },
+    "create": {
+      "description": "Create a model configuration that specifies which LLM provider and model to use. Models are referenced by agents. Available providers: 'more0ai/provider.llm.openai' (gpt-4o, gpt-4o-mini), 'more0ai/provider.llm.gemini' (gemini-2.0-flash, gemini-1.5-pro). Example: create a model named 'model.support.gpt4o' using provider 'more0ai/provider.llm.openai' with model_id 'gpt-4o-mini'.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "description": "App key that owns this model config. Example: 'my-app'"
+          },
+          "name": {
+            "type": "string",
+            "description": "Model config name. Example: 'model.support.gpt4o'"
+          },
+          "description": {
+            "type": "string",
+            "description": "What this model configuration is for. Example: 'GPT-4o-mini for support ticket triage'"
+          },
+          "provider_ref": {
+            "type": "string",
+            "description": "Provider capability reference. Example: 'more0ai/provider.llm.openai' or 'more0ai/provider.llm.gemini'"
+          },
+          "model_id": {
+            "type": "string",
+            "description": "Provider-specific model identifier. Example: 'gpt-4o-mini', 'gpt-4o', 'gemini-2.0-flash'"
+          },
+          "temperature": {
+            "type": "number",
+            "description": "Sampling temperature (0.0–2.0). Lower = more deterministic. Default: 0.7"
+          },
+          "max_tokens": {
+            "type": "number",
+            "description": "Maximum output tokens. Default: 1024"
+          },
+          "timeout": {
+            "type": "number",
+            "description": "Request timeout in seconds. Default: 60"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional tags for discovery. Example: ['support', 'openai']"
+          },
+          "version": {
+            "type": "object",
+            "properties": {
+              "major": {
+                "type": "number"
+              },
+              "minor": {
+                "type": "number"
+              },
+              "patch": {
+                "type": "number"
+              }
+            },
+            "description": "Optional version. Defaults to 1.0.0 if omitted."
+          }
+        },
+        "required": [
+          "app",
+          "name",
+          "description",
+          "provider_ref",
+          "model_id"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "cap": {
+            "type": "string",
+            "description": "Full capability reference (app/name)"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "description": "'created' or 'updated'"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "semantics": "work",
+      "channels": [
+        "sync"
+      ]
+    },
+    "get": {
+      "description": "Get full details of a model configuration by name.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Model config name or capability reference. Example: 'model.support.gpt4o' or 'my-app/model.support.gpt4o'"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "cap": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "methods": {
+            "type": "array"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "semantics": "informational",
+      "channels": [
+        "sync"
+      ]
+    },
+    "list": {
+      "description": "List model configurations. Optionally filter by app or tags.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "description": "Filter by app key"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Filter by tags"
+          },
+          "query": {
+            "type": "string",
+            "description": "Free-text search query"
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "cap": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "version": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "semantics": "informational",
+      "channels": [
+        "sync"
+      ]
+    },
+    "update": {
+      "description": "Update an existing model configuration. Provide only the fields you want to change. The version patch number is auto-incremented.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "description": "App key. Example: 'my-app'"
+          },
+          "name": {
+            "type": "string",
+            "description": "Model config name to update. Example: 'model.support.gpt4o'"
+          },
+          "description": {
+            "type": "string",
+            "description": "Updated description (optional)"
+          },
+          "provider_ref": {
+            "type": "string",
+            "description": "Updated provider reference (optional)"
+          },
+          "model_id": {
+            "type": "string",
+            "description": "Updated model identifier (optional)"
+          },
+          "temperature": {
+            "type": "number",
+            "description": "Updated temperature (optional)"
+          },
+          "max_tokens": {
+            "type": "number",
+            "description": "Updated max tokens (optional)"
+          },
+          "timeout": {
+            "type": "number",
+            "description": "Updated timeout (optional)"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Updated tags (optional)"
+          }
+        },
+        "required": [
+          "app",
+          "name"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "cap": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "semantics": "work",
+      "channels": [
+        "sync"
+      ]
+    },
+    "delete": {
+      "description": "Deprecate a model configuration. It remains in the registry but is marked as deprecated.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Model config name or capability reference"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Reason for deprecation"
+          }
+        },
+        "required": [
+          "name",
+          "reason"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "affected_versions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "semantics": "work",
+      "channels": [
+        "sync"
+      ]
+    }
+  },
+  "implementation": {
+    "kind": "ts-module",
+    "entrypoint": "implementations/models.ts",
+    "execution": {
+      "kind": "inline-ts",
+      "config": {
+        "npm_packages": [
+          "@more0ai/client@workspace:*"
+        ]
+      }
+    }
+  }
+}

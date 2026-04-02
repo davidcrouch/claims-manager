@@ -1,0 +1,168 @@
+{
+  "name": "tool.os.web",
+  "display_name": "Web Search Fetch",
+  "type": "tool",
+  "version": "1.0.0",
+  "description": "Search the web and fetch content from URLs. Use 'search' to find information on the internet and 'fetch' to retrieve the content of a specific web page or API endpoint.",
+  "tags": [
+    "system",
+    "os",
+    "web",
+    "internet",
+    "search",
+    "fetch"
+  ],
+  "methods": {
+    "info": {
+      "description": "Tool capability metadata",
+      "channels": [
+        "sync"
+      ]
+    },
+    "search": {
+      "description": "Search the web for information. Returns a list of results with titles, URLs, and snippets. Uses DuckDuckGo by default or a custom search API via SEARCH_API_URL env var. Example: search query='latest Node.js LTS version'.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search query string. Example: 'TypeScript 5 new features'"
+          },
+          "num_results": {
+            "type": "number",
+            "description": "Maximum number of results to return. Default: 5. Max: 20."
+          }
+        },
+        "required": [
+          "query"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "description": "Page title"
+                },
+                "url": {
+                  "type": "string",
+                  "description": "Page URL"
+                },
+                "snippet": {
+                  "type": "string",
+                  "description": "Text snippet / description"
+                }
+              }
+            },
+            "description": "Search results"
+          },
+          "query": {
+            "type": "string",
+            "description": "The query that was searched"
+          },
+          "total": {
+            "type": "number",
+            "description": "Number of results returned"
+          },
+          "error": {
+            "type": "string",
+            "description": "Error message if the search failed"
+          }
+        }
+      },
+      "semantics": "informational",
+      "channels": [
+        "sync"
+      ]
+    },
+    "fetch": {
+      "description": "Fetch content from a URL. Supports GET (default), POST, PUT, PATCH, DELETE methods. Returns the response body, status code, and headers. Use for retrieving web pages, calling REST APIs, or downloading text content. Example: fetch url='https://api.github.com/repos/nodejs/node' to get repo info.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Full URL to fetch. Must start with http:// or https://. Example: 'https://api.github.com/repos/nodejs/node'"
+          },
+          "method": {
+            "type": "string",
+            "description": "HTTP method: 'GET' (default), 'POST', 'PUT', 'PATCH', 'DELETE'"
+          },
+          "headers": {
+            "type": "object",
+            "description": "HTTP request headers as key-value pairs. Example: { \"Authorization\": \"Bearer token\", \"Content-Type\": \"application/json\" }"
+          },
+          "body": {
+            "type": "string",
+            "description": "Request body for POST/PUT/PATCH. Send JSON as a string."
+          },
+          "timeout": {
+            "type": "number",
+            "description": "Request timeout in seconds. Default: 30. Max: 120."
+          },
+          "max_response_bytes": {
+            "type": "number",
+            "description": "Maximum response body size in bytes. Default: 1048576 (1MB). Truncates if exceeded."
+          }
+        },
+        "required": [
+          "url"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "number",
+            "description": "HTTP status code"
+          },
+          "status_text": {
+            "type": "string",
+            "description": "HTTP status text (e.g. 'OK', 'Not Found')"
+          },
+          "headers": {
+            "type": "object",
+            "description": "Response headers as key-value pairs"
+          },
+          "body": {
+            "type": "string",
+            "description": "Response body as text"
+          },
+          "content_type": {
+            "type": "string",
+            "description": "Response Content-Type header"
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "True if the response body was truncated due to max_response_bytes"
+          },
+          "error": {
+            "type": "string",
+            "description": "Error message if the fetch failed"
+          }
+        }
+      },
+      "semantics": "informational",
+      "channels": [
+        "sync"
+      ]
+    }
+  },
+  "implementation": {
+    "kind": "ts-module",
+    "entrypoint": "implementations/web.ts",
+    "execution": {
+      "kind": "inline-ts",
+      "config": {
+        "npm_packages": [
+          "@more0ai/client@workspace:*"
+        ]
+      }
+    }
+  }
+}
