@@ -22,17 +22,13 @@ import { renderLogoutPage } from '../helpers/logout-renderer.js';
 import {
    STATIC_CLIENTS,
    CLAIMS_MANAGER_UI_CLIENT_ID,
-   CHAT_UI_CLIENT_ID,
-   REGISTRY_CLI_CLIENT_ID,
-   REGISTRY_IMPORT_CLIENT_ID,
-   CAPABILITIES_WORKER_CLIENT_ID
 } from './static-clients.js';
 
 const baseLogger = createLogger('auth-server:oidc-provider', LoggerType.NODEJS);
 const log = createTelemetryLogger(baseLogger, 'oidc-provider', 'OidcProvider', 'auth-server');
 
 // Re-export for consumers (e.g. auth-routes)
-export { CLAIMS_MANAGER_UI_CLIENT_ID, CHAT_UI_CLIENT_ID, REGISTRY_CLI_CLIENT_ID, REGISTRY_IMPORT_CLIENT_ID, CAPABILITIES_WORKER_CLIENT_ID };
+export { CLAIMS_MANAGER_UI_CLIENT_ID };
 
 /** Parse DCR `allowed_apps` (array or JSON string) for MCP gateway authorization. */
 function normalizeAllowedAppsFromMetadata(metadata: Record<string, unknown> | undefined): string[] {

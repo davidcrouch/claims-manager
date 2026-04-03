@@ -145,7 +145,7 @@ async function createServer(): Promise<Application> {
       // ========================================================================
       app.use(helmetMiddleware());
       app.use(securityHeaders);
-      app.use(generalRateLimit);
+      app.use(generalRateLimit as any);
 
       // ========================================================================
       // CORS CONFIGURATION

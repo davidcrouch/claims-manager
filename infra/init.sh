@@ -49,22 +49,31 @@ init_databases() {
     
     # List of databases to create
     DATABASES=(
-        "workers_comp"
-        "workers_comp_testing"
-        "pdf_test_gen"
-        "pdf_test_gen_testing"
+        "claims_manager"
+        "claims_manager_api"
+        "claims_manager_test"
     )
     
     for db in "${DATABASES[@]}"; do
         echo -n "  Creating database '$db'... "
-        docker exec more0ai-pgsql psql -U "$DB_USER" -d postgres -c "CREATE DATABASE $db;" 2>/dev/null && \
+        docker exec pgsql psql -U "$DB_USER" -d postgres -c "CREATE DATABASE $db;" 2>/dev/null && \
             echo -e "${GREEN}created${NC}" || \
             echo -e "${YELLOW}exists${NC}"
         
-        # Enable vector extension
-        docker exec more0ai-pgsql psql -U "$DB_USER" -d "$db" -c "CREATE EXTENSION IF NOT EXISTS vector;" 2>/dev/null
+        # Enable required extensions
+        docker exec pgsql psql -U "$DB_USER" -d "$db" -c "CREATE EXTENSION IF NOT EXISTS pgcrypto;" 2>/dev/null
     done
     
+    # Seed required application records
+    echo -n "  Seeding 'claims-manager' application... "
+    docker exec pgsql psql -U "$DB_USER" -d claims_manager -c \
+      "INSERT INTO applications (id, name, status, object, created_at, updated_at, created_by, updated_by, subdomain)
+       SELECT gen_random_uuid(), 'Claims Manager', 'active', 'application', NOW(), NOW(),
+              '00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000000', 'claims-manager'
+       WHERE NOT EXISTS (SELECT 1 FROM applications WHERE subdomain = 'claims-manager');" 2>/dev/null && \
+        echo -e "${GREEN}ready${NC}" || \
+        echo -e "${YELLOW}skipped (table may not exist yet)${NC}"
+
     echo -e "${GREEN}✓ Databases ready${NC}"
     echo ""
 }
@@ -77,9 +86,7 @@ init_buckets() {
     
     # List of buckets to create
     BUCKETS=(
-        "workers-comp"
-        "pdf-test-gen"
-        "more0ai-shared"
+        "claims-manager"
     )
     
     for bucket in "${BUCKETS[@]}"; do
@@ -109,7 +116,7 @@ init_buckets() {
   ]
 }
 EOF
-        for bucket in workers-comp pdf-test-gen more0ai-shared; do
+        for bucket in claims-manager; do
             mc cors set minio/\$bucket /tmp/cors.json 2>/dev/null || true
         done
     " && echo -e "${GREEN}done${NC}" || echo -e "${YELLOW}skipped${NC}"
@@ -123,7 +130,7 @@ EOF
 # ============================================================================
 
 # Check if infrastructure is running
-if ! docker ps | grep -q more0ai-pgsql; then
+if ! docker ps | grep -q pgsql; then
     echo -e "${RED}Error: Infrastructure not running. Start it first:${NC}"
     echo "  ./start.sh"
     exit 1
@@ -141,7 +148,7 @@ fi
 echo -e "${GREEN}Infrastructure initialization complete!${NC}"
 echo ""
 echo "Databases:"
-docker exec more0ai-pgsql psql -U "$DB_USER" -d postgres -c "\l" 2>/dev/null | grep -E "workers_comp|pdf_test_gen" | awk '{print "  - " $1}'
+docker exec pgsql psql -U "$DB_USER" -d postgres -c "\l" 2>/dev/null | grep -E "claims_manager" | awk '{print "  - " $1}'
 echo ""
 echo "Buckets:"
 docker run --rm --network more0ai-infra --entrypoint /bin/sh minio/mc -c \

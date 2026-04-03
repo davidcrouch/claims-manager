@@ -34,7 +34,8 @@ import { strict as assert } from 'node:assert';
 import * as querystring from 'node:querystring';
 import { inspect } from 'node:util';
 import isEmpty from 'lodash/isEmpty.js';
-import { storeAuthResult, deleteStoredAuthResult, CHAT_UI_CLIENT_ID, REGISTRY_CLI_CLIENT_ID } from '../config/oidc-provider.js';
+import { storeAuthResult, deleteStoredAuthResult, CLAIMS_MANAGER_UI_CLIENT_ID } from '../config/oidc-provider.js';
+import { STATIC_CLIENTS } from '../config/static-clients.js';
 import { getClientId, getApiUrl, getBaseUrl, getPostLogoutRedirectUrl, getEnvVarWithDefault } from '../config/env-validation.js';
 // Local db services for user operations
 import { createUsersService, createUserIdentitiesService } from '../db/services/index.js';
@@ -169,7 +170,7 @@ export default function createAuthRoutes(
 
    function isFirstPartyClient(clientId: string | undefined): boolean {
       if (!clientId) return false;
-      return clientId === getClientId() || clientId === CHAT_UI_CLIENT_ID;
+      return clientId === getClientId() || clientId === CLAIMS_MANAGER_UI_CLIENT_ID;
    }
 
    /**
@@ -1306,10 +1307,10 @@ export default function createAuthRoutes(
          if (!storedAppKey) {
             storedAppKey = await getAppSlug(uid) || undefined;
          }
-         // Device flow (e.g. mz login) has no subdomain; use default app when client is registry-cli
-         if (!storedAppKey && interactionDetails.params?.client_id === REGISTRY_CLI_CLIENT_ID) {
-            storedAppKey = process.env.MZ_DEVICE_FLOW_APP_SUBDOMAIN || process.env.DEFAULT_APP_SUBDOMAIN || 'app';
-            log.info({ functionName: 'login-submit', storedAppKey }, 'auth-server:auth-routes:login-submit - Using default app subdomain for registry-cli device flow');
+         // Device flow has no subdomain; use default app
+         if (!storedAppKey) {
+            storedAppKey = process.env.DEFAULT_APP_SUBDOMAIN || 'app';
+            log.info({ functionName: 'login-submit', storedAppKey }, 'auth-server:auth-routes:login-submit - Using default app subdomain for device flow');
          }
          log.info({ functionName: 'login-submit', userId, storedAppKey }, 'auth-server:auth-routes:login-submit - Starting unified tenant resolution');
          
@@ -1638,8 +1639,8 @@ export default function createAuthRoutes(
             if (!selectOrgAppKey) {
                selectOrgAppKey = await getAppSlug(uid) || undefined;
             }
-            if (!selectOrgAppKey && interactionDetails.params?.client_id === REGISTRY_CLI_CLIENT_ID) {
-               selectOrgAppKey = process.env.MZ_DEVICE_FLOW_APP_SUBDOMAIN || process.env.DEFAULT_APP_SUBDOMAIN || 'app';
+            if (!selectOrgAppKey) {
+               selectOrgAppKey = process.env.DEFAULT_APP_SUBDOMAIN || 'app';
             }
             const subdomain = selectOrgAppKey || extractSubdomainFromOrigin(origin);
             application = subdomain ? await getApplicationBySubdomain(subdomain) : null;
@@ -1837,8 +1838,8 @@ export default function createAuthRoutes(
             if (!selectOrgAppKeyFromInteraction) {
                selectOrgAppKeyFromInteraction = await getAppSlug(uid) || undefined;
             }
-            if (!selectOrgAppKeyFromInteraction && interactionDetails.params?.client_id === REGISTRY_CLI_CLIENT_ID) {
-               selectOrgAppKeyFromInteraction = process.env.MZ_DEVICE_FLOW_APP_SUBDOMAIN || process.env.DEFAULT_APP_SUBDOMAIN || 'app';
+            if (!selectOrgAppKeyFromInteraction) {
+               selectOrgAppKeyFromInteraction = process.env.DEFAULT_APP_SUBDOMAIN || 'app';
             }
             subdomain = selectOrgAppKeyFromInteraction || extractSubdomainFromOrigin(origin);
             application = subdomain ? await getApplicationBySubdomain(subdomain) : null;
@@ -2081,12 +2082,9 @@ export default function createAuthRoutes(
             }
          }
 
-         // When origin/redirect_uri are localhost (no subdomain), use default app subdomain (e.g. device flow registry-cli, or admin-ui at localhost:3207)
+         // When origin/redirect_uri are localhost (no subdomain), use default app subdomain
          if (!applicationId) {
-            const defaultSubdomain =
-               (interactionDetails.params?.client_id === REGISTRY_CLI_CLIENT_ID
-                  ? (process.env.MZ_DEVICE_FLOW_APP_SUBDOMAIN || process.env.DEFAULT_APP_SUBDOMAIN || 'app')
-                  : null) || getEnvVarWithDefault('REGISTRATION_DEFAULT_APP_SUBDOMAIN', 'app');
+            const defaultSubdomain = getEnvVarWithDefault('REGISTRATION_DEFAULT_APP_SUBDOMAIN', 'app');
             application = await getApplicationBySubdomain(defaultSubdomain);
             applicationId = application?.id;
             if (applicationId) {

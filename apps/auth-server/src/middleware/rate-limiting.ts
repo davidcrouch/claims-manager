@@ -1,5 +1,4 @@
 import rateLimit from 'express-rate-limit';
-import { Request, Response } from 'express';
 import { createLogger, LoggerType } from '../lib/logger.js';
 import { createTelemetryLogger } from '@morezero/telemetry';
 import { getRateLimitConfig } from '../config/env-validation.js';
@@ -29,7 +28,7 @@ export const generalRateLimit = rateLimit({
    },
    standardHeaders: true,
    legacyHeaders: false,
-   handler: (req: Request, res: Response) => {
+   handler: (req, res) => {
       log.warn({
          ip: req.ip,
          path: req.path,
@@ -53,7 +52,7 @@ export const authRateLimit = rateLimit({
    },
    standardHeaders: true,
    legacyHeaders: false,
-   handler: (req: Request, res: Response) => {
+   handler: (req, res) => {
       log.warn({
          ip: req.ip,
          path: req.path,
@@ -77,7 +76,7 @@ export const oauthRateLimit = rateLimit({
    },
    standardHeaders: true,
    legacyHeaders: false,
-   handler: (req: Request, res: Response) => {
+   handler: (req, res) => {
       log.warn({
          ip: req.ip,
          path: req.path,
@@ -101,7 +100,7 @@ export const tokenRateLimit = rateLimit({
    },
    standardHeaders: true,
    legacyHeaders: false,
-   handler: (req: Request, res: Response) => {
+   handler: (req, res) => {
       log.warn({
          ip: req.ip,
          path: req.path,
