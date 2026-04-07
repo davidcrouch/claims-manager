@@ -1,0 +1,8 @@
+#!/bin/sh
+# Run work-hours logger after each successful commit.
+ROOT="$(git rev-parse --show-toplevel)"
+if command -v node >/dev/null 2>&1; then
+  node "$ROOT/scripts/append-work-hours.mjs" || true
+else
+  echo "[.githooks/post-commit] node not found; skipping work hours append." >&2
+fi
