@@ -27,10 +27,6 @@ describe('JwtService', () => {
         email: 'test@example.com',
         name: 'Test User',
         organizationId: 'org-123',
-        compName: 'Test Company',
-        compId: 'comp-123',
-        isAdmin: true,
-        roleInCompany: 'Manager',
         avatarURL: 'https://example.com/avatar.jpg',
         phone: '+1234567890'
       };

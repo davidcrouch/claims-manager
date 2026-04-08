@@ -58,6 +58,7 @@ export class WebhookAliasController {
       hmacVerified,
       connectionId: connection?.connectionId,
       providerCode: connection?.providerCode,
+      providerId: connection?.providerId,
     });
 
     if (hmacVerified && connection) {
@@ -66,8 +67,10 @@ export class WebhookAliasController {
           eventId: event.id,
           tenantId: event.payloadTenantId ?? '',
           connectionId: connection.connectionId,
+          providerId: connection.providerId,
           eventType: event.eventType,
           providerEntityId: event.payloadEntityId ?? '',
+          eventTimestamp: event.eventTimestamp,
         })
         .catch(() => {});
     }

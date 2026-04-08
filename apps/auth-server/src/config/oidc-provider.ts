@@ -87,7 +87,6 @@ export async function storeAuthResult(userId: string, authResult: any) {
          const redis = await initializeRedis();
          const key = `auth:user:${userId}`;
 
-      // Create a clean, serializable object to avoid circular references
       const cleanAuthResult = {
          accessToken: authResult.accessToken,
          refreshToken: authResult.refreshToken,
@@ -95,15 +94,10 @@ export async function storeAuthResult(userId: string, authResult: any) {
             userId: authResult.user?.userId,
             name: authResult.user?.name,
             email: authResult.user?.email,
-            compName: authResult.user?.compName,
-            compId: authResult.user?.compId,
-            isAdmin: authResult.user?.isAdmin || false,
-            roleInCompany: authResult.user?.roleInCompany,
             avatarURL: authResult.user?.avatarURL,
             phone: authResult.user?.phone
          },
          organizationId: authResult.organizationId,
-         applicationId: authResult.applicationId,
          // Add token metadata for token exchange
          metadata: {
             stored_at: Date.now(),
@@ -161,16 +155,11 @@ export async function getStoredAuthResult(userId: string) {
             userId: string;
             name?: string;
             email?: string;
-            compName?: string;
-            compId?: string;
-            isAdmin?: boolean;
-            roleInCompany?: string;
             avatarURL?: string;
             phone?: string;
             provider?: string;
          };
          organizationId?: string;
-         applicationId?: string;
       }>(key);
 
          if (authResult) {
@@ -247,7 +236,6 @@ export async function deleteStoredAuthResult(userId: string): Promise<void> {
 export interface OAuthStateData {
    createdAt: number;
    interactionUid?: string;
-   applicationId?: string;
    clientRedirectUri?: string;
 }
 
@@ -623,8 +611,8 @@ export async function createOidcProvider(): Promise<Provider> {
       // registry:* scopes have no claims but must be here so the provider classifies them as OIDC
       // scopes rather than resource scopes when resourceIndicators is enabled.
       claims: {
-         openid: ['sub', 'organization_id', 'application_id'],
-         profile: ['name', 'given_name', 'family_name', 'picture', 'company', 'role', 'is_admin'],
+         openid: ['sub', 'organization_id'],
+         profile: ['name', 'given_name', 'family_name', 'picture'],
          email: ['email', 'email_verified'],
          phone: ['phone_number', 'phone_number_verified'],
          address: ['address'],
@@ -707,7 +695,7 @@ export async function createOidcProvider(): Promise<Provider> {
          }
       },
 
-      // DCR: persist tenant + MCP app allow-list (used in JWT for MCP gateway, doc 35)
+      // DCR: persist organization + MCP app allow-list (used in JWT for MCP gateway, doc 35)
       extraClientMetadata: {
          properties: ['organization_id', 'allowed_apps'],
          validator(_ctx, key, value, _metadata) {
@@ -754,13 +742,11 @@ export async function createOidcProvider(): Promise<Provider> {
 
                const user = authResult.user;
                const organizationId = authResult.organizationId;
-               const applicationId = authResult.applicationId;
 
                log.debug({ 
                   id, 
                   user, 
                   organizationId, 
-                  applicationId 
                }, 'auth-server:oidc-provider:findAccount - Retrieved account from Redis');
 
 
@@ -772,7 +758,6 @@ export async function createOidcProvider(): Promise<Provider> {
                      const userClaims: any = {
                         sub: userId,
                         organization_id: organizationId,
-                        application_id: applicationId,
                      };
 
                      // Add profile claims (includes name)
@@ -783,10 +768,6 @@ export async function createOidcProvider(): Promise<Provider> {
                         userClaims.given_name = user.name ? user.name.split(' ')[0] : '';
                         userClaims.family_name = user.name ? user.name.split(' ').slice(1).join(' ') : '';
                         userClaims.picture = user.avatarURL || '';
-                        // Custom claims for company/role info
-                        userClaims.company = user.compName;
-                        userClaims.role = user.roleInCompany;
-                        userClaims.is_admin = user.isAdmin || false;
                      }
 
                      // Add email claims
@@ -895,14 +876,12 @@ export async function createOidcProvider(): Promise<Provider> {
                userId: sessionAccountId,
                hasAuthResult: !!authResult,
                hasOrganizationId: !!(authResult?.organizationId),
-               hasApplicationId: !!(authResult?.applicationId),
             }, 'auth-server:oidc-provider:extraTokenClaims - Retrieved stored auth result');
 
             if (authResult && authResult.organizationId) {
                const user = authResult.user;
                const claims: any = {
                   organization_id: authResult.organizationId,
-                  application_id: authResult.applicationId,
                   ...(user?.name && { name: user.name }),
                   ...(user?.email && { email: user.email }),
                };
@@ -910,7 +889,6 @@ export async function createOidcProvider(): Promise<Provider> {
                log.info({
                   userId: sessionAccountId,
                   organization_id: authResult.organizationId,
-                  application_id: authResult.applicationId,
                }, 'auth-server:oidc-provider:extraTokenClaims - Adding organization claims from stored auth result');
 
                return claims;

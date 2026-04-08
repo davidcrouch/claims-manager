@@ -48,3 +48,12 @@
   **Backfilled the full commit history** with estimated hours and invoice-style descriptions for all prior work.  
   Added **line-ending rules** so hook scripts work correctly across platforms.  
   Updated **repository ignore rules** to keep local editor configuration out of version control.
+
+- `2026-04-08` **10 h**  
+  **Integration schema hardening and auth alignment across API, sign-in service, and web app.**  
+  Tightened integration-related data shapes so provider and connection relationships are clearer and webhook and external-object handling match the updated model.  
+  Simplified organization and registration flows in the sign-in service by removing redundant layers and aligning tokens with the streamlined model.  
+  Updated the business API and user storage to match the same organization and JWT shape end to end.  
+  Adjusted the web experience for sign-in, registration, and entity forms so sessions stay consistent with the backend.  
+  Refreshed database migrations and local infrastructure so new environments start from the current baseline without drift.  
+  Documented the integration hardening plan and webhook operator notes in implementation docs and updated the delivery overview.

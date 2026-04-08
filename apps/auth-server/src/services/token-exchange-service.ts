@@ -583,13 +583,6 @@ export class TokenExchangeService {
         return metadataScope;
       }
 
-      // Determine scope based on user permissions
-      const user = accountData.user;
-      if (user?.isAdmin) {
-        return 'openid profile email admin backend:full';
-      }
-
-      // Default scope for regular users
       return 'openid profile email backend:read';
     } catch (error) {
       log.warn({
@@ -645,7 +638,6 @@ export class TokenExchangeService {
         hasAccessToken: !!accountData.accessToken,
         hasUser: !!accountData.user,
         userId: accountData.user?.userId,
-        isAdmin: accountData.user?.isAdmin
       }, 'auth-server:token-exchange-service:validateBackendToken - Backend token validation successful');
 
       return {
@@ -676,10 +668,6 @@ export class TokenExchangeService {
           userId: accountData.user?.userId,
           name: accountData.user?.name,
           email: accountData.user?.email,
-          compName: accountData.user?.compName,
-          compId: accountData.user?.compId,
-          isAdmin: accountData.user?.isAdmin,
-          roleInCompany: accountData.user?.roleInCompany,
           avatarURL: accountData.user?.avatarURL,
           phone: accountData.user?.phone
         },
@@ -772,23 +760,9 @@ export class TokenExchangeService {
         };
       }
 
-      if (resource.includes('/admin/') && !storedAuthResult.user?.isAdmin) {
-        log.warn({
-          organizationId,
-          resource,
-          isAdmin: storedAuthResult.user?.isAdmin
-        }, 'auth-server:token-exchange-service:validateResourceAccess - Admin resource access denied for non-admin user');
-
-        return {
-          success: false,
-          error: 'Admin privileges required for this resource'
-        };
-      }
-
       log.info({
         organizationId,
         resource,
-        isAdmin: storedAuthResult.user?.isAdmin
       }, 'auth-server:token-exchange-service:validateResourceAccess - Resource access granted');
 
       return {

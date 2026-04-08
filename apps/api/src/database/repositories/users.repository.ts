@@ -1,8 +1,8 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { DRIZZLE } from '../drizzle.module';
 import type { DrizzleDB } from '../drizzle.module';
-import { users } from '../schema';
+import { users, organizationUsers } from '../schema';
 
 export type UserRow = typeof users.$inferSelect;
 export type UserInsert = typeof users.$inferInsert;
@@ -20,20 +20,22 @@ export class UsersRepository {
     return row ?? null;
   }
 
-  async findByKindeUserId(params: { kindeUserId: string }): Promise<UserRow | null> {
+  async findByEmail(params: { email: string }): Promise<UserRow | null> {
     const [row] = await this.db
       .select()
       .from(users)
-      .where(eq(users.kindeUserId, params.kindeUserId))
+      .where(eq(users.email, params.email))
       .limit(1);
     return row ?? null;
   }
 
-  async findByTenant(params: { tenantId: string }): Promise<UserRow[]> {
-    return this.db
-      .select()
+  async findByOrganization(params: { organizationId: string }): Promise<UserRow[]> {
+    const rows = await this.db
+      .select({ user: users })
       .from(users)
-      .where(eq(users.tenantId, params.tenantId));
+      .innerJoin(organizationUsers, eq(users.id, organizationUsers.userId))
+      .where(eq(organizationUsers.organizationId, params.organizationId));
+    return rows.map((r) => r.user);
   }
 
   async create(params: { data: UserInsert }): Promise<UserRow> {

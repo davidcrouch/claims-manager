@@ -78,9 +78,6 @@ export interface OrganizationContext {
    
    /** Existing organization ID (if joining) */
    organizationId?: string;
-   
-   /** Application ID (resolved from subdomain or provided) */
-   applicationId?: string;
 }
 
 /**
@@ -305,7 +302,6 @@ export async function registerIdentity(input: IdentityRegistrationInput): Promis
          password: input.credentials?.password,
          organizationName: input.organizationContext?.organizationName,
          organizationId: input.organizationContext?.organizationId,
-         applicationId: input.organizationContext?.applicationId,
          origin: input.origin,
          // OAuth tokens
          accessToken: oauthTokens?.accessToken,
@@ -328,9 +324,7 @@ export async function registerIdentity(input: IdentityRegistrationInput): Promis
             errorCode: signupResult.errorCode
          }, 'auth-server:identity-registration:registerIdentity - Signup failed');
          
-         // Map error codes - InternalSignupService uses compatible error codes
          const errorCode: RegistrationErrorCode = 
-            signupResult.errorCode === 'APPLICATION_NOT_FOUND' ? 'PROVISIONING_FAILED' :
             (signupResult.errorCode as RegistrationErrorCode) || 'DATABASE_ERROR';
          
          return {

@@ -36,7 +36,7 @@ export class WebhooksService implements OnModuleInit {
   async resolveConnection(params: {
     payloadTenantId: string;
     payloadClient: string;
-  }): Promise<{ connectionId: string; providerCode: string } | null> {
+  }): Promise<{ connectionId: string; providerCode: string; providerId: string } | null> {
     if (!params.payloadTenantId || !params.payloadClient) {
       return null;
     }
@@ -53,7 +53,7 @@ export class WebhooksService implements OnModuleInit {
       return null;
     }
 
-    return { connectionId: connection.id, providerCode: 'crunchwork' };
+    return { connectionId: connection.id, providerCode: 'crunchwork', providerId: connection.providerId };
   }
 
   async getWebhookSecret(params: { connectionId: string }): Promise<string> {
@@ -69,13 +69,16 @@ export class WebhooksService implements OnModuleInit {
     hmacVerified: boolean;
     connectionId?: string;
     providerCode?: string;
+    providerId?: string;
   }) {
     const payload = JSON.parse(params.rawBody);
+    const entityType = ExternalToolsController.resolveEntityType(payload.type);
+
     const insertData: InboundWebhookEventInsert = {
       externalEventId: payload.id,
       eventType: payload.type,
       eventTimestamp: new Date(payload.timestamp),
-      payloadEntityId: payload.payload?.id,
+      payloadEntityId: payload.payload?.id?.toString() ?? null,
       payloadTeamIds: payload.payload?.teamIds || [],
       payloadTenantId: payload.payload?.tenantId,
       payloadClient: payload.payload?.client,
@@ -87,7 +90,9 @@ export class WebhooksService implements OnModuleInit {
       rawBodyJson: payload,
       processingStatus: 'pending',
       connectionId: params.connectionId,
+      providerId: params.providerId,
       providerCode: params.providerCode,
+      providerEntityType: entityType,
     };
     return this.webhookRepo.create({ data: insertData });
   }
@@ -102,8 +107,10 @@ export class WebhooksService implements OnModuleInit {
     eventId: string;
     tenantId: string;
     connectionId: string;
+    providerId: string;
     eventType: string;
     providerEntityId: string;
+    eventTimestamp?: Date;
   }): Promise<void> {
     const logPrefix = 'WebhooksService.processEventAsync';
 
@@ -139,12 +146,15 @@ export class WebhooksService implements OnModuleInit {
         const { externalObject } = await this.externalObjectService.upsertFromFetch({
           tenantId: params.tenantId,
           connectionId: params.connectionId,
+          providerId: params.providerId,
           providerCode: 'crunchwork',
           providerEntityType: entityType,
           providerEntityId: params.providerEntityId,
           normalizedEntityType: entityType,
           payload: fullPayload,
           sourceEventId: params.eventId,
+          sourceEventType: params.eventType,
+          sourceEventTimestamp: params.eventTimestamp,
           tx,
         });
         externalObjectId = externalObject.id;

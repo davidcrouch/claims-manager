@@ -49,11 +49,6 @@ export class JwtService {
       email: string;
       name: string;
       organizationId: string;
-      applicationId?: string;
-      compName?: string;
-      compId?: string;
-      isAdmin?: boolean;
-      roleInCompany?: string;
       avatarURL?: string;
       phone?: string;
    }): Promise<string> {
@@ -64,13 +59,8 @@ export class JwtService {
          email: params.email,
          name: params.name,
          organization_id: params.organizationId,
-         application_id: params.applicationId,
          roles: ['user'],
          features: [],
-         compName: params.compName,
-         compId: params.compId,
-         isAdmin: params.isAdmin || false,
-         roleInCompany: params.roleInCompany,
          avatarURL: params.avatarURL,
          phone: params.phone
       };
@@ -80,10 +70,6 @@ export class JwtService {
          userId: params.userId,
          email: params.email,
          organizationId: params.organizationId,
-         applicationId: params.applicationId,
-         compName: params.compName,
-         compId: params.compId,
-         isAdmin: params.isAdmin
       }, 'auth-server:jwt-service:generateApiToken - Generating API token with JWKS RSA key');
 
       try {

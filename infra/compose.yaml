@@ -16,15 +16,13 @@
 #   4. Start claims-manager app services from this repo's root.
 #
 # Connection details (host):
-#   DATABASE_URL=postgresql://more0ai:password@localhost:3210/claims_manager        (auth-server)
-#   DATABASE_URL=postgresql://more0ai:password@localhost:3210/claims_manager_api    (api)
+#   DATABASE_URL=postgresql://more0ai:password@localhost:3210/claims_manager    (shared by auth-server + api)
 #   REDIS_URL=redis://localhost:3250
 #   S3_ENDPOINT=http://localhost:3230
 #   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:3270
 #
 # Connection details (Docker, on more0ai-infra network):
-#   DATABASE_URL=postgresql://more0ai:password@pgsql:5432/claims_manager            (auth-server)
-#   DATABASE_URL=postgresql://more0ai:password@pgsql:5432/claims_manager_api       (api)
+#   DATABASE_URL=postgresql://more0ai:password@pgsql:5432/claims_manager       (shared by auth-server + api)
 #   REDIS_URL=redis://redis:6379
 #   S3_ENDPOINT=http://minio:9000
 #   OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317

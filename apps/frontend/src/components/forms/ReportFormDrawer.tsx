@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
 import {
   Sheet,
@@ -41,7 +41,7 @@ export function ReportFormDrawer({ open, onOpenChange, jobId, claimId }: ReportF
   const [error, setError] = useState<string | null>(null);
 
   const form = useForm<ReportFormValues>({
-    resolver: zodResolver(reportFormSchema),
+    resolver: standardSchemaResolver(reportFormSchema),
     defaultValues: {
       jobId,
       claimId,

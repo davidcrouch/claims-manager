@@ -95,7 +95,6 @@ export default function createSignupRoutes(app: Application): void {
          const origin = req.headers.origin as string | undefined;
          const referer = req.headers.referer as string | undefined;
          const appSlug = req.headers['x-more0-app-slug'] as string | undefined;
-         const applicationId = req.headers['x-application-id'] as string | undefined;
          const clientId = req.headers['x-client-id'] as string | undefined;
          
          const {
@@ -119,7 +118,7 @@ export default function createSignupRoutes(app: Application): void {
             hasPassword: !!password,
             hasOrganizationName: !!organizationName || !!company,
             origin,
-            applicationId: applicationId ? 'present' : 'missing'
+            clientId: clientId ? 'present' : 'missing'
          }, 'auth-server:signup-routes:signup - Signup request received');
 
          // Validate terms acceptance for password registration
@@ -134,12 +133,12 @@ export default function createSignupRoutes(app: Application): void {
          // Priority: x-more0-app-slug header > subdomain from origin > fallback headers
          const subdomain = appSlug || extractSubdomain(origin) || extractSubdomain(referer);
          
-         if (!subdomain && !applicationId && !clientId) {
+         if (!subdomain && !clientId) {
             log.error({ functionName, origin, referer, appSlug }, 
-               'auth-server:signup-routes:signup - Could not determine application context');
+               'auth-server:signup-routes:signup - Could not determine request context');
             return res.status(400).json({
                error: 'INVALID_REQUEST',
-               message: 'Could not determine application context. x-more0-app-slug, Origin header, or x-application-id/x-client-id header is required.'
+               message: 'Could not determine request context. x-more0-app-slug, Origin header, or x-client-id header is required.'
             });
          }
 
@@ -157,7 +156,6 @@ export default function createSignupRoutes(app: Application): void {
             organizationContext: {
                organizationName: organizationName || company,
                organizationId,
-               applicationId: applicationId || undefined
             },
             origin
          };

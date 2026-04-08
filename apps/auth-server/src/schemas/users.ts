@@ -27,11 +27,10 @@ export interface User extends NewUser {
   email: string;
   status: string;
   object?: string;
-  created?: string;
-  modified?: string;
   createdBy?: string;
-  modifiedBy?: string;
+  updatedBy?: string;
   config?: UserConfig | Record<string, unknown>;
-  /** Auth-server tenant-resolution checks this */
-  isDisabled?: boolean;
+  isActive?: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
 }

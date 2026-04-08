@@ -1,7 +1,7 @@
 'use client';
 
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
 import {
   Sheet,
@@ -44,7 +44,7 @@ export function InvoiceFormDrawer({ open, onOpenChange, purchaseOrders }: Invoic
   const [error, setError] = useState<string | null>(null);
 
   const form = useForm<InvoiceFormValues>({
-    resolver: zodResolver(invoiceFormSchema),
+    resolver: standardSchemaResolver(invoiceFormSchema),
     defaultValues: {
       purchaseOrderId: '',
       invoiceNumber: '',

@@ -14,10 +14,6 @@ jest.mock('../../../src/services/backend-service', () => {
             userId: '123',
             email: 'test@example.com',
             name: 'Test User',
-            compName: 'Test Company',
-            compId: 'comp-123',
-            isAdmin: false,
-            roleInCompany: 'Manager',
             avatarURL: 'https://example.com/avatar.jpg',
             phone: '+1234567890'
           }

@@ -24,7 +24,6 @@ export {
   type InboundWebhookEventRow,
   type InboundWebhookEventInsert,
 } from './inbound-webhook-events.repository';
-export { TenantsRepository, type TenantRow, type TenantInsert } from './tenants.repository';
 export { UsersRepository, type UserRow, type UserInsert } from './users.repository';
 export {
   IntegrationProvidersRepository,

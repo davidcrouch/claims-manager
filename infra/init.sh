@@ -50,7 +50,6 @@ init_databases() {
     # List of databases to create
     DATABASES=(
         "claims_manager"
-        "claims_manager_api"
         "claims_manager_test"
     )
     

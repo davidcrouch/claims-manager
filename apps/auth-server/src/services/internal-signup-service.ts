@@ -13,8 +13,6 @@ import { createTelemetryLogger } from '@morezero/telemetry';
 import {
    createApplicationSignupService,
    ApplicationSignupService,
-   createApplicationsService,
-   ApplicationsService,
 } from '../db/services/index.js';
 import type { AccessContext } from '../schemas/index.js';
 import * as bcrypt from 'bcrypt';
@@ -31,7 +29,6 @@ export interface InternalSignupInput {
    password?: string;
    organizationName?: string;
    organizationId?: string;
-   applicationId?: string;
    origin?: string;
    subdomain?: string;
    accessToken?: string;
@@ -48,8 +45,7 @@ export type InternalSignupErrorCode =
    | 'INVALID_PROVIDER'
    | 'PROVISIONING_FAILED'
    | 'DATABASE_ERROR'
-   | 'VALIDATION_ERROR'
-   | 'APPLICATION_NOT_FOUND';
+   | 'VALIDATION_ERROR';
 
 export interface InternalSignupResult {
    success: boolean;
@@ -67,11 +63,9 @@ const BCRYPT_SALT_ROUNDS = 12;
 
 class InternalSignupService {
    private signupService: ApplicationSignupService;
-   private applicationsService: ApplicationsService;
 
    constructor() {
       this.signupService = createApplicationSignupService();
-      this.applicationsService = createApplicationsService();
    }
 
    /**
@@ -86,44 +80,28 @@ class InternalSignupService {
          email: input.email,
          provider: input.provider,
          hasPassword: !!input.password,
-         hasApplicationId: !!input.applicationId,
-         hasSubdomain: !!input.subdomain,
          hasOrigin: !!input.origin
       }, 'auth-server:internal-signup:signup - Starting unified signup');
 
       try {
-         // 1. Resolve application ID
-         const applicationId = await this.resolveApplicationId(input, context);
-
-         if (!applicationId) {
-            log.error({ functionName }, 'auth-server:internal-signup:signup - Could not resolve application');
-            return {
-               success: false,
-               error: 'Could not resolve application',
-               errorCode: 'APPLICATION_NOT_FOUND'
-            };
-         }
-
-         // 2. Hash password if provided (for password-based auth)
+         // 1. Hash password if provided (for password-based auth)
          let passwordHash: string | undefined;
          if (input.provider === 'password' && input.password) {
             passwordHash = await bcrypt.hash(input.password, BCRYPT_SALT_ROUNDS);
             log.debug({ functionName }, 'auth-server:internal-signup:signup - Password hashed');
          }
 
-         // 3. Call signup service - creates everything in one transaction
+         // 2. Call signup service - creates everything in one transaction
          const organizationName = input.organizationName;
          const organizationId = input.organizationId;
          log.debug({
             functionName,
             email: input.email,
             provider: input.provider,
-            applicationId,
             organizationName,
          }, 'auth-server:internal-signup:signup - Calling local signup service');
 
          const result = await this.signupService.signup(context, {
-            applicationId,
             email: input.email,
             name: input.name,
             avatarUrl: input.avatarUrl,
@@ -186,76 +164,6 @@ class InternalSignupService {
       }
    }
 
-   /**
-    * Resolve application ID from various sources
-    */
-   private async resolveApplicationId(
-      input: { applicationId?: string; subdomain?: string; origin?: string },
-      context: AccessContext
-   ): Promise<string | null> {
-      const functionName = 'resolveApplicationId';
-
-      // Priority 1: Direct application ID
-      if (input.applicationId) {
-         log.debug({ functionName, applicationId: input.applicationId }, 
-            'auth-server:internal-signup:resolveApplicationId - Using direct application ID');
-         return input.applicationId;
-      }
-
-      // Priority 2: Subdomain header
-      if (input.subdomain) {
-         try {
-            const app = await this.applicationsService.getApplicationBySubdomain(context, input.subdomain);
-            if (app) {
-               log.debug({
-                  functionName,
-                  subdomain: input.subdomain,
-                  applicationId: app.id
-               }, 'auth-server:internal-signup:resolveApplicationId - Resolved from subdomain');
-               return app.id;
-            }
-         } catch (error: any) {
-            log.warn({
-               functionName,
-               subdomain: input.subdomain,
-               error: error.message
-            }, 'auth-server:internal-signup:resolveApplicationId - Failed to resolve from subdomain');
-         }
-      }
-
-      // Priority 3: Extract subdomain from origin URL
-      if (input.origin) {
-         try {
-            const url = new URL(input.origin);
-            const hostname = url.hostname;
-            const parts = hostname.split('.');
-
-            if (parts.length >= 3 && !hostname.includes('localhost')) {
-               const originSubdomain = parts[0];
-               const app = await this.applicationsService.getApplicationBySubdomain(context, originSubdomain);
-               if (app) {
-                  log.debug({
-                     functionName,
-                     origin: input.origin,
-                     originSubdomain,
-                     applicationId: app.id
-                  }, 'auth-server:internal-signup:resolveApplicationId - Resolved from origin');
-                  return app.id;
-               }
-            }
-         } catch (error: any) {
-            log.warn({
-               functionName,
-               origin: input.origin,
-               error: error.message
-            }, 'auth-server:internal-signup:resolveApplicationId - Failed to resolve from origin');
-         }
-      }
-
-      log.warn({ functionName, input }, 
-         'auth-server:internal-signup:resolveApplicationId - Could not resolve application ID');
-      return null;
-   }
 }
 
 // Singleton instance

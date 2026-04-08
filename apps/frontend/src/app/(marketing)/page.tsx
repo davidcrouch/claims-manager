@@ -9,7 +9,7 @@ export default function LandingPage() {
           <a href="/api/auth/login">
             <Button variant="ghost">Sign in</Button>
           </a>
-          <a href="/api/auth/login">
+          <a href="/api/auth/register">
             <Button>Sign up</Button>
           </a>
         </div>
@@ -26,7 +26,7 @@ export default function LandingPage() {
           <a href="/api/auth/login">
             <Button size="lg">Sign in</Button>
           </a>
-          <a href="/api/auth/login">
+          <a href="/api/auth/register">
             <Button size="lg" variant="outline">
               Create account
             </Button>

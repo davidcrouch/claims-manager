@@ -6,7 +6,6 @@
 import { createLogger, LoggerType } from '../../lib/logger.js';
 import type { AccessContext } from '../../schemas/index.js';
 import { getDb, type DbGetter, type Db } from '../client.js';
-import { createApplicationsRepository } from '../repositories/applications-repository.js';
 import { createUsersRepository } from '../repositories/users-repository.js';
 import { createUserIdentitiesRepository } from '../repositories/user-identities-repository.js';
 import { createOrganizationsRepository } from '../repositories/organizations-repository.js';
@@ -31,7 +30,6 @@ export interface ApplicationSignupInput {
   passwordHash?: string;
   organizationName?: string;
   organizationId?: string;
-  applicationId: string;
   provider?: string;
   providerUserId?: string;
   providerProfile?: ProviderProfile;
@@ -65,13 +63,7 @@ export class ApplicationSignupService {
     const db = getDb();
     return db.transaction(async (tx) => {
       const txDb: DbGetter = () => tx as unknown as Db;
-      const applicationsRepo = createApplicationsRepository(txDb, undefined);
-      const app = await applicationsRepo.get({ organizationId: 'public', userId: '00000000-0000-0000-0000-000000000000' }, input.applicationId);
-      if (!app) {
-        log.error({ applicationId: input.applicationId }, 'auth-server:db:application-signup-service:signup - Application not found');
-        throw new Error('Application not found');
-      }
-      const systemUserId = app.systemUserId ?? '00000000-0000-0000-0000-000000000000';
+      const systemUserId = '00000000-0000-0000-0000-000000000000';
       const systemContext: AccessContext = { organizationId: 'public', userId: systemUserId };
 
       const usersRepo = createUsersRepository(txDb, undefined);

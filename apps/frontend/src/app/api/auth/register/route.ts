@@ -3,7 +3,7 @@ import { randomBytes, createHash } from 'node:crypto';
 import { authConfig } from '@/lib/auth-config';
 import { signCookie } from '@/lib/auth-cookies';
 
-const LOG_PREFIX = 'frontend:api:auth:login';
+const LOG_PREFIX = 'frontend:api:auth:register';
 
 const POST_LOGIN_REDIRECT_COOKIE = 'post_login_redirect_url';
 
@@ -44,9 +44,11 @@ export async function GET(req: NextRequest) {
   try {
     const interaction = req.nextUrl.searchParams.get('interaction');
     if (interaction) {
-      const loginUrl = `${authConfig.authServerUrl}/login?interaction=${encodeURIComponent(interaction)}`;
-      console.debug(`${LOG_PREFIX} - redirecting to provider login`, { interaction });
-      return NextResponse.redirect(loginUrl);
+      const registerUrl = `${authConfig.authServerUrl}/register?interaction=${encodeURIComponent(interaction)}`;
+      console.debug(`${LOG_PREFIX} - redirecting to provider register`, {
+        interaction,
+      });
+      return NextResponse.redirect(registerUrl);
     }
 
     const returnTo = req.nextUrl.searchParams.get('returnTo')?.trim();
@@ -72,6 +74,7 @@ export async function GET(req: NextRequest) {
       code_challenge: challenge,
       code_challenge_method: 'S256',
       app_slug: authConfig.appSlug,
+      prompt: 'register',
     };
     if (authConfig.oidcAudience) {
       params.resource = authConfig.oidcAudience;
@@ -81,6 +84,7 @@ export async function GET(req: NextRequest) {
     console.info(`${LOG_PREFIX} - redirecting to authorize`, {
       redirect_uri: redirectUri,
       audience: params.audience,
+      prompt: params.prompt,
     });
 
     const res = NextResponse.redirect(
@@ -118,9 +122,9 @@ export async function GET(req: NextRequest) {
 
     return res;
   } catch (error) {
-    console.error(`${LOG_PREFIX} - login redirect failed`, {
+    console.error(`${LOG_PREFIX} - register redirect failed`, {
       error: error instanceof Error ? error.message : String(error),
     });
-    return NextResponse.json({ error: 'Login failed' }, { status: 500 });
+    return NextResponse.json({ error: 'Registration failed' }, { status: 500 });
   }
 }

@@ -119,6 +119,7 @@ The **claims list view** is served from the local DB, populated by the above. To
 | 22 | `22_ERROR_HANDLING.md` | Error Handling & Logging | Global filters, structured logging |
 | 23 | `23_TESTING_STRATEGY.md` | Testing Strategy | Unit, integration, e2e test approach |
 | 24 | `24_DEPLOYMENT.md` | Deployment & CI/CD | Docker, environment configs, pipeline |
+| 26 | `26_INTEGRATION_SCHEMA_HARDENING.md` | Integration Schema Hardening | FK constraints, column type widening, observability columns, transaction docs |
 
 ---
 

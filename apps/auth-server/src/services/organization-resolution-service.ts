@@ -5,7 +5,6 @@ import {
   createUsersService,
   createOrganizationUsersService,
   createOrganizationsService,
-  createApplicationsService,
 } from '../db/services/index.js';
 import bcrypt from 'bcrypt';
 
@@ -19,7 +18,6 @@ const userIdentitiesService = createUserIdentitiesService();
 const usersService = createUsersService();
 const organizationUsersService = createOrganizationUsersService();
 const organizationsService = createOrganizationsService();
-const applicationsService = createApplicationsService();
 
 // ============================================================================
 // Types
@@ -33,24 +31,19 @@ export interface OrganizationInfo {
 export interface OrganizationResolutionInput {
   provider: string;
   providerSubject: string;
-  origin?: string;
-  appKey?: string;
 }
 
 export interface ResolveWithOrganizationInput {
   userId: string;
   organizationId: string;
-  origin?: string;
-  appKey?: string;
 }
 
 export interface OrganizationResolutionResult {
   success: boolean;
   userId?: string;
   organizationId?: string;
-  applicationId?: string;
   error?: string;
-  errorCode?: 'USER_NOT_FOUND' | 'NO_ORGANIZATIONS' | 'MULTIPLE_ORGANIZATIONS' | 'APPLICATION_NOT_FOUND';
+  errorCode?: 'USER_NOT_FOUND' | 'NO_ORGANIZATIONS' | 'MULTIPLE_ORGANIZATIONS';
   organizations?: OrganizationInfo[];
   registrationUrl?: string;
 }
@@ -73,7 +66,6 @@ export interface AuthResultWithOrganization {
     provider?: string;
   };
   organizationId: string;
-  applicationId: string;
 }
 
 export interface AuthResultWithOrganizationParams {
@@ -83,50 +75,11 @@ export interface AuthResultWithOrganizationParams {
   avatarURL?: string;
   provider?: string;
   organizationId: string;
-  applicationId: string;
 }
-
-// Legacy aliases
-export type TenantResolutionInput = OrganizationResolutionInput;
-export type TenantResolutionResult = OrganizationResolutionResult;
-export type AuthResultWithTenant = AuthResultWithOrganization;
-export type AuthResultWithTenantParams = AuthResultWithOrganizationParams;
 
 // ============================================================================
 // Functions
 // ============================================================================
-
-export function extractSubdomainFromOrigin(origin: string | undefined): string | null {
-  if (!origin) {
-    log.warn({}, 'auth-server:organization-resolution:extractSubdomainFromOrigin - No origin provided');
-    return null;
-  }
-  try {
-    const url = new URL(origin);
-    const hostname = url.hostname;
-    const parts = hostname.split('.');
-
-    if (parts.length >= 3 && !hostname.includes('localhost')) {
-      const subdomain = parts[0];
-      log.debug({ origin, subdomain }, 'auth-server:organization-resolution:extractSubdomainFromOrigin - Subdomain extracted');
-      return subdomain;
-    }
-
-    if (hostname.includes('localhost') || hostname.match(/^\d+\.\d+\.\d+\.\d+$/)) {
-      log.debug({ origin }, 'auth-server:organization-resolution:extractSubdomainFromOrigin - Localhost detected, no subdomain');
-      return null;
-    }
-
-    log.debug({ origin, hostname, parts }, 'auth-server:organization-resolution:extractSubdomainFromOrigin - No subdomain found');
-    return null;
-  } catch (error) {
-    log.error(
-      { origin, error: error instanceof Error ? error.message : error },
-      'auth-server:organization-resolution:extractSubdomainFromOrigin - Failed to parse origin'
-    );
-    return null;
-  }
-}
 
 export async function verifyPasswordCredentials(params: {
   email: string;
@@ -152,7 +105,7 @@ export async function verifyPasswordCredentials(params: {
     return { success: false, error: 'Invalid email or password', errorCode: 'USER_NOT_FOUND' };
   }
 
-  if (user.isDisabled) {
+  if (user.isActive === false) {
     log.warn({ email, userId: user.id }, 'auth-server:organization-resolution:verifyPasswordCredentials - Account is disabled');
     return { success: false, error: 'Account is disabled. Please contact support.', errorCode: 'ACCOUNT_DISABLED' };
   }
@@ -220,32 +173,6 @@ export async function getOrganizationsForUser(userId: string): Promise<Organizat
   return result;
 }
 
-export async function getApplicationById(applicationId: string): Promise<{ id: string; name: string } | null> {
-  log.debug({ applicationId }, 'auth-server:organization-resolution:getApplicationById - Looking up application');
-
-  const application = await applicationsService.getApplication(systemContext, applicationId);
-  if (application) {
-    log.info({ applicationId, applicationName: application.name }, 'auth-server:organization-resolution:getApplicationById - Application found');
-    return { id: application.id, name: application.name! };
-  }
-
-  log.warn({ applicationId }, 'auth-server:organization-resolution:getApplicationById - Application not found');
-  return null;
-}
-
-export async function getApplicationBySubdomain(subdomain: string): Promise<{ id: string; name: string } | null> {
-  log.debug({ subdomain }, 'auth-server:organization-resolution:getApplicationBySubdomain - Looking up application');
-
-  const application = await applicationsService.getApplicationBySubdomain(systemContext, subdomain);
-  if (application) {
-    log.info({ subdomain, applicationId: application.id, applicationName: application.name }, 'auth-server:organization-resolution:getApplicationBySubdomain - Application found');
-    return { id: application.id, name: application.name! };
-  }
-
-  log.warn({ subdomain }, `auth-server:organization-resolution:getApplicationBySubdomain - Application not found: subdomain=${subdomain}`);
-  return null;
-}
-
 export async function getOrganizationById(organizationId: string): Promise<{ id: string; name: string } | null> {
   log.debug({ organizationId }, 'auth-server:organization-resolution:getOrganizationById - Looking up organization');
 
@@ -260,10 +187,10 @@ export async function getOrganizationById(organizationId: string): Promise<{ id:
 }
 
 export async function resolveOrganization(input: OrganizationResolutionInput): Promise<OrganizationResolutionResult> {
-  const { provider, providerSubject, origin, appKey } = input;
+  const { provider, providerSubject } = input;
   log.info(
-    { provider, providerSubject, origin, appKey },
-    `auth-server:organization-resolution:resolveOrganization - Starting organization resolution: provider=${provider}, providerSubject=${providerSubject}, origin=${origin ?? '(none)'}, appKey=${appKey ?? '(none)'}`
+    { provider, providerSubject },
+    `auth-server:organization-resolution:resolveOrganization - Starting organization resolution: provider=${provider}, providerSubject=${providerSubject}`
   );
 
   const userIdentity = await resolveUserIdentity({ provider, providerSubject });
@@ -303,49 +230,20 @@ export async function resolveOrganization(input: OrganizationResolutionInput): P
   }
 
   const organizationId = organizations[0].id;
-  return resolveWithOrganization({ userId, organizationId, origin, appKey });
+  return resolveWithOrganization({ userId, organizationId });
 }
 
 export async function resolveWithOrganization(input: ResolveWithOrganizationInput): Promise<OrganizationResolutionResult> {
-  const { userId, organizationId, origin, appKey } = input;
+  const { userId, organizationId } = input;
   log.info(
-    { userId, organizationId, origin, appKey },
-    `auth-server:organization-resolution:resolveWithOrganization - Resolving with selected organization: userId=${userId}, organizationId=${organizationId}, origin=${origin ?? '(none)'}, appKey=${appKey ?? '(none)'}`
+    { userId, organizationId },
+    `auth-server:organization-resolution:resolveWithOrganization - Resolving with selected organization: userId=${userId}, organizationId=${organizationId}`
   );
 
-  const subdomain = appKey || extractSubdomainFromOrigin(origin);
-  log.info(
-    { appKey: appKey ?? null, origin, subdomain: subdomain ?? null },
-    `auth-server:organization-resolution:resolveWithOrganization - Application lookup: appKey=${appKey ?? '(none)'}, origin=${origin || '(none)'}, subdomain=${subdomain ?? '(none)'}`
-  );
-
-  if (!subdomain) {
-    return {
-      success: false,
-      userId,
-      organizationId,
-      error: 'Unable to determine application from URL. Please ensure you are accessing the correct URL.',
-      errorCode: 'APPLICATION_NOT_FOUND',
-    };
-  }
-
-  const application = await getApplicationBySubdomain(subdomain);
-  if (!application) {
-    return {
-      success: false,
-      userId,
-      organizationId,
-      error: `Application not found for subdomain "${subdomain}". Please check the URL or contact your administrator.`,
-      errorCode: 'APPLICATION_NOT_FOUND',
-    };
-  }
-
-  log.info({ userId, organizationId, applicationId: application.id }, 'auth-server:organization-resolution:resolveWithOrganization - Organization resolution successful');
   return {
     success: true,
     userId,
     organizationId,
-    applicationId: application.id,
   };
 }
 
@@ -360,8 +258,6 @@ export function createAuthResult(params: AuthResultWithOrganizationParams): Auth
       provider: params.provider,
     },
     organizationId: params.organizationId,
-    applicationId: params.applicationId,
   };
 }
 
-export const resolveTenant = resolveOrganization;

@@ -8,7 +8,6 @@ import {
    consumeOAuthState,
    storeGoogleAuthCode,
    consumeGoogleAuthCode,
-   getAppSlug,
    type OAuthStateData,
    type GoogleAuthCodeData
 } from '../config/oidc-provider.js';
@@ -178,23 +177,15 @@ export default function createGoogleRoutes(app: Application, provider?: any): vo
          // Note: 'state' query param is used for interaction UID in login.ejs, but we'll use 'interaction' to avoid confusion
          const interactionUid = (req.query.interaction || req.query.state) as string | undefined;
          
-         // Get applicationId - either directly or via subdomain
-         // This identifies which application the user is logging into
-         const applicationId = req.query.applicationId as string | undefined;
-         
-         // IMPORTANT: Without interactionUid, OIDC flow cannot complete
-         // This happens when user navigates directly to Google login without going through /authorize first
          if (!interactionUid) {
             log.warn({
                queryParams: Object.keys(req.query).join(', ') || 'none',
                referer: req.headers.referer || 'none',
-               applicationId: applicationId || 'none'
             }, 'auth-server:google-routes:start - No interaction UID provided. User may have bypassed OIDC authorize flow.');
          }
          
          log.debug({
             interactionUid: interactionUid || 'undefined',
-            applicationId: applicationId || 'undefined',
             hasCookies: !!req.cookies,
             hasInteractionCookie: !!(req.cookies?._interaction || req.cookies?._interaction_resume)
          }, 'auth-server:google-routes:start - Extracted params');
@@ -217,7 +208,6 @@ export default function createGoogleRoutes(app: Application, provider?: any): vo
          await storeOAuthState(csrfState, { 
             createdAt: Date.now(),
             interactionUid: interactionUid,
-            applicationId: applicationId,
             clientRedirectUri: clientRedirectUri
          });
 
@@ -285,7 +275,6 @@ export default function createGoogleRoutes(app: Application, provider?: any): vo
 
       // Validate state parameter for CSRF protection and get stored data
       let interactionUid: string | undefined;
-      let storedApplicationId: string | undefined;
       let storedClientRedirectUri: string | undefined;
       if (state) {
          const stateData = await consumeOAuthState(state);
@@ -297,15 +286,11 @@ export default function createGoogleRoutes(app: Application, provider?: any): vo
             }, 'auth-server:google-routes:callback - Invalid or expired state parameter');
             return res.status(400).send('Invalid or expired state parameter');
          }
-         // Get interaction UID, applicationId, and client redirect URI from stored state
          interactionUid = stateData.interactionUid;
-         storedApplicationId = stateData.applicationId;
          storedClientRedirectUri = stateData.clientRedirectUri;
-         // No need to delete - consumeOAuthState handles it
          
          log.debug({
             interactionUid: interactionUid || 'NONE',
-            storedApplicationId: storedApplicationId || 'NONE',
             storedClientRedirectUri: storedClientRedirectUri || 'NONE',
             hasInteractionCookie,
             hasInteractionResumeCookie
@@ -413,7 +398,6 @@ export default function createGoogleRoutes(app: Application, provider?: any): vo
             name,
             provider: 'google',
             hasInteractionUid: !!interactionUid,
-            storedApplicationId,
             googleUser: {
                id: googleUser.id,
                sub: googleUser.sub,
@@ -427,41 +411,20 @@ export default function createGoogleRoutes(app: Application, provider?: any): vo
             }
          }, 'auth-server:google-routes:callback - Google OAuth authentication successful');
 
-         // Tenant resolution - use tenant resolution service
-         // Prefer the stored client redirect_uri (from the OIDC interaction that started this flow)
-         // Fall back to the configured client callback URL
          const originUri = storedClientRedirectUri || getClientCallbackUrl();
          const appOrigin = new URL(originUri).origin;
-         
-         // Retrieve the app slug from the OIDC interaction params or Redis
-         let googleAppKey: string | undefined;
-         if (interactionUid) {
-            try {
-               const googleInteractionDetails = await provider.interactionDetails(req, res);
-               googleAppKey = googleInteractionDetails.params?.app_slug as string | undefined;
-               if (!googleAppKey) {
-                  googleAppKey = await getAppSlug(interactionUid) || undefined;
-               }
-            } catch {
-               googleAppKey = await getAppSlug(interactionUid) || undefined;
-            }
-         }
 
          log.info({
             providerSubject,
             email,
-            origin: appOrigin,
-            appKey: googleAppKey
-         }, 'auth-server:google-routes:callback - Starting tenant resolution for login');
+         }, 'auth-server:google-routes:callback - Starting organization resolution for login');
 
          const organizationResult = await resolveOrganization({
             provider: authProvider,
             providerSubject,
-            origin: appOrigin,
-            appKey: googleAppKey
          });
 
-         // Handle tenant resolution errors
+         // Handle organization resolution errors
          if (!organizationResult.success) {
             log.warn({
                providerSubject,
@@ -495,7 +458,7 @@ export default function createGoogleRoutes(app: Application, provider?: any): vo
 
                // Complete login with user info and organizations list
                // The select_org policy will detect this and trigger org selection
-               // OIDC standard: login.accountId = userId (user identifier, not tenant)
+               // OIDC standard: login.accountId = userId (user identifier)
                const result = {
                   login: {
                      accountId: organizationResult.userId!,  // OIDC account identifier is always userId
@@ -541,9 +504,7 @@ export default function createGoogleRoutes(app: Application, provider?: any): vo
                      name: name,
                      avatarUrl: googleUser.picture
                   },
-                  organizationContext: {
-                     applicationId: storedApplicationId
-                  },
+                  organizationContext: {},
                   interactionUid: interactionUid,
                   origin: appOrigin
                };
@@ -577,7 +538,6 @@ export default function createGoogleRoutes(app: Application, provider?: any): vo
                   avatarURL: googleUser.picture,
                   provider: authProvider,
                   organizationId: registrationResult.organizationId!,
-                  applicationId: storedApplicationId || ''
                });
                
                // Store the auth result (always use userId as storage key per OIDC standard)
@@ -630,16 +590,15 @@ export default function createGoogleRoutes(app: Application, provider?: any): vo
          }
 
          // Tenant resolution successful - create auth result and complete login
-         const { userId, organizationId, applicationId } = organizationResult;
+         const { userId, organizationId } = organizationResult;
 
          log.info({
             userId,
             organizationId,
-            applicationId,
             hasInteractionUid: !!interactionUid
-         }, 'auth-server:google-routes:callback - Tenant resolution successful');
+         }, 'auth-server:google-routes:callback - Organization resolution successful');
 
-         // Create auth result with full tenant information
+         // Create auth result with organization information
          const authResult = createAuthResult({
             userId: userId!,
             email: email,
@@ -647,7 +606,6 @@ export default function createGoogleRoutes(app: Application, provider?: any): vo
             avatarURL: googleUser.picture,
             provider: authProvider,
             organizationId: organizationId!,
-            applicationId: applicationId!
          });
 
          // Store the complete authResult in Redis for later use (keyed by userId per OIDC standard)
@@ -656,7 +614,6 @@ export default function createGoogleRoutes(app: Application, provider?: any): vo
          log.info({ 
             userId,
             organizationId,
-            applicationId,
             userEmail: email
          }, 'auth-server:google-routes:callback - Google authentication successful, auth result stored');
 

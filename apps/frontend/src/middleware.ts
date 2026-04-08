@@ -20,7 +20,8 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  if (pathname === '/') return NextResponse.next();
+  if (pathname === '/' || pathname.startsWith('/.well-known'))
+    return NextResponse.next();
 
   if (!hasAuthCookie) {
     const loginUrl = new URL('/api/auth/login', req.url);

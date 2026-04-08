@@ -39,7 +39,7 @@ export class UsersRepository {
     const conditions = [];
     if (search) conditions.push(ilike(users.name, `%${search}%`));
     if (status) conditions.push(eq(users.status, status));
-    const orderBy = sortOrder === 'asc' ? asc(users.created) : desc(users.created);
+    const orderBy = sortOrder === 'asc' ? asc(users.createdAt) : desc(users.createdAt);
 
     const [totalResult] = await this.db()
       .select({ count: count() })
@@ -66,19 +66,19 @@ export class UsersRepository {
   }
 
   async create(context: AccessContext, data: NewUser): Promise<User> {
-    const now = new Date().toISOString();
+    const now = new Date();
     const [row] = await this.db()
       .insert(users)
       .values({
         name: data.name ?? '',
         email: (data as { email?: string }).email ?? '',
-        created: now,
-        modified: now,
         object: 'user',
         status: (data as { status?: string }).status || 'Active',
         createdBy: context.userId ?? '00000000-0000-0000-0000-000000000000',
-        modifiedBy: context.userId ?? '00000000-0000-0000-0000-000000000000',
+        updatedBy: context.userId ?? '00000000-0000-0000-0000-000000000000',
         config: (data as { config?: unknown }).config ?? null,
+        createdAt: now,
+        updatedAt: now,
       } as typeof users.$inferInsert)
       .returning();
     if (!row) throw new Error('Failed to create user');
@@ -90,8 +90,8 @@ export class UsersRepository {
       .update(users)
       .set({
         ...data,
-        modified: new Date().toISOString(),
-        modifiedBy: context.userId ?? '00000000-0000-0000-0000-000000000000',
+        updatedAt: new Date(),
+        updatedBy: context.userId ?? '00000000-0000-0000-0000-000000000000',
       } as Record<string, unknown>)
       .where(eq(users.id, id))
       .returning();
@@ -109,8 +109,8 @@ export class UsersRepository {
       .update(users)
       .set({
         status: 'Archived',
-        modifiedBy: context.userId,
-        modified: new Date().toISOString(),
+        updatedBy: context.userId,
+        updatedAt: new Date(),
       } as Record<string, unknown>)
       .where(and(eq(users.id, id), eq(users.status, 'Active')))
       .returning();

@@ -3,7 +3,7 @@
  * CUSTOM SELECT_ORG PROMPT
  * =============================================================================
  * 
- * Custom interaction prompt for organization/tenant selection in multi-tenant apps.
+ * Custom interaction prompt for organization selection in multi-organization apps.
  * This allows users who belong to multiple organizations to select which one
  * they want to authenticate under.
  * 

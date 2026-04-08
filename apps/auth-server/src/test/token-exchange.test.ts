@@ -58,10 +58,6 @@ const mockStoredAccount = {
     userId: TEST_CONFIG.testOrganizationId,
     name: 'Test User',
     email: 'test@example.com',
-    compName: 'Test Company',
-    compId: 'test-comp-123',
-    isAdmin: false,
-    roleInCompany: 'user',
     avatarURL: 'https://example.com/avatar.jpg',
     phone: '+1234567890'
   },

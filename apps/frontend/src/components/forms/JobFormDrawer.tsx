@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
 import {
   Sheet,
@@ -50,7 +50,7 @@ export function JobFormDrawer({ open, onOpenChange, claims, jobTypes }: JobFormD
   const [error, setError] = useState<string | null>(null);
 
   const form = useForm<JobFormValues>({
-    resolver: zodResolver(jobFormSchema),
+    resolver: standardSchemaResolver(jobFormSchema),
     defaultValues: {
       claimId: '',
       jobTypeId: '',

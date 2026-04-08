@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
 import {
   Sheet,
@@ -42,7 +42,7 @@ export function AppointmentFormDrawer({ open, onOpenChange, jobId }: Appointment
   const [error, setError] = useState<string | null>(null);
 
   const form = useForm<AppointmentFormValues>({
-    resolver: zodResolver(appointmentFormSchema),
+    resolver: standardSchemaResolver(appointmentFormSchema),
     defaultValues: {
       jobId,
       name: '',

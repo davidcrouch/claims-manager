@@ -1,6 +1,7 @@
 /**
- * auth-server local DB schema (Drizzle) – minimal tables for auth and organization resolution.
- * Compatible with shared schema column names so the same Postgres can be used if desired.
+ * auth-server DB schema (Drizzle) – shared with claims-manager API.
+ * The API app owns migrations; this file mirrors the canonical definitions
+ * in apps/api/src/database/schema/index.ts for auth-related tables.
  */
 
 import {
@@ -12,21 +13,28 @@ import {
   jsonb,
   uniqueIndex,
   unique,
+  index,
 } from 'drizzle-orm/pg-core';
 
-export const users = pgTable('users', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  name: text('name').notNull(),
-  email: text('email').notNull(),
-  status: text('status').notNull(),
-  object: text('object').notNull(),
-  created: timestamp('created', { withTimezone: true, mode: 'string' }).notNull(),
-  modified: timestamp('modified', { withTimezone: true, mode: 'string' }).notNull(),
-  createdBy: uuid('created_by'),
-  modifiedBy: uuid('modified_by'),
-  isDisabled: boolean('is_disabled').default(false).notNull(),
-  config: jsonb('config'),
-});
+export const users = pgTable(
+  'users',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    email: text('email'),
+    name: text('name'),
+    status: text('status').notNull().default('active'),
+    object: text('object').notNull().default('user'),
+    isActive: boolean('is_active').notNull().default(true),
+    config: jsonb('config'),
+    createdBy: uuid('created_by'),
+    updatedBy: uuid('updated_by'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_users_email').on(t.email),
+  ],
+);
 
 export const userIdentities = pgTable(
   'user_identities',
@@ -90,17 +98,5 @@ export const organizationUsers = pgTable(
   (table) => [unique('organization_users_user_organization_key').on(table.userId, table.organizationId)]
 );
 
-export const applications = pgTable('applications', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  name: text('name'),
-  status: text('status').notNull(),
-  object: text('object'),
-  created: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull(),
-  modified: timestamp('updated_at', { withTimezone: true, mode: 'string' }).notNull(),
-  createdBy: uuid('created_by').notNull(),
-  modifiedBy: uuid('updated_by').notNull(),
-  subdomain: text('subdomain'),
-  systemUserId: uuid('system_user_id'),
-  organizationId: uuid('organization_id'),
-});
+
 

@@ -24,13 +24,4 @@ export default defineConfig({
   dbCredentials: {
     url: getDatabaseUrl(),
   },
-  tablesFilter: [
-    "users",
-    "user_identities",
-    "organizations",
-    "organization_users",
-    "applications",
-    "accounts",
-    "account_users",
-  ],
 });

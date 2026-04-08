@@ -1,7 +1,7 @@
 'use client';
 
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
 import {
   Sheet,
@@ -38,7 +38,7 @@ export function MessageFormDrawer({ open, onOpenChange, jobId, claimId }: Messag
   const [error, setError] = useState<string | null>(null);
 
   const form = useForm<MessageFormValues>({
-    resolver: zodResolver(messageFormSchema),
+    resolver: standardSchemaResolver(messageFormSchema),
     defaultValues: {
       subject: '',
       body: '',

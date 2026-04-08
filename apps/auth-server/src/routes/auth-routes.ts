@@ -46,10 +46,7 @@ import bcrypt from 'bcrypt';
 import {
    verifyPasswordCredentials,
    resolveOrganization,
-   resolveWithOrganization,
    getOrganizationsForUser,
-   extractSubdomainFromOrigin,
-   getApplicationBySubdomain,
    createAuthResult,
    type OrganizationInfo,
    type PasswordVerificationResult
@@ -435,10 +432,10 @@ export default function createAuthRoutes(
             
             const uid = interaction as string;
             const baseUrl = getRequestBaseUrl(req);
-            const proxyOrigin = req.query.proxy_origin as string | undefined;
-            const registerActionUrl = proxyOrigin
-               ? `${proxyOrigin}/api/auth/register-proxy?interaction=${encodeURIComponent(uid)}`
-               : `${baseUrl}/interaction/${uid}/register`;
+            // Same-origin POST as login (/interaction/:uid/login): OIDC interaction cookies are set
+            // for the auth-server host; cross-posting to an app origin (e.g. register-proxy) cannot
+            // forward those cookies, so registration must submit to the auth server.
+            const registerActionUrl = `${baseUrl}/interaction/${uid}/register`;
             const googleAuthUrl = `${baseUrl}/login/google/start?interaction=${encodeURIComponent(uid)}`;
             const loginUrl = `${baseUrl}/login?interaction=${uid}`;
             const startOverUrl = error ? await getStartOverUrl(uid, req, res) : undefined;
@@ -888,10 +885,7 @@ export default function createAuthRoutes(
                   prompt: prompt.name,
                }, 'auth-server:auth-routes:interaction - Rendering register page directly');
 
-               const regRedirectUri = params.redirect_uri as string | undefined;
-               const proxyOrigin = regRedirectUri ? new URL(regRedirectUri).origin : '';
                const registerQuery = new URLSearchParams({ interaction: interactionUid });
-               if (proxyOrigin) registerQuery.set('proxy_origin', proxyOrigin);
                return res.redirect(`${getRequestBaseUrl(req)}/register?${registerQuery.toString()}`);
             }
 
@@ -980,9 +974,9 @@ export default function createAuthRoutes(
                      accountId: interactionDetails.session?.accountId
                   }, 'Interaction details retrieved for consent');
 
-                  // OIDC standard: session.accountId = userId (user identifier, not tenant)
+                  // OIDC standard: session.accountId = userId (user identifier)
                   const { prompt: { details }, session: { accountId }, grantId, params: interactionParams } = interactionDetails;
-                  
+
                   // Get client information
                   const client = await provider.Client.find(params.client_id);
                   const clientName = client?.clientName || client?.clientId || 'Application';
@@ -1292,67 +1286,25 @@ export default function createAuthRoutes(
          // =====================================================================
          // STEP 2: UNIFIED TENANT RESOLUTION (Same as Google OAuth)
          // =====================================================================
-         const origin = req.get('origin') || req.get('referer') || '';
-         const headerAppSlug = req.headers['x-more0-app-slug'] as string | undefined;
-         const bodyAppSlug = typeof req.body?.app_slug === 'string' ? req.body.app_slug : undefined;
-         log.info(
-            { functionName: 'login-submit', xMore0AppSlug: headerAppSlug ?? null, bodyAppSlug: bodyAppSlug ?? null },
-            `auth-server:auth-routes:login-submit - x-more0-app-slug header value: ${headerAppSlug ?? '(not set)'}, body app_slug: ${bodyAppSlug ?? '(not set)'}`
-         );
-         // Read app slug: header (from form JS fetch) > body (hidden field) > OIDC params > Redis-stored slug
-         let storedAppKey = headerAppSlug || bodyAppSlug;
-         if (!storedAppKey) {
-            storedAppKey = interactionDetails.params?.app_slug as string | undefined;
-         }
-         if (!storedAppKey) {
-            storedAppKey = await getAppSlug(uid) || undefined;
-         }
-         // Device flow has no subdomain; use default app
-         if (!storedAppKey) {
-            storedAppKey = process.env.DEFAULT_APP_SUBDOMAIN || 'app';
-            log.info({ functionName: 'login-submit', storedAppKey }, 'auth-server:auth-routes:login-submit - Using default app subdomain for device flow');
-         }
-         log.info({ functionName: 'login-submit', userId, storedAppKey }, 'auth-server:auth-routes:login-submit - Starting unified tenant resolution');
+         log.info({ functionName: 'login-submit', userId }, 'auth-server:auth-routes:login-submit - Starting unified organization resolution');
          
-         // Use resolveOrganization for unified flow (provider='password', providerSubject=email)
-         let organizationResult = await resolveOrganization({
+         const organizationResult = await resolveOrganization({
             provider: 'password',
             providerSubject: email,
-            origin,
-            appKey: storedAppKey
          });
-
-         // Fallback: if application not found by app_slug, retry with default subdomain
-         // (mirrors the registration flow which falls back to REGISTRATION_DEFAULT_APP_SUBDOMAIN)
-         if (organizationResult.errorCode === 'APPLICATION_NOT_FOUND' && organizationResult.userId && organizationResult.organizationId) {
-            const defaultSubdomain = getEnvVarWithDefault('REGISTRATION_DEFAULT_APP_SUBDOMAIN', 'app');
-            if (defaultSubdomain !== storedAppKey) {
-               log.info({
-                  functionName: 'login-submit',
-                  originalAppKey: storedAppKey,
-                  fallbackSubdomain: defaultSubdomain
-               }, 'auth-server:auth-routes:login-submit - Application not found, retrying with default subdomain');
-               organizationResult = await resolveWithOrganization({
-                  userId: organizationResult.userId,
-                  organizationId: organizationResult.organizationId,
-                  origin,
-                  appKey: defaultSubdomain
-               });
-            }
-         }
 
          // =====================================================================
          // STEP 3: HANDLE TENANT RESOLUTION RESULTS
          // =====================================================================
          // 
          // Policy-based org selection flow:
-         // - If single org: complete login with full tenant info
+         // - If single org: complete login with full organization info
          // - If multiple orgs: complete login with user info + organizations list
          //   The select_org policy will trigger next and show org selection
          // - If errors: redirect back with error message
          // =====================================================================
 
-         // Handle tenant resolution errors (non-multi-organization errors)
+         // Handle organization resolution errors (non-multi-organization errors)
          if (!organizationResult.success && organizationResult.errorCode !== 'MULTIPLE_ORGANIZATIONS') {
             log.warn(
                {
@@ -1380,7 +1332,7 @@ export default function createAuthRoutes(
             }
 
             // Handle other errors
-            return res.redirect(buildLoginErrorUrl(organizationResult.errorCode?.toLowerCase() || 'login_failed', organizationResult.error || 'Login failed'));
+            return res.redirect(buildLoginErrorUrl((organizationResult.errorCode as string)?.toLowerCase() || 'login_failed', organizationResult.error || 'Login failed'));
          }
 
          // =====================================================================
@@ -1418,25 +1370,22 @@ export default function createAuthRoutes(
             return;
          }
 
-         // Single organization - complete login with full tenant info (from organizationResult)
+         // Single organization - complete login with full organization info
          const organizationId = organizationResult.organizationId;
-         const applicationId = organizationResult.applicationId!;
 
          log.info({ 
             functionName: 'login-submit',
             userId,
             organizationId,
-            applicationId
-         }, 'auth-server:auth-routes:login-submit - Single organization, completing login with full tenant info');
+         }, 'auth-server:auth-routes:login-submit - Single organization, completing login');
 
-         // Create auth result with full tenant information
+         // Create auth result with organization information
          const authResult = createAuthResult({
             userId: userId,
             email: email,
             name: userName,
             provider: 'password',
             organizationId: organizationId!,
-            applicationId: applicationId!
          });
 
          // Store the auth result in Redis keyed by userId (OIDC account identifier)
@@ -1446,7 +1395,6 @@ export default function createAuthRoutes(
             functionName: 'login-submit',
             userId,
             organizationId,
-            applicationId
          }, 'auth-server:auth-routes:login-submit - Auth result stored, completing OIDC interaction');
 
          // Prepare login result for OIDC provider
@@ -1457,9 +1405,7 @@ export default function createAuthRoutes(
                amr: ['password'],
                remember: true,
                ts: Math.floor(Date.now() / 1000),
-               // Include selected org info (custom fields for token claims)
                organizationId,
-               applicationId,
             },
          };
 
@@ -1603,7 +1549,7 @@ export default function createAuthRoutes(
             return res.redirect(loginUrl);
          }
 
-         // OIDC standard: login.accountId = userId (user identifier, not tenant)
+         // OIDC standard: login.accountId = userId (user identifier)
          const { accountId: userId, email, name: userName, organizations, provider: authProvider } = loginResult;
          const orgList = organizations ?? [];
 
@@ -1627,32 +1573,6 @@ export default function createAuthRoutes(
             selectedOrganizationName: selectedOrganization.organizationName
          }, 'auth-server:auth-routes:select-org-submit - Valid organization selected');
 
-         // =====================================================================
-         // RESOLVE FULL TENANT INFO FOR SELECTED ORGANIZATION
-         // =====================================================================
-         const origin = req.get('origin') || req.get('referer') || '';
-         const headerSubdomain = (req.get('x-app-subdomain') || '').trim();
-         let application = headerSubdomain ? await getApplicationBySubdomain(headerSubdomain) : null;
-         let applicationId = application?.id;
-         if (!applicationId) {
-            let selectOrgAppKey = interactionDetails.params?.app_slug as string | undefined;
-            if (!selectOrgAppKey) {
-               selectOrgAppKey = await getAppSlug(uid) || undefined;
-            }
-            if (!selectOrgAppKey) {
-               selectOrgAppKey = process.env.DEFAULT_APP_SUBDOMAIN || 'app';
-            }
-            const subdomain = selectOrgAppKey || extractSubdomainFromOrigin(origin);
-            application = subdomain ? await getApplicationBySubdomain(subdomain) : null;
-            applicationId = application?.id;
-         }
-
-         log.debug({
-            functionName: 'select-org-submit',
-            organizationId,
-            applicationId
-         }, 'auth-server:auth-routes:select-org-submit - Resolved tenant info');
-
          // Create auth result with selected org
          const authResult = createAuthResult({
             userId: userId,
@@ -1660,7 +1580,6 @@ export default function createAuthRoutes(
             name: userName || '',
             provider: authProvider || 'password',
             organizationId: organizationId,
-            applicationId: applicationId || ''
          });
 
          // Store the auth result in Redis keyed by userId (OIDC account identifier)
@@ -1670,16 +1589,13 @@ export default function createAuthRoutes(
             functionName: 'select-org-submit',
             userId,
             organizationId,
-            applicationId
          }, 'auth-server:auth-routes:select-org-submit - Auth result stored');
 
          // Complete the select_org interaction
-         // Include the selected organization info so it can be used in token claims
          const result = {
             select_org: {
                organizationId,
                organizationName: selectedOrganization.organizationName,
-               applicationId,
             },
          };
 
@@ -1829,27 +1745,6 @@ export default function createAuthRoutes(
          // CREATE ACCOUNT FOR SELECTED ORGANIZATION
          // =====================================================================
          const origin = req.get('origin') || req.get('referer') || '';
-         const headerSubdomainSelectOrg = (req.get('x-app-subdomain') || '').trim();
-         let application = headerSubdomainSelectOrg ? await getApplicationBySubdomain(headerSubdomainSelectOrg) : null;
-         let applicationId = application?.id;
-         let subdomain: string | null = null;
-         if (!applicationId) {
-            let selectOrgAppKeyFromInteraction = interactionDetails.params?.app_slug as string | undefined;
-            if (!selectOrgAppKeyFromInteraction) {
-               selectOrgAppKeyFromInteraction = await getAppSlug(uid) || undefined;
-            }
-            if (!selectOrgAppKeyFromInteraction) {
-               selectOrgAppKeyFromInteraction = process.env.DEFAULT_APP_SUBDOMAIN || 'app';
-            }
-            subdomain = selectOrgAppKeyFromInteraction || extractSubdomainFromOrigin(origin);
-            application = subdomain ? await getApplicationBySubdomain(subdomain) : null;
-            applicationId = application?.id;
-         }
-
-         if (!applicationId) {
-            log.error({ functionName: 'select-organization-submit', subdomain }, 'auth-server:auth-routes:select-organization-submit - Could not resolve application');
-            return res.redirect(getAppSelectOrganizationUrl('Could not determine application. Please try again.'));
-         }
 
          // Get user to create identity if needed
          const user = await usersService.getUser(systemContext, userId);
@@ -1869,10 +1764,8 @@ export default function createAuthRoutes(
             name: user.name || userName,
             provider: 'password',
             providerUserId: email,
-            // Don't pass password - identity should already exist from registration
             organizationId: createNew ? undefined : organizationId,
             organizationName: createNew ? `${userName || email}'s Organization` : undefined,
-            applicationId,
             origin
          });
 
@@ -1890,7 +1783,7 @@ export default function createAuthRoutes(
                functionName: 'select-organization-submit',
                userId,
                organizationId: signupResult.organizationId
-            }, 'auth-server:auth-routes:select-organization-submit - Account created without tenant assignment (invalid state)');
+            }, 'auth-server:auth-routes:select-organization-submit - Account created without organization assignment (invalid state)');
             return res.redirect(getAppSelectOrganizationUrl('Failed to assign organization. Please try again or contact support.'));
          }
 
@@ -1907,7 +1800,6 @@ export default function createAuthRoutes(
             name: userName || '',
             provider: 'password',
             organizationId: signupResult.organizationId!,
-            applicationId: applicationId
          });
 
          // Store the auth result in Redis keyed by userId (OIDC account identifier)
@@ -2043,59 +1935,11 @@ export default function createAuthRoutes(
          };
 
          const origin = req.get('origin') || req.get('referer') || '';
-         // Resolve application: x-app-subdomain header first, then app_slug/subdomain/redirect_uri/default
-         const headerSubdomain = (req.get('x-app-subdomain') || '').trim();
-         let application = headerSubdomain ? await getApplicationBySubdomain(headerSubdomain) : null;
-         let applicationId = application?.id;
-         if (applicationId) {
-            log.info({ functionName: 'register-submit', applicationId, subdomain: headerSubdomain }, 'auth-server:auth-routes:register - Resolved application from x-app-subdomain header');
-         }
-         if (!applicationId) {
-            let registerAppKey = interactionDetails.params?.app_slug as string | undefined;
-            if (!registerAppKey) {
-               registerAppKey = await getAppSlug(uid) || undefined;
-            }
-            const subdomain = registerAppKey || extractSubdomainFromOrigin(origin);
-            application = subdomain ? await getApplicationBySubdomain(subdomain) : null;
-            applicationId = application?.id;
-         }
 
-         // When the user submits from auth server's register page (e.g. auth.more0.dev/register),
-         // origin is the auth host so subdomain is "auth" and application is null. Fall back to
-         // redirect_uri from the OIDC interaction to determine the requesting app's context.
-         if (!applicationId) {
-            const redirectUri = interactionDetails.params.redirect_uri as string | undefined;
-            if (redirectUri) {
-               try {
-                  const redirectOrigin = new URL(redirectUri).origin;
-                  const redirectSubdomain = extractSubdomainFromOrigin(redirectOrigin);
-                  if (redirectSubdomain) {
-                     application = await getApplicationBySubdomain(redirectSubdomain);
-                     applicationId = application?.id;
-                     if (applicationId) {
-                        log.info({ functionName: 'register-submit', redirectUri, redirectSubdomain, applicationId }, 'auth-server:auth-routes:register - Resolved application from redirect_uri');
-                     }
-                  }
-               } catch (urlError) {
-                  log.warn({ functionName: 'register-submit', redirectUri, error: urlError instanceof Error ? urlError.message : String(urlError) }, 'auth-server:auth-routes:register - Failed to parse redirect_uri for application context');
-               }
-            }
-         }
-
-         // When origin/redirect_uri are localhost (no subdomain), use default app subdomain
-         if (!applicationId) {
-            const defaultSubdomain = getEnvVarWithDefault('REGISTRATION_DEFAULT_APP_SUBDOMAIN', 'app');
-            application = await getApplicationBySubdomain(defaultSubdomain);
-            applicationId = application?.id;
-            if (applicationId) {
-               log.info({ functionName: 'register-submit', defaultSubdomain, applicationId }, 'auth-server:auth-routes:register - Resolved application from REGISTRATION_DEFAULT_APP_SUBDOMAIN');
-            }
-         }
-
-         log.info({ functionName: 'register-submit', email, applicationId }, 'auth-server:auth-routes:register - Checking for existing user');
+         log.info({ functionName: 'register-submit', email }, 'auth-server:auth-routes:register - Checking for existing user');
          const existingUser = await getUserByEmail(email);
 
-         if (existingUser && applicationId) {
+         if (existingUser) {
             // User exists - check if they already have password identity
             // If they do, they should LOGIN, not register
             log.info({ 
@@ -2207,7 +2051,6 @@ export default function createAuthRoutes(
                   provider: 'password',
                   providerUserId: email,
                   organizationId: userOrganizations[0].id,
-                  applicationId,
                   origin
                });
 
@@ -2217,7 +2060,7 @@ export default function createAuthRoutes(
                }
 
                if (!signupResult.organizationId) {
-                  log.error({ functionName: 'register-submit', userId: existingUser.userId, organizationId: signupResult.organizationId }, 'auth-server:auth-routes:register - Signup completed without tenant assignment (invalid state)');
+                  log.error({ functionName: 'register-submit', userId: existingUser.userId, organizationId: signupResult.organizationId }, 'auth-server:auth-routes:register - Signup completed without organization assignment (invalid state)');
                   return res.redirect(`/register?interaction=${uid}&error=${encodeURIComponent('Registration failed: unable to assign organization. Please try again or contact support.')}`);
                }
 
@@ -2227,7 +2070,6 @@ export default function createAuthRoutes(
                   name: existingUser.name || userName,
                   provider: 'password',
                   organizationId: signupResult.organizationId!,
-                  applicationId: applicationId!
                });
 
                await storeAuthResult(existingUser.userId, authResult);
@@ -2284,17 +2126,10 @@ export default function createAuthRoutes(
          // =====================================================================
          // UNIFIED SIGNUP: Create all records in a single transaction
          // =====================================================================
-         
-         // Require applicationId for new user registration
-         if (!applicationId) {
-            log.error({ functionName: 'register-submit', email, origin }, 'auth-server:auth-routes:register - Cannot register: no application context');
-            return res.redirect(`/register?interaction=${uid}&error=${encodeURIComponent('Registration failed: unable to determine application context.')}`);
-         }
 
          log.info({ 
             functionName: 'register-submit', 
             email, 
-            applicationId,
             organizationName: company || userName
          }, 'auth-server:auth-routes:register - Starting unified signup via ApplicationSignupService');
 
@@ -2307,7 +2142,6 @@ export default function createAuthRoutes(
             providerUserId: email,
             password, // Service will hash the password
             organizationName: company || `${userName}'s Organization`,
-            applicationId,
             origin
          });
 
@@ -2321,14 +2155,14 @@ export default function createAuthRoutes(
             return res.redirect(`/register?interaction=${uid}&error=${encodeURIComponent(signupResult.error || 'Registration failed')}`);
          }
 
-         // Enforce: user MUST be assigned to a tenant (organization) on registration
+         // Enforce: user MUST be assigned to an organization on registration
          if (!signupResult.organizationId) {
             log.error({ 
                functionName: 'register-submit', 
                email, 
                userId: signupResult.userId,
                organizationId: signupResult.organizationId
-            }, 'auth-server:auth-routes:register - Registration completed without tenant assignment (invalid state)');
+            }, 'auth-server:auth-routes:register - Registration completed without organization assignment (invalid state)');
             return res.redirect(`/register?interaction=${uid}&error=${encodeURIComponent('Registration failed: unable to assign organization. Please try again or contact support.')}`);
          }
 
@@ -2340,14 +2174,13 @@ export default function createAuthRoutes(
             scenario: signupResult.scenario
          }, 'auth-server:auth-routes:register - Unified signup completed successfully');
 
-         // Create auth result with full tenant information
+         // Create auth result with organization information
          const authResult = createAuthResult({
             userId: signupResult.userId!,
             email,
             name: userName,
             provider: 'password',
             organizationId: signupResult.organizationId!,
-            applicationId
          });
 
          // Store the auth result in Redis keyed by userId (OIDC account identifier)
@@ -2357,7 +2190,6 @@ export default function createAuthRoutes(
             functionName: 'register-submit',
             userId: signupResult.userId,
             organizationId: signupResult.organizationId,
-            applicationId
          }, 'auth-server:auth-routes:register - Auth result stored, completing register interaction');
 
          // Include both register and login so the provider accepts the result whether
@@ -2368,7 +2200,6 @@ export default function createAuthRoutes(
                email,
                name: userName,
                organizationId: signupResult.organizationId,
-               applicationId,
                completed: true
             },
             login: {
@@ -2570,7 +2401,7 @@ export default function createAuthRoutes(
 
          // Get interaction details
          const interactionDetails = await provider.interactionDetails(req, res);
-         // OIDC standard: session.accountId = userId (user identifier, not tenant)
+         // OIDC standard: session.accountId = userId (user identifier)
          const { prompt: { details }, session: { accountId }, grantId, params: interactionParams } = interactionDetails;
          const params = interactionParams as any;
 

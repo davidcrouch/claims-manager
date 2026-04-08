@@ -11,6 +11,7 @@ import {
   bigint,
   jsonb,
   uniqueIndex,
+  unique,
   index,
   check,
   type AnyPgColumn,
@@ -703,35 +704,90 @@ export const attachments = pgTable(
   ],
 );
 
-// Tenants
-export const tenants = pgTable('tenants', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  name: text('name').notNull(),
-  slug: text('slug').unique(),
-  config: jsonb('config').notNull().default({}),
-  isActive: boolean('is_active').notNull().default(true),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
-// Users
+// Users (identity only — org membership lives in organization_users)
 export const users = pgTable(
   'users',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    tenantId: text('tenant_id').notNull(),
-    kindeUserId: text('kinde_user_id').notNull().unique(),
     email: text('email'),
     name: text('name'),
-    role: text('role'),
+    status: text('status').notNull().default('active'),
+    object: text('object').notNull().default('user'),
     isActive: boolean('is_active').notNull().default(true),
+    config: jsonb('config'),
+    createdBy: uuid('created_by'),
+    updatedBy: uuid('updated_by'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    index('idx_users_tenant').on(t.tenantId),
-    index('idx_users_email').on(t.tenantId, t.email),
+    index('idx_users_email').on(t.email),
   ],
+);
+
+// User identities (auth: links users to external identity providers)
+export const userIdentities = pgTable(
+  'user_identities',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    provider: text('provider').notNull(),
+    providerSubject: text('provider_subject').notNull(),
+    displayName: text('display_name'),
+    avatarUrl: text('avatar_url'),
+    rawProfile: jsonb('raw_profile').notNull(),
+    accessToken: text('access_token'),
+    refreshToken: text('refresh_token'),
+    tokenExpiresAt: timestamp('token_expires_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('uq_user_identities_provider_subject').on(t.provider, t.providerSubject),
+  ],
+);
+
+// Organizations (auth: tenant/org registry)
+export const organizations = pgTable('organizations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  slug: text('slug').notNull(),
+  description: text('description'),
+  status: text('status').notNull(),
+  object: text('object').notNull(),
+  created: timestamp('created', { withTimezone: true, mode: 'string' }).notNull(),
+  modified: timestamp('modified', { withTimezone: true, mode: 'string' }).notNull(),
+  createdBy: uuid('created_by').notNull(),
+  modifiedBy: uuid('modified_by').notNull(),
+  orgCode: text('org_code').notNull(),
+  config: jsonb('config'),
+});
+
+// Organization users (auth: maps users to organizations)
+export const organizationUsers = pgTable(
+  'organization_users',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id),
+    role: text('role').notNull(),
+    status: text('status').notNull(),
+    object: text('object').notNull(),
+    created: timestamp('created', { withTimezone: true, mode: 'string' }).notNull(),
+    modified: timestamp('modified', { withTimezone: true, mode: 'string' }).notNull(),
+    createdBy: uuid('created_by').notNull(),
+    modifiedBy: uuid('modified_by').notNull(),
+    profile: jsonb('profile'),
+    config: jsonb('config'),
+    ext: jsonb('ext'),
+  },
+  (t) => [unique('organization_users_user_organization_key').on(t.userId, t.organizationId)],
 );
 
 // Integration providers
@@ -752,7 +808,9 @@ export const integrationConnections = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     tenantId: text('tenant_id').notNull(),
     providerId: uuid('provider_id').notNull().references(() => integrationProviders.id),
+    name: text('name').notNull().default(''),
     environment: text('environment').notNull(),
+    authType: text('auth_type').notNull().default('client_credentials'),
     baseUrl: text('base_url').notNull(),
     authUrl: text('auth_url'),
     clientIdentifier: text('client_identifier'),
@@ -778,15 +836,22 @@ export const externalObjects = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     tenantId: text('tenant_id').notNull(),
     connectionId: uuid('connection_id').notNull().references(() => integrationConnections.id),
+    providerId: uuid('provider_id').references(() => integrationProviders.id),
     providerCode: text('provider_code').notNull(),
     providerEntityType: text('provider_entity_type').notNull(),
     providerEntityId: text('provider_entity_id').notNull(),
     normalizedEntityType: text('normalized_entity_type').notNull(),
+    externalParentId: text('external_parent_id'),
     latestPayload: jsonb('latest_payload').notNull(),
     payloadHash: text('payload_hash'),
     fetchStatus: text('fetch_status').notNull().default('fetched'),
     lastFetchedAt: timestamp('last_fetched_at', { withTimezone: true }),
     lastFetchEventId: uuid('last_fetch_event_id'),
+    latestEventType: text('latest_event_type'),
+    latestEventTimestamp: timestamp('latest_event_timestamp', { withTimezone: true }),
+    externalCreatedAt: timestamp('external_created_at', { withTimezone: true }),
+    externalUpdatedAt: timestamp('external_updated_at', { withTimezone: true }),
+    lastErrorMessage: text('last_error_message'),
     metadata: jsonb('metadata').notNull().default({}),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -814,7 +879,7 @@ export const externalObjectVersions = pgTable(
     payload: jsonb('payload').notNull(),
     payloadHash: text('payload_hash').notNull(),
     sourceEventId: uuid('source_event_id'),
-    changedFields: jsonb('changed_fields').notNull().default([]),
+    changeSummary: jsonb('change_summary').notNull().default({}),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -861,7 +926,7 @@ export const inboundWebhookEvents = pgTable(
     tenantId: text('tenant_id'),
     eventType: text('event_type').notNull(),
     eventTimestamp: timestamp('event_timestamp', { withTimezone: true }).notNull(),
-    payloadEntityId: uuid('payload_entity_id'),
+    payloadEntityId: text('payload_entity_id'),
     payloadTeamIds: jsonb('payload_team_ids').notNull().default([]),
     payloadTenantId: text('payload_tenant_id'),
     payloadClient: text('payload_client'),
@@ -874,13 +939,17 @@ export const inboundWebhookEvents = pgTable(
     processingStatus: text('processing_status').notNull().default('pending'),
     processingError: text('processing_error'),
     processedAt: timestamp('processed_at', { withTimezone: true }),
-    connectionId: uuid('connection_id'),
+    connectionId: uuid('connection_id').references(() => integrationConnections.id),
+    providerId: uuid('provider_id').references(() => integrationProviders.id),
     providerCode: text('provider_code'),
+    providerEntityType: text('provider_entity_type'),
     retryCount: integer('retry_count').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index('idx_webhooks_status').on(t.processingStatus, t.createdAt),
+    index('idx_webhooks_connection_type_entity').on(t.connectionId, t.eventType, t.payloadEntityId),
+    index('idx_webhooks_provider_entity').on(t.providerId, t.providerEntityType),
   ],
 );
 

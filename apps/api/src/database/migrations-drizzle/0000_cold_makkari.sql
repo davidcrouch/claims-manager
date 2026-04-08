@@ -1,3 +1,17 @@
+CREATE TABLE "applications" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"name" text,
+	"status" text NOT NULL,
+	"object" text,
+	"created_at" timestamp with time zone NOT NULL,
+	"updated_at" timestamp with time zone NOT NULL,
+	"created_by" uuid NOT NULL,
+	"updated_by" uuid NOT NULL,
+	"subdomain" text,
+	"system_user_id" uuid,
+	"organization_id" uuid
+);
+--> statement-breakpoint
 CREATE TABLE "appointment_attendees" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" text NOT NULL,
@@ -173,7 +187,7 @@ CREATE TABLE "external_object_versions" (
 	"payload" jsonb NOT NULL,
 	"payload_hash" text NOT NULL,
 	"source_event_id" uuid,
-	"changed_fields" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"change_summary" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
@@ -181,15 +195,22 @@ CREATE TABLE "external_objects" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" text NOT NULL,
 	"connection_id" uuid NOT NULL,
+	"provider_id" uuid,
 	"provider_code" text NOT NULL,
 	"provider_entity_type" text NOT NULL,
 	"provider_entity_id" text NOT NULL,
 	"normalized_entity_type" text NOT NULL,
+	"external_parent_id" text,
 	"latest_payload" jsonb NOT NULL,
 	"payload_hash" text,
 	"fetch_status" text DEFAULT 'fetched' NOT NULL,
 	"last_fetched_at" timestamp with time zone,
 	"last_fetch_event_id" uuid,
+	"latest_event_type" text,
+	"latest_event_timestamp" timestamp with time zone,
+	"external_created_at" timestamp with time zone,
+	"external_updated_at" timestamp with time zone,
+	"last_error_message" text,
 	"metadata" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
@@ -233,7 +254,7 @@ CREATE TABLE "inbound_webhook_events" (
 	"tenant_id" text,
 	"event_type" text NOT NULL,
 	"event_timestamp" timestamp with time zone NOT NULL,
-	"payload_entity_id" uuid,
+	"payload_entity_id" text,
 	"payload_team_ids" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"payload_tenant_id" text,
 	"payload_client" text,
@@ -247,7 +268,9 @@ CREATE TABLE "inbound_webhook_events" (
 	"processing_error" text,
 	"processed_at" timestamp with time zone,
 	"connection_id" uuid,
+	"provider_id" uuid,
 	"provider_code" text,
+	"provider_entity_type" text,
 	"retry_count" integer DEFAULT 0 NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "inbound_webhook_events_external_event_id_unique" UNIQUE("external_event_id")
@@ -257,7 +280,9 @@ CREATE TABLE "integration_connections" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" text NOT NULL,
 	"provider_id" uuid NOT NULL,
+	"name" text DEFAULT '' NOT NULL,
 	"environment" text NOT NULL,
+	"auth_type" text DEFAULT 'client_credentials' NOT NULL,
 	"base_url" text NOT NULL,
 	"auth_url" text,
 	"client_identifier" text,
@@ -381,6 +406,38 @@ CREATE TABLE "messages" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "chk_message_from" CHECK (from_claim_id IS NOT NULL OR from_job_id IS NOT NULL),
 	CONSTRAINT "chk_message_to" CHECK (to_claim_id IS NOT NULL OR to_job_id IS NOT NULL)
+);
+--> statement-breakpoint
+CREATE TABLE "organization_users" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"user_id" uuid NOT NULL,
+	"organization_id" uuid NOT NULL,
+	"role" text NOT NULL,
+	"status" text NOT NULL,
+	"object" text NOT NULL,
+	"created" timestamp with time zone NOT NULL,
+	"modified" timestamp with time zone NOT NULL,
+	"created_by" uuid NOT NULL,
+	"modified_by" uuid NOT NULL,
+	"profile" jsonb,
+	"config" jsonb,
+	"ext" jsonb,
+	CONSTRAINT "organization_users_user_organization_key" UNIQUE("user_id","organization_id")
+);
+--> statement-breakpoint
+CREATE TABLE "organizations" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"name" text NOT NULL,
+	"slug" text NOT NULL,
+	"description" text,
+	"status" text NOT NULL,
+	"object" text NOT NULL,
+	"created" timestamp with time zone NOT NULL,
+	"modified" timestamp with time zone NOT NULL,
+	"created_by" uuid NOT NULL,
+	"modified_by" uuid NOT NULL,
+	"org_code" text NOT NULL,
+	"config" jsonb
 );
 --> statement-breakpoint
 CREATE TABLE "purchase_order_combos" (
@@ -622,28 +679,33 @@ CREATE TABLE "tasks" (
 	CONSTRAINT "chk_task_status" CHECK (status IN ('Open','Completed','Failed'))
 );
 --> statement-breakpoint
-CREATE TABLE "tenants" (
+CREATE TABLE "user_identities" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"name" text NOT NULL,
-	"slug" text,
-	"config" jsonb DEFAULT '{}'::jsonb NOT NULL,
-	"is_active" boolean DEFAULT true NOT NULL,
+	"user_id" uuid NOT NULL,
+	"provider" text NOT NULL,
+	"provider_subject" text NOT NULL,
+	"display_name" text,
+	"avatar_url" text,
+	"raw_profile" jsonb NOT NULL,
+	"access_token" text,
+	"refresh_token" text,
+	"token_expires_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "tenants_slug_unique" UNIQUE("slug")
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "users" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"tenant_id" text NOT NULL,
-	"kinde_user_id" text NOT NULL,
 	"email" text,
 	"name" text,
-	"role" text,
+	"status" text DEFAULT 'active' NOT NULL,
+	"object" text DEFAULT 'user' NOT NULL,
 	"is_active" boolean DEFAULT true NOT NULL,
+	"config" jsonb,
+	"created_by" uuid,
+	"updated_by" uuid,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "users_kinde_user_id_unique" UNIQUE("kinde_user_id")
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "vendors" (
@@ -681,8 +743,11 @@ ALTER TABLE "external_event_attempts" ADD CONSTRAINT "external_event_attempts_ev
 ALTER TABLE "external_links" ADD CONSTRAINT "external_links_external_object_id_external_objects_id_fk" FOREIGN KEY ("external_object_id") REFERENCES "public"."external_objects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "external_object_versions" ADD CONSTRAINT "external_object_versions_external_object_id_external_objects_id_fk" FOREIGN KEY ("external_object_id") REFERENCES "public"."external_objects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "external_objects" ADD CONSTRAINT "external_objects_connection_id_integration_connections_id_fk" FOREIGN KEY ("connection_id") REFERENCES "public"."integration_connections"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "external_objects" ADD CONSTRAINT "external_objects_provider_id_integration_providers_id_fk" FOREIGN KEY ("provider_id") REFERENCES "public"."integration_providers"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "external_processing_log" ADD CONSTRAINT "external_processing_log_connection_id_integration_connections_id_fk" FOREIGN KEY ("connection_id") REFERENCES "public"."integration_connections"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "external_reference_resolution_log" ADD CONSTRAINT "external_reference_resolution_log_matched_lookup_id_lookup_values_id_fk" FOREIGN KEY ("matched_lookup_id") REFERENCES "public"."lookup_values"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "inbound_webhook_events" ADD CONSTRAINT "inbound_webhook_events_connection_id_integration_connections_id_fk" FOREIGN KEY ("connection_id") REFERENCES "public"."integration_connections"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "inbound_webhook_events" ADD CONSTRAINT "inbound_webhook_events_provider_id_integration_providers_id_fk" FOREIGN KEY ("provider_id") REFERENCES "public"."integration_providers"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "integration_connections" ADD CONSTRAINT "integration_connections_provider_id_integration_providers_id_fk" FOREIGN KEY ("provider_id") REFERENCES "public"."integration_providers"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "invoices" ADD CONSTRAINT "invoices_purchase_order_id_purchase_orders_id_fk" FOREIGN KEY ("purchase_order_id") REFERENCES "public"."purchase_orders"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "invoices" ADD CONSTRAINT "invoices_claim_id_claims_id_fk" FOREIGN KEY ("claim_id") REFERENCES "public"."claims"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
@@ -698,6 +763,8 @@ ALTER TABLE "messages" ADD CONSTRAINT "messages_from_claim_id_claims_id_fk" FORE
 ALTER TABLE "messages" ADD CONSTRAINT "messages_from_job_id_jobs_id_fk" FOREIGN KEY ("from_job_id") REFERENCES "public"."jobs"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "messages" ADD CONSTRAINT "messages_to_claim_id_claims_id_fk" FOREIGN KEY ("to_claim_id") REFERENCES "public"."claims"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "messages" ADD CONSTRAINT "messages_to_job_id_jobs_id_fk" FOREIGN KEY ("to_job_id") REFERENCES "public"."jobs"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "organization_users" ADD CONSTRAINT "organization_users_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "organization_users" ADD CONSTRAINT "organization_users_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "purchase_order_combos" ADD CONSTRAINT "purchase_order_combos_purchase_order_group_id_purchase_order_groups_id_fk" FOREIGN KEY ("purchase_order_group_id") REFERENCES "public"."purchase_order_groups"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "purchase_order_groups" ADD CONSTRAINT "purchase_order_groups_purchase_order_id_purchase_orders_id_fk" FOREIGN KEY ("purchase_order_id") REFERENCES "public"."purchase_orders"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "purchase_order_items" ADD CONSTRAINT "purchase_order_items_purchase_order_group_id_purchase_order_groups_id_fk" FOREIGN KEY ("purchase_order_group_id") REFERENCES "public"."purchase_order_groups"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -716,6 +783,7 @@ ALTER TABLE "reports" ADD CONSTRAINT "reports_claim_id_claims_id_fk" FOREIGN KEY
 ALTER TABLE "reports" ADD CONSTRAINT "reports_job_id_jobs_id_fk" FOREIGN KEY ("job_id") REFERENCES "public"."jobs"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tasks" ADD CONSTRAINT "tasks_claim_id_claims_id_fk" FOREIGN KEY ("claim_id") REFERENCES "public"."claims"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tasks" ADD CONSTRAINT "tasks_job_id_jobs_id_fk" FOREIGN KEY ("job_id") REFERENCES "public"."jobs"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "user_identities" ADD CONSTRAINT "user_identities_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "idx_attachments_related" ON "attachments" USING btree ("tenant_id","related_record_type","related_record_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "UQ_claim_contact" ON "claim_contacts" USING btree ("claim_id","contact_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "UQ_claims_tenant_number" ON "claims" USING btree ("tenant_id","claim_number");--> statement-breakpoint
@@ -739,6 +807,8 @@ CREATE INDEX "idx_processing_log_status" ON "external_processing_log" USING btre
 CREATE INDEX "idx_processing_log_tenant_type" ON "external_processing_log" USING btree ("tenant_id","provider_entity_type");--> statement-breakpoint
 CREATE INDEX "idx_processing_log_workflow" ON "external_processing_log" USING btree ("workflow_run_id");--> statement-breakpoint
 CREATE INDEX "idx_webhooks_status" ON "inbound_webhook_events" USING btree ("processing_status","created_at");--> statement-breakpoint
+CREATE INDEX "idx_webhooks_connection_type_entity" ON "inbound_webhook_events" USING btree ("connection_id","event_type","payload_entity_id");--> statement-breakpoint
+CREATE INDEX "idx_webhooks_provider_entity" ON "inbound_webhook_events" USING btree ("provider_id","provider_entity_type");--> statement-breakpoint
 CREATE UNIQUE INDEX "UQ_connection_tenant_provider_env" ON "integration_connections" USING btree ("tenant_id","provider_id","environment");--> statement-breakpoint
 CREATE INDEX "idx_connections_tenant" ON "integration_connections" USING btree ("tenant_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "UQ_invoices_tenant_po_number" ON "invoices" USING btree ("tenant_id","purchase_order_id","invoice_number");--> statement-breakpoint
@@ -759,7 +829,7 @@ CREATE INDEX "idx_reports_type" ON "reports" USING btree ("tenant_id","report_ty
 CREATE INDEX "idx_tasks_claim" ON "tasks" USING btree ("tenant_id","claim_id");--> statement-breakpoint
 CREATE INDEX "idx_tasks_job" ON "tasks" USING btree ("tenant_id","job_id");--> statement-breakpoint
 CREATE INDEX "idx_tasks_status" ON "tasks" USING btree ("tenant_id","status");--> statement-breakpoint
-CREATE INDEX "idx_users_tenant" ON "users" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "idx_users_email" ON "users" USING btree ("tenant_id","email");--> statement-breakpoint
+CREATE UNIQUE INDEX "uq_user_identities_provider_subject" ON "user_identities" USING btree ("provider","provider_subject");--> statement-breakpoint
+CREATE INDEX "idx_users_email" ON "users" USING btree ("email");--> statement-breakpoint
 CREATE UNIQUE INDEX "UQ_vendors_tenant_extref" ON "vendors" USING btree ("tenant_id","external_reference");--> statement-breakpoint
 CREATE INDEX "idx_vendors_postcode" ON "vendors" USING btree ("tenant_id","postcode");

@@ -124,12 +124,15 @@ export class ExternalToolsController implements OnModuleInit {
     body: {
       tenantId: string;
       connectionId: string;
+      providerId?: string;
       providerCode: string;
       providerEntityType: string;
       providerEntityId: string;
       normalizedEntityType?: string;
       payload: Record<string, unknown>;
       sourceEventId?: string;
+      sourceEventType?: string;
+      sourceEventTimestamp?: string;
     },
   ): Promise<{
     externalObject: Record<string, unknown>;
@@ -143,12 +146,15 @@ export class ExternalToolsController implements OnModuleInit {
     const result = await this.externalObjectService.upsertFromFetch({
       tenantId: body.tenantId,
       connectionId: body.connectionId,
+      providerId: body.providerId,
       providerCode: body.providerCode,
       providerEntityType: body.providerEntityType,
       providerEntityId: body.providerEntityId,
       normalizedEntityType: body.normalizedEntityType ?? body.providerEntityType,
       payload: body.payload,
       sourceEventId: body.sourceEventId,
+      sourceEventType: body.sourceEventType,
+      sourceEventTimestamp: body.sourceEventTimestamp ? new Date(body.sourceEventTimestamp) : undefined,
     });
 
     return {

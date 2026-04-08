@@ -41,10 +41,6 @@ describe('BackendService', () => {
           userId: '123',
           email: 'test@example.com',
           name: 'Test User',
-          compName: undefined,
-          compId: undefined,
-          isAdmin: false,
-          roleInCompany: undefined,
           avatarURL: undefined,
           phone: undefined
         }
@@ -103,10 +99,6 @@ describe('BackendService', () => {
           userId: '123',
           email: 'test@example.com',
           name: 'Test User',
-          compName: undefined,
-          compId: undefined,
-          isAdmin: false,
-          roleInCompany: undefined,
           avatarURL: undefined,
           phone: undefined
         }
