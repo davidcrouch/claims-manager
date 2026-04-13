@@ -1,0 +1,6 @@
+project_id       = "claims-manager-production"
+infra_project_id = "claims-manager-infra"
+region           = "australia-southeast1"
+environment      = "production"
+cloudsql_tier    = "db-custom-4-16384"
+dns_name         = "claims-manager.example.com."

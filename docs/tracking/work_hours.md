@@ -49,7 +49,7 @@
   Added **line-ending rules** so hook scripts work correctly across platforms.  
   Updated **repository ignore rules** to keep local editor configuration out of version control.
 
-- `2026-04-08` **10 h**  
+- `2026-04-10` **10 h**  
   **Integration schema hardening and auth alignment across API, sign-in service, and web app.**  
   Tightened integration-related data shapes so provider and connection relationships are clearer and webhook and external-object handling match the updated model.  
   Simplified organization and registration flows in the sign-in service by removing redundant layers and aligning tokens with the streamlined model.  
@@ -65,3 +65,12 @@
   Extended repository layer with provider-scoped webhook event queries, error counts, and last-event tracking.
   Authored **webhook pipeline v2 architecture documentation** covering receipt simplification, sweep service, tool endpoints, entity mapping, workflow refinement, and observability.
   Documented the providers management UI design specification for team reference.
+
+- `2026-04-14` **10 h**
+  Delivered **repeatable hosted delivery** with automated build, test, and promotion paths for staging and production.
+  Added **infrastructure-as-code** and **Kubernetes manifests** so networking, data stores, secrets, and workloads can be provisioned and updated in a controlled way.
+  Shipped **operator scripts** for applying Terraform, rolling out releases, and rolling back when needed.
+  Hardened **container images** so the API carries database migrations and can apply them at deploy time in a standard way.
+  Prepared the **web application image** for efficient production serving alongside the API and supporting services.
+  Scoped **integration provider visibility** to the signed-in customer so webhook history and counts cannot leak across tenants.
+  Retired the older single-purpose workflow in favor of the new pipeline layout aligned with the monorepo.

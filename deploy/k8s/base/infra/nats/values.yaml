@@ -1,0 +1,24 @@
+config:
+  cluster:
+    enabled: true
+    replicas: 3
+  jetstream:
+    enabled: true
+    fileStore:
+      enabled: true
+      dir: /data
+      maxSize: 10Gi
+      pvc:
+        enabled: true
+        size: 20Gi
+        storageClassName: premium-rwo
+    memoryStore:
+      enabled: true
+      maxSize: 1Gi
+  merge:
+    max_payload: << 16MB >>
+podTemplate:
+  topologySpreadConstraints:
+    topology.kubernetes.io/zone:
+      maxSkew: 1
+      whenUnsatisfiable: DoNotSchedule

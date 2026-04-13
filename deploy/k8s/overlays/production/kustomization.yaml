@@ -1,0 +1,86 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+patches:
+  - target:
+      kind: Deployment
+      name: api-server
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 2
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: 500m
+
+  - target:
+      kind: Deployment
+      name: auth-server
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 3
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: 500m
+
+  - target:
+      kind: Deployment
+      name: frontend
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 3
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: 250m
+
+  - target:
+      kind: ConfigMap
+      name: otel-collector-config
+    patch: |
+      - op: replace
+        path: /data/config.yaml
+        value: |
+          extensions:
+            health_check:
+              endpoint: 0.0.0.0:13133
+          exporters:
+            googlecloud:
+              project: claims-manager-production
+              trace:
+                endpoint: cloudtrace.googleapis.com:443
+              metric:
+                endpoint: monitoring.googleapis.com:443
+            logging:
+              loglevel: warn
+          receivers:
+            otlp:
+              protocols:
+                grpc:
+                  endpoint: 0.0.0.0:4317
+                http:
+                  endpoint: 0.0.0.0:4318
+          processors:
+            batch:
+              timeout: 5s
+              send_batch_size: 256
+            resourcedetection:
+              detectors: [gcp]
+          service:
+            extensions: [health_check]
+            pipelines:
+              traces:
+                receivers: [otlp]
+                processors: [batch, resourcedetection]
+                exporters: [googlecloud]
+              metrics:
+                receivers: [otlp]
+                processors: [batch, resourcedetection]
+                exporters: [googlecloud]
+
+patchesStrategicMerge:
+  - pdb.yaml

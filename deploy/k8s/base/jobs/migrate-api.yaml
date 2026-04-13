@@ -1,0 +1,28 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate-api-IMAGE_TAG
+  namespace: jobs
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: australia-southeast1-docker.pkg.dev/claims-manager-infra/claims-manager/api-server:IMAGE_TAG
+          imagePullPolicy: Always
+          command: ["node", "dist/database/run-migrations.js"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: api-server-secrets
+                  key: database-url
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 256Mi

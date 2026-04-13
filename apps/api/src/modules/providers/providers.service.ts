@@ -35,7 +35,7 @@ export class ProvidersService {
     private readonly webhookEventsRepo: InboundWebhookEventsRepository,
   ) {}
 
-  async findAll(): Promise<ProviderSummary[]> {
+  async findAll(tenantId: string): Promise<ProviderSummary[]> {
     this.logger.debug('[ProvidersService.findAll] Listing all providers');
     const providers = await this.providersRepo.findAll();
 
@@ -44,9 +44,18 @@ export class ProvidersService {
         const [connections, totalEvents, errorCount, lastEventAt] =
           await Promise.all([
             this.connectionsRepo.findByProviderId({ providerId: p.id }),
-            this.webhookEventsRepo.countByProviderId({ providerId: p.id }),
-            this.webhookEventsRepo.countErrorsByProviderId({ providerId: p.id }),
-            this.webhookEventsRepo.lastEventAtByProviderId({ providerId: p.id }),
+            this.webhookEventsRepo.countByProviderId({
+              providerId: p.id,
+              tenantId,
+            }),
+            this.webhookEventsRepo.countErrorsByProviderId({
+              providerId: p.id,
+              tenantId,
+            }),
+            this.webhookEventsRepo.lastEventAtByProviderId({
+              providerId: p.id,
+              tenantId,
+            }),
           ]);
 
         return {
@@ -207,6 +216,7 @@ export class ProvidersService {
 
   async findWebhookEvents(params: {
     providerId: string;
+    tenantId: string;
     status?: string;
     page?: number;
     limit?: number;
@@ -217,6 +227,7 @@ export class ProvidersService {
     await this.ensureProviderExists(params.providerId);
     return this.webhookEventsRepo.findByProviderId({
       providerId: params.providerId,
+      tenantId: params.tenantId,
       status: params.status,
       page: params.page,
       limit: params.limit,

@@ -1,0 +1,6 @@
+project_id       = "claims-manager-staging"
+infra_project_id = "claims-manager-infra"
+region           = "australia-southeast1"
+environment      = "staging"
+cloudsql_tier    = "db-custom-2-8192"
+dns_name         = "staging.claims-manager.example.com."

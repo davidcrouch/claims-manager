@@ -1,0 +1,188 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: auth-server
+  namespace: platform
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-server
+  namespace: platform
+  labels:
+    app: auth-server
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: auth-server
+  template:
+    metadata:
+      labels:
+        app: auth-server
+    spec:
+      serviceAccountName: auth-server
+      containers:
+        - name: auth-server
+          image: australia-southeast1-docker.pkg.dev/claims-manager-infra/claims-manager/auth-server:IMAGE_TAG
+          ports:
+            - containerPort: 4000
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: PORT
+              value: "4000"
+            - name: SERVICE_NAME
+              value: auth-server
+            - name: SERVICE_VERSION
+              value: IMAGE_TAG
+            - name: OIDC_ISSUER
+              value: https://auth.DNS_SUFFIX
+            - name: BASE_URL
+              value: https://auth.DNS_SUFFIX
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: auth-server-secrets
+                  key: database-url
+            - name: REDIS_PROVIDER
+              value: self-hosted
+            - name: REDIS_HOST
+              value: redis-master.infra.svc.cluster.local
+            - name: REDIS_PORT
+              value: "6379"
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: auth-server-secrets
+                  key: jwt-secret
+            - name: JWT_PUBLIC_KEY_N
+              valueFrom:
+                secretKeyRef:
+                  name: auth-server-secrets
+                  key: jwks-rsa-n
+            - name: JWT_PUBLIC_KEY_E
+              value: AQAB
+            - name: JWT_PRIVATE_KEY_D
+              valueFrom:
+                secretKeyRef:
+                  name: auth-server-secrets
+                  key: jwks-rsa-d
+            - name: JWT_PRIVATE_KEY_P
+              valueFrom:
+                secretKeyRef:
+                  name: auth-server-secrets
+                  key: jwks-rsa-p
+            - name: JWT_PRIVATE_KEY_Q
+              valueFrom:
+                secretKeyRef:
+                  name: auth-server-secrets
+                  key: jwks-rsa-q
+            - name: JWT_PRIVATE_KEY_DP
+              valueFrom:
+                secretKeyRef:
+                  name: auth-server-secrets
+                  key: jwks-rsa-dp
+            - name: JWT_PRIVATE_KEY_DQ
+              valueFrom:
+                secretKeyRef:
+                  name: auth-server-secrets
+                  key: jwks-rsa-dq
+            - name: JWT_PRIVATE_KEY_QI
+              valueFrom:
+                secretKeyRef:
+                  name: auth-server-secrets
+                  key: jwks-rsa-qi
+            - name: JWT_EC_PRIVATE_KEY_D
+              valueFrom:
+                secretKeyRef:
+                  name: auth-server-secrets
+                  key: jwks-ec-d
+            - name: JWT_EC_PUBLIC_KEY_X
+              valueFrom:
+                secretKeyRef:
+                  name: auth-server-secrets
+                  key: jwks-ec-x
+            - name: JWT_EC_PUBLIC_KEY_Y
+              valueFrom:
+                secretKeyRef:
+                  name: auth-server-secrets
+                  key: jwks-ec-y
+            - name: DYNAMIC_REGISTRATION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: auth-server-secrets
+                  key: dcr-secret
+            - name: DCR_IAT_SIGNING_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: auth-server-secrets
+                  key: dcr-iat-key
+            - name: OIDC_COOKIES_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: auth-server-secrets
+                  key: oidc-cookies-keys
+            - name: OIDC_CLIENT_ID
+              value: claims-manager-frontend
+            - name: OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: auth-server-secrets
+                  key: oidc-client-secret
+            - name: OIDC_CLIENT_CALLBACK_URI
+              value: https://app.DNS_SUFFIX/api/auth/callback
+            - name: OIDC_POST_LOGIN_URI
+              value: https://app.DNS_SUFFIX
+            - name: OIDC_POST_LOGOUT_URI
+              value: https://app.DNS_SUFFIX
+            - name: OIDC_ADDITIONAL_REDIRECT_URIS
+              value: https://app.DNS_SUFFIX/api/auth/callback
+            - name: CORS_ORIGINS
+              value: https://app.DNS_SUFFIX,https://auth.DNS_SUFFIX,https://api.DNS_SUFFIX
+            - name: GOOGLE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: auth-server-secrets
+                  key: google-client-id
+            - name: GOOGLE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: auth-server-secrets
+                  key: google-client-secret
+            - name: MOREZERO_API_URL
+              value: https://api.DNS_SUFFIX
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://otel-collector.infra.svc.cluster.local:4317
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 4000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-server
+  namespace: platform
+  labels:
+    app: auth-server
+spec:
+  selector:
+    app: auth-server
+  ports:
+    - port: 4000
+      targetPort: 4000

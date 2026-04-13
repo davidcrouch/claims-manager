@@ -1,0 +1,166 @@
+name: Deploy Production
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  DNS_SUFFIX: claims-manager.example.com
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ci-deployer@claims-manager-infra.iam.gserviceaccount.com
+
+      - uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: claims-manager-production
+          location: australia-southeast1
+          project_id: claims-manager-production
+
+      - name: Extract version tag
+        run: echo "IMAGE_TAG=${GITHUB_REF_NAME}" >> $GITHUB_ENV
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Ensure External Secrets Operator
+        run: |
+          helm repo add external-secrets https://charts.external-secrets.io
+          helm repo update
+          helm upgrade --install external-secrets external-secrets/external-secrets \
+            --namespace external-secrets \
+            --create-namespace \
+            --set serviceAccount.annotations."iam\.gke\.io/gcp-service-account"=external-secrets-sa@claims-manager-production.iam.gserviceaccount.com \
+            --wait
+          echo "Waiting for CRDs to be established..."
+          kubectl wait --for=condition=Established crd/secretstores.external-secrets.io --timeout=60s
+          kubectl wait --for=condition=Established crd/externalsecrets.external-secrets.io --timeout=60s
+
+      - name: Ensure NATS
+        run: |
+          helm repo add nats https://nats-io.github.io/k8s/helm/charts/
+          helm repo update
+          helm upgrade --install nats nats/nats \
+            --namespace infra \
+            --values deploy/k8s/base/infra/nats/values.yaml \
+            --wait --timeout 5m
+
+      - name: Ensure Redis
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm upgrade --install redis bitnami/redis \
+            --namespace infra \
+            --set architecture=standalone \
+            --set auth.enabled=false \
+            --set master.persistence.size=1Gi \
+            --wait --timeout 5m
+
+      - name: Run database migrations
+        env:
+          PROJECT_ID: claims-manager-production
+        run: |
+          chmod +x deploy/scripts/deploy.sh
+          deploy/scripts/deploy.sh migrate ${{ env.IMAGE_TAG }}
+
+      - name: Deploy services
+        run: |
+          cd deploy/k8s
+          kustomize build overlays/production | \
+            sed "s|IMAGE_TAG|${{ env.IMAGE_TAG }}|g" | \
+            sed "s|PROJECT_ID|claims-manager-production|g" | \
+            sed "s|DNS_SUFFIX|${{ env.DNS_SUFFIX }}|g" | \
+            kubectl apply -f -
+
+      - name: Restart deployments
+        run: |
+          for ns in platform gateways workers frontend infra; do
+            DEPLOYMENTS=$(kubectl -n $ns get deployment -o name 2>/dev/null || true)
+            for deploy in $DEPLOYMENTS; do
+              echo "Restarting ${ns}/${deploy}..."
+              kubectl -n $ns rollout restart "$deploy"
+            done
+          done
+
+      - name: Wait for ExternalSecrets
+        run: |
+          for ns in platform frontend jobs; do
+            SECRETS=$(kubectl -n $ns get externalsecret -o name 2>/dev/null || true)
+            for es in $SECRETS; do
+              echo "Waiting for ${ns}/${es}..."
+              kubectl -n $ns wait --for=condition=Ready --timeout=120s "$es" || {
+                echo "::warning::ExternalSecret ${ns}/${es} not ready"
+                kubectl -n $ns describe "$es" || true
+              }
+            done
+          done
+
+      - name: Wait for core platform services
+        run: |
+          echo "Waiting for api-server and auth-server first..."
+          for deploy in api-server auth-server; do
+            echo "Waiting for platform/deployment.apps/${deploy}..."
+            kubectl -n platform rollout status "deployment/${deploy}" --timeout=420s || {
+              echo "::error::platform/${deploy} failed to roll out"
+              kubectl -n platform describe "deployment/${deploy}" || true
+            }
+          done
+
+      - name: Restart dependent services
+        run: |
+          for ns in gateways workers frontend; do
+            DEPLOYMENTS=$(kubectl -n $ns get deployment -o name 2>/dev/null || true)
+            for deploy in $DEPLOYMENTS; do
+              echo "Restarting ${ns}/${deploy}..."
+              kubectl -n $ns rollout restart "$deploy"
+            done
+          done
+
+      - name: Wait for all rollouts
+        run: |
+          FAILED=0
+          for ns in platform gateways workers frontend infra; do
+            DEPLOYMENTS=$(kubectl -n $ns get deployment -o name 2>/dev/null || true)
+            for deploy in $DEPLOYMENTS; do
+              echo "Waiting for ${ns}/${deploy}..."
+              if ! kubectl -n $ns rollout status "$deploy" --timeout=420s; then
+                echo "::error::${ns}/${deploy} failed to roll out"
+                kubectl -n $ns describe "$deploy" || true
+                POD=$(kubectl -n $ns get pods -l app=$(echo $deploy | sed 's|deployment.apps/||') \
+                  --sort-by=.metadata.creationTimestamp -o name 2>/dev/null | tail -1)
+                if [ -n "$POD" ]; then
+                  echo "--- Pod status ---"
+                  kubectl -n $ns describe "$POD" || true
+                  echo "--- Pod logs ---"
+                  kubectl -n $ns logs "$POD" --tail=40 || true
+                fi
+                FAILED=1
+              fi
+            done
+          done
+          if [ "$FAILED" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Smoke test
+        run: |
+          sleep 10
+          API_IP=$(kubectl -n platform get svc api-server -o jsonpath='{.spec.clusterIP}')
+          kubectl run smoke-test --rm -i --restart=Never \
+            --image=curlimages/curl:latest -- \
+            curl -sf http://${API_IP}:3001/api/v1/health
+          echo "Smoke test passed"

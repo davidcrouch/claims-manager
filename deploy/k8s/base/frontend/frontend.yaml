@@ -1,0 +1,92 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: frontend
+  namespace: frontend
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: frontend
+  labels:
+    app: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      serviceAccountName: frontend
+      containers:
+        - name: frontend
+          image: australia-southeast1-docker.pkg.dev/claims-manager-infra/claims-manager/frontend:IMAGE_TAG
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: PORT
+              value: "3000"
+            - name: NEXT_PUBLIC_API_URL
+              value: https://api.DNS_SUFFIX
+            - name: AUTH_SERVER_URL
+              value: https://auth.DNS_SUFFIX
+            - name: OIDC_ISSUER
+              value: https://auth.DNS_SUFFIX
+            - name: OIDC_CLIENT_ID
+              value: claims-manager-frontend
+            - name: OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: frontend-secrets
+                  key: oidc-client-secret
+            - name: OIDC_REDIRECT_URI
+              value: https://app.DNS_SUFFIX/api/auth/callback
+            - name: OIDC_POST_LOGIN_URI
+              value: https://app.DNS_SUFFIX
+            - name: OIDC_POST_LOGOUT_URI
+              value: https://app.DNS_SUFFIX
+            - name: OIDC_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: frontend-secrets
+                  key: oidc-cookie-secret
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://otel-collector.infra.svc.cluster.local:4317
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: frontend
+  labels:
+    app: frontend
+spec:
+  selector:
+    app: frontend
+  ports:
+    - port: 3000
+      targetPort: 3000

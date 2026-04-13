@@ -23,7 +23,8 @@ export class ProvidersController {
 
   @Get()
   async findAll() {
-    return this.providersService.findAll();
+    const tenantId = this.tenantContext.getTenantId();
+    return this.providersService.findAll(tenantId);
   }
 
   @Get(':id')
@@ -85,8 +86,10 @@ export class ProvidersController {
     @Query('limit') limit?: string,
     @Query('status') status?: string,
   ) {
+    const tenantId = this.tenantContext.getTenantId();
     return this.providersService.findWebhookEvents({
       providerId: id,
+      tenantId,
       status,
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
