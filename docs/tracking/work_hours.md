@@ -57,3 +57,11 @@
   Adjusted the web experience for sign-in, registration, and entity forms so sessions stay consistent with the backend.  
   Refreshed database migrations and local infrastructure so new environments start from the current baseline without drift.  
   Documented the integration hardening plan and webhook operator notes in implementation docs and updated the delivery overview.
+
+- `2026-04-13` **5 h**
+  Delivered a complete **providers management interface** for creating, editing, and monitoring integration providers and their connections.
+  Built backend API endpoints for provider and connection CRUD with webhook event statistics and paginated event history.
+  Added a **full-page management UI** with list, detail, and form views including connection configuration and webhook monitoring.
+  Extended repository layer with provider-scoped webhook event queries, error counts, and last-event tracking.
+  Authored **webhook pipeline v2 architecture documentation** covering receipt simplification, sweep service, tool endpoints, entity mapping, workflow refinement, and observability.
+  Documented the providers management UI design specification for team reference.

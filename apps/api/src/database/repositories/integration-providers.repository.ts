@@ -11,6 +11,15 @@ export type IntegrationProviderInsert = typeof integrationProviders.$inferInsert
 export class IntegrationProvidersRepository {
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
 
+  async findById(params: { id: string }): Promise<IntegrationProviderRow | null> {
+    const [row] = await this.db
+      .select()
+      .from(integrationProviders)
+      .where(eq(integrationProviders.id, params.id))
+      .limit(1);
+    return row ?? null;
+  }
+
   async findByCode(params: { code: string }): Promise<IntegrationProviderRow | null> {
     const [row] = await this.db
       .select()
@@ -30,5 +39,17 @@ export class IntegrationProvidersRepository {
       .values(params.data)
       .returning();
     return inserted!;
+  }
+
+  async update(params: {
+    id: string;
+    data: Partial<IntegrationProviderInsert>;
+  }): Promise<IntegrationProviderRow | null> {
+    const [updated] = await this.db
+      .update(integrationProviders)
+      .set({ ...params.data, updatedAt: new Date() })
+      .where(eq(integrationProviders.id, params.id))
+      .returning();
+    return updated ?? null;
   }
 }

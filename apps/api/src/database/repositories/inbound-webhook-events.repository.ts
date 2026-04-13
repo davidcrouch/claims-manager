@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, or, and, desc } from 'drizzle-orm';
+import { eq, or, and, desc, count as drizzleCount, max, inArray } from 'drizzle-orm';
 import { DRIZZLE } from '../drizzle.module';
 import type { DrizzleDB, DrizzleDbOrTx } from '../drizzle.module';
-import { inboundWebhookEvents } from '../schema';
+import { inboundWebhookEvents, integrationConnections } from '../schema';
 
 export type InboundWebhookEventRow = typeof inboundWebhookEvents.$inferSelect;
 export type InboundWebhookEventInsert = typeof inboundWebhookEvents.$inferInsert;
@@ -72,5 +72,89 @@ export class InboundWebhookEventsRepository {
       )
       .orderBy(desc(inboundWebhookEvents.createdAt))
       .limit(params.limit ?? 20);
+  }
+
+  /**
+   * Build a WHERE condition matching events belonging to a provider+tenant.
+   * Matches events where:
+   *  - provider_id is set directly, OR
+   *  - connection_id belongs to one of the provider's connections (tenant-scoped)
+   */
+  private providerTenantCondition(providerId: string, tenantId: string) {
+    const connectionIds = this.db
+      .select({ id: integrationConnections.id })
+      .from(integrationConnections)
+      .where(
+        and(
+          eq(integrationConnections.providerId, providerId),
+          eq(integrationConnections.tenantId, tenantId),
+        ),
+      );
+
+    return or(
+      eq(inboundWebhookEvents.providerId, providerId),
+      inArray(inboundWebhookEvents.connectionId, connectionIds),
+    )!;
+  }
+
+  async findByProviderId(params: {
+    providerId: string;
+    tenantId: string;
+    status?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{ data: InboundWebhookEventRow[]; total: number }> {
+    const limit = params.limit ?? 20;
+    const offset = ((params.page ?? 1) - 1) * limit;
+
+    const ownership = this.providerTenantCondition(params.providerId, params.tenantId);
+    const whereClause = params.status
+      ? and(ownership, eq(inboundWebhookEvents.processingStatus, params.status))!
+      : ownership;
+
+    const [data, countResult] = await Promise.all([
+      this.db
+        .select()
+        .from(inboundWebhookEvents)
+        .where(whereClause)
+        .orderBy(desc(inboundWebhookEvents.createdAt))
+        .limit(limit)
+        .offset(offset),
+      this.db
+        .select({ count: drizzleCount() })
+        .from(inboundWebhookEvents)
+        .where(whereClause),
+    ]);
+
+    return { data, total: countResult[0]?.count ?? 0 };
+  }
+
+  async countByProviderId(params: { providerId: string; tenantId: string }): Promise<number> {
+    const [result] = await this.db
+      .select({ count: drizzleCount() })
+      .from(inboundWebhookEvents)
+      .where(this.providerTenantCondition(params.providerId, params.tenantId));
+    return result?.count ?? 0;
+  }
+
+  async countErrorsByProviderId(params: { providerId: string; tenantId: string }): Promise<number> {
+    const [result] = await this.db
+      .select({ count: drizzleCount() })
+      .from(inboundWebhookEvents)
+      .where(
+        and(
+          this.providerTenantCondition(params.providerId, params.tenantId),
+          eq(inboundWebhookEvents.processingStatus, 'failed'),
+        ),
+      );
+    return result?.count ?? 0;
+  }
+
+  async lastEventAtByProviderId(params: { providerId: string; tenantId: string }): Promise<Date | null> {
+    const [result] = await this.db
+      .select({ lastAt: max(inboundWebhookEvents.createdAt) })
+      .from(inboundWebhookEvents)
+      .where(this.providerTenantCondition(params.providerId, params.tenantId));
+    return result?.lastAt ?? null;
   }
 }

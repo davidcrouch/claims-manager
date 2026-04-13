@@ -31,6 +31,7 @@ import { VendorsModule } from './modules/vendors/vendors.module';
 import { ContactsModule } from './modules/contacts/contacts.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { ProvidersModule } from './modules/providers/providers.module';
 import { TenantInterceptor } from './tenant/tenant.interceptor';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -74,6 +75,7 @@ import { CommonModule } from './common/common.module';
     ContactsModule,
     WebhooksModule,
     DashboardModule,
+    ProvidersModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: HttpExceptionFilter },

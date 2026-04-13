@@ -11,6 +11,7 @@ import {
   Receipt,
   ClipboardList,
   Building2,
+  Unplug,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -34,6 +35,7 @@ const navItems = [
   { title: 'Invoices', href: '/invoices', icon: Receipt },
   { title: 'Reports', href: '/reports', icon: ClipboardList },
   { title: 'Vendors', href: '/vendors', icon: Building2 },
+  { title: 'Providers', href: '/providers', icon: Unplug },
 ] as const;
 
 export function AppSidebar() {

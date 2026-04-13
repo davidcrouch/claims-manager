@@ -120,6 +120,14 @@ The **claims list view** is served from the local DB, populated by the above. To
 | 23 | `23_TESTING_STRATEGY.md` | Testing Strategy | Unit, integration, e2e test approach |
 | 24 | `24_DEPLOYMENT.md` | Deployment & CI/CD | Docker, environment configs, pipeline |
 | 26 | `26_INTEGRATION_SCHEMA_HARDENING.md` | Integration Schema Hardening | FK constraints, column type widening, observability columns, transaction docs |
+| 27 | `27_WEBHOOK_PIPELINE_V2_OVERVIEW.md` | Webhook Pipeline v2 Overview | More0-orchestrated processing, transaction boundaries, architecture |
+| 27a | `27a_WEBHOOK_RECEIPT_SIMPLIFICATION.md` | Webhook Receipt Simplification | Slim controller/service to persist + dispatch only |
+| 27b | `27b_WEBHOOK_SWEEP_SERVICE.md` | Webhook Sweep Service | Outbox poller for automatic crash recovery |
+| 27c | `27c_MORE0_TOOL_ENDPOINTS.md` | More0 Tool Endpoints | Callback API that More0 workflow steps invoke |
+| 27d | `27d_ENTITY_MAPPER_SERVICE.md` | Entity Mapper Service | Projection logic from external objects to internal tables |
+| 27e | `27e_MORE0_WORKFLOW_REFINEMENT.md` | More0 Workflow Refinement | Updated ASL definition and capability registration |
+| 27f | `27f_OBSERVABILITY_AND_RECOVERY.md` | Observability & Recovery | Monitoring, alerting, dead-letter handling, runbook |
+| 28 | `28_PROVIDERS_MANAGEMENT_UI.md` | Providers Management UI | Provider CRUD, connection management, webhook monitoring UI |
 
 ---
 

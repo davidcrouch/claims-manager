@@ -77,6 +77,13 @@ export class IntegrationConnectionsRepository {
     return inserted!;
   }
 
+  async findByProviderId(params: { providerId: string }): Promise<IntegrationConnectionRow[]> {
+    return this.db
+      .select()
+      .from(integrationConnections)
+      .where(eq(integrationConnections.providerId, params.providerId));
+  }
+
   async update(params: {
     id: string;
     data: Partial<IntegrationConnectionInsert>;

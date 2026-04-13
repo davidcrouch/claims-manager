@@ -18,6 +18,14 @@ import type {
   DashboardStats,
   RecentActivity,
   PaginatedResponse,
+  ProviderSummary,
+  Provider,
+  ProviderConnection,
+  WebhookEvent,
+  CreateProviderPayload,
+  UpdateProviderPayload,
+  CreateConnectionPayload,
+  UpdateConnectionPayload,
 } from '@/types/api';
 
 export interface ApiClientOptions {
@@ -310,6 +318,62 @@ export function createApiClient(options?: ApiClientOptions) {
         method: 'POST',
         body: JSON.stringify(body ?? {}),
       });
+    },
+
+    getProviders(): Promise<ProviderSummary[]> {
+      return fetchApi<ProviderSummary[]>('/providers');
+    },
+
+    getProvider(id: string): Promise<Provider> {
+      return fetchApi<Provider>(`/providers/${id}`);
+    },
+
+    createProvider(body: CreateProviderPayload): Promise<Provider> {
+      return fetchApi<Provider>('/providers', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+
+    updateProvider(id: string, body: UpdateProviderPayload): Promise<Provider> {
+      return fetchApi<Provider>(`/providers/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      });
+    },
+
+    deleteProvider(id: string): Promise<Provider> {
+      return fetchApi<Provider>(`/providers/${id}`, { method: 'DELETE' });
+    },
+
+    getProviderConnections(id: string): Promise<ProviderConnection[]> {
+      return fetchApi<ProviderConnection[]>(`/providers/${id}/connections`);
+    },
+
+    createProviderConnection(id: string, body: CreateConnectionPayload): Promise<ProviderConnection> {
+      return fetchApi<ProviderConnection>(`/providers/${id}/connections`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+
+    updateProviderConnection(id: string, connId: string, body: UpdateConnectionPayload): Promise<ProviderConnection> {
+      return fetchApi<ProviderConnection>(`/providers/${id}/connections/${connId}`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      });
+    },
+
+    getProviderWebhookEvents(id: string, params?: {
+      page?: number;
+      limit?: number;
+      status?: string;
+    }): Promise<PaginatedResponse<WebhookEvent>> {
+      const sp = new URLSearchParams();
+      if (params?.page != null) sp.set('page', String(params.page));
+      if (params?.limit != null) sp.set('limit', String(params.limit));
+      if (params?.status) sp.set('status', params.status);
+      return fetchApi<PaginatedResponse<WebhookEvent>>(`/providers/${id}/webhook-events?${sp}`);
     },
   };
 }

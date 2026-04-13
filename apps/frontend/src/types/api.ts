@@ -164,6 +164,126 @@ export interface Appointment {
   status?: string | null;
 }
 
+export interface ProviderSummary {
+  id: string;
+  code: string;
+  name: string;
+  isActive: boolean;
+  metadata: Record<string, unknown>;
+  connectionCount: number;
+  totalWebhookEvents: number;
+  recentErrorCount: number;
+  lastEventAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Provider {
+  id: string;
+  code: string;
+  name: string;
+  isActive: boolean;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  connections: ProviderConnection[];
+}
+
+export interface ProviderConnection {
+  id: string;
+  tenantId: string;
+  providerId: string;
+  name: string;
+  environment: string;
+  authType: string;
+  baseUrl: string;
+  authUrl: string | null;
+  clientIdentifier: string | null;
+  providerTenantId: string | null;
+  credentials: Record<string, unknown>;
+  webhookSecret: string | null;
+  config: Record<string, unknown>;
+  isActive: boolean;
+  lastSyncAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WebhookEvent {
+  id: string;
+  externalEventId: string;
+  tenantId: string | null;
+  eventType: string;
+  eventTimestamp: string;
+  payloadEntityId: string | null;
+  payloadTeamIds: unknown[];
+  payloadTenantId: string | null;
+  payloadClient: string | null;
+  signatureHeader: string | null;
+  hmacVerified: boolean | null;
+  rawBodyJson: unknown;
+  processingStatus: string;
+  processingError: string | null;
+  processedAt: string | null;
+  connectionId: string | null;
+  providerId: string | null;
+  providerCode: string | null;
+  providerEntityType: string | null;
+  retryCount: number;
+  createdAt: string;
+}
+
+export interface CreateProviderPayload {
+  code: string;
+  name: string;
+  isActive?: boolean;
+  metadata?: Record<string, unknown>;
+  connection?: {
+    name: string;
+    environment: string;
+    baseUrl: string;
+    authUrl?: string;
+    authType?: string;
+    clientIdentifier?: string;
+    providerTenantId?: string;
+    credentials?: Record<string, unknown>;
+    webhookSecret?: string;
+    config?: Record<string, unknown>;
+  };
+}
+
+export interface UpdateProviderPayload {
+  name?: string;
+  isActive?: boolean;
+  metadata?: Record<string, unknown>;
+}
+
+export interface CreateConnectionPayload {
+  name: string;
+  environment: string;
+  baseUrl: string;
+  authUrl?: string;
+  authType?: string;
+  clientIdentifier?: string;
+  providerTenantId?: string;
+  credentials?: Record<string, unknown>;
+  webhookSecret?: string;
+  config?: Record<string, unknown>;
+}
+
+export interface UpdateConnectionPayload {
+  name?: string;
+  environment?: string;
+  baseUrl?: string;
+  authUrl?: string;
+  authType?: string;
+  clientIdentifier?: string;
+  providerTenantId?: string;
+  credentials?: Record<string, unknown>;
+  webhookSecret?: string;
+  config?: Record<string, unknown>;
+}
+
 export interface DashboardStats {
   totalClaims: number;
   totalJobs: number;
