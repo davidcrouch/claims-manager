@@ -40,14 +40,13 @@ export class AttachmentsService {
   }
 
   async create(params: { body: Record<string, unknown> }) {
-    const crunchworkTenantId = this.tenantContext.getCrunchworkTenantId();
-    const connectionId = await this.resolveConnectionId(crunchworkTenantId);
+    const tenantId = this.tenantContext.getTenantId();
+    const connectionId = await this.resolveConnectionId(tenantId);
     const apiAttachment = await this.crunchworkService.createAttachment({
       connectionId,
       body: params.body,
     });
 
-    const tenantId = this.tenantContext.getTenantId();
     const apiObj = apiAttachment as Record<string, unknown>;
     const insertData: AttachmentInsert = {
       tenantId,
@@ -67,8 +66,8 @@ export class AttachmentsService {
     const existing = await this.findOne({ id: params.id });
     if (!existing) return null;
 
-    const crunchworkTenantId = this.tenantContext.getCrunchworkTenantId();
-    const connectionId = await this.resolveConnectionId(crunchworkTenantId);
+    const tenantId = this.tenantContext.getTenantId();
+    const connectionId = await this.resolveConnectionId(tenantId);
     const apiAttachment = await this.crunchworkService.updateAttachment({
       connectionId,
       attachmentId: params.id,

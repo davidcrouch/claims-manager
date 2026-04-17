@@ -1,8 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
 import { eq, and, isNull, desc, sql } from 'drizzle-orm';
-import { DRIZZLE } from '../drizzle.module';
-import type { DrizzleDB } from '../drizzle.module';
+import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { reports } from '../schema';
 
 export type ReportRow = typeof reports.$inferSelect;
@@ -35,7 +34,10 @@ export class ReportsRepository {
       whereClause = and(whereClause, eq(reports.claimId, params.claimId));
     }
     if (params.reportTypeId) {
-      whereClause = and(whereClause, eq(reports.reportTypeLookupId, params.reportTypeId));
+      whereClause = and(
+        whereClause,
+        eq(reports.reportTypeLookupId, params.reportTypeId),
+      );
     }
 
     const [data, countResult] = await Promise.all([
@@ -56,41 +58,68 @@ export class ReportsRepository {
     return { data, total };
   }
 
-  async findOne(params: { id: string; tenantId: string }): Promise<ReportRow | null> {
+  async findOne(params: {
+    id: string;
+    tenantId: string;
+  }): Promise<ReportRow | null> {
     const [row] = await this.db
       .select()
       .from(reports)
-      .where(and(eq(reports.id, params.id), eq(reports.tenantId, params.tenantId)))
+      .where(
+        and(eq(reports.id, params.id), eq(reports.tenantId, params.tenantId)),
+      )
       .limit(1);
     return row ?? null;
   }
 
-  async findByJob(params: { jobId: string; tenantId: string }): Promise<ReportRow[]> {
+  async findByJob(params: {
+    jobId: string;
+    tenantId: string;
+  }): Promise<ReportRow[]> {
     return this.db
       .select()
       .from(reports)
-      .where(and(eq(reports.jobId, params.jobId), eq(reports.tenantId, params.tenantId)))
+      .where(
+        and(
+          eq(reports.jobId, params.jobId),
+          eq(reports.tenantId, params.tenantId),
+        ),
+      )
       .orderBy(desc(reports.updatedAt));
   }
 
-  async findByClaim(params: { claimId: string; tenantId: string }): Promise<ReportRow[]> {
+  async findByClaim(params: {
+    claimId: string;
+    tenantId: string;
+  }): Promise<ReportRow[]> {
     return this.db
       .select()
       .from(reports)
-      .where(and(eq(reports.claimId, params.claimId), eq(reports.tenantId, params.tenantId)))
+      .where(
+        and(
+          eq(reports.claimId, params.claimId),
+          eq(reports.tenantId, params.tenantId),
+        ),
+      )
       .orderBy(desc(reports.updatedAt));
   }
 
-  async create(params: { data: ReportInsert }): Promise<ReportRow> {
-    const [inserted] = await this.db.insert(reports).values(params.data).returning();
-    return inserted!;
+  async create(params: {
+    data: ReportInsert;
+    tx?: DrizzleDbOrTx;
+  }): Promise<ReportRow> {
+    const db = params.tx ?? this.db;
+    const [inserted] = await db.insert(reports).values(params.data).returning();
+    return inserted;
   }
 
   async update(params: {
     id: string;
     data: Partial<ReportInsert>;
+    tx?: DrizzleDbOrTx;
   }): Promise<ReportRow | null> {
-    const [updated] = await this.db
+    const db = params.tx ?? this.db;
+    const [updated] = await db
       .update(reports)
       .set({ ...params.data, updatedAt: new Date() })
       .where(eq(reports.id, params.id))

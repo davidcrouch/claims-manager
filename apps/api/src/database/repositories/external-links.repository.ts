@@ -1,7 +1,6 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
-import { DRIZZLE } from '../drizzle.module';
-import type { DrizzleDB } from '../drizzle.module';
+import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { externalLinks } from '../schema';
 
 export type ExternalLinkRow = typeof externalLinks.$inferSelect;
@@ -13,8 +12,10 @@ export class ExternalLinksRepository {
 
   async findByExternalObjectId(params: {
     externalObjectId: string;
+    tx?: DrizzleDbOrTx;
   }): Promise<ExternalLinkRow[]> {
-    return this.db
+    const db = params.tx ?? this.db;
+    return db
       .select()
       .from(externalLinks)
       .where(eq(externalLinks.externalObjectId, params.externalObjectId));
@@ -23,8 +24,10 @@ export class ExternalLinksRepository {
   async findByInternalEntity(params: {
     internalEntityType: string;
     internalEntityId: string;
+    tx?: DrizzleDbOrTx;
   }): Promise<ExternalLinkRow[]> {
-    return this.db
+    const db = params.tx ?? this.db;
+    return db
       .select()
       .from(externalLinks)
       .where(
@@ -35,8 +38,12 @@ export class ExternalLinksRepository {
       );
   }
 
-  async upsert(params: { data: ExternalLinkInsert }): Promise<ExternalLinkRow> {
-    const existing = await this.db
+  async upsert(params: {
+    data: ExternalLinkInsert;
+    tx?: DrizzleDbOrTx;
+  }): Promise<ExternalLinkRow> {
+    const db = params.tx ?? this.db;
+    const existing = await db
       .select()
       .from(externalLinks)
       .where(
@@ -50,26 +57,30 @@ export class ExternalLinksRepository {
       .limit(1);
 
     if (existing.length > 0) {
-      const [updated] = await this.db
+      const [updated] = await db
         .update(externalLinks)
         .set({ ...params.data, updatedAt: new Date() })
-        .where(eq(externalLinks.id, existing[0]!.id))
+        .where(eq(externalLinks.id, existing[0].id))
         .returning();
-      return updated!;
+      return updated;
     }
 
-    const [inserted] = await this.db
+    const [inserted] = await db
       .insert(externalLinks)
       .values(params.data)
       .returning();
-    return inserted!;
+    return inserted;
   }
 
-  async create(params: { data: ExternalLinkInsert }): Promise<ExternalLinkRow> {
-    const [inserted] = await this.db
+  async create(params: {
+    data: ExternalLinkInsert;
+    tx?: DrizzleDbOrTx;
+  }): Promise<ExternalLinkRow> {
+    const db = params.tx ?? this.db;
+    const [inserted] = await db
       .insert(externalLinks)
       .values(params.data)
       .returning();
-    return inserted!;
+    return inserted;
   }
 }

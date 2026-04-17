@@ -71,6 +71,7 @@ export class ConnectionResolverService {
     clientSecret: string;
     authUrl: string;
     baseUrl: string;
+    baseApi: string;
     activeTenantId: string;
   }> {
     const cacheKey = `creds:${params.connectionId}`;
@@ -94,6 +95,7 @@ export class ConnectionResolverService {
       clientSecret: creds.clientSecret ?? '',
       authUrl: connection.authUrl ?? '',
       baseUrl: connection.baseUrl,
+      baseApi: connection.baseApi ?? connection.baseUrl,
       activeTenantId: connection.providerTenantId ?? '',
     };
   }

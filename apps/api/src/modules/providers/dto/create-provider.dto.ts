@@ -14,6 +14,10 @@ export class CreateConnectionDto {
 
   @IsOptional()
   @IsString()
+  baseApi?: string;
+
+  @IsOptional()
+  @IsString()
   authUrl?: string;
 
   @IsOptional()

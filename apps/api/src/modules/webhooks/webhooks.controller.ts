@@ -1,4 +1,4 @@
-import { Controller, Headers, Post, Req, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Headers, Post, Req, HttpCode, HttpStatus, Logger } from '@nestjs/common';
 import { Request } from 'express';
 import { Public } from '../../auth/decorators/public.decorator';
 import { WebhooksService } from './webhooks.service';
@@ -10,6 +10,8 @@ interface RawBodyRequest extends Request {
 
 @Controller('webhooks')
 export class WebhooksController {
+  private readonly logger = new Logger('WebhooksController');
+
   constructor(
     private readonly webhooksService: WebhooksService,
     private readonly hmacService: WebhookHmacService,
@@ -26,16 +28,35 @@ export class WebhooksController {
     const rawBodyText = rawBody.toString();
 
     const payload = typeof req.body === 'object' ? req.body : JSON.parse(rawBodyText);
+
+    const payloadTenantId = payload?.payload?.tenantId ?? '';
+    const payloadClient = payload?.payload?.client ?? '';
+    const entityType = payload?.payload?.entity?.type ?? payload?.entityType ?? '';
+    const entityId = payload?.payload?.entity?.id ?? payload?.entityId ?? '';
+
+    this.logger.log(
+      `WebhooksController.handleWebhook — inbound externalEventId=${payload?.id ?? 'unknown'} ` +
+        `eventType=${payload?.eventType ?? 'unknown'} entity=${entityType}/${entityId} ` +
+        `tenantId=${payloadTenantId} client=${payloadClient} ` +
+        `bytes=${rawBody.length} hasSignature=${Boolean(signature)}`,
+    );
+    this.logger.debug(
+      `WebhooksController.handleWebhook — rawBody externalEventId=${payload?.id ?? 'unknown'} ${rawBodyText}`,
+    );
+
     const existing = await this.webhooksService.webhookRepo.findByExternalEventId({
       externalEventId: payload.id,
     });
     if (existing) {
+      this.logger.debug(
+        `WebhooksController.handleWebhook — duplicate event ${payload.id}, skipping`,
+      );
       return { received: true };
     }
 
     const connection = await this.webhooksService.resolveConnection({
-      payloadTenantId: payload.payload?.tenantId ?? '',
-      payloadClient: payload.payload?.client ?? '',
+      payloadTenantId,
+      payloadClient,
     });
 
     const hmacSecret = connection
@@ -56,7 +77,16 @@ export class WebhooksController {
       providerId: connection?.providerId,
     });
 
+    this.logger.log(
+      `WebhooksController.handleWebhook — persisted eventId=${event.id} ` +
+        `externalEventId=${payload?.id ?? 'unknown'} connectionId=${connection?.connectionId ?? 'none'} ` +
+        `providerCode=${connection?.providerCode ?? 'none'} hmacVerified=${hmacVerified}`,
+    );
+
     if (hmacVerified && connection) {
+      this.logger.debug(
+        `WebhooksController.handleWebhook — dispatching async processing eventId=${event.id}`,
+      );
       this.webhooksService
         .processEventAsync({
           eventId: event.id,
@@ -67,7 +97,18 @@ export class WebhooksController {
           providerEntityId: event.payloadEntityId ?? '',
           eventTimestamp: event.eventTimestamp,
         })
-        .catch(() => {});
+        .catch((err: unknown) => {
+          this.logger.error(
+            `WebhooksController.handleWebhook — async processing failed eventId=${event.id}: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
+        });
+    } else {
+      this.logger.warn(
+        `WebhooksController.handleWebhook — not processing eventId=${event.id} ` +
+          `(hmacVerified=${hmacVerified} connectionResolved=${Boolean(connection)})`,
+      );
     }
 
     return { received: true };

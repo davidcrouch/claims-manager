@@ -1,8 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
 import { eq, and, isNull, desc, sql } from 'drizzle-orm';
-import { DRIZZLE } from '../drizzle.module';
-import type { DrizzleDB } from '../drizzle.module';
+import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { quotes } from '../schema';
 
 export type QuoteRow = typeof quotes.$inferSelect;
@@ -31,7 +30,10 @@ export class QuotesRepository {
       whereClause = and(whereClause, eq(quotes.jobId, params.jobId));
     }
     if (params.statusId) {
-      whereClause = and(whereClause, eq(quotes.statusLookupId, params.statusId));
+      whereClause = and(
+        whereClause,
+        eq(quotes.statusLookupId, params.statusId),
+      );
     }
 
     const [data, countResult] = await Promise.all([
@@ -52,33 +54,52 @@ export class QuotesRepository {
     return { data, total };
   }
 
-  async findOne(params: { id: string; tenantId: string }): Promise<QuoteRow | null> {
+  async findOne(params: {
+    id: string;
+    tenantId: string;
+  }): Promise<QuoteRow | null> {
     const [row] = await this.db
       .select()
       .from(quotes)
-      .where(and(eq(quotes.id, params.id), eq(quotes.tenantId, params.tenantId)))
+      .where(
+        and(eq(quotes.id, params.id), eq(quotes.tenantId, params.tenantId)),
+      )
       .limit(1);
     return row ?? null;
   }
 
-  async findByJob(params: { jobId: string; tenantId: string }): Promise<QuoteRow[]> {
+  async findByJob(params: {
+    jobId: string;
+    tenantId: string;
+  }): Promise<QuoteRow[]> {
     return this.db
       .select()
       .from(quotes)
-      .where(and(eq(quotes.jobId, params.jobId), eq(quotes.tenantId, params.tenantId)))
+      .where(
+        and(
+          eq(quotes.jobId, params.jobId),
+          eq(quotes.tenantId, params.tenantId),
+        ),
+      )
       .orderBy(desc(quotes.updatedAt));
   }
 
-  async create(params: { data: QuoteInsert }): Promise<QuoteRow> {
-    const [inserted] = await this.db.insert(quotes).values(params.data).returning();
-    return inserted!;
+  async create(params: {
+    data: QuoteInsert;
+    tx?: DrizzleDbOrTx;
+  }): Promise<QuoteRow> {
+    const db = params.tx ?? this.db;
+    const [inserted] = await db.insert(quotes).values(params.data).returning();
+    return inserted;
   }
 
   async update(params: {
     id: string;
     data: Partial<QuoteInsert>;
+    tx?: DrizzleDbOrTx;
   }): Promise<QuoteRow | null> {
-    const [updated] = await this.db
+    const db = params.tx ?? this.db;
+    const [updated] = await db
       .update(quotes)
       .set({ ...params.data, updatedAt: new Date() })
       .where(eq(quotes.id, params.id))

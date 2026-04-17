@@ -28,6 +28,10 @@ export class UpdateConnectionDto {
 
   @IsOptional()
   @IsString()
+  baseApi?: string;
+
+  @IsOptional()
+  @IsString()
   authUrl?: string;
 
   @IsOptional()

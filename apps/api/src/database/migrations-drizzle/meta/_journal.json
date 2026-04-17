@@ -15,6 +15,13 @@
       "when": 1775612645207,
       "tag": "0001_safe_sebastian_shaw",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1776420851492,
+      "tag": "0002_clever_morgan_stark",
+      "breakpoints": true
     }
   ]
 }

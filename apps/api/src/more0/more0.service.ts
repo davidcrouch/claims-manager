@@ -8,19 +8,31 @@ export class More0Service {
   private readonly registryUrl: string;
   private readonly appKey: string;
   private readonly apiKey: string;
+  private readonly enabled: boolean;
   private readonly mockMode: boolean;
 
   constructor(private readonly configService: ConfigService) {
-    this.registryUrl = this.configService.get<string>('more0.registryUrl', 'http://localhost:3200');
-    this.appKey = this.configService.get<string>('more0.appKey', 'claims-manager');
+    this.registryUrl = this.configService.get<string>(
+      'more0.registryUrl',
+      'http://localhost:3200',
+    );
+    this.appKey = this.configService.get<string>(
+      'more0.appKey',
+      'claims-manager',
+    );
     this.apiKey = this.configService.get<string>('more0.apiKey', '');
-    this.mockMode = !this.apiKey;
+    this.enabled = this.configService.get<boolean>('more0.enabled', false);
+    this.mockMode = !this.enabled || !this.apiKey;
 
     if (this.mockMode) {
       this.logger.warn(
-        'More0Service — running in MOCK mode (no MORE0_API_KEY configured). Workflow calls will be logged but not dispatched.',
+        'More0Service — running in MOCK mode (MORE0_ENABLED=false or MORE0_API_KEY missing). Workflow calls will be logged but not dispatched.',
       );
     }
+  }
+
+  isEnabled(): boolean {
+    return !this.mockMode;
   }
 
   async invokeWorkflow(params: {
@@ -53,22 +65,27 @@ export class More0Service {
     );
 
     try {
-      const response = await fetch(`${this.registryUrl}/api/v1/workflows/invoke`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
+      const response = await fetch(
+        `${this.registryUrl}/api/v1/workflows/invoke`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
+          },
+          body: JSON.stringify({
+            workflowName: fqcn,
+            input: params.input,
+            context: params.context,
+          }),
         },
-        body: JSON.stringify({
-          workflowName: fqcn,
-          input: params.input,
-          context: params.context,
-        }),
-      });
+      );
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`More0 workflow invocation failed (${response.status}): ${errorText}`);
+        throw new Error(
+          `More0 workflow invocation failed (${response.status}): ${errorText}`,
+        );
       }
 
       const result = (await response.json()) as { runId: string };
@@ -96,9 +113,7 @@ export class More0Service {
       : `${this.appKey}.${params.workflowName}`;
 
     if (this.mockMode) {
-      this.logger.log(
-        `More0Service.invokeWorkflowSync [MOCK] — ${fqcn}`,
-      );
+      this.logger.log(`More0Service.invokeWorkflowSync [MOCK] — ${fqcn}`);
       this.logger.log(
         `More0Service.invokeWorkflowSync [MOCK] — input: ${JSON.stringify(params.input, null, 2)}`,
       );
@@ -114,23 +129,28 @@ export class More0Service {
       `More0Service.invokeWorkflowSync — invoking ${fqcn} synchronously`,
     );
 
-    const response = await fetch(`${this.registryUrl}/api/v1/workflows/invoke-sync`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
+    const response = await fetch(
+      `${this.registryUrl}/api/v1/workflows/invoke-sync`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
+        },
+        body: JSON.stringify({
+          workflowName: fqcn,
+          input: params.input,
+          context: params.context,
+          timeoutMs: params.timeoutMs ?? 30000,
+        }),
       },
-      body: JSON.stringify({
-        workflowName: fqcn,
-        input: params.input,
-        context: params.context,
-        timeoutMs: params.timeoutMs ?? 30000,
-      }),
-    });
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`More0 sync workflow invocation failed (${response.status}): ${errorText}`);
+      throw new Error(
+        `More0 sync workflow invocation failed (${response.status}): ${errorText}`,
+      );
     }
 
     return (await response.json()) as Record<string, unknown>;

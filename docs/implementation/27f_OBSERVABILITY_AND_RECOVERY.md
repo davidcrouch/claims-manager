@@ -350,3 +350,37 @@ The sweep will pick them all up (50 per cycle, so a backlog of 500 events takes 
 - [ ] Admin endpoints are auth-protected (require admin role)
 - [ ] Event detail endpoint shows full processing history chain
 - [ ] Runbook covers More0 down, CW down, mapper errors, duplicates, and full reset
+
+---
+
+## 4. Status Value Catalogue (introduced by doc 29)
+
+The temporary in-process orchestrator (`WebhookOrchestratorService` + `InProcessProjectionService`, see [doc 29](./29_TEMPORARY_WEBHOOK_ORCHESTRATOR.md)) writes to two columns whose enums must stay aligned with downstream dashboards (doc 21) and the providers UI (doc 28). This catalogue is the authoritative whitelist; every code path that writes a status MUST use one of these values.
+
+### 4.1 `inbound_webhook_events.processing_status`
+
+| Value | Set by | Meaning |
+|---|---|---|
+| `pending` | `WebhooksController` → `persistEvent` | Persisted, not yet dispatched. |
+| `fetch_failed` | `WebhooksService.processEventAsync` | CW fetch gave up (4xx/5xx after retries). |
+| `fetched` | `WebhooksService.processEventAsync` | External object upserted; awaiting projection. |
+| `dispatched` | `WebhookOrchestratorService` (more0 route) | Workflow invocation accepted by More0. |
+| `completed` | `WebhookOrchestratorService` (inproc route) | Internal projection succeeded. |
+| `completed_unmapped` | `WebhookOrchestratorService` (inproc route) | External object stored, no mapper registered (or mapper skipped). |
+| `mapper_failed` | `WebhookOrchestratorService` (inproc route) | Mapper threw; processing log has the reason. |
+| `failed` | any | Unexpected error outside of the above paths. |
+
+### 4.2 `external_processing_log.status`
+
+| Value | Meaning |
+|---|---|
+| `pending` | Row created during TX-2 (external object upsert). |
+| `processing` | More0 workflow in flight (more0 route only). |
+| `completed` | Projection succeeded. |
+| `failed` | Projection threw; `error_message` populated. |
+| `skipped_no_mapper` | No mapper registered for this entity type. |
+| `skipped_no_parent` | Mapper refused to insert because a required parent entity wasn't yet linked. |
+| `skipped_incomplete_payload` | Mapper refused to insert because mandatory payload fields were missing. |
+| `workflow_invoke_failed` | More0 `invokeWorkflow` threw. |
+
+The `metadata` JSONB column carries the orchestrator's route decision (`{ "orchestratorRoute": "inproc" | "more0" | "none" }`) so historical audits can tell which path produced each outcome.

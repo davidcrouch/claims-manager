@@ -10,7 +10,6 @@ describe('ClaimsService', () => {
 
   const mockTenantContext = {
     getTenantId: jest.fn().mockReturnValue('tenant-1'),
-    getCrunchworkTenantId: jest.fn().mockReturnValue('cw-tenant-1'),
     hasTenant: jest.fn().mockReturnValue(true),
   };
 
@@ -60,6 +59,8 @@ describe('ClaimsService', () => {
         page: 1,
         limit: 20,
         search: undefined,
+        sort: undefined,
+        status: undefined,
       });
     });
   });
@@ -69,7 +70,7 @@ describe('ClaimsService', () => {
       const body = { claimNumber: 'CLM-001', account: { externalReference: 'ACC001' } };
       const result = await service.create({ body });
       expect(crunchworkService.createClaim).toHaveBeenCalledWith({
-        tenantId: 'cw-tenant-1',
+        connectionId: 'tenant-1',
         body,
       });
       expect(result).toBeDefined();

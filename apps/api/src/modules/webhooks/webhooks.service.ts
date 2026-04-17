@@ -6,12 +6,12 @@ import {
   type InboundWebhookEventInsert,
 } from '../../database/repositories';
 import { DRIZZLE, type DrizzleDB } from '../../database/drizzle.module';
-import { More0Service } from '../../more0/more0.service';
 import { CrunchworkService } from '../../crunchwork/crunchwork.service';
 import { ExternalObjectService } from '../external/external-object.service';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
 import { CredentialsCipher } from '../../common/credentials-cipher';
 import { ExternalToolsController } from '../external/tools/external-tools.controller';
+import { WebhookOrchestratorService } from './webhook-orchestrator.service';
 
 @Injectable()
 export class WebhooksService implements OnModuleInit {
@@ -21,10 +21,10 @@ export class WebhooksService implements OnModuleInit {
     public readonly webhookRepo: InboundWebhookEventsRepository,
     private readonly connectionsRepo: IntegrationConnectionsRepository,
     private readonly processingLogRepo: ExternalProcessingLogRepository,
-    private readonly more0Service: More0Service,
     private readonly crunchworkService: CrunchworkService,
     private readonly externalObjectService: ExternalObjectService,
     private readonly connectionResolver: ConnectionResolverService,
+    private readonly orchestrator: WebhookOrchestratorService,
     private readonly cipher: CredentialsCipher,
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
   ) {}
@@ -36,7 +36,11 @@ export class WebhooksService implements OnModuleInit {
   async resolveConnection(params: {
     payloadTenantId: string;
     payloadClient: string;
-  }): Promise<{ connectionId: string; providerCode: string; providerId: string } | null> {
+  }): Promise<{
+    connectionId: string;
+    providerCode: string;
+    providerId: string;
+  } | null> {
     if (!params.payloadTenantId || !params.payloadClient) {
       return null;
     }
@@ -53,11 +57,17 @@ export class WebhooksService implements OnModuleInit {
       return null;
     }
 
-    return { connectionId: connection.id, providerCode: 'crunchwork', providerId: connection.providerId };
+    return {
+      connectionId: connection.id,
+      providerCode: 'crunchwork',
+      providerId: connection.providerId,
+    };
   }
 
   async getWebhookSecret(params: { connectionId: string }): Promise<string> {
-    const connection = await this.connectionsRepo.findById({ id: params.connectionId });
+    const connection = await this.connectionsRepo.findById({
+      id: params.connectionId,
+    });
     if (!connection?.webhookSecret) return '';
     return this.cipher.decrypt(connection.webhookSecret);
   }
@@ -82,7 +92,8 @@ export class WebhooksService implements OnModuleInit {
       payloadTeamIds: payload.payload?.teamIds || [],
       payloadTenantId: payload.payload?.tenantId,
       payloadClient: payload.payload?.client,
-      payloadProjectExternalReference: payload.payload?.projectExternalReference,
+      payloadProjectExternalReference:
+        payload.payload?.projectExternalReference,
       signatureHeader: params.signature,
       hmacVerified: params.hmacVerified,
       rawHeaders: params.rawHeaders,
@@ -98,10 +109,14 @@ export class WebhooksService implements OnModuleInit {
   }
 
   /**
-   * Fire-and-forget: fetches the full entity from Crunchwork, stores it
-   * in a DB transaction (external_objects + processing_log + event status),
-   * then invokes the More0 workflow. Errors are logged and written to DB
-   * but never propagated to the caller so the webhook response is unaffected.
+   * Fire-and-forget: fetches the full entity from Crunchwork, stores it in a
+   * DB transaction (external_objects + processing_log + event status), then
+   * hands the event to `WebhookOrchestratorService` which decides whether to
+   * dispatch to More0 or run the in-process projection. Errors are logged and
+   * written to DB but never propagated to the caller so the webhook response
+   * is unaffected.
+   *
+   * See docs/implementation/29_TEMPORARY_WEBHOOK_ORCHESTRATOR.md §3.
    */
   async processEventAsync(params: {
     eventId: string;
@@ -117,7 +132,9 @@ export class WebhooksService implements OnModuleInit {
     try {
       const entityType = this.resolveEntityType(params.eventType);
       if (!entityType) {
-        this.logger.warn(`${logPrefix} — unknown event type: ${params.eventType}`);
+        this.logger.warn(
+          `${logPrefix} — unknown event type: ${params.eventType}`,
+        );
         return;
       }
 
@@ -130,7 +147,9 @@ export class WebhooksService implements OnModuleInit {
         });
       } catch (fetchError) {
         const msg = (fetchError as Error).message;
-        this.logger.error(`${logPrefix} — CW fetch failed for ${entityType}/${params.providerEntityId}: ${msg}`);
+        this.logger.error(
+          `${logPrefix} — CW fetch failed for ${entityType}/${params.providerEntityId}: ${msg}`,
+        );
         await this.webhookRepo.updateProcessingStatus({
           id: params.eventId,
           processingStatus: 'fetch_failed',
@@ -143,20 +162,21 @@ export class WebhooksService implements OnModuleInit {
       let externalObjectId: string | undefined;
 
       await this.db.transaction(async (tx) => {
-        const { externalObject } = await this.externalObjectService.upsertFromFetch({
-          tenantId: params.tenantId,
-          connectionId: params.connectionId,
-          providerId: params.providerId,
-          providerCode: 'crunchwork',
-          providerEntityType: entityType,
-          providerEntityId: params.providerEntityId,
-          normalizedEntityType: entityType,
-          payload: fullPayload,
-          sourceEventId: params.eventId,
-          sourceEventType: params.eventType,
-          sourceEventTimestamp: params.eventTimestamp,
-          tx,
-        });
+        const { externalObject } =
+          await this.externalObjectService.upsertFromFetch({
+            tenantId: params.tenantId,
+            connectionId: params.connectionId,
+            providerId: params.providerId,
+            providerCode: 'crunchwork',
+            providerEntityType: entityType,
+            providerEntityId: params.providerEntityId,
+            normalizedEntityType: entityType,
+            payload: fullPayload,
+            sourceEventId: params.eventId,
+            sourceEventType: params.eventType,
+            sourceEventTimestamp: params.eventTimestamp,
+            tx,
+          });
         externalObjectId = externalObject.id;
 
         const logEntry = await this.processingLogRepo.create({
@@ -181,52 +201,44 @@ export class WebhooksService implements OnModuleInit {
         });
       });
 
-      try {
-        const { runId } = await this.more0Service.invokeWorkflow({
-          workflowName: 'process-webhook-event',
-          input: {
-            eventId: params.eventId,
-            tenantId: params.tenantId,
-            connectionId: params.connectionId,
-            eventType: params.eventType,
-            providerEntityId: params.providerEntityId,
-            processingLogId,
-            externalObjectId,
-          },
-          context: { tenantId: params.tenantId },
-        });
-
-        if (processingLogId) {
-          await this.processingLogRepo.updateStatus({
-            id: processingLogId,
-            status: 'processing',
-            workflowRunId: runId,
-          });
-        }
-
-        await this.webhookRepo.updateProcessingStatus({
-          id: params.eventId,
-          processingStatus: 'dispatched',
-        });
-      } catch (workflowError) {
-        const msg = (workflowError as Error).message;
-        this.logger.error(`${logPrefix} — workflow invocation failed: ${msg}`);
-        if (processingLogId) {
-          await this.processingLogRepo.updateStatus({
-            id: processingLogId,
-            status: 'workflow_invoke_failed',
-            errorMessage: msg,
-          });
-        }
+      if (!externalObjectId || !processingLogId) {
+        this.logger.error(
+          `${logPrefix} — TX-2 completed but ids missing (externalObjectId=${externalObjectId}, processingLogId=${processingLogId})`,
+        );
+        return;
       }
+
+      await this.orchestrator.finalize({
+        eventId: params.eventId,
+        tenantId: params.tenantId,
+        connectionId: params.connectionId,
+        providerEntityType: entityType,
+        providerEntityId: params.providerEntityId,
+        externalObjectId,
+        processingLogId,
+        eventType: params.eventType,
+      });
     } catch (error) {
       const err = error as Error;
-      this.logger.error(`${logPrefix} — unexpected error: ${err.message}`, err.stack);
+      this.logger.error(
+        `${logPrefix} — unexpected error: ${err.message}`,
+        err.stack,
+      );
+      try {
+        await this.webhookRepo.updateProcessingStatus({
+          id: params.eventId,
+          processingStatus: 'failed',
+          processingError: err.message,
+        });
+      } catch (statusError) {
+        this.logger.error(
+          `${logPrefix} — also failed to update webhook status: ${(statusError as Error).message}`,
+        );
+      }
     }
   }
 
   private resolveEntityType(eventType: string): string | null {
     return ExternalToolsController.resolveEntityType(eventType);
   }
-
 }

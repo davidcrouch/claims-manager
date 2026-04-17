@@ -33,7 +33,7 @@ interface FieldDef {
   type?: 'text' | 'password' | 'url';
   required?: boolean;
   hint?: string;
-  mapTo: 'baseUrl' | 'authUrl' | 'clientIdentifier' | 'providerTenantId' | 'webhookSecret' | `credentials.${string}` | `config.${string}`;
+  mapTo: 'baseUrl' | 'baseApi' | 'authUrl' | 'clientIdentifier' | 'providerTenantId' | 'webhookSecret' | `credentials.${string}` | `config.${string}`;
 }
 
 const PROVIDER_TEMPLATES: ProviderTemplate[] = [
@@ -42,14 +42,15 @@ const PROVIDER_TEMPLATES: ProviderTemplate[] = [
     name: 'Crunchwork',
     description: 'Crunchwork Insurance claims management platform',
     fields: [
-      { key: 'baseUrl', label: 'API Hostname', placeholder: 'https://staging-iag.crunchwork.com', type: 'url', required: true, mapTo: 'baseUrl' },
+      { key: 'baseUrl', label: 'API Hostname', placeholder: 'https://staging-iag.crunchwork.com', type: 'url', required: true, hint: 'Base host used for OAuth token exchange.', mapTo: 'baseUrl' },
+      { key: 'baseApi', label: 'REST API Base URL', placeholder: 'https://staging-iag.crunchwork.com/rest/insurance-rest', type: 'url', required: true, hint: 'Prefix used for REST calls (e.g. /jobs/{id}). Per Insurance REST API §3.2.1.', mapTo: 'baseApi' },
       { key: 'authUrl', label: 'Auth Token URL', placeholder: 'https://staging-iag.crunchwork.com/auth/token?grant_type=client_credentials', type: 'url', required: true, mapTo: 'authUrl' },
-      { key: 'clientId', label: 'Client ID', placeholder: 'Client identifier (UUID)', required: true, mapTo: 'clientIdentifier' },
-      { key: 'clientSecret', label: 'Client Secret', type: 'password', required: true, mapTo: 'credentials.clientSecret' },
-      { key: 'insureTenantId', label: 'Insure Tenant ID', placeholder: 'Insurer tenant UUID', required: true, mapTo: 'providerTenantId' },
-      { key: 'vendorTenantId', label: 'Vendor Tenant ID', placeholder: 'Vendor tenant UUID', required: true, mapTo: 'credentials.vendorTenantId' },
+      { key: 'clientIdentifier', label: 'Client Identifier', placeholder: 'e.g. iag', required: true, hint: 'Short slug sent as "client" in webhook payloads.', mapTo: 'clientIdentifier' },
+      { key: 'clientId', label: 'OAuth Client ID', placeholder: 'Client credentials UUID', required: true, mapTo: 'credentials.clientId' },
+      { key: 'clientSecret', label: 'OAuth Client Secret', type: 'password', required: true, mapTo: 'credentials.clientSecret' },
+      { key: 'vendorTenantId', label: 'Vendor Tenant ID', placeholder: 'Vendor tenant UUID', required: true, hint: 'Used to match inbound webhooks to this connection.', mapTo: 'providerTenantId' },
+      { key: 'insureTenantId', label: 'Insure Tenant ID', placeholder: 'Insurer tenant UUID', required: true, mapTo: 'config.insureTenantId' },
       { key: 'hmacKey', label: 'HMAC Key', placeholder: 'Webhook HMAC verification key', type: 'password', required: true, mapTo: 'webhookSecret' },
-      { key: 'clientIdentifier', label: 'Client Identifier', placeholder: 'e.g. iag', required: true, mapTo: 'config.clientIdentifier' },
     ],
   },
 ];
@@ -154,6 +155,7 @@ export function ProviderFormDrawer({
           name: string;
           environment: string;
           baseUrl: string;
+          baseApi?: string;
           authUrl?: string;
           authType?: string;
           clientIdentifier?: string;

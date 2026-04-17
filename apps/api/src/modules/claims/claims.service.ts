@@ -26,6 +26,8 @@ export class ClaimsService {
     page?: number;
     limit?: number;
     search?: string;
+    sort?: string;
+    status?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
     return this.claimsRepo.findAll({
@@ -33,6 +35,8 @@ export class ClaimsService {
       page: params.page,
       limit: params.limit,
       search: params.search,
+      sort: params.sort,
+      status: params.status,
     });
   }
 
@@ -42,14 +46,13 @@ export class ClaimsService {
   }
 
   async create(params: { body: Record<string, unknown> }) {
-    const crunchworkTenantId = this.tenantContext.getCrunchworkTenantId();
-    const connectionId = await this.resolveConnectionId(crunchworkTenantId);
+    const tenantId = this.tenantContext.getTenantId();
+    const connectionId = await this.resolveConnectionId(tenantId);
     const apiClaim = await this.crunchworkService.createClaim({
       connectionId,
       body: params.body,
     });
 
-    const tenantId = this.tenantContext.getTenantId();
     const apiClaimObj = apiClaim as { id?: string; claimNumber?: string };
     const insertData: ClaimInsert = {
       tenantId,
@@ -67,8 +70,8 @@ export class ClaimsService {
     const existing = await this.findOne({ id: params.id });
     if (!existing) return null;
 
-    const crunchworkTenantId = this.tenantContext.getCrunchworkTenantId();
-    const connectionId = await this.resolveConnectionId(crunchworkTenantId);
+    const tenantId = this.tenantContext.getTenantId();
+    const connectionId = await this.resolveConnectionId(tenantId);
     const apiClaim = await this.crunchworkService.updateClaim({
       connectionId,
       claimId: params.id,

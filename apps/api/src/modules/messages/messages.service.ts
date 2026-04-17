@@ -48,14 +48,13 @@ export class MessagesService {
   }
 
   async create(params: { body: Record<string, unknown> }) {
-    const crunchworkTenantId = this.tenantContext.getCrunchworkTenantId();
-    const connectionId = await this.resolveConnectionId(crunchworkTenantId);
+    const tenantId = this.tenantContext.getTenantId();
+    const connectionId = await this.resolveConnectionId(tenantId);
     const apiMessage = await this.crunchworkService.createMessage({
       connectionId,
       body: params.body,
     });
 
-    const tenantId = this.tenantContext.getTenantId();
     const apiObj = apiMessage as Record<string, unknown>;
     const insertData: MessageInsert = {
       tenantId,
@@ -80,8 +79,8 @@ export class MessagesService {
     const existing = await this.findOne({ id: params.id });
     if (!existing) return null;
 
-    const crunchworkTenantId = this.tenantContext.getCrunchworkTenantId();
-    const connectionId = await this.resolveConnectionId(crunchworkTenantId);
+    const tenantId = this.tenantContext.getTenantId();
+    const connectionId = await this.resolveConnectionId(tenantId);
     await this.crunchworkService.acknowledgeMessage({
       connectionId,
       messageId: params.id,

@@ -20,7 +20,7 @@ variable "environment" {
 
 variable "cloudsql_tier" {
   type    = string
-  default = "db-custom-2-8192"
+  default = "db-custom-1-3840"
 }
 
 variable "gateway_ip" {

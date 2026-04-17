@@ -35,14 +35,13 @@ export class AppointmentsService {
   }
 
   async create(params: { body: Record<string, unknown> }) {
-    const crunchworkTenantId = this.tenantContext.getCrunchworkTenantId();
-    const connectionId = await this.resolveConnectionId(crunchworkTenantId);
+    const tenantId = this.tenantContext.getTenantId();
+    const connectionId = await this.resolveConnectionId(tenantId);
     const apiAppointment = await this.crunchworkService.createAppointment({
       connectionId,
       body: params.body,
     });
 
-    const tenantId = this.tenantContext.getTenantId();
     const apiObj = apiAppointment as Record<string, unknown>;
     const insertData: AppointmentInsert = {
       tenantId,
@@ -60,8 +59,8 @@ export class AppointmentsService {
     const existing = await this.findOne({ id: params.id });
     if (!existing) return null;
 
-    const crunchworkTenantId = this.tenantContext.getCrunchworkTenantId();
-    const connectionId = await this.resolveConnectionId(crunchworkTenantId);
+    const tenantId = this.tenantContext.getTenantId();
+    const connectionId = await this.resolveConnectionId(tenantId);
     const apiAppointment = await this.crunchworkService.updateAppointment({
       connectionId,
       appointmentId: params.id,
@@ -84,8 +83,8 @@ export class AppointmentsService {
     const existing = await this.findOne({ id: params.id });
     if (!existing) return null;
 
-    const crunchworkTenantId = this.tenantContext.getCrunchworkTenantId();
-    const connectionId = await this.resolveConnectionId(crunchworkTenantId);
+    const tenantId = this.tenantContext.getTenantId();
+    const connectionId = await this.resolveConnectionId(tenantId);
     await this.crunchworkService.cancelAppointment({
       connectionId,
       appointmentId: params.id,

@@ -56,14 +56,13 @@ export class ReportsService {
   }
 
   async create(params: { body: Record<string, unknown> }) {
-    const crunchworkTenantId = this.tenantContext.getCrunchworkTenantId();
-    const connectionId = await this.resolveConnectionId(crunchworkTenantId);
+    const tenantId = this.tenantContext.getTenantId();
+    const connectionId = await this.resolveConnectionId(tenantId);
     const apiReport = await this.crunchworkService.createReport({
       connectionId,
       body: params.body,
     });
 
-    const tenantId = this.tenantContext.getTenantId();
     const apiObj = apiReport as Record<string, unknown>;
     const insertData: ReportInsert = {
       tenantId,
@@ -81,8 +80,8 @@ export class ReportsService {
     const existing = await this.findOne({ id: params.id });
     if (!existing) return null;
 
-    const crunchworkTenantId = this.tenantContext.getCrunchworkTenantId();
-    const connectionId = await this.resolveConnectionId(crunchworkTenantId);
+    const tenantId = this.tenantContext.getTenantId();
+    const connectionId = await this.resolveConnectionId(tenantId);
     const apiReport = await this.crunchworkService.updateReport({
       connectionId,
       reportId: params.id,

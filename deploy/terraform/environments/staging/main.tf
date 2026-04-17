@@ -54,6 +54,8 @@ module "cloudsql" {
   private_network       = module.networking.vpc_self_link
 }
 
+# Minimum Memorystore capacity (M1). Auth currently targets in-cluster redis-master;
+# keep this small until workloads read the managed instance host from configuration.
 module "memorystore" {
   source = "../../modules/memorystore"
 
@@ -61,7 +63,7 @@ module "memorystore" {
   region              = var.region
   environment         = var.environment
   tier                = "BASIC"
-  memory_size_gb      = 3
+  memory_size_gb      = 1
   authorized_network  = module.networking.vpc_self_link
 }
 

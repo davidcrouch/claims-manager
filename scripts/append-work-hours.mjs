@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
  * Appends a work-hours block to docs/tracking/work_hours.md when Estimated-hours (or Work-hours)
- * is present in the commit message. See .cursor/rules/work-hours-tracking.mdc for
- * estimation rules, invoice-style Work-summary guidance, and logging conventions.
+ * is present in the commit message. Optional `Lay-summary:` (one line) is copied into
+ * the ledger as `Lay summary:` for Word invoices. See .cursor/rules/work-hours-tracking.mdc.
  */
 import { execSync } from "node:child_process";
 import fs from "node:fs";
@@ -63,6 +63,16 @@ function removeWorkSummaryBlock(text) {
       "",
     )
     .trim();
+}
+
+/** One-line plain summary for invoices; stripped from body before narrative extraction. */
+function extractLaySummaryFromCommitBody(text) {
+  const m = text.match(/^\s*Lay-summary:\s*(.+)$/im);
+  return m ? normalizeOneLine(m[1]) : null;
+}
+
+function stripLaySummaryFromCommitBody(text) {
+  return text.replace(/^\s*Lay-summary:\s*.+$/gim, "").trim();
 }
 
 /** Target description lines (5–7) from estimated hours. */
@@ -284,9 +294,12 @@ function main() {
   let fullBody;
   let subject;
   let dateIso;
+  let layFromCommit = null;
   try {
     hash = git("rev-parse --short HEAD");
-    fullBody = git("log -1 --format=%B");
+    const rawBody = git("log -1 --format=%B");
+    layFromCommit = extractLaySummaryFromCommitBody(rawBody);
+    fullBody = stripLaySummaryFromCommitBody(rawBody);
     subject = git("log -1 --format=%s");
     dateIso = git("log -1 --format=%cI");
   } catch (e) {
@@ -331,8 +344,11 @@ function main() {
   );
 
   const datePart = dateIso.includes("T") ? dateIso.split("T")[0] : dateIso;
+  const layIndented = layFromCommit
+    ? `  Lay summary: ${escMdInline(layFromCommit)}\n`
+    : "";
   const bodyIndented = descLines.map((l) => `  ${l}`).join("\n");
-  const block = `- \`${datePart}\` ${hashToken} **${hours} h**  \n${bodyIndented}\n\n`;
+  const block = `- \`${datePart}\` ${hashToken} **${hours} h**\n${layIndented}${bodyIndented}\n\n`;
 
   const sep = existing.length > 0 && !/\n$/.test(existing) ? "\n" : "";
   fs.appendFileSync(trackingFile, sep + block, "utf8");

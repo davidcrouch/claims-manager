@@ -56,8 +56,8 @@ export class VendorsService {
       );
     }
 
-    const crunchworkTenantId = this.tenantContext.getCrunchworkTenantId();
-    const connectionId = await this.resolveConnectionId(crunchworkTenantId);
+    const tenantId = this.tenantContext.getTenantId();
+    const connectionId = await this.resolveConnectionId(tenantId);
     return this.crunchworkService.getVendorAllocation({
       connectionId,
       jobType: params.jobType,

@@ -52,8 +52,8 @@ export class PurchaseOrdersService {
     const existing = await this.findOne({ id: params.id });
     if (!existing) return null;
 
-    const crunchworkTenantId = this.tenantContext.getCrunchworkTenantId();
-    const connectionId = await this.resolveConnectionId(crunchworkTenantId);
+    const tenantId = this.tenantContext.getTenantId();
+    const connectionId = await this.resolveConnectionId(tenantId);
     const apiPo = await this.crunchworkService.updatePurchaseOrder({
       connectionId,
       purchaseOrderId: params.id,

@@ -3,8 +3,10 @@ import { eq, and, desc, sql } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { externalProcessingLog } from '../schema';
 
-export type ExternalProcessingLogRow = typeof externalProcessingLog.$inferSelect;
-export type ExternalProcessingLogInsert = typeof externalProcessingLog.$inferInsert;
+export type ExternalProcessingLogRow =
+  typeof externalProcessingLog.$inferSelect;
+export type ExternalProcessingLogInsert =
+  typeof externalProcessingLog.$inferInsert;
 
 @Injectable()
 export class ExternalProcessingLogRepository {
@@ -19,7 +21,7 @@ export class ExternalProcessingLogRepository {
       .insert(externalProcessingLog)
       .values(params.data)
       .returning();
-    return inserted!;
+    return inserted;
   }
 
   async updateStatus(params: {
@@ -29,17 +31,25 @@ export class ExternalProcessingLogRepository {
     errorMessage?: string;
     externalObjectId?: string;
     workflowRunId?: string;
+    metadata?: Record<string, unknown>;
+    tx?: DrizzleDbOrTx;
   }): Promise<ExternalProcessingLogRow | null> {
+    const db = params.tx ?? this.db;
     const setData: Record<string, unknown> = {
       status: params.status,
       updatedAt: new Date(),
     };
-    if (params.completedAt !== undefined) setData.completedAt = params.completedAt;
-    if (params.errorMessage !== undefined) setData.errorMessage = params.errorMessage;
-    if (params.externalObjectId !== undefined) setData.externalObjectId = params.externalObjectId;
-    if (params.workflowRunId !== undefined) setData.workflowRunId = params.workflowRunId;
+    if (params.completedAt !== undefined)
+      setData.completedAt = params.completedAt;
+    if (params.errorMessage !== undefined)
+      setData.errorMessage = params.errorMessage;
+    if (params.externalObjectId !== undefined)
+      setData.externalObjectId = params.externalObjectId;
+    if (params.workflowRunId !== undefined)
+      setData.workflowRunId = params.workflowRunId;
+    if (params.metadata !== undefined) setData.metadata = params.metadata;
 
-    const [updated] = await this.db
+    const [updated] = await db
       .update(externalProcessingLog)
       .set(setData)
       .where(eq(externalProcessingLog.id, params.id))
@@ -71,7 +81,9 @@ export class ExternalProcessingLogRepository {
 
     const conditions = [eq(externalProcessingLog.tenantId, params.tenantId)];
     if (params.providerEntityType) {
-      conditions.push(eq(externalProcessingLog.providerEntityType, params.providerEntityType));
+      conditions.push(
+        eq(externalProcessingLog.providerEntityType, params.providerEntityType),
+      );
     }
     if (params.status) {
       conditions.push(eq(externalProcessingLog.status, params.status));

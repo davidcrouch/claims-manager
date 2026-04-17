@@ -317,6 +317,7 @@ function ConnectionCard({
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(connection.name);
   const [baseUrl, setBaseUrl] = useState(connection.baseUrl);
+  const [baseApi, setBaseApi] = useState(connection.baseApi ?? '');
   const [authUrl, setAuthUrl] = useState(connection.authUrl ?? '');
   const [environment, setEnvironment] = useState(connection.environment);
   const [clientIdentifier, setClientIdentifier] = useState(
@@ -334,6 +335,7 @@ function ConnectionCard({
     const result = await updateConnectionAction(providerId, connection.id, {
       name,
       baseUrl,
+      baseApi: baseApi || undefined,
       authUrl: authUrl || undefined,
       environment,
       clientIdentifier: clientIdentifier || undefined,
@@ -373,13 +375,19 @@ function ConnectionCard({
             <p className="font-mono text-xs text-slate-700 truncate">{connection.baseUrl}</p>
           </div>
           <div>
-            <p className="text-xs text-slate-400 mb-0.5">Client ID</p>
+            <p className="text-xs text-slate-400 mb-0.5">REST API Base URL</p>
+            <p className="font-mono text-xs text-slate-700 truncate">
+              {connection.baseApi ?? '—'}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-400 mb-0.5">Client Identifier</p>
             <p className="font-mono text-xs text-slate-700">
               {connection.clientIdentifier ?? '—'}
             </p>
           </div>
           <div>
-            <p className="text-xs text-slate-400 mb-0.5">Provider Tenant ID</p>
+            <p className="text-xs text-slate-400 mb-0.5">Vendor Tenant ID</p>
             <p className="font-mono text-xs text-slate-700">
               {connection.providerTenantId ?? '—'}
             </p>
@@ -415,24 +423,46 @@ function ConnectionCard({
             <div className="space-y-1.5">
               <Label>Base URL</Label>
               <Input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
+              <p className="text-xs text-slate-400">
+                Host used for OAuth token exchange.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>REST API Base URL</Label>
+              <Input
+                value={baseApi}
+                onChange={(e) => setBaseApi(e.target.value)}
+                placeholder="https://staging-iag.crunchwork.com/rest/insurance-rest"
+              />
+              <p className="text-xs text-slate-400">
+                Prefix used for REST calls per Insurance REST API §3.2.1.
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label>Auth URL</Label>
               <Input value={authUrl} onChange={(e) => setAuthUrl(e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <Label>Client ID</Label>
+              <Label>Client Identifier</Label>
               <Input
                 value={clientIdentifier}
                 onChange={(e) => setClientIdentifier(e.target.value)}
+                placeholder="e.g. iag"
               />
+              <p className="text-xs text-slate-400">
+                Short slug sent as <code>client</code> in webhook payloads.
+              </p>
             </div>
             <div className="space-y-1.5">
-              <Label>Provider Tenant ID</Label>
+              <Label>Vendor Tenant ID</Label>
               <Input
                 value={providerTenantId}
                 onChange={(e) => setProviderTenantId(e.target.value)}
+                placeholder="Vendor tenant UUID"
               />
+              <p className="text-xs text-slate-400">
+                UUID sent as <code>tenantId</code> in webhook payloads.
+              </p>
             </div>
           </div>
           {error && (
@@ -474,6 +504,7 @@ function AddConnectionForm({
   const [name, setName] = useState('');
   const [environment, setEnvironment] = useState('staging');
   const [baseUrl, setBaseUrl] = useState('');
+  const [baseApi, setBaseApi] = useState('');
   const [authUrl, setAuthUrl] = useState('');
   const [clientIdentifier, setClientIdentifier] = useState('');
   const [clientSecret, setClientSecret] = useState('');
@@ -493,6 +524,7 @@ function AddConnectionForm({
       name,
       environment,
       baseUrl,
+      baseApi: baseApi || undefined,
       authUrl: authUrl || undefined,
       authType: 'client_credentials',
       clientIdentifier: clientIdentifier || undefined,
@@ -547,6 +579,21 @@ function AddConnectionForm({
             onChange={(e) => setBaseUrl(e.target.value)}
             placeholder="https://staging-iag.crunchwork.com"
           />
+          <p className="text-xs text-slate-400">
+            Host used for OAuth token exchange.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>REST API Base URL</Label>
+          <Input
+            value={baseApi}
+            onChange={(e) => setBaseApi(e.target.value)}
+            placeholder="https://staging-iag.crunchwork.com/rest/insurance-rest"
+          />
+          <p className="text-xs text-slate-400">
+            Prefix used for REST calls per Insurance REST API §3.2.1.
+          </p>
         </div>
 
         <div className="space-y-1.5">
@@ -559,15 +606,19 @@ function AddConnectionForm({
         </div>
 
         <div className="space-y-1.5">
-          <Label>Client ID</Label>
+          <Label>Client Identifier</Label>
           <Input
             value={clientIdentifier}
             onChange={(e) => setClientIdentifier(e.target.value)}
+            placeholder="e.g. iag"
           />
+          <p className="text-xs text-slate-400">
+            Short slug sent as <code>client</code> in webhook payloads.
+          </p>
         </div>
 
         <div className="space-y-1.5">
-          <Label>Client Secret</Label>
+          <Label>OAuth Client Secret</Label>
           <Input
             type="password"
             value={clientSecret}
@@ -577,11 +628,15 @@ function AddConnectionForm({
         </div>
 
         <div className="space-y-1.5">
-          <Label>Provider Tenant ID</Label>
+          <Label>Vendor Tenant ID</Label>
           <Input
             value={providerTenantId}
             onChange={(e) => setProviderTenantId(e.target.value)}
+            placeholder="Vendor tenant UUID"
           />
+          <p className="text-xs text-slate-400">
+            UUID sent as <code>tenantId</code> in webhook payloads.
+          </p>
         </div>
 
         <div className="space-y-1.5">

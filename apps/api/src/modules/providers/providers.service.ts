@@ -6,6 +6,7 @@ import {
 import { IntegrationProvidersRepository } from '../../database/repositories/integration-providers.repository';
 import { IntegrationConnectionsRepository } from '../../database/repositories/integration-connections.repository';
 import { InboundWebhookEventsRepository } from '../../database/repositories/inbound-webhook-events.repository';
+import { CredentialsCipher } from '../../common/credentials-cipher';
 import type { CreateProviderDto } from './dto/create-provider.dto';
 import type { CreateConnectionDto } from './dto/create-provider.dto';
 import type { UpdateProviderDto } from './dto/update-provider.dto';
@@ -33,7 +34,23 @@ export class ProvidersService {
     private readonly providersRepo: IntegrationProvidersRepository,
     private readonly connectionsRepo: IntegrationConnectionsRepository,
     private readonly webhookEventsRepo: InboundWebhookEventsRepository,
+    private readonly cipher: CredentialsCipher,
   ) {}
+
+  private encryptCredentials(
+    credentials: Record<string, unknown> | undefined,
+  ): string | Record<string, unknown> {
+    if (!credentials || Object.keys(credentials).length === 0) {
+      return {};
+    }
+    return this.cipher.encryptJson(credentials);
+  }
+
+  private encryptWebhookSecret(secret: string | undefined): string | undefined {
+    if (!secret) return undefined;
+    if (secret.startsWith('enc:')) return secret;
+    return this.cipher.encrypt(secret);
+  }
 
   async findAll(tenantId: string): Promise<ProviderSummary[]> {
     this.logger.debug('[ProvidersService.findAll] Listing all providers');
@@ -117,12 +134,13 @@ export class ProvidersService {
           name: dto.connection.name,
           environment: dto.connection.environment,
           baseUrl: dto.connection.baseUrl,
+          baseApi: dto.connection.baseApi,
           authUrl: dto.connection.authUrl,
           authType: dto.connection.authType ?? 'client_credentials',
           clientIdentifier: dto.connection.clientIdentifier,
           providerTenantId: dto.connection.providerTenantId,
-          credentials: dto.connection.credentials ?? {},
-          webhookSecret: dto.connection.webhookSecret,
+          credentials: this.encryptCredentials(dto.connection.credentials),
+          webhookSecret: this.encryptWebhookSecret(dto.connection.webhookSecret),
           config: dto.connection.config ?? {},
         },
       });
@@ -184,12 +202,13 @@ export class ProvidersService {
         name: params.dto.name,
         environment: params.dto.environment,
         baseUrl: params.dto.baseUrl,
+        baseApi: params.dto.baseApi,
         authUrl: params.dto.authUrl,
         authType: params.dto.authType ?? 'client_credentials',
         clientIdentifier: params.dto.clientIdentifier,
         providerTenantId: params.dto.providerTenantId,
-        credentials: params.dto.credentials ?? {},
-        webhookSecret: params.dto.webhookSecret,
+        credentials: this.encryptCredentials(params.dto.credentials),
+        webhookSecret: this.encryptWebhookSecret(params.dto.webhookSecret),
         config: params.dto.config ?? {},
       },
     });
@@ -204,9 +223,21 @@ export class ProvidersService {
       `[ProvidersService.updateConnection] providerId=${params.providerId} connectionId=${params.connectionId}`,
     );
     await this.ensureProviderExists(params.providerId);
+
+    const { credentials, webhookSecret, ...rest } = params.dto;
+    const data: Parameters<typeof this.connectionsRepo.update>[0]['data'] = {
+      ...rest,
+    };
+    if (credentials !== undefined) {
+      data.credentials = this.encryptCredentials(credentials);
+    }
+    if (webhookSecret !== undefined) {
+      data.webhookSecret = this.encryptWebhookSecret(webhookSecret);
+    }
+
     const updated = await this.connectionsRepo.update({
       id: params.connectionId,
-      data: params.dto,
+      data,
     });
     if (!updated) {
       throw new NotFoundException(`Connection ${params.connectionId} not found`);

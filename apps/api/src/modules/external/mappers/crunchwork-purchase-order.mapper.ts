@@ -1,7 +1,10 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
-import { DRIZZLE } from '../../../database/drizzle.module';
-import type { DrizzleDB } from '../../../database/drizzle.module';
+import {
+  DRIZZLE,
+  type DrizzleDB,
+  type DrizzleDbOrTx,
+} from '../../../database/drizzle.module';
 import {
   purchaseOrders,
   purchaseOrderGroups,
@@ -28,43 +31,57 @@ export class CrunchworkPurchaseOrderMapper implements EntityMapper {
     externalObject: Record<string, unknown>;
     tenantId: string;
     connectionId: string;
+    tx?: DrizzleDbOrTx;
   }): Promise<{ internalEntityId: string; internalEntityType: string }> {
     const extObj = params.externalObject;
     const payload = extObj.latestPayload as Record<string, unknown>;
     const externalObjectId = extObj.id as string;
+    const db = params.tx ?? this.db;
 
     this.logger.log(
       `CrunchworkPurchaseOrderMapper.map — externalObjectId=${externalObjectId}`,
     );
 
-    const existingLinks = await this.externalLinksRepo.findByExternalObjectId({ externalObjectId });
-    const existingLink = existingLinks.find((l) => l.internalEntityType === 'purchase_order');
+    const existingLinks = await this.externalLinksRepo.findByExternalObjectId({
+      externalObjectId,
+      tx: params.tx,
+    });
+    const existingLink = existingLinks.find(
+      (l) => l.internalEntityType === 'purchase_order',
+    );
 
     const jobId = await this.resolveFK({
       connectionId: params.connectionId,
       providerEntityType: 'job',
       providerEntityId: (payload.job as Record<string, unknown>)?.id as string,
       internalEntityType: 'job',
+      tx: params.tx,
     });
 
     const claimId = await this.resolveFK({
       connectionId: params.connectionId,
       providerEntityType: 'claim',
-      providerEntityId: (payload.claim as Record<string, unknown>)?.id as string,
+      providerEntityId: (payload.claim as Record<string, unknown>)
+        ?.id as string,
       internalEntityType: 'claim',
+      tx: params.tx,
     });
 
     const statusLookupId = await this.lookupResolver.resolve({
       tenantId: params.tenantId,
       domain: 'purchase_order_status',
-      externalReference: (payload.status as Record<string, unknown>)?.externalReference as string ?? '',
+      externalReference:
+        ((payload.status as Record<string, unknown>)
+          ?.externalReference as string) ?? '',
       autoCreate: true,
     });
 
     const poTypeLookupId = await this.lookupResolver.resolve({
       tenantId: params.tenantId,
       domain: 'purchase_order_type',
-      externalReference: (payload.purchaseOrderType as Record<string, unknown>)?.externalReference as string ?? '',
+      externalReference:
+        ((payload.purchaseOrderType as Record<string, unknown>)
+          ?.externalReference as string) ?? '',
       autoCreate: true,
     });
 
@@ -73,18 +90,18 @@ export class CrunchworkPurchaseOrderMapper implements EntityMapper {
       claimId: claimId ?? undefined,
       jobId: jobId ?? undefined,
       externalId: payload.id as string,
-      purchaseOrderNumber: payload.purchaseOrderNumber as string ?? undefined,
-      name: payload.name as string ?? undefined,
+      purchaseOrderNumber: (payload.purchaseOrderNumber as string) ?? undefined,
+      name: (payload.name as string) ?? undefined,
       statusLookupId: statusLookupId ?? undefined,
       purchaseOrderTypeLookupId: poTypeLookupId ?? undefined,
-      startDate: payload.startDate as string ?? undefined,
-      endDate: payload.endDate as string ?? undefined,
-      note: payload.note as string ?? undefined,
+      startDate: (payload.startDate as string) ?? undefined,
+      endDate: (payload.endDate as string) ?? undefined,
+      note: (payload.note as string) ?? undefined,
       poTo: (payload.poTo as Record<string, unknown>) ?? {},
       poFor: (payload.poFor as Record<string, unknown>) ?? {},
       poFrom: (payload.poFrom as Record<string, unknown>) ?? {},
-      totalAmount: payload.totalAmount as string ?? undefined,
-      adjustedTotal: payload.adjustedTotal as string ?? undefined,
+      totalAmount: (payload.totalAmount as string) ?? undefined,
+      adjustedTotal: (payload.adjustedTotal as string) ?? undefined,
       purchaseOrderPayload: payload,
       updatedAt: new Date(),
     };
@@ -92,17 +109,17 @@ export class CrunchworkPurchaseOrderMapper implements EntityMapper {
     let internalId: string;
 
     if (existingLink) {
-      await this.db
+      await db
         .update(purchaseOrders)
         .set(poData)
         .where(eq(purchaseOrders.id, existingLink.internalEntityId));
       internalId = existingLink.internalEntityId;
     } else {
-      const [created] = await this.db
+      const [created] = await db
         .insert(purchaseOrders)
         .values({ ...poData, createdAt: new Date() })
         .returning();
-      internalId = created!.id;
+      internalId = created.id;
 
       await this.externalLinksRepo.upsert({
         data: {
@@ -114,6 +131,7 @@ export class CrunchworkPurchaseOrderMapper implements EntityMapper {
           isPrimary: true,
           metadata: {},
         },
+        tx: params.tx,
       });
     }
 
@@ -121,29 +139,36 @@ export class CrunchworkPurchaseOrderMapper implements EntityMapper {
       purchaseOrderId: internalId,
       tenantId: params.tenantId,
       payload,
+      tx: params.tx,
     });
 
-    return { internalEntityId: internalId, internalEntityType: 'purchase_order' };
+    return {
+      internalEntityId: internalId,
+      internalEntityType: 'purchase_order',
+    };
   }
 
   private async syncLineItems(params: {
     purchaseOrderId: string;
     tenantId: string;
     payload: Record<string, unknown>;
+    tx?: DrizzleDbOrTx;
   }): Promise<void> {
-    await this.db
+    const db = params.tx ?? this.db;
+
+    await db
       .delete(purchaseOrderGroups)
       .where(eq(purchaseOrderGroups.purchaseOrderId, params.purchaseOrderId));
 
     const groups = (params.payload.groups as Record<string, unknown>[]) ?? [];
     for (let gi = 0; gi < groups.length; gi++) {
-      const group = groups[gi]!;
-      const [createdGroup] = await this.db
+      const group = groups[gi];
+      const [createdGroup] = await db
         .insert(purchaseOrderGroups)
         .values({
           tenantId: params.tenantId,
           purchaseOrderId: params.purchaseOrderId,
-          description: group.description as string ?? undefined,
+          description: (group.description as string) ?? undefined,
           sortIndex: gi,
           groupPayload: group,
         })
@@ -151,17 +176,17 @@ export class CrunchworkPurchaseOrderMapper implements EntityMapper {
 
       const combos = (group.combos as Record<string, unknown>[]) ?? [];
       for (let ci = 0; ci < combos.length; ci++) {
-        const combo = combos[ci]!;
-        const [createdCombo] = await this.db
+        const combo = combos[ci];
+        const [createdCombo] = await db
           .insert(purchaseOrderCombos)
           .values({
             tenantId: params.tenantId,
-            purchaseOrderGroupId: createdGroup!.id,
-            name: combo.name as string ?? undefined,
-            description: combo.description as string ?? undefined,
-            category: combo.category as string ?? undefined,
-            subCategory: combo.subCategory as string ?? undefined,
-            quantity: combo.quantity as string ?? undefined,
+            purchaseOrderGroupId: createdGroup.id,
+            name: (combo.name as string) ?? undefined,
+            description: (combo.description as string) ?? undefined,
+            category: (combo.category as string) ?? undefined,
+            subCategory: (combo.subCategory as string) ?? undefined,
+            quantity: (combo.quantity as string) ?? undefined,
             sortIndex: ci,
             comboPayload: combo,
           })
@@ -169,19 +194,19 @@ export class CrunchworkPurchaseOrderMapper implements EntityMapper {
 
         const items = (combo.items as Record<string, unknown>[]) ?? [];
         for (let ii = 0; ii < items.length; ii++) {
-          const item = items[ii]!;
-          await this.db.insert(purchaseOrderItems).values({
+          const item = items[ii];
+          await db.insert(purchaseOrderItems).values({
             tenantId: params.tenantId,
-            purchaseOrderComboId: createdCombo!.id,
-            name: item.name as string ?? undefined,
-            description: item.description as string ?? undefined,
-            category: item.category as string ?? undefined,
-            subCategory: item.subCategory as string ?? undefined,
-            itemType: item.itemType as string ?? undefined,
-            quantity: item.quantity as string ?? undefined,
-            tax: item.tax as string ?? undefined,
-            unitCost: item.unitCost as string ?? undefined,
-            buyCost: item.buyCost as string ?? undefined,
+            purchaseOrderComboId: createdCombo.id,
+            name: (item.name as string) ?? undefined,
+            description: (item.description as string) ?? undefined,
+            category: (item.category as string) ?? undefined,
+            subCategory: (item.subCategory as string) ?? undefined,
+            itemType: (item.itemType as string) ?? undefined,
+            quantity: (item.quantity as string) ?? undefined,
+            tax: (item.tax as string) ?? undefined,
+            unitCost: (item.unitCost as string) ?? undefined,
+            buyCost: (item.buyCost as string) ?? undefined,
             sortIndex: ii,
             itemPayload: item,
           });
@@ -195,6 +220,7 @@ export class CrunchworkPurchaseOrderMapper implements EntityMapper {
     providerEntityType: string;
     providerEntityId: string | undefined;
     internalEntityType: string;
+    tx?: DrizzleDbOrTx;
   }): Promise<string | null> {
     if (!params.providerEntityId) return null;
     return this.externalObjectService.resolveInternalEntityId({
@@ -202,6 +228,7 @@ export class CrunchworkPurchaseOrderMapper implements EntityMapper {
       providerEntityType: params.providerEntityType,
       providerEntityId: params.providerEntityId,
       internalEntityType: params.internalEntityType,
+      tx: params.tx,
     });
   }
 }

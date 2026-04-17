@@ -8,8 +8,6 @@ import {
   UseGuards,
   BadRequestException,
   Logger,
-  OnModuleInit,
-  Optional,
 } from '@nestjs/common';
 import { Public } from '../../../auth/decorators/public.decorator';
 import { ToolAuthGuard } from './tool-auth.guard';
@@ -20,20 +18,20 @@ import {
   ExternalProcessingLogRepository,
   ExternalEventAttemptsRepository,
 } from '../../../database/repositories';
-import { CrunchworkJobMapper } from '../mappers/crunchwork-job.mapper';
-import { CrunchworkClaimMapper } from '../mappers/crunchwork-claim.mapper';
-import { CrunchworkPurchaseOrderMapper } from '../mappers/crunchwork-purchase-order.mapper';
-import { CrunchworkInvoiceMapper } from '../mappers/crunchwork-invoice.mapper';
-import { CrunchworkTaskMapper } from '../mappers/crunchwork-task.mapper';
-import { CrunchworkMessageMapper } from '../mappers/crunchwork-message.mapper';
-import { CrunchworkAttachmentMapper } from '../mappers/crunchwork-attachment.mapper';
+import { EntityMapperRegistry } from '../entity-mapper.registry';
+import type { DrizzleDbOrTx } from '../../../database/drizzle.module';
 
 export interface EntityMapper {
   map(params: {
     externalObject: Record<string, unknown>;
     tenantId: string;
     connectionId: string;
-  }): Promise<{ internalEntityId: string; internalEntityType: string }>;
+    tx?: DrizzleDbOrTx;
+  }): Promise<{
+    internalEntityId: string;
+    internalEntityType: string;
+    skipped?: string;
+  }>;
 }
 
 const EVENT_TYPE_TO_ENTITY: Record<string, string> = {
@@ -61,9 +59,8 @@ const EVENT_TYPE_TO_ENTITY: Record<string, string> = {
 @Controller('api/v1/tools')
 @Public()
 @UseGuards(ToolAuthGuard)
-export class ExternalToolsController implements OnModuleInit {
+export class ExternalToolsController {
   private readonly logger = new Logger('ExternalToolsController');
-  private mappers: Record<string, EntityMapper> = {};
 
   constructor(
     private readonly crunchworkService: CrunchworkService,
@@ -71,28 +68,8 @@ export class ExternalToolsController implements OnModuleInit {
     private readonly externalObjectsRepo: ExternalObjectsRepository,
     private readonly processingLogRepo: ExternalProcessingLogRepository,
     private readonly eventAttemptsRepo: ExternalEventAttemptsRepository,
-    @Optional() private readonly jobMapper?: CrunchworkJobMapper,
-    @Optional() private readonly claimMapper?: CrunchworkClaimMapper,
-    @Optional() private readonly poMapper?: CrunchworkPurchaseOrderMapper,
-    @Optional() private readonly invoiceMapper?: CrunchworkInvoiceMapper,
-    @Optional() private readonly taskMapper?: CrunchworkTaskMapper,
-    @Optional() private readonly messageMapper?: CrunchworkMessageMapper,
-    @Optional() private readonly attachmentMapper?: CrunchworkAttachmentMapper,
+    private readonly mapperRegistry: EntityMapperRegistry,
   ) {}
-
-  onModuleInit(): void {
-    if (this.jobMapper) this.mappers['job'] = this.jobMapper;
-    if (this.claimMapper) this.mappers['claim'] = this.claimMapper;
-    if (this.poMapper) this.mappers['purchase_order'] = this.poMapper;
-    if (this.invoiceMapper) this.mappers['invoice'] = this.invoiceMapper;
-    if (this.taskMapper) this.mappers['task'] = this.taskMapper;
-    if (this.messageMapper) this.mappers['message'] = this.messageMapper;
-    if (this.attachmentMapper) this.mappers['attachment'] = this.attachmentMapper;
-  }
-
-  registerMapper(params: { entityType: string; mapper: EntityMapper }): void {
-    this.mappers[params.entityType] = params.mapper;
-  }
 
   @Post('crunchwork/fetch')
   @HttpCode(HttpStatus.OK)
@@ -150,15 +127,21 @@ export class ExternalToolsController implements OnModuleInit {
       providerCode: body.providerCode,
       providerEntityType: body.providerEntityType,
       providerEntityId: body.providerEntityId,
-      normalizedEntityType: body.normalizedEntityType ?? body.providerEntityType,
+      normalizedEntityType:
+        body.normalizedEntityType ?? body.providerEntityType,
       payload: body.payload,
       sourceEventId: body.sourceEventId,
       sourceEventType: body.sourceEventType,
-      sourceEventTimestamp: body.sourceEventTimestamp ? new Date(body.sourceEventTimestamp) : undefined,
+      sourceEventTimestamp: body.sourceEventTimestamp
+        ? new Date(body.sourceEventTimestamp)
+        : undefined,
     });
 
     return {
-      externalObject: result.externalObject as unknown as Record<string, unknown>,
+      externalObject: result.externalObject as unknown as Record<
+        string,
+        unknown
+      >,
       isNew: result.isNew,
       hashChanged: result.hashChanged,
     };
@@ -174,21 +157,29 @@ export class ExternalToolsController implements OnModuleInit {
       tenantId: string;
       connectionId: string;
     },
-  ): Promise<{ internalEntityId: string; internalEntityType: string }> {
+  ): Promise<{
+    internalEntityId: string;
+    internalEntityType: string;
+    skipped?: string;
+  }> {
     this.logger.log(
       `ExternalToolsController.mapEntity — entityType=${entityType} externalObjectId=${body.externalObjectId}`,
     );
 
-    const mapper = this.mappers[entityType];
+    const mapper = this.mapperRegistry.get({ entityType });
     if (!mapper) {
-      throw new BadRequestException(`No mapper registered for entity type: ${entityType}`);
+      throw new BadRequestException(
+        `No mapper registered for entity type: ${entityType}`,
+      );
     }
 
     const externalObject = await this.externalObjectsRepo.findById({
       id: body.externalObjectId,
     });
     if (!externalObject) {
-      throw new BadRequestException(`External object not found: ${body.externalObjectId}`);
+      throw new BadRequestException(
+        `External object not found: ${body.externalObjectId}`,
+      );
     }
 
     return mapper.map({
@@ -216,7 +207,10 @@ export class ExternalToolsController implements OnModuleInit {
     await this.processingLogRepo.updateStatus({
       id: body.processingLogId,
       status: body.status,
-      completedAt: body.status === 'completed' || body.status === 'failed' ? new Date() : undefined,
+      completedAt:
+        body.status === 'completed' || body.status === 'failed'
+          ? new Date()
+          : undefined,
       externalObjectId: body.externalObjectId,
       errorMessage: body.errorMessage,
     });

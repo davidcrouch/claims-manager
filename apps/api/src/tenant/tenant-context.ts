@@ -16,13 +16,6 @@ export class TenantContext {
     return this.data.tenantId;
   }
 
-  getCrunchworkTenantId(): string {
-    if (!this.data) {
-      throw new Error('[TenantContext.getCrunchworkTenantId] Tenant context not set');
-    }
-    return this.data.crunchworkTenantId;
-  }
-
   hasTenant(): boolean {
     return this.data !== null;
   }

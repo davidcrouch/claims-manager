@@ -812,6 +812,7 @@ export const integrationConnections = pgTable(
     environment: text('environment').notNull(),
     authType: text('auth_type').notNull().default('client_credentials'),
     baseUrl: text('base_url').notNull(),
+    baseApi: text('base_api'),
     authUrl: text('auth_url'),
     clientIdentifier: text('client_identifier'),
     providerTenantId: text('provider_tenant_id'),

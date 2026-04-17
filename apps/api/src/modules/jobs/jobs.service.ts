@@ -42,14 +42,13 @@ export class JobsService {
   }
 
   async create(params: { body: Record<string, unknown> }) {
-    const crunchworkTenantId = this.tenantContext.getCrunchworkTenantId();
-    const connectionId = await this.resolveConnectionId(crunchworkTenantId);
+    const tenantId = this.tenantContext.getTenantId();
+    const connectionId = await this.resolveConnectionId(tenantId);
     const apiJob = await this.crunchworkService.createJob({
       connectionId,
       body: params.body,
     });
 
-    const tenantId = this.tenantContext.getTenantId();
     const apiJobObj = apiJob as Record<string, unknown>;
     const claimId = (apiJobObj.claimId ?? apiJobObj.claim_id ?? params.body?.claimId ?? params.body?.claim_id) as string;
     const jobTypeId = (apiJobObj.jobType as { id?: string })?.id ?? (apiJobObj.job_type as { id?: string })?.id;
@@ -71,8 +70,8 @@ export class JobsService {
     const existing = await this.findOne({ id: params.id });
     if (!existing) return null;
 
-    const crunchworkTenantId = this.tenantContext.getCrunchworkTenantId();
-    const connectionId = await this.resolveConnectionId(crunchworkTenantId);
+    const tenantId = this.tenantContext.getTenantId();
+    const connectionId = await this.resolveConnectionId(tenantId);
     const apiJob = await this.crunchworkService.updateJob({
       connectionId,
       jobId: params.id,

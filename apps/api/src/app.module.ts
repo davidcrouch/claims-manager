@@ -4,9 +4,9 @@ import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import appConfig from './config/app.config';
 import databaseConfig from './config/database.config';
-import crunchworkConfig from './config/crunchwork.config';
 import authConfig from './config/auth.config';
 import more0Config from './config/more0.config';
+import webhookConfig from './config/webhook.config';
 import { validate } from './config/env.validation';
 import { AuthModule } from './auth/auth.module';
 import { HealthModule } from './health/health.module';
@@ -42,7 +42,13 @@ import { CommonModule } from './common/common.module';
     CommonModule,
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [appConfig, databaseConfig, crunchworkConfig, authConfig, more0Config],
+      load: [
+        appConfig,
+        databaseConfig,
+        authConfig,
+        more0Config,
+        webhookConfig,
+      ],
       validate,
       envFilePath: ['.env', '../.env', '../../.env'],
     }),
@@ -80,7 +86,11 @@ import { CommonModule } from './common/common.module';
   providers: [
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
     { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },
-    { provide: APP_INTERCEPTOR, useClass: TenantInterceptor, scope: Scope.REQUEST },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: TenantInterceptor,
+      scope: Scope.REQUEST,
+    },
   ],
 })
 export class AppModule {}

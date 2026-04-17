@@ -47,14 +47,14 @@ export interface UpdateJobParams extends CrunchworkRequestParams {
 export class CrunchworkService {
   private readonly logger = new Logger('CrunchworkService');
   private readonly maxRetries = 3;
-  private connectionResolver: { getCredentials(p: { connectionId: string }): Promise<{ clientId: string; clientSecret: string; authUrl: string; baseUrl: string; activeTenantId: string }> } | null = null;
+  private connectionResolver: { getCredentials(p: { connectionId: string }): Promise<{ clientId: string; clientSecret: string; authUrl: string; baseUrl: string; baseApi: string; activeTenantId: string }> } | null = null;
 
   constructor(
     private readonly httpService: HttpService,
     private readonly authService: CrunchworkAuthService,
   ) {}
 
-  setConnectionResolver(resolver: { getCredentials(p: { connectionId: string }): Promise<{ clientId: string; clientSecret: string; authUrl: string; baseUrl: string; activeTenantId: string }> }): void {
+  setConnectionResolver(resolver: { getCredentials(p: { connectionId: string }): Promise<{ clientId: string; clientSecret: string; authUrl: string; baseUrl: string; baseApi: string; activeTenantId: string }> }): void {
     this.connectionResolver = resolver;
   }
 
@@ -83,7 +83,8 @@ export class CrunchworkService {
       },
     });
 
-    const url = `${creds.baseUrl}${options.path}`;
+    const restBase = creds.baseApi || creds.baseUrl;
+    const url = `${restBase.replace(/\/$/, '')}${options.path}`;
     this.logger.debug(`CrunchworkService.request — ${options.method} ${url}`);
 
     const response = await firstValueFrom(
@@ -94,11 +95,30 @@ export class CrunchworkService {
           Authorization: `Bearer ${token}`,
           'active-tenant-id': creds.activeTenantId,
           'Content-Type': 'application/json',
+          Accept: 'application/json',
         },
         data: options.body,
         params: options.params,
       }),
     );
+
+    const contentType = String(
+      response.headers?.['content-type'] ?? response.headers?.['Content-Type'] ?? '',
+    ).toLowerCase();
+    const looksLikeHtml =
+      typeof response.data === 'string' &&
+      /^\s*<(?:!doctype|html|head|body)/i.test(response.data);
+
+    if ((contentType && !contentType.includes('json')) || looksLikeHtml) {
+      this.logger.error(
+        `CrunchworkService.request — non-JSON response from ${options.method} ${url} (content-type="${contentType}"). ` +
+          `Likely baseApi is misconfigured on the connection (falling back to the web SPA host).`,
+      );
+      throw new InternalServerErrorException(
+        `CrunchworkService.request — expected JSON but received "${contentType || 'unknown'}". ` +
+          `Check integration_connections.base_api for connection ${options.connectionId}.`,
+      );
+    }
 
     return response.data;
   }

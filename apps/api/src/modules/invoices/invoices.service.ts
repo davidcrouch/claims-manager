@@ -52,14 +52,13 @@ export class InvoicesService {
   }
 
   async create(params: { body: Record<string, unknown> }) {
-    const crunchworkTenantId = this.tenantContext.getCrunchworkTenantId();
-    const connectionId = await this.resolveConnectionId(crunchworkTenantId);
+    const tenantId = this.tenantContext.getTenantId();
+    const connectionId = await this.resolveConnectionId(tenantId);
     const apiInvoice = await this.crunchworkService.createInvoice({
       connectionId,
       body: params.body,
     });
 
-    const tenantId = this.tenantContext.getTenantId();
     const apiObj = apiInvoice as Record<string, unknown>;
     const toNum = (v: unknown) => (v != null ? String(v) : undefined);
     const insertData: InvoiceInsert = {
@@ -80,8 +79,8 @@ export class InvoicesService {
     const existing = await this.findOne({ id: params.id });
     if (!existing) return null;
 
-    const crunchworkTenantId = this.tenantContext.getCrunchworkTenantId();
-    const connectionId = await this.resolveConnectionId(crunchworkTenantId);
+    const tenantId = this.tenantContext.getTenantId();
+    const connectionId = await this.resolveConnectionId(tenantId);
     const apiInvoice = await this.crunchworkService.updateInvoice({
       connectionId,
       invoiceId: params.id,

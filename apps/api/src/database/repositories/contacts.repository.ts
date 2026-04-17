@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
 import { eq, and, or, ilike, asc, sql } from 'drizzle-orm';
 import { DRIZZLE } from '../drizzle.module';
-import type { DrizzleDB } from '../drizzle.module';
+import type { DrizzleDB, DrizzleDbOrTx } from '../drizzle.module';
 import { contacts } from '../schema';
 
 export type ContactRow = typeof contacts.$inferSelect;
@@ -31,7 +31,7 @@ export class ContactsRepository {
             ilike(contacts.lastName, searchPattern),
             ilike(contacts.email, searchPattern),
             ilike(contacts.mobilePhone, searchPattern),
-          )!,
+          ),
         )
       : eq(contacts.tenantId, params.tenantId);
 
@@ -53,12 +53,61 @@ export class ContactsRepository {
     return { data, total };
   }
 
-  async findOne(params: { id: string; tenantId: string }): Promise<ContactRow | null> {
+  async findOne(params: {
+    id: string;
+    tenantId: string;
+  }): Promise<ContactRow | null> {
     const [row] = await this.db
       .select()
       .from(contacts)
-      .where(and(eq(contacts.id, params.id), eq(contacts.tenantId, params.tenantId)))
+      .where(
+        and(eq(contacts.id, params.id), eq(contacts.tenantId, params.tenantId)),
+      )
       .limit(1);
     return row ?? null;
+  }
+
+  async findByExternalReference(params: {
+    tenantId: string;
+    externalReference: string;
+    tx?: DrizzleDbOrTx;
+  }): Promise<ContactRow | null> {
+    const db = params.tx ?? this.db;
+    const [row] = await db
+      .select()
+      .from(contacts)
+      .where(
+        and(
+          eq(contacts.tenantId, params.tenantId),
+          eq(contacts.externalReference, params.externalReference),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
+  /**
+   * Idempotent upsert keyed on `(tenant_id, external_reference)` — matches the
+   * `UQ_contacts_tenant_extref` unique index. Callers must pass a non-empty
+   * `externalReference`; contacts without an external reference are not
+   * projected by the webhook pipeline (see docs/mapping/claims.md §7.1).
+   */
+  async upsertByExternalReference(params: {
+    data: ContactInsert & { externalReference: string };
+    tx?: DrizzleDbOrTx;
+  }): Promise<ContactRow> {
+    const db = params.tx ?? this.db;
+    const updateSet: Partial<ContactInsert> = { ...params.data };
+    delete updateSet.externalReference;
+    delete updateSet.tenantId;
+    const [row] = await db
+      .insert(contacts)
+      .values(params.data)
+      .onConflictDoUpdate({
+        target: [contacts.tenantId, contacts.externalReference],
+        set: { ...updateSet, updatedAt: new Date() },
+      })
+      .returning();
+    return row;
   }
 }

@@ -1,5 +1,7 @@
 name: Deploy Production
 
+# Production is opt-in: only runs when you push a semver tag (e.g. v1.2.3).
+# Until then, apply only staging Terraform / deploy only staging workflows.
 on:
   push:
     tags: ["v*.*.*"]

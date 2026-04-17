@@ -197,6 +197,7 @@ export interface ProviderConnection {
   environment: string;
   authType: string;
   baseUrl: string;
+  baseApi: string | null;
   authUrl: string | null;
   clientIdentifier: string | null;
   providerTenantId: string | null;
@@ -242,6 +243,7 @@ export interface CreateProviderPayload {
     name: string;
     environment: string;
     baseUrl: string;
+    baseApi?: string;
     authUrl?: string;
     authType?: string;
     clientIdentifier?: string;
@@ -262,6 +264,7 @@ export interface CreateConnectionPayload {
   name: string;
   environment: string;
   baseUrl: string;
+  baseApi?: string;
   authUrl?: string;
   authType?: string;
   clientIdentifier?: string;
@@ -275,6 +278,7 @@ export interface UpdateConnectionPayload {
   name?: string;
   environment?: string;
   baseUrl?: string;
+  baseApi?: string;
   authUrl?: string;
   authType?: string;
   clientIdentifier?: string;

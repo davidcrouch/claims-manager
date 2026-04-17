@@ -4,17 +4,13 @@ import {
   Injectable,
   NestInterceptor,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Observable } from 'rxjs';
 import { TenantContext } from './tenant-context';
 import { AuthenticatedUser } from '../auth/interfaces/authenticated-user.interface';
 
 @Injectable()
 export class TenantInterceptor implements NestInterceptor {
-  constructor(
-    private readonly tenantContext: TenantContext,
-    private readonly configService: ConfigService,
-  ) {}
+  constructor(private readonly tenantContext: TenantContext) {}
 
   async intercept(
     context: ExecutionContext,
@@ -23,15 +19,10 @@ export class TenantInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest();
     const user = request.user as AuthenticatedUser | undefined;
     const headerTenantId = request.headers?.['x-tenant-id'] as string | undefined;
-    const orgCode = user?.tenantId || headerTenantId;
+    const tenantId = user?.tenantId || headerTenantId;
 
-    if (orgCode) {
-      const crunchworkTenantId =
-        this.configService.get<string>('crunchwork.vendorTenantId') || orgCode;
-      this.tenantContext.setTenant({
-        tenantId: orgCode,
-        crunchworkTenantId,
-      });
+    if (tenantId) {
+      this.tenantContext.setTenant({ tenantId });
     }
 
     return next.handle();

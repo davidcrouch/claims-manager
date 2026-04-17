@@ -11,6 +11,12 @@ import { CrunchworkInvoiceMapper } from './mappers/crunchwork-invoice.mapper';
 import { CrunchworkTaskMapper } from './mappers/crunchwork-task.mapper';
 import { CrunchworkMessageMapper } from './mappers/crunchwork-message.mapper';
 import { CrunchworkAttachmentMapper } from './mappers/crunchwork-attachment.mapper';
+import { CrunchworkQuoteMapper } from './mappers/crunchwork-quote.mapper';
+import { CrunchworkReportMapper } from './mappers/crunchwork-report.mapper';
+import { CrunchworkAppointmentMapper } from './mappers/crunchwork-appointment.mapper';
+import { EntityMapperRegistry } from './entity-mapper.registry';
+import { InProcessProjectionService } from './in-process-projection.service';
+import { ParentRecoveryService } from './parent-recovery.service';
 import { CrunchworkModule } from '../../crunchwork/crunchwork.module';
 import { More0Module } from '../../more0/more0.module';
 
@@ -22,6 +28,9 @@ const mappers = [
   CrunchworkTaskMapper,
   CrunchworkMessageMapper,
   CrunchworkAttachmentMapper,
+  CrunchworkQuoteMapper,
+  CrunchworkReportMapper,
+  CrunchworkAppointmentMapper,
 ];
 
 @Module({
@@ -32,6 +41,9 @@ const mappers = [
     NestedEntityExtractor,
     LookupResolver,
     ConnectionResolverService,
+    EntityMapperRegistry,
+    InProcessProjectionService,
+    ParentRecoveryService,
     ...mappers,
   ],
   exports: [
@@ -39,6 +51,9 @@ const mappers = [
     NestedEntityExtractor,
     LookupResolver,
     ConnectionResolverService,
+    EntityMapperRegistry,
+    InProcessProjectionService,
+    ParentRecoveryService,
     ...mappers,
   ],
 })

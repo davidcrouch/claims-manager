@@ -1,8 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
 import { eq, and, isNull, desc, sql, gte } from 'drizzle-orm';
-import { DRIZZLE } from '../drizzle.module';
-import type { DrizzleDB } from '../drizzle.module';
+import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { jobs, lookupValues } from '../schema';
 
 export type JobRow = typeof jobs.$inferSelect;
@@ -22,7 +21,10 @@ export class JobsRepository {
     const limit = Math.min(params.limit ?? 20, 100);
     const skip = (page - 1) * limit;
 
-    const baseWhere = and(eq(jobs.tenantId, params.tenantId), isNull(jobs.deletedAt));
+    const baseWhere = and(
+      eq(jobs.tenantId, params.tenantId),
+      isNull(jobs.deletedAt),
+    );
     const whereClause = params.claimId
       ? and(baseWhere, eq(jobs.claimId, params.claimId))
       : baseWhere;
@@ -45,7 +47,10 @@ export class JobsRepository {
     return { data, total };
   }
 
-  async findOne(params: { id: string; tenantId: string }): Promise<JobRow | null> {
+  async findOne(params: {
+    id: string;
+    tenantId: string;
+  }): Promise<JobRow | null> {
     const [row] = await this.db
       .select()
       .from(jobs)
@@ -54,20 +59,68 @@ export class JobsRepository {
     return row ?? null;
   }
 
-  async findByIdAndTenant(params: { id: string; tenantId: string }): Promise<JobRow | null> {
+  async findByIdAndTenant(params: {
+    id: string;
+    tenantId: string;
+  }): Promise<JobRow | null> {
     return this.findOne(params);
   }
 
-  async create(params: { data: JobInsert }): Promise<JobRow> {
-    const [inserted] = await this.db.insert(jobs).values(params.data).returning();
-    return inserted!;
+  async create(params: {
+    data: JobInsert;
+    tx?: DrizzleDbOrTx;
+  }): Promise<JobRow> {
+    const db = params.tx ?? this.db;
+    const [inserted] = await db.insert(jobs).values(params.data).returning();
+    return inserted;
+  }
+
+  /**
+   * Race-safe insert. Returns the inserted row, or `null` if the unique
+   * constraint on `(tenant_id, external_reference)` already held a row
+   * (concurrent writer won the race). Callers should re-read by
+   * `findByExternalReference` when `null` is returned and switch to update.
+   */
+  async createIfNotExists(params: {
+    data: JobInsert;
+    tx?: DrizzleDbOrTx;
+  }): Promise<JobRow | null> {
+    const db = params.tx ?? this.db;
+    const [inserted] = await db
+      .insert(jobs)
+      .values(params.data)
+      .onConflictDoNothing()
+      .returning();
+    return inserted ?? null;
+  }
+
+  async findByExternalReference(params: {
+    tenantId: string;
+    externalReference: string;
+    tx?: DrizzleDbOrTx;
+  }): Promise<JobRow | null> {
+    const db = params.tx ?? this.db;
+    const [row] = await db
+      .select()
+      .from(jobs)
+      .where(
+        and(
+          eq(jobs.tenantId, params.tenantId),
+          eq(jobs.externalReference, params.externalReference),
+          isNull(jobs.deletedAt),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
   }
 
   async update(params: {
     id: string;
     data: Partial<JobInsert>;
+    tx?: DrizzleDbOrTx;
   }): Promise<JobRow | null> {
-    const [updated] = await this.db
+    const db = params.tx ?? this.db;
+    const [updated] = await db
       .update(jobs)
       .set({ ...params.data, updatedAt: new Date() })
       .where(eq(jobs.id, params.id))
@@ -104,7 +157,9 @@ export class JobsRepository {
   }): Promise<{ status: string; count: string }[]> {
     const result = await this.db
       .select({
-        status: sql<string>`COALESCE(${lookupValues.name}, 'Unknown')`.as('status'),
+        status: sql<string>`COALESCE(${lookupValues.name}, 'Unknown')`.as(
+          'status',
+        ),
         count: sql<string>`COUNT(*)::text`.as('count'),
       })
       .from(jobs)

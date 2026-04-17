@@ -4,7 +4,6 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  IsUrl,
   validateSync,
 } from 'class-validator';
 
@@ -18,25 +17,17 @@ export class EnvironmentVariables {
   @IsNotEmpty()
   DATABASE_URL: string;
 
-  @IsUrl()
+  @IsString()
   @IsOptional()
-  CRUNCHWORK_AUTH_URL?: string;
-
-  @IsUrl()
-  @IsOptional()
-  CRUNCHWORK_BASE_URL?: string;
+  MORE0_ENABLED?: string;
 
   @IsString()
   @IsOptional()
-  CRUNCHWORK_CLIENT_ID?: string;
+  MORE0_API_KEY?: string;
 
   @IsString()
   @IsOptional()
-  CRUNCHWORK_CLIENT_SECRET?: string;
-
-  @IsString()
-  @IsOptional()
-  CRUNCHWORK_HMAC_KEY?: string;
+  WEBHOOK_INPROC_MAPPING_ENABLED?: string;
 }
 
 export function validate(config: Record<string, unknown>) {
@@ -45,7 +36,9 @@ export function validate(config: Record<string, unknown>) {
   });
   const errors = validateSync(validated, { skipMissingProperties: true });
   if (errors.length > 0) {
-    throw new Error(`[Config.validate] Invalid environment: ${errors.toString()}`);
+    throw new Error(
+      `[Config.validate] Invalid environment: ${errors.toString()}`,
+    );
   }
   return validated;
 }
