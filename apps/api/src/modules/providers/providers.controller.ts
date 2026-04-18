@@ -3,15 +3,13 @@ import {
   Get,
   Post,
   Put,
-  Delete,
   Param,
   Body,
   Query,
 } from '@nestjs/common';
 import { ProvidersService } from './providers.service';
-import { CreateProviderDto } from './dto/create-provider.dto';
-import { UpdateProviderDto, UpdateConnectionDto } from './dto/update-provider.dto';
-import { CreateConnectionDto } from './dto/create-provider.dto';
+import { CreateConnectionDto } from './dto/create-connection.dto';
+import { UpdateConnectionDto } from './dto/update-connection.dto';
 import { TenantContext } from '../../tenant/tenant-context';
 
 @Controller('providers')
@@ -27,68 +25,57 @@ export class ProvidersController {
     return this.providersService.findAll(tenantId);
   }
 
-  @Get(':id')
-  async findOne(@Param('id') id: string) {
-    return this.providersService.findOne({ id });
-  }
-
-  @Post()
-  async create(@Body() dto: CreateProviderDto) {
+  @Get(':code')
+  async findOne(@Param('code') code: string) {
     const tenantId = this.tenantContext.getTenantId();
-    return this.providersService.create(dto, tenantId);
+    return this.providersService.findOne({ code, tenantId });
   }
 
-  @Put(':id')
-  async update(@Param('id') id: string, @Body() dto: UpdateProviderDto) {
-    return this.providersService.update({ id, dto });
+  @Get(':code/connections')
+  async findConnections(@Param('code') code: string) {
+    const tenantId = this.tenantContext.getTenantId();
+    return this.providersService.findConnections({
+      providerCode: code,
+      tenantId,
+    });
   }
 
-  @Delete(':id')
-  async deactivate(@Param('id') id: string) {
-    return this.providersService.deactivate({ id });
-  }
-
-  @Get(':id/connections')
-  async findConnections(@Param('id') id: string) {
-    return this.providersService.findConnections({ providerId: id });
-  }
-
-  @Post(':id/connections')
+  @Post(':code/connections')
   async createConnection(
-    @Param('id') id: string,
+    @Param('code') code: string,
     @Body() dto: CreateConnectionDto,
   ) {
     const tenantId = this.tenantContext.getTenantId();
     return this.providersService.createConnection({
-      providerId: id,
+      providerCode: code,
       tenantId,
       dto,
     });
   }
 
-  @Put(':id/connections/:connId')
+  @Put(':code/connections/:connId')
   async updateConnection(
-    @Param('id') id: string,
+    @Param('code') code: string,
     @Param('connId') connId: string,
     @Body() dto: UpdateConnectionDto,
   ) {
     return this.providersService.updateConnection({
-      providerId: id,
+      providerCode: code,
       connectionId: connId,
       dto,
     });
   }
 
-  @Get(':id/webhook-events')
+  @Get(':code/webhook-events')
   async findWebhookEvents(
-    @Param('id') id: string,
+    @Param('code') code: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('status') status?: string,
   ) {
     const tenantId = this.tenantContext.getTenantId();
     return this.providersService.findWebhookEvents({
-      providerId: id,
+      providerCode: code,
       tenantId,
       status,
       page: page ? parseInt(page, 10) : undefined,

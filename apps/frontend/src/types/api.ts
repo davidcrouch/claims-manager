@@ -164,35 +164,38 @@ export interface Appointment {
   status?: string | null;
 }
 
+/**
+ * Provider identifier is the stable slug (e.g. 'crunchwork'), not a UUID.
+ * Providers are hardcoded in `apps/api/src/modules/providers/provider-registry.ts`;
+ * the `id` field mirrors `code` for historical URL compatibility.
+ */
 export interface ProviderSummary {
   id: string;
   code: string;
   name: string;
+  description?: string;
   isActive: boolean;
   metadata: Record<string, unknown>;
   connectionCount: number;
   totalWebhookEvents: number;
   recentErrorCount: number;
   lastEventAt: string | null;
-  createdAt: string;
-  updatedAt: string;
 }
 
 export interface Provider {
   id: string;
   code: string;
   name: string;
+  description?: string;
   isActive: boolean;
   metadata: Record<string, unknown>;
-  createdAt: string;
-  updatedAt: string;
   connections: ProviderConnection[];
 }
 
 export interface ProviderConnection {
   id: string;
   tenantId: string;
-  providerId: string;
+  providerCode: string;
   name: string;
   environment: string;
   authType: string;
@@ -208,6 +211,40 @@ export interface ProviderConnection {
   lastSyncAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Connection summary returned by `GET /connections` — excludes sensitive fields
+ * (credentials, webhookSecret, config) which are only returned by the detail
+ * endpoint.
+ */
+export interface ConnectionSummary {
+  id: string;
+  tenantId: string;
+  providerCode: string;
+  providerName: string;
+  providerIsActive: boolean;
+  name: string;
+  environment: string;
+  isActive: boolean;
+  clientIdentifier: string | null;
+  providerTenantId: string | null;
+  baseUrl: string;
+  baseApi: string | null;
+  authUrl: string | null;
+  authType: string;
+  createdAt: string;
+  updatedAt: string;
+  totalWebhookEvents: number;
+  recentErrorCount: number;
+  lastEventAt: string | null;
+}
+
+export interface ConnectionDetail extends ConnectionSummary {
+  credentials: Record<string, unknown>;
+  webhookSecret: string | null;
+  config: Record<string, unknown>;
+  lastSyncAt: string | null;
 }
 
 export interface WebhookEvent {
@@ -227,37 +264,10 @@ export interface WebhookEvent {
   processingError: string | null;
   processedAt: string | null;
   connectionId: string | null;
-  providerId: string | null;
   providerCode: string | null;
   providerEntityType: string | null;
   retryCount: number;
   createdAt: string;
-}
-
-export interface CreateProviderPayload {
-  code: string;
-  name: string;
-  isActive?: boolean;
-  metadata?: Record<string, unknown>;
-  connection?: {
-    name: string;
-    environment: string;
-    baseUrl: string;
-    baseApi?: string;
-    authUrl?: string;
-    authType?: string;
-    clientIdentifier?: string;
-    providerTenantId?: string;
-    credentials?: Record<string, unknown>;
-    webhookSecret?: string;
-    config?: Record<string, unknown>;
-  };
-}
-
-export interface UpdateProviderPayload {
-  name?: string;
-  isActive?: boolean;
-  metadata?: Record<string, unknown>;
 }
 
 export interface CreateConnectionPayload {

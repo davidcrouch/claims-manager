@@ -40,7 +40,6 @@ export class WebhooksService implements OnModuleInit {
     connectionId: string;
     tenantId: string;
     providerCode: string;
-    providerId: string;
   } | null> {
     if (!params.payloadTenantId || !params.payloadClient) {
       return null;
@@ -61,8 +60,7 @@ export class WebhooksService implements OnModuleInit {
     return {
       connectionId: connection.id,
       tenantId: connection.tenantId,
-      providerCode: 'crunchwork',
-      providerId: connection.providerId,
+      providerCode: connection.providerCode,
     };
   }
 
@@ -82,7 +80,6 @@ export class WebhooksService implements OnModuleInit {
     tenantId?: string;
     connectionId?: string;
     providerCode?: string;
-    providerId?: string;
   }) {
     const payload = JSON.parse(params.rawBody);
     const entityType = ExternalToolsController.resolveEntityType(payload.type);
@@ -105,7 +102,6 @@ export class WebhooksService implements OnModuleInit {
       rawBodyJson: payload,
       processingStatus: 'pending',
       connectionId: params.connectionId,
-      providerId: params.providerId,
       providerCode: params.providerCode,
       providerEntityType: entityType,
     };
@@ -126,7 +122,7 @@ export class WebhooksService implements OnModuleInit {
     eventId: string;
     tenantId: string;
     connectionId: string;
-    providerId: string;
+    providerCode: string;
     eventType: string;
     providerEntityId: string;
     eventTimestamp?: Date;
@@ -170,8 +166,7 @@ export class WebhooksService implements OnModuleInit {
           await this.externalObjectService.upsertFromFetch({
             tenantId: params.tenantId,
             connectionId: params.connectionId,
-            providerId: params.providerId,
-            providerCode: 'crunchwork',
+            providerCode: params.providerCode,
             providerEntityType: entityType,
             providerEntityId: params.providerEntityId,
             normalizedEntityType: entityType,

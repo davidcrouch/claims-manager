@@ -86,8 +86,7 @@ export async function loadCrunchworkConnection(
          LIMIT 1`
       : `SELECT ic.id, ic.auth_url, ic.base_url, ic.credentials, ic.provider_tenant_id, ic.client_identifier, ic.webhook_secret
          FROM integration_connections ic
-         JOIN integration_providers ip ON ip.id = ic.provider_id
-         WHERE ip.code = 'crunchwork' AND ic.is_active = true
+         WHERE ic.provider_code = 'crunchwork' AND ic.is_active = true
          ORDER BY ic.updated_at DESC
          LIMIT 1`;
     const result = await pool.query(

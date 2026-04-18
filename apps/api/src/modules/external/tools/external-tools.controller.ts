@@ -101,7 +101,6 @@ export class ExternalToolsController {
     body: {
       tenantId: string;
       connectionId: string;
-      providerId?: string;
       providerCode: string;
       providerEntityType: string;
       providerEntityId: string;
@@ -123,7 +122,6 @@ export class ExternalToolsController {
     const result = await this.externalObjectService.upsertFromFetch({
       tenantId: body.tenantId,
       connectionId: body.connectionId,
-      providerId: body.providerId,
       providerCode: body.providerCode,
       providerEntityType: body.providerEntityType,
       providerEntityId: body.providerEntityId,

@@ -77,28 +77,28 @@ export class InboundWebhookEventsRepository {
   /**
    * Build a WHERE condition matching events belonging to a provider+tenant.
    * Matches events where:
-   *  - provider_id is set directly, OR
+   *  - provider_code is set directly, OR
    *  - connection_id belongs to one of the provider's connections (tenant-scoped)
    */
-  private providerTenantCondition(providerId: string, tenantId: string) {
+  private providerTenantCondition(providerCode: string, tenantId: string) {
     const connectionIds = this.db
       .select({ id: integrationConnections.id })
       .from(integrationConnections)
       .where(
         and(
-          eq(integrationConnections.providerId, providerId),
+          eq(integrationConnections.providerCode, providerCode),
           eq(integrationConnections.tenantId, tenantId),
         ),
       );
 
     return or(
-      eq(inboundWebhookEvents.providerId, providerId),
+      eq(inboundWebhookEvents.providerCode, providerCode),
       inArray(inboundWebhookEvents.connectionId, connectionIds),
     )!;
   }
 
-  async findByProviderId(params: {
-    providerId: string;
+  async findByProviderCode(params: {
+    providerCode: string;
     tenantId: string;
     status?: string;
     page?: number;
@@ -107,7 +107,7 @@ export class InboundWebhookEventsRepository {
     const limit = params.limit ?? 20;
     const offset = ((params.page ?? 1) - 1) * limit;
 
-    const ownership = this.providerTenantCondition(params.providerId, params.tenantId);
+    const ownership = this.providerTenantCondition(params.providerCode, params.tenantId);
     const whereClause = params.status
       ? and(ownership, eq(inboundWebhookEvents.processingStatus, params.status))!
       : ownership;
@@ -129,32 +129,119 @@ export class InboundWebhookEventsRepository {
     return { data, total: countResult[0]?.count ?? 0 };
   }
 
-  async countByProviderId(params: { providerId: string; tenantId: string }): Promise<number> {
-    const [result] = await this.db
-      .select({ count: drizzleCount() })
-      .from(inboundWebhookEvents)
-      .where(this.providerTenantCondition(params.providerId, params.tenantId));
-    return result?.count ?? 0;
+  async findByConnectionId(params: {
+    connectionId: string;
+    tenantId: string;
+    status?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{ data: InboundWebhookEventRow[]; total: number }> {
+    const limit = params.limit ?? 20;
+    const offset = ((params.page ?? 1) - 1) * limit;
+
+    const ownership = and(
+      eq(inboundWebhookEvents.connectionId, params.connectionId),
+      or(
+        eq(inboundWebhookEvents.tenantId, params.tenantId),
+        eq(inboundWebhookEvents.payloadTenantId, params.tenantId),
+      )!,
+    )!;
+    const whereClause = params.status
+      ? and(ownership, eq(inboundWebhookEvents.processingStatus, params.status))!
+      : ownership;
+
+    const [data, countResult] = await Promise.all([
+      this.db
+        .select()
+        .from(inboundWebhookEvents)
+        .where(whereClause)
+        .orderBy(desc(inboundWebhookEvents.createdAt))
+        .limit(limit)
+        .offset(offset),
+      this.db
+        .select({ count: drizzleCount() })
+        .from(inboundWebhookEvents)
+        .where(whereClause),
+    ]);
+
+    return { data, total: countResult[0]?.count ?? 0 };
   }
 
-  async countErrorsByProviderId(params: { providerId: string; tenantId: string }): Promise<number> {
+  async countByConnectionId(params: { connectionId: string; tenantId: string }): Promise<number> {
     const [result] = await this.db
       .select({ count: drizzleCount() })
       .from(inboundWebhookEvents)
       .where(
         and(
-          this.providerTenantCondition(params.providerId, params.tenantId),
+          eq(inboundWebhookEvents.connectionId, params.connectionId),
+          or(
+            eq(inboundWebhookEvents.tenantId, params.tenantId),
+            eq(inboundWebhookEvents.payloadTenantId, params.tenantId),
+          )!,
+        ),
+      );
+    return result?.count ?? 0;
+  }
+
+  async countErrorsByConnectionId(params: { connectionId: string; tenantId: string }): Promise<number> {
+    const [result] = await this.db
+      .select({ count: drizzleCount() })
+      .from(inboundWebhookEvents)
+      .where(
+        and(
+          eq(inboundWebhookEvents.connectionId, params.connectionId),
+          or(
+            eq(inboundWebhookEvents.tenantId, params.tenantId),
+            eq(inboundWebhookEvents.payloadTenantId, params.tenantId),
+          )!,
           eq(inboundWebhookEvents.processingStatus, 'failed'),
         ),
       );
     return result?.count ?? 0;
   }
 
-  async lastEventAtByProviderId(params: { providerId: string; tenantId: string }): Promise<Date | null> {
+  async lastEventAtByConnectionId(params: { connectionId: string; tenantId: string }): Promise<Date | null> {
     const [result] = await this.db
       .select({ lastAt: max(inboundWebhookEvents.createdAt) })
       .from(inboundWebhookEvents)
-      .where(this.providerTenantCondition(params.providerId, params.tenantId));
+      .where(
+        and(
+          eq(inboundWebhookEvents.connectionId, params.connectionId),
+          or(
+            eq(inboundWebhookEvents.tenantId, params.tenantId),
+            eq(inboundWebhookEvents.payloadTenantId, params.tenantId),
+          )!,
+        ),
+      );
+    return result?.lastAt ?? null;
+  }
+
+  async countByProviderCode(params: { providerCode: string; tenantId: string }): Promise<number> {
+    const [result] = await this.db
+      .select({ count: drizzleCount() })
+      .from(inboundWebhookEvents)
+      .where(this.providerTenantCondition(params.providerCode, params.tenantId));
+    return result?.count ?? 0;
+  }
+
+  async countErrorsByProviderCode(params: { providerCode: string; tenantId: string }): Promise<number> {
+    const [result] = await this.db
+      .select({ count: drizzleCount() })
+      .from(inboundWebhookEvents)
+      .where(
+        and(
+          this.providerTenantCondition(params.providerCode, params.tenantId),
+          eq(inboundWebhookEvents.processingStatus, 'failed'),
+        ),
+      );
+    return result?.count ?? 0;
+  }
+
+  async lastEventAtByProviderCode(params: { providerCode: string; tenantId: string }): Promise<Date | null> {
+    const [result] = await this.db
+      .select({ lastAt: max(inboundWebhookEvents.createdAt) })
+      .from(inboundWebhookEvents)
+      .where(this.providerTenantCondition(params.providerCode, params.tenantId));
     return result?.lastAt ?? null;
   }
 }

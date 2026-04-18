@@ -104,6 +104,16 @@
   Refreshed the **claims list screen** with cleaner filtering and updated provider editing screens for consistency.
   Authored mapping and orchestration **documentation** for the team plus an internal time-tracking invoice tool.
 
+- `2026-04-18` `PENDING` **6 h**
+  `47 files | +8 775 −2 374 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
+  Lay summary: Replaced the old "add your own partner" screens with a built-in list of supported partner systems and tailored connection forms, so staff configure partner links instead of defining the partners themselves.
+  **Hardcoded provider catalogue and connection-focused management UI.** Replaced the previous generic partner management screens with a **built-in catalogue** of supported partner systems so staff no longer maintain partner records by hand.
+  Introduced **partner-specific connection forms** so each partner link is configured using the exact fields that partner actually needs.
+  Refreshed the **back-office API** with new endpoints for managing connections, matching the simplified model end-to-end.
+  Retired the **unused partner records table** with a safe database migration, reducing surface area and keeping the schema focused.
+  Delivered a **design specification** describing the new hardcoded-partner model so the team has a single reference for future changes.
+  Added **automated tests** covering the updated partner service to guard the refactor going forward.
+
 - `2026-04-18` `1d41703` **4 h**
   `17 files | +7 242 −36 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Tightened how customer identity is stored and linked across claims records so partner updates always land against the correct customer, with safeguards against accidentally pointing services at the wrong database.

@@ -1,8 +1,11 @@
 # Database Seeds
 
 Idempotent seed framework for `claims_manager`. Used for first-party
-reference data that the app needs in order to function (e.g. the
-`integration_providers` row for `crunchwork`).
+reference data that the app needs in order to function.
+
+> As of migration `0004_drop_integration_providers`, the provider catalogue
+> is **hardcoded in source** (`src/modules/providers/provider-registry.ts`)
+> rather than seeded. There are currently no seed entries registered.
 
 ## Commands
 
@@ -30,8 +33,7 @@ seeds/
   lib/
     db.ts       # pg.Pool + drizzle connection helper
     runner.ts   # Seed type + runSeeds() orchestrator
-  entries/
-    integration-providers.seed.ts   # first-party integration providers
+  entries/      # (currently empty)
   index.ts      # seed-only entry point (registers + runs)
   flush.ts      # flush entry point (drop -> migrate -> seed)
 ```
@@ -62,7 +64,7 @@ seeds/
 
    ```ts
    import mySeed from './entries/<name>.seed';
-   const SEEDS: Seed[] = [integrationProviders, mySeed];
+   const SEEDS: Seed[] = [mySeed];
    ```
 
 3. Run `pnpm --filter api run db:seed` to apply.
@@ -70,15 +72,17 @@ seeds/
 ## Idempotency rules
 
 - Every seed must be safe to run multiple times.
-- Prefer upserts keyed on a unique column (e.g. `integration_providers.code`).
+- Prefer upserts keyed on a unique column.
 - Never issue unconditional `INSERT` without conflict handling.
 
 ## What is (and isn't) seeded
 
 | Table | Seeded? | Why |
 |---|---|---|
-| `integration_providers` | **Yes** (`crunchwork`) | Looked up by code from webhook handlers and entity mappers |
-| `organizations`, `users`, `user_identities`, `organization_users` | No — written by `apps/auth-server` on signup/login | |
 | `integration_connections` | No — per-tenant config; created via the UI/API | |
+| `organizations`, `users`, `user_identities`, `organization_users` | No — written by `apps/auth-server` on signup/login | |
 | `lookup_values` | No — auto-created on first webhook ingestion from `external_reference` values | |
 | All other tables | No — operational data | |
+
+> The former `integration_providers` table has been removed. Provider
+> metadata now lives in `apps/api/src/modules/providers/provider-registry.ts`.

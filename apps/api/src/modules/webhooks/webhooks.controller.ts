@@ -75,7 +75,6 @@ export class WebhooksController {
       tenantId: connection?.tenantId,
       connectionId: connection?.connectionId,
       providerCode: connection?.providerCode,
-      providerId: connection?.providerId,
     });
 
     this.logger.log(
@@ -94,7 +93,7 @@ export class WebhooksController {
           eventId: event.id,
           tenantId: connection.tenantId,
           connectionId: connection.connectionId,
-          providerId: connection.providerId,
+          providerCode: connection.providerCode,
           eventType: event.eventType,
           providerEntityId: event.payloadEntityId ?? '',
           eventTimestamp: event.eventTimestamp,

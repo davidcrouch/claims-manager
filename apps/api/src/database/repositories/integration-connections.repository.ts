@@ -2,7 +2,7 @@ import { Injectable, Inject } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
 import { DRIZZLE } from '../drizzle.module';
 import type { DrizzleDB } from '../drizzle.module';
-import { integrationConnections, integrationProviders } from '../schema';
+import { integrationConnections } from '../schema';
 
 export type IntegrationConnectionRow = typeof integrationConnections.$inferSelect;
 export type IntegrationConnectionInsert = typeof integrationConnections.$inferInsert;
@@ -25,21 +25,17 @@ export class IntegrationConnectionsRepository {
     providerCode: string;
   }): Promise<IntegrationConnectionRow | null> {
     const [row] = await this.db
-      .select({ connection: integrationConnections })
+      .select()
       .from(integrationConnections)
-      .innerJoin(
-        integrationProviders,
-        eq(integrationConnections.providerId, integrationProviders.id),
-      )
       .where(
         and(
           eq(integrationConnections.tenantId, params.tenantId),
-          eq(integrationProviders.code, params.providerCode),
+          eq(integrationConnections.providerCode, params.providerCode),
           eq(integrationConnections.isActive, true),
         ),
       )
       .limit(1);
-    return row?.connection ?? null;
+    return row ?? null;
   }
 
   async findByTenantIdAndClient(params: {
@@ -77,11 +73,26 @@ export class IntegrationConnectionsRepository {
     return inserted!;
   }
 
-  async findByProviderId(params: { providerId: string }): Promise<IntegrationConnectionRow[]> {
+  async findByProviderCode(params: { providerCode: string }): Promise<IntegrationConnectionRow[]> {
     return this.db
       .select()
       .from(integrationConnections)
-      .where(eq(integrationConnections.providerId, params.providerId));
+      .where(eq(integrationConnections.providerCode, params.providerCode));
+  }
+
+  async findByTenantAndProviderCode(params: {
+    tenantId: string;
+    providerCode: string;
+  }): Promise<IntegrationConnectionRow[]> {
+    return this.db
+      .select()
+      .from(integrationConnections)
+      .where(
+        and(
+          eq(integrationConnections.tenantId, params.tenantId),
+          eq(integrationConnections.providerCode, params.providerCode),
+        ),
+      );
   }
 
   async update(params: {

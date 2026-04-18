@@ -21,12 +21,9 @@ import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { sql } from 'drizzle-orm';
 import { openDb, getDbHost } from './lib/db';
 import { runSeeds } from './lib/runner';
-import integrationProviders from './entries/integration-providers.seed';
 import type { Seed } from './lib/runner';
 
-const SEEDS: Seed[] = [
-  integrationProviders,
-];
+const SEEDS: Seed[] = [];
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 

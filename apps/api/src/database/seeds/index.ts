@@ -10,11 +10,7 @@ import { openDb } from './lib/db';
 import { runSeeds } from './lib/runner';
 import type { Seed } from './lib/runner';
 
-import integrationProviders from './entries/integration-providers.seed';
-
-const SEEDS: Seed[] = [
-  integrationProviders,
-];
+const SEEDS: Seed[] = [];
 
 export async function seed(): Promise<void> {
   const { db, pool } = openDb();

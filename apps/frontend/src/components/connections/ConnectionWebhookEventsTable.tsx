@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { fetchProviderWebhookEventsAction } from '@/app/(app)/providers/actions';
+import { fetchConnectionWebhookEventsAction } from '@/app/(app)/connections/actions';
 import type { WebhookEvent, PaginatedResponse } from '@/types/api';
 
 function statusVariant(status: string): 'active' | 'inactive' | 'custom' {
@@ -30,14 +30,14 @@ function formatTimestamp(iso: string): string {
   });
 }
 
-export interface WebhookEventsTableProps {
-  providerId: string;
+export interface ConnectionWebhookEventsTableProps {
+  connectionId: string;
 }
 
-export function WebhookEventsTable({ providerId }: WebhookEventsTableProps) {
-  const [data, setData] = useState<PaginatedResponse<WebhookEvent> | null>(
-    null,
-  );
+export function ConnectionWebhookEventsTable({
+  connectionId,
+}: ConnectionWebhookEventsTableProps) {
+  const [data, setData] = useState<PaginatedResponse<WebhookEvent> | null>(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('all');
@@ -46,14 +46,14 @@ export function WebhookEventsTable({ providerId }: WebhookEventsTableProps) {
 
   const fetchEvents = useCallback(async () => {
     setLoading(true);
-    const result = await fetchProviderWebhookEventsAction(providerId, {
+    const result = await fetchConnectionWebhookEventsAction(connectionId, {
       page,
       limit,
       status: statusFilter === 'all' ? undefined : statusFilter,
     });
     setData(result);
     setLoading(false);
-  }, [providerId, page, statusFilter]);
+  }, [connectionId, page, statusFilter]);
 
   useEffect(() => {
     void fetchEvents();

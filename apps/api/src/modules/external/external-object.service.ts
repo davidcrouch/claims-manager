@@ -21,7 +21,6 @@ export class ExternalObjectService {
   async upsertFromFetch(params: {
     tenantId: string;
     connectionId: string;
-    providerId?: string;
     providerCode: string;
     providerEntityType: string;
     providerEntityId: string;
@@ -69,7 +68,6 @@ export class ExternalObjectService {
         data: {
           tenantId: params.tenantId,
           connectionId: params.connectionId,
-          providerId: params.providerId,
           providerCode: params.providerCode,
           providerEntityType: params.providerEntityType,
           providerEntityId: params.providerEntityId,

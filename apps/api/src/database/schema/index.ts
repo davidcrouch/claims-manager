@@ -838,18 +838,9 @@ export const organizationUsers = pgTable(
   (t) => [unique('organization_users_user_organization_key').on(t.userId, t.organizationId)],
 );
 
-// Integration providers
-export const integrationProviders = pgTable('integration_providers', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  code: text('code').notNull().unique(),
-  name: text('name').notNull(),
-  isActive: boolean('is_active').notNull().default(true),
-  metadata: jsonb('metadata').notNull().default({}),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
 // Integration connections
+// Providers are hardcoded in `src/modules/providers/provider-registry.ts`;
+// `provider_code` is the stable slug identifying the provider.
 export const integrationConnections = pgTable(
   'integration_connections',
   {
@@ -857,7 +848,7 @@ export const integrationConnections = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
-    providerId: uuid('provider_id').notNull().references(() => integrationProviders.id),
+    providerCode: text('provider_code').notNull(),
     name: text('name').notNull().default(''),
     environment: text('environment').notNull(),
     authType: text('auth_type').notNull().default('client_credentials'),
@@ -875,8 +866,9 @@ export const integrationConnections = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex('UQ_connection_tenant_provider_env').on(t.tenantId, t.providerId, t.environment),
+    uniqueIndex('UQ_connection_tenant_provider_env').on(t.tenantId, t.providerCode, t.environment),
     index('idx_connections_tenant').on(t.tenantId),
+    index('idx_connections_provider_code').on(t.providerCode),
   ],
 );
 
@@ -889,7 +881,6 @@ export const externalObjects = pgTable(
       .notNull()
       .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     connectionId: uuid('connection_id').notNull().references(() => integrationConnections.id),
-    providerId: uuid('provider_id').references(() => integrationProviders.id),
     providerCode: text('provider_code').notNull(),
     providerEntityType: text('provider_entity_type').notNull(),
     providerEntityId: text('provider_entity_id').notNull(),
@@ -998,7 +989,6 @@ export const inboundWebhookEvents = pgTable(
     processingError: text('processing_error'),
     processedAt: timestamp('processed_at', { withTimezone: true }),
     connectionId: uuid('connection_id').references(() => integrationConnections.id),
-    providerId: uuid('provider_id').references(() => integrationProviders.id),
     providerCode: text('provider_code'),
     providerEntityType: text('provider_entity_type'),
     retryCount: integer('retry_count').notNull().default(0),
@@ -1007,7 +997,7 @@ export const inboundWebhookEvents = pgTable(
   (t) => [
     index('idx_webhooks_status').on(t.processingStatus, t.createdAt),
     index('idx_webhooks_connection_type_entity').on(t.connectionId, t.eventType, t.payloadEntityId),
-    index('idx_webhooks_provider_entity').on(t.providerId, t.providerEntityType),
+    index('idx_webhooks_provider_code_entity').on(t.providerCode, t.providerEntityType),
   ],
 );
 

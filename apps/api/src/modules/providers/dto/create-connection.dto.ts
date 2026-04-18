@@ -1,5 +1,4 @@
-import { IsString, IsOptional, IsBoolean, ValidateNested, IsIn } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsString, IsOptional, IsIn } from 'class-validator';
 
 export class CreateConnectionDto {
   @IsString()
@@ -41,24 +40,4 @@ export class CreateConnectionDto {
 
   @IsOptional()
   config?: Record<string, unknown>;
-}
-
-export class CreateProviderDto {
-  @IsString()
-  code: string;
-
-  @IsString()
-  name: string;
-
-  @IsOptional()
-  @IsBoolean()
-  isActive?: boolean;
-
-  @IsOptional()
-  metadata?: Record<string, unknown>;
-
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => CreateConnectionDto)
-  connection?: CreateConnectionDto;
 }

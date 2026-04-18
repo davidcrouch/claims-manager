@@ -68,11 +68,6 @@ export {
   type UserInsert,
 } from './users.repository';
 export {
-  IntegrationProvidersRepository,
-  type IntegrationProviderRow,
-  type IntegrationProviderInsert,
-} from './integration-providers.repository';
-export {
   IntegrationConnectionsRepository,
   type IntegrationConnectionRow,
   type IntegrationConnectionInsert,

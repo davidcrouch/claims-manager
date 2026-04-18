@@ -1,17 +1,4 @@
-import { IsString, IsOptional, IsBoolean } from 'class-validator';
-
-export class UpdateProviderDto {
-  @IsOptional()
-  @IsString()
-  name?: string;
-
-  @IsOptional()
-  @IsBoolean()
-  isActive?: boolean;
-
-  @IsOptional()
-  metadata?: Record<string, unknown>;
-}
+import { IsString, IsOptional } from 'class-validator';
 
 export class UpdateConnectionDto {
   @IsOptional()

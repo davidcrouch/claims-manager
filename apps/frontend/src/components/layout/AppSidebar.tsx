@@ -35,7 +35,7 @@ const navItems = [
   { title: 'Invoices', href: '/invoices', icon: Receipt },
   { title: 'Reports', href: '/reports', icon: ClipboardList },
   { title: 'Vendors', href: '/vendors', icon: Building2 },
-  { title: 'Providers', href: '/providers', icon: Unplug },
+  { title: 'Connections', href: '/connections', icon: Unplug },
 ] as const;
 
 export function AppSidebar() {
