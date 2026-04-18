@@ -38,6 +38,7 @@ export class WebhooksService implements OnModuleInit {
     payloadClient: string;
   }): Promise<{
     connectionId: string;
+    tenantId: string;
     providerCode: string;
     providerId: string;
   } | null> {
@@ -52,13 +53,14 @@ export class WebhooksService implements OnModuleInit {
 
     if (!connection) {
       this.logger.warn(
-        `WebhooksService.resolveConnection — no connection found for tenantId=${params.payloadTenantId} client=${params.payloadClient}`,
+        `WebhooksService.resolveConnection — no connection found for providerTenantId=${params.payloadTenantId} client=${params.payloadClient}`,
       );
       return null;
     }
 
     return {
       connectionId: connection.id,
+      tenantId: connection.tenantId,
       providerCode: 'crunchwork',
       providerId: connection.providerId,
     };
@@ -77,6 +79,7 @@ export class WebhooksService implements OnModuleInit {
     rawHeaders: Record<string, string>;
     signature: string;
     hmacVerified: boolean;
+    tenantId?: string;
     connectionId?: string;
     providerCode?: string;
     providerId?: string;
@@ -88,6 +91,7 @@ export class WebhooksService implements OnModuleInit {
       externalEventId: payload.id,
       eventType: payload.type,
       eventTimestamp: new Date(payload.timestamp),
+      tenantId: params.tenantId,
       payloadEntityId: payload.payload?.id?.toString() ?? null,
       payloadTeamIds: payload.payload?.teamIds || [],
       payloadTenantId: payload.payload?.tenantId,

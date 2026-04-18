@@ -22,6 +22,13 @@
       "when": 1776420851492,
       "tag": "0002_clever_morgan_stark",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1776470169340,
+      "tag": "0003_tenant_id_uuid_fk",
+      "breakpoints": true
     }
   ]
 }

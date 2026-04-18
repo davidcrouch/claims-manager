@@ -50,7 +50,7 @@ import { CommonModule } from './common/common.module';
         webhookConfig,
       ],
       validate,
-      envFilePath: ['.env', '../.env', '../../.env'],
+      envFilePath: ['.env'],
     }),
     DatabaseModule,
     ThrottlerModule.forRoot([

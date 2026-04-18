@@ -31,13 +31,39 @@ function buildDatabaseUrl(): string {
   );
 }
 
+const EXPECTED_DATABASE_NAME = 'claims_manager';
+
 /** Returns the database connection URL (from DATABASE_URL or built from DB_*). */
 export function getDatabaseUrl(): string {
   const url = process.env.DATABASE_URL ?? buildDatabaseUrl();
   if (!url || url.trim() === '') {
     throw new Error('auth-server:db:client - DATABASE_URL is not set and DB_* fallback is incomplete');
   }
+  assertExpectedDatabase(url);
   return url;
+}
+
+/**
+ * Fail fast if the resolved connection URL points at a database other than
+ * the one this app is expected to share with the claims-manager API. Guards
+ * against the auth-server silently reverting to a legacy platform database.
+ */
+function assertExpectedDatabase(connectionUrl: string): void {
+  const match = connectionUrl.match(
+    /^postgres(?:ql)?:\/\/[^@]+@[^/]+\/([^/?]+)/,
+  );
+  const actual = match?.[1];
+  if (!actual) {
+    throw new Error(
+      'auth-server:db:client - unable to parse database name from connection URL.',
+    );
+  }
+  if (actual !== EXPECTED_DATABASE_NAME) {
+    throw new Error(
+      `auth-server:db:client - connection URL points at database "${actual}" ` +
+        `but this app requires "${EXPECTED_DATABASE_NAME}". Refusing to start.`,
+    );
+  }
 }
 
 export function loadDatabaseConfig(): DatabaseConfig {

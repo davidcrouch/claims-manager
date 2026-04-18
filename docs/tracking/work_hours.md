@@ -103,3 +103,13 @@
   Expanded translation coverage for the main partner system with new appointment, quote, and report mappings plus a richer claim mapping.
   Refreshed the **claims list screen** with cleaner filtering and updated provider editing screens for consistency.
   Authored mapping and orchestration **documentation** for the team plus an internal time-tracking invoice tool.
+
+- `2026-04-18` `1d41703` **4 h**
+  `17 files | +7 242 −36 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  Lay summary: Tightened how customer identity is stored and linked across claims records so partner updates always land against the correct customer, with safeguards against accidentally pointing services at the wrong database.
+  **Schema tenant-id hardening, webhook tenant wiring, and seed framework.** Converted the stored **customer identifier** on every claims table into a strongly-typed reference back to the **organizations** table so bad or mismatched values are rejected at the database level.
+  Shipped the supporting **database migration** that safely converts existing records and adds the new constraints.
+  Updated the **webhook intake** so incoming partner events are attributed to the customer from the **signed-in connection** rather than trusting a field in the payload, preventing cross-customer drift.
+  Added a **startup safety check** in both the main API and sign-in service that refuses to start if pointed at the wrong database, protecting against accidental environment mis-configuration.
+  Introduced a **reusable seeding framework** with flush support so reference data (like integration providers) can be populated and reset consistently across environments.
+  Delivered an initial **integration providers seed** so new environments come up with the expected partner catalog out of the box.

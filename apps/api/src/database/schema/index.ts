@@ -23,7 +23,9 @@ export const lookupValues = pgTable(
   'lookup_values',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    tenantId: text('tenant_id').notNull(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     domain: text('domain').notNull(),
     name: text('name'),
     externalReference: text('external_reference'),
@@ -41,7 +43,9 @@ export const lookupValues = pgTable(
 // External reference resolution log
 export const externalReferenceResolutionLog = pgTable('external_reference_resolution_log', {
   id: uuid('id').primaryKey().defaultRandom(),
-  tenantId: text('tenant_id').notNull(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
   domain: text('domain').notNull(),
   externalReference: text('external_reference').notNull(),
   sourceEntity: text('source_entity'),
@@ -57,7 +61,9 @@ export const contacts = pgTable(
   'contacts',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    tenantId: text('tenant_id').notNull(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     externalReference: text('external_reference'),
     firstName: text('first_name'),
     lastName: text('last_name'),
@@ -86,7 +92,9 @@ export const claims = pgTable(
   'claims',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    tenantId: text('tenant_id').notNull(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     claimNumber: text('claim_number'),
     externalReference: text('external_reference'),
     externalClaimId: text('external_claim_id'),
@@ -143,7 +151,9 @@ export const claimContacts = pgTable(
   'claim_contacts',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    tenantId: text('tenant_id').notNull(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     claimId: uuid('claim_id').notNull().references(() => claims.id, { onDelete: 'cascade' }),
     contactId: uuid('contact_id').notNull().references(() => contacts.id, { onDelete: 'cascade' }),
     sortIndex: integer('sort_index').notNull().default(0),
@@ -155,7 +165,9 @@ export const claimContacts = pgTable(
 // Claim assignees
 export const claimAssignees = pgTable('claim_assignees', {
   id: uuid('id').primaryKey().defaultRandom(),
-  tenantId: text('tenant_id').notNull(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
   claimId: uuid('claim_id').notNull().references(() => claims.id, { onDelete: 'cascade' }),
   assigneeTypeLookupId: uuid('assignee_type_lookup_id'),
   userId: text('user_id'),
@@ -172,7 +184,9 @@ export const vendors = pgTable(
   'vendors',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    tenantId: text('tenant_id').notNull(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     name: text('name').notNull(),
     externalReference: text('external_reference'),
     address: jsonb('address').notNull().default({}),
@@ -199,7 +213,9 @@ export const jobs = pgTable(
   'jobs',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    tenantId: text('tenant_id').notNull(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     claimId: uuid('claim_id').notNull().references(() => claims.id, { onDelete: 'cascade' }),
     parentClaimId: uuid('parent_claim_id'),
     vendorId: uuid('vendor_id').references(() => vendors.id),
@@ -240,7 +256,9 @@ export const quotes = pgTable(
   'quotes',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    tenantId: text('tenant_id').notNull(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     claimId: uuid('claim_id').references(() => claims.id, { onDelete: 'cascade' }),
     jobId: uuid('job_id').references(() => jobs.id, { onDelete: 'cascade' }),
     externalReference: text('external_reference'),
@@ -285,7 +303,9 @@ export const quotes = pgTable(
 // Quote groups
 export const quoteGroups = pgTable('quote_groups', {
   id: uuid('id').primaryKey().defaultRandom(),
-  tenantId: text('tenant_id').notNull(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
   quoteId: uuid('quote_id').notNull().references(() => quotes.id, { onDelete: 'cascade' }),
   groupLabelLookupId: uuid('group_label_lookup_id'),
   description: text('description'),
@@ -300,7 +320,9 @@ export const quoteGroups = pgTable('quote_groups', {
 // Quote combos
 export const quoteCombos = pgTable('quote_combos', {
   id: uuid('id').primaryKey().defaultRandom(),
-  tenantId: text('tenant_id').notNull(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
   quoteGroupId: uuid('quote_group_id')
     .notNull()
     .references(() => quoteGroups.id, { onDelete: 'cascade' }),
@@ -322,7 +344,9 @@ export const quoteItems = pgTable(
   'quote_items',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    tenantId: text('tenant_id').notNull(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     quoteGroupId: uuid('quote_group_id').references(() => quoteGroups.id),
     quoteComboId: uuid('quote_combo_id').references(() => quoteCombos.id),
     catalogItemId: uuid('catalog_item_id'),
@@ -363,7 +387,9 @@ export const purchaseOrders = pgTable(
   'purchase_orders',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    tenantId: text('tenant_id').notNull(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     claimId: uuid('claim_id').references(() => claims.id, { onDelete: 'cascade' }),
     jobId: uuid('job_id').references(() => jobs.id, { onDelete: 'cascade' }),
     vendorId: uuid('vendor_id').references(() => vendors.id),
@@ -410,7 +436,9 @@ export const purchaseOrders = pgTable(
 // Purchase order groups
 export const purchaseOrderGroups = pgTable('purchase_order_groups', {
   id: uuid('id').primaryKey().defaultRandom(),
-  tenantId: text('tenant_id').notNull(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
   purchaseOrderId: uuid('purchase_order_id')
     .notNull()
     .references(() => purchaseOrders.id, { onDelete: 'cascade' }),
@@ -425,7 +453,9 @@ export const purchaseOrderGroups = pgTable('purchase_order_groups', {
 // Purchase order combos
 export const purchaseOrderCombos = pgTable('purchase_order_combos', {
   id: uuid('id').primaryKey().defaultRandom(),
-  tenantId: text('tenant_id').notNull(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
   purchaseOrderGroupId: uuid('purchase_order_group_id')
     .notNull()
     .references(() => purchaseOrderGroups.id, { onDelete: 'cascade' }),
@@ -447,7 +477,9 @@ export const purchaseOrderItems = pgTable(
   'purchase_order_items',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    tenantId: text('tenant_id').notNull(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     purchaseOrderGroupId: uuid('purchase_order_group_id').references(
       () => purchaseOrderGroups.id,
     ),
@@ -490,7 +522,9 @@ export const invoices = pgTable(
   'invoices',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    tenantId: text('tenant_id').notNull(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     purchaseOrderId: uuid('purchase_order_id')
       .notNull()
       .references(() => purchaseOrders.id),
@@ -527,7 +561,9 @@ export const jobContacts = pgTable(
   'job_contacts',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    tenantId: text('tenant_id').notNull(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     jobId: uuid('job_id').notNull().references(() => jobs.id, { onDelete: 'cascade' }),
     contactId: uuid('contact_id').notNull().references(() => contacts.id, { onDelete: 'cascade' }),
     sortIndex: integer('sort_index').notNull().default(0),
@@ -541,7 +577,9 @@ export const tasks = pgTable(
   'tasks',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    tenantId: text('tenant_id').notNull(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     taskTypeLookupId: uuid('task_type_lookup_id'),
     claimId: uuid('claim_id').references(() => claims.id, { onDelete: 'cascade' }),
     jobId: uuid('job_id').references(() => jobs.id, { onDelete: 'cascade' }),
@@ -573,7 +611,9 @@ export const messages = pgTable(
   'messages',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    tenantId: text('tenant_id').notNull(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     messageTypeLookupId: uuid('message_type_lookup_id'),
     fromClaimId: uuid('from_claim_id').references(() => claims.id, { onDelete: 'cascade' }),
     fromJobId: uuid('from_job_id').references(() => jobs.id, { onDelete: 'cascade' }),
@@ -602,7 +642,9 @@ export const appointments = pgTable(
   'appointments',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    tenantId: text('tenant_id').notNull(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     jobId: uuid('job_id').notNull().references(() => jobs.id, { onDelete: 'cascade' }),
     appointmentTypeLookupId: uuid('appointment_type_lookup_id'),
     specialistVisitTypeLookupId: uuid('specialist_visit_type_lookup_id'),
@@ -624,7 +666,9 @@ export const appointmentAttendees = pgTable(
   'appointment_attendees',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    tenantId: text('tenant_id').notNull(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     appointmentId: uuid('appointment_id')
       .notNull()
       .references(() => appointments.id, { onDelete: 'cascade' }),
@@ -643,7 +687,9 @@ export const reports = pgTable(
   'reports',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    tenantId: text('tenant_id').notNull(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     claimId: uuid('claim_id').references(() => claims.id, { onDelete: 'cascade' }),
     jobId: uuid('job_id').references(() => jobs.id, { onDelete: 'cascade' }),
     reportTypeLookupId: uuid('report_type_lookup_id'),
@@ -671,7 +717,9 @@ export const attachments = pgTable(
   'attachments',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    tenantId: text('tenant_id').notNull(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     relatedRecordType: text('related_record_type').notNull(),
     relatedRecordId: uuid('related_record_id').notNull(),
     documentTypeLookupId: uuid('document_type_lookup_id'),
@@ -806,7 +854,9 @@ export const integrationConnections = pgTable(
   'integration_connections',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    tenantId: text('tenant_id').notNull(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     providerId: uuid('provider_id').notNull().references(() => integrationProviders.id),
     name: text('name').notNull().default(''),
     environment: text('environment').notNull(),
@@ -835,7 +885,9 @@ export const externalObjects = pgTable(
   'external_objects',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    tenantId: text('tenant_id').notNull(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     connectionId: uuid('connection_id').notNull().references(() => integrationConnections.id),
     providerId: uuid('provider_id').references(() => integrationProviders.id),
     providerCode: text('provider_code').notNull(),
@@ -894,7 +946,9 @@ export const externalLinks = pgTable(
   'external_links',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    tenantId: text('tenant_id').notNull(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     externalObjectId: uuid('external_object_id')
       .notNull()
       .references(() => externalObjects.id, { onDelete: 'cascade' }),
@@ -924,7 +978,10 @@ export const inboundWebhookEvents = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
     externalEventId: text('external_event_id').notNull().unique(),
-    tenantId: text('tenant_id'),
+    tenantId: uuid('tenant_id').references(() => organizations.id, {
+      onDelete: 'restrict',
+      onUpdate: 'cascade',
+    }),
     eventType: text('event_type').notNull(),
     eventTimestamp: timestamp('event_timestamp', { withTimezone: true }).notNull(),
     payloadEntityId: text('payload_entity_id'),
@@ -959,7 +1016,9 @@ export const externalProcessingLog = pgTable(
   'external_processing_log',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    tenantId: text('tenant_id').notNull(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     connectionId: uuid('connection_id').references(() => integrationConnections.id),
     eventId: uuid('event_id'),
     workflowRunId: text('workflow_run_id'),

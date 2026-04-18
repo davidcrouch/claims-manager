@@ -72,6 +72,7 @@ export class WebhooksController {
       rawHeaders: req.headers as Record<string, string>,
       signature: signature || '',
       hmacVerified,
+      tenantId: connection?.tenantId,
       connectionId: connection?.connectionId,
       providerCode: connection?.providerCode,
       providerId: connection?.providerId,
@@ -80,6 +81,7 @@ export class WebhooksController {
     this.logger.log(
       `WebhooksController.handleWebhook — persisted eventId=${event.id} ` +
         `externalEventId=${payload?.id ?? 'unknown'} connectionId=${connection?.connectionId ?? 'none'} ` +
+        `tenantId=${connection?.tenantId ?? 'none'} ` +
         `providerCode=${connection?.providerCode ?? 'none'} hmacVerified=${hmacVerified}`,
     );
 
@@ -90,7 +92,7 @@ export class WebhooksController {
       this.webhooksService
         .processEventAsync({
           eventId: event.id,
-          tenantId: event.payloadTenantId ?? '',
+          tenantId: connection.tenantId,
           connectionId: connection.connectionId,
           providerId: connection.providerId,
           eventType: event.eventType,
