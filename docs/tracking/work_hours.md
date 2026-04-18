@@ -104,7 +104,7 @@
   Refreshed the **claims list screen** with cleaner filtering and updated provider editing screens for consistency.
   Authored mapping and orchestration **documentation** for the team plus an internal time-tracking invoice tool.
 
-- `2026-04-18` `PENDING` **6 h**
+- `2026-04-18` `a1f5a74` **6 h**
   `47 files | +8 775 −2 374 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
   Lay summary: Replaced the old "add your own partner" screens with a built-in list of supported partner systems and tailored connection forms, so staff configure partner links instead of defining the partners themselves.
   **Hardcoded provider catalogue and connection-focused management UI.** Replaced the previous generic partner management screens with a **built-in catalogue** of supported partner systems so staff no longer maintain partner records by hand.
