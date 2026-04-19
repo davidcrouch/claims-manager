@@ -35,7 +35,7 @@ import * as querystring from 'node:querystring';
 import { inspect } from 'node:util';
 import isEmpty from 'lodash/isEmpty.js';
 import { storeAuthResult, deleteStoredAuthResult, CLAIMS_MANAGER_UI_CLIENT_ID } from '../config/oidc-provider.js';
-import { STATIC_CLIENTS } from '../config/static-clients.js';
+import { getStaticClients } from '../config/static-clients.js';
 import { getClientId, getApiUrl, getBaseUrl, getPostLogoutRedirectUrl, getEnvVarWithDefault } from '../config/env-validation.js';
 // Local db services for user operations
 import { createUsersService, createUserIdentitiesService } from '../db/services/index.js';
@@ -185,7 +185,7 @@ export default function createAuthRoutes(
       } catch {
          // Interaction expired – fall through to static-client fallback
       }
-      const interactiveClient = STATIC_CLIENTS.find(
+      const interactiveClient = getStaticClients().find(
          c => c.redirect_uris.length > 0 && c.grant_types.includes('authorization_code')
       );
       if (interactiveClient) {

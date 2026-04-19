@@ -20,7 +20,7 @@ import {
 import { registerOidcProviderEvents } from './oidc-provider-events.js';
 import { renderLogoutPage } from '../helpers/logout-renderer.js';
 import {
-   STATIC_CLIENTS,
+   getStaticClients,
    CLAIMS_MANAGER_UI_CLIENT_ID,
 } from './static-clients.js';
 
@@ -549,7 +549,7 @@ export async function createOidcProvider(): Promise<Provider> {
       },
 
       // Static clients - see static-clients.ts
-      clients: STATIC_CLIENTS,
+      clients: getStaticClients(),
 
       // JWKS configuration loaded from environment variables
       jwks: getJwksConfig(),
