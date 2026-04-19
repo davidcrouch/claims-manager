@@ -79,8 +79,29 @@ jobs:
       - name: Set image tag
         run: echo "IMAGE_TAG=main-${GITHUB_SHA::7}" >> $GITHUB_ENV
 
+      # First-build bootstrap: if :latest doesn't exist for a service yet,
+      # the later re-tag step can't clone it to the commit tag. Detect
+      # missing images here so the build step below can force them.
+      - id: existing
+        name: Detect existing images
+        run: |
+          REGISTRY="australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager"
+          check() {
+            local image=$1
+            if gcloud artifacts docker images describe "${REGISTRY}/${image}:latest" > /dev/null 2>&1; then
+              echo "${image}: latest exists"
+              echo "${image}=true" >> $GITHUB_OUTPUT
+            else
+              echo "${image}: latest missing (will force build)"
+              echo "${image}=false" >> $GITHUB_OUTPUT
+            fi
+          }
+          check api-server
+          check auth-server
+          check frontend
+
       - name: Build & push api-server
-        if: steps.changes.outputs.api-server == 'true' || inputs.force_build_all
+        if: steps.changes.outputs.api-server == 'true' || inputs.force_build_all || steps.existing.outputs.api-server == 'false'
         run: |
           docker build -f apps/api/Dockerfile \
             -t australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager/api-server:${{ env.IMAGE_TAG }} \
@@ -90,7 +111,7 @@ jobs:
           docker system prune -af
 
       - name: Build & push auth-server
-        if: steps.changes.outputs.auth-server == 'true' || inputs.force_build_all
+        if: steps.changes.outputs.auth-server == 'true' || inputs.force_build_all || steps.existing.outputs.auth-server == 'false'
         run: |
           docker build -f apps/auth-server/Dockerfile \
             -t australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager/auth-server:${{ env.IMAGE_TAG }} \
@@ -104,7 +125,7 @@ jobs:
       # NEXT_PUBLIC_API_URL is read from process.env at runtime and does
       # NOT need to be baked in. compose.yaml sets it per-environment.
       - name: Build & push frontend
-        if: steps.changes.outputs.frontend == 'true' || inputs.force_build_all
+        if: steps.changes.outputs.frontend == 'true' || inputs.force_build_all || steps.existing.outputs.frontend == 'false'
         run: |
           docker build -f apps/frontend/Dockerfile \
             -t australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager/frontend:${{ env.IMAGE_TAG }} \
@@ -127,9 +148,20 @@ jobs:
               FAILED=1
             fi
           }
-          [ "${{ steps.changes.outputs.api-server }}" != "true" ] && retag api-server
-          [ "${{ steps.changes.outputs.auth-server }}" != "true" ] && retag auth-server
-          [ "${{ steps.changes.outputs.frontend }}" != "true" ] && retag frontend
+          # Skip retag when the service was (re)built in this run — either
+          # because code changed, force_build_all was set, or :latest was
+          # missing and we just bootstrapped it.
+          needs_retag() {
+            local image=$1
+            local changed=$2
+            local existed=$3
+            [ "$changed" != "true" ] \
+              && [ "${{ inputs.force_build_all }}" != "true" ] \
+              && [ "$existed" = "true" ]
+          }
+          needs_retag api-server  "${{ steps.changes.outputs.api-server }}"  "${{ steps.existing.outputs.api-server }}"  && retag api-server
+          needs_retag auth-server "${{ steps.changes.outputs.auth-server }}" "${{ steps.existing.outputs.auth-server }}" && retag auth-server
+          needs_retag frontend    "${{ steps.changes.outputs.frontend }}"    "${{ steps.existing.outputs.frontend }}"    && retag frontend
           if [ "$FAILED" -ne 0 ]; then
             echo "::error::One or more image re-tags failed. Run workflow_dispatch with force_build_all=true to rebuild all images."
             exit 1
