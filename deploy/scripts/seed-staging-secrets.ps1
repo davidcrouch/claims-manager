@@ -75,10 +75,13 @@ $redisHost        = TfOut 'redis_host'
 $redisPort        = TfOut 'redis_port'
 $frontendSa       = TfOut 'frontend_sa_email'
 
-# Database naming contract matches deploy/terraform/modules/cloudsql/main.tf
-# where local.database_ids = ["claims_manager", "auth", "chat"].
+# The API and auth-server both live in the same "claims_manager" database.
+# apps/auth-server/src/db/client.ts hard-asserts the expected db name and
+# refuses to start if it sees anything else. The legacy "auth" and "chat"
+# databases in deploy/terraform/modules/cloudsql/main.tf are unused - see
+# .github/workflows/cd-staging.yaml which only migrates "claims_manager".
 $apiDbName  = 'claims_manager'
-$authDbName = 'auth'
+$authDbName = 'claims_manager'
 
 $databaseUrlApi  = "postgresql://${cloudsqlUser}:${cloudsqlPassword}@${cloudsqlIp}:5432/${apiDbName}"
 $databaseUrlAuth = "postgresql://${cloudsqlUser}:${cloudsqlPassword}@${cloudsqlIp}:5432/${authDbName}"
