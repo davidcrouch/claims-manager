@@ -1,4 +1,14 @@
 {
   "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // Pin rootDir to src/ so tsc mirrors the src tree into dist/ instead of
+    // inferring rootDir from the longest common path of all inputs. Without
+    // this, any .ts sitting beside src/ (e.g. drizzle.config.ts) shifts the
+    // common path up to apps/api/, which produces dist/src/**/*.js (and
+    // breaks `node dist/main.js` and `node dist/database/run-migrations.js`
+    // in the production image).
+    "rootDir": "./src"
+  },
+  "include": ["src/**/*"],
   "exclude": ["node_modules", "test", "dist", "**/*spec.ts"]
 }
