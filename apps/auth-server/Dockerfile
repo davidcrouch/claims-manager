@@ -17,7 +17,6 @@ FROM base AS deps
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 
 # Copy only the necessary package.json files
-COPY packages/logger/package.json ./packages/logger/
 COPY packages/telemetry/package.json ./packages/telemetry/
 COPY apps/auth-server/package.json ./apps/auth-server/
 
@@ -33,7 +32,6 @@ COPY --from=deps /root/.local/share/pnpm/store /root/.local/share/pnpm/store
 # Copy workspace files and source code
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 # Copy source code for the necessary packages
-COPY packages/logger/ ./packages/logger/
 COPY packages/telemetry/ ./packages/telemetry/
 COPY apps/auth-server/ ./apps/auth-server/
 
@@ -42,7 +40,6 @@ RUN pnpm install --frozen-lockfile --prod=false
 
 # Build internal libraries first (in dependency order)
 RUN pnpm -r --aggregate-output \
-  --filter "@morezero/logger" \
   --filter "@morezero/telemetry" \
   build
 

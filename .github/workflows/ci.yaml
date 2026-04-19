@@ -62,7 +62,6 @@ jobs:
               - 'packages/**'
             auth-server:
               - 'apps/auth-server/**'
-              - 'packages/logger/**'
               - 'packages/telemetry/**'
             frontend:
               - 'apps/frontend/**'
