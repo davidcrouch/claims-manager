@@ -123,3 +123,15 @@
   Added a **startup safety check** in both the main API and sign-in service that refuses to start if pointed at the wrong database, protecting against accidental environment mis-configuration.
   Introduced a **reusable seeding framework** with flush support so reference data (like integration providers) can be populated and reset consistently across environments.
   Delivered an initial **integration providers seed** so new environments come up with the expected partner catalog out of the box.
+
+- `2026-04-20` `9ba736d` **14 h**
+  `52 files | +2 617 −243 | Tier 3 complex / Tier 4 deep integration | Heavy orchestration`
+  Spans commits `46f2b24..9ba736d` (14 commits) covering the initial staging pipeline build-out and subsequent live-deployment hardening.
+  Lay summary: Set up the full automated delivery pipeline to the staging website and worked through many rounds of fixes so the website, sign-in service, and application all build, deploy, and start cleanly against live hosted infrastructure.
+  **Automated delivery pipeline to branlamie.com staging, plus live pipeline hardening.** Delivered an **end-to-end automated hosted delivery pipeline** so every change flows from automated checks through build, packaging, and rollout to the live staging site.
+  Provisioned the staging environment as **infrastructure-as-code** — databases, in-memory cache, private network, container registry, a hosted virtual machine, custom domains, and HTTPS — with repeatable apply and rollback.
+  Added **operator seeding and bootstrap scripts** so environment secrets, database connection strings, and encryption keys are populated into the managed secret store in one idempotent run.
+  Hardened the **container images** for the application, the sign-in service, and the public website so each starts cleanly in the hosted environment and follows the expected workspace layout.
+  Reworked the **sign-in service configuration** so registered redirect addresses and client credentials come from environment configuration, making the service safe to deploy across environments.
+  Walked the pipeline through successive staging runs, **diagnosing and fixing each failure** surfaced by the live environment — package manager pinning, first-time image bootstrap, migration networking, database name alignment, and standards-compliant token exchange.
+  Registered the **staging domains** (web app, sign-in, and application interface) with HTTPS so the product is reachable at its friendly URLs, ready for end-to-end user flow testing.
