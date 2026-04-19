@@ -44,7 +44,7 @@ RUN pnpm -r --aggregate-output \
   build
 
 # Build the auth-server
-RUN pnpm --filter "morezero-auth-server" build
+RUN pnpm --filter "@morezero/auth-server" build
 
 ############################
 # Runtime (distroless)
