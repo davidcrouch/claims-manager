@@ -20,7 +20,7 @@ resource "google_dns_managed_zone" "this" {
 }
 
 resource "google_dns_record_set" "subdomains" {
-  for_each = var.gateway_ip == "" ? toset([]) : toset(local.subdomains)
+  for_each = var.create_subdomain_records ? toset(local.subdomains) : toset([])
 
   project      = var.project_id
   managed_zone = google_dns_managed_zone.this.name

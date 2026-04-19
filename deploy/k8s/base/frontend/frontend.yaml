@@ -24,7 +24,7 @@ spec:
       serviceAccountName: frontend
       containers:
         - name: frontend
-          image: australia-southeast1-docker.pkg.dev/claims-manager-infra/claims-manager/frontend:IMAGE_TAG
+          image: australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager/frontend:IMAGE_TAG
           ports:
             - containerPort: 3000
           env:

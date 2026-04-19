@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REGISTRY="australia-southeast1-docker.pkg.dev/claims-manager-infra/claims-manager"
+REGISTRY="australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager"
 
 NAMESPACE_MAP=(
   "api-server:platform"

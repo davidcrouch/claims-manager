@@ -1,5 +1,5 @@
 project_id       = "claims-manager-production"
-infra_project_id = "claims-manager-infra"
+infra_project_id = "claims-manager-infra-493807"
 region           = "australia-southeast1"
 environment      = "production"
 cloudsql_tier    = "db-custom-4-16384"

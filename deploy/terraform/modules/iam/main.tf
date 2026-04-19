@@ -39,10 +39,10 @@ locals {
     }
   ]...)
 
-  ci_deployer_roles = [
+  ci_deployer_roles = toset(concat([
     "roles/container.admin",
     "roles/artifactregistry.writer",
-  ]
+  ], var.extra_ci_deployer_roles))
 }
 
 resource "google_service_account" "workload" {
@@ -62,11 +62,11 @@ resource "google_project_iam_member" "workload" {
 }
 
 resource "google_service_account_iam_member" "workload_identity" {
-  for_each = local.services
+  for_each = var.enable_gke_workload_identity ? local.services : {}
 
   service_account_id = google_service_account.workload[each.key].name
-  role                 = "roles/iam.workloadIdentityUser"
-  member               = "serviceAccount:${var.project_id}.svc.id.goog[${each.value.namespace}/${each.value.ksa_name}]"
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${var.project_id}.svc.id.goog[${each.value.namespace}/${each.value.ksa_name}]"
 }
 
 resource "google_service_account" "ci_deployer" {
@@ -76,7 +76,7 @@ resource "google_service_account" "ci_deployer" {
 }
 
 resource "google_project_iam_member" "ci_deployer" {
-  for_each = toset(local.ci_deployer_roles)
+  for_each = local.ci_deployer_roles
 
   project = var.project_id
   role    = each.value
@@ -96,6 +96,8 @@ resource "google_project_iam_member" "external_secrets" {
 }
 
 resource "google_service_account_iam_member" "external_secrets_wi" {
+  count = var.enable_gke_workload_identity ? 1 : 0
+
   service_account_id = google_service_account.external_secrets.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "serviceAccount:${var.project_id}.svc.id.goog[external-secrets/external-secrets]"

@@ -1,0 +1,26 @@
+# deploy/compose/staging/compose.override.yaml
+#
+# Applies resource limits so the app tier fits inside the e2-standard-2
+# budget (2 vCPU / 8 GiB). Postgres/Redis run as managed services
+# (CloudSQL + Memorystore), so the on-VM budget only covers api-server,
+# auth-server, frontend and caddy.
+
+services:
+  caddy:
+    cpus: 0.2
+    mem_limit: 256m
+
+  api-server:
+    cpus: 0.6
+    mem_limit: 1g
+    mem_reservation: 512m
+
+  auth-server:
+    cpus: 0.5
+    mem_limit: 768m
+    mem_reservation: 384m
+
+  frontend:
+    cpus: 0.5
+    mem_limit: 768m
+    mem_reservation: 384m

@@ -25,7 +25,7 @@ jobs:
       - uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-          service_account: ci-deployer@claims-manager-infra.iam.gserviceaccount.com
+          service_account: ci-deployer@claims-manager-infra-493807.iam.gserviceaccount.com
 
       - uses: hashicorp/setup-terraform@v3
         with:
@@ -74,7 +74,7 @@ jobs:
       - uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-          service_account: ci-deployer@claims-manager-infra.iam.gserviceaccount.com
+          service_account: ci-deployer@claims-manager-infra-493807.iam.gserviceaccount.com
 
       - uses: hashicorp/setup-terraform@v3
         with:
@@ -99,7 +99,7 @@ jobs:
       - uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-          service_account: ci-deployer@claims-manager-infra.iam.gserviceaccount.com
+          service_account: ci-deployer@claims-manager-infra-493807.iam.gserviceaccount.com
 
       - uses: hashicorp/setup-terraform@v3
         with:

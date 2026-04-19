@@ -24,7 +24,7 @@ spec:
       serviceAccountName: auth-server
       containers:
         - name: auth-server
-          image: australia-southeast1-docker.pkg.dev/claims-manager-infra/claims-manager/auth-server:IMAGE_TAG
+          image: australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager/auth-server:IMAGE_TAG
           ports:
             - containerPort: 4000
           env:

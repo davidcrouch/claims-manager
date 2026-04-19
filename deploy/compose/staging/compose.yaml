@@ -1,0 +1,165 @@
+# deploy/compose/staging/compose.yaml
+#
+# Base topology for the staging VM (single e2-standard-2 host). Defines:
+#   - edge: caddy (public TLS + host-based routing)
+#   - platform: api-server, auth-server
+#   - frontend: frontend (Next.js)
+#
+# Postgres and Redis are NOT run in compose; the VM reaches them over private
+# IP through the VPC peering that Terraform's cloudsql + memorystore modules
+# provision. The startup script renders DATABASE_URL_* / REDIS_URL into
+# /var/lib/claims-manager/staging.env from Secret Manager on every boot.
+#
+# Image tag is injected by CI via IMAGE_TAG - see .github/workflows/cd-staging.yaml.
+
+name: claims-manager-staging
+
+networks:
+  edge:
+    driver: bridge
+  internal:
+    driver: bridge
+    internal: true
+  # Outbound-only bridge for services that must reach public APIs (Stripe,
+  # third-party auth providers, Artifact Registry at runtime). The `internal`
+  # network is flagged `internal: true`, disabling NAT egress, so any service
+  # that needs to resolve or hit a public host must also be attached to
+  # `egress`. No ports are published on this network.
+  egress:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+services:
+  # ── Public ingress / TLS ───────────────────────────────────────────
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      CADDY_ADMIN_EMAIL: ${CADDY_ADMIN_EMAIL:-ops@branlamie.com}
+      API_HOST: ${API_HOST}
+      AUTH_HOST: ${AUTH_HOST}
+      APP_HOST: ${APP_HOST}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api-server:
+        condition: service_started
+      auth-server:
+        condition: service_started
+      frontend:
+        condition: service_started
+    networks: [edge, internal]
+
+  # ── Platform tier ──────────────────────────────────────────────────
+  api-server:
+    image: australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager/api-server:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: /var/lib/claims-manager/staging.env
+    environment:
+      NODE_ENV: production
+      PORT: "3001"
+      API_PREFIX: api/v1
+      SERVICE_NAME: api-server
+      # Primary app database (CloudSQL private IP baked into DATABASE_URL_API secret).
+      DATABASE_URL: ${DATABASE_URL_API}
+      # Encryption key for provider credentials at rest.
+      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY}
+      # OIDC verifier configuration - API trusts tokens minted by the staging
+      # auth-server and audience-scoped to the api.
+      AUTH_ISSUER_URL: https://${AUTH_HOST}
+      AUTH_AUDIENCE: claims-manager-api
+      AUTH_JWKS_URI: https://${AUTH_HOST}/.well-known/jwks.json
+      LOG_LEVEL: info
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3001/api/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    # `egress` needed for outbound provider (Crunchwork, etc.) API calls.
+    networks: [internal, egress]
+
+  auth-server:
+    image: australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager/auth-server:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: /var/lib/claims-manager/staging.env
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      SERVICE_NAME: auth-server
+      SERVICE_VERSION: ${IMAGE_TAG:-staging}
+      OIDC_ISSUER: https://${AUTH_HOST}
+      BASE_URL: https://${AUTH_HOST}
+      DATABASE_URL: ${DATABASE_URL_AUTH}
+      # Memorystore (managed Redis) reached over VPC peering.
+      REDIS_PROVIDER: self-hosted
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_DB: "0"
+      REDIS_TLS: "false"
+      JWT_SECRET: ${AUTH_JWT_SECRET}
+      JWT_PUBLIC_KEY_E: AQAB
+      DYNAMIC_REGISTRATION_SECRET: ${DYNAMIC_REGISTRATION_SECRET}
+      DCR_IAT_SIGNING_KEY: ${DCR_IAT_SIGNING_KEY}
+      OIDC_COOKIES_KEYS: ${OIDC_COOKIES_KEYS}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      # Static OIDC client wired into the frontend app (claims-manager-ui).
+      OIDC_CLIENT_ID: claims-manager-ui
+      OIDC_CLIENT_SECRET: ${AUTH_OIDC_CLIENT_SECRET}
+      OIDC_CLIENT_CALLBACK_URI: https://${APP_HOST}/api/auth/callback
+      OIDC_ADDITIONAL_REDIRECT_URIS: https://${APP_HOST}/api/auth/callback
+      OIDC_POST_LOGIN_URI: https://${APP_HOST}/dashboard
+      OIDC_POST_LOGOUT_URI: https://${APP_HOST}
+      CORS_ORIGINS: https://${APP_HOST},https://${API_HOST},https://${AUTH_HOST}
+      AUDIENCE: https://${API_HOST}
+      MOREZERO_API_URL: https://${API_HOST}
+    healthcheck:
+      # Use 127.0.0.1 (not localhost): node binds IPv4, the base image resolves
+      # localhost to ::1 which yields "connection refused".
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:4000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    networks: [internal, egress]
+
+  # ── Frontend tier ──────────────────────────────────────────────────
+  frontend:
+    image: australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager/frontend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: /var/lib/claims-manager/staging.env
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      # NEXT_PUBLIC_API_URL is baked into the client bundle at build time
+      # (see apps/frontend/Dockerfile ARG). Set here too so server-side
+      # renders stay consistent when CI rebuilds with a new ARG value.
+      NEXT_PUBLIC_API_URL: https://${API_HOST}
+      NEXT_PUBLIC_API_PREFIX: /api/v1
+      AUTH_SERVER_URL: https://${AUTH_HOST}
+      OIDC_ISSUER: https://${AUTH_HOST}
+      OIDC_CLIENT_ID: claims-manager-ui
+      OIDC_CLIENT_SECRET: ${AUTH_OIDC_CLIENT_SECRET}
+      OIDC_REDIRECT_URI: https://${APP_HOST}/api/auth/callback
+      OIDC_POST_LOGIN_URI: https://${APP_HOST}/dashboard
+      OIDC_POST_LOGOUT_URI: https://${APP_HOST}
+      OIDC_AUDIENCE: https://${API_HOST}
+      OIDC_SCOPES: openid,profile,email
+      OIDC_COOKIE_SECRET: ${FRONTEND_OIDC_COOKIE_SECRET}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+    networks: [internal, egress]

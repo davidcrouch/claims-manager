@@ -11,7 +11,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: migrate
-          image: australia-southeast1-docker.pkg.dev/claims-manager-infra/claims-manager/api-server:IMAGE_TAG
+          image: australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager/api-server:IMAGE_TAG
           imagePullPolicy: Always
           command: ["node", "dist/database/run-migrations.js"]
           env:

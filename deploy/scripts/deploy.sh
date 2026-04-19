@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REGISTRY="australia-southeast1-docker.pkg.dev/claims-manager-infra/claims-manager"
+REGISTRY="australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager"
 JOBS_NS="jobs"
 
 # Migrations run before full kustomize apply in CI; namespaces must exist first.
@@ -19,7 +19,7 @@ ensure_migrate_secrets_in_jobs() {
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   local project_id="${GCP_PROJECT_ID:-${PROJECT_ID:-}}"
   if [[ -z "$project_id" ]]; then
-    echo "[deploy.sh] ERROR: Set PROJECT_ID or GCP_PROJECT_ID (e.g. claims-manager-staging) so migrate can sync secrets into namespace jobs." >&2
+    echo "[deploy.sh] ERROR: Set PROJECT_ID or GCP_PROJECT_ID (e.g. claims-manager-staging-493807) so migrate can sync secrets into namespace jobs." >&2
     exit 1
   fi
 

@@ -70,7 +70,7 @@ jobs:
       - uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-          service_account: ci-deployer@claims-manager-infra.iam.gserviceaccount.com
+          service_account: ci-deployer@claims-manager-infra-493807.iam.gserviceaccount.com
 
       - uses: google-github-actions/setup-gcloud@v2
 
@@ -83,35 +83,39 @@ jobs:
         if: steps.changes.outputs.api-server == 'true' || inputs.force_build_all
         run: |
           docker build -f apps/api/Dockerfile \
-            -t australia-southeast1-docker.pkg.dev/claims-manager-infra/claims-manager/api-server:${{ env.IMAGE_TAG }} \
-            -t australia-southeast1-docker.pkg.dev/claims-manager-infra/claims-manager/api-server:latest \
+            -t australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager/api-server:${{ env.IMAGE_TAG }} \
+            -t australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager/api-server:latest \
             .
-          docker push --all-tags australia-southeast1-docker.pkg.dev/claims-manager-infra/claims-manager/api-server
+          docker push --all-tags australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager/api-server
           docker system prune -af
 
       - name: Build & push auth-server
         if: steps.changes.outputs.auth-server == 'true' || inputs.force_build_all
         run: |
           docker build -f apps/auth-server/Dockerfile \
-            -t australia-southeast1-docker.pkg.dev/claims-manager-infra/claims-manager/auth-server:${{ env.IMAGE_TAG }} \
-            -t australia-southeast1-docker.pkg.dev/claims-manager-infra/claims-manager/auth-server:latest \
+            -t australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager/auth-server:${{ env.IMAGE_TAG }} \
+            -t australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager/auth-server:latest \
             .
-          docker push --all-tags australia-southeast1-docker.pkg.dev/claims-manager-infra/claims-manager/auth-server
+          docker push --all-tags australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager/auth-server
           docker system prune -af
 
+      # Frontend is a BFF: every call to createApiClient runs on the
+      # Next.js server (server components + `use server` actions), so
+      # NEXT_PUBLIC_API_URL is read from process.env at runtime and does
+      # NOT need to be baked in. compose.yaml sets it per-environment.
       - name: Build & push frontend
         if: steps.changes.outputs.frontend == 'true' || inputs.force_build_all
         run: |
           docker build -f apps/frontend/Dockerfile \
-            -t australia-southeast1-docker.pkg.dev/claims-manager-infra/claims-manager/frontend:${{ env.IMAGE_TAG }} \
-            -t australia-southeast1-docker.pkg.dev/claims-manager-infra/claims-manager/frontend:latest \
+            -t australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager/frontend:${{ env.IMAGE_TAG }} \
+            -t australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager/frontend:latest \
             .
-          docker push --all-tags australia-southeast1-docker.pkg.dev/claims-manager-infra/claims-manager/frontend
+          docker push --all-tags australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager/frontend
           docker system prune -af
 
       - name: Re-tag unchanged images
         run: |
-          REGISTRY="australia-southeast1-docker.pkg.dev/claims-manager-infra/claims-manager"
+          REGISTRY="australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager"
           FAILED=0
           retag() {
             local image=$1
@@ -134,7 +138,7 @@ jobs:
 
       - name: Verify all images exist
         run: |
-          REGISTRY="australia-southeast1-docker.pkg.dev/claims-manager-infra/claims-manager"
+          REGISTRY="australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager"
           MISSING=0
           for image in api-server auth-server frontend; do
             if ! gcloud artifacts docker images describe "${REGISTRY}/${image}:${{ env.IMAGE_TAG }}" > /dev/null 2>&1; then

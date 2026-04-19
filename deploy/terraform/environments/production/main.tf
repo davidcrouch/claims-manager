@@ -107,8 +107,9 @@ module "secrets" {
 module "dns" {
   source = "../../modules/dns"
 
-  project_id  = var.project_id
-  environment = var.environment
-  dns_name    = var.dns_name
-  gateway_ip  = var.gateway_ip
+  project_id               = var.project_id
+  environment              = var.environment
+  dns_name                 = var.dns_name
+  gateway_ip               = var.gateway_ip
+  create_subdomain_records = var.gateway_ip != ""
 }

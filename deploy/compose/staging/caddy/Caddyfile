@@ -1,0 +1,46 @@
+# deploy/compose/staging/caddy/Caddyfile
+#
+# Caddy provides TLS (automatic ACME via Let's Encrypt) and host-based
+# routing for the single-VM staging topology. One A-record per subdomain
+# points at module.staging_vm.public_ip; Caddy fans out to services on
+# the internal docker network.
+
+{
+	email {$CADDY_ADMIN_EMAIL}
+	servers {
+		protocols h1 h2 h3
+	}
+}
+
+# API - NestJS app (port 3001).
+{$API_HOST} {
+	encode zstd gzip
+	reverse_proxy api-server:3001
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+}
+
+# Auth server - OIDC provider (port 4000).
+{$AUTH_HOST} {
+	encode zstd gzip
+	reverse_proxy auth-server:4000
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+}
+
+# Frontend - Next.js app (port 3000).
+{$APP_HOST} {
+	encode zstd gzip
+	reverse_proxy frontend:3000
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+}
