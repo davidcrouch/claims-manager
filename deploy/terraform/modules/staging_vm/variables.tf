@@ -3,11 +3,6 @@ variable "project_id" {
   description = "GCP project ID for the staging environment"
 }
 
-variable "infra_project_id" {
-  type        = string
-  description = "GCP project hosting Artifact Registry (image pulls)"
-}
-
 variable "region" {
   type        = string
   description = "Region the VM runs in, e.g. australia-southeast1"

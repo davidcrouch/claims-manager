@@ -35,7 +35,6 @@ module "staging_vm" {
   source = "../../modules/staging_vm"
 
   project_id        = var.project_id
-  infra_project_id  = var.infra_project_id
   region            = var.region
   zone              = var.staging_vm_zone
   environment       = var.environment

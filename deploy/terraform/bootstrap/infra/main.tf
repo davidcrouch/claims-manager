@@ -34,6 +34,12 @@ data "google_project" "infra" {
 
 # ── API enablement (infra) ─────────────────────────────────────────
 locals {
+  # NOTE: APIs billed to the ci-deployer's quota project (this one, since
+  # the SA lives here) must be enabled here even when the resource itself
+  # lives in the staging project — otherwise terraform refresh for any
+  # staging resource using those APIs fails with "API has not been used
+  # in project <infra-number> before". sqladmin + redis + servicenetworking
+  # are the ones that bit us during staging apply.
   infra_apis = toset([
     "cloudresourcemanager.googleapis.com",
     "iam.googleapis.com",
@@ -44,6 +50,11 @@ locals {
     "storage.googleapis.com",
     "logging.googleapis.com",
     "compute.googleapis.com",
+    "sqladmin.googleapis.com",
+    "redis.googleapis.com",
+    "servicenetworking.googleapis.com",
+    "secretmanager.googleapis.com",
+    "dns.googleapis.com",
   ])
 
   # APIs terraform and the CD pipeline will touch in the staging project.
@@ -124,13 +135,18 @@ resource "google_service_account" "ci_deployer" {
 }
 
 # Roles in the infra project:
-#   artifactregistry.writer  - push images from CI
+#   artifactregistry.admin   - push images AND read/write repo IAM policy.
+#                              (writer alone cannot call repositories.getIamPolicy,
+#                              which terraform refresh needs to reconcile the
+#                              google_artifact_registry_repository_iam_member
+#                              resources that grant staging-vm-sa + compute SA
+#                              reader access on the claims-manager repo.)
 #   storage.admin            - read/write terraform state bucket
 #   logging.logWriter        - write logs from CI
 #   iam.serviceAccountTokenCreator on self - WIF impersonation requires this
 locals {
   ci_deployer_infra_roles = toset([
-    "roles/artifactregistry.writer",
+    "roles/artifactregistry.admin",
     "roles/storage.admin",
     "roles/logging.logWriter",
   ])

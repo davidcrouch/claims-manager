@@ -104,12 +104,6 @@ resource "google_project_iam_member" "staging_vm_secret_accessor" {
   member  = google_service_account.staging_vm.member
 }
 
-resource "google_project_iam_member" "staging_vm_artifact_reader" {
-  project = var.infra_project_id
-  role    = "roles/artifactregistry.reader"
-  member  = google_service_account.staging_vm.member
-}
-
 resource "google_project_iam_member" "staging_vm_logging" {
   project = var.project_id
   role    = "roles/logging.logWriter"
