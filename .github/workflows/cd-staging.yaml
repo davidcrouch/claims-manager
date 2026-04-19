@@ -129,6 +129,12 @@ jobs:
       # Run drizzle migrations for the api database in a one-shot container
       # so schema-drift cannot sneak past us before the service pool is up.
       # Uses apps/api `db:migrate:runtime` which runs against DATABASE_URL.
+      #
+      # The egress network is defined in compose.yaml and is normally created
+      # by `docker compose up`. On a fresh MIG instance (or after a docker
+      # system prune) it doesn't exist yet when this step runs, so we create
+      # it here idempotently with the labels compose expects — compose will
+      # then reuse the same network on `up` below instead of recreating it.
       - name: Run API database migrations (one-shot)
         run: |
           gcloud compute ssh "${INSTANCE_NAME}" \
@@ -138,6 +144,11 @@ jobs:
             --command "set -e; \
               IMAGE=${ARTIFACT_HOST}/claims-manager-infra-493807/claims-manager/api-server:${IMAGE_TAG}; \
               DB_URL=\$(sudo grep ^DATABASE_URL_API= ${ENV_FILE} | cut -d= -f2-); \
+              sudo DOCKER_CONFIG=${DOCKER_CONFIG} docker network inspect claims-manager-staging_egress >/dev/null 2>&1 || \
+                sudo DOCKER_CONFIG=${DOCKER_CONFIG} docker network create \
+                  --label com.docker.compose.project=claims-manager-staging \
+                  --label com.docker.compose.network=egress \
+                  claims-manager-staging_egress; \
               sudo DOCKER_CONFIG=${DOCKER_CONFIG} docker pull \$IMAGE; \
               sudo DOCKER_CONFIG=${DOCKER_CONFIG} docker run --rm --network claims-manager-staging_egress \
                 --env-file ${ENV_FILE} \
