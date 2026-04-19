@@ -67,8 +67,16 @@ export async function GET(req: NextRequest) {
   }
 
   const body = new URLSearchParams(bodyParams);
+  // RFC 6749 §2.3.1: the client_id and client_secret MUST be
+  // application/x-www-form-urlencoded before being joined with ':' and
+  // base64-encoded. node-oidc-provider URL-decodes the two halves on
+  // receipt, so without this step any '+' or '/' in a base64 secret turns
+  // into a space (or similar) server-side and authentication fails with
+  // invalid_client.
   const basicAuth = Buffer.from(
-    `${authConfig.oidcClientId}:${authConfig.oidcClientSecret}`,
+    `${encodeURIComponent(authConfig.oidcClientId)}:${encodeURIComponent(
+      authConfig.oidcClientSecret,
+    )}`,
     'utf8',
   ).toString('base64');
 
