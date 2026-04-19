@@ -17,8 +17,10 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     strategy:
+      # Production is intentionally excluded until the production GCP project
+      # is bootstrapped. Add "production" back to the matrix when ready.
       matrix:
-        environment: [staging, production]
+        environment: [staging]
     steps:
       - uses: actions/checkout@v4
 
@@ -89,7 +91,10 @@ jobs:
         working-directory: deploy/terraform/environments/staging
 
   apply-production:
-    if: github.ref == 'refs/heads/main'
+    # Disabled until the production GCP project is bootstrapped. Flip to
+    # `github.ref == 'refs/heads/main'` (and re-add `production` to the
+    # plan matrix above) when ready to stand up production.
+    if: false
     needs: [apply-staging]
     runs-on: ubuntu-latest
     environment: production
