@@ -5,13 +5,46 @@ interface AuthLayoutProps {
   inlineScript?: string;
 }
 
+/**
+ * Shared auth-pages layout.
+ *
+ * Mirrors the marketing landing page: solid white background with a faint
+ * navy grid pattern, radially masked so the texture fades at the edges.
+ * The actual content (login/register form, etc.) is expected to provide
+ * its own navy panel for contrast against this light backdrop.
+ */
 export function AuthLayout({ children, inlineScript }: AuthLayoutProps) {
+  /** Matches marketing landing page hero grid (`NAVY` in apps/frontend) */
+  const NAVY = '#152a52';
+
   return (
-    <main className="relative flex grow flex-col min-h-screen bg-gray-950">
-      <div className="fixed inset-0 z-0 bg-gradient-to-br from-gray-950 via-gray-900 to-indigo-950" />
-      <div className="relative z-10">
-        {children}
-      </div>
+    <main
+      className="relative flex grow flex-col min-h-screen"
+      style={{ backgroundColor: '#ffffff' }}
+    >
+      {/* Base white canvas */}
+      <div className="fixed inset-0 z-0" style={{ backgroundColor: '#ffffff' }} />
+
+      {/* Navy grid pattern (48px tiles, radial mask fades to edges) */}
+      <div
+        aria-hidden="true"
+        className="fixed inset-0 z-0"
+        style={{
+          backgroundImage: `
+            linear-gradient(to right, ${NAVY} 1px, transparent 1px),
+            linear-gradient(to bottom, ${NAVY} 1px, transparent 1px)
+          `,
+          backgroundSize: '48px 48px',
+          opacity: 0.07,
+          maskImage:
+            'radial-gradient(ellipse 90% 80% at 50% 40%, black 35%, transparent 90%)',
+          WebkitMaskImage:
+            'radial-gradient(ellipse 90% 80% at 50% 40%, black 35%, transparent 90%)',
+        }}
+      />
+
+      <div className="relative z-10 flex grow flex-col">{children}</div>
+
       {inlineScript && (
         <script dangerouslySetInnerHTML={{ __html: inlineScript }} />
       )}

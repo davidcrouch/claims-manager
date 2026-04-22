@@ -3,6 +3,7 @@ import { getServerApiClient } from '@/lib/server-api';
 import { SetBreadcrumbs } from '@/components/layout/SetBreadcrumbs';
 import { JobDetail } from '@/components/jobs/JobDetail';
 import type { Metadata } from 'next';
+import type { Claim } from '@/types/api';
 
 export async function generateMetadata({
   params,
@@ -38,6 +39,17 @@ export default async function JobDetailPage({
     notFound();
   }
 
+  let parentClaim: Claim | null = null;
+  if (job.claimId) {
+    parentClaim = await api.getClaim(job.claimId).catch((err: unknown) => {
+      console.warn(
+        'frontend:JobDetailPage - getClaim (parent) failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return null;
+    });
+  }
+
   const title = job.externalReference ?? id;
 
   return (
@@ -48,7 +60,7 @@ export default async function JobDetailPage({
           { title, href: `/jobs/${id}` },
         ]}
       />
-      <JobDetail job={job} />
+      <JobDetail job={job} parentClaim={parentClaim} />
     </>
   );
 }

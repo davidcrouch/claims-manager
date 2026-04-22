@@ -63,27 +63,67 @@ export interface Claim {
   jobs?: Job[];
 }
 
+export interface VendorRef {
+  id?: string;
+  name?: string;
+  externalReference?: string;
+}
+
 export interface Job {
   id: string;
   tenantId: string;
   claimId: string;
+  parentClaimId?: string | null;
+  parentJobId?: string | null;
+  vendorId?: string | null;
   externalReference?: string | null;
   jobTypeLookupId: string;
   statusLookupId?: string | null;
   requestDate?: string | null;
+  collectExcess?: boolean | null;
+  excess?: string | null;
+  makeSafeRequired?: boolean | null;
   address?: AddressPayload | Record<string, unknown>;
   addressSuburb?: string | null;
   addressPostcode?: string | null;
+  addressState?: string | null;
+  addressCountry?: string | null;
   jobInstructions?: string | null;
-  makeSafeRequired?: boolean | null;
-  collectExcess?: boolean | null;
-  excess?: string | null;
+
+  vendorSnapshot?: Record<string, unknown>;
+  temporaryAccommodationDetails?: Record<string, unknown>;
+  specialistDetails?: Record<string, unknown>;
+  rectificationDetails?: Record<string, unknown>;
+  auditDetails?: Record<string, unknown>;
+  mobilityConsiderations?: Array<{ name?: string; externalReference?: string }>;
+
   apiPayload?: Record<string, unknown>;
+  customData?: Record<string, unknown>;
+
   createdAt?: string;
   updatedAt?: string;
+
   status?: LookupRef;
   jobType?: LookupRef;
   claim?: Claim;
+  vendor?: VendorRef;
+}
+
+export interface Attachment {
+  id: string;
+  tenantId?: string;
+  relatedRecordType?: string;
+  relatedRecordId?: string;
+  title?: string | null;
+  filename?: string | null;
+  documentType?: string | null;
+  fileUrl?: string | null;
+  fileSize?: number | string | null;
+  mimeType?: string | null;
+  uploadedBy?: string | null;
+  uploadedByName?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 }
 
 export interface Quote {
@@ -121,9 +161,14 @@ export interface Invoice {
   id: string;
   tenantId: string;
   purchaseOrderId: string;
+  jobId?: string | null;
   invoiceNumber?: string | null;
   statusLookupId?: string | null;
+  issueDate?: string | null;
+  subTotal?: string | null;
+  tax?: string | null;
   totalAmount?: string | null;
+  excessAmount?: string | null;
   createdAt?: string;
   updatedAt?: string;
   status?: LookupRef;
@@ -151,8 +196,14 @@ export interface Task {
   claimId?: string | null;
   name: string;
   description?: string | null;
-  status?: string;
+  status?: string | LookupRef | null;
+  taskType?: string | LookupRef | null;
+  priority?: string | LookupRef | null;
+  dueDate?: string | null;
   assignedToUserId?: string | null;
+  assigneeName?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Message {
@@ -175,15 +226,29 @@ export interface Vendor {
   updatedAt?: string;
 }
 
+export interface AppointmentAttendee {
+  id?: string;
+  appointmentId?: string;
+  attendeeType?: 'CONTACT' | 'USER' | string;
+  contactId?: string | null;
+  userId?: string | null;
+  name?: string | null;
+  email?: string | null;
+}
+
 export interface Appointment {
   id: string;
   tenantId: string;
   jobId: string;
   name: string;
   location: string;
+  appointmentType?: string | LookupRef | null;
   startDate?: string;
   endDate?: string;
   status?: string | null;
+  cancellationReason?: string | null;
+  cancelledAt?: string | null;
+  attendees?: AppointmentAttendee[];
 }
 
 /**

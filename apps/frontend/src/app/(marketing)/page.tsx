@@ -20,27 +20,42 @@ import {
  * small blue-dot bullets, clean shadows (no glows, no gradients).
  *
  * Palette (scoped to this page):
- *   navy         hsl(213 50% 12%)   #0f1d33
- *   slate        hsl(213 27% 25%)   #2f3d50
+ *   navy         hsl(220 60% 20%)   #152a52 (dark blue; slightly darker than sidebar)
+ *   slate        hsl(220 52% 24%)   #1e3a5f (mid band, same hue family)
  *   soft-white   hsl(210 33% 97%)   #f5f7fa
  *   light-grey   hsl(214 24% 87%)   #d6dde4
  *   blue-accent  hsl(214 65% 55%)   #3e86d4
  *   muted-fg     hsl(213 27% 35%)   #42526a
  */
 
-const NAVY = '#0f1d33';
-const SLATE = '#2f3d50';
+const NAVY = '#152a52';
+const SLATE = '#1e3a5f';
 const SOFT_WHITE = '#f5f7fa';
 const LIGHT_GREY = '#d6dde4';
 const BLUE = '#3e86d4';
 const MUTED_FG = '#42526a';
+const INK = '#030712';
+const INK_MUTED = '#1e293b';
 
 export default function LandingPage() {
   return (
     <div
       className="flex min-h-screen flex-col antialiased"
-      style={{ backgroundColor: SOFT_WHITE, color: NAVY }}
+      style={{ backgroundColor: '#ffffff', color: INK }}
     >
+      {/* Page-level keyframes for subtle floating/glow animations */}
+      <style>{`
+        @keyframes cm-float {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-6px); }
+        }
+        @keyframes cm-pulse-dot {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.55; transform: scale(1.35); }
+        }
+        .cm-float { animation: cm-float 5s ease-in-out infinite; }
+        .cm-pulse-dot { animation: cm-pulse-dot 2.2s ease-in-out infinite; }
+      `}</style>
       <SiteHeader />
       <main className="flex-1">
         <Hero />
@@ -61,19 +76,27 @@ export default function LandingPage() {
 /* ------------------------------------------------------------------ */
 
 function SiteHeader() {
+  const navLinks = [
+    { label: 'Platform', href: '#platform' },
+    { label: 'Workflow', href: '#workflow' },
+    { label: 'Reporting', href: '#reporting' },
+    { label: 'Security', href: '#security' },
+  ];
+
   return (
     <header
       className="sticky top-0 z-40 border-b backdrop-blur"
       style={{
-        borderColor: LIGHT_GREY,
-        backgroundColor: 'rgba(255,255,255,0.8)',
+        borderColor: 'rgba(255,255,255,0.08)',
+        backgroundColor: 'rgba(21,42,82,0.92)',
+        boxShadow: '0 4px 20px -4px rgba(21,42,82,0.35)',
       }}
     >
       <div className="container mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
         <Link
           href="/"
-          className="flex items-center gap-2.5 text-base tracking-tight"
-          style={{ color: NAVY }}
+          className="group flex items-center gap-2.5 text-base tracking-tight transition-opacity duration-200 hover:opacity-90"
+          style={{ color: SOFT_WHITE }}
         >
           <LogoMark />
           <span>
@@ -83,35 +106,30 @@ function SiteHeader() {
         </Link>
 
         <nav className="hidden items-center gap-8 md:flex">
-          {[
-            { label: 'Platform', href: '#platform' },
-            { label: 'Workflow', href: '#workflow' },
-            { label: 'Reporting', href: '#reporting' },
-            { label: 'Security', href: '#security' },
-          ].map((l) => (
+          {navLinks.map((l) => (
             <a
               key={l.label}
               href={l.href}
-              className="text-sm font-medium transition-colors duration-200"
-              style={{ color: MUTED_FG }}
+              className="text-sm font-medium transition-colors duration-200 hover:text-white"
+              style={{ color: 'rgba(245,247,250,0.7)' }}
             >
               {l.label}
             </a>
           ))}
-          <Link
+          <a
             href="/api/auth/login"
-            className="text-sm font-medium transition-colors duration-200"
-            style={{ color: MUTED_FG }}
+            className="text-sm font-medium transition-colors duration-200 hover:text-white"
+            style={{ color: 'rgba(245,247,250,0.7)' }}
           >
             Sign in
-          </Link>
-          <Link
+          </a>
+          <a
             href="/api/auth/register"
-            className="rounded px-5 py-2 text-sm font-medium transition-colors duration-200"
+            className="rounded px-5 py-2 text-sm font-medium shadow-md transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg"
             style={{ backgroundColor: BLUE, color: SOFT_WHITE }}
           >
             Get started
-          </Link>
+          </a>
         </nav>
       </div>
     </header>
@@ -121,7 +139,7 @@ function SiteHeader() {
 function LogoMark() {
   return (
     <div
-      className="flex size-8 items-center justify-center rounded"
+      className="flex size-8 items-center justify-center rounded shadow-md transition-transform duration-300 group-hover:scale-105"
       style={{ backgroundColor: BLUE }}
     >
       <Shield className="size-4 text-white" strokeWidth={2.5} />
@@ -138,39 +156,40 @@ function Hero() {
     <>
       <section
         className="relative overflow-hidden pt-16 pb-20 md:pt-24 md:pb-28"
-        style={{
-          backgroundImage: `linear-gradient(to bottom, #ffffff 0%, ${SOFT_WHITE} 100%)`,
-        }}
+        style={{ backgroundColor: '#ffffff' }}
       >
-        {/* Subtle dot pattern (very faint, navy dots on light bg) */}
+        {/* Grid pattern (navy lines on white bg) */}
         <div
           aria-hidden="true"
           className="absolute inset-0"
           style={{
-            backgroundImage: `radial-gradient(${NAVY} 1px, transparent 1px)`,
-            backgroundSize: '32px 32px',
-            opacity: 0.05,
+            backgroundImage: `
+              linear-gradient(to right, ${NAVY} 1px, transparent 1px),
+              linear-gradient(to bottom, ${NAVY} 1px, transparent 1px)
+            `,
+            backgroundSize: '48px 48px',
+            opacity: 0.07,
             maskImage:
-              'radial-gradient(ellipse 80% 70% at 50% 30%, black 30%, transparent 85%)',
+              'radial-gradient(ellipse 90% 80% at 50% 40%, black 35%, transparent 90%)',
             WebkitMaskImage:
-              'radial-gradient(ellipse 80% 70% at 50% 30%, black 30%, transparent 85%)',
+              'radial-gradient(ellipse 90% 80% at 50% 40%, black 35%, transparent 90%)',
           }}
         />
 
         <div className="container relative z-10 mx-auto max-w-7xl px-6">
           <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-12 lg:gap-10">
             {/* Left: content */}
-            <div className="lg:col-span-7">
+            <div className="lg:col-span-7 animate-in fade-in-0 slide-in-from-bottom-4 duration-700">
               {/* Trust pill */}
               <div
-                className="mb-8 inline-flex items-center gap-2.5 rounded-full border bg-white px-3.5 py-1.5 text-xs shadow-sm"
+                className="mb-8 inline-flex items-center gap-2.5 rounded-full border bg-white px-3.5 py-1.5 text-xs shadow-sm transition-shadow duration-300 hover:shadow-md"
                 style={{
                   borderColor: LIGHT_GREY,
-                  color: MUTED_FG,
+                  color: INK_MUTED,
                 }}
               >
                 <span
-                  className="flex size-1.5 rounded-full"
+                  className="cm-pulse-dot flex size-1.5 rounded-full"
                   style={{ backgroundColor: BLUE }}
                 />
                 <span className="font-medium">
@@ -198,7 +217,7 @@ function Hero() {
 
               <h1
                 className="mb-6 text-4xl font-bold leading-[1.05] tracking-tight md:text-5xl lg:text-[3.5rem] xl:text-6xl"
-                style={{ color: NAVY }}
+                style={{ color: INK }}
               >
                 The claims workspace your{' '}
                 <span
@@ -227,7 +246,7 @@ function Hero() {
 
               <p
                 className="mb-10 max-w-xl text-lg leading-relaxed md:text-xl"
-                style={{ color: MUTED_FG }}
+                style={{ color: INK_MUTED }}
               >
                 Claims, jobs, quotes, vendors, invoices and reporting —
                 unified in a single, purpose-built workspace for carriers,
@@ -235,18 +254,18 @@ function Hero() {
               </p>
 
               <div className="flex flex-wrap items-center gap-4">
-                <Link
+                <a
                   href="/api/auth/register"
-                  className="inline-flex items-center rounded px-7 py-3.5 text-sm font-medium transition-colors duration-200"
+                  className="group inline-flex items-center rounded px-7 py-3.5 text-sm font-medium shadow-md transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl"
                   style={{ backgroundColor: BLUE, color: SOFT_WHITE }}
                 >
                   Start Free Trial
-                  <ArrowRight className="ml-2 size-4" />
-                </Link>
+                  <ArrowRight className="ml-2 size-4 transition-transform duration-300 group-hover:translate-x-1" />
+                </a>
                 <a
                   href="#platform"
-                  className="inline-flex items-center rounded border bg-white px-6 py-3.5 text-sm font-medium transition-colors duration-200"
-                  style={{ borderColor: LIGHT_GREY, color: NAVY }}
+                  className="inline-flex items-center rounded border bg-white px-6 py-3.5 text-sm font-medium shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md"
+                  style={{ borderColor: LIGHT_GREY, color: INK }}
                 >
                   <PlayCircle className="mr-2 size-4" style={{ color: BLUE }} />
                   Watch 90-second demo
@@ -267,11 +286,11 @@ function Hero() {
                   </div>
                   <span
                     className="text-sm font-semibold"
-                    style={{ color: NAVY }}
+                    style={{ color: INK }}
                   >
                     4.9 / 5
                   </span>
-                  <span className="text-sm" style={{ color: MUTED_FG }}>
+                  <span className="text-sm" style={{ color: INK_MUTED }}>
                     from 180+ reviews
                   </span>
                 </div>
@@ -279,37 +298,37 @@ function Hero() {
                   className="hidden h-4 w-px sm:block"
                   style={{ backgroundColor: LIGHT_GREY }}
                 />
-                <span className="text-sm" style={{ color: MUTED_FG }}>
+                <span className="text-sm" style={{ color: INK_MUTED }}>
                   SOC 2 Type II · AU-hosted
                 </span>
               </div>
             </div>
 
             {/* Right: portrait hero image */}
-            <div className="relative lg:col-span-5">
+            <div className="relative lg:col-span-5 animate-in fade-in-0 slide-in-from-bottom-6 duration-1000">
               {/* Small blue accent square behind the image */}
               <div
                 aria-hidden="true"
                 className="absolute -bottom-6 -right-6 hidden h-2/3 w-2/3 rounded-xl lg:block"
                 style={{
                   backgroundColor: BLUE,
-                  opacity: 0.08,
+                  opacity: 0.1,
                 }}
               />
               {/* Thin navy accent square behind the image (offset) */}
               <div
                 aria-hidden="true"
                 className="absolute -left-4 -top-4 hidden h-16 w-16 rounded-md border-2 lg:block"
-                style={{ borderColor: NAVY, opacity: 0.15 }}
+                style={{ borderColor: NAVY, opacity: 0.2 }}
               />
 
               <div
-                className="relative overflow-hidden rounded-xl"
+                className="relative overflow-hidden rounded-xl transition-transform duration-500 hover:-translate-y-1"
                 style={{
                   aspectRatio: '4 / 5',
                   backgroundColor: NAVY,
                   boxShadow:
-                    '0 30px 60px -20px rgba(15,29,51,0.35), 0 0 0 1px rgba(15,29,51,0.08)',
+                    '0 40px 80px -20px rgba(21,42,82,0.45), 0 0 0 1px rgba(21,42,82,0.08)',
                 }}
               >
                 <Image
@@ -325,7 +344,7 @@ function Hero() {
 
               {/* Floating metric chip over the image */}
               <div
-                className="absolute -left-4 bottom-10 hidden items-center gap-3 rounded-lg border bg-white p-3 pr-5 shadow-lg lg:flex"
+                className="cm-float absolute -left-4 bottom-10 hidden items-center gap-3 rounded-lg border bg-white p-3 pr-5 shadow-xl lg:flex"
                 style={{ borderColor: LIGHT_GREY }}
               >
                 <div
@@ -337,13 +356,13 @@ function Hero() {
                 <div>
                   <div
                     className="text-[10px] font-semibold uppercase tracking-widest"
-                    style={{ color: MUTED_FG }}
+                    style={{ color: INK_MUTED }}
                   >
                     Cycle time
                   </div>
                   <div
                     className="text-sm font-bold"
-                    style={{ color: NAVY }}
+                    style={{ color: INK }}
                   >
                     −62% vs. legacy
                   </div>
@@ -354,20 +373,21 @@ function Hero() {
         </div>
       </section>
 
-      {/* Stat strip bridging hero to the next section */}
+      {/* Stat strip bridging hero to the next section (dark for alternation) */}
       <div
-        className="border-y"
+        className="relative"
         style={{
-          backgroundColor: SOFT_WHITE,
-          borderColor: LIGHT_GREY,
+          backgroundColor: NAVY,
+          boxShadow:
+            '0 -10px 30px -15px rgba(21,42,82,0.4), 0 10px 30px -15px rgba(21,42,82,0.4)',
         }}
       >
         <div className="container mx-auto max-w-7xl px-6">
-          <div className="grid grid-cols-2 divide-x md:grid-cols-4" style={{ color: NAVY }}>
-            <StatCell
-              value="2.4M+"
-              label="Claims processed"
-            />
+          <div
+            className="grid grid-cols-2 divide-x md:grid-cols-4"
+            style={{ color: SOFT_WHITE }}
+          >
+            <StatCell value="2.4M+" label="Claims processed" />
             <StatCell value="62%" label="Faster cycle time" />
             <StatCell value="99.99%" label="Platform uptime" />
             <StatCell value="5 days" label="Median go-live" />
@@ -381,18 +401,18 @@ function Hero() {
 function StatCell({ value, label }: { value: string; label: string }) {
   return (
     <div
-      className="flex flex-col items-center justify-center py-8"
-      style={{ borderColor: LIGHT_GREY }}
+      className="group flex flex-col items-center justify-center py-8 transition-colors duration-300"
+      style={{ borderColor: 'rgba(214,221,228,0.12)' }}
     >
       <div
-        className="text-3xl font-bold tracking-tight md:text-4xl"
-        style={{ color: NAVY }}
+        className="text-3xl font-bold tracking-tight transition-transform duration-300 group-hover:scale-105 md:text-4xl"
+        style={{ color: SOFT_WHITE }}
       >
         {value}
       </div>
       <div
         className="mt-1 text-xs font-medium uppercase tracking-widest"
-        style={{ color: MUTED_FG }}
+        style={{ color: 'rgba(245,247,250,0.65)' }}
       >
         {label}
       </div>
@@ -474,7 +494,7 @@ function ProblemSection() {
     <section
       id="challenge"
       className="py-24 md:py-32"
-      style={{ backgroundColor: SOFT_WHITE }}
+      style={{ backgroundColor: '#ffffff' }}
     >
       <div className="container mx-auto max-w-7xl px-6">
         <div className="flex flex-col lg:flex-row lg:items-center lg:gap-12 xl:gap-16">
@@ -590,7 +610,7 @@ function WorkflowSectionBlock() {
     <section
       id="workflow"
       className="py-24 md:py-32"
-      style={{ backgroundColor: SOFT_WHITE }}
+      style={{ backgroundColor: '#ffffff' }}
     >
       <div className="container mx-auto max-w-7xl px-6">
         <div className="flex flex-col lg:flex-row lg:items-center lg:gap-12 xl:gap-16">
@@ -668,10 +688,10 @@ function IntelligenceSection() {
           {examples.map((q) => (
             <div
               key={q}
-              className="rounded border p-6"
+              className="rounded border p-6 transition-all duration-300 hover:-translate-y-1 hover:border-white/30 hover:shadow-xl hover:shadow-black/30"
               style={{
                 borderColor: 'rgba(214,221,228,0.15)',
-                backgroundColor: 'rgba(15,29,51,0.35)',
+                backgroundColor: 'rgba(21,42,82,0.35)',
               }}
             >
               <p
@@ -731,7 +751,7 @@ function ProfessionalSection() {
     <section
       id="security"
       className="py-24 md:py-32"
-      style={{ backgroundColor: SOFT_WHITE }}
+      style={{ backgroundColor: '#ffffff' }}
     >
       <div className="container mx-auto max-w-7xl px-6">
         <div className="max-w-3xl">
@@ -750,11 +770,11 @@ function ProfessionalSection() {
           {features.map((f) => (
             <div
               key={f.title}
-              className="rounded border bg-white p-8 shadow-sm"
+              className="group rounded border bg-white p-8 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-transparent hover:shadow-xl"
               style={{ borderColor: LIGHT_GREY }}
             >
               <div
-                className="mb-5 flex size-10 items-center justify-center rounded"
+                className="mb-5 flex size-10 items-center justify-center rounded shadow-md transition-all duration-300 group-hover:scale-110 group-hover:shadow-lg"
                 style={{ backgroundColor: BLUE }}
               >
                 <f.icon className="size-5 text-white" strokeWidth={2} />
@@ -805,24 +825,24 @@ function EarlyAccessCta() {
             guided rollout.
           </p>
           <div className="flex flex-wrap gap-4">
-            <Link
+            <a
               href="/api/auth/register"
-              className="inline-flex items-center rounded px-7 py-3.5 text-sm font-medium transition-colors duration-200"
+              className="group inline-flex items-center rounded px-7 py-3.5 text-sm font-medium shadow-lg transition-all duration-300 hover:-translate-y-0.5 hover:shadow-2xl"
               style={{ backgroundColor: BLUE, color: SOFT_WHITE }}
             >
               Start Free Trial
-              <ArrowRight className="ml-2 size-4" />
-            </Link>
-            <Link
+              <ArrowRight className="ml-2 size-4 transition-transform duration-300 group-hover:translate-x-1" />
+            </a>
+            <a
               href="/api/auth/login"
-              className="inline-flex items-center rounded border px-7 py-3.5 text-sm font-medium transition-colors duration-200"
+              className="inline-flex items-center rounded border px-7 py-3.5 text-sm font-medium transition-all duration-300 hover:-translate-y-0.5 hover:border-white/40 hover:bg-white/5"
               style={{
                 borderColor: 'rgba(214,221,228,0.2)',
-                color: 'rgba(245,247,250,0.8)',
+                color: 'rgba(245,247,250,0.9)',
               }}
             >
               Talk to Sales
-            </Link>
+            </a>
           </div>
 
           <div
@@ -894,7 +914,7 @@ function ProblemMock() {
   ];
   return (
     <div
-      className="rounded-lg border bg-white p-6 shadow-lg"
+      className="rounded-lg border bg-white p-6 shadow-lg transition-all duration-500 hover:-translate-y-1 hover:shadow-2xl"
       style={{ borderColor: LIGHT_GREY }}
     >
       <p
@@ -908,7 +928,7 @@ function ProblemMock() {
           <div
             key={r.label}
             className="flex items-center justify-between rounded border px-4 py-3"
-            style={{ borderColor: LIGHT_GREY, backgroundColor: SOFT_WHITE }}
+            style={{ borderColor: LIGHT_GREY, backgroundColor: '#ffffff' }}
           >
             <span className="text-sm font-medium" style={{ color: NAVY }}>
               {r.label}
@@ -960,12 +980,12 @@ function ClaimsMock() {
 
   return (
     <div
-      className="overflow-hidden rounded-lg bg-white shadow-2xl"
+      className="overflow-hidden rounded-lg bg-white shadow-2xl transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_30px_60px_-15px_rgba(21,42,82,0.5)]"
       style={{ border: `1px solid ${LIGHT_GREY}` }}
     >
       <div
         className="flex items-center justify-between border-b px-5 py-4"
-        style={{ borderColor: LIGHT_GREY, backgroundColor: SOFT_WHITE }}
+        style={{ borderColor: LIGHT_GREY, backgroundColor: '#ffffff' }}
       >
         <div>
           <p className="text-sm font-semibold" style={{ color: NAVY }}>
@@ -1038,7 +1058,7 @@ function WorkflowMock() {
 
   return (
     <div
-      className="rounded-lg border bg-white p-6 shadow-lg"
+      className="rounded-lg border bg-white p-6 shadow-lg transition-all duration-500 hover:-translate-y-1 hover:shadow-2xl"
       style={{ borderColor: LIGHT_GREY }}
     >
       <div className="mb-6 flex items-center justify-between">

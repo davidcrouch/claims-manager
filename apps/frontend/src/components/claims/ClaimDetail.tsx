@@ -10,8 +10,6 @@ import {
   Briefcase,
   ShieldAlert,
   FileSignature,
-  CircleCheck,
-  CircleX,
   Phone,
   Mail,
   Home,
@@ -31,66 +29,19 @@ import {
   TabsList,
   TabsTrigger,
 } from '@/components/ui/tabs';
+import {
+  DefRow,
+  SectionCard,
+  BoolPill,
+  formatDate,
+  formatDateTime,
+  formatCurrency,
+  pick,
+  asString,
+  asBool,
+  type Dict,
+} from '@/components/shared/detail';
 import type { Claim } from '@/types/api';
-
-type Dict = Record<string, unknown>;
-
-function pick(obj: Dict | undefined, ...keys: string[]): unknown {
-  if (!obj) return undefined;
-  for (const k of keys) {
-    const v = obj[k];
-    if (v !== undefined && v !== null && v !== '') return v;
-  }
-  return undefined;
-}
-
-function asString(v: unknown): string | undefined {
-  if (v == null) return undefined;
-  if (typeof v === 'string') return v || undefined;
-  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
-  return undefined;
-}
-
-function asBool(v: unknown): boolean | undefined {
-  if (v == null) return undefined;
-  if (typeof v === 'boolean') return v;
-  if (v === 'true') return true;
-  if (v === 'false') return false;
-  return undefined;
-}
-
-function formatDate(value?: string | null): string {
-  if (!value) return '—';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-}
-
-function formatDateTime(value?: string | null): string {
-  if (!value) return '—';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString();
-}
-
-function formatCurrency(value: unknown): string {
-  if (value == null || value === '') return '—';
-  const n = typeof value === 'number' ? value : Number(value);
-  if (Number.isNaN(n)) return String(value);
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency: 'AUD',
-      maximumFractionDigits: 2,
-    }).format(n);
-  } catch {
-    return `$${n.toFixed(2)}`;
-  }
-}
 
 function formatAddress(claim: Claim): string {
   const addr = claim.address as Dict | undefined;
@@ -126,59 +77,6 @@ function getApi(claim: Claim): Dict {
 function getPolicy(claim: Claim): Dict {
   const fromClaim = (claim.policyDetails as Dict | undefined) ?? {};
   return fromClaim;
-}
-
-function DefRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="grid grid-cols-[minmax(0,180px)_1fr] gap-2 py-1.5 text-sm border-b border-border/40 last:border-b-0">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="text-foreground wrap-break-word">
-        {value == null || value === '' ? '—' : value}
-      </dd>
-    </div>
-  );
-}
-
-function SectionCard({
-  title,
-  icon,
-  children,
-}: {
-  title: string;
-  icon?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm">
-          {icon}
-          {title}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <dl>{children}</dl>
-      </CardContent>
-    </Card>
-  );
-}
-
-function BoolPill({ value }: { value: unknown }) {
-  const b = asBool(value);
-  if (b === undefined) return <span className="text-muted-foreground">—</span>;
-  return (
-    <span
-      className={
-        'inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium ' +
-        (b
-          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400'
-          : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400')
-      }
-    >
-      {b ? <CircleCheck className="h-3 w-3" /> : <CircleX className="h-3 w-3" />}
-      {b ? 'Yes' : 'No'}
-    </span>
-  );
 }
 
 function OverviewTab({ claim }: { claim: Claim }) {

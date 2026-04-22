@@ -677,23 +677,32 @@ export async function createOidcProvider(): Promise<Provider> {
       // Cookie configuration for secure sessions
       // IMPORTANT: keys are REQUIRED for signing cookies - without them, cookies fail
       // validation after cross-site redirects (e.g., Google OAuth) causing "session expired" errors
-      cookies: {
-         keys: getOidcCookieKeys(),
-         long: {
-            signed: true,
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production' || process.env.OIDC_COOKIES_SECURE === 'true',
-            sameSite: 'lax' as const,
-            maxAge: 14 * 24 * 60 * 60 * 1000, // 14 days
-         },
-         short: {
-            signed: true,
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production' || process.env.OIDC_COOKIES_SECURE === 'true',
-            sameSite: 'lax' as const,
-            maxAge: 10 * 60 * 1000, // 10 minutes for interactions
-         }
-      },
+      //
+      // Cookie maxAge is aligned with the server-side TTLs configured via
+      // OIDC_SESSION_TTL (long cookie) and OIDC_INTERACTION_TTL (short cookie) so
+      // that login interaction cookies don't expire before the server-side
+      // interaction, which was the cause of "Session expired. Please try again."
+      // errors during login (previously the short cookie was only 10 minutes).
+      cookies: (() => {
+         const ttl = getTokenTtlConfig();
+         return {
+            keys: getOidcCookieKeys(),
+            long: {
+               signed: true,
+               httpOnly: true,
+               secure: process.env.NODE_ENV === 'production' || process.env.OIDC_COOKIES_SECURE === 'true',
+               sameSite: 'lax' as const,
+               maxAge: ttl.session * 1000,
+            },
+            short: {
+               signed: true,
+               httpOnly: true,
+               secure: process.env.NODE_ENV === 'production' || process.env.OIDC_COOKIES_SECURE === 'true',
+               sameSite: 'lax' as const,
+               maxAge: ttl.interaction * 1000,
+            }
+         };
+      })(),
 
       // DCR: persist organization + MCP app allow-list (used in JWT for MCP gateway, doc 35)
       extraClientMetadata: {

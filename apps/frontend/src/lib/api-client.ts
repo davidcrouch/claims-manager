@@ -15,6 +15,7 @@ import type {
   Message,
   Vendor,
   Appointment,
+  Attachment,
   DashboardStats,
   RecentActivity,
   PaginatedResponse,
@@ -33,7 +34,7 @@ export interface ApiClientOptions {
   tenantId?: string;
 }
 
-class ApiError extends Error {
+export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
@@ -180,6 +181,18 @@ export function createApiClient(options?: ApiClientOptions) {
 
     getJobAppointments(jobId: string): Promise<Appointment[]> {
       return fetchApi<Appointment[]>(`/appointments/job/${jobId}`);
+    },
+
+    getJobInvoices(jobId: string): Promise<Invoice[]> {
+      return fetchApi<Invoice[]>(`/invoices/job/${jobId}`);
+    },
+
+    getJobAttachments(jobId: string): Promise<Attachment[]> {
+      const sp = new URLSearchParams({
+        relatedRecordType: 'Job',
+        relatedRecordId: jobId,
+      });
+      return fetchApi<Attachment[]>(`/attachments?${sp}`);
     },
 
     getQuotes(params: {
