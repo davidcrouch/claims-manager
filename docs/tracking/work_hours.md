@@ -155,3 +155,16 @@
   Included a **sign-up call-to-action** band and a clean **footer** so visitors always have a clear next step.
   Produced a bespoke **navy hero visual** (AI-generated) shipped with the site so the page does not rely on stock imagery.
   Made the whole page **responsive** so it reads cleanly on phones, tablets, and desktops.
+
+- `2026-04-22` `b093287` **6 h**
+  `75 files | +12 247 −671 | Tier 3 complex / Tier 4 deep integration | Heavy orchestration`
+  Lay summary: Rebuilt the partner-webhook processing pipeline so each incoming event is handed to a managed workflow that runs a short, auditable sequence of steps, with the raw payload archived to object storage and a clean fallback to the existing in-process path.
+  **More0 webhook-workflow app with S3 archive, webhook tools, and event orchestration.** Packaged the webhook pipeline as a self-contained **More0 workflow app** (`process-inbound-event`) that takes an event identifier and drives the end-to-end flow: read the event, archive the raw payload, upsert mapped records, and update the processing log.
+  Defined six **HTTP tool endpoints** (webhook-event-read, payload-archive, crunchwork-fetch, external-object-upsert, entity-mapper, processing-log-update) behind a shared **tool-auth guard**, each with its own tool descriptor and typed handler, so the workflow can call well-scoped API capabilities.
+  Added a new **S3 / MinIO service and module** with configuration wiring so inbound payloads are archived to a dedicated bucket for audit and replay.
+  Shipped a **database migration and seed-framework entry** (`sample-data.seed.ts`) to support the new archive / processing flow and populate reference data consistently across environments.
+  Extended the **webhook orchestrator** and event-type resolver to dispatch to the workflow when enabled, while keeping the legacy in-process path as an environment-switchable fallback.
+  Updated the **external-object service, entity mapper registry, and partner mappers** (appointment, attachment, claim, invoice, job, message, purchase order, quote, report, task) to plug into the new pipeline cleanly.
+  Wired the **deployment layer** — Docker Compose for local, Kubernetes external-secrets and api-server manifests, and the Terraform secrets module — so the new bucket, More0 config, and environment toggles are available in every environment.
+  Retired the previous `external/tools` module in favour of the new **webhook-tools module** and documented the whole pipeline in an implementation note.
+  Added unit specs for the **orchestrator and More0 service** plus a client-test script for the workflow so the integration can be exercised end-to-end without the partner.
