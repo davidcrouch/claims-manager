@@ -1,6 +1,6 @@
 {
   "name": "claims-manager-webhook",
-  "display_name": "Claims Manager Webhook",
+  "display_name": "EnsureOS Webhook",
   "type": "application",
   "version": "2.0.0",
   "description": "Webhook ingestion pipeline: event lookup → CW fetch → payload archive → external upsert → projection.",

@@ -111,14 +111,14 @@
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
-  /* Sidebar: dark navy — purer blue (lower green vs blue; avoids teal cast) */
-  --sidebar: #182f58;
-  --sidebar-foreground: #f5f7fa;
+  /* Sidebar: dark navy — slightly darker base; menu text pure white */
+  --sidebar: #162b50;
+  --sidebar-foreground: #ffffff;
   --sidebar-primary: #3e86d4;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #243e6e;
-  --sidebar-accent-foreground: #f5f7fa;
-  --sidebar-border: rgba(255, 255, 255, 0.09);
+  --sidebar-accent: #203d6a;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(255, 255, 255, 0.1);
   --sidebar-ring: #3e86d4;
   /* Button/UI tokens (workers-comp-ai-paralegal) */
   --btn-primary: oklch(0.488 0.243 264.376);
@@ -153,13 +153,14 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --sidebar: #182f58;
-  --sidebar-foreground: #f5f7fa;
+  /* Sidebar: same tokens as :root (dark navy + white nav labels) */
+  --sidebar: #162b50;
+  --sidebar-foreground: #ffffff;
   --sidebar-primary: #3e86d4;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #243e6e;
-  --sidebar-accent-foreground: #f5f7fa;
-  --sidebar-border: rgba(255, 255, 255, 0.09);
+  --sidebar-accent: #203d6a;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(255, 255, 255, 0.1);
   --sidebar-ring: #3e86d4;
 }
 

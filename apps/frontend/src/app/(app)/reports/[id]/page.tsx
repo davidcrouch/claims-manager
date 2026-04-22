@@ -11,11 +11,11 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const api = await getServerApiClient();
-  if (!api) return { title: 'Report | Claims Manager' };
+  if (!api) return { title: 'Report | EnsureOS' };
 
   const report = await api.getReport(id).catch(() => null);
   const title = report?.title ?? report?.reference ?? id;
-  return { title: `${title} | Claims Manager` };
+  return { title: `${title} | EnsureOS` };
 }
 
 export default async function ReportDetailPage({

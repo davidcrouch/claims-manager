@@ -206,7 +206,7 @@ async function createServer(): Promise<Application> {
          const baseUrl = `${req.protocol}://${req.get('host')}`;
 
          res.render('home', {
-            title: 'MoreZero Auth Server',
+            title: 'EnsureOS Auth Server',
             health: {
                status: 'ok',
                uptime: process.uptime(),
@@ -403,7 +403,7 @@ async function startServer(): Promise<void> {
                oidcIssuer: serverConfig.oidcIssuer,
                environment: nodeEnv,
                isProduction: nodeEnv === 'production'
-            }, 'MoreZero Auth Server is running');
+            }, 'EnsureOS Auth Server is running');
 
             // Server is running successfully
          });

@@ -11,11 +11,11 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const api = await getServerApiClient();
-  if (!api) return { title: 'Purchase Order | Claims Manager' };
+  if (!api) return { title: 'Purchase Order | EnsureOS' };
 
   const po = await api.getPurchaseOrder(id).catch(() => null);
   const title = po?.purchaseOrderNumber ?? po?.externalId ?? id;
-  return { title: `${title} | Claims Manager` };
+  return { title: `${title} | EnsureOS` };
 }
 
 export default async function PurchaseOrderDetailPage({

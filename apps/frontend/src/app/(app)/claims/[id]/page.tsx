@@ -11,11 +11,11 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const api = await getServerApiClient();
-  if (!api) return { title: 'Claim | Claims Manager' };
+  if (!api) return { title: 'Claim | EnsureOS' };
 
   const claim = await api.getClaim(id).catch(() => null);
   const title = claim?.claimNumber ?? claim?.externalReference ?? id;
-  return { title: `${title} | Claims Manager` };
+  return { title: `${title} | EnsureOS` };
 }
 
 export default async function ClaimDetailPage({

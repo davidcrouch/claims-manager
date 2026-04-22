@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -12,7 +13,6 @@ import {
   ClipboardList,
   Building2,
   Unplug,
-  Shield,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -49,15 +49,17 @@ export function AppSidebar() {
           href="/dashboard"
           className="group/brand flex items-center gap-2.5 px-2 py-1.5 text-sidebar-foreground transition-opacity duration-200 hover:opacity-90"
         >
-          <span
-            className="flex size-7 shrink-0 items-center justify-center rounded-md shadow-md transition-transform duration-300 group-hover/brand:scale-105"
-            style={{ backgroundColor: '#3e86d4' }}
-          >
-            <Shield className="size-4 text-white" strokeWidth={2.5} />
+          <span className="relative flex size-8 shrink-0 overflow-hidden rounded-md shadow-md ring-1 ring-white/15 transition-transform duration-300 group-hover/brand:scale-105">
+            <Image
+              src="/ensure_logo.png"
+              alt=""
+              width={32}
+              height={32}
+              className="size-full object-contain"
+            />
           </span>
-          <span className="truncate text-sm tracking-tight group-data-[collapsible=icon]:hidden">
-            <span className="font-bold">Claims</span>{' '}
-            <span className="font-light">Manager</span>
+          <span className="truncate text-sm font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
+            EnsureOS
           </span>
         </Link>
       </SidebarHeader>

@@ -1,4 +1,5 @@
 export { AuthLayout } from './AuthLayout.js';
+export { AuthLeftPanel } from './AuthLeftPanel.js';
 export { LoginPage } from './LoginPage.js';
 export { RegisterPage } from './RegisterPage.js';
 export { OrganizationSelectorPage } from './OrganizationSelectorPage.js';

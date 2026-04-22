@@ -68,8 +68,8 @@ export function ConsentPage({
       <head>
         <meta charSet="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Authorize Application - More0</title>
-        <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+        <title>Authorize application — EnsureOS</title>
+        <link rel="icon" type="image/png" href="/ensure_logo.png" />
         <link rel="stylesheet" href="/styles.css" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
@@ -78,7 +78,7 @@ export function ConsentPage({
       <body className="bg-white min-h-screen flex items-center justify-center p-5 font-sans">
         <div className="bg-white rounded-xl border border-gray-200 shadow-2xl w-full max-w-[600px] p-10">
           <div className="text-center mb-8">
-            <img src="/large_logo.png" alt="More0 Logo" className="w-[200px] h-[100px] object-contain mx-auto mb-5" />
+            <img src="/ensure_logo_text.png" alt="EnsureOS" className="w-[200px] h-[100px] object-contain mx-auto mb-5" />
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Authorize Application</h1>
             <p className="text-base text-gray-500">Review and approve the requested permissions</p>
           </div>

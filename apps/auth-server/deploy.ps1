@@ -1,4 +1,4 @@
-# Deploy Script for More0 Auth Server
+# Deploy Script for EnsureOS Auth Server
 # Run this script from the apps/auth-server directory
 
 param(
@@ -12,7 +12,7 @@ param(
 
 if ($Help) {
     Write-Host @"
-Deploy Script for More0 Auth Server
+Deploy Script for EnsureOS Auth Server
 
 Usage:
     .\deploy.ps1 [options]

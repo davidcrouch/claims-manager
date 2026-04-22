@@ -11,8 +11,15 @@ const figtree = Figtree({
 });
 
 export const metadata: Metadata = {
-  title: 'Claims Manager',
-  description: 'Claims Manager Application',
+  title: {
+    default: 'EnsureOS',
+    template: '%s | EnsureOS',
+  },
+  description: 'EnsureOS — claim, repair, and operations workspace for insurance teams.',
+  icons: {
+    icon: [{ url: '/ensure_logo.png', type: 'image/png' }],
+    apple: [{ url: '/ensure_logo.png', type: 'image/png' }],
+  },
 };
 
 export default function RootLayout({

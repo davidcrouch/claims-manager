@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { FileText, Briefcase, ClipboardCheck, Receipt } from 'lucide-react';
 
 export const metadata = {
-  title: 'Dashboard | Claims Manager',
+  title: 'Dashboard | EnsureOS',
 };
 
 export default async function DashboardPage() {

@@ -1,10 +1,10 @@
-# More0 Auth Server
+# EnsureOS Auth Server
 
 Express-based OAuth 2.1/OIDC Authorization Server with MCP compliance, Dynamic Client Registration, and Initial Access Token support.
 
 ## Overview
 
-This is a comprehensive OAuth 2.1/OpenID Connect authorization server built with Express.js that provides authentication and authorization services for the More0 ecosystem. It supports both user authentication and machine-to-machine (M2M) client registration with Initial Access Tokens (IAT) for autonomous client onboarding.
+This is a comprehensive OAuth 2.1/OpenID Connect authorization server built with Express.js that provides authentication and authorization services for the EnsureOS product. It supports both user authentication and machine-to-machine (M2M) client registration with Initial Access Tokens (IAT) for autonomous client onboarding.
 
 ## Key Features
 

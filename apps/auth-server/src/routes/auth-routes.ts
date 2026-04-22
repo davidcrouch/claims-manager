@@ -368,7 +368,7 @@ export default function createAuthRoutes(
                   appSlug,
                   startOverUrl,
                }),
-               { title: 'More0 - Sign In', description: 'Sign in to your account' }
+               { title: 'EnsureOS — Sign in', description: 'Sign in to your EnsureOS account' }
             );
             res.send(html);
             
@@ -450,7 +450,7 @@ export default function createAuthRoutes(
                   loginUrl,
                   startOverUrl,
                }),
-               { title: 'More0 - Sign Up', description: 'Create your account' }
+               { title: 'EnsureOS — Sign up', description: 'Create your EnsureOS account' }
             );
             res.send(html);
             
@@ -482,7 +482,7 @@ export default function createAuthRoutes(
                success,
                loginUrl: `${baseUrl}/login`,
             }),
-            { title: 'More0 - Reset Password', description: 'Reset your password' }
+            { title: 'EnsureOS — Reset password', description: 'Reset your password' }
          );
          res.send(html);
       } catch (err) {
@@ -511,7 +511,7 @@ export default function createAuthRoutes(
                error: error ? decodeURIComponent(error) : null,
                loginUrl: `${baseUrl}/login`,
             }),
-            { title: 'More0 - Set New Password' }
+            { title: 'EnsureOS — Set new password' }
          );
          res.send(html);
       } catch (err) {
@@ -552,7 +552,7 @@ export default function createAuthRoutes(
                actionUrl: `${baseUrl}/api/auth/signup`,
                loginUrl: `${baseUrl}/login`,
             }),
-            { title: 'More0 - Complete Your Registration' }
+            { title: 'EnsureOS — Complete your registration' }
          );
          res.send(html);
       } catch (err) {
@@ -917,7 +917,7 @@ export default function createAuthRoutes(
                      actionUrl: `/interaction/${interactionUid}/select-organization`,
                      showCreateNew: true,
                   }),
-                  { title: 'More0 - Select Organization' }
+                  { title: 'EnsureOS — Select organization' }
                );
                return res.send(selectOrgHtml);
             }
@@ -950,7 +950,7 @@ export default function createAuthRoutes(
                      actionUrl: `/interaction/${interactionUid}/select-org`,
                      showCreateNew: false,
                   }),
-                  { title: 'More0 - Select Organization' }
+                  { title: 'EnsureOS — Select organization' }
                );
                return res.send(selectOrgHtml);
             }
@@ -1148,7 +1148,7 @@ export default function createAuthRoutes(
                         resourceScopes,
                         error: null,
                      }),
-                     { title: 'Authorize Application - More0' }
+                     { title: 'EnsureOS — Authorize application' }
                   );
                   return res.send(consentHtml);
                } catch (error) {
@@ -2639,7 +2639,7 @@ export default function createAuthRoutes(
                   resourceScopes,
                   error: err.message || 'An error occurred processing your consent',
                }),
-               { title: 'Authorize Application - More0' }
+               { title: 'EnsureOS — Authorize application' }
             );
             return res.send(errorConsentHtml);
          } catch (renderError) {

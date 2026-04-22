@@ -44,8 +44,8 @@ async function bootstrap() {
   });
 
   const config = new DocumentBuilder()
-    .setTitle('Claims Manager API')
-    .setDescription('BFF API for Claims Manager')
+    .setTitle('EnsureOS API')
+    .setDescription('BFF API for EnsureOS')
     .setVersion('1.0')
     .addBearerAuth()
     .build();

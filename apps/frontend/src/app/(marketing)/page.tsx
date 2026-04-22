@@ -88,21 +88,18 @@ function SiteHeader() {
       className="sticky top-0 z-40 border-b backdrop-blur"
       style={{
         borderColor: 'rgba(255,255,255,0.08)',
-        backgroundColor: 'rgba(21,42,82,0.92)',
-        boxShadow: '0 4px 20px -4px rgba(21,42,82,0.35)',
+        backgroundColor: 'rgba(22,43,80,0.92)',
+        boxShadow: '0 4px 20px -4px rgba(22,43,80,0.35)',
       }}
     >
       <div className="container mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
         <Link
           href="/"
           className="group flex items-center gap-2.5 text-base tracking-tight transition-opacity duration-200 hover:opacity-90"
-          style={{ color: SOFT_WHITE }}
+          style={{ color: '#ffffff' }}
         >
           <LogoMark />
-          <span>
-            <span className="font-bold">Claims</span>{' '}
-            <span className="font-light">Manager</span>
-          </span>
+          <span className="font-semibold tracking-tight">EnsureOS</span>
         </Link>
 
         <nav className="hidden items-center gap-8 md:flex">
@@ -110,16 +107,14 @@ function SiteHeader() {
             <a
               key={l.label}
               href={l.href}
-              className="text-sm font-medium transition-colors duration-200 hover:text-white"
-              style={{ color: 'rgba(245,247,250,0.7)' }}
+              className="text-sm font-medium text-white transition-opacity duration-200 hover:opacity-80"
             >
               {l.label}
             </a>
           ))}
           <a
             href="/api/auth/login"
-            className="text-sm font-medium transition-colors duration-200 hover:text-white"
-            style={{ color: 'rgba(245,247,250,0.7)' }}
+            className="text-sm font-medium text-white transition-opacity duration-200 hover:opacity-80"
           >
             Sign in
           </a>
@@ -138,12 +133,15 @@ function SiteHeader() {
 
 function LogoMark() {
   return (
-    <div
-      className="flex size-8 items-center justify-center rounded shadow-md transition-transform duration-300 group-hover:scale-105"
-      style={{ backgroundColor: BLUE }}
-    >
-      <Shield className="size-4 text-white" strokeWidth={2.5} />
-    </div>
+    <span className="relative flex size-9 shrink-0 overflow-hidden rounded-md bg-white/10 p-1 shadow-md ring-1 ring-white/20 transition-transform duration-300 group-hover:scale-105">
+      <Image
+        src="/ensure_logo.png"
+        alt=""
+        width={36}
+        height={36}
+        className="size-full object-contain"
+      />
+    </span>
   );
 }
 
@@ -211,7 +209,7 @@ function Hero() {
                   className="text-xs font-semibold uppercase tracking-[0.2em]"
                   style={{ color: BLUE }}
                 >
-                  Claims Management Platform
+                  Insurance operations platform
                 </span>
               </div>
 
@@ -333,7 +331,7 @@ function Hero() {
               >
                 <Image
                   src="/claims-hero.png"
-                  alt="Claims Manager — unified workspace showing claims, analytics and workflow"
+                  alt="EnsureOS — unified workspace showing claims, analytics and workflow"
                   width={1024}
                   height={585}
                   priority
@@ -562,7 +560,7 @@ function UnifiedRecordsSection() {
               className="mb-6 text-base leading-relaxed"
               style={{ color: 'rgba(245,247,250,0.6)' }}
             >
-              Claims Manager brings every piece of a claim together — parties,
+              EnsureOS brings every piece of a claim together — parties,
               coverage, events, documents, quotes, payments and communications —
               into a single, navigable record.
             </p>
@@ -761,7 +759,7 @@ function ProfessionalSection() {
             className="mb-16 text-lg leading-relaxed"
             style={{ color: MUTED_FG }}
           >
-            Claims Manager is built to support the confidentiality,
+            EnsureOS is built to support the confidentiality,
             auditability and operational rigour that insurance teams require.
           </p>
         </div>
@@ -820,7 +818,7 @@ function EarlyAccessCta() {
             className="mb-10 text-lg leading-relaxed"
             style={{ color: 'rgba(245,247,250,0.7)' }}
           >
-            Claims Manager is now available to carriers, MGAs and adjusting
+            EnsureOS is now available to carriers, MGAs and adjusting
             firms. Start a free trial in minutes, or talk to our team about a
             guided rollout.
           </p>
@@ -887,13 +885,10 @@ function SiteFooter() {
           style={{ color: SOFT_WHITE }}
         >
           <LogoMark />
-          <span>
-            <span className="font-bold">Claims</span>{' '}
-            <span className="font-light">Manager</span>
-          </span>
+          <span className="font-semibold tracking-tight">EnsureOS</span>
         </div>
         <p className="text-xs" style={{ color: 'rgba(245,247,250,0.5)' }}>
-          © {new Date().getFullYear()} Claims Manager. All rights reserved.
+          © {new Date().getFullYear()} EnsureOS. All rights reserved.
         </p>
       </div>
     </footer>

@@ -11,11 +11,11 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const api = await getServerApiClient();
-  if (!api) return { title: 'Quote | Claims Manager' };
+  if (!api) return { title: 'Quote | EnsureOS' };
 
   const quote = await api.getQuote(id).catch(() => null);
   const title = quote?.quoteNumber ?? quote?.externalReference ?? id;
-  return { title: `${title} | Claims Manager` };
+  return { title: `${title} | EnsureOS` };
 }
 
 export default async function QuoteDetailPage({

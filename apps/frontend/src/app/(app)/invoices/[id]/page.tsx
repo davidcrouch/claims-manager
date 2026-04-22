@@ -11,11 +11,11 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const api = await getServerApiClient();
-  if (!api) return { title: 'Invoice | Claims Manager' };
+  if (!api) return { title: 'Invoice | EnsureOS' };
 
   const invoice = await api.getInvoice(id).catch(() => null);
   const title = invoice?.invoiceNumber ?? id;
-  return { title: `${title} | Claims Manager` };
+  return { title: `${title} | EnsureOS` };
 }
 
 export default async function InvoiceDetailPage({

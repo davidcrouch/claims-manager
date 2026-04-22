@@ -1,6 +1,6 @@
 # Auth Server Test Suite
 
-Comprehensive test suite for the More0 Auth Server using the co-located `__tests__` pattern.
+Comprehensive test suite for the EnsureOS Auth Server using the co-located `__tests__` pattern.
 
 ## Test Structure
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `server.ts` file is the main entry point for the More0 Auth Server, implementing a comprehensive OAuth 2.0/OIDC authentication server using Express.js and the `oidc-provider` library. This document explains the design decisions, architecture patterns, and middleware ordering that make this server production-ready.
+The `server.ts` file is the main entry point for the EnsureOS Auth Server, implementing a comprehensive OAuth 2.0/OIDC authentication server using Express.js and the `oidc-provider` library. This document explains the design decisions, architecture patterns, and middleware ordering that make this server production-ready.
 
 ## Architecture Design
 
@@ -236,7 +236,7 @@ log.info({
    oidcIssuer: serverConfig.oidcIssuer,
    environment: nodeEnv,
    isProduction: nodeEnv === 'production'
-}, 'More0 Auth Server is running');
+}, 'EnsureOS Auth Server is running');
 ```
 
 - **Structured Data**: All log messages include relevant context data
