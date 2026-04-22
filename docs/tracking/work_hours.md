@@ -168,3 +168,13 @@
   Wired the **deployment layer** — Docker Compose for local, Kubernetes external-secrets and api-server manifests, and the Terraform secrets module — so the new bucket, More0 config, and environment toggles are available in every environment.
   Retired the previous `external/tools` module in favour of the new **webhook-tools module** and documented the whole pipeline in an implementation note.
   Added unit specs for the **orchestrator and More0 service** plus a client-test script for the workflow so the integration can be exercised end-to-end without the partner.
+
+- `2026-04-22` `ff299f5` **4 h**
+  `25 files | +2 599 −557 | Tier 2 standard | Moderate orchestration`
+  Lay summary: Rebuilt every list screen — claims, jobs, invoices, quotes, purchase orders, reports, and vendors — around a shared, consistent layout with the same filters, search, and table behaviour so the application feels like one coherent product.
+  **Unified list pages with shared filters and cleaner detail view.** Introduced a **shared list-filters component** used by every list screen so search, status, date, and other filter controls look and behave identically everywhere.
+  Rebuilt the **list clients** for claims, jobs, invoices, quotes, purchase orders, reports, and vendors around a single consistent table-based layout, replacing the older mixed card-and-table approach.
+  Retired the legacy **per-entity card components** (ClaimCard, InvoiceCard, JobCard, PurchaseOrderCard, QuoteCard, ReportCard) so there is one canonical presentation for list items, reducing visual drift and maintenance cost.
+  Tightened the **claim detail page** and matching loading state for a faster, cleaner read, and aligned the associated page clients (invoices, jobs) on the new layout.
+  Aligned **server-rendered pages** across the app on the new list structure so page headings, empty states, and data flow match end-to-end.
+  Updated shared **API types** to support the unified filter surface across list screens.
