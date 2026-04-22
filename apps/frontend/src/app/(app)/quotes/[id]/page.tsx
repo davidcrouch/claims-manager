@@ -1,6 +1,5 @@
-import { getSession, getAccessToken } from '@/lib/auth';
 import { redirect, notFound } from 'next/navigation';
-import { createApiClient } from '@/lib/api-client';
+import { getServerApiClient } from '@/lib/server-api';
 import { SetBreadcrumbs } from '@/components/layout/SetBreadcrumbs';
 import { QuoteDetail } from '@/components/quotes/QuoteDetail';
 import type { Metadata } from 'next';
@@ -11,14 +10,10 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const session = await getSession();
-  if (!session.authenticated) return { title: 'Quote | Claims Manager' };
+  const api = await getServerApiClient();
+  if (!api) return { title: 'Quote | Claims Manager' };
 
-  const token = await getAccessToken();
-  if (!token) return { title: 'Quote | Claims Manager' };
-
-  const api = createApiClient({ token });
-  const quote = await api.getQuote(id);
+  const quote = await api.getQuote(id).catch(() => null);
   const title = quote?.quoteNumber ?? quote?.externalReference ?? id;
   return { title: `${title} | Claims Manager` };
 }
@@ -29,14 +24,16 @@ export default async function QuoteDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const session = await getSession();
-  if (!session.authenticated) redirect('/api/auth/login');
+  const api = await getServerApiClient();
+  if (!api) redirect('/api/auth/login');
 
-  const token = await getAccessToken();
-  if (!token) redirect('/api/auth/login');
-
-  const api = createApiClient({ token });
-  const quote = await api.getQuote(id);
+  const quote = await api.getQuote(id).catch((err: unknown) => {
+    console.error(
+      'frontend:QuoteDetailPage - getQuote failed:',
+      err instanceof Error ? err.message : err,
+    );
+    return null;
+  });
   if (!quote) notFound();
 
   const title = quote.quoteNumber ?? quote.externalReference ?? id;

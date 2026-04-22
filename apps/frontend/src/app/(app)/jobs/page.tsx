@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { SetBreadcrumbs } from '@/components/layout/SetBreadcrumbs';
 import { JobsPageClient } from '@/components/jobs/JobsPageClient';
+import type { Claim, Job, PaginatedResponse } from '@/types/api';
 
 export default async function JobsPage({
   searchParams,
@@ -12,13 +13,30 @@ export default async function JobsPage({
   if (!api) redirect('/api/auth/login');
 
   const params = await searchParams;
+  const emptyJobs: PaginatedResponse<Job> = { data: [], total: 0 };
+  const emptyClaims: PaginatedResponse<Claim> = { data: [], total: 0 };
+
   const [initialJobs, claimsRes, jobTypesRes] = await Promise.all([
-    api.getJobs({
-      page: parseInt(params.page ?? '1', 10),
-      limit: 20,
-      search: params.search,
+    api
+      .getJobs({
+        page: parseInt(params.page ?? '1', 10),
+        limit: 20,
+        search: params.search,
+      })
+      .catch((err: unknown) => {
+        console.error(
+          'frontend:JobsPage - getJobs failed:',
+          err instanceof Error ? err.message : err,
+        );
+        return emptyJobs;
+      }),
+    api.getClaims({ limit: 100 }).catch((err: unknown) => {
+      console.error(
+        'frontend:JobsPage - getClaims failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return emptyClaims;
     }),
-    api.getClaims({ limit: 100 }),
     api.getLookupsByDomain('job_type').catch(() => []),
   ]);
 

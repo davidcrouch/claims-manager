@@ -6,6 +6,7 @@ import {
   buildClaimsListFetchKeyFromPageParams,
   normalizeSortParam,
 } from '@/components/claims/claims-list-helpers';
+import type { Claim, PaginatedResponse } from '@/types/api';
 
 /** Lookup domain for claim lifecycle status values (tenant-specific). */
 const CLAIM_STATUS_LOOKUP_DOMAIN = 'claim_status';
@@ -23,14 +24,24 @@ export default async function ClaimsPage({
   const params = await searchParams;
   const sort = normalizeSortParam(params.sort ?? null);
 
+  const emptyClaims: PaginatedResponse<Claim> = { data: [], total: 0 };
+
   const [initialClaims, statusLookups] = await Promise.all([
-    api.getClaims({
-      page: parseInt(params.page ?? '1', 10),
-      limit: 20,
-      search: params.search,
-      sort,
-      status: params.status,
-    }),
+    api
+      .getClaims({
+        page: parseInt(params.page ?? '1', 10),
+        limit: 20,
+        search: params.search,
+        sort,
+        status: params.status,
+      })
+      .catch((err: unknown) => {
+        console.error(
+          'frontend:ClaimsPage - getClaims failed:',
+          err instanceof Error ? err.message : err,
+        );
+        return emptyClaims;
+      }),
     api.getLookupsByDomain(CLAIM_STATUS_LOOKUP_DOMAIN).catch(() => []),
   ]);
 

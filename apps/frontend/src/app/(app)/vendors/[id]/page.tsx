@@ -1,6 +1,5 @@
-import { getSession, getAccessToken } from '@/lib/auth';
 import { redirect, notFound } from 'next/navigation';
-import { createApiClient } from '@/lib/api-client';
+import { getServerApiClient } from '@/lib/server-api';
 import { SetBreadcrumbs } from '@/components/layout/SetBreadcrumbs';
 import { VendorDetail } from '@/components/vendors/VendorDetail';
 
@@ -10,14 +9,16 @@ export default async function VendorDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const session = await getSession();
-  if (!session.authenticated) redirect('/api/auth/login');
+  const api = await getServerApiClient();
+  if (!api) redirect('/api/auth/login');
 
-  const token = await getAccessToken();
-  if (!token) redirect('/api/auth/login');
-
-  const api = createApiClient({ token });
-  const vendor = await api.getVendor(id);
+  const vendor = await api.getVendor(id).catch((err: unknown) => {
+    console.error(
+      'frontend:VendorDetailPage - getVendor failed:',
+      err instanceof Error ? err.message : err,
+    );
+    return null;
+  });
   if (!vendor) notFound();
 
   return (

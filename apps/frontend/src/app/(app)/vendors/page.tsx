@@ -1,18 +1,21 @@
-import { getSession, getAccessToken } from '@/lib/auth';
 import { redirect } from 'next/navigation';
-import { createApiClient } from '@/lib/api-client';
+import { getServerApiClient } from '@/lib/server-api';
 import { SetBreadcrumbs } from '@/components/layout/SetBreadcrumbs';
 import { VendorsListClient } from '@/components/vendors/VendorsListClient';
+import type { PaginatedResponse, Vendor } from '@/types/api';
 
 export default async function VendorsPage() {
-  const session = await getSession();
-  if (!session.authenticated) redirect('/api/auth/login');
+  const api = await getServerApiClient();
+  if (!api) redirect('/api/auth/login');
 
-  const token = await getAccessToken();
-  if (!token) redirect('/api/auth/login');
-
-  const api = createApiClient({ token });
-  const vendorsRes = await api.getVendors();
+  const empty: PaginatedResponse<Vendor> = { data: [], total: 0 };
+  const vendorsRes = await api.getVendors().catch((err: unknown) => {
+    console.error(
+      'frontend:VendorsPage - getVendors failed:',
+      err instanceof Error ? err.message : err,
+    );
+    return empty;
+  });
 
   const vendors = vendorsRes?.data ?? [];
 

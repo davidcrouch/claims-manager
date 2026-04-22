@@ -77,7 +77,8 @@ services:
       # auth-server and audience-scoped to the api.
       AUTH_ISSUER_URL: https://${AUTH_HOST}
       AUTH_AUDIENCE: claims-manager-api
-      AUTH_JWKS_URI: https://${AUTH_HOST}/.well-known/jwks.json
+      # auth-server (oidc-provider) exposes JWKS at /jwks; /.well-known/jwks.json 404s.
+      AUTH_JWKS_URI: https://${AUTH_HOST}/jwks
       LOG_LEVEL: info
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3001/api/v1/health"]

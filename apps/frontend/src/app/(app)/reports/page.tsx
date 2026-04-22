@@ -1,27 +1,32 @@
-import { getSession, getAccessToken } from '@/lib/auth';
 import { redirect } from 'next/navigation';
-import { createApiClient } from '@/lib/api-client';
+import { getServerApiClient } from '@/lib/server-api';
 import { SetBreadcrumbs } from '@/components/layout/SetBreadcrumbs';
 import { ReportsListClient } from '@/components/reports/ReportsListClient';
+import type { PaginatedResponse, Report } from '@/types/api';
 
 export default async function ReportsPage({
   searchParams,
 }: {
   searchParams: Promise<{ page?: string; jobId?: string }>;
 }) {
-  const session = await getSession();
-  if (!session.authenticated) redirect('/api/auth/login');
-
-  const token = await getAccessToken();
-  if (!token) redirect('/api/auth/login');
+  const api = await getServerApiClient();
+  if (!api) redirect('/api/auth/login');
 
   const params = await searchParams;
-  const api = createApiClient({ token });
-  const initialReports = await api.getReports({
-    page: parseInt(params.page ?? '1', 10),
-    limit: 20,
-    jobId: params.jobId,
-  });
+  const empty: PaginatedResponse<Report> = { data: [], total: 0 };
+  const initialReports = await api
+    .getReports({
+      page: parseInt(params.page ?? '1', 10),
+      limit: 20,
+      jobId: params.jobId,
+    })
+    .catch((err: unknown) => {
+      console.error(
+        'frontend:ReportsPage - getReports failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return empty;
+    });
 
   return (
     <>

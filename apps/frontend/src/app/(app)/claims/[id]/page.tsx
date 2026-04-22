@@ -1,6 +1,5 @@
-import { getSession, getAccessToken } from '@/lib/auth';
 import { redirect, notFound } from 'next/navigation';
-import { createApiClient } from '@/lib/api-client';
+import { getServerApiClient } from '@/lib/server-api';
 import { SetBreadcrumbs } from '@/components/layout/SetBreadcrumbs';
 import { ClaimDetail } from '@/components/claims/ClaimDetail';
 import type { Metadata } from 'next';
@@ -11,14 +10,10 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const session = await getSession();
-  if (!session.authenticated) return { title: 'Claim | Claims Manager' };
+  const api = await getServerApiClient();
+  if (!api) return { title: 'Claim | Claims Manager' };
 
-  const token = await getAccessToken();
-  if (!token) return { title: 'Claim | Claims Manager' };
-
-  const api = createApiClient({ token });
-  const claim = await api.getClaim(id);
+  const claim = await api.getClaim(id).catch(() => null);
   const title = claim?.claimNumber ?? claim?.externalReference ?? id;
   return { title: `${title} | Claims Manager` };
 }
@@ -29,20 +24,24 @@ export default async function ClaimDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const session = await getSession();
-  if (!session.authenticated) {
-    redirect('/api/auth/login');
-  }
+  const api = await getServerApiClient();
+  if (!api) redirect('/api/auth/login');
 
-  const token = await getAccessToken();
-  if (!token) {
-    redirect('/api/auth/login');
-  }
-
-  const api = createApiClient({ token });
   const [claim, jobsRes] = await Promise.all([
-    api.getClaim(id),
-    api.getJobs({ claimId: id, limit: 50 }),
+    api.getClaim(id).catch((err: unknown) => {
+      console.error(
+        'frontend:ClaimDetailPage - getClaim failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return null;
+    }),
+    api.getJobs({ claimId: id, limit: 50 }).catch((err: unknown) => {
+      console.error(
+        'frontend:ClaimDetailPage - getJobs failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return { data: [], total: 0 };
+    }),
   ]);
 
   if (!claim) {

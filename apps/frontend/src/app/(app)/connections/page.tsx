@@ -9,7 +9,13 @@ export default async function ConnectionsPage() {
     redirect('/api/auth/login');
   }
 
-  const connections = await api.getConnections();
+  const connections = await api.getConnections().catch((err: unknown) => {
+    console.error(
+      'frontend:ConnectionsPage - getConnections failed:',
+      err instanceof Error ? err.message : err,
+    );
+    return [];
+  });
 
   return (
     <>

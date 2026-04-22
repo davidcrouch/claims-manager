@@ -1,29 +1,42 @@
-import { getSession, getAccessToken } from '@/lib/auth';
 import { redirect } from 'next/navigation';
-import { createApiClient } from '@/lib/api-client';
+import { getServerApiClient } from '@/lib/server-api';
 import { SetBreadcrumbs } from '@/components/layout/SetBreadcrumbs';
 import { InvoicesPageClient } from '@/components/invoices/InvoicesPageClient';
+import type { Invoice, PaginatedResponse, PurchaseOrder } from '@/types/api';
 
 export default async function InvoicesPage({
   searchParams,
 }: {
   searchParams: Promise<{ page?: string; purchaseOrderId?: string }>;
 }) {
-  const session = await getSession();
-  if (!session.authenticated) redirect('/api/auth/login');
-
-  const token = await getAccessToken();
-  if (!token) redirect('/api/auth/login');
+  const api = await getServerApiClient();
+  if (!api) redirect('/api/auth/login');
 
   const params = await searchParams;
-  const api = createApiClient({ token });
+  const emptyInvoices: PaginatedResponse<Invoice> = { data: [], total: 0 };
+  const emptyPOs: PaginatedResponse<PurchaseOrder> = { data: [], total: 0 };
+
   const [initialInvoices, posRes] = await Promise.all([
-    api.getInvoices({
-      page: parseInt(params.page ?? '1', 10),
-      limit: 20,
-      purchaseOrderId: params.purchaseOrderId,
+    api
+      .getInvoices({
+        page: parseInt(params.page ?? '1', 10),
+        limit: 20,
+        purchaseOrderId: params.purchaseOrderId,
+      })
+      .catch((err: unknown) => {
+        console.error(
+          'frontend:InvoicesPage - getInvoices failed:',
+          err instanceof Error ? err.message : err,
+        );
+        return emptyInvoices;
+      }),
+    api.getPurchaseOrders({ limit: 100 }).catch((err: unknown) => {
+      console.error(
+        'frontend:InvoicesPage - getPurchaseOrders failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return emptyPOs;
     }),
-    api.getPurchaseOrders({ limit: 100 }),
   ]);
 
   const purchaseOrders = posRes?.data ?? [];
