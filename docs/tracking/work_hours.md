@@ -145,3 +145,13 @@
   Aligned every server-rendered page on the **shared tenant-aware request helper** so the customer identifier is always forwarded to the backend consistently.
   Tightened the **backend tenant resolver** to ignore blank-or-whitespace values, removing a class of silent mis-routes.
   Verified the staging database shape (tables, applied migrations, row counts) against the expected model while investigating.
+
+- `2026-04-22` `2f01230` **4.5 h**
+  `2 files | +1 107 −33 | Tier 2 standard | Heavy orchestration`
+  Lay summary: Redesigned the public marketing home page so it looks like a modern, professional product site with a custom hero illustration and a consistent style across every section.
+  **Redesign marketing landing page with bespoke hero illustration.** Rebuilt the public **home page** as a proper marketing site with a clean, alternating-section layout, consistent typography, and a cohesive colour palette drawn from the company's other product sites.
+  Delivered a distinctive **hero section** with a custom-generated product illustration, headline and subtitle, primary and secondary calls-to-action, customer rating, and high-level trust indicators.
+  Added sections for **the problem we solve**, a **unified-records** overview, **workflow automation**, **operational reporting**, and **professional-standards assurances**, each with supporting visuals.
+  Included a **sign-up call-to-action** band and a clean **footer** so visitors always have a clear next step.
+  Produced a bespoke **navy hero visual** (AI-generated) shipped with the site so the page does not rely on stock imagery.
+  Made the whole page **responsive** so it reads cleanly on phones, tablets, and desktops.
