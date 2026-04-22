@@ -10,7 +10,7 @@ import { CrunchworkService } from '../../crunchwork/crunchwork.service';
 import { ExternalObjectService } from '../external/external-object.service';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
 import { CredentialsCipher } from '../../common/credentials-cipher';
-import { ExternalToolsController } from '../external/tools/external-tools.controller';
+import { resolveEntityType as resolveEventTypeToEntity } from './event-type-resolver';
 import { WebhookOrchestratorService } from './webhook-orchestrator.service';
 
 @Injectable()
@@ -82,7 +82,7 @@ export class WebhooksService implements OnModuleInit {
     providerCode?: string;
   }) {
     const payload = JSON.parse(params.rawBody);
-    const entityType = ExternalToolsController.resolveEntityType(payload.type);
+    const entityType = resolveEventTypeToEntity(payload.type);
 
     const insertData: InboundWebhookEventInsert = {
       externalEventId: payload.id,
@@ -138,6 +138,42 @@ export class WebhooksService implements OnModuleInit {
         return;
       }
 
+      const route = this.orchestrator.resolveRoute();
+
+      if (route === 'more0') {
+        // More0 route: the workflow itself does CW fetch + S3 archive +
+        // external-object upsert + projection. The API only pre-creates a
+        // placeholder processing-log row so we have an id to stamp the
+        // workflowRunId onto, then dispatches to the gateway.
+        this.logger.log(
+          `${logPrefix} — eventId=${params.eventId} route=more0; dispatching without in-process fetch`,
+        );
+        const logEntry = await this.processingLogRepo.create({
+          data: {
+            tenantId: params.tenantId,
+            connectionId: params.connectionId,
+            eventId: params.eventId,
+            providerEntityType: entityType,
+            providerEntityId: params.providerEntityId,
+            action: 'webhook_process',
+            status: 'pending',
+          },
+        });
+
+        await this.orchestrator.finalize({
+          eventId: params.eventId,
+          tenantId: params.tenantId,
+          connectionId: params.connectionId,
+          providerEntityType: entityType,
+          providerEntityId: params.providerEntityId,
+          externalObjectId: null,
+          processingLogId: logEntry.id,
+          eventType: params.eventType,
+        });
+        return;
+      }
+
+      // Legacy in-process path: fetch CW → upsert → project inline.
       let fullPayload: Record<string, unknown>;
       try {
         fullPayload = await this.crunchworkService.fetchEntityByType({
@@ -238,6 +274,6 @@ export class WebhooksService implements OnModuleInit {
   }
 
   private resolveEntityType(eventType: string): string | null {
-    return ExternalToolsController.resolveEntityType(eventType);
+    return resolveEventTypeToEntity(eventType);
   }
 }

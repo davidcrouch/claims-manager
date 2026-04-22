@@ -11,8 +11,27 @@ services:
       - .env
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/claims_manager
+      # More0 / webhook processing wiring — defaults assume More0 stack runs
+      # on the host network (see /repos/capabilities/docker-compose.yml).
+      - WEBHOOK_PROCESSING_MODE=${WEBHOOK_PROCESSING_MODE:-inproc}
+      - MORE0_ENABLED=${MORE0_ENABLED:-false}
+      - MORE0_API_KEY=${MORE0_API_KEY:-}
+      - MORE0_REGISTRY_URL=${MORE0_REGISTRY_URL:-http://host.docker.internal:3201}
+      - MORE0_GATEWAY_URL=${MORE0_GATEWAY_URL:-http://host.docker.internal:3205}
+      - MORE0_APP_KEY=${MORE0_APP_KEY:-claims-manager-webhook}
+      - MORE0_ORGANIZATION_ID=${MORE0_ORGANIZATION_ID:-claims-manager-webhook}
+      - MORE0_TOOL_SECRET=${MORE0_TOOL_SECRET:-change-me}
+      # S3 / MinIO archive.
+      - S3_ENDPOINT=${S3_ENDPOINT:-http://minio:9000}
+      - S3_REGION=${S3_REGION:-us-east-1}
+      - S3_BUCKET_PAYLOADS=${S3_BUCKET_PAYLOADS:-claims-manager}
+      - S3_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID:-sail}
+      - S3_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY:-password}
+      - S3_FORCE_PATH_STYLE=${S3_FORCE_PATH_STYLE:-true}
+      - S3_ARCHIVE_PREFIX=${S3_ARCHIVE_PREFIX:-webhooks/payloads}
     depends_on:
       - postgres
+      - minio
 
   postgres:
     image: postgres:16-alpine
@@ -25,5 +44,31 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
+  # Local MinIO for the payload-archive tool. The bucket `claims-manager`
+  # is created by the one-shot `minio-mc` service below.
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:-sail}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:-password}
+    volumes:
+      - miniodata:/data
+
+  minio-mc:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: >-
+      /bin/sh -c "
+      until (mc alias set local http://minio:9000 ${S3_ACCESS_KEY_ID:-sail} ${S3_SECRET_ACCESS_KEY:-password}) do echo 'waiting for minio...'; sleep 2; done;
+      mc mb --ignore-existing local/${S3_BUCKET_PAYLOADS:-claims-manager};
+      exit 0;
+      "
+
 volumes:
   pgdata:
+  miniodata:

@@ -1,0 +1,255 @@
+{
+  "Comment": "Read inbound webhook event → fetch CW entity → archive payload → upsert external object → project to internal entity. Granular failure branches flip event + log status.",
+  "StartAt": "read-event",
+  "States": {
+    "read-event": {
+      "Type": "Task",
+      "Comment": "Load inbound_webhook_events row by id and resolve providerEntityType + providerEntityId.",
+      "Resource": "tool.claims-manager-webhook.webhook-event-read",
+      "Parameters": {
+        "method": "execute",
+        "params": {
+          "eventId.$": "$.eventId"
+        }
+      },
+      "ResultPath": "$.event",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "mark-read-failed"
+        }
+      ],
+      "Next": "fetch-external-entity"
+    },
+    "fetch-external-entity": {
+      "Type": "Task",
+      "Comment": "Call Crunchwork to retrieve the full entity payload.",
+      "Resource": "tool.claims-manager-webhook.crunchwork-fetch",
+      "Parameters": {
+        "method": "execute",
+        "params": {
+          "connectionId.$": "$.event.connectionId",
+          "providerEntityType.$": "$.event.providerEntityType",
+          "providerEntityId.$": "$.event.providerEntityId"
+        }
+      },
+      "ResultPath": "$.fetch",
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "MaxAttempts": 3,
+          "IntervalSeconds": 30,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "mark-fetch-failed"
+        }
+      ],
+      "Next": "archive-payload"
+    },
+    "archive-payload": {
+      "Type": "Task",
+      "Comment": "Write the raw payload to S3/MinIO and capture the archive URI.",
+      "Resource": "tool.claims-manager-webhook.payload-archive",
+      "Parameters": {
+        "method": "execute",
+        "params": {
+          "tenantId.$": "$.event.tenantId",
+          "providerEntityType.$": "$.event.providerEntityType",
+          "providerEntityId.$": "$.event.providerEntityId",
+          "payload.$": "$.fetch.payload"
+        }
+      },
+      "ResultPath": "$.archive",
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "MaxAttempts": 2,
+          "IntervalSeconds": 5,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "mark-archive-failed"
+        }
+      ],
+      "Next": "upsert-external-object"
+    },
+    "upsert-external-object": {
+      "Type": "Task",
+      "Comment": "Persist external object + version row, stamp archive URI, advance processing log.",
+      "Resource": "tool.claims-manager-webhook.external-object-upsert",
+      "Parameters": {
+        "method": "execute",
+        "params": {
+          "tenantId.$": "$.event.tenantId",
+          "connectionId.$": "$.event.connectionId",
+          "providerCode.$": "$.event.providerCode",
+          "providerEntityType.$": "$.event.providerEntityType",
+          "providerEntityId.$": "$.event.providerEntityId",
+          "payload.$": "$.fetch.payload",
+          "sourceEventId.$": "$.event.eventId",
+          "sourceEventType.$": "$.event.eventType",
+          "sourceEventTimestamp.$": "$.event.eventTimestamp",
+          "archiveObjectUri.$": "$.archive.archiveObjectUri",
+          "eventId.$": "$.event.eventId"
+        }
+      },
+      "ResultPath": "$.upsert",
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "MaxAttempts": 2,
+          "IntervalSeconds": 5,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "mark-upsert-failed"
+        }
+      ],
+      "Next": "project-to-internal"
+    },
+    "project-to-internal": {
+      "Type": "Task",
+      "Comment": "Run the matching entity mapper and mark the processing log completed.",
+      "Resource": "tool.claims-manager-webhook.entity-mapper",
+      "Parameters": {
+        "method": "execute",
+        "params": {
+          "externalObjectId.$": "$.upsert.externalObject.id",
+          "tenantId.$": "$.event.tenantId",
+          "connectionId.$": "$.event.connectionId",
+          "entityType.$": "$.event.providerEntityType",
+          "processingLogId.$": "$.upsert.processingLogId"
+        }
+      },
+      "ResultPath": "$.mapped",
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "MaxAttempts": 2,
+          "IntervalSeconds": 5,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "mark-projection-failed"
+        }
+      ],
+      "Next": "mark-completed"
+    },
+    "mark-completed": {
+      "Type": "Task",
+      "Resource": "tool.claims-manager-webhook.processing-log-update",
+      "Parameters": {
+        "method": "execute",
+        "params": {
+          "processingLogId.$": "$.upsert.processingLogId",
+          "status": "completed",
+          "externalObjectId.$": "$.upsert.externalObject.id",
+          "eventId.$": "$.event.eventId",
+          "eventStatus": "processed"
+        }
+      },
+      "ResultPath": "$.markResult",
+      "Next": "format-output"
+    },
+    "format-output": {
+      "Type": "Pass",
+      "Parameters": {
+        "externalObjectId.$": "$.upsert.externalObject.id",
+        "internalEntityType.$": "$.mapped.internalEntityType",
+        "internalEntityId.$": "$.mapped.internalEntityId",
+        "archiveObjectUri.$": "$.archive.archiveObjectUri"
+      },
+      "End": true
+    },
+    "mark-read-failed": {
+      "Type": "Task",
+      "Resource": "tool.claims-manager-webhook.processing-log-update",
+      "Parameters": {
+        "method": "execute",
+        "params": {
+          "status": "failed",
+          "errorMessage.$": "$.error.Cause",
+          "eventId.$": "$.eventId",
+          "eventStatus": "read_failed"
+        }
+      },
+      "End": true
+    },
+    "mark-fetch-failed": {
+      "Type": "Task",
+      "Resource": "tool.claims-manager-webhook.processing-log-update",
+      "Parameters": {
+        "method": "execute",
+        "params": {
+          "status": "failed",
+          "errorMessage.$": "$.error.Cause",
+          "eventId.$": "$.event.eventId",
+          "eventStatus": "fetch_failed"
+        }
+      },
+      "End": true
+    },
+    "mark-archive-failed": {
+      "Type": "Task",
+      "Resource": "tool.claims-manager-webhook.processing-log-update",
+      "Parameters": {
+        "method": "execute",
+        "params": {
+          "status": "failed",
+          "errorMessage.$": "$.error.Cause",
+          "eventId.$": "$.event.eventId",
+          "eventStatus": "archive_failed"
+        }
+      },
+      "End": true
+    },
+    "mark-upsert-failed": {
+      "Type": "Task",
+      "Resource": "tool.claims-manager-webhook.processing-log-update",
+      "Parameters": {
+        "method": "execute",
+        "params": {
+          "status": "failed",
+          "errorMessage.$": "$.error.Cause",
+          "eventId.$": "$.event.eventId",
+          "eventStatus": "upsert_failed"
+        }
+      },
+      "End": true
+    },
+    "mark-projection-failed": {
+      "Type": "Task",
+      "Resource": "tool.claims-manager-webhook.processing-log-update",
+      "Parameters": {
+        "method": "execute",
+        "params": {
+          "processingLogId.$": "$.upsert.processingLogId",
+          "status": "failed",
+          "externalObjectId.$": "$.upsert.externalObject.id",
+          "errorMessage.$": "$.error.Cause",
+          "eventId.$": "$.event.eventId",
+          "eventStatus": "projection_failed"
+        }
+      },
+      "End": true
+    }
+  }
+}

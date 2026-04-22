@@ -18,17 +18,20 @@ export interface OrchestratorResult {
 }
 
 /**
- * WebhookOrchestratorService decides, after the external_object row is
- * persisted, whether to hand the event off to More0 or run the in-process
- * projection. This replaces the previous implicit "mock mode" behaviour in
- * More0Service with an explicit, auditable decision recorded in the
- * processing log's `metadata` column.
+ * WebhookOrchestratorService decides, after the `inbound_webhook_events` row
+ * has been persisted, whether to hand the event off to More0 (via the HTTP
+ * gateway) or run the legacy in-process projection. The route is selected
+ * by `WEBHOOK_PROCESSING_MODE` (`more0` | `inproc`, default `inproc`) with
+ * `MORE0_ENABLED` + `MORE0_API_KEY` acting as a circuit breaker for the
+ * More0 branch.
  *
- * See docs/implementation/29_TEMPORARY_WEBHOOK_ORCHESTRATOR.md §2, §3.
+ * See `docs/implementation/31_MORE0_WEBHOOK_WORKFLOW_APP.md`.
  */
 @Injectable()
 export class WebhookOrchestratorService {
   private readonly logger = new Logger('WebhookOrchestratorService');
+  private static readonly WORKFLOW_CAP =
+    'claims-manager-webhook/workflow.claims-manager-webhook.process-inbound-event';
 
   constructor(
     private readonly configService: ConfigService,
@@ -45,7 +48,7 @@ export class WebhookOrchestratorService {
     connectionId: string;
     providerEntityType: string;
     providerEntityId: string;
-    externalObjectId: string;
+    externalObjectId: string | null;
     processingLogId: string;
     eventType: string;
   }): Promise<OrchestratorResult> {
@@ -56,11 +59,44 @@ export class WebhookOrchestratorService {
     );
 
     if (route === 'more0') {
-      return this.runMore0({ ...params });
+      return this.runMore0({
+        eventId: params.eventId,
+        processingLogId: params.processingLogId,
+        tenantId: params.tenantId,
+      });
     }
 
     if (route === 'inproc') {
-      return this.runInProc({ ...params });
+      if (!params.externalObjectId) {
+        this.logger.error(
+          `${logPrefix} — eventId=${params.eventId} route=inproc but externalObjectId missing; marking log failed`,
+        );
+        await this.processingLogRepo.updateStatus({
+          id: params.processingLogId,
+          status: 'failed',
+          errorMessage: 'in-process projection requires externalObjectId',
+          metadata: {
+            orchestratorRoute: 'inproc',
+            reason: 'missing_external_object',
+          },
+        });
+        return {
+          route: 'inproc',
+          ok: false,
+          reason: 'missing_external_object',
+        };
+      }
+
+      return this.runInProc({
+        eventId: params.eventId,
+        tenantId: params.tenantId,
+        connectionId: params.connectionId,
+        providerEntityType: params.providerEntityType,
+        providerEntityId: params.providerEntityId,
+        externalObjectId: params.externalObjectId,
+        processingLogId: params.processingLogId,
+        eventType: params.eventType,
+      });
     }
 
     this.logger.warn(
@@ -76,35 +112,28 @@ export class WebhookOrchestratorService {
 
   private async runMore0(params: {
     eventId: string;
-    tenantId: string;
-    connectionId: string;
-    providerEntityType: string;
-    providerEntityId: string;
-    externalObjectId: string;
     processingLogId: string;
-    eventType: string;
+    tenantId: string;
   }): Promise<OrchestratorResult> {
     const logPrefix = 'WebhookOrchestratorService.runMore0';
     try {
-      const { runId } = await this.more0Service.invokeWorkflow({
-        workflowName: 'process-webhook-event',
-        input: {
-          eventId: params.eventId,
-          tenantId: params.tenantId,
-          connectionId: params.connectionId,
-          eventType: params.eventType,
-          providerEntityId: params.providerEntityId,
-          processingLogId: params.processingLogId,
-          externalObjectId: params.externalObjectId,
-        },
-        context: { tenantId: params.tenantId },
+      const result = await this.more0Service.invokeViaGateway({
+        cap: WebhookOrchestratorService.WORKFLOW_CAP,
+        method: 'execute',
+        params: { eventId: params.eventId },
       });
+
+      const runId = result.runId ?? null;
 
       await this.processingLogRepo.updateStatus({
         id: params.processingLogId,
         status: 'processing',
-        workflowRunId: runId,
-        metadata: { orchestratorRoute: 'more0', workflowRunId: runId },
+        workflowRunId: runId ?? undefined,
+        metadata: {
+          orchestratorRoute: 'more0',
+          workflowRunId: runId,
+          workflowCap: WebhookOrchestratorService.WORKFLOW_CAP,
+        },
       });
 
       await this.webhookRepo.updateProcessingStatus({
@@ -113,7 +142,7 @@ export class WebhookOrchestratorService {
       });
 
       this.logger.log(
-        `${logPrefix} — eventId=${params.eventId} dispatched to more0 runId=${runId}`,
+        `${logPrefix} — eventId=${params.eventId} dispatched to more0 runId=${runId ?? 'n/a'}`,
       );
       return { route: 'more0', ok: true };
     } catch (error) {
@@ -126,6 +155,11 @@ export class WebhookOrchestratorService {
         status: 'workflow_invoke_failed',
         errorMessage: msg,
         metadata: { orchestratorRoute: 'more0', error: msg },
+      });
+      await this.webhookRepo.updateProcessingStatus({
+        id: params.eventId,
+        processingStatus: 'dispatch_failed',
+        processingError: msg,
       });
       return { route: 'more0', ok: false, reason: msg };
     }
@@ -209,8 +243,6 @@ export class WebhookOrchestratorService {
             reason: 'retry_scheduled',
           };
         }
-
-        // Retries exhausted — fall through to the permanent-failure path.
       }
 
       this.logger.error(
@@ -236,11 +268,24 @@ export class WebhookOrchestratorService {
     }
   }
 
-  private resolveRoute(): OrchestratorRoute {
-    if (this.shouldUseMore0()) return 'more0';
+  /**
+   * Public so `WebhooksService` can branch BEFORE the CW pre-fetch when the
+   * More0 route is active (the workflow is responsible for fetching).
+   */
+  resolveRoute(): OrchestratorRoute {
+    const mode = (
+      this.configService.get<string>('webhook.processingMode', 'inproc') ||
+      'inproc'
+    ).toLowerCase();
+
+    if (mode === 'more0' && this.shouldUseMore0()) {
+      return 'more0';
+    }
+
     if (this.configService.get<boolean>('webhook.inProcMappingEnabled', true)) {
       return 'inproc';
     }
+
     return 'none';
   }
 

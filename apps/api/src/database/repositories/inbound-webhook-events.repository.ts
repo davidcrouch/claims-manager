@@ -23,6 +23,17 @@ export class InboundWebhookEventsRepository {
     return row ?? null;
   }
 
+  async findById(params: {
+    id: string;
+  }): Promise<InboundWebhookEventRow | null> {
+    const [row] = await this.db
+      .select()
+      .from(inboundWebhookEvents)
+      .where(eq(inboundWebhookEvents.id, params.id))
+      .limit(1);
+    return row ?? null;
+  }
+
   async create(params: { data: InboundWebhookEventInsert; tx?: DrizzleDbOrTx }): Promise<InboundWebhookEventRow> {
     const db = params.tx ?? this.db;
     const [inserted] = await db

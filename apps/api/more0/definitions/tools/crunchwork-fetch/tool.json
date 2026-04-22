@@ -1,0 +1,63 @@
+{
+  "name": "tool.claims-manager-webhook.crunchwork-fetch",
+  "display_name": "Crunchwork Entity Fetch",
+  "type": "tool",
+  "version": "2.0.0",
+  "description": "Fetch a full entity from the Crunchwork Insurance REST API by entity type and ID.",
+  "tags": ["claims-manager", "crunchwork", "fetch", "integration"],
+  "methods": {
+    "execute": {
+      "description": "Fetch an entity from the Crunchwork API using the specified connection credentials.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "description": "integration_connections row ID"
+          },
+          "providerEntityType": {
+            "type": "string",
+            "enum": [
+              "job",
+              "claim",
+              "purchase_order",
+              "invoice",
+              "task",
+              "message",
+              "attachment",
+              "report",
+              "quote",
+              "appointment"
+            ]
+          },
+          "providerEntityId": {
+            "type": "string",
+            "description": "CW entity UUID"
+          }
+        },
+        "required": ["connectionId", "providerEntityType", "providerEntityId"]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "payload": {
+            "type": "object",
+            "description": "Full CW API response JSON"
+          }
+        }
+      },
+      "semantics": "work",
+      "channels": ["sync"]
+    }
+  },
+  "implementation": {
+    "kind": "ts-module",
+    "entrypoint": "crunchwork-fetch.ts",
+    "execution": {
+      "kind": "inline-ts",
+      "config": {
+        "npm_packages": []
+      }
+    }
+  }
+}

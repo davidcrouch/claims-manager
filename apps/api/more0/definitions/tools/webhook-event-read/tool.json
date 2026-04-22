@@ -1,0 +1,51 @@
+{
+  "name": "tool.claims-manager-webhook.webhook-event-read",
+  "display_name": "Webhook Event Read",
+  "type": "tool",
+  "version": "2.0.0",
+  "description": "Read a row from inbound_webhook_events by id and return a normalized projection including resolved providerEntityType and existing processingLogId if any.",
+  "tags": ["claims-manager", "webhook", "read"],
+  "methods": {
+    "execute": {
+      "description": "Load the webhook event row and return the fields required to drive the rest of the pipeline.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "description": "inbound_webhook_events.id (UUID)"
+          }
+        },
+        "required": ["eventId"]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "eventId": { "type": "string" },
+          "externalEventId": { "type": "string" },
+          "tenantId": { "type": "string" },
+          "connectionId": { "type": "string" },
+          "providerCode": { "type": "string" },
+          "providerEntityType": { "type": "string" },
+          "providerEntityId": { "type": "string" },
+          "eventType": { "type": "string" },
+          "eventTimestamp": { "type": "string" },
+          "rawPayload": { "type": "object", "nullable": true },
+          "processingLogId": { "type": "string", "nullable": true }
+        }
+      },
+      "semantics": "query",
+      "channels": ["sync"]
+    }
+  },
+  "implementation": {
+    "kind": "ts-module",
+    "entrypoint": "webhook-event-read.ts",
+    "execution": {
+      "kind": "inline-ts",
+      "config": {
+        "npm_packages": []
+      }
+    }
+  }
+}

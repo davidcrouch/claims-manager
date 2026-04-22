@@ -7,6 +7,7 @@ import databaseConfig from './config/database.config';
 import authConfig from './config/auth.config';
 import more0Config from './config/more0.config';
 import webhookConfig from './config/webhook.config';
+import s3Config from './config/s3.config';
 import { validate } from './config/env.validation';
 import { AuthModule } from './auth/auth.module';
 import { HealthModule } from './health/health.module';
@@ -15,7 +16,7 @@ import { CrunchworkModule } from './crunchwork/crunchwork.module';
 import { DatabaseModule } from './database/database.module';
 import { More0Module } from './more0/more0.module';
 import { ExternalModule } from './modules/external/external.module';
-import { ExternalToolsModule } from './modules/external/tools/external-tools.module';
+import { WebhookToolsModule } from './modules/webhook-tools/webhook-tools.module';
 import { LookupsModule } from './modules/lookups/lookups.module';
 import { ClaimsModule } from './modules/claims/claims.module';
 import { JobsModule } from './modules/jobs/jobs.module';
@@ -36,10 +37,12 @@ import { TenantInterceptor } from './tenant/tenant.interceptor';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { CommonModule } from './common/common.module';
+import { S3Module } from './common/s3/s3.module';
 
 @Module({
   imports: [
     CommonModule,
+    S3Module,
     ConfigModule.forRoot({
       isGlobal: true,
       load: [
@@ -48,6 +51,7 @@ import { CommonModule } from './common/common.module';
         authConfig,
         more0Config,
         webhookConfig,
+        s3Config,
       ],
       validate,
       envFilePath: ['.env'],
@@ -64,7 +68,7 @@ import { CommonModule } from './common/common.module';
     CrunchworkModule,
     More0Module,
     ExternalModule,
-    ExternalToolsModule,
+    WebhookToolsModule,
     HealthModule,
     LookupsModule,
     ClaimsModule,

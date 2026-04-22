@@ -23,7 +23,29 @@ function parseIntList(
   return parts.length > 0 ? parts : fallback;
 }
 
+function parseProcessingMode(
+  value: string | undefined,
+  fallback: 'more0' | 'inproc',
+): 'more0' | 'inproc' {
+  const raw = (value ?? '').trim().toLowerCase();
+  if (raw === 'more0' || raw === 'inproc') return raw;
+  return fallback;
+}
+
 export default registerAs('webhook', () => ({
+  /**
+   * Selects which pipeline processes inbound webhook events after they are
+   * persisted in `inbound_webhook_events`:
+   *   - 'inproc' (default, legacy backup): runs the in-process CW fetch +
+   *     projection inside `WebhooksService.processEventAsync`.
+   *   - 'more0': dispatches a More0 workflow via the HTTP gateway passing
+   *     only the event id; the workflow drives fetch, archive, upsert,
+   *     and projection. Requires `MORE0_ENABLED=true` and `MORE0_API_KEY`.
+   */
+  processingMode: parseProcessingMode(
+    process.env.WEBHOOK_PROCESSING_MODE,
+    'inproc',
+  ),
   inProcMappingEnabled: parseBool(
     process.env.WEBHOOK_INPROC_MAPPING_ENABLED,
     true,

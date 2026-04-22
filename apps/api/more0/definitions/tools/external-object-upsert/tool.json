@@ -1,0 +1,61 @@
+{
+  "name": "tool.claims-manager-webhook.external-object-upsert",
+  "display_name": "External Object Upsert",
+  "type": "tool",
+  "version": "2.0.0",
+  "description": "Upsert an external object from a fetched CW entity payload and stamp the S3 archive URI. Atomically creates / advances the external_processing_log row and marks the inbound_webhook_events row as fetched.",
+  "tags": ["claims-manager", "webhook", "external-object", "upsert"],
+  "methods": {
+    "execute": {
+      "description": "Upsert external object with payload hash and versioning, write archive URI onto the version row, and advance processing-log + webhook-event status in a single DB transaction.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "tenantId": { "type": "string" },
+          "connectionId": { "type": "string" },
+          "providerCode": { "type": "string" },
+          "providerEntityType": { "type": "string" },
+          "providerEntityId": { "type": "string" },
+          "normalizedEntityType": { "type": "string" },
+          "payload": { "type": "object" },
+          "sourceEventId": { "type": "string", "nullable": true },
+          "sourceEventType": { "type": "string", "nullable": true },
+          "sourceEventTimestamp": { "type": "string", "nullable": true },
+          "archiveObjectUri": {
+            "type": "string",
+            "nullable": true,
+            "description": "s3:// URI returned from the payload-archive tool; persisted onto external_object_versions.archive_object_uri"
+          },
+          "eventId": {
+            "type": "string",
+            "nullable": true,
+            "description": "inbound_webhook_events.id — when present, the tool also creates/advances the processing-log row and marks the event fetched."
+          }
+        },
+        "required": ["tenantId", "connectionId", "providerCode", "providerEntityType", "providerEntityId", "payload"]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "externalObject": { "type": "object" },
+          "processingLogId": { "type": "string", "nullable": true },
+          "isNew": { "type": "boolean" },
+          "hashChanged": { "type": "boolean" },
+          "payloadHash": { "type": "string" }
+        }
+      },
+      "semantics": "work",
+      "channels": ["sync"]
+    }
+  },
+  "implementation": {
+    "kind": "ts-module",
+    "entrypoint": "external-object-upsert.ts",
+    "execution": {
+      "kind": "inline-ts",
+      "config": {
+        "npm_packages": []
+      }
+    }
+  }
+}

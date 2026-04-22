@@ -11,7 +11,7 @@ import {
   type ClaimContactInsert,
   type ClaimAssigneeInsert,
 } from '../../../database/repositories';
-import type { EntityMapper } from '../tools/external-tools.controller';
+import type { EntityMapper } from '../entity-mapper.interface';
 import { LookupResolver } from '../lookup-resolver.service';
 import type { DrizzleDbOrTx } from '../../../database/drizzle.module';
 import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';

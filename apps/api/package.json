@@ -25,6 +25,8 @@
     "db:flush": "ts-node src/database/seeds/flush.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1033.0",
+    "@aws-sdk/s3-request-presigner": "^3.1033.0",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/common": "^11.1.17",
     "@nestjs/config": "^4.0.3",
@@ -82,15 +84,25 @@
       "json",
       "ts"
     ],
-    "rootDir": "src",
+    "rootDir": ".",
+    "roots": [
+      "<rootDir>/src",
+      "<rootDir>/more0"
+    ],
     "testRegex": ".*\\.spec\\.ts$",
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/dist/",
+      "/more0/client-test/",
+      "/more0/definitions/"
+    ],
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
     "collectCoverageFrom": [
-      "**/*.(t|j)s"
+      "src/**/*.(t|j)s"
     ],
-    "coverageDirectory": "../coverage",
+    "coverageDirectory": "./coverage",
     "testEnvironment": "node"
   }
 }

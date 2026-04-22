@@ -1,11 +1,37 @@
 # Database Seeds
 
 Idempotent seed framework for `claims_manager`. Used for first-party
-reference data that the app needs in order to function.
+reference data and demo / sample data that make the app usable in dev
+and staging.
 
 > As of migration `0004_drop_integration_providers`, the provider catalogue
 > is **hardcoded in source** (`src/modules/providers/provider-registry.ts`)
-> rather than seeded. There are currently no seed entries registered.
+> rather than seeded.
+
+## Registered seeds
+
+| Name | What it does |
+|---|---|
+| `sample-data` | Populates the first organization in the DB with ~8 rows per core business table (contacts, vendors, claims, jobs, quotes + groups/combos/items, purchase_orders + groups/combos/items, invoices, tasks, messages, appointments + attendees, reports, attachments, lookup_values, claim_contacts, claim_assignees, job_contacts). All rows tagged with `external_reference` (or name/reference) prefixed `seed-*`, so re-running is a no-op. |
+
+### Seeding a remote environment (e.g. staging)
+
+The seed script reads `DATABASE_URL` from the environment — same as the API server.
+To seed `app.staging.branlamie.com`:
+
+```powershell
+# From repo root. Point DATABASE_URL at the staging DB (e.g. via the
+# CloudSQL Auth Proxy running on localhost:5432).
+$env:DATABASE_URL = "postgresql://<user>:<password>@localhost:5432/<dbname>"
+pnpm --filter api run db:seed
+```
+
+Alternatively, run it from inside the staging VM / a job container where
+`DATABASE_URL` is already exported; no other config is required.
+
+Because every inserted row is tagged `seed-*` and idempotency is keyed on
+unique columns (`external_reference`, `invoice_number`, etc.), running
+the seed multiple times against the same DB is safe.
 
 ## Commands
 

@@ -1,0 +1,53 @@
+{
+  "name": "tool.claims-manager-webhook.payload-archive",
+  "display_name": "Payload Archive (S3/MinIO)",
+  "type": "tool",
+  "version": "2.0.0",
+  "description": "Archive a CW entity payload to S3/MinIO under a deterministic key and return the object URI + etag.",
+  "tags": ["claims-manager", "webhook", "s3", "archive"],
+  "methods": {
+    "execute": {
+      "description": "Serialize the payload, compute a sha256 hash, and PUT it to S3 at the canonical key.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "tenantId": { "type": "string" },
+          "providerEntityType": { "type": "string" },
+          "providerEntityId": { "type": "string" },
+          "payload": { "type": "object" },
+          "hash": {
+            "type": "string",
+            "description": "Optional pre-computed sha256 of the canonicalized payload. When omitted, the tool computes it from JSON.stringify(payload)."
+          }
+        },
+        "required": ["tenantId", "providerEntityType", "providerEntityId", "payload"]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "archiveObjectUri": {
+            "type": "string",
+            "description": "Canonical s3:// URI of the archived object"
+          },
+          "bucket": { "type": "string" },
+          "key": { "type": "string" },
+          "etag": { "type": "string", "nullable": true },
+          "bytes": { "type": "integer" },
+          "sha256": { "type": "string" }
+        }
+      },
+      "semantics": "work",
+      "channels": ["sync"]
+    }
+  },
+  "implementation": {
+    "kind": "ts-module",
+    "entrypoint": "payload-archive.ts",
+    "execution": {
+      "kind": "inline-ts",
+      "config": {
+        "npm_packages": []
+      }
+    }
+  }
+}

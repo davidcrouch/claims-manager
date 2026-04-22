@@ -5,7 +5,7 @@ import {
   ExternalObjectsRepository,
   type JobInsert,
 } from '../../../database/repositories';
-import type { EntityMapper } from '../tools/external-tools.controller';
+import type { EntityMapper } from '../entity-mapper.interface';
 import { ExternalObjectService } from '../external-object.service';
 import { NestedEntityExtractor } from '../nested-entity-extractor.service';
 import { LookupResolver } from '../lookup-resolver.service';

@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
-import type { EntityMapper } from './tools/external-tools.controller';
+import type { EntityMapper } from './entity-mapper.interface';
 import { CrunchworkJobMapper } from './mappers/crunchwork-job.mapper';
 import { CrunchworkClaimMapper } from './mappers/crunchwork-claim.mapper';
 import { CrunchworkPurchaseOrderMapper } from './mappers/crunchwork-purchase-order.mapper';

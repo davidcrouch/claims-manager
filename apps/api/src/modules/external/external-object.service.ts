@@ -29,11 +29,13 @@ export class ExternalObjectService {
     sourceEventId?: string;
     sourceEventType?: string;
     sourceEventTimestamp?: Date;
+    archiveObjectUri?: string;
     tx?: DrizzleDbOrTx;
   }): Promise<{
     externalObject: ExternalObjectRow;
     isNew: boolean;
     hashChanged: boolean;
+    payloadHash: string;
   }> {
     const payloadHash = crypto
       .createHash('sha256')
@@ -114,12 +116,13 @@ export class ExternalObjectService {
           payloadHash,
           sourceEventId: params.sourceEventId,
           changeSummary,
+          archiveObjectUri: params.archiveObjectUri ?? null,
         },
         tx: params.tx,
       });
     }
 
-    return { externalObject, isNew: wasInserted, hashChanged };
+    return { externalObject, isNew: wasInserted, hashChanged, payloadHash };
   }
 
   private extractTimestamp(

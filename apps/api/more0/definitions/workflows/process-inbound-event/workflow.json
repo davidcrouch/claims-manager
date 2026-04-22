@@ -1,0 +1,54 @@
+{
+  "name": "workflow.claims-manager-webhook.process-inbound-event",
+  "display_name": "Process Inbound Webhook Event",
+  "type": "workflow",
+  "version": "2.0.0",
+  "description": "Given an inbound_webhook_events row id, drives the full pipeline: read event → fetch CW entity → archive payload to S3 → upsert external object → project to internal entity. Each step is an HTTP-backed tool; granular failure branches flip event + log status.",
+  "tags": ["claims-manager", "webhook", "crunchwork"],
+  "methods": {
+    "execute": {
+      "description": "Execute the webhook processing pipeline for a single inbound_webhook_events row.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "description": "inbound_webhook_events.id (UUID)"
+          }
+        },
+        "required": ["eventId"]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "externalObjectId": { "type": "string" },
+          "internalEntityType": { "type": "string" },
+          "internalEntityId": { "type": "string" },
+          "archiveObjectUri": { "type": "string" }
+        }
+      },
+      "semantics": "work",
+      "channels": ["async"]
+    }
+  },
+  "dependencies": {
+    "tools": [
+      "tool.claims-manager-webhook.webhook-event-read",
+      "tool.claims-manager-webhook.crunchwork-fetch",
+      "tool.claims-manager-webhook.payload-archive",
+      "tool.claims-manager-webhook.external-object-upsert",
+      "tool.claims-manager-webhook.entity-mapper",
+      "tool.claims-manager-webhook.processing-log-update"
+    ]
+  },
+  "implementation": {
+    "kind": "workflow-asl",
+    "entrypoint": "asl.json",
+    "execution": {
+      "kind": "workflow-engine",
+      "config": {
+        "adapter": "checkpoint-database"
+      }
+    }
+  }
+}

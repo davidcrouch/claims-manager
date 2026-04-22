@@ -48,6 +48,57 @@ spec:
               value: https://auth.DNS_SUFFIX/jwks
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: http://otel-collector.infra.svc.cluster.local:4317
+            # More0 integration (docs/implementation/31_MORE0_WEBHOOK_WORKFLOW_APP.md).
+            # Defaults to the safe in-process pipeline; flip to `more0` once
+            # the app is imported and the gateway is reachable.
+            - name: WEBHOOK_PROCESSING_MODE
+              value: inproc
+            - name: MORE0_ENABLED
+              value: "false"
+            - name: MORE0_REGISTRY_URL
+              value: http://more0-registry.infra.svc.cluster.local:3201
+            - name: MORE0_GATEWAY_URL
+              value: http://more0-gateway.infra.svc.cluster.local:3205
+            - name: MORE0_APP_KEY
+              value: claims-manager-webhook
+            - name: MORE0_ORGANIZATION_ID
+              value: claims-manager-webhook
+            - name: MORE0_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: api-server-secrets
+                  key: more0-api-key
+                  optional: true
+            - name: MORE0_TOOL_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: api-server-secrets
+                  key: more0-tool-secret
+                  optional: true
+            # S3 archive for the payload-archive tool. The endpoint defaults
+            # to GCS HMAC; override via overlay for MinIO/other providers.
+            - name: S3_ENDPOINT
+              value: https://storage.googleapis.com
+            - name: S3_REGION
+              value: australia-southeast1
+            - name: S3_BUCKET_PAYLOADS
+              value: claims-manager-webhooks
+            - name: S3_FORCE_PATH_STYLE
+              value: "false"
+            - name: S3_ARCHIVE_PREFIX
+              value: webhooks/payloads
+            - name: S3_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: api-server-secrets
+                  key: s3-access-key-id
+                  optional: true
+            - name: S3_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: api-server-secrets
+                  key: s3-secret-access-key
+                  optional: true
           readinessProbe:
             httpGet:
               path: /api/v1/health

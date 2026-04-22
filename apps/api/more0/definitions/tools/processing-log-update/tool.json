@@ -1,0 +1,47 @@
+{
+  "name": "tool.claims-manager-webhook.processing-log-update",
+  "display_name": "Processing Log Update",
+  "type": "tool",
+  "version": "2.0.0",
+  "description": "Advance the external_processing_log status and, optionally, the parent inbound_webhook_events.processing_status. Used by terminal workflow states (completed / failed branches).",
+  "tags": ["claims-manager", "webhook", "processing-log", "audit"],
+  "methods": {
+    "execute": {
+      "description": "Update processing log entry status and optionally mirror the status onto the webhook event row.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "processingLogId": { "type": "string", "nullable": true },
+          "status": { "type": "string", "enum": ["processing", "completed", "failed"] },
+          "externalObjectId": { "type": "string", "nullable": true },
+          "errorMessage": { "type": "string", "nullable": true },
+          "eventId": { "type": "string", "nullable": true },
+          "eventStatus": {
+            "type": "string",
+            "nullable": true,
+            "description": "Value to write to inbound_webhook_events.processing_status (e.g. 'processed', 'fetch_failed', 'upsert_failed', 'projection_failed')."
+          }
+        },
+        "required": ["status"]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" }
+        }
+      },
+      "semantics": "work",
+      "channels": ["sync"]
+    }
+  },
+  "implementation": {
+    "kind": "ts-module",
+    "entrypoint": "processing-log-update.ts",
+    "execution": {
+      "kind": "inline-ts",
+      "config": {
+        "npm_packages": []
+      }
+    }
+  }
+}

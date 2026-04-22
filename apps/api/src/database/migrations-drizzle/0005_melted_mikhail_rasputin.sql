@@ -1,0 +1,1 @@
+ALTER TABLE "external_object_versions" ADD COLUMN "archive_object_uri" text;

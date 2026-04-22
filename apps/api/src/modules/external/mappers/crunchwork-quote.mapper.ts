@@ -4,7 +4,7 @@ import {
   ExternalLinksRepository,
   type QuoteInsert,
 } from '../../../database/repositories';
-import type { EntityMapper } from '../tools/external-tools.controller';
+import type { EntityMapper } from '../entity-mapper.interface';
 import { ExternalObjectService } from '../external-object.service';
 import type { DrizzleDbOrTx } from '../../../database/drizzle.module';
 

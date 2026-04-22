@@ -924,6 +924,7 @@ export const externalObjectVersions = pgTable(
     payloadHash: text('payload_hash').notNull(),
     sourceEventId: uuid('source_event_id'),
     changeSummary: jsonb('change_summary').notNull().default({}),
+    archiveObjectUri: text('archive_object_uri'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

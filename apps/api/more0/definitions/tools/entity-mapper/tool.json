@@ -1,0 +1,47 @@
+{
+  "name": "tool.claims-manager-webhook.entity-mapper",
+  "display_name": "Entity Mapper",
+  "type": "tool",
+  "version": "2.0.0",
+  "description": "Project an external object into the matching internal entity row. Dispatches to the registered CW mapper for the given entity type.",
+  "tags": ["claims-manager", "webhook", "mapper", "projection"],
+  "methods": {
+    "execute": {
+      "description": "Map external object to internal entity row; optionally mark the processing-log entry completed.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "externalObjectId": { "type": "string" },
+          "tenantId": { "type": "string" },
+          "connectionId": { "type": "string" },
+          "entityType": {
+            "type": "string",
+            "enum": ["job", "claim", "purchase_order", "invoice", "task", "message", "attachment", "report", "quote", "appointment"]
+          },
+          "processingLogId": { "type": "string", "nullable": true }
+        },
+        "required": ["externalObjectId", "tenantId", "connectionId", "entityType"]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "internalEntityId": { "type": "string" },
+          "internalEntityType": { "type": "string" },
+          "skipped": { "type": "string", "nullable": true }
+        }
+      },
+      "semantics": "work",
+      "channels": ["sync"]
+    }
+  },
+  "implementation": {
+    "kind": "ts-module",
+    "entrypoint": "entity-mapper.ts",
+    "execution": {
+      "kind": "inline-ts",
+      "config": {
+        "npm_packages": []
+      }
+    }
+  }
+}

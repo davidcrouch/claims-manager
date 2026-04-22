@@ -42,6 +42,12 @@ locals {
     "stripe-connect-client-id",
     "mz-client-credentials",
     "frontend-oidc-cookie-secret",
+    # More0 integration (docs/implementation/31_MORE0_WEBHOOK_WORKFLOW_APP.md).
+    "more0-api-key",
+    "more0-tool-secret",
+    # S3 / object-store credentials used by the payload-archive tool.
+    "s3-access-key-id",
+    "s3-secret-access-key",
   ]
 }
 
