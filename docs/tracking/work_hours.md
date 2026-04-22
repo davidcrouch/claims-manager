@@ -178,3 +178,13 @@
   Tightened the **claim detail page** and matching loading state for a faster, cleaner read, and aligned the associated page clients (invoices, jobs) on the new layout.
   Aligned **server-rendered pages** across the app on the new list structure so page headings, empty states, and data flow match end-to-end.
   Updated shared **API types** to support the unified filter surface across list screens.
+
+- `2026-04-23` `96dbedc` **2 h**
+  `45 files | +3 887 −960 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  Lay summary: Staff see a clearer job screen with organized tabs and sign-in pages that match the rest of the product.
+  **Job detail workspace and refreshed sign-in experience.** Delivered a clearer job workspace with dedicated tabs for appointments, documents, messages, finances, parties, tasks, and job-type specifics so everything related to a job is easy to find.
+  Modernized the sign-in, registration, and sign-out screens to match the product's visual standards and keep the first impression consistent with the main application.
+  Introduced reusable building blocks for structured detail views shared across job and claim areas so future screens stay visually aligned with less repeat work.
+  Expanded job actions and loading behaviour so the page keeps pace with real-world use and surfaces the right information as work moves forward.
+  Aligned navigation and data typing with the updated screens for fewer surprises during review and smoother handoffs between list and detail views.
+  Captured the design approach in an implementation note for future maintenance and onboarding.
