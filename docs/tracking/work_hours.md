@@ -135,3 +135,13 @@
   Reworked the **sign-in service configuration** so registered redirect addresses and client credentials come from environment configuration, making the service safe to deploy across environments.
   Walked the pipeline through successive staging runs, **diagnosing and fixing each failure** surfaced by the live environment — package manager pinning, first-time image bootstrap, migration networking, database name alignment, and standards-compliant token exchange.
   Registered the **staging domains** (web app, sign-in, and application interface) with HTTPS so the product is reachable at its friendly URLs, ready for end-to-end user flow testing.
+
+- `2026-04-22` `45d0d54` **3 h**
+  `17 files | +245 −195 | Tier 2 standard / Tier 4 deep integration | Heavy orchestration`
+  Lay summary: Diagnosed and fixed a production error blocking every signed-in page on the staging website, and made the site gracefully degrade instead of showing a blank error if a backend hiccup happens.
+  **Staging authentication fix and Server Components resilience.** Diagnosed the root cause of the generic error message users were seeing on the staging site — the **signing-key lookup address** was wrong, so every signed-in request was being rejected.
+  Corrected the staging configuration to point at the **correct signing-key endpoint** so tokens validate cleanly end-to-end.
+  Hardened **every signed-in page** (claims, jobs, quotes, invoices, reports, vendors, purchase orders, and related detail screens) so future backend hiccups surface as empty states or clean not-found pages instead of the generic error message.
+  Aligned every server-rendered page on the **shared tenant-aware request helper** so the customer identifier is always forwarded to the backend consistently.
+  Tightened the **backend tenant resolver** to ignore blank-or-whitespace values, removing a class of silent mis-routes.
+  Verified the staging database shape (tables, applied migrations, row counts) against the expected model while investigating.
