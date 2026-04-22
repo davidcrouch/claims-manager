@@ -188,3 +188,13 @@
   Expanded job actions and loading behaviour so the page keeps pace with real-world use and surfaces the right information as work moves forward.
   Aligned navigation and data typing with the updated screens for fewer surprises during review and smoother handoffs between list and detail views.
   Captured the design approach in an implementation note for future maintenance and onboarding.
+
+- `2026-04-23` `762bed1` **5.5 h**
+  `39 files | +574 −689 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  Lay summary: The product now appears under the new EnsureOS name and logo everywhere customers sign in and use the site, with a cleaner two-column sign-in layout.
+  **Rebrand to EnsureOS with logos and unified auth layout.** Rolled out the **EnsureOS** name and **new brand artwork** across the public website, in-app navigation, and browser title areas so the experience reads as one product.
+  Restyled **sign-in, registration, and sign-out** into a single card with **branding on the left** and the form on a clear white panel, matching the intended first-impression layout.
+  Replaced legacy sign-in service images and favicon with the **new icon and full logo** assets served from the application and sign-in host.
+  Updated **page titles and labels** in the main application and supporting API documentation strings so staff and integrations see the new product name consistently.
+  Adjusted **marketing copy** on the landing page to describe EnsureOS in plain language while keeping the same overall structure.
+  Confirmed **type checks** on the touched applications after the layout and copy changes.
