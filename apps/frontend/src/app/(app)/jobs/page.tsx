@@ -16,7 +16,7 @@ export default async function JobsPage({
   const emptyJobs: PaginatedResponse<Job> = { data: [], total: 0 };
   const emptyClaims: PaginatedResponse<Claim> = { data: [], total: 0 };
 
-  const [initialJobs, claimsRes, jobTypesRes] = await Promise.all([
+  const [initialJobs, claimsRes, jobTypesRes, statusLookupsRes] = await Promise.all([
     api
       .getJobs({
         page: parseInt(params.page ?? '1', 10),
@@ -38,10 +38,17 @@ export default async function JobsPage({
       return emptyClaims;
     }),
     api.getLookupsByDomain('job_type').catch(() => []),
+    api.getLookupsByDomain('job_status').catch(() => []),
   ]);
 
   const claims = claimsRes?.data ?? [];
   const jobTypes = Array.isArray(jobTypesRes) ? jobTypesRes : [];
+  const statusOptions = (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map(
+    (row) => ({
+      id: row.id,
+      name: row.name?.trim() ? row.name : 'Unknown',
+    }),
+  );
 
   return (
     <>
@@ -50,6 +57,7 @@ export default async function JobsPage({
         initialData={initialJobs}
         claims={claims}
         jobTypes={jobTypes}
+        statusOptions={statusOptions}
       />
     </>
   );

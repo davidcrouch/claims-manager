@@ -14,24 +14,34 @@ export default async function QuotesPage({
 
   const params = await searchParams;
   const empty: PaginatedResponse<Quote> = { data: [], total: 0 };
-  const initialQuotes = await api
-    .getQuotes({
-      page: parseInt(params.page ?? '1', 10),
-      limit: 20,
-      jobId: params.jobId,
-    })
-    .catch((err: unknown) => {
-      console.error(
-        'frontend:QuotesPage - getQuotes failed:',
-        err instanceof Error ? err.message : err,
-      );
-      return empty;
-    });
+  const [initialQuotes, statusLookupsRes] = await Promise.all([
+    api
+      .getQuotes({
+        page: parseInt(params.page ?? '1', 10),
+        limit: 20,
+        jobId: params.jobId,
+      })
+      .catch((err: unknown) => {
+        console.error(
+          'frontend:QuotesPage - getQuotes failed:',
+          err instanceof Error ? err.message : err,
+        );
+        return empty;
+      }),
+    api.getLookupsByDomain('quote_status').catch(() => []),
+  ]);
+
+  const statusOptions = (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map(
+    (row) => ({
+      id: row.id,
+      name: row.name?.trim() ? row.name : 'Unknown',
+    }),
+  );
 
   return (
     <>
       <SetBreadcrumbs items={[{ title: 'Quotes', href: '/quotes' }]} />
-      <QuotesListClient initialData={initialQuotes} />
+      <QuotesListClient initialData={initialQuotes} statusOptions={statusOptions} />
     </>
   );
 }

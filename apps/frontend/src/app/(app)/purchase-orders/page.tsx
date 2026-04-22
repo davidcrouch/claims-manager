@@ -14,24 +14,37 @@ export default async function PurchaseOrdersPage({
 
   const params = await searchParams;
   const empty: PaginatedResponse<PurchaseOrder> = { data: [], total: 0 };
-  const initialPOs = await api
-    .getPurchaseOrders({
-      page: parseInt(params.page ?? '1', 10),
-      limit: 20,
-      jobId: params.jobId,
-    })
-    .catch((err: unknown) => {
-      console.error(
-        'frontend:PurchaseOrdersPage - getPurchaseOrders failed:',
-        err instanceof Error ? err.message : err,
-      );
-      return empty;
-    });
+  const [initialPOs, statusLookupsRes] = await Promise.all([
+    api
+      .getPurchaseOrders({
+        page: parseInt(params.page ?? '1', 10),
+        limit: 20,
+        jobId: params.jobId,
+      })
+      .catch((err: unknown) => {
+        console.error(
+          'frontend:PurchaseOrdersPage - getPurchaseOrders failed:',
+          err instanceof Error ? err.message : err,
+        );
+        return empty;
+      }),
+    api.getLookupsByDomain('po_status').catch(() => []),
+  ]);
+
+  const statusOptions = (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map(
+    (row) => ({
+      id: row.id,
+      name: row.name?.trim() ? row.name : 'Unknown',
+    }),
+  );
 
   return (
     <>
       <SetBreadcrumbs items={[{ title: 'Purchase Orders', href: '/purchase-orders' }]} />
-      <PurchaseOrdersListClient initialData={initialPOs} />
+      <PurchaseOrdersListClient
+        initialData={initialPOs}
+        statusOptions={statusOptions}
+      />
     </>
   );
 }

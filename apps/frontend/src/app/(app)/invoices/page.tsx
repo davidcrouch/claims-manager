@@ -16,7 +16,7 @@ export default async function InvoicesPage({
   const emptyInvoices: PaginatedResponse<Invoice> = { data: [], total: 0 };
   const emptyPOs: PaginatedResponse<PurchaseOrder> = { data: [], total: 0 };
 
-  const [initialInvoices, posRes] = await Promise.all([
+  const [initialInvoices, posRes, statusLookupsRes] = await Promise.all([
     api
       .getInvoices({
         page: parseInt(params.page ?? '1', 10),
@@ -37,14 +37,25 @@ export default async function InvoicesPage({
       );
       return emptyPOs;
     }),
+    api.getLookupsByDomain('invoice_status').catch(() => []),
   ]);
 
   const purchaseOrders = posRes?.data ?? [];
+  const statusOptions = (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map(
+    (row) => ({
+      id: row.id,
+      name: row.name?.trim() ? row.name : 'Unknown',
+    }),
+  );
 
   return (
     <>
       <SetBreadcrumbs items={[{ title: 'Invoices', href: '/invoices' }]} />
-      <InvoicesPageClient initialData={initialInvoices} purchaseOrders={purchaseOrders} />
+      <InvoicesPageClient
+        initialData={initialInvoices}
+        purchaseOrders={purchaseOrders}
+        statusOptions={statusOptions}
+      />
     </>
   );
 }

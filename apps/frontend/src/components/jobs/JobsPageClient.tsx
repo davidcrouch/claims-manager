@@ -11,15 +11,22 @@ export interface JobsPageClientProps {
   initialData: PaginatedResponse<Job>;
   claims: Claim[];
   jobTypes: { id: string; name?: string }[];
+  statusOptions: { id: string; name: string }[];
 }
 
-export function JobsPageClient({ initialData, claims, jobTypes }: JobsPageClientProps) {
+export function JobsPageClient({
+  initialData,
+  claims,
+  jobTypes,
+  statusOptions,
+}: JobsPageClientProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   return (
     <>
       <JobsListClient
         initialData={initialData}
+        statusOptions={statusOptions}
         headerAction={
           <Button onClick={() => setDrawerOpen(true)}>Create Job</Button>
         }

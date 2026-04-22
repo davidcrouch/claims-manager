@@ -14,24 +14,34 @@ export default async function ReportsPage({
 
   const params = await searchParams;
   const empty: PaginatedResponse<Report> = { data: [], total: 0 };
-  const initialReports = await api
-    .getReports({
-      page: parseInt(params.page ?? '1', 10),
-      limit: 20,
-      jobId: params.jobId,
-    })
-    .catch((err: unknown) => {
-      console.error(
-        'frontend:ReportsPage - getReports failed:',
-        err instanceof Error ? err.message : err,
-      );
-      return empty;
-    });
+  const [initialReports, statusLookupsRes] = await Promise.all([
+    api
+      .getReports({
+        page: parseInt(params.page ?? '1', 10),
+        limit: 20,
+        jobId: params.jobId,
+      })
+      .catch((err: unknown) => {
+        console.error(
+          'frontend:ReportsPage - getReports failed:',
+          err instanceof Error ? err.message : err,
+        );
+        return empty;
+      }),
+    api.getLookupsByDomain('report_status').catch(() => []),
+  ]);
+
+  const statusOptions = (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map(
+    (row) => ({
+      id: row.id,
+      name: row.name?.trim() ? row.name : 'Unknown',
+    }),
+  );
 
   return (
     <>
       <SetBreadcrumbs items={[{ title: 'Reports', href: '/reports' }]} />
-      <ReportsListClient initialData={initialReports} />
+      <ReportsListClient initialData={initialReports} statusOptions={statusOptions} />
     </>
   );
 }

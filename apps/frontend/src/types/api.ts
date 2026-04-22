@@ -40,10 +40,21 @@ export interface Claim {
   policyNumber?: string | null;
   policyName?: string | null;
   policyDetails?: Record<string, unknown>;
+  financialDetails?: Record<string, unknown>;
+  vulnerabilityDetails?: Record<string, unknown>;
+  contentionDetails?: Record<string, unknown>;
   lossTypeLookupId?: string | null;
   lossSubtypeLookupId?: string | null;
   dateOfLoss?: string | null;
   incidentDescription?: string | null;
+  postalAddress?: string | null;
+  abn?: string | null;
+  vulnerableCustomer?: boolean | null;
+  totalLoss?: boolean | null;
+  contentiousClaim?: boolean | null;
+  contentiousActivityFlag?: boolean | null;
+  autoApprovalApplies?: boolean | null;
+  contentsDamaged?: boolean | null;
   apiPayload?: Record<string, unknown>;
   createdAt?: string;
   updatedAt?: string;
@@ -85,6 +96,8 @@ export interface Quote {
   statusLookupId?: string | null;
   totalAmount?: string | null;
   quoteDate?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
   status?: LookupRef;
 }
 
@@ -98,6 +111,8 @@ export interface PurchaseOrder {
   statusLookupId?: string | null;
   totalAmount?: string | null;
   vendorId?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
   status?: LookupRef;
   vendor?: LookupRef;
 }
@@ -109,6 +124,8 @@ export interface Invoice {
   invoiceNumber?: string | null;
   statusLookupId?: string | null;
   totalAmount?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
   status?: LookupRef;
 }
 
@@ -120,7 +137,10 @@ export interface Report {
   reportTypeLookupId?: string | null;
   title?: string | null;
   reference?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
   status?: LookupRef;
+  reportType?: LookupRef;
   reportData?: Record<string, unknown>;
 }
 
@@ -151,6 +171,8 @@ export interface Vendor {
   tenantId: string;
   name: string;
   externalReference?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Appointment {

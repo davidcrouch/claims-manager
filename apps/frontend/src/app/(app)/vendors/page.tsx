@@ -17,12 +17,10 @@ export default async function VendorsPage() {
     return empty;
   });
 
-  const vendors = vendorsRes?.data ?? [];
-
   return (
     <>
       <SetBreadcrumbs items={[{ title: 'Vendors', href: '/vendors' }]} />
-      <VendorsListClient vendors={vendors} />
+      <VendorsListClient initialData={vendorsRes ?? empty} />
     </>
   );
 }

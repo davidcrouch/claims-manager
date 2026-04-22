@@ -17,10 +17,29 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { ClaimCard } from './ClaimCard';
 import { fetchClaimsAction } from '@/app/(app)/claims/actions';
 import type { Claim, PaginatedResponse } from '@/types/api';
 import { normalizeSortParam } from './claims-list-helpers';
+
+function formatAddress(claim: Claim): string {
+  const addr = claim.address as
+    | { streetNumber?: string; streetName?: string; suburb?: string }
+    | undefined;
+  if (addr) {
+    const parts = [addr.streetNumber, addr.streetName, addr.suburb].filter(
+      Boolean
+    );
+    if (parts.length) return parts.join(' ');
+  }
+  return claim.addressSuburb ?? '';
+}
+
+function formatDate(value?: string | null): string {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString();
+}
 
 const SORT_OPTIONS = [
   { key: 'updated_at', label: 'Updated' },
@@ -310,17 +329,62 @@ export function ClaimsListClient({
         style={{ minHeight: 0, overflow: 'auto' }}
       >
         {data.data.length > 0 ? (
-          <div
-            className="grid justify-start"
-            style={{
-              gridTemplateColumns:
-                'repeat(auto-fill, minmax(265px, 322px))',
-              gap: 'clamp(10px, 2vw, 20px)',
-            }}
-          >
-            {data.data.map((claim) => (
-              <ClaimCard key={claim.id} claim={claim} />
-            ))}
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <table className="min-w-full divide-y divide-slate-200 text-sm">
+              <thead className="bg-slate-50">
+                <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                  <th scope="col" className="px-4 py-3">Claim #</th>
+                  <th scope="col" className="px-4 py-3">Status</th>
+                  <th scope="col" className="px-4 py-3">Policy</th>
+                  <th scope="col" className="px-4 py-3">Address</th>
+                  <th scope="col" className="px-4 py-3">Account</th>
+                  <th scope="col" className="px-4 py-3">Lodged</th>
+                  <th scope="col" className="px-4 py-3">Updated</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {data.data.map((claim) => {
+                  const claimNo =
+                    claim.claimNumber ?? claim.externalReference ?? claim.id;
+                  const statusName =
+                    (claim.status as { name?: string })?.name ?? 'Unknown';
+                  const accountName =
+                    (claim.account as { name?: string })?.name ?? '';
+                  const policy =
+                    claim.policyNumber ?? claim.policyName ?? '';
+
+                  return (
+                    <tr
+                      key={claim.id}
+                      onClick={() => router.push(`/claims/${claim.id}`)}
+                      className="cursor-pointer transition-colors hover:bg-slate-50"
+                    >
+                      <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
+                        {claimNo}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                          {statusName}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{policy}</td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {formatAddress(claim)}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {accountName}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                        {formatDate(claim.lodgementDate)}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                        {formatDate(claim.updatedAt)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         ) : (
           <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50">
