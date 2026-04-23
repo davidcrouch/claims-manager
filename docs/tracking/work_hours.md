@@ -228,7 +228,7 @@
   Polished the **job overview screen** with clearer parent-job and parent-claim links plus an insurer-reference label so staff immediately see which record ties to which external system.
   Tightened the shared **claim data shape** so downstream screens can read the newly-mapped fields without manual casting.
 
-- `2026-04-24` `7b2ce84` **6.5 h**
+- `2026-04-24` `ebbb86c` **6.5 h**
   `15 files | +15 373 −147 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   (Drizzle snapshot JSON accounts for ~13 700 of the insertions; hand-written delta is ~1 700 lines.)
   Lay summary: Aligned the stored data for quotes and service orders with the partner-system contract and expanded the on-screen detail pages so every field now has a named home, plus a small backend lookup for invoices tied to a job.
