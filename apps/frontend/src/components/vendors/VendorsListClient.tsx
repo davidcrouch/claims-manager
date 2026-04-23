@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Building2 } from 'lucide-react';
 import {
   SortTabs,
   SearchInput,
@@ -13,6 +14,8 @@ import {
   compareValues,
   formatDate,
 } from '@/components/shared/list-filters';
+import { SetPageHeader } from '@/components/layout/SetPageHeader';
+import { ListPageHeader } from '@/components/layout/ListPageHeader';
 import type { Vendor, PaginatedResponse } from '@/types/api';
 
 const SORT_OPTIONS: SortOption[] = [
@@ -99,8 +102,29 @@ export function VendorsListClient({ initialData }: VendorsListClientProps) {
     return sorted;
   }, [data.data, debouncedSearch, activeSortField, sortOrder]);
 
+  const withReferenceCount = useMemo(
+    () =>
+      visibleRows.reduce(
+        (acc, v) => acc + (v.externalReference ? 1 : 0),
+        0,
+      ),
+    [visibleRows],
+  );
+
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
+      <SetPageHeader>
+        <ListPageHeader
+          icon={Building2}
+          title="Vendors"
+          total={data.total}
+          showing={visibleRows.length}
+          search={debouncedSearch}
+          stats={[
+            { label: 'Linked', value: withReferenceCount },
+          ]}
+        />
+      </SetPageHeader>
       <div className="flex flex-col gap-4 p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
           <SortTabs

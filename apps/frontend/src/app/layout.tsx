@@ -1,14 +1,7 @@
 import type { Metadata } from 'next';
-import { Figtree } from 'next/font/google';
 import { AuthProvider } from '@/components/providers/AuthProvider';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import './globals.css';
-
-const figtree = Figtree({
-  variable: '--font-sans',
-  subsets: ['latin'],
-  weight: ['400', '500', '600'],
-});
 
 export const metadata: Metadata = {
   title: {
@@ -17,8 +10,8 @@ export const metadata: Metadata = {
   },
   description: 'EnsureOS — claim, repair, and operations workspace for insurance teams.',
   icons: {
-    icon: [{ url: '/ensure_logo.png', type: 'image/png' }],
-    apple: [{ url: '/ensure_logo.png', type: 'image/png' }],
+    icon: [{ url: '/favicon.ico', type: 'image/x-icon' }],
+    shortcut: [{ url: '/favicon.ico', type: 'image/x-icon' }],
   },
 };
 
@@ -30,7 +23,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${figtree.variable} h-full antialiased`}
+      className="h-full antialiased"
     >
       <body className="min-h-full flex flex-col">
         <AuthProvider>

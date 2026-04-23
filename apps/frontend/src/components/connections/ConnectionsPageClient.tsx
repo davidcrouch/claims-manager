@@ -16,6 +16,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ConnectionFormDrawer } from './ConnectionFormDrawer';
+import { SetPageHeader } from '@/components/layout/SetPageHeader';
+import { ListPageHeader } from '@/components/layout/ListPageHeader';
 import type { ConnectionSummary } from '@/types/api';
 
 type SortField = 'name' | 'providerName' | 'totalWebhookEvents' | 'lastEventAt';
@@ -81,8 +83,50 @@ export function ConnectionsPageClient({ connections }: ConnectionsPageClientProp
     }
   }
 
+  const activeCount = connections.filter((c) => c.isActive).length;
+  const inactiveCount = connections.length - activeCount;
+  const totalEvents = connections.reduce(
+    (acc, c) => acc + c.totalWebhookEvents,
+    0,
+  );
+  const totalErrors = connections.reduce(
+    (acc, c) => acc + c.recentErrorCount,
+    0,
+  );
+  const statusFilterSelectedCount = statusFilter === 'all' ? 0 : 1;
+  const breakdown = [
+    { name: 'Active', count: activeCount },
+    { name: 'Inactive', count: inactiveCount },
+  ].filter((b) => b.count > 0);
+
   return (
     <>
+      <SetPageHeader>
+        <ListPageHeader
+          icon={Unplug}
+          title="Connections"
+          total={connections.length}
+          showing={filtered.length}
+          search={search}
+          statusSelectedCount={statusFilterSelectedCount}
+          breakdown={breakdown}
+          stats={[
+            { label: 'Events', value: totalEvents.toLocaleString() },
+            ...(totalErrors > 0
+              ? [
+                  {
+                    label: 'Recent errors',
+                    value: (
+                      <span className="text-destructive">
+                        {totalErrors.toLocaleString()}
+                      </span>
+                    ),
+                  },
+                ]
+              : []),
+          ]}
+        />
+      </SetPageHeader>
       <EntityPanel
         searchSlot={
           <div className="relative w-72">

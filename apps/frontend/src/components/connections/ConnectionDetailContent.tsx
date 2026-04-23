@@ -5,10 +5,45 @@ import { useRouter } from 'next/navigation';
 import { Unplug, Loader2, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { ConnectionWebhookEventsTable } from './ConnectionWebhookEventsTable';
 import { fetchConnectionAction } from '@/app/(app)/connections/actions';
 import { CrunchworkConnectionEditForm } from '@/components/providers/crunchwork/CrunchworkConnectionEditForm';
 import type { ConnectionDetail, ProviderConnection } from '@/types/api';
+
+function ConnectionPageHeader({
+  connection,
+  onBack,
+}: {
+  connection: ConnectionDetail;
+  onBack: () => void;
+}) {
+  return (
+    <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1">
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={onBack}
+        className="h-7 w-7 shrink-0"
+      >
+        <ArrowLeft className="h-4 w-4" />
+      </Button>
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-100">
+        <Unplug className="h-4 w-4 text-violet-600" />
+      </span>
+      <h1 className="truncate text-lg font-semibold leading-tight">
+        {connection.name || connection.providerName}
+      </h1>
+      <span className="text-xs text-muted-foreground">
+        {connection.providerName} · {connection.environment}
+      </span>
+      <StatusBadge
+        status={connection.isActive ? 'Active' : 'Inactive'}
+        variant={connection.isActive ? 'active' : 'inactive'}
+      />
+    </div>
+  );
+}
 
 type Tab = 'events' | 'details';
 
@@ -46,35 +81,12 @@ export function ConnectionDetailContent({
 
   return (
     <div className="flex flex-col h-full">
-      <div className="border-b border-slate-100 bg-slate-50/50 px-8 py-6">
-        <div className="mb-2 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => router.push('/connections')}
-              className="h-8 w-8"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-100">
-              <Unplug className="h-5 w-5 text-violet-600" />
-            </div>
-            <div className="flex flex-col">
-              <h2 className="text-2xl font-semibold text-slate-900">
-                {connection.name || connection.providerName}
-              </h2>
-              <p className="text-xs text-slate-500">
-                {connection.providerName} · {connection.environment}
-              </p>
-            </div>
-            <StatusBadge
-              status={connection.isActive ? 'Active' : 'Inactive'}
-              variant={connection.isActive ? 'active' : 'inactive'}
-            />
-          </div>
-        </div>
-      </div>
+      <SetPageHeader>
+        <ConnectionPageHeader
+          connection={connection}
+          onBack={() => router.push('/connections')}
+        />
+      </SetPageHeader>
 
       <div className="flex gap-0 border-b border-slate-200 bg-white px-8">
         {(['events', 'details'] as const).map((t) => (

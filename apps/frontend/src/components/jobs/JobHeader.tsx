@@ -53,7 +53,11 @@ function vendorDisplay(job: Job): { name?: string; externalReference?: string } 
   };
 }
 
-export function JobHeader({
+/**
+ * Compact page-header renderer for a job. Designed to live inside the top
+ * title bar (see `SetPageHeader`).
+ */
+export function JobPageHeader({
   job,
   parentClaim,
 }: {
@@ -79,86 +83,73 @@ export function JobHeader({
     ((api.claim as Dict | undefined)?.externalReference as string | undefined);
 
   return (
-    <header className="rounded-xl border border-border bg-card p-5 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0 space-y-2">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Briefcase className="h-4 w-4" />
-            <span>Job</span>
-            {job.externalReference && (
-              <>
-                <span>·</span>
-                <span className="font-mono">{job.externalReference}</span>
-              </>
-            )}
-          </div>
-          <h1 className="text-2xl font-semibold leading-tight">{title}</h1>
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge status={statusName} />
-            {jobTypeName && (
-              <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                <Tag className="h-3 w-3" />
-                {jobTypeName}
+    <div className="flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-2">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+        <Briefcase className="h-5 w-5 shrink-0 text-muted-foreground" />
+        <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
+        <StatusBadge status={statusName} />
+        {jobTypeName && (
+          <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+            <Tag className="h-3 w-3" />
+            {jobTypeName}
+          </span>
+        )}
+        {vendor.name && (
+          <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+            <Building2 className="h-3 w-3" />
+            {vendor.name}
+            {vendor.externalReference && (
+              <span className="font-mono text-[10px] opacity-70">
+                · {vendor.externalReference}
               </span>
             )}
-            {vendor.name && (
-              <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                <Building2 className="h-3 w-3" />
-                {vendor.name}
-                {vendor.externalReference && (
-                  <span className="font-mono text-[10px] opacity-70">
-                    · {vendor.externalReference}
-                  </span>
-                )}
-              </span>
-            )}
-            {address && (
-              <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                <MapPin className="h-3 w-3" />
-                {address}
-              </span>
-            )}
-          </div>
-          {job.claimId && (
-            <p className="text-xs text-muted-foreground">
-              Parent claim:{' '}
-              <Link
-                href={`/claims/${job.claimId}`}
-                className="inline-flex items-center gap-1 text-primary hover:underline"
-              >
-                {parentClaimNumber ?? job.claimId}
-                <ExternalLink className="h-3 w-3" />
-              </Link>
-            </p>
-          )}
+          </span>
+        )}
+        {address && (
+          <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+            <MapPin className="h-3 w-3" />
+            {address}
+          </span>
+        )}
+        {job.claimId && (
+          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+            <span>Claim:</span>
+            <Link
+              href={`/claims/${job.claimId}`}
+              className="inline-flex items-center gap-1 text-primary hover:underline"
+            >
+              {parentClaimNumber ?? job.claimId}
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          </span>
+        )}
+      </div>
+      <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1 text-xs">
+        <div className="flex items-baseline gap-1">
+          <span className="text-muted-foreground">Request:</span>
+          <span className="font-medium">{formatDate(job.requestDate)}</span>
         </div>
-        <div className="flex flex-wrap items-center gap-6 text-right">
-          <div>
-            <p className="text-xs text-muted-foreground">Request</p>
-            <p className="text-sm font-medium">{formatDate(job.requestDate)}</p>
+        <div className="flex items-baseline gap-1">
+          <span className="text-muted-foreground">Updated:</span>
+          <span className="font-medium">{formatDateTime(job.updatedAt)}</span>
+        </div>
+        {job.excess != null && job.excess !== '' && (
+          <div className="flex items-baseline gap-1">
+            <span className="text-muted-foreground">Excess:</span>
+            <span className="font-medium">{formatCurrency(job.excess)}</span>
           </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Updated</p>
-            <p className="text-sm font-medium">{formatDateTime(job.updatedAt)}</p>
-          </div>
-          {job.excess != null && job.excess !== '' && (
-            <div>
-              <p className="text-xs text-muted-foreground">Excess</p>
-              <p className="text-sm font-medium">{formatCurrency(job.excess)}</p>
-            </div>
-          )}
-          <div>
-            <p className="text-xs text-muted-foreground">Make-safe</p>
-            <p className="text-sm font-medium">
-              {job.makeSafeRequired == null
-                ? '—'
-                : job.makeSafeRequired
-                  ? 'Yes'
-                  : 'No'}
-            </p>
-          </div>
+        )}
+        <div className="flex items-baseline gap-1">
+          <span className="text-muted-foreground">Make-safe:</span>
+          <span className="font-medium">
+            {job.makeSafeRequired == null
+              ? '—'
+              : job.makeSafeRequired
+                ? 'Yes'
+                : 'No'}
+          </span>
         </div>
       </div>
-    </header>
+    </div>
   );
 }

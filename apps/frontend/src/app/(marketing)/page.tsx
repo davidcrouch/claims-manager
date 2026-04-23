@@ -9,7 +9,6 @@ import {
   BarChart3,
   Users,
   CheckCircle2,
-  Star,
   PlayCircle,
 } from 'lucide-react';
 
@@ -20,16 +19,14 @@ import {
  * small blue-dot bullets, clean shadows (no glows, no gradients).
  *
  * Palette (scoped to this page):
- *   navy         hsl(220 60% 20%)   #152a52 (dark blue; slightly darker than sidebar)
- *   slate        hsl(220 52% 24%)   #1e3a5f (mid band, same hue family)
+ *   navy         #02122d (single dark tone used for all dark sections; matches logo background, auth-server left panel & app sidebar)
  *   soft-white   hsl(210 33% 97%)   #f5f7fa
  *   light-grey   hsl(214 24% 87%)   #d6dde4
  *   blue-accent  hsl(214 65% 55%)   #3e86d4
  *   muted-fg     hsl(213 27% 35%)   #42526a
  */
 
-const NAVY = '#152a52';
-const SLATE = '#1e3a5f';
+const NAVY = '#02122d';
 const SOFT_WHITE = '#f5f7fa';
 const LIGHT_GREY = '#d6dde4';
 const BLUE = '#3e86d4';
@@ -88,14 +85,14 @@ function SiteHeader() {
       className="sticky top-0 z-40 border-b backdrop-blur"
       style={{
         borderColor: 'rgba(255,255,255,0.08)',
-        backgroundColor: 'rgba(22,43,80,0.92)',
-        boxShadow: '0 4px 20px -4px rgba(22,43,80,0.35)',
+        backgroundColor: 'rgba(2,18,45,0.92)',
+        boxShadow: '0 4px 20px -4px rgba(2,18,45,0.35)',
       }}
     >
       <div className="container mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
         <Link
           href="/"
-          className="group flex items-center gap-2.5 text-base tracking-tight transition-opacity duration-200 hover:opacity-90"
+          className="group flex items-center gap-3 text-xl tracking-tight transition-opacity duration-200 hover:opacity-90"
           style={{ color: '#ffffff' }}
         >
           <LogoMark />
@@ -133,12 +130,12 @@ function SiteHeader() {
 
 function LogoMark() {
   return (
-    <span className="relative flex size-9 shrink-0 overflow-hidden rounded-md bg-white/10 p-1 shadow-md ring-1 ring-white/20 transition-transform duration-300 group-hover:scale-105">
+    <span className="relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-md bg-transparent p-1 transition-transform duration-300 group-hover:scale-105">
       <Image
-        src="/ensure_logo.png"
+        src="/ensure_logo_dark.png"
         alt=""
-        width={36}
-        height={36}
+        width={56}
+        height={56}
         className="size-full object-contain"
       />
     </span>
@@ -166,11 +163,11 @@ function Hero() {
               linear-gradient(to bottom, ${NAVY} 1px, transparent 1px)
             `,
             backgroundSize: '48px 48px',
-            opacity: 0.07,
+            opacity: 0.13,
             maskImage:
-              'radial-gradient(ellipse 90% 80% at 50% 40%, black 35%, transparent 90%)',
+              'radial-gradient(ellipse 100% 90% at 50% 40%, black 55%, transparent 100%)',
             WebkitMaskImage:
-              'radial-gradient(ellipse 90% 80% at 50% 40%, black 35%, transparent 90%)',
+              'radial-gradient(ellipse 100% 90% at 50% 40%, black 55%, transparent 100%)',
           }}
         />
 
@@ -178,27 +175,6 @@ function Hero() {
           <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-12 lg:gap-10">
             {/* Left: content */}
             <div className="lg:col-span-7 animate-in fade-in-0 slide-in-from-bottom-4 duration-700">
-              {/* Trust pill */}
-              <div
-                className="mb-8 inline-flex items-center gap-2.5 rounded-full border bg-white px-3.5 py-1.5 text-xs shadow-sm transition-shadow duration-300 hover:shadow-md"
-                style={{
-                  borderColor: LIGHT_GREY,
-                  color: INK_MUTED,
-                }}
-              >
-                <span
-                  className="cm-pulse-dot flex size-1.5 rounded-full"
-                  style={{ backgroundColor: BLUE }}
-                />
-                <span className="font-medium">
-                  Now serving 200+ insurance teams
-                </span>
-                <span style={{ color: LIGHT_GREY }}>•</span>
-                <span className="font-medium" style={{ color: BLUE }}>
-                  Read customer story →
-                </span>
-              </div>
-
               {/* Accent bar + eyebrow */}
               <div className="mb-6 flex items-center gap-4">
                 <span
@@ -209,7 +185,7 @@ function Hero() {
                   className="text-xs font-semibold uppercase tracking-[0.2em]"
                   style={{ color: BLUE }}
                 >
-                  Insurance operations platform
+                  Built for insurance contractors
                 </span>
               </div>
 
@@ -246,9 +222,9 @@ function Hero() {
                 className="mb-10 max-w-xl text-lg leading-relaxed md:text-xl"
                 style={{ color: INK_MUTED }}
               >
-                Claims, jobs, quotes, vendors, invoices and reporting —
-                unified in a single, purpose-built workspace for carriers,
-                MGAs and adjusting firms.
+                Jobs, claims, quotes, vendors, invoices and reporting —
+                unified in a single, purpose-built workspace for contractors
+                performing insurance claim work on behalf of carriers.
               </p>
 
               <div className="flex flex-wrap items-center gap-4">
@@ -257,48 +233,10 @@ function Hero() {
                   className="group inline-flex items-center rounded px-7 py-3.5 text-sm font-medium shadow-md transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl"
                   style={{ backgroundColor: BLUE, color: SOFT_WHITE }}
                 >
-                  Start Free Trial
+                  Get Started
                   <ArrowRight className="ml-2 size-4 transition-transform duration-300 group-hover:translate-x-1" />
                 </a>
-                <a
-                  href="#platform"
-                  className="inline-flex items-center rounded border bg-white px-6 py-3.5 text-sm font-medium shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md"
-                  style={{ borderColor: LIGHT_GREY, color: INK }}
-                >
-                  <PlayCircle className="mr-2 size-4" style={{ color: BLUE }} />
-                  Watch 90-second demo
-                </a>
-              </div>
 
-              {/* Micro social proof */}
-              <div className="mt-8 flex flex-wrap items-center gap-6">
-                <div className="flex items-center gap-1.5">
-                  <div className="flex gap-0.5">
-                    {[0, 1, 2, 3, 4].map((i) => (
-                      <Star
-                        key={i}
-                        className="size-4"
-                        style={{ color: BLUE, fill: BLUE }}
-                      />
-                    ))}
-                  </div>
-                  <span
-                    className="text-sm font-semibold"
-                    style={{ color: INK }}
-                  >
-                    4.9 / 5
-                  </span>
-                  <span className="text-sm" style={{ color: INK_MUTED }}>
-                    from 180+ reviews
-                  </span>
-                </div>
-                <span
-                  className="hidden h-4 w-px sm:block"
-                  style={{ backgroundColor: LIGHT_GREY }}
-                />
-                <span className="text-sm" style={{ color: INK_MUTED }}>
-                  SOC 2 Type II · AU-hosted
-                </span>
               </div>
             </div>
 
@@ -326,7 +264,7 @@ function Hero() {
                   aspectRatio: '4 / 5',
                   backgroundColor: NAVY,
                   boxShadow:
-                    '0 40px 80px -20px rgba(21,42,82,0.45), 0 0 0 1px rgba(21,42,82,0.08)',
+                    '0 40px 80px -20px rgba(2,18,45,0.45), 0 0 0 1px rgba(2,18,45,0.08)',
                 }}
               >
                 <Image
@@ -356,13 +294,13 @@ function Hero() {
                     className="text-[10px] font-semibold uppercase tracking-widest"
                     style={{ color: INK_MUTED }}
                   >
-                    Cycle time
+                    Job view
                   </div>
                   <div
                     className="text-sm font-bold"
                     style={{ color: INK }}
                   >
-                    −62% vs. legacy
+                    Unified across crews
                   </div>
                 </div>
               </div>
@@ -377,7 +315,7 @@ function Hero() {
         style={{
           backgroundColor: NAVY,
           boxShadow:
-            '0 -10px 30px -15px rgba(21,42,82,0.4), 0 10px 30px -15px rgba(21,42,82,0.4)',
+            '0 -10px 30px -15px rgba(2,18,45,0.4), 0 10px 30px -15px rgba(2,18,45,0.4)',
         }}
       >
         <div className="container mx-auto max-w-7xl px-6">
@@ -385,10 +323,10 @@ function Hero() {
             className="grid grid-cols-2 divide-x md:grid-cols-4"
             style={{ color: SOFT_WHITE }}
           >
-            <StatCell value="2.4M+" label="Claims processed" />
-            <StatCell value="62%" label="Faster cycle time" />
-            <StatCell value="99.99%" label="Platform uptime" />
-            <StatCell value="5 days" label="Median go-live" />
+            <StatCell value="End-to-end" label="Scope to settlement" />
+            <StatCell value="Real-time" label="Carrier & job updates" />
+            <StatCell value="Built-in" label="Quotes, invoices, reports" />
+            <StatCell value="Field-ready" label="Works anywhere crews work" />
           </div>
         </div>
       </div>
@@ -482,10 +420,10 @@ function BulletList({
 
 function ProblemSection() {
   const items = [
-    'Re-keying claim details across disconnected systems',
-    'Chasing vendor quotes, invoices and supporting documents',
-    'Manually building reports for carriers and management',
-    'Tracking SLAs and assignments across spreadsheets and email',
+    'Re-keying job details across carrier portals and internal systems',
+    'Chasing subcontractor quotes, invoices and site documentation',
+    'Manually building progress reports and evidence packs for carriers',
+    'Tracking job assignments and carrier SLAs across spreadsheets and email',
   ];
 
   return (
@@ -502,15 +440,15 @@ function ProblemSection() {
           <div className="order-1 max-w-3xl flex-1 lg:order-2">
             <Eyebrow>The Problem</Eyebrow>
             <Heading>
-              Fragmented claims operations slow down every matter.
+              Fragmented tools slow down every insurance job.
             </Heading>
             <p
               className="mb-8 text-lg leading-relaxed"
               style={{ color: MUTED_FG }}
             >
-              Insurance operations frequently involve dozens of tools,
-              spreadsheets and inboxes — with critical information scattered
-              across them.
+              Contractors working on insurance claims juggle carrier portals,
+              spreadsheets, shared drives and inboxes — with critical job
+              information scattered across all of them.
             </p>
             <p
               className="mb-6 text-base leading-relaxed"
@@ -520,8 +458,8 @@ function ProblemSection() {
             </p>
             <BulletList items={items} />
             <p className="text-base leading-relaxed" style={{ color: MUTED_FG }}>
-              This administrative overhead delays resolution and erodes the
-              customer experience.
+              This administrative overhead delays completion, squeezes margins
+              and stretches the turnaround carriers expect from you.
             </p>
           </div>
         </div>
@@ -536,11 +474,11 @@ function ProblemSection() {
 
 function UnifiedRecordsSection() {
   const items = [
-    'Single record for every claim, contact, job and invoice',
-    'Document and attachment handling with version history',
-    'Full audit trail across every action and status change',
-    'Native integrations with carriers and assessing platforms',
-    'Powerful search and filtering across all matter data',
+    'Single record for every job, claim, quote, purchase order and invoice',
+    'Site photos, scopes and attachments with version history',
+    'Full audit trail across every action, approval and status change',
+    'Native integrations with carrier and assessing platforms',
+    'Powerful search and filtering across every active and closed job',
   ];
 
   return (
@@ -554,22 +492,23 @@ function UnifiedRecordsSection() {
           <div>
             <Eyebrow>Unified Records</Eyebrow>
             <Heading light>
-              From first notice of loss to final payment — in one workspace.
+              From job assignment to final invoice — in one workspace.
             </Heading>
             <p
               className="mb-6 text-base leading-relaxed"
               style={{ color: 'rgba(245,247,250,0.6)' }}
             >
-              EnsureOS brings every piece of a claim together — parties,
-              coverage, events, documents, quotes, payments and communications —
-              into a single, navigable record.
+              EnsureOS brings every part of an insurance job together — scope,
+              site photos, quotes, purchase orders, subcontractors, invoices and
+              carrier communications — into a single, navigable record.
             </p>
             <p
               className="text-base leading-relaxed"
               style={{ color: 'rgba(245,247,250,0.6)' }}
             >
               The platform is designed to reduce manual coordination and give
-              every team member a consistent, up-to-date view.
+              every estimator, coordinator and crew member a consistent,
+              up-to-date view.
             </p>
 
             <div className="mt-10">
@@ -598,10 +537,10 @@ function UnifiedRecordsSection() {
 
 function WorkflowSectionBlock() {
   const items = [
-    'Assignment and triage rules based on claim type and value',
-    'SLA tracking with proactive escalation',
-    'Vendor dispatch and quote reconciliation',
-    'Approval chains for reserves, payments and settlements',
+    'Auto-assign jobs to crews and estimators by trade, region or carrier',
+    'Carrier SLA tracking with proactive escalation',
+    'Subcontractor dispatch, purchase orders and quote reconciliation',
+    'Approval chains for variations, purchase orders and invoices',
   ];
 
   return (
@@ -615,22 +554,22 @@ function WorkflowSectionBlock() {
           <div className="max-w-3xl flex-1">
             <Eyebrow>Automated Workflow</Eyebrow>
             <Heading>
-              Orchestrate every step, from intake to resolution.
+              Orchestrate every job, from assignment to invoice.
             </Heading>
             <p
               className="mb-6 text-base leading-relaxed"
               style={{ color: MUTED_FG }}
             >
-              Configure intake rules, assignments, SLAs, approvals and
-              notifications to match how your team actually operates — without
-              writing code.
+              Configure intake rules, crew assignments, carrier SLAs,
+              approvals and notifications to match how your business actually
+              operates — without writing code.
             </p>
             <p
               className="mb-8 text-base leading-relaxed"
               style={{ color: MUTED_FG }}
             >
               Workflows put the right work in front of the right person at the
-              right time, so claims keep moving.
+              right time, so jobs keep moving.
             </p>
             <BulletList items={items} />
           </div>
@@ -649,22 +588,22 @@ function WorkflowSectionBlock() {
 
 function IntelligenceSection() {
   const examples = [
-    '"Show claims exceeding reserve by more than 15% this quarter."',
-    '"List open matters with SLAs breaching in the next 48 hours."',
-    '"Summarise vendor performance by region, for the last 90 days."',
+    '"Show jobs exceeding the approved scope by more than 15% this quarter."',
+    '"List open jobs with carrier SLAs breaching in the next 48 hours."',
+    '"Summarise subcontractor performance by region, for the last 90 days."',
   ];
 
   return (
     <section
       id="reporting"
       className="py-24 md:py-32"
-      style={{ backgroundColor: SLATE, color: SOFT_WHITE }}
+      style={{ backgroundColor: NAVY, color: SOFT_WHITE }}
     >
       <div className="container mx-auto max-w-7xl px-6">
         <div className="max-w-3xl">
           <Eyebrow>Operational Intelligence</Eyebrow>
           <Heading light>
-            Real-time reporting across your entire claims operation.
+            Real-time reporting across every job, crew and carrier.
           </Heading>
           <p
             className="mb-4 text-lg leading-relaxed"
@@ -678,7 +617,8 @@ function IntelligenceSection() {
             style={{ color: 'rgba(245,247,250,0.6)' }}
           >
             Ask operational questions and get immediate, verifiable answers
-            — with every result linked back to the underlying records.
+            — with every result linked back to the underlying jobs, quotes
+            and documents.
           </p>
         </div>
 
@@ -689,7 +629,7 @@ function IntelligenceSection() {
               className="rounded border p-6 transition-all duration-300 hover:-translate-y-1 hover:border-white/30 hover:shadow-xl hover:shadow-black/30"
               style={{
                 borderColor: 'rgba(214,221,228,0.15)',
-                backgroundColor: 'rgba(21,42,82,0.35)',
+                backgroundColor: 'rgba(2,18,45,0.35)',
               }}
             >
               <p
@@ -709,7 +649,7 @@ function IntelligenceSection() {
           className="mt-10 max-w-3xl text-base leading-relaxed"
           style={{ color: 'rgba(245,247,250,0.6)' }}
         >
-          All results retain links to the underlying claims, documents and
+          All results retain links to the underlying jobs, documents and
           events — so every number is traceable and every insight is auditable.
         </p>
       </div>
@@ -726,22 +666,22 @@ function ProfessionalSection() {
     {
       icon: Lock,
       title: 'Enterprise-grade security',
-      desc: 'SOC 2 Type II controls, SSO, role-based access, encryption at rest and in transit, and immutable audit logs.',
+      desc: 'SSO, role-based access, encryption at rest and in transit, and immutable audit logs — ready for carrier security reviews.',
     },
     {
       icon: FileText,
-      title: 'Traceable claim records',
-      desc: 'Every document, payment, status change and communication is linked to its matter and timestamped for review.',
+      title: 'Traceable job records',
+      desc: 'Every document, photo, variation, approval and communication is linked to its job and timestamped for review.',
     },
     {
       icon: Users,
       title: 'Controlled collaboration',
-      desc: 'Matter-level permissions and granular role definitions keep the right people in, and the wrong people out.',
+      desc: 'Job-level permissions and granular role definitions keep the right people in, and the wrong people out.',
     },
     {
       icon: Shield,
-      title: 'Built for regulated operations',
-      desc: 'Designed to meet the operational and compliance requirements of carriers, MGAs and adjusting firms.',
+      title: 'Built for carrier-grade operations',
+      desc: 'Designed to meet the documentation, auditability and turnaround requirements carriers expect from their contractors.',
     },
   ];
 
@@ -759,8 +699,9 @@ function ProfessionalSection() {
             className="mb-16 text-lg leading-relaxed"
             style={{ color: MUTED_FG }}
           >
-            EnsureOS is built to support the confidentiality,
-            auditability and operational rigour that insurance teams require.
+            EnsureOS is built to support the confidentiality, auditability
+            and operational rigour that carriers expect from every contractor
+            working on their claims.
           </p>
         </div>
 
@@ -812,15 +753,15 @@ function EarlyAccessCta() {
         <div className="max-w-3xl">
           <Eyebrow>Get Started</Eyebrow>
           <Heading light>
-            Bring your claims operation into a single, modern workspace.
+            Bring every insurance job into a single, modern workspace.
           </Heading>
           <p
             className="mb-10 text-lg leading-relaxed"
             style={{ color: 'rgba(245,247,250,0.7)' }}
           >
-            EnsureOS is now available to carriers, MGAs and adjusting
-            firms. Start a free trial in minutes, or talk to our team about a
-            guided rollout.
+            EnsureOS is now available to restoration, repair and assessing
+            contractors. Create an account in minutes, or sign in to pick up
+            where you left off.
           </p>
           <div className="flex flex-wrap gap-4">
             <a
@@ -828,7 +769,7 @@ function EarlyAccessCta() {
               className="group inline-flex items-center rounded px-7 py-3.5 text-sm font-medium shadow-lg transition-all duration-300 hover:-translate-y-0.5 hover:shadow-2xl"
               style={{ backgroundColor: BLUE, color: SOFT_WHITE }}
             >
-              Start Free Trial
+              Get Started
               <ArrowRight className="ml-2 size-4 transition-transform duration-300 group-hover:translate-x-1" />
             </a>
             <a
@@ -839,7 +780,7 @@ function EarlyAccessCta() {
                 color: 'rgba(245,247,250,0.9)',
               }}
             >
-              Talk to Sales
+              Sign In
             </a>
           </div>
 
@@ -849,7 +790,7 @@ function EarlyAccessCta() {
           >
             <span className="inline-flex items-center gap-2">
               <CheckCircle2 className="size-4" style={{ color: BLUE }} />
-              14-day free trial
+              Set up in minutes
             </span>
             <span className="inline-flex items-center gap-2">
               <CheckCircle2 className="size-4" style={{ color: BLUE }} />
@@ -857,7 +798,7 @@ function EarlyAccessCta() {
             </span>
             <span className="inline-flex items-center gap-2">
               <CheckCircle2 className="size-4" style={{ color: BLUE }} />
-              SOC 2 Type II
+              Purpose-built for contractors
             </span>
           </div>
         </div>
@@ -975,7 +916,7 @@ function ClaimsMock() {
 
   return (
     <div
-      className="overflow-hidden rounded-lg bg-white shadow-2xl transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_30px_60px_-15px_rgba(21,42,82,0.5)]"
+      className="overflow-hidden rounded-lg bg-white shadow-2xl transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_30px_60px_-15px_rgba(2,18,45,0.5)]"
       style={{ border: `1px solid ${LIGHT_GREY}` }}
     >
       <div

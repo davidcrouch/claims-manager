@@ -111,12 +111,12 @@
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
-  /* Sidebar: dark navy — slightly darker base; menu text pure white */
-  --sidebar: #162b50;
+  /* Sidebar: unified dark navy (#02122d) — matches logo background, landing page & auth-server left panel */
+  --sidebar: #02122d;
   --sidebar-foreground: #ffffff;
   --sidebar-primary: #3e86d4;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #203d6a;
+  --sidebar-accent: #0e2447;
   --sidebar-accent-foreground: #ffffff;
   --sidebar-border: rgba(255, 255, 255, 0.1);
   --sidebar-ring: #3e86d4;
@@ -153,12 +153,12 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  /* Sidebar: same tokens as :root (dark navy + white nav labels) */
-  --sidebar: #162b50;
+  /* Sidebar: same tokens as :root (unified dark navy #02122d + white nav labels) */
+  --sidebar: #02122d;
   --sidebar-foreground: #ffffff;
   --sidebar-primary: #3e86d4;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #203d6a;
+  --sidebar-accent: #0e2447;
   --sidebar-accent-foreground: #ffffff;
   --sidebar-border: rgba(255, 255, 255, 0.1);
   --sidebar-ring: #3e86d4;

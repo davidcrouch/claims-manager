@@ -1,7 +1,7 @@
 import { redirect, notFound } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
-import { SetBreadcrumbs } from '@/components/layout/SetBreadcrumbs';
-import { InvoiceDetail } from '@/components/invoices/InvoiceDetail';
+import { SetPageHeader } from '@/components/layout/SetPageHeader';
+import { InvoiceDetail, InvoicePageHeader } from '@/components/invoices/InvoiceDetail';
 import type { Metadata } from 'next';
 
 export async function generateMetadata({
@@ -36,16 +36,11 @@ export default async function InvoiceDetailPage({
   });
   if (!invoice) notFound();
 
-  const title = invoice.invoiceNumber ?? id;
-
   return (
     <>
-      <SetBreadcrumbs
-        items={[
-          { title: 'Invoices', href: '/invoices' },
-          { title, href: `/invoices/${id}` },
-        ]}
-      />
+      <SetPageHeader>
+        <InvoicePageHeader invoice={invoice} />
+      </SetPageHeader>
       <InvoiceDetail invoice={invoice} />
     </>
   );

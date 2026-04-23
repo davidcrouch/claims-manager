@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
-import { SetBreadcrumbs } from '@/components/layout/SetBreadcrumbs';
 import { QuotesListClient } from '@/components/quotes/QuotesListClient';
 import type { PaginatedResponse, Quote } from '@/types/api';
 
@@ -39,9 +38,6 @@ export default async function QuotesPage({
   );
 
   return (
-    <>
-      <SetBreadcrumbs items={[{ title: 'Quotes', href: '/quotes' }]} />
-      <QuotesListClient initialData={initialQuotes} statusOptions={statusOptions} />
-    </>
+    <QuotesListClient initialData={initialQuotes} statusOptions={statusOptions} />
   );
 }

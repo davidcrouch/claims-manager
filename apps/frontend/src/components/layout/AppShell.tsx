@@ -1,17 +1,18 @@
 'use client';
 
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
-import { AppSidebar } from './AppSidebar';
+import { AppSidebar, type AppSidebarUser } from './AppSidebar';
 
 export interface AppShellProps {
   header: React.ReactNode;
+  user?: AppSidebarUser | null;
   children: React.ReactNode;
 }
 
-export function AppShell({ header, children }: AppShellProps) {
+export function AppShell({ header, user, children }: AppShellProps) {
   return (
     <SidebarProvider>
-      <AppSidebar />
+      <AppSidebar user={user} />
       <SidebarInset>
         {header}
         <div className="flex-1 p-4">{children}</div>

@@ -1,7 +1,7 @@
 import { redirect, notFound } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
-import { SetBreadcrumbs } from '@/components/layout/SetBreadcrumbs';
-import { QuoteDetail } from '@/components/quotes/QuoteDetail';
+import { SetPageHeader } from '@/components/layout/SetPageHeader';
+import { QuoteDetail, QuotePageHeader } from '@/components/quotes/QuoteDetail';
 import type { Metadata } from 'next';
 
 export async function generateMetadata({
@@ -36,16 +36,11 @@ export default async function QuoteDetailPage({
   });
   if (!quote) notFound();
 
-  const title = quote.quoteNumber ?? quote.externalReference ?? id;
-
   return (
     <>
-      <SetBreadcrumbs
-        items={[
-          { title: 'Quotes', href: '/quotes' },
-          { title, href: `/quotes/${id}` },
-        ]}
-      />
+      <SetPageHeader>
+        <QuotePageHeader quote={quote} />
+      </SetPageHeader>
       <QuoteDetail quote={quote} />
     </>
   );

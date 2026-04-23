@@ -1,7 +1,8 @@
 import { redirect, notFound } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
-import { SetBreadcrumbs } from '@/components/layout/SetBreadcrumbs';
+import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { JobDetail } from '@/components/jobs/JobDetail';
+import { JobPageHeader } from '@/components/jobs/JobHeader';
 import type { Metadata } from 'next';
 import type { Claim } from '@/types/api';
 
@@ -50,16 +51,11 @@ export default async function JobDetailPage({
     });
   }
 
-  const title = job.externalReference ?? id;
-
   return (
     <>
-      <SetBreadcrumbs
-        items={[
-          { title: 'Jobs', href: '/jobs' },
-          { title, href: `/jobs/${id}` },
-        ]}
-      />
+      <SetPageHeader>
+        <JobPageHeader job={job} parentClaim={parentClaim} />
+      </SetPageHeader>
       <JobDetail job={job} parentClaim={parentClaim} />
     </>
   );

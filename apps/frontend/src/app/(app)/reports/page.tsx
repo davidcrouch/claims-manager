@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
-import { SetBreadcrumbs } from '@/components/layout/SetBreadcrumbs';
 import { ReportsListClient } from '@/components/reports/ReportsListClient';
 import type { PaginatedResponse, Report } from '@/types/api';
 
@@ -39,9 +38,6 @@ export default async function ReportsPage({
   );
 
   return (
-    <>
-      <SetBreadcrumbs items={[{ title: 'Reports', href: '/reports' }]} />
-      <ReportsListClient initialData={initialReports} statusOptions={statusOptions} />
-    </>
+    <ReportsListClient initialData={initialReports} statusOptions={statusOptions} />
   );
 }

@@ -1,7 +1,7 @@
 import { redirect, notFound } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
-import { SetBreadcrumbs } from '@/components/layout/SetBreadcrumbs';
-import { ClaimDetail } from '@/components/claims/ClaimDetail';
+import { SetPageHeader } from '@/components/layout/SetPageHeader';
+import { ClaimDetail, ClaimPageHeader } from '@/components/claims/ClaimDetail';
 import type { Metadata } from 'next';
 
 export async function generateMetadata({
@@ -49,16 +49,12 @@ export default async function ClaimDetailPage({
   }
 
   const claimWithJobs = { ...claim, jobs: jobsRes?.data ?? [] };
-  const title = claim.claimNumber ?? claim.externalReference ?? id;
 
   return (
     <>
-      <SetBreadcrumbs
-        items={[
-          { title: 'Claims', href: '/claims' },
-          { title, href: `/claims/${id}` },
-        ]}
-      />
+      <SetPageHeader>
+        <ClaimPageHeader claim={claimWithJobs} />
+      </SetPageHeader>
       <ClaimDetail claim={claimWithJobs} />
     </>
   );

@@ -712,7 +712,7 @@ function ComplianceTab({ claim }: { claim: Claim }) {
   );
 }
 
-export function ClaimDetail({ claim }: { claim: Claim }) {
+export function ClaimPageHeader({ claim }: { claim: Claim }) {
   const title = claim.claimNumber ?? claim.externalReference ?? claim.id;
   const api = getApi(claim);
   const statusName =
@@ -726,58 +726,52 @@ export function ClaimDetail({ claim }: { claim: Claim }) {
   const jobs = claim.jobs ?? [];
 
   return (
-    <div className="space-y-6">
-      <header className="rounded-xl border border-border bg-card p-5 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0 space-y-2">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <FileText className="h-4 w-4" />
-              <span>Claim</span>
-              {claim.externalReference && (
-                <>
-                  <span>·</span>
-                  <span className="font-mono">{claim.externalReference}</span>
-                </>
-              )}
-            </div>
-            <h1 className="text-2xl font-semibold leading-tight">{title}</h1>
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge status={statusName} />
-              {account && (
-                <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                  <Building2 className="h-3 w-3" />
-                  {account}
-                </span>
-              )}
-              {address && (
-                <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                  <MapPin className="h-3 w-3" />
-                  {address}
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-6 text-right">
-            <div>
-              <p className="text-xs text-muted-foreground">Lodged</p>
-              <p className="text-sm font-medium">
-                {formatDate(claim.lodgementDate)}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Date of loss</p>
-              <p className="text-sm font-medium">
-                {formatDate(claim.dateOfLoss)}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Jobs</p>
-              <p className="text-sm font-medium">{jobs.length}</p>
-            </div>
-          </div>
+    <div className="flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-2">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+        <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
+        <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
+        {claim.externalReference && (
+          <span className="font-mono text-xs text-muted-foreground">
+            · {claim.externalReference}
+          </span>
+        )}
+        <StatusBadge status={statusName} />
+        {account && (
+          <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+            <Building2 className="h-3 w-3" />
+            {account}
+          </span>
+        )}
+        {address && (
+          <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+            <MapPin className="h-3 w-3" />
+            {address}
+          </span>
+        )}
+      </div>
+      <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1 text-xs">
+        <div className="flex items-baseline gap-1">
+          <span className="text-muted-foreground">Lodged:</span>
+          <span className="font-medium">{formatDate(claim.lodgementDate)}</span>
         </div>
-      </header>
+        <div className="flex items-baseline gap-1">
+          <span className="text-muted-foreground">DOL:</span>
+          <span className="font-medium">{formatDate(claim.dateOfLoss)}</span>
+        </div>
+        <div className="flex items-baseline gap-1">
+          <span className="text-muted-foreground">Jobs:</span>
+          <span className="font-medium">{jobs.length}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
+export function ClaimDetail({ claim }: { claim: Claim }) {
+  const jobs = claim.jobs ?? [];
+
+  return (
+    <div className="space-y-6">
       <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">

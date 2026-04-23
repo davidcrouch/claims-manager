@@ -13,6 +13,7 @@ import {
   ClipboardList,
   Building2,
   Unplug,
+  LogOut,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -26,6 +27,24 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+
+export interface AppSidebarUser {
+  given_name?: string | null;
+  family_name?: string | null;
+  email?: string | null;
+  picture?: string | null;
+}
+
+export interface AppSidebarProps {
+  user?: AppSidebarUser | null;
+}
 
 const navItems = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -39,8 +58,23 @@ const navItems = [
   { title: 'Connections', href: '/connections', icon: Unplug },
 ] as const;
 
-export function AppSidebar() {
+function getInitials(user?: AppSidebarUser | null): string {
+  if (user?.given_name?.[0] && user?.family_name?.[0]) {
+    return `${user.given_name[0]}${user.family_name[0]}`;
+  }
+  return user?.email?.[0]?.toUpperCase() ?? '?';
+}
+
+function getDisplayName(user?: AppSidebarUser | null): string {
+  const parts = [user?.given_name, user?.family_name].filter(Boolean);
+  if (parts.length) return parts.join(' ');
+  return user?.email ?? 'Account';
+}
+
+export function AppSidebar({ user }: AppSidebarProps) {
   const pathname = usePathname();
+  const initials = getInitials(user);
+  const displayName = getDisplayName(user);
 
   return (
     <Sidebar collapsible="icon">
@@ -51,7 +85,7 @@ export function AppSidebar() {
         >
           <span className="relative flex size-8 shrink-0 overflow-hidden rounded-md shadow-md ring-1 ring-white/15 transition-transform duration-300 group-hover/brand:scale-105">
             <Image
-              src="/ensure_logo.png"
+              src="/ensure_logo_dark.png"
               alt=""
               width={32}
               height={32}
@@ -91,7 +125,57 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter />
+      <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <SidebarMenuButton
+                    tooltip={displayName}
+                    className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                  >
+                    <Avatar className="size-6">
+                      <AvatarFallback className="text-[10px]">
+                        {initials}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="flex min-w-0 flex-col text-left leading-tight">
+                      <span className="truncate text-xs font-medium">
+                        {displayName}
+                      </span>
+                      {user?.email && (
+                        <span className="truncate text-[10px] text-sidebar-foreground/60">
+                          {user.email}
+                        </span>
+                      )}
+                    </span>
+                  </SidebarMenuButton>
+                }
+              />
+              <DropdownMenuContent side="top" align="start" className="w-56">
+                <div className="px-2 py-1.5">
+                  <p className="text-sm font-medium">{displayName}</p>
+                  {user?.email && (
+                    <p className="text-xs text-muted-foreground">{user.email}</p>
+                  )}
+                </div>
+                <DropdownMenuItem
+                  render={
+                    <a
+                      href="/api/auth/logout"
+                      className="flex w-full cursor-pointer items-center gap-2"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Log out
+                    </a>
+                  }
+                />
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
     </Sidebar>
   );
 }

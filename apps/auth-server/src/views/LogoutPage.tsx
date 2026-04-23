@@ -32,7 +32,7 @@ export function LogoutPage({ form }: LogoutPageProps) {
         <meta charSet="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Logging out — EnsureOS</title>
-        <link rel="icon" type="image/png" href="/ensure_logo.png" />
+        <link rel="icon" type="image/x-icon" href="/favicon.ico" />
         <link rel="stylesheet" href="/styles.css" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
@@ -58,11 +58,11 @@ export function LogoutPage({ form }: LogoutPageProps) {
               linear-gradient(to bottom, ${NAVY} 1px, transparent 1px)
             `,
             backgroundSize: '48px 48px',
-            opacity: 0.07,
+            opacity: 0.18,
             maskImage:
-              'radial-gradient(ellipse 90% 80% at 50% 40%, black 35%, transparent 90%)',
+              'radial-gradient(ellipse 100% 90% at 50% 40%, black 55%, transparent 100%)',
             WebkitMaskImage:
-              'radial-gradient(ellipse 90% 80% at 50% 40%, black 35%, transparent 90%)',
+              'radial-gradient(ellipse 100% 90% at 50% 40%, black 55%, transparent 100%)',
           }}
         />
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { ClipboardList } from 'lucide-react';
 import {
   SortTabs,
   SearchInput,
@@ -17,6 +18,11 @@ import {
   compareValues,
   formatDate,
 } from '@/components/shared/list-filters';
+import { SetPageHeader } from '@/components/layout/SetPageHeader';
+import {
+  ListPageHeader,
+  computeStatusBreakdown,
+} from '@/components/layout/ListPageHeader';
 import type { Report, PaginatedResponse } from '@/types/api';
 
 const SORT_OPTIONS: SortOption[] = [
@@ -131,8 +137,38 @@ export function ReportsListClient({
     return sorted;
   }, [data.data, debouncedSearch, statusFilter, activeSortField, sortOrder]);
 
+  const breakdown = computeStatusBreakdown(
+    visibleRows,
+    (r) => r.status?.name,
+  );
+  const typeBreakdown = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of visibleRows) {
+      const name = r.reportType?.name?.trim();
+      if (!name) continue;
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 3);
+  }, [visibleRows]);
+  const combinedBreakdown =
+    breakdown.length > 0 ? breakdown : typeBreakdown;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
+      <SetPageHeader>
+        <ListPageHeader
+          icon={ClipboardList}
+          title="Reports"
+          total={data.total}
+          showing={visibleRows.length}
+          search={debouncedSearch}
+          statusSelectedCount={statusFilter.size}
+          breakdown={combinedBreakdown}
+        />
+      </SetPageHeader>
       <div className="flex flex-col gap-4 p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
           <SortTabs

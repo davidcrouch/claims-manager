@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
-import { SetBreadcrumbs } from '@/components/layout/SetBreadcrumbs';
 import { ClaimsListClient } from '@/components/claims/ClaimsListClient';
 import {
   buildClaimsListFetchKeyFromPageParams,
@@ -55,13 +54,10 @@ export default async function ClaimsPage({
   const initialFetchKey = buildClaimsListFetchKeyFromPageParams(params);
 
   return (
-    <>
-      <SetBreadcrumbs items={[{ title: 'Claims', href: '/claims' }]} />
-      <ClaimsListClient
-        initialData={initialClaims}
-        initialFetchKey={initialFetchKey}
-        statusOptions={statusOptions}
-      />
-    </>
+    <ClaimsListClient
+      initialData={initialClaims}
+      initialFetchKey={initialFetchKey}
+      statusOptions={statusOptions}
+    />
   );
 }

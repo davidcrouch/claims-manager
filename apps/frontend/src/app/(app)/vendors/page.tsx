@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
-import { SetBreadcrumbs } from '@/components/layout/SetBreadcrumbs';
 import { VendorsListClient } from '@/components/vendors/VendorsListClient';
 import type { PaginatedResponse, Vendor } from '@/types/api';
 
@@ -17,10 +16,5 @@ export default async function VendorsPage() {
     return empty;
   });
 
-  return (
-    <>
-      <SetBreadcrumbs items={[{ title: 'Vendors', href: '/vendors' }]} />
-      <VendorsListClient initialData={vendorsRes ?? empty} />
-    </>
-  );
+  return <VendorsListClient initialData={vendorsRes ?? empty} />;
 }

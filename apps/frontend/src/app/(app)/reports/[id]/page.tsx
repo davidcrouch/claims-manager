@@ -1,7 +1,7 @@
 import { redirect, notFound } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
-import { SetBreadcrumbs } from '@/components/layout/SetBreadcrumbs';
-import { ReportDetail } from '@/components/reports/ReportDetail';
+import { SetPageHeader } from '@/components/layout/SetPageHeader';
+import { ReportDetail, ReportPageHeader } from '@/components/reports/ReportDetail';
 import type { Metadata } from 'next';
 
 export async function generateMetadata({
@@ -36,16 +36,11 @@ export default async function ReportDetailPage({
   });
   if (!report) notFound();
 
-  const title = report.title ?? report.reference ?? id;
-
   return (
     <>
-      <SetBreadcrumbs
-        items={[
-          { title: 'Reports', href: '/reports' },
-          { title, href: `/reports/${id}` },
-        ]}
-      />
+      <SetPageHeader>
+        <ReportPageHeader report={report} />
+      </SetPageHeader>
       <ReportDetail report={report} />
     </>
   );

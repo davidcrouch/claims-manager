@@ -10,6 +10,7 @@ import {
   Search,
   X,
 } from 'lucide-react';
+import { FileText } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import {
   DropdownMenu,
@@ -17,6 +18,11 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { SetPageHeader } from '@/components/layout/SetPageHeader';
+import {
+  ListPageHeader,
+  computeStatusBreakdown,
+} from '@/components/layout/ListPageHeader';
 import { fetchClaimsAction } from '@/app/(app)/claims/actions';
 import type { Claim, PaginatedResponse } from '@/types/api';
 import { normalizeSortParam } from './claims-list-helpers';
@@ -275,8 +281,24 @@ export function ClaimsListClient({
   const selectAllStatuses = () =>
     setStatusFilter(new Set(statusOptions.map((o) => o.id)));
 
+  const breakdown = computeStatusBreakdown(
+    data.data,
+    (c) => (c.status as { name?: string } | undefined)?.name,
+  );
+
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
+      <SetPageHeader>
+        <ListPageHeader
+          icon={FileText}
+          title="Claims"
+          total={data.total}
+          showing={data.data.length}
+          search={debouncedSearch}
+          statusSelectedCount={statusFilter.size}
+          breakdown={breakdown}
+        />
+      </SetPageHeader>
       <div className="flex flex-col gap-4 p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
           <div className="flex items-center rounded-md border border-slate-200 bg-white p-1">

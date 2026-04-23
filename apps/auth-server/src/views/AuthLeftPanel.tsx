@@ -1,10 +1,10 @@
 import React from 'react';
 
-/** Dark product column (left side of the auth card) */
-const PRODUCT_COLUMN_BG = '#0e1b33';
+/** Dark product column (left side of the auth card) — matches ensure_logo_text_dark.png background */
+const PRODUCT_COLUMN_BG = '#02122d';
 
-const LOGO_TEXT = '/ensure_logo_text.png';
-const LOGO_ICON = '/ensure_logo.png';
+const LOGO_TEXT = '/ensure_logo_text_dark.png';
+const LOGO_ICON = '/ensure_logo_text_dark.png';
 
 interface AuthLeftPanelProps {
   /** Login/register: full logo with text. Logout: icon-only mark. */

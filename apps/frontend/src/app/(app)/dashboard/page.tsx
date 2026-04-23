@@ -1,8 +1,14 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
-import { SetBreadcrumbs } from '@/components/layout/SetBreadcrumbs';
+import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { FileText, Briefcase, ClipboardCheck, Receipt } from 'lucide-react';
+import {
+  FileText,
+  Briefcase,
+  ClipboardCheck,
+  Receipt,
+  LayoutDashboard,
+} from 'lucide-react';
 
 export const metadata = {
   title: 'Dashboard | EnsureOS',
@@ -27,7 +33,35 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <SetBreadcrumbs items={[{ title: 'Dashboard', href: '/dashboard' }]} />
+      <SetPageHeader>
+        <div className="flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-2">
+          <div className="flex items-center gap-3">
+            <LayoutDashboard className="h-5 w-5 shrink-0 text-muted-foreground" />
+            <h1 className="text-lg font-semibold leading-tight">Dashboard</h1>
+            <span className="text-xs text-muted-foreground">
+              Last {recentActivity.length} activities
+            </span>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1 text-xs">
+            <div className="flex items-baseline gap-1">
+              <span className="text-muted-foreground">Claims:</span>
+              <span className="font-medium">{stats?.totalClaims ?? 0}</span>
+            </div>
+            <div className="flex items-baseline gap-1">
+              <span className="text-muted-foreground">Jobs:</span>
+              <span className="font-medium">{stats?.totalJobs ?? 0}</span>
+            </div>
+            <div className="flex items-baseline gap-1">
+              <span className="text-muted-foreground">Pending approvals:</span>
+              <span className="font-medium">{stats?.pendingApprovals ?? 0}</span>
+            </div>
+            <div className="flex items-baseline gap-1">
+              <span className="text-muted-foreground">Open invoices:</span>
+              <span className="font-medium">{stats?.openInvoices ?? 0}</span>
+            </div>
+          </div>
+        </div>
+      </SetPageHeader>
       <div className="space-y-6">
         <h1 className="text-2xl font-semibold">Dashboard</h1>
 

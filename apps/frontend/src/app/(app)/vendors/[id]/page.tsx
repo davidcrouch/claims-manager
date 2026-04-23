@@ -1,7 +1,7 @@
 import { redirect, notFound } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
-import { SetBreadcrumbs } from '@/components/layout/SetBreadcrumbs';
-import { VendorDetail } from '@/components/vendors/VendorDetail';
+import { SetPageHeader } from '@/components/layout/SetPageHeader';
+import { VendorDetail, VendorPageHeader } from '@/components/vendors/VendorDetail';
 
 export default async function VendorDetailPage({
   params,
@@ -23,12 +23,9 @@ export default async function VendorDetailPage({
 
   return (
     <>
-      <SetBreadcrumbs
-        items={[
-          { title: 'Vendors', href: '/vendors' },
-          { title: vendor.name, href: `/vendors/${id}` },
-        ]}
-      />
+      <SetPageHeader>
+        <VendorPageHeader vendor={vendor} />
+      </SetPageHeader>
       <VendorDetail vendor={vendor} />
     </>
   );

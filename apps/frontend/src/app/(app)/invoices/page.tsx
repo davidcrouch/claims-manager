@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
-import { SetBreadcrumbs } from '@/components/layout/SetBreadcrumbs';
 import { InvoicesPageClient } from '@/components/invoices/InvoicesPageClient';
 import type { Invoice, PaginatedResponse, PurchaseOrder } from '@/types/api';
 
@@ -49,13 +48,10 @@ export default async function InvoicesPage({
   );
 
   return (
-    <>
-      <SetBreadcrumbs items={[{ title: 'Invoices', href: '/invoices' }]} />
-      <InvoicesPageClient
-        initialData={initialInvoices}
-        purchaseOrders={purchaseOrders}
-        statusOptions={statusOptions}
-      />
-    </>
+    <InvoicesPageClient
+      initialData={initialInvoices}
+      purchaseOrders={purchaseOrders}
+      statusOptions={statusOptions}
+    />
   );
 }

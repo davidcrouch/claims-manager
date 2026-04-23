@@ -1,34 +1,39 @@
 'use client';
 
 import Link from 'next/link';
-import { ShoppingCart } from 'lucide-react';
+import { ShoppingCart, ExternalLink } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import type { PurchaseOrder } from '@/types/api';
 
-export function PurchaseOrderDetail({ po }: { po: PurchaseOrder }) {
+export function PurchaseOrderPageHeader({ po }: { po: PurchaseOrder }) {
   const title = po.purchaseOrderNumber ?? po.externalId ?? po.id;
   const statusName = (po.status as { name?: string })?.name ?? 'Unknown';
+
+  return (
+    <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1">
+      <ShoppingCart className="h-5 w-5 shrink-0 text-muted-foreground" />
+      <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
+      <StatusBadge status={statusName} />
+      {po.jobId && (
+        <Link
+          href={`/jobs/${po.jobId}`}
+          className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+        >
+          View job
+          <ExternalLink className="h-3 w-3" />
+        </Link>
+      )}
+    </div>
+  );
+}
+
+export function PurchaseOrderDetail({ po }: { po: PurchaseOrder }) {
   const totalAmount = po.totalAmount ? `$${po.totalAmount}` : '—';
   const vendorName = (po.vendor as { name?: string })?.name ?? '—';
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold flex items-center gap-2">
-          <ShoppingCart className="h-6 w-6" />
-          {title}
-        </h1>
-        <StatusBadge status={statusName} className="mt-2" />
-        {po.jobId && (
-          <p className="mt-2 text-sm text-muted-foreground">
-            <Link href={`/jobs/${po.jobId}`} className="hover:underline">
-              View job
-            </Link>
-          </p>
-        )}
-      </div>
-
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader className="pb-2">

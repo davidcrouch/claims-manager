@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Receipt } from 'lucide-react';
 import {
   SortTabs,
   SearchInput,
@@ -17,6 +18,11 @@ import {
   compareValues,
   formatDate,
 } from '@/components/shared/list-filters';
+import { SetPageHeader } from '@/components/layout/SetPageHeader';
+import {
+  ListPageHeader,
+  computeStatusBreakdown,
+} from '@/components/layout/ListPageHeader';
 import type { Invoice, PaginatedResponse } from '@/types/api';
 
 const SORT_OPTIONS: SortOption[] = [
@@ -146,8 +152,37 @@ export function InvoicesListClient({
     return sorted;
   }, [data.data, debouncedSearch, statusFilter, activeSortField, sortOrder]);
 
+  const breakdown = computeStatusBreakdown(
+    visibleRows,
+    (i) => i.status?.name,
+  );
+  const totalValue = useMemo(() => {
+    const sum = visibleRows.reduce((acc, inv) => {
+      const n = Number(inv.totalAmount);
+      return Number.isFinite(n) ? acc + n : acc;
+    }, 0);
+    if (sum === 0) return null;
+    return sum.toLocaleString(undefined, {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: 0,
+    });
+  }, [visibleRows]);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
+      <SetPageHeader>
+        <ListPageHeader
+          icon={Receipt}
+          title="Invoices"
+          total={data.total}
+          showing={visibleRows.length}
+          search={debouncedSearch}
+          statusSelectedCount={statusFilter.size}
+          breakdown={breakdown}
+          stats={totalValue ? [{ label: 'Total value', value: totalValue }] : undefined}
+        />
+      </SetPageHeader>
       <div className="flex flex-col gap-4 p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
           <SortTabs

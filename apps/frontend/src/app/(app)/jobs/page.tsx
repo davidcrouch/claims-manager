@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
-import { SetBreadcrumbs } from '@/components/layout/SetBreadcrumbs';
 import { JobsPageClient } from '@/components/jobs/JobsPageClient';
 import type { Claim, Job, PaginatedResponse } from '@/types/api';
 
@@ -51,14 +50,11 @@ export default async function JobsPage({
   );
 
   return (
-    <>
-      <SetBreadcrumbs items={[{ title: 'Jobs', href: '/jobs' }]} />
-      <JobsPageClient
-        initialData={initialJobs}
-        claims={claims}
-        jobTypes={jobTypes}
-        statusOptions={statusOptions}
-      />
-    </>
+    <JobsPageClient
+      initialData={initialJobs}
+      claims={claims}
+      jobTypes={jobTypes}
+      statusOptions={statusOptions}
+    />
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Briefcase } from 'lucide-react';
 import {
   SortTabs,
   SearchInput,
@@ -17,6 +18,11 @@ import {
   compareValues,
   formatDate,
 } from '@/components/shared/list-filters';
+import { SetPageHeader } from '@/components/layout/SetPageHeader';
+import {
+  ListPageHeader,
+  computeStatusBreakdown,
+} from '@/components/layout/ListPageHeader';
 import { fetchJobsAction } from '@/app/(app)/jobs/actions';
 import type { Job, PaginatedResponse } from '@/types/api';
 
@@ -161,8 +167,24 @@ export function JobsListClient({
     return sorted;
   }, [data.data, debouncedSearch, statusFilter, activeSortField, sortOrder]);
 
+  const breakdown = computeStatusBreakdown(
+    visibleRows,
+    (j) => j.status?.name,
+  );
+
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
+      <SetPageHeader>
+        <ListPageHeader
+          icon={Briefcase}
+          title="Jobs"
+          total={data.total}
+          showing={visibleRows.length}
+          search={debouncedSearch}
+          statusSelectedCount={statusFilter.size}
+          breakdown={breakdown}
+        />
+      </SetPageHeader>
       <div className="flex flex-col gap-4 p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
           <SortTabs

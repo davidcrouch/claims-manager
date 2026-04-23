@@ -1,7 +1,10 @@
 import { redirect, notFound } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
-import { SetBreadcrumbs } from '@/components/layout/SetBreadcrumbs';
-import { PurchaseOrderDetail } from '@/components/purchase-orders/PurchaseOrderDetail';
+import { SetPageHeader } from '@/components/layout/SetPageHeader';
+import {
+  PurchaseOrderDetail,
+  PurchaseOrderPageHeader,
+} from '@/components/purchase-orders/PurchaseOrderDetail';
 import type { Metadata } from 'next';
 
 export async function generateMetadata({
@@ -36,16 +39,11 @@ export default async function PurchaseOrderDetailPage({
   });
   if (!po) notFound();
 
-  const title = po.purchaseOrderNumber ?? po.externalId ?? id;
-
   return (
     <>
-      <SetBreadcrumbs
-        items={[
-          { title: 'Purchase Orders', href: '/purchase-orders' },
-          { title, href: `/purchase-orders/${id}` },
-        ]}
-      />
+      <SetPageHeader>
+        <PurchaseOrderPageHeader po={po} />
+      </SetPageHeader>
       <PurchaseOrderDetail po={po} />
     </>
   );

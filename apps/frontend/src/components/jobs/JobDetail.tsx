@@ -20,7 +20,6 @@ import {
   TabsList,
   TabsTrigger,
 } from '@/components/ui/tabs';
-import { JobHeader } from './JobHeader';
 import { JobOverviewTab } from './tabs/JobOverviewTab';
 import { JobTypeDetailsTab } from './tabs/JobTypeDetailsTab';
 import { JobPartiesTab } from './tabs/JobPartiesTab';
@@ -91,8 +90,6 @@ export function JobDetail({
 
   return (
     <div className="space-y-6">
-      <JobHeader job={job} parentClaim={parentClaim} />
-
       <Tabs value={activeTab} onValueChange={onTabChange}>
         <TabsList className="flex-wrap">
           <TabsTrigger value="overview">

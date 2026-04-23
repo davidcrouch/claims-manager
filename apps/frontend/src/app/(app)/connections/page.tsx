@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
-import { SetBreadcrumbs } from '@/components/layout/SetBreadcrumbs';
 import { ConnectionsPageClient } from '@/components/connections/ConnectionsPageClient';
 
 export default async function ConnectionsPage() {
@@ -17,10 +16,5 @@ export default async function ConnectionsPage() {
     return [];
   });
 
-  return (
-    <>
-      <SetBreadcrumbs items={[{ title: 'Connections', href: '/connections' }]} />
-      <ConnectionsPageClient connections={connections} />
-    </>
-  );
+  return <ConnectionsPageClient connections={connections} />;
 }

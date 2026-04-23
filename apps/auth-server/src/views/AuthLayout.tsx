@@ -35,11 +35,11 @@ export function AuthLayout({ children, inlineScript }: AuthLayoutProps) {
             linear-gradient(to bottom, ${NAVY} 1px, transparent 1px)
           `,
           backgroundSize: '48px 48px',
-          opacity: 0.07,
+          opacity: 0.18,
           maskImage:
-            'radial-gradient(ellipse 90% 80% at 50% 40%, black 35%, transparent 90%)',
+            'radial-gradient(ellipse 100% 90% at 50% 40%, black 55%, transparent 100%)',
           WebkitMaskImage:
-            'radial-gradient(ellipse 90% 80% at 50% 40%, black 35%, transparent 90%)',
+            'radial-gradient(ellipse 100% 90% at 50% 40%, black 55%, transparent 100%)',
         }}
       />
 
