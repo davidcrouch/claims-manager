@@ -217,3 +217,13 @@
   Reworked the connections experience for clearer layout, spacing, and filtering alongside other listing screens.
   Restructured claim and job detail areas to align with the updated headers and tab presentation.
   Adjusted shared filters and vendor listing behaviour so screens stay predictable as users move between records.
+
+- `2026-04-24` `dd3cb04` **4.5 h**
+  `13 files | +1 719 −419 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  Lay summary: Expanded the internal reference that explains how each partner-system field lines up with our records for claims, jobs, quotes, and service orders, and adjusted the claim and job screens so those references are labelled correctly.
+  **Extended Crunchwork field-mapping documentation and aligned claim/job detail labels.** Grew the internal mapping reference for **claims, jobs, quotes, and purchase orders** so every partner-system field has a clear home in our records, giving the team a single source of truth for integration work.
+  Added dedicated mapping guides for **jobs, quotes, and purchase orders** alongside the existing claim mapping so the whole catalogue of tracked records is covered end-to-end.
+  Refreshed the matching **module design notes** so their descriptions stay consistent with the mapping reference.
+  Updated the **claim detail screen** to distinguish the insurer's own reference from the partner system's internal identifier and to surface vulnerability, contention, and last-updated information when present.
+  Polished the **job overview screen** with clearer parent-job and parent-claim links plus an insurer-reference label so staff immediately see which record ties to which external system.
+  Tightened the shared **claim data shape** so downstream screens can read the newly-mapped fields without manual casting.
