@@ -57,6 +57,8 @@ Each CW lookup object has the shape `{ id, name, externalReference }`. We resolv
 
 **Object-or-string tolerance.** The CW JSON body example (§3.3.1) occasionally shows these as bare strings (e.g. `"claimDecision": "Claim Accepted"`, `"priority": "LOW"`, `"policyType": "HOME"`, `"lineOfBusiness": "PersonalProperty"`). When the field arrives as a string, attempt a name match within the lookup domain; on miss, store the raw string under `custom_data.<field>Raw` and leave the FK null.
 
+`contacts[].type`, `contacts[].preferredMethodOfContact` and `assignees[].type` are also tolerated as bare strings. The CW JSON body example shows `"type": "INSURED"` on contacts and assignees even though the contract table lists them as `{id, name, externalReference}` objects. When the value arrives as a string the mapper attempts a name-based lookup; on miss the FK is left null and the raw string remains inside the row's `source_payload` / `assignee_payload` for display.
+
 ---
 
 ## 4. Address
@@ -138,7 +140,7 @@ The boolean flags `contentiousClaim` and `contentiousActivityFlag` remain as pro
 | CW field | JSONB key | Notes |
 |---|---|---|
 | `customData` (entire object) | `custom_data` (spread at top level of the bucket) | CW already stores most of these UI fields under `project.customData.*`; we mirror any keys not explicitly routed elsewhere here |
-| `maximumAccomodationDurationLimit` | `custom_data.maximumAccommodationDurationLimit` | String (note CW's contract spelling; the JSON body in the PDF also uses `maximumAccomodationDurationLimit`) |
+| `maximumAccomodationDurationLimit` | `custom_data.maximumAccommodationDurationLimit` | String. CW v17 spells the field correctly (`maximumAccommodationDurationLimit`, two m's) in the contract table but with one m (`maximumAccomodationDurationLimit`) in the JSON body example. Real CW payloads use the misspelled form, so the mapper reads the misspelled key and writes the corrected key under `custom_data`. |
 | `updatedAtDate` | `custom_data.cwUpdatedAtDate` | See §2 |
 | `claimDecision` (if string) | `custom_data.claimDecisionRaw` | See §3 object-or-string tolerance |
 | `priority` (if string) | `custom_data.priorityRaw` | See §3 |
@@ -170,10 +172,10 @@ For each element in CW `contacts[]`:
 | `contacts[].externalReference` | `contacts.external_reference` (required; fail record if missing) |
 | `contacts[].type.externalReference` | `contacts.type_lookup_id` via `contact_type` lookup domain |
 | `contacts[].type.name` | `claim_contacts.source_payload.typeName` |
-| `contacts[].preferredMethodOfContact.externalReference` | `contacts.preferred_method_lookup_id` via `contact_method` domain |
+| `contacts[].preferredMethodOfContact.externalReference` | `contacts.preferred_contact_method_lookup_id` via `contact_method` domain |
 | `contacts[].preferredMethodOfContact.name` | `claim_contacts.source_payload.preferredMethodName` |
 | `contacts[].notes` | `contacts.notes` |
-| entire CW contact object | `claim_contacts.source_payload` (verbatim) |
+| entire CW contact object | `contacts.contact_payload` (verbatim, per shared contact row) **and** `claim_contacts.source_payload.raw` (verbatim, per claim↔contact join) |
 
 ### 7.2 `claim_assignees`
 

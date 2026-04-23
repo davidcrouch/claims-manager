@@ -32,7 +32,7 @@ From `apps/api/src/database/schema/index.ts`:
 
 | Column | Notes |
 |---|---|
-| `id`, `tenantId`, `claimId`, `parentClaimId`, `parentJobId` | Identity + hierarchy |
+| `id`, `tenantId`, `claimId`, `parentClaimId`, `parentJobId` | Identity + hierarchy. `parentJobId` is the **internal** master/child link between jobs within a claim (see `docs/mapping/jobs.md` §2.2 and `docs/implementation/09_JOBS_MODULE.md` "Master / Child Jobs"); `parentClaimId` is Crunchwork's own claim-level field. |
 | `externalReference`, `jobTypeLookupId`, `statusLookupId` | Core classifiers |
 | `vendorId` | Optional vendor allocation |
 | `requestDate`, `collectExcess`, `excess`, `makeSafeRequired` | Scheduling + finance |
@@ -353,6 +353,7 @@ Mirror the new header layout + KPI row + two-column card grid in `apps/frontend/
 - Sanitization of HTML job instructions (future security hardening).
 - Deep-linked sub-tabs inside **Type Details** when both Specialist + TA attributes co-exist (not allowed by the API today).
 - Adding a dedicated `GET /attachments?relatedRecordType=Job&relatedRecordId=:id` API route, which may be needed for the Attachments tab — to be scoped separately if not already available.
+- **Full master / child job UI.** The data model supports an internal job hierarchy via `parent_job_id` (see `docs/mapping/jobs.md` §2.2 and `09_JOBS_MODULE.md` "Master / Child Jobs"). The Overview tab now surfaces a **read-only "Parent job" row** in Core Details (linking to the master job detail page) so every field in `jobs.md` is represented. Beyond that, this revamp intentionally does **not** build out the hierarchy UI — no "parent job" chip on the page header, no dedicated "child jobs" tab listing dependents, no split / re-parent affordances. Scope those affordances as a separate plan once the `GET /jobs?parentJobId=…` filter and create/edit forms that populate `parentJobId` land.
 
 ---
 

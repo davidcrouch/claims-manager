@@ -28,7 +28,10 @@ export interface Claim {
   id: string;
   tenantId: string;
   claimNumber?: string | null;
+  /** CW's canonical claim UUID (column `external_reference`; CW field `id`). */
   externalReference?: string | null;
+  /** Insurer's own reference (column `external_claim_id`; CW field `externalReference`). */
+  externalClaimId?: string | null;
   statusLookupId?: string | null;
   accountLookupId?: string | null;
   lodgementDate?: string | null;
@@ -43,6 +46,13 @@ export interface Claim {
   financialDetails?: Record<string, unknown>;
   vulnerabilityDetails?: Record<string, unknown>;
   contentionDetails?: Record<string, unknown>;
+  /**
+   * Catch-all JSONB bucket. Contains CW `customData` plus mapper-added keys
+   * such as `cwUpdatedAtDate`, `maximumAccommodationDurationLimit`, and
+   * `<field>Raw` fallbacks for string-form lookups. See
+   * `docs/mapping/claims.md` §6.5.
+   */
+  customData?: Record<string, unknown>;
   lossTypeLookupId?: string | null;
   lossSubtypeLookupId?: string | null;
   dateOfLoss?: string | null;

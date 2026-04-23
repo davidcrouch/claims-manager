@@ -114,6 +114,17 @@ export function JobOverviewTab({
     ((api.claim as Dict | undefined)?.claimNumber as string | undefined) ??
     ((api.claim as Dict | undefined)?.externalReference as string | undefined);
 
+  const custom = (job.customData as Dict | undefined) ?? {};
+  const insurerRef = asString(
+    pick(custom, 'insurerExternalReference') ??
+      pick(api, 'externalReference'),
+  );
+  const cwUpdatedAt = asString(
+    pick(custom, 'cwUpdatedAtDate') ?? pick(api, 'updatedAtDate'),
+  );
+  const parentClaimCw = job.parentClaimId ?? null;
+  const parentJobId = job.parentJobId ?? null;
+
   return (
     <div className="space-y-4">
       <div className="grid gap-4 md:grid-cols-4">
@@ -154,6 +165,9 @@ export function JobOverviewTab({
             label="External reference"
             value={job.externalReference ?? '—'}
           />
+          {insurerRef && (
+            <DefRow label="Insurer reference" value={insurerRef} />
+          )}
           <DefRow label="Job type" value={jobTypeName ?? '—'} />
           <DefRow label="Status" value={statusName} />
           <DefRow
@@ -172,6 +186,28 @@ export function JobOverviewTab({
               )
             }
           />
+          {parentClaimCw && parentClaimCw !== job.claimId && (
+            <DefRow
+              label="Parent claim (Crunchwork)"
+              value={
+                <span className="font-mono text-xs">{parentClaimCw}</span>
+              }
+            />
+          )}
+          {parentJobId && (
+            <DefRow
+              label="Parent job"
+              value={
+                <Link
+                  href={`/jobs/${parentJobId}`}
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                >
+                  Open master job
+                  <ExternalLink className="h-3 w-3" />
+                </Link>
+              }
+            />
+          )}
           <DefRow label="Request date" value={formatDate(job.requestDate)} />
           <DefRow
             label="Make-safe required"
@@ -184,6 +220,12 @@ export function JobOverviewTab({
           <DefRow label="Excess" value={formatCurrency(job.excess)} />
           <DefRow label="Created" value={formatDateTime(job.createdAt)} />
           <DefRow label="Updated" value={formatDateTime(job.updatedAt)} />
+          {cwUpdatedAt && (
+            <DefRow
+              label="Crunchwork updated"
+              value={formatDateTime(cwUpdatedAt)}
+            />
+          )}
         </SectionCard>
 
         <SectionCard

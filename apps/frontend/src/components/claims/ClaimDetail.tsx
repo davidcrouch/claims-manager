@@ -71,8 +71,23 @@ function getApi(claim: Claim): Dict {
 }
 
 function getPolicy(claim: Claim): Dict {
-  const fromClaim = (claim.policyDetails as Dict | undefined) ?? {};
-  return fromClaim;
+  return (claim.policyDetails as Dict | undefined) ?? {};
+}
+
+function getFinancial(claim: Claim): Dict {
+  return (claim.financialDetails as Dict | undefined) ?? {};
+}
+
+function getVulnerability(claim: Claim): Dict {
+  return (claim.vulnerabilityDetails as Dict | undefined) ?? {};
+}
+
+function getContention(claim: Claim): Dict {
+  return (claim.contentionDetails as Dict | undefined) ?? {};
+}
+
+function getCustomData(claim: Claim): Dict {
+  return (claim.customData as Dict | undefined) ?? {};
 }
 
 function OverviewTab({ claim }: { claim: Claim }) {
@@ -106,7 +121,7 @@ function OverviewTab({ claim }: { claim: Claim }) {
   const policyType =
     asString((api.policyType as Dict | undefined)?.name) ??
     asString(api.policyType) ??
-    asString(policy.policyType);
+    asString(pick(policy, 'policyTypeName', 'policyType'));
 
   return (
     <div className="space-y-4">
@@ -148,7 +163,11 @@ function OverviewTab({ claim }: { claim: Claim }) {
         >
           <DefRow label="Claim number" value={claim.claimNumber ?? '—'} />
           <DefRow
-            label="External reference"
+            label="Insurer reference"
+            value={claim.externalClaimId ?? '—'}
+          />
+          <DefRow
+            label="Crunchwork ID"
             value={claim.externalReference ?? '—'}
           />
           <DefRow
@@ -230,33 +249,47 @@ function OverviewTab({ claim }: { claim: Claim }) {
 function PolicyTab({ claim }: { claim: Claim }) {
   const api = getApi(claim);
   const policy = getPolicy(claim);
+  const financial = getFinancial(claim);
+  const custom = getCustomData(claim);
 
   const policyType =
     asString((api.policyType as Dict | undefined)?.name) ??
     asString(api.policyType) ??
-    asString(pick(policy, 'policyType'));
+    asString(pick(policy, 'policyTypeName', 'policyType'));
   const lineOfBusiness =
     asString((api.lineOfBusiness as Dict | undefined)?.name) ??
     asString(api.lineOfBusiness) ??
-    asString(pick(policy, 'lineOfBusiness'));
+    asString(pick(policy, 'lineOfBusinessName', 'lineOfBusiness'));
   const inceptionDate =
     asString(api.policyInceptionDate) ??
     asString(pick(policy, 'policyInceptionDate'));
   const buildingSumInsured =
-    pick(api, 'buildingSumInsured') ?? pick(policy, 'buildingSumInsured');
+    pick(api, 'buildingSumInsured') ?? pick(financial, 'buildingSumInsured');
   const contentsSumInsured =
-    pick(api, 'contentsSumInsured') ?? pick(policy, 'contentsSumInsured');
-  const excess = pick(api, 'excess') ?? pick(policy, 'excess');
+    pick(api, 'contentsSumInsured') ?? pick(financial, 'contentsSumInsured');
+  const excess = pick(api, 'excess') ?? pick(financial, 'excess');
   const collectExcess =
-    asBool(pick(api, 'collectExcess')) ?? asBool(pick(policy, 'collectExcess'));
+    asBool(pick(api, 'collectExcess')) ??
+    asBool(pick(financial, 'collectExcess'));
   const autoApproval =
     asBool(claim.autoApprovalApplies as unknown) ??
     asBool(pick(api, 'autoApprovalApplies'));
-  const accommodationBenefit = pick(api, 'accommodationBenefitLimit');
+  const accommodationBenefit =
+    pick(api, 'accommodationBenefitLimit') ??
+    pick(financial, 'accommodationBenefitLimit');
   const accommodationDuration = asString(
-    pick(api, 'maximumAccomodationDurationLimit', 'maximumAccommodationDurationLimit'),
+    pick(
+      api,
+      'maximumAccomodationDurationLimit',
+      'maximumAccommodationDurationLimit',
+    ) ??
+      pick(
+        custom,
+        'maximumAccommodationDurationLimit',
+        'maximumAccomodationDurationLimit',
+      ),
   );
-  const abn = asString(pick(api, 'abn'));
+  const abn = asString(pick(api, 'abn')) ?? claim.abn ?? undefined;
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -391,8 +424,11 @@ interface ContactRow {
   mobilePhone?: string;
   homePhone?: string;
   workPhone?: string;
+  externalReference?: string;
   type?: string | { name?: string; externalReference?: string };
-  preferredMethodOfContact?: string | { name?: string };
+  preferredMethodOfContact?:
+    | string
+    | { name?: string; externalReference?: string };
   notes?: string;
 }
 
@@ -414,6 +450,13 @@ function contactType(c: ContactRow): string {
   if (!c.type) return '—';
   if (typeof c.type === 'string') return c.type;
   return c.type.name ?? c.type.externalReference ?? '—';
+}
+
+function contactPreferredMethod(c: ContactRow): string {
+  const m = c.preferredMethodOfContact;
+  if (!m) return '—';
+  if (typeof m === 'string') return m;
+  return m.name ?? m.externalReference ?? '—';
 }
 
 function assigneeType(a: AssigneeRow): string {
@@ -448,6 +491,8 @@ function PartiesTab({ claim }: { claim: Claim }) {
                     <th className="px-4 py-2">Type</th>
                     <th className="px-4 py-2">Email</th>
                     <th className="px-4 py-2">Phones</th>
+                    <th className="px-4 py-2">Preferred</th>
+                    <th className="px-4 py-2">External ref</th>
                     <th className="px-4 py-2">Notes</th>
                   </tr>
                 </thead>
@@ -494,6 +539,12 @@ function PartiesTab({ claim }: { claim: Claim }) {
                           )}
                           {!c.mobilePhone && !c.homePhone && !c.workPhone && '—'}
                         </div>
+                      </td>
+                      <td className="px-4 py-2 text-muted-foreground">
+                        {contactPreferredMethod(c)}
+                      </td>
+                      <td className="px-4 py-2 font-mono text-xs text-muted-foreground">
+                        {c.externalReference ?? '—'}
                       </td>
                       <td className="px-4 py-2 text-muted-foreground">
                         {c.notes ?? '—'}
@@ -635,10 +686,16 @@ function JobsTab({ claim }: { claim: Claim }) {
 
 function ComplianceTab({ claim }: { claim: Claim }) {
   const api = getApi(claim);
+  const vulnerability = getVulnerability(claim);
+  const contention = getContention(claim);
+  const custom = getCustomData(claim);
+
   const vulnerableCustomer =
     asBool(claim.vulnerableCustomer as unknown) ??
     asBool(pick(api, 'vulnerableCustomer'));
-  const vulnerabilityCategory = asString(pick(api, 'vulnerabilityCategory'));
+  const vulnerabilityCategory =
+    asString(pick(api, 'vulnerabilityCategory')) ??
+    asString(pick(vulnerability, 'category'));
 
   const contentiousClaim =
     asBool(claim.contentiousClaim as unknown) ??
@@ -646,9 +703,13 @@ function ComplianceTab({ claim }: { claim: Claim }) {
   const contentiousActivityFlag =
     asBool(claim.contentiousActivityFlag as unknown) ??
     asBool(pick(api, 'contentiousActivityFlag'));
-  const contentiousActivityDetails = asString(
-    pick(api, 'contentiousActivityDetails'),
-  );
+  const contentiousActivityDetails =
+    asString(pick(api, 'contentiousActivityDetails')) ??
+    asString(pick(contention, 'activityDetails'));
+
+  const cwUpdatedAt =
+    asString(pick(custom, 'cwUpdatedAtDate')) ??
+    asString(pick(api, 'updatedAtDate'));
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -701,6 +762,10 @@ function ComplianceTab({ claim }: { claim: Claim }) {
           <dl>
             <DefRow label="Created" value={formatDateTime(claim.createdAt)} />
             <DefRow label="Updated" value={formatDateTime(claim.updatedAt)} />
+            <DefRow
+              label="Last Crunchwork update"
+              value={cwUpdatedAt ? formatDateTime(cwUpdatedAt) : '—'}
+            />
           </dl>
         </CardContent>
       </Card>
