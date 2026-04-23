@@ -13,6 +13,7 @@ import {
   type SortOption,
   type StatusOption,
   buildSortString,
+  parseSort,
   compareDates,
   compareValues,
 } from '@/components/shared/list-filters';
@@ -47,19 +48,12 @@ export function ConnectionsPageClient({ connections }: ConnectionsPageClientProp
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [createOpen, setCreateOpen] = useState(false);
 
-  const { field: activeSortField, order: sortOrder } = useMemo(() => {
-    const idx = sort.lastIndexOf('_');
-    if (idx <= 0) return { field: 'name', order: 'asc' as const };
-    const order = sort.slice(idx + 1);
-    const field = sort.slice(0, idx);
-    if (order !== 'asc' && order !== 'desc') {
-      return { field: 'name', order: 'asc' as const };
-    }
-    if (!ALLOWED_SORT_FIELDS.includes(field)) {
-      return { field: 'name', order: 'asc' as const };
-    }
-    return { field, order };
-  }, [sort]);
+  const { field: activeSortField, order: sortOrder } = parseSort({
+    sortParam: sort,
+    allowedFields: ALLOWED_SORT_FIELDS,
+    defaultField: 'name',
+    defaultOrder: 'asc',
+  });
 
   const handleSort = (field: string) => {
     if (activeSortField === field) {
