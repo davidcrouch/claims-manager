@@ -6,10 +6,14 @@ import { Building2 } from 'lucide-react';
 import {
   SortTabs,
   SearchInput,
+  StatusFilterMenu,
   ListEmptyState,
   type SortOption,
+  type StatusOption,
   buildSortString,
   parseSort,
+  statusIdsKey,
+  parseStatusIdsFromSearchParam,
   compareDates,
   compareValues,
   formatDate,
@@ -24,6 +28,14 @@ const SORT_OPTIONS: SortOption[] = [
   { key: 'created_at', label: 'Created' },
 ];
 const ALLOWED_SORT_FIELDS = SORT_OPTIONS.map((o) => o.key);
+
+const LINK_STATE_LINKED = 'linked';
+const LINK_STATE_UNLINKED = 'unlinked';
+const LINK_STATE_OPTIONS: StatusOption[] = [
+  { id: LINK_STATE_LINKED, name: 'Linked' },
+  { id: LINK_STATE_UNLINKED, name: 'Unlinked' },
+];
+const LINK_STATE_NOUN = { singular: 'link state', plural: 'link states' };
 
 export interface VendorsListClientProps {
   initialData: PaginatedResponse<Vendor>;
@@ -44,6 +56,9 @@ export function VendorsListClient({ initialData }: VendorsListClientProps) {
     });
     return buildSortString(parsed.field, parsed.order);
   });
+  const [linkFilter, setLinkFilter] = useState<Set<string>>(() =>
+    parseStatusIdsFromSearchParam(searchParams.get('link')),
+  );
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -51,13 +66,16 @@ export function VendorsListClient({ initialData }: VendorsListClientProps) {
   }, [search]);
 
   useEffect(() => {
+    const linkKey = statusIdsKey(linkFilter);
     const params = new URLSearchParams(searchParams.toString());
     params.set('search', debouncedSearch);
     params.set('sort', sort);
     params.set('page', '1');
+    if (linkKey) params.set('link', linkKey);
+    else params.delete('link');
     router.replace(`/vendors?${params}`, { scroll: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop: router.replace updates URL -> searchParams changes -> effect re-runs
-  }, [debouncedSearch, sort]);
+  }, [debouncedSearch, sort, linkFilter]);
 
   const { field: activeSortField, order: sortOrder } = parseSort({
     sortParam: sort,
@@ -75,9 +93,29 @@ export function VendorsListClient({ initialData }: VendorsListClientProps) {
     }
   };
 
+  const setLinkChecked = (id: string, checked: boolean) => {
+    setLinkFilter((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const clearLinkFilter = () => setLinkFilter(new Set());
+  const selectAllLinkStates = () =>
+    setLinkFilter(new Set(LINK_STATE_OPTIONS.map((o) => o.id)));
+
   const visibleRows = useMemo(() => {
     const query = debouncedSearch.trim().toLowerCase();
     let rows = data.data;
+
+    if (linkFilter.size > 0) {
+      rows = rows.filter((v) => {
+        const key = v.externalReference ? LINK_STATE_LINKED : LINK_STATE_UNLINKED;
+        return linkFilter.has(key);
+      });
+    }
 
     if (query) {
       rows = rows.filter((v) => {
@@ -100,7 +138,7 @@ export function VendorsListClient({ initialData }: VendorsListClientProps) {
     });
 
     return sorted;
-  }, [data.data, debouncedSearch, activeSortField, sortOrder]);
+  }, [data.data, debouncedSearch, linkFilter, activeSortField, sortOrder]);
 
   const withReferenceCount = useMemo(
     () =>
@@ -120,12 +158,15 @@ export function VendorsListClient({ initialData }: VendorsListClientProps) {
           total={data.total}
           showing={visibleRows.length}
           search={debouncedSearch}
+          statusSelectedCount={linkFilter.size}
+          statusFilterNoun={LINK_STATE_NOUN}
           stats={[
             { label: 'Linked', value: withReferenceCount },
           ]}
+          accent="rose"
         />
       </SetPageHeader>
-      <div className="flex flex-col gap-4 p-6">
+      <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
           <SortTabs
             options={SORT_OPTIONS}
@@ -138,6 +179,17 @@ export function VendorsListClient({ initialData }: VendorsListClientProps) {
             placeholder="Search vendors by name or reference..."
             value={search}
             onChange={setSearch}
+          />
+
+          <StatusFilterMenu
+            options={LINK_STATE_OPTIONS}
+            selected={linkFilter}
+            onSelectionChange={setLinkChecked}
+            onClearAll={clearLinkFilter}
+            onSelectAll={selectAllLinkStates}
+            triggerEmptyLabel="All vendors"
+            menuTitle="Filter by link state"
+            itemNoun={LINK_STATE_NOUN}
           />
         </div>
       </div>

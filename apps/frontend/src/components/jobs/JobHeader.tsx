@@ -9,6 +9,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { BackButton } from '@/components/layout/BackButton';
 import { formatDate, formatDateTime, formatCurrency } from '@/components/shared/detail';
 import type { Job, Claim } from '@/types/api';
 
@@ -85,7 +86,10 @@ export function JobPageHeader({
   return (
     <div className="flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-2">
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-        <Briefcase className="h-5 w-5 shrink-0 text-muted-foreground" />
+        <BackButton href="/jobs" label="Back to jobs" />
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100">
+          <Briefcase className="h-4 w-4 text-emerald-600" />
+        </span>
         <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
         <StatusBadge status={statusName} />
         {jobTypeName && (

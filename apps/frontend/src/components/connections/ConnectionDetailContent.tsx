@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Unplug, Loader2, ArrowLeft } from 'lucide-react';
+import { Unplug, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
+import { BackButton } from '@/components/layout/BackButton';
 import { ConnectionWebhookEventsTable } from './ConnectionWebhookEventsTable';
 import { fetchConnectionAction } from '@/app/(app)/connections/actions';
 import { CrunchworkConnectionEditForm } from '@/components/providers/crunchwork/CrunchworkConnectionEditForm';
@@ -13,21 +14,12 @@ import type { ConnectionDetail, ProviderConnection } from '@/types/api';
 
 function ConnectionPageHeader({
   connection,
-  onBack,
 }: {
   connection: ConnectionDetail;
-  onBack: () => void;
 }) {
   return (
     <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1">
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={onBack}
-        className="h-7 w-7 shrink-0"
-      >
-        <ArrowLeft className="h-4 w-4" />
-      </Button>
+      <BackButton href="/connections" label="Back to connections" />
       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-100">
         <Unplug className="h-4 w-4 text-violet-600" />
       </span>
@@ -82,10 +74,7 @@ export function ConnectionDetailContent({
   return (
     <div className="flex flex-col h-full">
       <SetPageHeader>
-        <ConnectionPageHeader
-          connection={connection}
-          onBack={() => router.push('/connections')}
-        />
+        <ConnectionPageHeader connection={connection} />
       </SetPageHeader>
 
       <div className="flex gap-0 border-b border-slate-200 bg-white px-8">

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { FileSpreadsheet, ExternalLink } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { BackButton } from '@/components/layout/BackButton';
 import type { Quote } from '@/types/api';
 
 export function QuotePageHeader({ quote }: { quote: Quote }) {
@@ -12,7 +13,10 @@ export function QuotePageHeader({ quote }: { quote: Quote }) {
 
   return (
     <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1">
-      <FileSpreadsheet className="h-5 w-5 shrink-0 text-muted-foreground" />
+      <BackButton href="/quotes" label="Back to quotes" />
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100">
+        <FileSpreadsheet className="h-4 w-4 text-amber-600" />
+      </span>
       <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
       <StatusBadge status={statusName} />
       {quote.jobId && (

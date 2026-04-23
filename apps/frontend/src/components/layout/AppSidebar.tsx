@@ -92,7 +92,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
               className="size-full object-contain"
             />
           </span>
-          <span className="truncate text-sm font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
+          <span className="truncate text-lg font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
             EnsureOS
           </span>
         </Link>

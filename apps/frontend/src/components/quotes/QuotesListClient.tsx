@@ -181,9 +181,10 @@ export function QuotesListClient({
           statusSelectedCount={statusFilter.size}
           breakdown={breakdown}
           stats={totalValue ? [{ label: 'Total value', value: totalValue }] : undefined}
+          accent="amber"
         />
       </SetPageHeader>
-      <div className="flex flex-col gap-4 p-6">
+      <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
           <SortTabs
             options={SORT_OPTIONS}

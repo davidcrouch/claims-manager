@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import {
   FileText,
@@ -23,12 +24,7 @@ import {
 } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@/components/ui/tabs';
+import { BackButton } from '@/components/layout/BackButton';
 import {
   DefRow,
   SectionCard,
@@ -728,7 +724,10 @@ export function ClaimPageHeader({ claim }: { claim: Claim }) {
   return (
     <div className="flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-2">
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-        <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
+        <BackButton href="/claims" label="Back to claims" />
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-100">
+          <FileText className="h-4 w-4 text-blue-600" />
+        </span>
         <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
         {claim.externalReference && (
           <span className="font-mono text-xs text-muted-foreground">
@@ -767,56 +766,79 @@ export function ClaimPageHeader({ claim }: { claim: Claim }) {
   );
 }
 
+type ClaimTab =
+  | 'overview'
+  | 'policy'
+  | 'loss'
+  | 'parties'
+  | 'jobs'
+  | 'compliance';
+
 export function ClaimDetail({ claim }: { claim: Claim }) {
   const jobs = claim.jobs ?? [];
+  const [tab, setTab] = useState<ClaimTab>('overview');
+
+  const tabs: Array<{
+    id: ClaimTab;
+    label: string;
+    icon: typeof Calendar;
+    count?: number;
+  }> = [
+    { id: 'overview', label: 'Overview', icon: Calendar },
+    { id: 'policy', label: 'Policy & Financial', icon: Building2 },
+    { id: 'loss', label: 'Loss Details', icon: Droplets },
+    { id: 'parties', label: 'Parties', icon: Users },
+    {
+      id: 'jobs',
+      label: 'Jobs',
+      icon: Briefcase,
+      count: jobs.length > 0 ? jobs.length : undefined,
+    },
+    { id: 'compliance', label: 'Compliance', icon: ShieldAlert },
+  ];
 
   return (
-    <div className="space-y-6">
-      <Tabs defaultValue="overview">
-        <TabsList>
-          <TabsTrigger value="overview">
-            <Calendar className="h-3.5 w-3.5" /> Overview
-          </TabsTrigger>
-          <TabsTrigger value="policy">
-            <Building2 className="h-3.5 w-3.5" /> Policy &amp; Financial
-          </TabsTrigger>
-          <TabsTrigger value="loss">
-            <Droplets className="h-3.5 w-3.5" /> Loss Details
-          </TabsTrigger>
-          <TabsTrigger value="parties">
-            <Users className="h-3.5 w-3.5" /> Parties
-          </TabsTrigger>
-          <TabsTrigger value="jobs">
-            <Briefcase className="h-3.5 w-3.5" /> Jobs
-            {jobs.length > 0 && (
-              <span className="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                {jobs.length}
-              </span>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="compliance">
-            <ShieldAlert className="h-3.5 w-3.5" /> Compliance
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="overview" className="pt-4">
-          <OverviewTab claim={claim} />
-        </TabsContent>
-        <TabsContent value="policy" className="pt-4">
-          <PolicyTab claim={claim} />
-        </TabsContent>
-        <TabsContent value="loss" className="pt-4">
-          <LossTab claim={claim} />
-        </TabsContent>
-        <TabsContent value="parties" className="pt-4">
-          <PartiesTab claim={claim} />
-        </TabsContent>
-        <TabsContent value="jobs" className="pt-4">
-          <JobsTab claim={claim} />
-        </TabsContent>
-        <TabsContent value="compliance" className="pt-4">
-          <ComplianceTab claim={claim} />
-        </TabsContent>
-      </Tabs>
+    <div className="flex flex-col">
+      <div className="flex gap-0 border-b border-slate-200">
+        {tabs.map((t) => {
+          const Icon = t.icon;
+          const active = tab === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className={`inline-flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                active
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {t.label}
+              {t.count !== undefined && (
+                <span
+                  className={`ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                    active
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'bg-muted text-muted-foreground'
+                  }`}
+                >
+                  {t.count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <div className="pt-4">
+        {tab === 'overview' && <OverviewTab claim={claim} />}
+        {tab === 'policy' && <PolicyTab claim={claim} />}
+        {tab === 'loss' && <LossTab claim={claim} />}
+        {tab === 'parties' && <PartiesTab claim={claim} />}
+        {tab === 'jobs' && <JobsTab claim={claim} />}
+        {tab === 'compliance' && <ComplianceTab claim={claim} />}
+      </div>
     </div>
   );
 }

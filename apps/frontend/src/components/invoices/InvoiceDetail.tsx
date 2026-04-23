@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Receipt, ExternalLink } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { BackButton } from '@/components/layout/BackButton';
 import type { Invoice } from '@/types/api';
 
 export function InvoicePageHeader({ invoice }: { invoice: Invoice }) {
@@ -12,7 +13,10 @@ export function InvoicePageHeader({ invoice }: { invoice: Invoice }) {
 
   return (
     <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1">
-      <Receipt className="h-5 w-5 shrink-0 text-muted-foreground" />
+      <BackButton href="/invoices" label="Back to invoices" />
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-teal-100">
+        <Receipt className="h-4 w-4 text-teal-600" />
+      </span>
       <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
       <StatusBadge status={statusName} />
       {invoice.purchaseOrderId && (

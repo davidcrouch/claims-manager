@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ShoppingCart, ExternalLink } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { BackButton } from '@/components/layout/BackButton';
 import type { PurchaseOrder } from '@/types/api';
 
 export function PurchaseOrderPageHeader({ po }: { po: PurchaseOrder }) {
@@ -12,7 +13,10 @@ export function PurchaseOrderPageHeader({ po }: { po: PurchaseOrder }) {
 
   return (
     <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1">
-      <ShoppingCart className="h-5 w-5 shrink-0 text-muted-foreground" />
+      <BackButton href="/purchase-orders" label="Back to purchase orders" />
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-orange-100">
+        <ShoppingCart className="h-4 w-4 text-orange-600" />
+      </span>
       <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
       <StatusBadge status={statusName} />
       {po.jobId && (

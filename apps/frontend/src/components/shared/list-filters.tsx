@@ -147,7 +147,7 @@ export function SearchInput(props: {
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full pl-9 pr-9"
+        className="h-10 w-full pl-9 pr-9"
       />
       {value && (
         <button
@@ -168,6 +168,12 @@ export function StatusFilterMenu(props: {
   onSelectionChange: (id: string, checked: boolean) => void;
   onClearAll: () => void;
   onSelectAll: () => void;
+  /** Trigger label shown when no option is selected. Defaults to "All statuses". */
+  triggerEmptyLabel?: string;
+  /** Header text in the dropdown menu. Defaults to "Filter by status". */
+  menuTitle?: string;
+  /** Noun (singular) used to pluralise the selected count, e.g. "2 statuses". */
+  itemNoun?: { singular: string; plural: string };
 }) {
   const {
     options,
@@ -175,6 +181,9 @@ export function StatusFilterMenu(props: {
     onSelectionChange,
     onClearAll,
     onSelectAll,
+    triggerEmptyLabel = 'All statuses',
+    menuTitle = 'Filter by status',
+    itemNoun = { singular: 'status', plural: 'statuses' },
   } = props;
   return (
     <DropdownMenu>
@@ -182,15 +191,17 @@ export function StatusFilterMenu(props: {
         <span className="flex items-center gap-2">
           <Filter size={14} className="text-slate-400" />
           {selected.size === 0
-            ? 'All statuses'
-            : `${selected.size} status${selected.size !== 1 ? 'es' : ''}`}
+            ? triggerEmptyLabel
+            : `${selected.size} ${
+                selected.size === 1 ? itemNoun.singular : itemNoun.plural
+              }`}
         </span>
         <ChevronDown size={14} className="text-slate-400" />
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-[220px] p-2" align="end">
         <div className="mb-2 flex items-center justify-between border-b border-slate-100 pb-2">
           <span className="text-xs font-medium text-slate-500">
-            Filter by status
+            {menuTitle}
           </span>
           <div className="flex gap-1">
             <button
@@ -225,7 +236,7 @@ export function StatusFilterMenu(props: {
           ))}
           {options.length === 0 && (
             <p className="px-2 py-1.5 text-xs text-slate-400">
-              No status values loaded
+              No {itemNoun.singular} values loaded
             </p>
           )}
         </div>

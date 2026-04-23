@@ -2,26 +2,39 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Unplug, Search, Plus, ArrowUpDown } from 'lucide-react';
-import { EntityPanel } from '@/components/ui/entity-panel';
+import { Unplug, Plus } from 'lucide-react';
 import { Card, CardHeader, CardContent, CardFooter } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  SortTabs,
+  SearchInput,
+  StatusFilterMenu,
+  type SortOption,
+  type StatusOption,
+  buildSortString,
+  compareDates,
+  compareValues,
+} from '@/components/shared/list-filters';
 import { ConnectionFormDrawer } from './ConnectionFormDrawer';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { ListPageHeader } from '@/components/layout/ListPageHeader';
 import type { ConnectionSummary } from '@/types/api';
 
-type SortField = 'name' | 'providerName' | 'totalWebhookEvents' | 'lastEventAt';
-type StatusFilter = 'all' | 'active' | 'inactive';
+const SORT_OPTIONS: SortOption[] = [
+  { key: 'name', label: 'Name' },
+  { key: 'providerName', label: 'Provider' },
+  { key: 'lastEventAt', label: 'Last Event' },
+  { key: 'totalWebhookEvents', label: 'Events' },
+];
+const ALLOWED_SORT_FIELDS = SORT_OPTIONS.map((o) => o.key);
+
+const STATUS_ACTIVE = 'active';
+const STATUS_INACTIVE = 'inactive';
+const STATUS_OPTIONS: StatusOption[] = [
+  { id: STATUS_ACTIVE, name: 'Active' },
+  { id: STATUS_INACTIVE, name: 'Inactive' },
+];
 
 export interface ConnectionsPageClientProps {
   connections: ConnectionSummary[];
@@ -30,18 +43,54 @@ export interface ConnectionsPageClientProps {
 export function ConnectionsPageClient({ connections }: ConnectionsPageClientProps) {
   const router = useRouter();
   const [search, setSearch] = useState('');
-  const [sortField, setSortField] = useState<SortField>('name');
-  const [sortAsc, setSortAsc] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [sort, setSort] = useState<string>(buildSortString('name', 'asc'));
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [createOpen, setCreateOpen] = useState(false);
+
+  const { field: activeSortField, order: sortOrder } = useMemo(() => {
+    const idx = sort.lastIndexOf('_');
+    if (idx <= 0) return { field: 'name', order: 'asc' as const };
+    const order = sort.slice(idx + 1);
+    const field = sort.slice(0, idx);
+    if (order !== 'asc' && order !== 'desc') {
+      return { field: 'name', order: 'asc' as const };
+    }
+    if (!ALLOWED_SORT_FIELDS.includes(field)) {
+      return { field: 'name', order: 'asc' as const };
+    }
+    return { field, order };
+  }, [sort]);
+
+  const handleSort = (field: string) => {
+    if (activeSortField === field) {
+      setSort(buildSortString(field, sortOrder === 'asc' ? 'desc' : 'asc'));
+    } else {
+      const defaultOrder = field === 'name' || field === 'providerName' ? 'asc' : 'desc';
+      setSort(buildSortString(field, defaultOrder));
+    }
+  };
+
+  const setStatusChecked = (id: string, checked: boolean) => {
+    setStatusFilter((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const clearStatuses = () => setStatusFilter(new Set());
+  const selectAllStatuses = () =>
+    setStatusFilter(new Set(STATUS_OPTIONS.map((o) => o.id)));
 
   const filtered = useMemo(() => {
     let items = [...connections];
 
-    if (statusFilter === 'active') {
-      items = items.filter((c) => c.isActive);
-    } else if (statusFilter === 'inactive') {
-      items = items.filter((c) => !c.isActive);
+    if (statusFilter.size > 0) {
+      items = items.filter((c) => {
+        const key = c.isActive ? STATUS_ACTIVE : STATUS_INACTIVE;
+        return statusFilter.has(key);
+      });
     }
 
     if (search.trim()) {
@@ -56,32 +105,25 @@ export function ConnectionsPageClient({ connections }: ConnectionsPageClientProp
     }
 
     items.sort((a, b) => {
-      let cmp = 0;
-      if (sortField === 'name') {
-        cmp = a.name.localeCompare(b.name);
-      } else if (sortField === 'providerName') {
-        cmp = a.providerName.localeCompare(b.providerName);
-      } else if (sortField === 'lastEventAt') {
-        const aT = a.lastEventAt ? new Date(a.lastEventAt).getTime() : 0;
-        const bT = b.lastEventAt ? new Date(b.lastEventAt).getTime() : 0;
-        cmp = aT - bT;
-      } else if (sortField === 'totalWebhookEvents') {
-        cmp = a.totalWebhookEvents - b.totalWebhookEvents;
+      switch (activeSortField) {
+        case 'providerName':
+          return compareValues(a.providerName, b.providerName, sortOrder);
+        case 'lastEventAt':
+          return compareDates(a.lastEventAt, b.lastEventAt, sortOrder);
+        case 'totalWebhookEvents':
+          return compareValues(
+            a.totalWebhookEvents,
+            b.totalWebhookEvents,
+            sortOrder,
+          );
+        case 'name':
+        default:
+          return compareValues(a.name, b.name, sortOrder);
       }
-      return sortAsc ? cmp : -cmp;
     });
 
     return items;
-  }, [connections, search, sortField, sortAsc, statusFilter]);
-
-  function handleSort(field: SortField) {
-    if (sortField === field) {
-      setSortAsc((prev) => !prev);
-    } else {
-      setSortField(field);
-      setSortAsc(true);
-    }
-  }
+  }, [connections, search, activeSortField, sortOrder, statusFilter]);
 
   const activeCount = connections.filter((c) => c.isActive).length;
   const inactiveCount = connections.length - activeCount;
@@ -93,14 +135,13 @@ export function ConnectionsPageClient({ connections }: ConnectionsPageClientProp
     (acc, c) => acc + c.recentErrorCount,
     0,
   );
-  const statusFilterSelectedCount = statusFilter === 'all' ? 0 : 1;
   const breakdown = [
     { name: 'Active', count: activeCount },
     { name: 'Inactive', count: inactiveCount },
   ].filter((b) => b.count > 0);
 
   return (
-    <>
+    <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
       <SetPageHeader>
         <ListPageHeader
           icon={Unplug}
@@ -108,7 +149,7 @@ export function ConnectionsPageClient({ connections }: ConnectionsPageClientProp
           total={connections.length}
           showing={filtered.length}
           search={search}
-          statusSelectedCount={statusFilterSelectedCount}
+          statusSelectedCount={statusFilter.size}
           breakdown={breakdown}
           stats={[
             { label: 'Events', value: totalEvents.toLocaleString() },
@@ -125,67 +166,46 @@ export function ConnectionsPageClient({ connections }: ConnectionsPageClientProp
                 ]
               : []),
           ]}
+          accent="violet"
         />
       </SetPageHeader>
-      <EntityPanel
-        searchSlot={
-          <div className="relative w-72">
-            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search by name, provider, environment..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-8"
-            />
-          </div>
-        }
-        sortSlot={
-          <div className="flex items-center gap-1">
-            {(['name', 'providerName', 'lastEventAt', 'totalWebhookEvents'] as const).map(
-              (field) => (
-                <Button
-                  key={field}
-                  variant={sortField === field ? 'secondary' : 'ghost'}
-                  size="sm"
-                  onClick={() => handleSort(field)}
-                  className="gap-1 text-xs"
-                >
-                  {field === 'name'
-                    ? 'Name'
-                    : field === 'providerName'
-                      ? 'Provider'
-                      : field === 'lastEventAt'
-                        ? 'Last Event'
-                        : 'Events'}
-                  {sortField === field && (
-                    <ArrowUpDown className="h-3 w-3" />
-                  )}
-                </Button>
-              ),
-            )}
-          </div>
-        }
-        filterSlot={
-          <Select
-            value={statusFilter}
-            onValueChange={(v) => setStatusFilter(v as StatusFilter)}
+      <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+          <SortTabs
+            options={SORT_OPTIONS}
+            activeField={activeSortField}
+            sortOrder={sortOrder}
+            onSort={handleSort}
+          />
+
+          <SearchInput
+            placeholder="Search by name, provider, environment..."
+            value={search}
+            onChange={setSearch}
+          />
+
+          <StatusFilterMenu
+            options={STATUS_OPTIONS}
+            selected={statusFilter}
+            onSelectionChange={setStatusChecked}
+            onClearAll={clearStatuses}
+            onSelectAll={selectAllStatuses}
+          />
+
+          <Button
+            onClick={() => setCreateOpen(true)}
+            size="sm"
+            className="gap-1"
           >
-            <SelectTrigger className="w-[120px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="inactive">Inactive</SelectItem>
-            </SelectContent>
-          </Select>
-        }
-        headerAction={
-          <Button onClick={() => setCreateOpen(true)} size="sm" className="gap-1">
             <Plus className="h-4 w-4" />
             Add Connection
           </Button>
-        }
+        </div>
+      </div>
+
+      <div
+        className="flex-1 px-6 pb-6"
+        style={{ minHeight: 0, overflow: 'auto' }}
       >
         {filtered.length > 0 ? (
           <div
@@ -262,13 +282,13 @@ export function ConnectionsPageClient({ connections }: ConnectionsPageClientProp
             </div>
           </div>
         )}
-      </EntityPanel>
+      </div>
 
       <ConnectionFormDrawer
         open={createOpen}
         onOpenChange={setCreateOpen}
         existingConnections={connections}
       />
-    </>
+    </div>
   );
 }

@@ -297,9 +297,10 @@ export function ClaimsListClient({
           search={debouncedSearch}
           statusSelectedCount={statusFilter.size}
           breakdown={breakdown}
+          accent="blue"
         />
       </SetPageHeader>
-      <div className="flex flex-col gap-4 p-6">
+      <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
           <div className="flex items-center rounded-md border border-slate-200 bg-white p-1">
             {SORT_OPTIONS.map((option) => (
@@ -323,7 +324,7 @@ export function ClaimsListClient({
               placeholder="Search claims by claim number, reference, or policy..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-9"
+              className="h-10 w-full pl-9 pr-9"
             />
             {search && (
               <button
