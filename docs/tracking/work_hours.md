@@ -208,3 +208,12 @@
   Swapped in the new **EnsureOS logos and favicons** on both the public sign-in host and the main application for a consistent brand across tabs, headers, and sign-in panels.
   Tightened shared UI primitives (tabs and related components) used by the updated pages so the refreshed screens render cleanly.
   Aligned marketing and app layout entry points with the new shell so the site loads under the updated branding end to end.
+
+- `2026-04-23` `597f91a` **1 h**
+  `21 files | +496 −270 | Tier 2 standard | Moderate orchestration`
+  Lay summary: Staff can return to lists with one tap and see more consistent headers while browsing connections and other business records.
+  **List and detail navigation polish across modules.** Extended shared list and detail headers so titles, breadcrumbs, and primary actions read the same way across claims, jobs, invoices, quotes, purchase orders, reports, vendors, and connections.
+  Added a compact back control on detail screens so returning to the parent list is one clear step.
+  Reworked the connections experience for clearer layout, spacing, and filtering alongside other listing screens.
+  Restructured claim and job detail areas to align with the updated headers and tab presentation.
+  Adjusted shared filters and vendor listing behaviour so screens stay predictable as users move between records.
