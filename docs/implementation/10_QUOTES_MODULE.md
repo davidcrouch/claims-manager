@@ -199,8 +199,8 @@ Backlog (tracked in [`docs/mapping/quotes.md`](../mapping/quotes.md) §12):
 - [ ] Populate `schedule_info`, `approval_info`, `custom_data` buckets (§6).
 - [ ] Resolve `status` and `quoteType` lookups; log misses.
 - [ ] Sync `quote_groups`, `quote_combos`, `quote_items` child rows inside the
-      same projection transaction (§7–§9).
-- [ ] Add `external_reference` columns to the three child tables so child
-      upserts are idempotent by CW id.
+      same projection transaction (§7–§9). Schema-level support landed in
+      migration `0006_quote_schema_alignment` (`external_reference` columns,
+      parent-cascade FKs, child indexes, lookup FKs).
 - [ ] Seed the remaining lookup domains (`quote_type`, `group_label`,
       `line_scope_status`, `unit_type`).

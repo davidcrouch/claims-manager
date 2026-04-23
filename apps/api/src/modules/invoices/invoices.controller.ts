@@ -25,6 +25,11 @@ export class InvoicesController {
     return this.invoicesService.findByPurchaseOrder({ purchaseOrderId });
   }
 
+  @Get('job/:jobId')
+  async findByJob(@Param('jobId') jobId: string) {
+    return this.invoicesService.findByJob({ jobId });
+  }
+
   @Get(':id')
   async findOne(@Param('id') id: string) {
     return this.invoicesService.findOne({ id });

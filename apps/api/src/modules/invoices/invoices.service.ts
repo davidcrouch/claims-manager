@@ -51,6 +51,14 @@ export class InvoicesService {
     });
   }
 
+  async findByJob(params: { jobId: string }) {
+    const tenantId = this.tenantContext.getTenantId();
+    return this.invoicesRepo.findByJob({
+      jobId: params.jobId,
+      tenantId,
+    });
+  }
+
   async create(params: { body: Record<string, unknown> }) {
     const tenantId = this.tenantContext.getTenantId();
     const connectionId = await this.resolveConnectionId(tenantId);

@@ -266,8 +266,8 @@ export const quotes = pgTable(
     name: text('name'),
     reference: text('reference'),
     note: text('note'),
-    statusLookupId: uuid('status_lookup_id'),
-    quoteTypeLookupId: uuid('quote_type_lookup_id'),
+    statusLookupId: uuid('status_lookup_id').references(() => lookupValues.id),
+    quoteTypeLookupId: uuid('quote_type_lookup_id').references(() => lookupValues.id),
     quoteDate: timestamp('quote_date', { withTimezone: true }),
     expiresInDays: integer('expires_in_days'),
     subTotal: numeric('sub_total', { precision: 14, scale: 2 }),
@@ -294,6 +294,7 @@ export const quotes = pgTable(
   },
   (t) => [
     check('chk_quote_parent', sql`claim_id IS NOT NULL OR job_id IS NOT NULL`),
+    uniqueIndex('UQ_quotes_tenant_extref').on(t.tenantId, t.externalReference),
     index('idx_quotes_job').on(t.tenantId, t.jobId),
     index('idx_quotes_claim').on(t.tenantId, t.claimId),
     index('idx_quotes_status').on(t.tenantId, t.statusLookupId),
@@ -301,43 +302,61 @@ export const quotes = pgTable(
 );
 
 // Quote groups
-export const quoteGroups = pgTable('quote_groups', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  tenantId: uuid('tenant_id')
-    .notNull()
-    .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
-  quoteId: uuid('quote_id').notNull().references(() => quotes.id, { onDelete: 'cascade' }),
-  groupLabelLookupId: uuid('group_label_lookup_id'),
-  description: text('description'),
-  dimensions: jsonb('dimensions').notNull().default({}),
-  sortIndex: integer('sort_index').notNull().default(0),
-  totals: jsonb('totals').notNull().default({}),
-  groupPayload: jsonb('group_payload').notNull().default({}),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+export const quoteGroups = pgTable(
+  'quote_groups',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    quoteId: uuid('quote_id').notNull().references(() => quotes.id, { onDelete: 'cascade' }),
+    externalReference: text('external_reference'),
+    groupLabelLookupId: uuid('group_label_lookup_id').references(() => lookupValues.id),
+    description: text('description'),
+    dimensions: jsonb('dimensions').notNull().default({}),
+    sortIndex: integer('sort_index').notNull().default(0),
+    totals: jsonb('totals').notNull().default({}),
+    groupPayload: jsonb('group_payload').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('UQ_quote_groups_parent_extref').on(t.quoteId, t.externalReference),
+    index('idx_quote_groups_quote').on(t.tenantId, t.quoteId),
+  ],
+);
 
 // Quote combos
-export const quoteCombos = pgTable('quote_combos', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  tenantId: uuid('tenant_id')
-    .notNull()
-    .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
-  quoteGroupId: uuid('quote_group_id')
-    .notNull()
-    .references(() => quoteGroups.id, { onDelete: 'cascade' }),
-  catalogComboId: uuid('catalog_combo_id'),
-  lineScopeStatusLookupId: uuid('line_scope_status_lookup_id'),
-  name: text('name'),
-  description: text('description'),
-  category: text('category'),
-  subCategory: text('sub_category'),
-  quantity: numeric('quantity', { precision: 14, scale: 4 }),
-  sortIndex: integer('sort_index').notNull().default(0),
-  totals: jsonb('totals').notNull().default({}),
-  comboPayload: jsonb('combo_payload').notNull().default({}),
-  deletedAt: timestamp('deleted_at', { withTimezone: true }),
-});
+export const quoteCombos = pgTable(
+  'quote_combos',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    quoteGroupId: uuid('quote_group_id')
+      .notNull()
+      .references(() => quoteGroups.id, { onDelete: 'cascade' }),
+    externalReference: text('external_reference'),
+    catalogComboId: uuid('catalog_combo_id'),
+    lineScopeStatusLookupId: uuid('line_scope_status_lookup_id').references(() => lookupValues.id),
+    name: text('name'),
+    description: text('description'),
+    category: text('category'),
+    subCategory: text('sub_category'),
+    quantity: numeric('quantity', { precision: 14, scale: 4 }),
+    sortIndex: integer('sort_index').notNull().default(0),
+    totals: jsonb('totals').notNull().default({}),
+    comboPayload: jsonb('combo_payload').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('UQ_quote_combos_parent_extref').on(t.quoteGroupId, t.externalReference),
+    index('idx_quote_combos_group').on(t.tenantId, t.quoteGroupId),
+  ],
+);
 
 // Quote items
 export const quoteItems = pgTable(
@@ -347,11 +366,12 @@ export const quoteItems = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
-    quoteGroupId: uuid('quote_group_id').references(() => quoteGroups.id),
-    quoteComboId: uuid('quote_combo_id').references(() => quoteCombos.id),
+    quoteGroupId: uuid('quote_group_id').references(() => quoteGroups.id, { onDelete: 'cascade' }),
+    quoteComboId: uuid('quote_combo_id').references(() => quoteCombos.id, { onDelete: 'cascade' }),
+    externalReference: text('external_reference'),
     catalogItemId: uuid('catalog_item_id'),
-    lineScopeStatusLookupId: uuid('line_scope_status_lookup_id'),
-    unitTypeLookupId: uuid('unit_type_lookup_id'),
+    lineScopeStatusLookupId: uuid('line_scope_status_lookup_id').references(() => lookupValues.id),
+    unitTypeLookupId: uuid('unit_type_lookup_id').references(() => lookupValues.id),
     name: text('name'),
     description: text('description'),
     category: text('category'),
@@ -372,6 +392,8 @@ export const quoteItems = pgTable(
     mismatches: jsonb('mismatches').notNull().default([]),
     totals: jsonb('totals').notNull().default({}),
     itemPayload: jsonb('item_payload').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (t) => [
@@ -379,6 +401,10 @@ export const quoteItems = pgTable(
       'chk_quote_item_parent',
       sql`(quote_group_id IS NOT NULL AND quote_combo_id IS NULL) OR (quote_group_id IS NULL AND quote_combo_id IS NOT NULL)`,
     ),
+    uniqueIndex('UQ_quote_items_group_extref').on(t.quoteGroupId, t.externalReference),
+    uniqueIndex('UQ_quote_items_combo_extref').on(t.quoteComboId, t.externalReference),
+    index('idx_quote_items_group').on(t.tenantId, t.quoteGroupId),
+    index('idx_quote_items_combo').on(t.tenantId, t.quoteComboId),
   ],
 );
 
@@ -430,47 +456,66 @@ export const purchaseOrders = pgTable(
     index('idx_po_job').on(t.tenantId, t.jobId),
     index('idx_po_claim').on(t.tenantId, t.claimId),
     index('idx_po_vendor').on(t.tenantId, t.vendorId),
+    uniqueIndex('UQ_purchase_orders_tenant_external_id')
+      .on(t.tenantId, t.externalId)
+      .where(sql`external_id IS NOT NULL`),
+    uniqueIndex('UQ_purchase_orders_tenant_po_number')
+      .on(t.tenantId, t.purchaseOrderNumber)
+      .where(sql`purchase_order_number IS NOT NULL`),
   ],
 );
 
 // Purchase order groups
-export const purchaseOrderGroups = pgTable('purchase_order_groups', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  tenantId: uuid('tenant_id')
-    .notNull()
-    .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
-  purchaseOrderId: uuid('purchase_order_id')
-    .notNull()
-    .references(() => purchaseOrders.id, { onDelete: 'cascade' }),
-  groupLabelLookupId: uuid('group_label_lookup_id'),
-  description: text('description'),
-  dimensions: jsonb('dimensions').notNull().default({}),
-  sortIndex: integer('sort_index').notNull().default(0),
-  totals: jsonb('totals').notNull().default({}),
-  groupPayload: jsonb('group_payload').notNull().default({}),
-});
+export const purchaseOrderGroups = pgTable(
+  'purchase_order_groups',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    purchaseOrderId: uuid('purchase_order_id')
+      .notNull()
+      .references(() => purchaseOrders.id, { onDelete: 'cascade' }),
+    groupLabelLookupId: uuid('group_label_lookup_id'),
+    description: text('description'),
+    dimensions: jsonb('dimensions').notNull().default({}),
+    sortIndex: integer('sort_index').notNull().default(0),
+    totals: jsonb('totals').notNull().default({}),
+    groupPayload: jsonb('group_payload').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [index('idx_po_groups_po').on(t.tenantId, t.purchaseOrderId)],
+);
 
 // Purchase order combos
-export const purchaseOrderCombos = pgTable('purchase_order_combos', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  tenantId: uuid('tenant_id')
-    .notNull()
-    .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
-  purchaseOrderGroupId: uuid('purchase_order_group_id')
-    .notNull()
-    .references(() => purchaseOrderGroups.id, { onDelete: 'cascade' }),
-  catalogComboId: uuid('catalog_combo_id'),
-  quoteComboId: uuid('quote_combo_id'),
-  name: text('name'),
-  description: text('description'),
-  category: text('category'),
-  subCategory: text('sub_category'),
-  quantity: numeric('quantity', { precision: 14, scale: 4 }),
-  sortIndex: integer('sort_index').notNull().default(0),
-  totals: jsonb('totals').notNull().default({}),
-  comboPayload: jsonb('combo_payload').notNull().default({}),
-  deletedAt: timestamp('deleted_at', { withTimezone: true }),
-});
+export const purchaseOrderCombos = pgTable(
+  'purchase_order_combos',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    purchaseOrderGroupId: uuid('purchase_order_group_id')
+      .notNull()
+      .references(() => purchaseOrderGroups.id, { onDelete: 'cascade' }),
+    catalogComboId: uuid('catalog_combo_id'),
+    quoteComboId: uuid('quote_combo_id'),
+    name: text('name'),
+    description: text('description'),
+    category: text('category'),
+    subCategory: text('sub_category'),
+    quantity: numeric('quantity', { precision: 14, scale: 4 }),
+    sortIndex: integer('sort_index').notNull().default(0),
+    totals: jsonb('totals').notNull().default({}),
+    comboPayload: jsonb('combo_payload').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [index('idx_po_combos_group').on(t.tenantId, t.purchaseOrderGroupId)],
+);
 
 // Purchase order items
 export const purchaseOrderItems = pgTable(
@@ -482,9 +527,11 @@ export const purchaseOrderItems = pgTable(
       .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     purchaseOrderGroupId: uuid('purchase_order_group_id').references(
       () => purchaseOrderGroups.id,
+      { onDelete: 'cascade' },
     ),
     purchaseOrderComboId: uuid('purchase_order_combo_id').references(
       () => purchaseOrderCombos.id,
+      { onDelete: 'cascade' },
     ),
     catalogItemId: uuid('catalog_item_id'),
     quoteLineItemId: uuid('quote_line_item_id'),
@@ -507,6 +554,8 @@ export const purchaseOrderItems = pgTable(
     tags: jsonb('tags').notNull().default([]),
     totals: jsonb('totals').notNull().default({}),
     itemPayload: jsonb('item_payload').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (t) => [
@@ -514,6 +563,8 @@ export const purchaseOrderItems = pgTable(
       'chk_po_item_parent',
       sql`(purchase_order_group_id IS NOT NULL AND purchase_order_combo_id IS NULL) OR (purchase_order_group_id IS NULL AND purchase_order_combo_id IS NOT NULL)`,
     ),
+    index('idx_po_items_group').on(t.tenantId, t.purchaseOrderGroupId),
+    index('idx_po_items_combo').on(t.tenantId, t.purchaseOrderComboId),
   ],
 );
 

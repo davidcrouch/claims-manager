@@ -136,34 +136,156 @@ export interface Attachment {
   updatedAt?: string | null;
 }
 
+/**
+ * Shape of the CW-style party bucket stored on `quotes.quote_to` /
+ * `quote_for` / `quote_from`. Keys match `docs/mapping/quotes.md` §4.
+ */
+export interface QuotePartyPayload {
+  name?: string;
+  companyRegistrationNumber?: string;
+  contactName?: string;
+  clientReference?: string;
+  phoneNumber?: string;
+  email?: string;
+  unitNumber?: string;
+  streetNumber?: string;
+  streetName?: string;
+  suburb?: string;
+  postCode?: string;
+  state?: string;
+  country?: string;
+}
+
+/** `quotes.schedule_info` bucket. See `docs/mapping/quotes.md` §6.2. */
+export interface QuoteScheduleInfo {
+  estimatedStartDate?: string;
+  estimatedCompletionDate?: string;
+  reasonForVariation?: string;
+}
+
+/** `quotes.approval_info` bucket. See `docs/mapping/quotes.md` §6.3. */
+export interface QuoteApprovalInfo {
+  isAutoApproved?: boolean;
+  statusType?: string;
+  statusName?: string;
+  quoteTypeName?: string;
+  createdByName?: string;
+  createdByExternalReference?: string;
+  updatedByName?: string;
+  updatedByExternalReference?: string;
+}
+
 export interface Quote {
   id: string;
   tenantId: string;
   jobId?: string | null;
   claimId?: string | null;
-  quoteNumber?: string | null;
+  /** CW quote UUID (column `external_reference`; CW field `id`). */
   externalReference?: string | null;
+  quoteNumber?: string | null;
+  name?: string | null;
+  reference?: string | null;
+  note?: string | null;
   statusLookupId?: string | null;
-  totalAmount?: string | null;
+  quoteTypeLookupId?: string | null;
   quoteDate?: string | null;
+  expiresInDays?: number | null;
+  subTotal?: string | null;
+  totalTax?: string | null;
+  totalAmount?: string | null;
+  quoteTo?: QuotePartyPayload | Record<string, unknown>;
+  quoteFor?: QuotePartyPayload | Record<string, unknown>;
+  quoteFrom?: QuotePartyPayload | Record<string, unknown>;
+  scheduleInfo?: QuoteScheduleInfo | Record<string, unknown>;
+  approvalInfo?: QuoteApprovalInfo | Record<string, unknown>;
+  quoteToEmail?: string | null;
+  quoteToName?: string | null;
+  quoteForName?: string | null;
+  estimatedStartDate?: string | null;
+  estimatedCompletionDate?: string | null;
+  isAutoApproved?: boolean | null;
+  /**
+   * Catch-all bucket. See `docs/mapping/quotes.md` §6.4 — contains CW
+   * `customData` plus mapper-added keys such as `cwExternalReference`,
+   * `cwCreatedAtDate`, `cwUpdatedAtDate`.
+   */
+  customData?: Record<string, unknown>;
+  /** Full verbatim CW response. See `docs/mapping/quotes.md` §10. */
+  apiPayload?: Record<string, unknown>;
+  createdByUserId?: string | null;
+  updatedByUserId?: string | null;
   createdAt?: string;
   updatedAt?: string;
   status?: LookupRef;
+  quoteType?: LookupRef;
 }
 
+/**
+ * Purchase Order — shape of the row returned by `GET /purchase-orders/:id`.
+ *
+ * Field-by-field mapping lives in `docs/mapping/purchase_orders.md`. The API
+ * currently returns the raw `purchase_orders` row (no joins), so lookup names
+ * for `status`, `purchaseOrderType`, and `vendor` must be read out of
+ * `purchaseOrderPayload` until a join-aware DTO is added.
+ */
 export interface PurchaseOrder {
   id: string;
   tenantId: string;
+
+  // §3 — parent / related entity resolution
   jobId?: string | null;
   claimId?: string | null;
-  purchaseOrderNumber?: string | null;
-  externalId?: string | null;
-  statusLookupId?: string | null;
-  totalAmount?: string | null;
   vendorId?: string | null;
+  quoteId?: string | null;
+
+  // §2 — identity
+  externalId?: string | null;
+  purchaseOrderNumber?: string | null;
+  name?: string | null;
+
+  // §4 — lookup FKs
+  statusLookupId?: string | null;
+  purchaseOrderTypeLookupId?: string | null;
+
+  // §5 — service window (promoted columns)
+  startDate?: string | null;
+  endDate?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+
+  // §7 — promoted scalars
+  note?: string | null;
+  totalAmount?: string | null;
+  adjustedTotal?: string | null;
+  adjustedTotalAdjustmentAmount?: string | null;
+
+  // §6 — party buckets + promoted scalars
+  poTo?: Record<string, unknown> | null;
+  poFor?: Record<string, unknown> | null;
+  poFrom?: Record<string, unknown> | null;
+  poToEmail?: string | null;
+  poForName?: string | null;
+
+  // §5 / §8 — service window / allocation JSONB buckets
+  serviceWindow?: Record<string, unknown> | null;
+  adjustmentInfo?: Record<string, unknown> | null;
+  allocationContext?: Record<string, unknown> | null;
+
+  // §10 — verbatim CW payload (lossless fallback)
+  purchaseOrderPayload?: Record<string, unknown> | null;
+
+  // §2 — user references
+  createdByUserId?: string | null;
+  updatedByUserId?: string | null;
+
+  // audit
   createdAt?: string;
   updatedAt?: string;
+  deletedAt?: string | null;
+
+  // Optional joins (populated once the API adds them; currently undefined).
   status?: LookupRef;
+  purchaseOrderType?: LookupRef;
   vendor?: LookupRef;
 }
 

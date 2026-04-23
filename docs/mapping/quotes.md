@@ -5,7 +5,7 @@
 **Mapper:** `apps/api/src/modules/external/mappers/crunchwork-quote.mapper.ts`
 **Last aligned with:** Insurance REST API v17 (exported 2026-03-04)
 
-> **Coverage status:** The full contract is documented below. The current mapper is a **stub** that only promotes the parent resolution keys (`id`, `jobId`, `claimId`, `quoteNumber`, `name`, `reference`, `note`) and preserves the rest inside `api_payload`. Every field below marked "promoted" or "child row" other than those is part of the mapper backlog; update this doc **before** you add promotion logic.
+> **Coverage status:** The full contract is documented below and the schema has every column the contract needs (migration `0006_quote_schema_alignment` added the missing `external_reference` columns, lookup FKs, parent cascades, child indexes, and the `(tenant_id, external_reference)` unique index on `quotes`). The current **mapper** is still a stub that only promotes the parent resolution keys (`id`, `jobId`, `claimId`, `quoteNumber`, `name`, `reference`, `note`) and preserves the rest inside `api_payload`. Every field below marked "promoted" or "child row" other than those is part of the mapper backlog; update this doc **before** you add promotion logic.
 
 ---
 
@@ -180,13 +180,11 @@ Any **unknown** key present in the CW response but not listed anywhere in this d
 
 ## 7. `quote_groups`
 
-For each element in CW `groups[]` upsert a row in `quote_groups` keyed by `(quote_id, external_reference)` where `external_reference = groups[].id` (CW group UUID; stored in `group_payload.id` since `quote_groups` has no dedicated column — see Implementation notes §10).
-
-> **Schema gap — follow up.** `quote_groups` currently has no `external_reference` column. Until it is added, the mapper identifies an existing group by the CW `id` stored inside `group_payload.id`. Pruning (removing groups no longer in the latest payload) is therefore deferred to the schema migration that adds this column.
+For each element in CW `groups[]` upsert a row in `quote_groups` keyed by `(quote_id, external_reference)` where `external_reference = groups[].id` (CW group UUID). The `UQ_quote_groups_parent_extref` unique index enforces idempotence.
 
 | CW field | Destination |
 |---|---|
-| `groups[].id` | `quote_groups.group_payload.id` (string; see gap above) |
+| `groups[].id` | `quote_groups.external_reference` |
 | `groups[].groupLabel.externalReference` | `quote_groups.group_label_lookup_id` via `group_label` lookup domain |
 | `groups[].groupLabel.name` | `quote_groups.group_payload.groupLabelName` |
 | `groups[].groupLabel.id` | _ignored_ (CW internal) |
@@ -210,11 +208,11 @@ For each element in CW `groups[]` upsert a row in `quote_groups` keyed by `(quot
 
 ## 8. `quote_combos`
 
-For each element in `groups[].combos[]` upsert a row in `quote_combos` keyed by `(quote_group_id, external_reference)` where `external_reference = combos[].id` (same schema-gap note as §7 applies — combo CW id is stored in `combo_payload.id`).
+For each element in `groups[].combos[]` upsert a row in `quote_combos` keyed by `(quote_group_id, external_reference)` where `external_reference = combos[].id`. The `UQ_quote_combos_parent_extref` unique index enforces idempotence.
 
 | CW field | Destination |
 |---|---|
-| `combos[].id` | `quote_combos.combo_payload.id` |
+| `combos[].id` | `quote_combos.external_reference` |
 | `combos[].tenantId` | _ignored_ |
 | `combos[].index` | `quote_combos.sort_index` |
 | `combos[].catalogComboId` | `quote_combos.catalog_combo_id` |
@@ -249,11 +247,11 @@ For each element in `groups[].items[]` **and** `groups[].combos[].items[]` upser
 - items under a group directly → `quote_group_id` = that group, `quote_combo_id` = null
 - items nested inside a combo → `quote_combo_id` = that combo, `quote_group_id` = null
 
-Upsert key is `(parent_id, external_reference)` where `external_reference = items[].id` and `parent_id` is whichever of `quote_group_id` / `quote_combo_id` applies. Same schema-gap note as §7 — CW id lives in `item_payload.id` until the dedicated column lands.
+Upsert key is `(parent_id, external_reference)` where `external_reference = items[].id` and `parent_id` is whichever of `quote_group_id` / `quote_combo_id` applies. The `UQ_quote_items_group_extref` and `UQ_quote_items_combo_extref` unique indexes enforce idempotence for both parent shapes.
 
 | CW field | Destination |
 |---|---|
-| `items[].id` | `quote_items.item_payload.id` |
+| `items[].id` | `quote_items.external_reference` |
 | `items[].tenantId` | _ignored_ |
 | `items[].catalogItemId` | `quote_items.catalog_item_id` |
 | `items[].name` | `quote_items.name` |
@@ -333,10 +331,9 @@ doc can be marked "Full — mapper matches spec":
 - **Resolve `status` / `quoteType` lookups** in §3 (log `UNRESOLVED_LOOKUP`
   against `external_reference_resolution_log`; leave FK null on miss).
 - **Sync group / combo / item children** per §7–§9 inside the same transaction
-  provided by `InProcessProjectionService`.
-- **Add `external_reference` columns** to `quote_groups`, `quote_combos`,
-  `quote_items` so the mapper can upsert children idempotently by CW id instead
-  of stashing the CW id in the JSONB payload (see the gap notes in §7–§9).
+  provided by `InProcessProjectionService`. Schema-level support is in place
+  (`external_reference` columns + `UQ_quote_*_parent_extref` unique indexes on
+  all three child tables as of migration `0006_quote_schema_alignment`).
 - **Pruning.** Once §7–§9 land, follow the same additive rules as `claims` for
   shared child tables, but prune groups / combos / items whose CW id is absent
   from the latest payload (they are per-quote state; stale rows mislead

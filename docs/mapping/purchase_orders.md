@@ -334,9 +334,11 @@ projects CW PO payloads inside a single transaction supplied by
 
 - **Existing-PO fallback order**: (1) link in `external_links` for the same
   `external_object`, (2) `(tenant_id, external_id)` once §2's `externalId`
-  gap is closed, (3) `(tenant_id, purchase_order_number)`. Until the middle
-  fallback is implemented, the mapper relies solely on the external-link row
-  created on first ingest.
+  gap is closed, (3) `(tenant_id, purchase_order_number)`. Both fallbacks are
+  backed by partial unique indexes on `purchase_orders`
+  (`UQ_purchase_orders_tenant_external_id`, `UQ_purchase_orders_tenant_po_number`);
+  until the middle fallback is implemented the mapper relies solely on the
+  external-link row created on first ingest.
 - **Line-item sync is destroy-and-rebuild.** On every ingest the mapper
   deletes all `purchase_order_groups` for the PO (cascading to combos and
   items) and re-inserts them. This keeps replay idempotent and avoids diffing

@@ -74,6 +74,22 @@ export class InvoicesRepository {
       .orderBy(desc(invoices.updatedAt));
   }
 
+  async findByJob(params: {
+    jobId: string;
+    tenantId: string;
+  }): Promise<InvoiceRow[]> {
+    return this.db
+      .select()
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.jobId, params.jobId),
+          eq(invoices.tenantId, params.tenantId),
+        ),
+      )
+      .orderBy(desc(invoices.updatedAt));
+  }
+
   async create(params: { data: InvoiceInsert }): Promise<InvoiceRow> {
     const [inserted] = await this.db.insert(invoices).values(params.data).returning();
     return inserted!;

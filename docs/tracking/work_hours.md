@@ -227,3 +227,14 @@
   Updated the **claim detail screen** to distinguish the insurer's own reference from the partner system's internal identifier and to surface vulnerability, contention, and last-updated information when present.
   Polished the **job overview screen** with clearer parent-job and parent-claim links plus an insurer-reference label so staff immediately see which record ties to which external system.
   Tightened the shared **claim data shape** so downstream screens can read the newly-mapped fields without manual casting.
+
+- `2026-04-24` `7b2ce84` **6.5 h**
+  `15 files | +15 373 −147 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  (Drizzle snapshot JSON accounts for ~13 700 of the insertions; hand-written delta is ~1 700 lines.)
+  Lay summary: Aligned the stored data for quotes and service orders with the partner-system contract and expanded the on-screen detail pages so every field now has a named home, plus a small backend lookup for invoices tied to a job.
+  **Schema alignment for quotes and purchase orders; quote / PO detail screens expanded; invoices-by-job lookup.** Added the missing structural pieces (external-reference keys, parent-cascade deletes, lookup links, child indexes) so quote groups, combos, items and purchase-order groups, combos, items match the partner-system contract end-to-end.
+  Tightened duplicate-prevention on the core **quotes** and **purchase-orders** records so the same partner record cannot be ingested twice.
+  Reworked the **quote detail** and **purchase-order detail** screens to present every contract field — identity, parties, parent job and claim, service window, totals, adjustments, and payload fallback — in clearly labelled sections.
+  Extended the shared frontend data shapes so the new screens read the enriched fields without manual casting.
+  Added a backend endpoint for **invoices associated with a given job** so that view can surface them directly.
+  Updated the internal mapping reference for quotes and purchase orders to show which parts are now schema-backed and which remain on the mapper backlog.
