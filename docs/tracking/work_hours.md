@@ -198,3 +198,13 @@
   Updated **page titles and labels** in the main application and supporting API documentation strings so staff and integrations see the new product name consistently.
   Adjusted **marketing copy** on the landing page to describe EnsureOS in plain language while keeping the same overall structure.
   Confirmed **type checks** on the touched applications after the layout and copy changes.
+
+- `2026-04-23` `d38ac0e` **5 h**
+  `62 files | +998 −620 | Tier 2 standard | Moderate orchestration`
+  Lay summary: Every list and detail screen now shares the same page header, the side navigation and shell were refreshed, and the request-routing piece was renamed in line with the framework update.
+  **List/detail page header unification and request-routing rename.** Introduced a shared **list page header** and **set-page-header** building blocks and applied them consistently across claims, jobs, invoices, quotes, purchase orders, reports, vendors, and connections so every screen opens with the same title, breadcrumb, and action layout.
+  Refreshed the **application shell** — side navigation, top bar, layout wrapper, and breadcrumb provider — so navigation feels cohesive across the product.
+  Renamed the Next.js **middleware module to proxy** to match the current framework convention, keeping existing request-rewriting behaviour.
+  Swapped in the new **EnsureOS logos and favicons** on both the public sign-in host and the main application for a consistent brand across tabs, headers, and sign-in panels.
+  Tightened shared UI primitives (tabs and related components) used by the updated pages so the refreshed screens render cleanly.
+  Aligned marketing and app layout entry points with the new shell so the site loads under the updated branding end to end.
