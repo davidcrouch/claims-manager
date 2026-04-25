@@ -68,6 +68,14 @@ export class EnvironmentVariables {
   @IsString()
   @IsOptional()
   S3_ARCHIVE_PREFIX?: string;
+
+  @IsString()
+  @IsOptional()
+  INTERNAL_API_TOKEN?: string;
+
+  @IsString()
+  @IsOptional()
+  SEED_NEW_TENANTS?: string;
 }
 
 export function validate(config: Record<string, unknown>) {

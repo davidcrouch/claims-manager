@@ -122,6 +122,19 @@ render_env() {
     # GCS HMAC creds (frontend signed-URL usage).
     echo "GCS_HMAC_ACCESS_KEY=$(secret_value gcs-hmac-access-key)"
     echo "GCS_HMAC_SECRET_KEY=$(secret_value gcs-hmac-secret-key)"
+
+    # Shared secret for api-server /internal/* routes. Consumed by both
+    # api-server (validates incoming x-internal-token header) and
+    # auth-server (sends the header when calling seed-tenant after
+    # signup). See apps/api/src/modules/internal/ and
+    # apps/auth-server/src/services/api-seed-client.ts.
+    echo "INTERNAL_API_TOKEN=$(secret_value internal-api-token)"
+    # Feature flag: enable sample-data seeding for brand-new tenants.
+    # Staging = "true"; production keeps this off unless explicitly set.
+    echo "SEED_NEW_TENANTS=true"
+    # auth-server uses this to reach api-server over the compose internal
+    # network. api-server listens on port 3001 inside the container.
+    echo "API_INTERNAL_URL=http://api-server:3001"
   } > "${tmp}"
 
   install -m 0600 "${tmp}" /var/lib/claims-manager/staging.env

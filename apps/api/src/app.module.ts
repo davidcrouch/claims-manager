@@ -33,6 +33,7 @@ import { ContactsModule } from './modules/contacts/contacts.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { ProvidersModule } from './modules/providers/providers.module';
+import { InternalModule } from './modules/internal/internal.module';
 import { TenantInterceptor } from './tenant/tenant.interceptor';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -86,6 +87,7 @@ import { S3Module } from './common/s3/s3.module';
     WebhooksModule,
     DashboardModule,
     ProvidersModule,
+    InternalModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: HttpExceptionFilter },

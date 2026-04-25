@@ -181,6 +181,10 @@ Set-SecretValue -Name 'auth-oidc-cookies-keys'      -Value $cookieKeys          
 
 Set-SecretValue -Name 'frontend-oidc-cookie-secret' -Value (New-Random-Base64 32) -Label '(random 32B base64)'
 
+# Shared secret for api-server /internal/* service-to-service routes
+# (auth-server -> api-server seed-tenant after signup).
+Set-SecretValue -Name 'internal-api-token'          -Value (New-Random-Hex    32) -Label '(random 32B hex)'
+
 # JWKS RSA (7 components) + EC (3 components). Names follow
 # deploy/terraform/modules/secrets/main.tf and the env vars startup.sh
 # renders into staging.env.

@@ -23,11 +23,12 @@
  *   inbound_webhook_events, external_processing_log, external_event_attempts (ingestion).
  */
 import { and, eq } from 'drizzle-orm';
-import type { Seed, SeedContext, SeedResult } from '../lib/runner';
+import type { Seed, SeedContext, SeedLogger, SeedResult } from '../lib/runner';
 import type { SeedDb } from '../lib/db';
 import * as schema from '../../schema';
 
-const PREFIX = 'seed-';
+export const SEED_PREFIX = 'seed-';
+const PREFIX = SEED_PREFIX;
 const COUNT = 8;
 
 const LOG = '[seeds/sample-data]';
@@ -1137,18 +1138,31 @@ async function seedAttachments(params: {
 }
 
 // -----------------------------------------------------------------------
-// Seed definition
+// Reusable entry point (used by CLI seed + api-server /internal/seed-tenant)
 // -----------------------------------------------------------------------
 
-async function run(ctx: SeedContext): Promise<SeedResult> {
-  const { db, logger } = ctx;
-  const stats: Stats = { inserted: 0, skipped: 0 };
+/**
+ * Seed sample data for a specific tenant. Idempotent — re-running is safe
+ * because every row is keyed on a `seed-*`-prefixed unique column.
+ *
+ * This is the single source of truth for the "sample data" shape. Callers:
+ *   - CLI (`pnpm --filter api run db:seed`) → resolves first org, then calls this.
+ *   - api-server `POST /internal/seed-tenant` → called by auth-server after
+ *     a new organization is provisioned on signup.
+ */
+export async function seedSampleDataForTenant(params: {
+  db: SeedDb;
+  tenantId: string;
+  logger?: SeedLogger;
+}): Promise<SeedResult> {
+  const { db, tenantId } = params;
+  const logger: SeedLogger = params.logger ?? {
+    info: (msg) => console.log(`${LOG} ${msg}`),
+    warn: (msg) => console.warn(`${LOG} ${msg}`),
+    error: (msg) => console.error(`${LOG} ${msg}`),
+  };
 
-  const tenantId = await resolveTenantId({ db });
-  if (!tenantId) {
-    logger.warn('no organizations in DB — nothing to seed');
-    return { inserted: 0, updated: 0, skipped: 0, notes: 'no tenant' };
-  }
+  const stats: Stats = { inserted: 0, skipped: 0 };
 
   const lookups = await seedLookups({ db, tenantId, stats });
   logger.info(`lookups ready (${Object.keys(lookups).length})`);
@@ -1188,6 +1202,22 @@ async function run(ctx: SeedContext): Promise<SeedResult> {
     skipped: stats.skipped,
     notes: `tenant=${tenantId}`,
   };
+}
+
+// -----------------------------------------------------------------------
+// Seed definition (CLI path)
+// -----------------------------------------------------------------------
+
+async function run(ctx: SeedContext): Promise<SeedResult> {
+  const { db, logger } = ctx;
+
+  const tenantId = await resolveTenantId({ db });
+  if (!tenantId) {
+    logger.warn('no organizations in DB — nothing to seed');
+    return { inserted: 0, updated: 0, skipped: 0, notes: 'no tenant' };
+  }
+
+  return seedSampleDataForTenant({ db, tenantId, logger });
 }
 
 const seed: Seed = {

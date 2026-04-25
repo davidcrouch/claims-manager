@@ -14,6 +14,22 @@ and staging.
 |---|---|
 | `sample-data` | Populates the first organization in the DB with ~8 rows per core business table (contacts, vendors, claims, jobs, quotes + groups/combos/items, purchase_orders + groups/combos/items, invoices, tasks, messages, appointments + attendees, reports, attachments, lookup_values, claim_contacts, claim_assignees, job_contacts). All rows tagged with `external_reference` (or name/reference) prefixed `seed-*`, so re-running is a no-op. |
 
+### Seeding a specific tenant on demand
+
+`sample-data.seed.ts` also exports a reusable `seedSampleDataForTenant({ db, tenantId, logger? })`
+function. This is the same code path the CLI runs, but parameterised on
+`tenantId` instead of picking the first organization. Callers:
+
+| Caller | How | When |
+|---|---|---|
+| CLI (`pnpm --filter api run db:seed`) | Picks first org, calls `seedSampleDataForTenant` | Manual / bootstrap |
+| `POST /api/v1/internal/seed-tenant` | Body `{ tenantId }`, validates org exists, dispatches in the background | Invoked by `auth-server` after a new tenant signs up |
+
+The `/internal/seed-tenant` route is guarded by `x-internal-token` (shared
+secret) and gated by `SEED_NEW_TENANTS=true`. See
+`apps/api/src/modules/internal/` and
+`apps/auth-server/src/services/api-seed-client.ts`.
+
 ### Seeding a remote environment (e.g. staging)
 
 The seed script reads `DATABASE_URL` from the environment — same as the API server.

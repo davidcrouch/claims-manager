@@ -11,11 +11,12 @@
 import { createLogger, LoggerType } from '../lib/logger.js';
 import { createTelemetryLogger } from '@morezero/telemetry';
 import {
-   createApplicationSignupService,
-   ApplicationSignupService,
+  createApplicationSignupService,
+  ApplicationSignupService,
 } from '../db/services/index.js';
 import type { AccessContext } from '../schemas/index.js';
 import * as bcrypt from 'bcrypt';
+import { triggerSeedTenant } from './api-seed-client.js';
 
 const baseLogger = createLogger('auth-server:internal-signup', LoggerType.NODEJS);
 const log = createTelemetryLogger(baseLogger, 'internal-signup', 'InternalSignupService', 'auth-server');
@@ -128,6 +129,38 @@ class InternalSignupService {
             userIdentityId: result.userIdentityId,
             scenario: result.scenario,
          }, 'auth-server:internal-signup:signup - Signup completed successfully');
+
+         // Fire-and-forget: when a brand-new organization was just created,
+         // ask api-server to populate sample data for it. Gated by
+         // SEED_NEW_TENANTS on both sides; any failure is logged but
+         // never surfaced back to the signup caller.
+         //
+         // Both scenarios below mean "a new org was just provisioned":
+         //   - new_user_new_organization:        brand new user + brand new org (e.g. OAuth first-signup)
+         //   - existing_user_new_organization:   user row already existed when org was created
+         //     (this is the normal password /register flow: the /interaction/:uid/register
+         //     route creates the user first, then /select-organization-submit calls signup()
+         //     a second time to create the org, so the user already exists at that point).
+         const isNewOrgScenario =
+            result.scenario === 'new_user_new_organization' ||
+            result.scenario === 'existing_user_new_organization';
+         if (isNewOrgScenario && result.organizationId) {
+            log.info({
+               functionName,
+               organizationId: result.organizationId,
+               scenario: result.scenario,
+            }, 'auth-server:internal-signup:signup - dispatching sample-data seed for new tenant');
+            try {
+               triggerSeedTenant({ tenantId: result.organizationId });
+            } catch (seedErr: unknown) {
+               const message = seedErr instanceof Error ? seedErr.message : String(seedErr);
+               log.warn({
+                  functionName,
+                  organizationId: result.organizationId,
+                  error: message,
+               }, 'auth-server:internal-signup:signup - triggerSeedTenant dispatch failed (non-fatal)');
+            }
+         }
 
          return {
             success: true,

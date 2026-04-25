@@ -48,6 +48,11 @@ locals {
     # S3 / object-store credentials used by the payload-archive tool.
     "s3-access-key-id",
     "s3-secret-access-key",
+    # Shared secret for api-server /internal/* routes (auth-server → api-server
+    # service-to-service calls, e.g. seed-tenant after signup). See
+    # apps/api/src/modules/internal/ and
+    # apps/auth-server/src/services/api-seed-client.ts.
+    "internal-api-token",
   ]
 }
 

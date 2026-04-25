@@ -79,6 +79,11 @@ services:
       AUTH_AUDIENCE: claims-manager-api
       # auth-server (oidc-provider) exposes JWKS at /jwks; /.well-known/jwks.json 404s.
       AUTH_JWKS_URI: https://${AUTH_HOST}/jwks
+      # Shared-secret header for service-to-service /internal/* routes.
+      # Paired with SEED_NEW_TENANTS to enable per-tenant sample-data
+      # seeding on signup (staging only).
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+      SEED_NEW_TENANTS: ${SEED_NEW_TENANTS:-false}
       LOG_LEVEL: info
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3001/api/v1/health"]
@@ -124,6 +129,11 @@ services:
       CORS_ORIGINS: https://${APP_HOST},https://${API_HOST},https://${AUTH_HOST}
       AUDIENCE: https://${API_HOST}
       MOREZERO_API_URL: https://${API_HOST}
+      # Reach api-server over the compose internal network for /internal/*
+      # service-to-service calls (e.g. seed-tenant after new signup).
+      API_INTERNAL_URL: ${API_INTERNAL_URL:-http://api-server:3001}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+      SEED_NEW_TENANTS: ${SEED_NEW_TENANTS:-false}
     healthcheck:
       # Use 127.0.0.1 (not localhost): node binds IPv4, the base image resolves
       # localhost to ::1 which yields "connection refused".
