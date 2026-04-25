@@ -239,7 +239,7 @@
   Added a backend endpoint for **invoices associated with a given job** so that view can surface them directly.
   Updated the internal mapping reference for quotes and purchase orders to show which parts are now schema-backed and which remain on the mapper backlog.
 
-- `2026-04-25` `PENDING` **5.5 h**
+- `2026-04-25` `99af045` **5.5 h**
   `24 files | +1 292 −719 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Refreshed the create-record pop-up used across the product and switched the connections list to a cleaner table view with consistent filtering and navigation.
   **Unified bottom form drawer across create flows, table-based connections, and detail polish.** Delivered a **new shared create-record pop-up** used everywhere in the product (appointments, jobs, messages, invoices, quotes, and reports) so every creation flow looks and behaves the same way.
