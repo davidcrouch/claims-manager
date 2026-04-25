@@ -3,19 +3,19 @@
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Unplug, Plus } from 'lucide-react';
-import { Card, CardHeader, CardContent, CardFooter } from '@/components/ui/card';
-import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
 import {
   SortTabs,
   SearchInput,
   StatusFilterMenu,
+  ListEmptyState,
   type SortOption,
   type StatusOption,
   buildSortString,
   parseSort,
   compareDates,
   compareValues,
+  formatDate,
 } from '@/components/shared/list-filters';
 import { ConnectionFormDrawer } from './ConnectionFormDrawer';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
@@ -202,79 +202,64 @@ export function ConnectionsPageClient({ connections }: ConnectionsPageClientProp
         style={{ minHeight: 0, overflow: 'auto' }}
       >
         {filtered.length > 0 ? (
-          <div
-            className="grid justify-start"
-            style={{
-              gridTemplateColumns: 'repeat(auto-fill, minmax(265px, 322px))',
-              gap: 'clamp(10px, 2vw, 20px)',
-            }}
-          >
-            {filtered.map((conn) => (
-              <button
-                key={conn.id}
-                type="button"
-                onClick={() => router.push(`/connections/${conn.id}`)}
-                className="text-left"
-              >
-                <Card className="h-36 min-w-[265px] max-w-[322px] border-l-4 border-l-violet-500 transition-colors hover:bg-muted/50">
-                  <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-1">
-                    <div className="flex items-center gap-2">
-                      <Unplug className="h-5 w-5 text-muted-foreground" />
-                      <span className="font-medium truncate">
-                        {conn.name || conn.providerName}
-                      </span>
-                    </div>
-                    <StatusBadge
-                      status={conn.isActive ? 'Active' : 'Inactive'}
-                      variant={conn.isActive ? 'active' : 'inactive'}
-                    />
-                  </CardHeader>
-                  <CardContent className="py-1 space-y-0.5">
-                    <p className="text-sm text-slate-700 truncate">
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <table className="min-w-full divide-y divide-slate-200 text-sm">
+              <thead className="bg-slate-50">
+                <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                  <th scope="col" className="px-4 py-3">Name</th>
+                  <th scope="col" className="px-4 py-3">Provider</th>
+                  <th scope="col" className="px-4 py-3">Environment</th>
+                  <th scope="col" className="px-4 py-3">Status</th>
+                  <th scope="col" className="px-4 py-3">Events</th>
+                  <th scope="col" className="px-4 py-3">Last Event</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filtered.map((conn) => (
+                  <tr
+                    key={conn.id}
+                    onClick={() => router.push(`/connections/${conn.id}`)}
+                    className="cursor-pointer transition-colors hover:bg-slate-50"
+                  >
+                    <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
+                      {conn.name || conn.providerName}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">
                       {conn.providerName}
-                    </p>
-                    <p className="text-xs text-muted-foreground truncate font-mono">
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-slate-600">
                       {conn.environment}
-                    </p>
-                  </CardContent>
-                  <CardFooter className="py-1 text-xs text-muted-foreground">
-                    {conn.totalWebhookEvents} event
-                    {conn.totalWebhookEvents !== 1 ? 's' : ''}
-                    {conn.recentErrorCount > 0 && (
-                      <span className="ml-1 text-destructive">
-                        · {conn.recentErrorCount} error
-                        {conn.recentErrorCount !== 1 ? 's' : ''}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                        {conn.isActive ? 'Active' : 'Inactive'}
                       </span>
-                    )}
-                  </CardFooter>
-                </Card>
-              </button>
-            ))}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      {conn.totalWebhookEvents.toLocaleString()}
+                      {conn.recentErrorCount > 0 && (
+                        <span className="ml-1 text-destructive">
+                          · {conn.recentErrorCount.toLocaleString()} error
+                          {conn.recentErrorCount !== 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      {formatDate(conn.lastEventAt)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         ) : (
-          <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 dark:bg-slate-900/50 dark:border-slate-700">
-            <div className="flex flex-col items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
-                <Unplug className="h-6 w-6 text-muted-foreground" />
-              </div>
-              <p className="text-sm text-muted-foreground">
-                {connections.length === 0
-                  ? 'No connections configured yet.'
-                  : 'No connections match your filters.'}
-              </p>
-              {connections.length === 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCreateOpen(true)}
-                  className="gap-1"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add your first connection
-                </Button>
-              )}
-            </div>
-          </div>
+          <ListEmptyState
+            label={
+              connections.length === 0
+                ? 'No connections configured yet.'
+                : 'No connections match your filters.'
+            }
+          />
         )}
       </div>
 

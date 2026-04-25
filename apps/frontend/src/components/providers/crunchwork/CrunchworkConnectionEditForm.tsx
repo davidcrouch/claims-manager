@@ -216,7 +216,7 @@ export function CrunchworkConnectionEditForm({
         </div>
       )}
 
-      <div className="flex justify-end gap-3 pt-2">
+      <div className="flex items-center justify-between gap-3 pt-2">
         <button
           type="button"
           onClick={onCancel}

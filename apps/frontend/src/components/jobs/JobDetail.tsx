@@ -109,10 +109,10 @@ export function JobDetail({
               key={t.id}
               type="button"
               onClick={() => onTabChange(t.id)}
-              className={`inline-flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px ${
+              className={`inline-flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t-md ${
                 active
-                  ? 'border-emerald-600 text-emerald-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
+                  ? 'border-emerald-600 bg-emerald-50 text-emerald-600'
+                  : 'border-transparent bg-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700'
               }`}
             >
               <Icon className="h-3.5 w-3.5" />

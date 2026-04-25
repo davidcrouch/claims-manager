@@ -1,23 +1,22 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetFooter,
-} from '@/components/ui/sheet';
+import { ClipboardList } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  BottomFormDrawer,
+  BottomFormDrawerBody,
+  BottomFormDrawerError,
+  BottomFormDrawerFooter,
+} from '@/components/forms/BottomFormDrawer';
 import { createReportAction } from '@/app/(app)/mutations';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 const reportFormSchema = z.object({
   jobId: z.string().min(1, 'Job is required'),
@@ -35,7 +34,12 @@ export interface ReportFormDrawerProps {
   claimId: string;
 }
 
-export function ReportFormDrawer({ open, onOpenChange, jobId, claimId }: ReportFormDrawerProps) {
+export function ReportFormDrawer({
+  open,
+  onOpenChange,
+  jobId,
+  claimId,
+}: ReportFormDrawerProps) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -90,39 +94,60 @@ export function ReportFormDrawer({ open, onOpenChange, jobId, claimId }: ReportF
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent>
-        <SheetHeader>
-          <SheetTitle>Create Report</SheetTitle>
-        </SheetHeader>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label htmlFor="title">Title</Label>
-            <Input id="title" {...form.register('title')} placeholder="Report title" />
-            {form.formState.errors.title && (
-              <p className="text-sm text-destructive">{form.formState.errors.title.message}</p>
-            )}
+    <BottomFormDrawer
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Create Report"
+      description="Create a report for this job. Provide a title and attach any notes as JSON or plain text."
+      icon={<ClipboardList className="h-5 w-5" />}
+    >
+      <form
+        onSubmit={form.handleSubmit(onSubmit)}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <BottomFormDrawerBody>
+          <div className="grid grid-cols-1 gap-x-6 gap-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="title">Title</Label>
+              <Input
+                id="title"
+                {...form.register('title')}
+                placeholder="Report title"
+              />
+              {form.formState.errors.title && (
+                <p className="text-sm text-destructive">
+                  {form.formState.errors.title.message}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="reportData">Notes (JSON or plain text)</Label>
+              <Textarea
+                id="reportData"
+                {...form.register('reportData')}
+                placeholder='{"notes": "..."} or plain text'
+                rows={6}
+              />
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="reportData">Notes (JSON or plain text)</Label>
-            <Textarea
-              id="reportData"
-              {...form.register('reportData')}
-              placeholder='{"notes": "..."} or plain text'
-              rows={4}
-            />
-          </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <SheetFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? 'Creating...' : 'Create Report'}
-            </Button>
-          </SheetFooter>
-        </form>
-      </SheetContent>
-    </Sheet>
+
+          <BottomFormDrawerError error={error} />
+        </BottomFormDrawerBody>
+
+        <BottomFormDrawerFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={submitting}>
+            {submitting ? 'Creating...' : 'Create Report'}
+          </Button>
+        </BottomFormDrawerFooter>
+      </form>
+    </BottomFormDrawer>
   );
 }

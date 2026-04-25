@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { FileBarChart, ExternalLink } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { FileBarChart } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ReportFormDrawer } from '@/components/forms/ReportFormDrawer';
@@ -55,12 +55,6 @@ export function JobReportsTab({
       />
 
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <FileBarChart className="h-4 w-4 text-muted-foreground" />
-            Reports ({reports.length})
-          </CardTitle>
-        </CardHeader>
         <CardContent className="px-0">
           {loading ? (
             <p className="px-4 text-sm text-muted-foreground">Loading...</p>
@@ -76,7 +70,6 @@ export function JobReportsTab({
                     <th className="px-4 py-2">Type</th>
                     <th className="px-4 py-2">Status</th>
                     <th className="px-4 py-2">Updated</th>
-                    <th className="px-4 py-2" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
@@ -85,7 +78,12 @@ export function JobReportsTab({
                     return (
                       <tr key={r.id} className="hover:bg-muted/30">
                         <td className="px-4 py-2 font-medium">
-                          {r.title ?? r.id}
+                          <Link
+                            href={`/reports/${r.id}`}
+                            className="text-primary hover:underline"
+                          >
+                            {r.title ?? r.id}
+                          </Link>
                         </td>
                         <td className="px-4 py-2 text-muted-foreground">
                           {r.reference ?? '—'}
@@ -98,14 +96,6 @@ export function JobReportsTab({
                         </td>
                         <td className="px-4 py-2 text-muted-foreground">
                           {formatDate(r.updatedAt)}
-                        </td>
-                        <td className="px-4 py-2 text-right">
-                          <Link
-                            href={`/reports/${r.id}`}
-                            className="inline-flex items-center gap-1 text-primary hover:underline"
-                          >
-                            Open <ExternalLink className="h-3 w-3" />
-                          </Link>
                         </td>
                       </tr>
                     );

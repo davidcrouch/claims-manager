@@ -2,14 +2,28 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Unplug, Loader2 } from 'lucide-react';
+import {
+  Unplug,
+  Loader2,
+  Globe,
+  KeyRound,
+  Activity,
+  AlertTriangle,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { BackButton } from '@/components/layout/BackButton';
+import {
+  DefRow,
+  SectionCard,
+  BoolPill,
+  formatDateTime,
+} from '@/components/shared/detail';
 import { ConnectionWebhookEventsTable } from './ConnectionWebhookEventsTable';
+import { ConnectionEditDrawer } from './ConnectionEditDrawer';
 import { fetchConnectionAction } from '@/app/(app)/connections/actions';
-import { CrunchworkConnectionEditForm } from '@/components/providers/crunchwork/CrunchworkConnectionEditForm';
 import type { ConnectionDetail, ProviderConnection } from '@/types/api';
 
 function ConnectionPageHeader({
@@ -49,7 +63,7 @@ export function ConnectionDetailContent({
   const router = useRouter();
   const [connection, setConnection] = useState<ConnectionDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(false);
+  const [editDrawerOpen, setEditDrawerOpen] = useState(false);
   const [tab, setTab] = useState<Tab>('events');
 
   const loadConnection = useCallback(async () => {
@@ -82,10 +96,7 @@ export function ConnectionDetailContent({
           <button
             key={t}
             type="button"
-            onClick={() => {
-              setTab(t);
-              setEditing(false);
-            }}
+            onClick={() => setTab(t)}
             className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px ${
               tab === t
                 ? 'border-violet-600 text-violet-600'
@@ -99,138 +110,181 @@ export function ConnectionDetailContent({
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto bg-white px-12 py-8">
-        <div className="max-w-4xl">
-          {tab === 'events' && (
+      <div className="flex-1 overflow-y-auto bg-white">
+        {tab === 'events' && (
+          <div className="px-6 pb-6 pt-4">
             <ConnectionWebhookEventsTable connectionId={connection.id} />
-          )}
-          {tab === 'details' && (
+          </div>
+        )}
+        {tab === 'details' && (
+          <div className="px-8 py-6">
             <DetailsTab
               connection={connection}
-              editing={editing}
-              onEdit={() => setEditing(true)}
-              onCancelEdit={() => setEditing(false)}
-              onSaved={() => {
-                setEditing(false);
-                void loadConnection();
-                router.refresh();
-              }}
+              onEdit={() => setEditDrawerOpen(true)}
             />
-          )}
-        </div>
+          </div>
+        )}
       </div>
+
+      <ConnectionEditDrawer
+        open={editDrawerOpen}
+        onOpenChange={setEditDrawerOpen}
+        connection={connectionDetailToProviderConnection(connection)}
+        onSaved={() => {
+          setEditDrawerOpen(false);
+          void loadConnection();
+          router.refresh();
+        }}
+      />
     </div>
   );
 }
 
 function DetailsTab({
   connection,
-  editing,
   onEdit,
-  onCancelEdit,
-  onSaved,
 }: {
   connection: ConnectionDetail;
-  editing: boolean;
   onEdit: () => void;
-  onCancelEdit: () => void;
-  onSaved: () => void;
 }) {
-  if (editing) {
-    if (connection.providerCode === 'crunchwork') {
-      return (
-        <CrunchworkConnectionEditForm
-          connection={connectionDetailToProviderConnection(connection)}
-          onCancel={onCancelEdit}
-          onSaved={onSaved}
-        />
-      );
-    }
-    return (
-      <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
-        <p className="text-sm text-amber-700">
-          No edit form registered for provider &quot;{connection.providerCode}&quot;.
-        </p>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center justify-end">
-        <Button variant="outline" size="sm" onClick={onEdit}>
+        <Button size="sm" onClick={onEdit}>
           Edit Connection
         </Button>
       </div>
-      <div className="grid grid-cols-2 gap-x-4 gap-y-5">
-        <Field label="Connection Name" value={connection.name} />
-        <Field label="Provider" value={connection.providerName} />
-        <Field label="Environment" value={connection.environment} />
-        <Field label="Active" value={connection.isActive ? 'Yes' : 'No'} />
-        <Field label="API Hostname" value={connection.baseUrl} mono />
-        <Field
-          label="REST API Base URL"
-          value={connection.baseApi ?? '—'}
-          mono
-        />
-        <Field label="Auth URL" value={connection.authUrl ?? '—'} mono />
-        <Field
-          label="Client Identifier"
-          value={connection.clientIdentifier ?? '—'}
-          mono
-        />
-        <Field
-          label="Vendor Tenant ID"
-          value={connection.providerTenantId ?? '—'}
-          mono
-        />
-        <Field
-          label="Last Sync"
-          value={
-            connection.lastSyncAt
-              ? new Date(connection.lastSyncAt).toLocaleString()
-              : 'Never'
-          }
-        />
-        <Field
-          label="Last Event"
-          value={
-            connection.lastEventAt
-              ? new Date(connection.lastEventAt).toLocaleString()
-              : 'Never'
-          }
-        />
-        <Field
-          label="Errors (total)"
-          value={String(connection.recentErrorCount)}
-        />
+
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card size="sm">
+          <CardContent className="px-4">
+            <p className="text-xs text-muted-foreground">Status</p>
+            <p className="mt-1 text-sm font-medium">
+              {connection.isActive ? 'Active' : 'Inactive'}
+            </p>
+          </CardContent>
+        </Card>
+        <Card size="sm">
+          <CardContent className="px-4">
+            <p className="text-xs text-muted-foreground">Environment</p>
+            <p className="mt-1 text-sm font-medium capitalize">
+              {connection.environment}
+            </p>
+          </CardContent>
+        </Card>
+        <Card size="sm">
+          <CardContent className="px-4">
+            <p className="text-xs text-muted-foreground">Last Sync</p>
+            <p className="mt-1 text-sm font-medium">
+              {connection.lastSyncAt
+                ? formatDateTime(connection.lastSyncAt)
+                : 'Never'}
+            </p>
+          </CardContent>
+        </Card>
+        <Card size="sm">
+          <CardContent className="px-4">
+            <p className="text-xs text-muted-foreground">Errors (total)</p>
+            <p className="mt-1 text-sm font-medium">
+              {connection.recentErrorCount}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <SectionCard
+          title="Connection"
+          icon={<Unplug className="h-4 w-4 text-muted-foreground" />}
+        >
+          <DefRow label="Connection name" value={connection.name || '—'} />
+          <DefRow label="Provider" value={connection.providerName} />
+          <DefRow
+            label="Environment"
+            value={
+              <span className="capitalize">{connection.environment}</span>
+            }
+          />
+          <DefRow label="Auth type" value={connection.authType ?? '—'} />
+          <DefRow label="Active" value={<BoolPill value={connection.isActive} />} />
+        </SectionCard>
+
+        <SectionCard
+          title="API Endpoints"
+          icon={<Globe className="h-4 w-4 text-muted-foreground" />}
+        >
+          <DefRow label="API hostname" value={<Mono value={connection.baseUrl} />} />
+          <DefRow
+            label="REST API base URL"
+            value={<Mono value={connection.baseApi} />}
+          />
+          <DefRow
+            label="Auth token URL"
+            value={<Mono value={connection.authUrl} />}
+          />
+        </SectionCard>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <SectionCard
+          title="Identifiers"
+          icon={<KeyRound className="h-4 w-4 text-muted-foreground" />}
+        >
+          <DefRow
+            label="Client identifier"
+            value={<Mono value={connection.clientIdentifier} />}
+          />
+          <DefRow
+            label="Vendor tenant ID"
+            value={<Mono value={connection.providerTenantId} />}
+          />
+        </SectionCard>
+
+        <SectionCard
+          title="Activity"
+          icon={<Activity className="h-4 w-4 text-muted-foreground" />}
+        >
+          <DefRow
+            label="Last sync"
+            value={
+              connection.lastSyncAt
+                ? formatDateTime(connection.lastSyncAt)
+                : 'Never'
+            }
+          />
+          <DefRow
+            label="Last event"
+            value={
+              connection.lastEventAt
+                ? formatDateTime(connection.lastEventAt)
+                : 'Never'
+            }
+          />
+          <DefRow
+            label="Errors (total)"
+            value={
+              connection.recentErrorCount > 0 ? (
+                <span className="inline-flex items-center gap-1 text-destructive">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  {connection.recentErrorCount}
+                </span>
+              ) : (
+                '0'
+              )
+            }
+          />
+        </SectionCard>
       </div>
     </div>
   );
 }
 
-function Field({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
+function Mono({ value }: { value?: string | null }) {
+  if (!value) return <span className="text-muted-foreground">—</span>;
   return (
-    <div className="space-y-1.5">
-      <p className="text-xs text-slate-400">{label}</p>
-      <p
-        className={
-          mono
-            ? 'font-mono text-xs text-slate-700 truncate'
-            : 'text-sm text-slate-700'
-        }
-      >
-        {value}
-      </p>
-    </div>
+    <span className="font-mono text-xs break-all text-foreground">
+      {value}
+    </span>
   );
 }
 

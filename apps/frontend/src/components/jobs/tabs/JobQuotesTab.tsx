@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { FileText, ExternalLink } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { FileText } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { QuoteFormDrawer } from '@/components/forms/QuoteFormDrawer';
@@ -55,12 +55,6 @@ export function JobQuotesTab({
       />
 
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <FileText className="h-4 w-4 text-muted-foreground" />
-            Quotes ({quotes.length})
-          </CardTitle>
-        </CardHeader>
         <CardContent className="px-0">
           {loading ? (
             <p className="px-4 text-sm text-muted-foreground">Loading...</p>
@@ -76,7 +70,6 @@ export function JobQuotesTab({
                     <th className="px-4 py-2">Status</th>
                     <th className="px-4 py-2">Quote date</th>
                     <th className="px-4 py-2 text-right">Total</th>
-                    <th className="px-4 py-2" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
@@ -85,7 +78,12 @@ export function JobQuotesTab({
                     return (
                       <tr key={q.id} className="hover:bg-muted/30">
                         <td className="px-4 py-2 font-medium">
-                          {q.quoteNumber ?? q.id}
+                          <Link
+                            href={`/quotes/${q.id}`}
+                            className="text-primary hover:underline"
+                          >
+                            {q.quoteNumber ?? q.id}
+                          </Link>
                         </td>
                         <td className="px-4 py-2 text-muted-foreground">
                           {q.externalReference ?? '—'}
@@ -98,14 +96,6 @@ export function JobQuotesTab({
                         </td>
                         <td className="px-4 py-2 text-right font-medium">
                           {formatCurrency(q.totalAmount)}
-                        </td>
-                        <td className="px-4 py-2 text-right">
-                          <Link
-                            href={`/quotes/${q.id}`}
-                            className="inline-flex items-center gap-1 text-primary hover:underline"
-                          >
-                            Open <ExternalLink className="h-3 w-3" />
-                          </Link>
                         </td>
                       </tr>
                     );

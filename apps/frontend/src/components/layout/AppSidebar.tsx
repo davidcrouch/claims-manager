@@ -21,7 +21,6 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -78,28 +77,32 @@ export function AppSidebar({ user }: AppSidebarProps) {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader>
+      <SidebarHeader className="pb-5">
         <Link
           href="/dashboard"
-          className="group/brand flex items-center gap-2.5 px-2 py-1.5 text-sidebar-foreground transition-opacity duration-200 hover:opacity-90"
+          className="group/brand flex items-start gap-3 px-2 py-1.5 text-sidebar-foreground transition-opacity duration-200 hover:opacity-90"
         >
-          <span className="relative flex size-8 shrink-0 overflow-hidden rounded-md shadow-md ring-1 ring-white/15 transition-transform duration-300 group-hover/brand:scale-105">
+          <span className="relative mt-0.5 flex size-11 shrink-0 overflow-hidden rounded-md shadow-md ring-1 ring-white/15 transition-transform duration-300 group-hover/brand:scale-105">
             <Image
               src="/ensure_logo_dark.png"
               alt=""
-              width={32}
-              height={32}
+              width={44}
+              height={44}
               className="size-full object-contain"
             />
           </span>
-          <span className="truncate text-lg font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
-            EnsureOS
+          <span className="flex min-w-0 flex-col gap-0.5 group-data-[collapsible=icon]:hidden">
+            <span className="truncate text-lg font-semibold tracking-tight">
+              EnsureOS
+            </span>
+            <span className="truncate text-xs leading-tight text-sidebar-foreground/65">
+              Claims workspace
+            </span>
           </span>
         </Link>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {navItems.map((item) => {
@@ -125,7 +128,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter>
+      <SidebarFooter className="pb-6">
         <SidebarMenu>
           <SidebarMenuItem>
             <DropdownMenu>

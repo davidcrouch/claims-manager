@@ -238,3 +238,13 @@
   Extended the shared frontend data shapes so the new screens read the enriched fields without manual casting.
   Added a backend endpoint for **invoices associated with a given job** so that view can surface them directly.
   Updated the internal mapping reference for quotes and purchase orders to show which parts are now schema-backed and which remain on the mapper backlog.
+
+- `2026-04-25` `PENDING` **5.5 h**
+  `24 files | +1 292 −719 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  Lay summary: Refreshed the create-record pop-up used across the product and switched the connections list to a cleaner table view with consistent filtering and navigation.
+  **Unified bottom form drawer across create flows, table-based connections, and detail polish.** Delivered a **new shared create-record pop-up** used everywhere in the product (appointments, jobs, messages, invoices, quotes, and reports) so every creation flow looks and behaves the same way.
+  Rebuilt the **connections list** as a clean table with sort, search, and status-filter controls matching the rest of the product, replacing the older card-grid layout.
+  Refreshed the **connection detail screen** with a side-sheet edit flow, grouped detail sections, and a consistent activity-events table using the same search, sort, and status controls.
+  Polished the **claim, job, and purchase-order tabs** so the active tab reads more clearly, and made related-item tables link directly from each row's title instead of a trailing "Open" action.
+  Updated the **application shell** with a larger brand mark, a new tagline, and a tightened dashboard header so the product reads as one coherent workspace.
+  Aligned every create flow on the new drawer so future forms drop in without duplicating layout code.

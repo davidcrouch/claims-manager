@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Receipt } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import Link from 'next/link';
+import { Card, CardContent } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { fetchJobInvoicesAction } from '@/app/(app)/jobs/[id]/actions';
 import { formatDate, formatCurrency, PhaseUnavailable } from '@/components/shared/detail';
@@ -37,12 +37,6 @@ export function JobInvoicesTab({ jobId }: { jobId: string }) {
 
   return (
     <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm">
-          <Receipt className="h-4 w-4 text-muted-foreground" />
-          Invoices ({invoices.length})
-        </CardTitle>
-      </CardHeader>
       <CardContent className="px-0">
         {invoices.length === 0 ? (
           <p className="px-4 text-sm text-muted-foreground">
@@ -68,7 +62,12 @@ export function JobInvoicesTab({ jobId }: { jobId: string }) {
                   return (
                     <tr key={inv.id} className="hover:bg-muted/30">
                       <td className="px-4 py-2 font-medium">
-                        {inv.invoiceNumber ?? inv.id}
+                        <Link
+                          href={`/invoices/${inv.id}`}
+                          className="text-primary hover:underline"
+                        >
+                          {inv.invoiceNumber ?? inv.id}
+                        </Link>
                       </td>
                       <td className="px-4 py-2 text-muted-foreground">
                         {formatDate(inv.issueDate ?? inv.createdAt)}

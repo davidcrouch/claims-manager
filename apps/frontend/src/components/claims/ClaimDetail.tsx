@@ -23,7 +23,6 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { Button } from '@/components/ui/button';
 import { BackButton } from '@/components/layout/BackButton';
 import {
   DefRow,
@@ -618,12 +617,6 @@ function JobsTab({ claim }: { claim: Claim }) {
   const jobs = claim.jobs ?? [];
   return (
     <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm">
-          <Briefcase className="h-4 w-4 text-muted-foreground" />
-          Linked jobs ({jobs.length})
-        </CardTitle>
-      </CardHeader>
       <CardContent className="px-0">
         {jobs.length === 0 ? (
           <p className="px-4 text-sm text-muted-foreground">
@@ -639,7 +632,6 @@ function JobsTab({ claim }: { claim: Claim }) {
                   <th className="px-4 py-2">Status</th>
                   <th className="px-4 py-2">Request date</th>
                   <th className="px-4 py-2">Updated</th>
-                  <th className="px-4 py-2" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -651,7 +643,12 @@ function JobsTab({ claim }: { claim: Claim }) {
                   return (
                     <tr key={job.id} className="hover:bg-muted/30">
                       <td className="px-4 py-2 font-medium">
-                        {job.externalReference ?? job.id}
+                        <Link
+                          href={`/jobs/${job.id}`}
+                          className="text-primary hover:underline"
+                        >
+                          {job.externalReference ?? job.id}
+                        </Link>
                       </td>
                       <td className="px-4 py-2 text-muted-foreground">
                         {typeName}
@@ -664,13 +661,6 @@ function JobsTab({ claim }: { claim: Claim }) {
                       </td>
                       <td className="px-4 py-2 text-muted-foreground">
                         {formatDate(job.updatedAt)}
-                      </td>
-                      <td className="px-4 py-2 text-right">
-                        <Link href={`/jobs/${job.id}`}>
-                          <Button variant="ghost" size="sm">
-                            Open
-                          </Button>
-                        </Link>
                       </td>
                     </tr>
                   );
@@ -873,10 +863,10 @@ export function ClaimDetail({ claim }: { claim: Claim }) {
               key={t.id}
               type="button"
               onClick={() => setTab(t.id)}
-              className={`inline-flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px ${
+              className={`inline-flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t-md ${
                 active
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
+                  ? 'border-blue-600 bg-blue-50 text-blue-600'
+                  : 'border-transparent bg-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700'
               }`}
             >
               <Icon className="h-3.5 w-3.5" />

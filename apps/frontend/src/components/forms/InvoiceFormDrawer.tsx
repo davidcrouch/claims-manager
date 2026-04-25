@@ -1,15 +1,11 @@
 'use client';
 
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetFooter,
-} from '@/components/ui/sheet';
+import { Receipt } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,9 +16,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  BottomFormDrawer,
+  BottomFormDrawerBody,
+  BottomFormDrawerError,
+  BottomFormDrawerFooter,
+} from '@/components/forms/BottomFormDrawer';
 import { createInvoiceAction } from '@/app/(app)/mutations';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import type { PurchaseOrder } from '@/types/api';
 
 const invoiceFormSchema = z.object({
@@ -38,7 +38,11 @@ export interface InvoiceFormDrawerProps {
   purchaseOrders: PurchaseOrder[];
 }
 
-export function InvoiceFormDrawer({ open, onOpenChange, purchaseOrders }: InvoiceFormDrawerProps) {
+export function InvoiceFormDrawer({
+  open,
+  onOpenChange,
+  purchaseOrders,
+}: InvoiceFormDrawerProps) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,59 +71,80 @@ export function InvoiceFormDrawer({ open, onOpenChange, purchaseOrders }: Invoic
         setError(result.error ?? 'Failed to submit invoice');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to submit invoice');
+      setError(
+        err instanceof Error ? err.message : 'Failed to submit invoice',
+      );
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent>
-        <SheetHeader>
-          <SheetTitle>Submit Invoice</SheetTitle>
-        </SheetHeader>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label htmlFor="purchaseOrderId">Purchase Order</Label>
-            <Select
-              value={form.watch('purchaseOrderId')}
-              onValueChange={(v) => form.setValue('purchaseOrderId', v ?? '')}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select purchase order" />
-              </SelectTrigger>
-              <SelectContent>
-                {purchaseOrders.map((po) => (
-                  <SelectItem key={po.id} value={po.id}>
-                    {po.purchaseOrderNumber ?? po.externalId ?? po.id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {form.formState.errors.purchaseOrderId && (
-              <p className="text-sm text-destructive">{form.formState.errors.purchaseOrderId.message}</p>
-            )}
+    <BottomFormDrawer
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Submit Invoice"
+      description="Submit an invoice for an existing purchase order. Optionally include your invoice number for reference."
+      icon={<Receipt className="h-5 w-5" />}
+    >
+      <form
+        onSubmit={form.handleSubmit(onSubmit)}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <BottomFormDrawerBody>
+          <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="purchaseOrderId">Purchase Order</Label>
+              <Select
+                value={form.watch('purchaseOrderId')}
+                onValueChange={(v) =>
+                  form.setValue('purchaseOrderId', v ?? '')
+                }
+              >
+                <SelectTrigger id="purchaseOrderId">
+                  <SelectValue placeholder="Select purchase order" />
+                </SelectTrigger>
+                <SelectContent>
+                  {purchaseOrders.map((po) => (
+                    <SelectItem key={po.id} value={po.id}>
+                      {po.purchaseOrderNumber ?? po.externalId ?? po.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {form.formState.errors.purchaseOrderId && (
+                <p className="text-sm text-destructive">
+                  {form.formState.errors.purchaseOrderId.message}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="invoiceNumber">Invoice Number (optional)</Label>
+              <Input
+                id="invoiceNumber"
+                {...form.register('invoiceNumber')}
+                placeholder="e.g. INV-001"
+              />
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="invoiceNumber">Invoice Number (optional)</Label>
-            <Input
-              id="invoiceNumber"
-              {...form.register('invoiceNumber')}
-              placeholder="e.g. INV-001"
-            />
-          </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <SheetFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? 'Submitting...' : 'Submit Invoice'}
-            </Button>
-          </SheetFooter>
-        </form>
-      </SheetContent>
-    </Sheet>
+
+          <BottomFormDrawerError error={error} />
+        </BottomFormDrawerBody>
+
+        <BottomFormDrawerFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={submitting}>
+            {submitting ? 'Submitting...' : 'Submit Invoice'}
+          </Button>
+        </BottomFormDrawerFooter>
+      </form>
+    </BottomFormDrawer>
   );
 }

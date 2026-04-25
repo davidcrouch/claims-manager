@@ -1,21 +1,19 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetFooter,
-} from '@/components/ui/sheet';
+import { FileSignature } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
+import {
+  BottomFormDrawer,
+  BottomFormDrawerBody,
+  BottomFormDrawerError,
+  BottomFormDrawerFooter,
+} from '@/components/forms/BottomFormDrawer';
 import { createQuoteAction } from '@/app/(app)/mutations';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 const quoteFormSchema = z.object({
   jobId: z.string().min(1, 'Job is required'),
@@ -31,7 +29,12 @@ export interface QuoteFormDrawerProps {
   claimId: string;
 }
 
-export function QuoteFormDrawer({ open, onOpenChange, jobId, claimId }: QuoteFormDrawerProps) {
+export function QuoteFormDrawer({
+  open,
+  onOpenChange,
+  jobId,
+  claimId,
+}: QuoteFormDrawerProps) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,26 +70,39 @@ export function QuoteFormDrawer({ open, onOpenChange, jobId, claimId }: QuoteFor
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent>
-        <SheetHeader>
-          <SheetTitle>Create Quote</SheetTitle>
-        </SheetHeader>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
+    <BottomFormDrawer
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Create Quote"
+      description="Create a new quote for this job. The Crunchwork API will generate the quote details."
+      icon={<FileSignature className="h-5 w-5" />}
+    >
+      <form
+        onSubmit={form.handleSubmit(onSubmit)}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <BottomFormDrawerBody>
           <p className="text-sm text-muted-foreground">
-            Creating quote for this job. The Crunchwork API will generate quote details.
+            Creating a quote for this job. The Crunchwork API will generate the
+            quote details.
           </p>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <SheetFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? 'Creating...' : 'Create Quote'}
-            </Button>
-          </SheetFooter>
-        </form>
-      </SheetContent>
-    </Sheet>
+
+          <BottomFormDrawerError error={error} />
+        </BottomFormDrawerBody>
+
+        <BottomFormDrawerFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={submitting}>
+            {submitting ? 'Creating...' : 'Create Quote'}
+          </Button>
+        </BottomFormDrawerFooter>
+      </form>
+    </BottomFormDrawer>
   );
 }

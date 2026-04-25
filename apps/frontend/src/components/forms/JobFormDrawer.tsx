@@ -5,13 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetFooter,
-} from '@/components/ui/sheet';
+import { Briefcase } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,6 +17,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  BottomFormDrawer,
+  BottomFormDrawerBody,
+  BottomFormDrawerError,
+  BottomFormDrawerFooter,
+} from '@/components/forms/BottomFormDrawer';
 import { createJobAction } from '@/app/(app)/jobs/mutations';
 import type { Claim } from '@/types/api';
 
@@ -44,7 +44,12 @@ export interface JobFormDrawerProps {
   jobTypes: { id: string; name?: string }[];
 }
 
-export function JobFormDrawer({ open, onOpenChange, claims, jobTypes }: JobFormDrawerProps) {
+export function JobFormDrawer({
+  open,
+  onOpenChange,
+  claims,
+  jobTypes,
+}: JobFormDrawerProps) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,84 +93,105 @@ export function JobFormDrawer({ open, onOpenChange, claims, jobTypes }: JobFormD
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent>
-        <SheetHeader>
-          <SheetTitle>Create Job</SheetTitle>
-        </SheetHeader>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label htmlFor="claimId">Claim</Label>
-            <Select
-              value={form.watch('claimId')}
-              onValueChange={(v) => form.setValue('claimId', v ?? '')}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select claim" />
-              </SelectTrigger>
-              <SelectContent>
-                {claims.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.claimNumber ?? c.externalReference ?? c.id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {form.formState.errors.claimId && (
-              <p className="text-sm text-destructive">{form.formState.errors.claimId.message}</p>
-            )}
+    <BottomFormDrawer
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Create Job"
+      description="Add a new job to an existing claim. Choose the job type, include any instructions, and set the excess if applicable."
+      icon={<Briefcase className="h-5 w-5" />}
+    >
+      <form
+        onSubmit={form.handleSubmit(onSubmit)}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <BottomFormDrawerBody>
+          <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="claimId">Claim</Label>
+              <Select
+                value={form.watch('claimId')}
+                onValueChange={(v) => form.setValue('claimId', v ?? '')}
+              >
+                <SelectTrigger id="claimId">
+                  <SelectValue placeholder="Select claim" />
+                </SelectTrigger>
+                <SelectContent>
+                  {claims.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.claimNumber ?? c.externalReference ?? c.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {form.formState.errors.claimId && (
+                <p className="text-sm text-destructive">
+                  {form.formState.errors.claimId.message}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="jobTypeId">Job Type</Label>
+              <Select
+                value={form.watch('jobTypeId')}
+                onValueChange={(v) => form.setValue('jobTypeId', v ?? '')}
+              >
+                <SelectTrigger id="jobTypeId">
+                  <SelectValue placeholder="Select job type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {jobTypes.map((jt) => (
+                    <SelectItem key={jt.id} value={jt.id}>
+                      {jt.name ?? jt.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {form.formState.errors.jobTypeId && (
+                <p className="text-sm text-destructive">
+                  {form.formState.errors.jobTypeId.message}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="jobInstructions">Instructions</Label>
+              <Textarea
+                id="jobInstructions"
+                {...form.register('jobInstructions')}
+                placeholder="Job instructions..."
+                rows={4}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="excess">Excess</Label>
+              <Input
+                id="excess"
+                type="number"
+                step="0.01"
+                {...form.register('excess')}
+                placeholder="0.00"
+              />
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="jobTypeId">Job Type</Label>
-            <Select
-              value={form.watch('jobTypeId')}
-              onValueChange={(v) => form.setValue('jobTypeId', v ?? '')}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select job type" />
-              </SelectTrigger>
-              <SelectContent>
-                {jobTypes.map((jt) => (
-                  <SelectItem key={jt.id} value={jt.id}>
-                    {jt.name ?? jt.id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {form.formState.errors.jobTypeId && (
-              <p className="text-sm text-destructive">{form.formState.errors.jobTypeId.message}</p>
-            )}
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="jobInstructions">Instructions</Label>
-            <Textarea
-              id="jobInstructions"
-              {...form.register('jobInstructions')}
-              placeholder="Job instructions..."
-              rows={3}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="excess">Excess</Label>
-            <Input
-              id="excess"
-              type="number"
-              step="0.01"
-              {...form.register('excess')}
-              placeholder="0.00"
-            />
-          </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <SheetFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? 'Creating...' : 'Create Job'}
-            </Button>
-          </SheetFooter>
-        </form>
-      </SheetContent>
-    </Sheet>
+
+          <BottomFormDrawerError error={error} />
+        </BottomFormDrawerBody>
+
+        <BottomFormDrawerFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={submitting}>
+            {submitting ? 'Creating...' : 'Create Job'}
+          </Button>
+        </BottomFormDrawerFooter>
+      </form>
+    </BottomFormDrawer>
   );
 }

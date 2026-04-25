@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { FileSignature, ExternalLink } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { fetchJobPurchaseOrdersAction } from '@/app/(app)/jobs/[id]/actions';
 import { formatDate, formatCurrency } from '@/components/shared/detail';
@@ -30,12 +29,6 @@ export function JobPurchaseOrdersTab({ jobId }: { jobId: string }) {
 
   return (
     <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm">
-          <FileSignature className="h-4 w-4 text-muted-foreground" />
-          Purchase Orders ({pos.length})
-        </CardTitle>
-      </CardHeader>
       <CardContent className="px-0">
         {loading ? (
           <p className="px-4 text-sm text-muted-foreground">Loading...</p>
@@ -54,7 +47,6 @@ export function JobPurchaseOrdersTab({ jobId }: { jobId: string }) {
                   <th className="px-4 py-2">Vendor</th>
                   <th className="px-4 py-2">Updated</th>
                   <th className="px-4 py-2 text-right">Total</th>
-                  <th className="px-4 py-2" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -63,7 +55,12 @@ export function JobPurchaseOrdersTab({ jobId }: { jobId: string }) {
                   return (
                     <tr key={po.id} className="hover:bg-muted/30">
                       <td className="px-4 py-2 font-medium">
-                        {po.purchaseOrderNumber ?? po.id}
+                        <Link
+                          href={`/purchase-orders/${po.id}`}
+                          className="text-primary hover:underline"
+                        >
+                          {po.purchaseOrderNumber ?? po.id}
+                        </Link>
                       </td>
                       <td className="px-4 py-2 text-muted-foreground">
                         {po.externalId ?? '—'}
@@ -79,14 +76,6 @@ export function JobPurchaseOrdersTab({ jobId }: { jobId: string }) {
                       </td>
                       <td className="px-4 py-2 text-right font-medium">
                         {formatCurrency(po.totalAmount)}
-                      </td>
-                      <td className="px-4 py-2 text-right">
-                        <Link
-                          href={`/purchase-orders/${po.id}`}
-                          className="inline-flex items-center gap-1 text-primary hover:underline"
-                        >
-                          Open <ExternalLink className="h-3 w-3" />
-                        </Link>
                       </td>
                     </tr>
                   );
