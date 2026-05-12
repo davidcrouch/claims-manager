@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, desc, asc, sql } from 'drizzle-orm';
+import { eq, and, desc, asc, lt, sql } from 'drizzle-orm';
 import { DRIZZLE } from '../drizzle.module';
 import type { DrizzleDB } from '../drizzle.module';
 import { tasks } from '../schema';
@@ -19,6 +19,10 @@ export class TasksRepository {
     jobId?: string;
     claimId?: string;
     status?: string;
+    priority?: string;
+    entityType?: string;
+    entityId?: string;
+    assignedToUserId?: string;
   }): Promise<{ data: TaskRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
@@ -33,6 +37,18 @@ export class TasksRepository {
     }
     if (params.status) {
       whereClause = and(whereClause, eq(tasks.status, params.status))!;
+    }
+    if (params.priority) {
+      whereClause = and(whereClause, eq(tasks.priority, params.priority))!;
+    }
+    if (params.entityType) {
+      whereClause = and(whereClause, eq(tasks.relatedEntityType, params.entityType))!;
+    }
+    if (params.entityId) {
+      whereClause = and(whereClause, eq(tasks.relatedEntityId, params.entityId))!;
+    }
+    if (params.assignedToUserId) {
+      whereClause = and(whereClause, eq(tasks.assignedToUserId, params.assignedToUserId))!;
     }
 
     const [data, countResult] = await Promise.all([
@@ -51,6 +67,38 @@ export class TasksRepository {
 
     const total = countResult[0]?.count ?? 0;
     return { data, total };
+  }
+
+  async findByEntity(params: {
+    tenantId: string;
+    entityType: string;
+    entityId: string;
+  }): Promise<TaskRow[]> {
+    return this.db
+      .select()
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.tenantId, params.tenantId),
+          eq(tasks.relatedEntityType, params.entityType),
+          eq(tasks.relatedEntityId, params.entityId),
+        ),
+      )
+      .orderBy(asc(tasks.dueDate));
+  }
+
+  async findOverdue(params: { tenantId: string }): Promise<TaskRow[]> {
+    return this.db
+      .select()
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.tenantId, params.tenantId),
+          eq(tasks.status, 'Open'),
+          lt(tasks.dueDate, new Date()),
+        ),
+      )
+      .orderBy(asc(tasks.dueDate));
   }
 
   async findOne(params: { id: string; tenantId: string }): Promise<TaskRow | null> {

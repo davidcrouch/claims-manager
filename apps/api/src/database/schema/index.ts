@@ -632,6 +632,8 @@ export const tasks = pgTable(
       .notNull()
       .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     taskTypeLookupId: uuid('task_type_lookup_id'),
+    relatedEntityType: text('related_entity_type').notNull(),
+    relatedEntityId: uuid('related_entity_id').notNull(),
     claimId: uuid('claim_id').references(() => claims.id, { onDelete: 'cascade' }),
     jobId: uuid('job_id').references(() => jobs.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
@@ -648,12 +650,22 @@ export const tasks = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    check('chk_task_parent', sql`claim_id IS NOT NULL OR job_id IS NOT NULL`),
+    check(
+      'chk_task_entity_type',
+      sql`related_entity_type IN (
+        'Job', 'Claim', 'Quote', 'WorkOrder', 'Invoice',
+        'RFQ', 'Proposal', 'PurchaseOrder', 'Bill',
+        'Appointment', 'Contact'
+      )`,
+    ),
     check('chk_task_priority', sql`priority IN ('Low','Medium','High','Critical')`),
     check('chk_task_status', sql`status IN ('Open','Completed','Failed')`),
+    index('idx_tasks_entity').on(t.tenantId, t.relatedEntityType, t.relatedEntityId),
     index('idx_tasks_claim').on(t.tenantId, t.claimId),
     index('idx_tasks_job').on(t.tenantId, t.jobId),
     index('idx_tasks_status').on(t.tenantId, t.status),
+    index('idx_tasks_due_date').on(t.tenantId, t.dueDate),
+    index('idx_tasks_assigned').on(t.tenantId, t.assignedToUserId),
   ],
 );
 
@@ -1102,6 +1114,478 @@ export const externalEventAttempts = pgTable(
   },
   (t) => [
     uniqueIndex('UQ_event_attempt').on(t.eventId, t.attemptNumber),
+  ],
+);
+
+// Work Orders
+export const workOrders = pgTable(
+  'work_orders',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    purchaseOrderId: uuid('purchase_order_id')
+      .notNull()
+      .references(() => purchaseOrders.id),
+    claimId: uuid('claim_id').references(() => claims.id, { onDelete: 'cascade' }),
+    jobId: uuid('job_id').references(() => jobs.id, { onDelete: 'cascade' }),
+    vendorId: uuid('vendor_id').references(() => vendors.id),
+    sourceTenantId: uuid('source_tenant_id'),
+    sourceExternalReference: text('source_external_reference'),
+    externalId: text('external_id'),
+    workOrderNumber: text('work_order_number'),
+    name: text('name'),
+    statusLookupId: uuid('status_lookup_id').references(() => lookupValues.id),
+    workOrderTypeLookupId: uuid('work_order_type_lookup_id').references(() => lookupValues.id),
+    startDate: date('start_date'),
+    endDate: date('end_date'),
+    startTime: time('start_time'),
+    endTime: time('end_time'),
+    note: text('note'),
+    scopeOfWork: text('scope_of_work'),
+    woTo: jsonb('wo_to').notNull().default({}),
+    woFor: jsonb('wo_for').notNull().default({}),
+    woFrom: jsonb('wo_from').notNull().default({}),
+    serviceWindow: jsonb('service_window').notNull().default({}),
+    woToEmail: text('wo_to_email'),
+    woForName: text('wo_for_name'),
+    totalAmount: numeric('total_amount', { precision: 14, scale: 2 }),
+    adjustedTotal: numeric('adjusted_total', { precision: 14, scale: 2 }),
+    workOrderPayload: jsonb('work_order_payload').notNull().default({}),
+    createdByUserId: text('created_by_user_id'),
+    updatedByUserId: text('updated_by_user_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('idx_wo_po').on(t.tenantId, t.purchaseOrderId),
+    index('idx_wo_job').on(t.tenantId, t.jobId),
+    index('idx_wo_claim').on(t.tenantId, t.claimId),
+    index('idx_wo_number').on(t.tenantId, t.workOrderNumber),
+  ],
+);
+
+// Work order groups
+export const workOrderGroups = pgTable(
+  'work_order_groups',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    workOrderId: uuid('work_order_id')
+      .notNull()
+      .references(() => workOrders.id, { onDelete: 'cascade' }),
+    groupLabelLookupId: uuid('group_label_lookup_id'),
+    description: text('description'),
+    dimensions: jsonb('dimensions').notNull().default({}),
+    sortIndex: integer('sort_index').notNull().default(0),
+    totals: jsonb('totals').notNull().default({}),
+    groupPayload: jsonb('group_payload').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [index('idx_wo_groups_wo').on(t.tenantId, t.workOrderId)],
+);
+
+// Work order combos
+export const workOrderCombos = pgTable(
+  'work_order_combos',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    workOrderGroupId: uuid('work_order_group_id')
+      .notNull()
+      .references(() => workOrderGroups.id, { onDelete: 'cascade' }),
+    catalogComboId: uuid('catalog_combo_id'),
+    name: text('name'),
+    description: text('description'),
+    category: text('category'),
+    subCategory: text('sub_category'),
+    quantity: numeric('quantity', { precision: 14, scale: 4 }),
+    sortIndex: integer('sort_index').notNull().default(0),
+    totals: jsonb('totals').notNull().default({}),
+    comboPayload: jsonb('combo_payload').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [index('idx_wo_combos_group').on(t.tenantId, t.workOrderGroupId)],
+);
+
+// Work order items
+export const workOrderItems = pgTable(
+  'work_order_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    workOrderGroupId: uuid('work_order_group_id').references(
+      () => workOrderGroups.id,
+      { onDelete: 'cascade' },
+    ),
+    workOrderComboId: uuid('work_order_combo_id').references(
+      () => workOrderCombos.id,
+      { onDelete: 'cascade' },
+    ),
+    catalogItemId: uuid('catalog_item_id'),
+    unitTypeLookupId: uuid('unit_type_lookup_id'),
+    name: text('name'),
+    description: text('description'),
+    category: text('category'),
+    subCategory: text('sub_category'),
+    itemType: text('item_type'),
+    quantity: numeric('quantity', { precision: 14, scale: 4 }),
+    tax: numeric('tax', { precision: 14, scale: 4 }),
+    unitCost: numeric('unit_cost', { precision: 14, scale: 4 }),
+    buyCost: numeric('buy_cost', { precision: 14, scale: 4 }),
+    markupType: text('markup_type'),
+    markupValue: numeric('markup_value', { precision: 14, scale: 4 }),
+    reconciliation: numeric('reconciliation', { precision: 14, scale: 4 }),
+    sortIndex: integer('sort_index').notNull().default(0),
+    note: text('note'),
+    tags: jsonb('tags').notNull().default([]),
+    totals: jsonb('totals').notNull().default({}),
+    itemPayload: jsonb('item_payload').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [
+    check(
+      'chk_wo_item_parent',
+      sql`(work_order_group_id IS NOT NULL AND work_order_combo_id IS NULL) OR (work_order_group_id IS NULL AND work_order_combo_id IS NOT NULL)`,
+    ),
+    index('idx_wo_items_group').on(t.tenantId, t.workOrderGroupId),
+    index('idx_wo_items_combo').on(t.tenantId, t.workOrderComboId),
+  ],
+);
+
+// RFQs
+export const rfqs = pgTable(
+  'rfqs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    claimId: uuid('claim_id').references(() => claims.id, { onDelete: 'cascade' }),
+    jobId: uuid('job_id').references(() => jobs.id, { onDelete: 'cascade' }),
+    quoteId: uuid('quote_id').references(() => quotes.id, { onDelete: 'set null' }),
+    vendorId: uuid('vendor_id').references(() => vendors.id),
+    rfqNumber: text('rfq_number'),
+    name: text('name'),
+    note: text('note'),
+    statusLookupId: uuid('status_lookup_id').references(() => lookupValues.id),
+    sentDate: timestamp('sent_date', { withTimezone: true }),
+    dueDate: timestamp('due_date', { withTimezone: true }),
+    receivedDate: timestamp('received_date', { withTimezone: true }),
+    includePricing: boolean('include_pricing').notNull().default(false),
+    includeQuantities: boolean('include_quantities').notNull().default(true),
+    rfqTo: jsonb('rfq_to').notNull().default({}),
+    rfqFrom: jsonb('rfq_from').notNull().default({}),
+    rfqToEmail: text('rfq_to_email'),
+    rfqToName: text('rfq_to_name'),
+    rfqPayload: jsonb('rfq_payload').notNull().default({}),
+    createdByUserId: text('created_by_user_id'),
+    updatedByUserId: text('updated_by_user_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [
+    check('chk_rfq_parent', sql`claim_id IS NOT NULL OR job_id IS NOT NULL`),
+    index('idx_rfq_job').on(t.tenantId, t.jobId),
+    index('idx_rfq_claim').on(t.tenantId, t.claimId),
+    index('idx_rfq_quote').on(t.tenantId, t.quoteId),
+    index('idx_rfq_vendor').on(t.tenantId, t.vendorId),
+    index('idx_rfq_number').on(t.tenantId, t.rfqNumber),
+  ],
+);
+
+// RFQ groups
+export const rfqGroups = pgTable(
+  'rfq_groups',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    rfqId: uuid('rfq_id').notNull().references(() => rfqs.id, { onDelete: 'cascade' }),
+    sourceQuoteGroupId: uuid('source_quote_group_id').references(() => quoteGroups.id),
+    groupLabelLookupId: uuid('group_label_lookup_id').references(() => lookupValues.id),
+    description: text('description'),
+    dimensions: jsonb('dimensions').notNull().default({}),
+    sortIndex: integer('sort_index').notNull().default(0),
+    totals: jsonb('totals').notNull().default({}),
+    groupPayload: jsonb('group_payload').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('idx_rfq_groups_rfq').on(t.tenantId, t.rfqId)],
+);
+
+// RFQ combos
+export const rfqCombos = pgTable(
+  'rfq_combos',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    rfqGroupId: uuid('rfq_group_id')
+      .notNull()
+      .references(() => rfqGroups.id, { onDelete: 'cascade' }),
+    sourceQuoteComboId: uuid('source_quote_combo_id').references(() => quoteCombos.id),
+    name: text('name'),
+    description: text('description'),
+    category: text('category'),
+    subCategory: text('sub_category'),
+    quantity: numeric('quantity', { precision: 14, scale: 4 }),
+    sortIndex: integer('sort_index').notNull().default(0),
+    totals: jsonb('totals').notNull().default({}),
+    comboPayload: jsonb('combo_payload').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('idx_rfq_combos_group').on(t.tenantId, t.rfqGroupId)],
+);
+
+// RFQ items
+export const rfqItems = pgTable(
+  'rfq_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    rfqGroupId: uuid('rfq_group_id').references(() => rfqGroups.id, { onDelete: 'cascade' }),
+    rfqComboId: uuid('rfq_combo_id').references(() => rfqCombos.id, { onDelete: 'cascade' }),
+    sourceQuoteItemId: uuid('source_quote_item_id').references(() => quoteItems.id),
+    unitTypeLookupId: uuid('unit_type_lookup_id'),
+    name: text('name'),
+    description: text('description'),
+    category: text('category'),
+    subCategory: text('sub_category'),
+    itemType: text('item_type'),
+    quantity: numeric('quantity', { precision: 14, scale: 4 }),
+    tax: numeric('tax', { precision: 14, scale: 4 }),
+    unitCost: numeric('unit_cost', { precision: 14, scale: 4 }),
+    buyCost: numeric('buy_cost', { precision: 14, scale: 4 }),
+    sortIndex: integer('sort_index').notNull().default(0),
+    note: text('note'),
+    totals: jsonb('totals').notNull().default({}),
+    itemPayload: jsonb('item_payload').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check(
+      'chk_rfq_item_parent',
+      sql`(rfq_group_id IS NOT NULL AND rfq_combo_id IS NULL) OR (rfq_group_id IS NULL AND rfq_combo_id IS NOT NULL)`,
+    ),
+    index('idx_rfq_items_group').on(t.tenantId, t.rfqGroupId),
+    index('idx_rfq_items_combo').on(t.tenantId, t.rfqComboId),
+  ],
+);
+
+// Proposals
+export const proposals = pgTable(
+  'proposals',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    quoteId: uuid('quote_id')
+      .notNull()
+      .references(() => quotes.id),
+    claimId: uuid('claim_id').references(() => claims.id, { onDelete: 'cascade' }),
+    jobId: uuid('job_id').references(() => jobs.id, { onDelete: 'cascade' }),
+    rfqId: uuid('rfq_id').references(() => rfqs.id, { onDelete: 'set null' }),
+    vendorId: uuid('vendor_id').references(() => vendors.id),
+    proposalNumber: text('proposal_number'),
+    name: text('name'),
+    reference: text('reference'),
+    note: text('note'),
+    statusLookupId: uuid('status_lookup_id').references(() => lookupValues.id),
+    proposalTypeLookupId: uuid('proposal_type_lookup_id').references(() => lookupValues.id),
+    receivedDate: timestamp('received_date', { withTimezone: true }),
+    proposalDate: timestamp('proposal_date', { withTimezone: true }),
+    expiresInDays: integer('expires_in_days'),
+    subTotal: numeric('sub_total', { precision: 14, scale: 2 }),
+    totalTax: numeric('total_tax', { precision: 14, scale: 2 }),
+    totalAmount: numeric('total_amount', { precision: 14, scale: 2 }),
+    proposalTo: jsonb('proposal_to').notNull().default({}),
+    proposalFor: jsonb('proposal_for').notNull().default({}),
+    proposalFrom: jsonb('proposal_from').notNull().default({}),
+    proposalToEmail: text('proposal_to_email'),
+    proposalToName: text('proposal_to_name'),
+    proposalFromName: text('proposal_from_name'),
+    customData: jsonb('custom_data').notNull().default({}),
+    proposalPayload: jsonb('proposal_payload').notNull().default({}),
+    createdByUserId: text('created_by_user_id'),
+    updatedByUserId: text('updated_by_user_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('idx_proposal_quote').on(t.tenantId, t.quoteId),
+    index('idx_proposal_job').on(t.tenantId, t.jobId),
+    index('idx_proposal_claim').on(t.tenantId, t.claimId),
+    index('idx_proposal_rfq').on(t.tenantId, t.rfqId),
+    index('idx_proposal_vendor').on(t.tenantId, t.vendorId),
+    index('idx_proposal_number').on(t.tenantId, t.proposalNumber),
+  ],
+);
+
+// Proposal groups
+export const proposalGroups = pgTable(
+  'proposal_groups',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    proposalId: uuid('proposal_id')
+      .notNull()
+      .references(() => proposals.id, { onDelete: 'cascade' }),
+    sourceRfqGroupId: uuid('source_rfq_group_id').references(() => rfqGroups.id),
+    groupLabelLookupId: uuid('group_label_lookup_id').references(() => lookupValues.id),
+    description: text('description'),
+    dimensions: jsonb('dimensions').notNull().default({}),
+    sortIndex: integer('sort_index').notNull().default(0),
+    totals: jsonb('totals').notNull().default({}),
+    groupPayload: jsonb('group_payload').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('idx_proposal_groups_proposal').on(t.tenantId, t.proposalId)],
+);
+
+// Proposal combos
+export const proposalCombos = pgTable(
+  'proposal_combos',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    proposalGroupId: uuid('proposal_group_id')
+      .notNull()
+      .references(() => proposalGroups.id, { onDelete: 'cascade' }),
+    sourceRfqComboId: uuid('source_rfq_combo_id').references(() => rfqCombos.id),
+    name: text('name'),
+    description: text('description'),
+    category: text('category'),
+    subCategory: text('sub_category'),
+    quantity: numeric('quantity', { precision: 14, scale: 4 }),
+    sortIndex: integer('sort_index').notNull().default(0),
+    totals: jsonb('totals').notNull().default({}),
+    comboPayload: jsonb('combo_payload').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('idx_proposal_combos_group').on(t.tenantId, t.proposalGroupId)],
+);
+
+// Proposal items
+export const proposalItems = pgTable(
+  'proposal_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    proposalGroupId: uuid('proposal_group_id').references(() => proposalGroups.id, {
+      onDelete: 'cascade',
+    }),
+    proposalComboId: uuid('proposal_combo_id').references(() => proposalCombos.id, {
+      onDelete: 'cascade',
+    }),
+    sourceRfqItemId: uuid('source_rfq_item_id').references(() => rfqItems.id),
+    unitTypeLookupId: uuid('unit_type_lookup_id'),
+    name: text('name'),
+    description: text('description'),
+    category: text('category'),
+    subCategory: text('sub_category'),
+    itemType: text('item_type'),
+    quantity: numeric('quantity', { precision: 14, scale: 4 }),
+    tax: numeric('tax', { precision: 14, scale: 4 }),
+    unitCost: numeric('unit_cost', { precision: 14, scale: 4 }),
+    buyCost: numeric('buy_cost', { precision: 14, scale: 4 }),
+    markupType: text('markup_type'),
+    markupValue: numeric('markup_value', { precision: 14, scale: 4 }),
+    sortIndex: integer('sort_index').notNull().default(0),
+    note: text('note'),
+    totals: jsonb('totals').notNull().default({}),
+    itemPayload: jsonb('item_payload').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check(
+      'chk_proposal_item_parent',
+      sql`(proposal_group_id IS NOT NULL AND proposal_combo_id IS NULL) OR (proposal_group_id IS NULL AND proposal_combo_id IS NOT NULL)`,
+    ),
+    index('idx_proposal_items_group').on(t.tenantId, t.proposalGroupId),
+    index('idx_proposal_items_combo').on(t.tenantId, t.proposalComboId),
+  ],
+);
+
+// Bills
+export const bills = pgTable(
+  'bills',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    invoiceId: uuid('invoice_id')
+      .notNull()
+      .references(() => invoices.id),
+    purchaseOrderId: uuid('purchase_order_id').references(() => purchaseOrders.id),
+    claimId: uuid('claim_id').references(() => claims.id, { onDelete: 'set null' }),
+    jobId: uuid('job_id').references(() => jobs.id, { onDelete: 'set null' }),
+    vendorId: uuid('vendor_id').references(() => vendors.id),
+    billNumber: text('bill_number'),
+    externalReference: text('external_reference'),
+    issueDate: timestamp('issue_date', { withTimezone: true }),
+    receivedDate: timestamp('received_date', { withTimezone: true }),
+    dueDate: timestamp('due_date', { withTimezone: true }),
+    paymentDate: timestamp('payment_date', { withTimezone: true }),
+    comments: text('comments'),
+    declinedReason: text('declined_reason'),
+    statusLookupId: uuid('status_lookup_id').references(() => lookupValues.id),
+    paymentStatusLookupId: uuid('payment_status_lookup_id').references(() => lookupValues.id),
+    subTotal: numeric('sub_total', { precision: 14, scale: 2 }),
+    totalTax: numeric('total_tax', { precision: 14, scale: 2 }),
+    totalAmount: numeric('total_amount', { precision: 14, scale: 2 }),
+    isDeleted: boolean('is_deleted').notNull().default(false),
+    billPayload: jsonb('bill_payload').notNull().default({}),
+    createdByUserId: text('created_by_user_id'),
+    updatedByUserId: text('updated_by_user_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_bills_invoice').on(t.tenantId, t.invoiceId),
+    index('idx_bills_po').on(t.tenantId, t.purchaseOrderId),
+    index('idx_bills_job').on(t.tenantId, t.jobId),
+    index('idx_bills_claim').on(t.tenantId, t.claimId),
+    index('idx_bills_vendor').on(t.tenantId, t.vendorId),
+    index('idx_bills_number').on(t.tenantId, t.billNumber),
+    index('idx_bills_status').on(t.tenantId, t.statusLookupId),
+    index('idx_bills_due_date').on(t.tenantId, t.dueDate),
+    index('idx_bills_payment_status').on(t.tenantId, t.paymentStatusLookupId),
+    unique('UQ_bills_tenant_number').on(t.tenantId, t.purchaseOrderId, t.billNumber),
   ],
 );
 

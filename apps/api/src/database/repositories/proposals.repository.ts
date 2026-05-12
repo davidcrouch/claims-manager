@@ -1,0 +1,140 @@
+import { Injectable } from '@nestjs/common';
+import { Inject } from '@nestjs/common';
+import { eq, and, isNull, desc, sql } from 'drizzle-orm';
+import { DRIZZLE } from '../drizzle.module';
+import type { DrizzleDB } from '../drizzle.module';
+import { proposals } from '../schema';
+
+export type ProposalRow = typeof proposals.$inferSelect;
+export type ProposalInsert = typeof proposals.$inferInsert;
+
+@Injectable()
+export class ProposalsRepository {
+  constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
+
+  async findAll(params: {
+    tenantId: string;
+    page?: number;
+    limit?: number;
+    jobId?: string;
+    rfqId?: string;
+    vendorId?: string;
+  }): Promise<{ data: ProposalRow[]; total: number }> {
+    const page = params.page ?? 1;
+    const limit = Math.min(params.limit ?? 20, 100);
+    const skip = (page - 1) * limit;
+
+    let whereClause = and(
+      eq(proposals.tenantId, params.tenantId),
+      isNull(proposals.deletedAt),
+    );
+    if (params.jobId) {
+      whereClause = and(whereClause, eq(proposals.jobId, params.jobId));
+    }
+    if (params.rfqId) {
+      whereClause = and(whereClause, eq(proposals.rfqId, params.rfqId));
+    }
+    if (params.vendorId) {
+      whereClause = and(whereClause, eq(proposals.vendorId, params.vendorId));
+    }
+
+    const [data, countResult] = await Promise.all([
+      this.db
+        .select()
+        .from(proposals)
+        .where(whereClause)
+        .orderBy(desc(proposals.updatedAt))
+        .limit(limit)
+        .offset(skip),
+      this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(proposals)
+        .where(whereClause),
+    ]);
+
+    const total = countResult[0]?.count ?? 0;
+    return { data, total };
+  }
+
+  async findOne(params: {
+    id: string;
+    tenantId: string;
+  }): Promise<ProposalRow | null> {
+    const [row] = await this.db
+      .select()
+      .from(proposals)
+      .where(
+        and(eq(proposals.id, params.id), eq(proposals.tenantId, params.tenantId)),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
+  async findByJob(params: {
+    jobId: string;
+    tenantId: string;
+  }): Promise<ProposalRow[]> {
+    return this.db
+      .select()
+      .from(proposals)
+      .where(
+        and(
+          eq(proposals.jobId, params.jobId),
+          eq(proposals.tenantId, params.tenantId),
+        ),
+      )
+      .orderBy(desc(proposals.updatedAt));
+  }
+
+  async findByRfq(params: {
+    rfqId: string;
+    tenantId: string;
+  }): Promise<ProposalRow[]> {
+    return this.db
+      .select()
+      .from(proposals)
+      .where(
+        and(
+          eq(proposals.rfqId, params.rfqId),
+          eq(proposals.tenantId, params.tenantId),
+        ),
+      )
+      .orderBy(desc(proposals.updatedAt));
+  }
+
+  async findByVendor(params: {
+    vendorId: string;
+    tenantId: string;
+  }): Promise<ProposalRow[]> {
+    return this.db
+      .select()
+      .from(proposals)
+      .where(
+        and(
+          eq(proposals.vendorId, params.vendorId),
+          eq(proposals.tenantId, params.tenantId),
+        ),
+      )
+      .orderBy(desc(proposals.updatedAt));
+  }
+
+  async create(params: { data: ProposalInsert }): Promise<ProposalRow> {
+    const [inserted] = await this.db
+      .insert(proposals)
+      .values(params.data)
+      .returning();
+    return inserted;
+  }
+
+  async update(params: {
+    id: string;
+    data: Partial<ProposalInsert>;
+  }): Promise<ProposalRow | null> {
+    const [updated] = await this.db
+      .update(proposals)
+      .set({ ...params.data, updatedAt: new Date() })
+      .where(eq(proposals.id, params.id))
+      .returning();
+    return updated ?? null;
+  }
+}

@@ -12,6 +12,10 @@ export class TasksController {
     @Query('jobId') jobId?: string,
     @Query('claimId') claimId?: string,
     @Query('status') status?: string,
+    @Query('priority') priority?: string,
+    @Query('entityType') entityType?: string,
+    @Query('entityId') entityId?: string,
+    @Query('assignedToUserId') assignedToUserId?: string,
   ) {
     return this.tasksService.findAll({
       page: page ? parseInt(page, 10) : 1,
@@ -19,6 +23,10 @@ export class TasksController {
       jobId,
       claimId,
       status,
+      priority,
+      entityType,
+      entityId,
+      assignedToUserId,
     });
   }
 
@@ -30,6 +38,19 @@ export class TasksController {
   @Get('claim/:claimId')
   async findByClaim(@Param('claimId') claimId: string) {
     return this.tasksService.findByClaim({ claimId });
+  }
+
+  @Get('entity/:entityType/:entityId')
+  async findByEntity(
+    @Param('entityType') entityType: string,
+    @Param('entityId') entityId: string,
+  ) {
+    return this.tasksService.findByEntity({ entityType, entityId });
+  }
+
+  @Get('overdue')
+  async findOverdue() {
+    return this.tasksService.findOverdue();
   }
 
   @Get(':id')

@@ -22,6 +22,7 @@ import { ClaimsModule } from './modules/claims/claims.module';
 import { JobsModule } from './modules/jobs/jobs.module';
 import { QuotesModule } from './modules/quotes/quotes.module';
 import { PurchaseOrdersModule } from './modules/purchase-orders/purchase-orders.module';
+import { WorkOrdersModule } from './modules/work-orders/work-orders.module';
 import { InvoicesModule } from './modules/invoices/invoices.module';
 import { MessagesModule } from './modules/messages/messages.module';
 import { TasksModule } from './modules/tasks/tasks.module';
@@ -34,6 +35,10 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { ProvidersModule } from './modules/providers/providers.module';
 import { InternalModule } from './modules/internal/internal.module';
+import { ProposalsModule } from './modules/proposals/proposals.module';
+import { BillsModule } from './modules/bills/bills.module';
+import { RfqsModule } from './modules/rfqs/rfqs.module';
+import { FinanceModule } from './modules/finance/finance.module';
 import { TenantInterceptor } from './tenant/tenant.interceptor';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -76,6 +81,7 @@ import { S3Module } from './common/s3/s3.module';
     JobsModule,
     QuotesModule,
     PurchaseOrdersModule,
+    WorkOrdersModule,
     InvoicesModule,
     MessagesModule,
     TasksModule,
@@ -88,6 +94,11 @@ import { S3Module } from './common/s3/s3.module';
     DashboardModule,
     ProvidersModule,
     InternalModule,
+    WorkOrdersModule,
+    RfqsModule,
+    ProposalsModule,
+    BillsModule,
+    FinanceModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: HttpExceptionFilter },

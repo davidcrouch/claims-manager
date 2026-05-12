@@ -306,6 +306,140 @@ export interface Invoice {
   status?: LookupRef;
 }
 
+export interface WorkOrder {
+  id: string;
+  tenantId: string;
+  purchaseOrderId: string;
+  jobId?: string | null;
+  claimId?: string | null;
+  vendorId?: string | null;
+  sourceTenantId?: string | null;
+  sourceExternalReference?: string | null;
+  externalId?: string | null;
+  workOrderNumber?: string | null;
+  name?: string | null;
+  statusLookupId?: string | null;
+  workOrderTypeLookupId?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  note?: string | null;
+  scopeOfWork?: string | null;
+  woTo?: Record<string, unknown> | null;
+  woFor?: Record<string, unknown> | null;
+  woFrom?: Record<string, unknown> | null;
+  serviceWindow?: Record<string, unknown> | null;
+  woToEmail?: string | null;
+  woForName?: string | null;
+  totalAmount?: string | null;
+  adjustedTotal?: string | null;
+  workOrderPayload?: Record<string, unknown> | null;
+  createdByUserId?: string | null;
+  updatedByUserId?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  deletedAt?: string | null;
+  status?: LookupRef;
+  workOrderType?: LookupRef;
+}
+
+export interface Rfq {
+  id: string;
+  tenantId: string;
+  jobId?: string | null;
+  claimId?: string | null;
+  quoteId?: string | null;
+  vendorId?: string | null;
+  rfqNumber?: string | null;
+  name?: string | null;
+  note?: string | null;
+  statusLookupId?: string | null;
+  sentDate?: string | null;
+  dueDate?: string | null;
+  receivedDate?: string | null;
+  includePricing: boolean;
+  includeQuantities: boolean;
+  rfqTo?: Record<string, unknown> | null;
+  rfqFrom?: Record<string, unknown> | null;
+  rfqToEmail?: string | null;
+  rfqToName?: string | null;
+  rfqPayload?: Record<string, unknown> | null;
+  createdByUserId?: string | null;
+  updatedByUserId?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  deletedAt?: string | null;
+  status?: LookupRef;
+}
+
+export interface Proposal {
+  id: string;
+  tenantId: string;
+  quoteId: string;
+  jobId?: string | null;
+  claimId?: string | null;
+  rfqId?: string | null;
+  vendorId?: string | null;
+  proposalNumber?: string | null;
+  name?: string | null;
+  reference?: string | null;
+  note?: string | null;
+  statusLookupId?: string | null;
+  proposalTypeLookupId?: string | null;
+  receivedDate?: string | null;
+  proposalDate?: string | null;
+  expiresInDays?: number | null;
+  subTotal?: string | null;
+  totalTax?: string | null;
+  totalAmount?: string | null;
+  proposalTo?: Record<string, unknown> | null;
+  proposalFor?: Record<string, unknown> | null;
+  proposalFrom?: Record<string, unknown> | null;
+  proposalToEmail?: string | null;
+  proposalToName?: string | null;
+  proposalFromName?: string | null;
+  proposalPayload?: Record<string, unknown> | null;
+  createdByUserId?: string | null;
+  updatedByUserId?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  deletedAt?: string | null;
+  status?: LookupRef;
+  proposalType?: LookupRef;
+}
+
+export interface Bill {
+  id: string;
+  tenantId: string;
+  invoiceId: string;
+  purchaseOrderId?: string | null;
+  jobId?: string | null;
+  claimId?: string | null;
+  vendorId?: string | null;
+  billNumber?: string | null;
+  externalReference?: string | null;
+  issueDate?: string | null;
+  receivedDate?: string | null;
+  dueDate?: string | null;
+  paymentDate?: string | null;
+  comments?: string | null;
+  declinedReason?: string | null;
+  statusLookupId?: string | null;
+  paymentStatusLookupId?: string | null;
+  subTotal?: string | null;
+  totalTax?: string | null;
+  totalAmount?: string | null;
+  isDeleted: boolean;
+  billPayload?: Record<string, unknown> | null;
+  createdByUserId?: string | null;
+  updatedByUserId?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  status?: LookupRef;
+  paymentStatus?: LookupRef;
+}
+
 export interface Report {
   id: string;
   tenantId: string;
@@ -324,6 +458,8 @@ export interface Report {
 export interface Task {
   id: string;
   tenantId: string;
+  relatedEntityType: string;
+  relatedEntityId: string;
   jobId?: string | null;
   claimId?: string | null;
   name: string;
@@ -334,6 +470,7 @@ export interface Task {
   dueDate?: string | null;
   assignedToUserId?: string | null;
   assigneeName?: string | null;
+  completedAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -525,6 +662,38 @@ export interface DashboardStats {
   openInvoices: number;
   openTasks: number;
   recentJobCount: number;
+  openWorkOrders?: number;
+  pendingRfqs?: number;
+  pendingProposals?: number;
+  outstandingBills?: number;
+  overdueTaskCount?: number;
+  upcomingAppointments?: number;
+  unreadMessages?: number;
+  arTotalOutstanding?: number;
+  apTotalOutstanding?: number;
+  arOverdueCount?: number;
+  apOverdueCount?: number;
+}
+
+export interface AgingBucket {
+  label: string;
+  count: number;
+  totalAmount: number;
+}
+
+export interface FinanceSummary {
+  ar: {
+    totalOutstanding: number;
+    totalOverdue: number;
+    totalPaid: number;
+    buckets: AgingBucket[];
+  };
+  ap: {
+    totalOutstanding: number;
+    totalOverdue: number;
+    totalPaid: number;
+    buckets: AgingBucket[];
+  };
 }
 
 export interface RecentActivity {

@@ -24,6 +24,10 @@ import {
   ExternalLinksRepository,
   ExternalProcessingLogRepository,
   ExternalEventAttemptsRepository,
+  WorkOrdersRepository,
+  RfqsRepository,
+  ProposalsRepository,
+  BillsRepository,
 } from './repositories';
 
 const repositories = [
@@ -50,6 +54,10 @@ const repositories = [
   ExternalLinksRepository,
   ExternalProcessingLogRepository,
   ExternalEventAttemptsRepository,
+  WorkOrdersRepository,
+  RfqsRepository,
+  ProposalsRepository,
+  BillsRepository,
 ];
 
 @Global()

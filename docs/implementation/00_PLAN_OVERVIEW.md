@@ -128,6 +128,30 @@ The **claims list view** is served from the local DB, populated by the above. To
 | 27e | `27e_MORE0_WORKFLOW_REFINEMENT.md` | More0 Workflow Refinement | Updated ASL definition and capability registration |
 | 27f | `27f_OBSERVABILITY_AND_RECOVERY.md` | Observability & Recovery | Monitoring, alerting, dead-letter handling, runbook |
 | 28 | `28_PROVIDERS_MANAGEMENT_UI.md` | Providers Management UI | Provider CRUD, connection management, webhook monitoring UI |
+| 29 | `29_TEMPORARY_WEBHOOK_ORCHESTRATOR.md` | Temporary Webhook Orchestrator | Interim webhook processing orchestrator |
+| 30 | `30_HARDCODED_PROVIDERS_AND_PROVIDER_FORMS.md` | Hardcoded Providers & Forms | Provider config forms and defaults |
+| 31 | `31_MORE0_WEBHOOK_WORKFLOW_APP.md` | More0 Webhook Workflow App | More0-based webhook processing application |
+| 32 | `32_UI_JOB_DETAIL_REVAMP.md` | UI Job Detail Revamp | Job detail page redesign with full sub-resource tabs |
+
+---
+
+## Contractor (Prime) Menu Restructure & New Entities
+
+Implements the grouped sidebar navigation from `docs/Ensure Roles.pdf` with new entity types, finance views, and cross-entity operations pages.
+
+| # | Document | Title | Scope |
+|---|----------|-------|-------|
+| 33 | `33_CONTRACTOR_PRIME_MENU_RESTRUCTURE.md` | Menu Restructure Overview | Architecture, domain model, sub-plan index |
+| 33a | `33a_SIDEBAR_RESTRUCTURE.md` | Sidebar Restructure | Frontend grouped nav + stub pages |
+| 33b | `33b_WORK_ORDERS_MODULE.md` | Work Orders Module | DB + API + frontend for Work Orders |
+| 33c | `33c_RFQS_MODULE.md` | RFQs Module | DB + API + frontend for RFQs |
+| 33d | `33d_PROPOSALS_MODULE.md` | Proposals Module | DB + API + frontend for Proposals |
+| 33e | `33e_BILLS_MODULE.md` | Bills Module | DB + API + frontend for Bills |
+| 33f | `33f_FINANCE_AR_AP.md` | Finance AR & AP | Accounting views of invoices and bills |
+| 33g | `33g_TASKS_POLYMORPHIC_EXPANSION.md` | Tasks Polymorphic Expansion | Cross-entity task attachment + standalone page |
+| 33h | `33h_OPERATIONS_STANDALONE_PAGES.md` | Operations Standalone Pages | Schedule, Messages, Appointments, Contacts |
+| 33i | `33i_ADMIN_PAGES.md` | Admin Pages | Users, Documents, Settings (Connections tab) |
+| 33j | `33j_DASHBOARD_ENHANCEMENT.md` | Dashboard Enhancement | Clickable metrics linked to new pages |
 
 ---
 

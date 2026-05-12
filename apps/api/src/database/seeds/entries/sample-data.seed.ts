@@ -14,6 +14,10 @@
  *   claim_contacts, claim_assignees, job_contacts,
  *   quotes (+ groups, combos, items),
  *   purchase_orders (+ groups, combos, items),
+ *   work_orders (+ groups, combos, items),
+ *   rfqs (+ groups, combos, items),
+ *   proposals (+ groups, combos, items),
+ *   bills,
  *   invoices, tasks, messages, appointments, appointment_attendees,
  *   reports, attachments.
  *
@@ -87,6 +91,22 @@ const LOOKUP_SPECS: readonly LookupSpec[] = [
   { domain: 'report_type', name: 'Inspection Report', ref: 'report-type-inspection' },
   { domain: 'appointment_type', name: 'Site Visit', ref: 'appt-type-site' },
   { domain: 'document_type', name: 'Photo', ref: 'doc-type-photo' },
+  { domain: 'wo_status', name: 'Draft', ref: 'wo-status-draft' },
+  { domain: 'wo_status', name: 'Active', ref: 'wo-status-active' },
+  { domain: 'wo_status', name: 'Completed', ref: 'wo-status-completed' },
+  { domain: 'wo_type', name: 'Standard', ref: 'wo-type-standard' },
+  { domain: 'rfq_status', name: 'Sent', ref: 'rfq-status-sent' },
+  { domain: 'rfq_status', name: 'Received', ref: 'rfq-status-received' },
+  { domain: 'rfq_status', name: 'Closed', ref: 'rfq-status-closed' },
+  { domain: 'proposal_status', name: 'Received', ref: 'proposal-status-received' },
+  { domain: 'proposal_status', name: 'Under Review', ref: 'proposal-status-review' },
+  { domain: 'proposal_status', name: 'Accepted', ref: 'proposal-status-accepted' },
+  { domain: 'proposal_type', name: 'Standard', ref: 'proposal-type-standard' },
+  { domain: 'bill_status', name: 'Received', ref: 'bill-status-received' },
+  { domain: 'bill_status', name: 'Approved', ref: 'bill-status-approved' },
+  { domain: 'bill_payment_status', name: 'Unpaid', ref: 'bill-pay-unpaid' },
+  { domain: 'bill_payment_status', name: 'Paid', ref: 'bill-pay-paid' },
+  { domain: 'bill_payment_status', name: 'Partial', ref: 'bill-pay-partial' },
 ];
 
 async function seedLookups(params: {
@@ -887,6 +907,600 @@ async function seedInvoices(params: {
 }
 
 // -----------------------------------------------------------------------
+// Work Orders → groups → combos → items
+// -----------------------------------------------------------------------
+
+interface WorkOrderBundle {
+  workOrderId: string;
+  groupId: string;
+  comboId: string;
+}
+
+async function seedWorkOrders(params: {
+  db: SeedDb;
+  tenantId: string;
+  stats: Stats;
+  lookups: Record<string, string>;
+  purchaseOrderBundles: PurchaseOrderBundle[];
+  claimIds: string[];
+  jobIds: string[];
+  vendorIds: string[];
+}): Promise<WorkOrderBundle[]> {
+  const out: WorkOrderBundle[] = [];
+  const woStatuses = ['wo-status-draft', 'wo-status-active', 'wo-status-completed'];
+  for (let i = 1; i <= COUNT; i += 1) {
+    const woNumber = `WO-SEED-${String(i).padStart(4, '0')}`;
+    const po = params.purchaseOrderBundles[(i - 1) % params.purchaseOrderBundles.length];
+
+    let woId: string;
+    const [existing] = await params.db
+      .select({ id: schema.workOrders.id })
+      .from(schema.workOrders)
+      .where(
+        and(
+          eq(schema.workOrders.tenantId, params.tenantId),
+          eq(schema.workOrders.workOrderNumber, woNumber),
+        ),
+      )
+      .limit(1);
+
+    if (existing) {
+      woId = existing.id;
+      params.stats.skipped += 1;
+    } else {
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() + i);
+      const endDate = new Date(startDate);
+      endDate.setDate(endDate.getDate() + 7);
+      const [inserted] = await params.db
+        .insert(schema.workOrders)
+        .values({
+          tenantId: params.tenantId,
+          purchaseOrderId: po.purchaseOrderId,
+          claimId: params.claimIds[(i - 1) % params.claimIds.length],
+          jobId: params.jobIds[(i - 1) % params.jobIds.length],
+          vendorId: params.vendorIds[(i - 1) % params.vendorIds.length],
+          workOrderNumber: woNumber,
+          name: `Seed Work Order ${i}`,
+          statusLookupId: params.lookups[pick(woStatuses, i - 1)],
+          workOrderTypeLookupId: params.lookups['wo-type-standard'],
+          startDate: startDate.toISOString().slice(0, 10),
+          endDate: endDate.toISOString().slice(0, 10),
+          note: `Seed work order #${i}: scope of work for downstream party.`,
+          scopeOfWork: `Complete all repairs per line items — seed WO ${i}.`,
+          totalAmount: '1100.00',
+          woToEmail: `vendor${i}@example.com`,
+          woForName: `Recipient ${i}`,
+        })
+        .returning({ id: schema.workOrders.id });
+      woId = inserted.id;
+      params.stats.inserted += 1;
+    }
+
+    const groupDesc = `${PREFIX}wo-group-${String(i).padStart(2, '0')}`;
+    let groupId: string;
+    const [existingGroup] = await params.db
+      .select({ id: schema.workOrderGroups.id })
+      .from(schema.workOrderGroups)
+      .where(
+        and(
+          eq(schema.workOrderGroups.workOrderId, woId),
+          eq(schema.workOrderGroups.description, groupDesc),
+        ),
+      )
+      .limit(1);
+    if (existingGroup) {
+      groupId = existingGroup.id;
+      params.stats.skipped += 1;
+    } else {
+      const [inserted] = await params.db
+        .insert(schema.workOrderGroups)
+        .values({
+          tenantId: params.tenantId,
+          workOrderId: woId,
+          description: groupDesc,
+          sortIndex: 0,
+        })
+        .returning({ id: schema.workOrderGroups.id });
+      groupId = inserted.id;
+      params.stats.inserted += 1;
+    }
+
+    const comboName = `${PREFIX}wo-combo-${String(i).padStart(2, '0')}`;
+    let comboId: string;
+    const [existingCombo] = await params.db
+      .select({ id: schema.workOrderCombos.id })
+      .from(schema.workOrderCombos)
+      .where(
+        and(
+          eq(schema.workOrderCombos.workOrderGroupId, groupId),
+          eq(schema.workOrderCombos.name, comboName),
+        ),
+      )
+      .limit(1);
+    if (existingCombo) {
+      comboId = existingCombo.id;
+      params.stats.skipped += 1;
+    } else {
+      const [inserted] = await params.db
+        .insert(schema.workOrderCombos)
+        .values({
+          tenantId: params.tenantId,
+          workOrderGroupId: groupId,
+          name: comboName,
+          description: `Seed WO combo bundle ${i}`,
+          category: 'Labour',
+          quantity: '1',
+          sortIndex: 0,
+        })
+        .returning({ id: schema.workOrderCombos.id });
+      comboId = inserted.id;
+      params.stats.inserted += 1;
+    }
+
+    const itemName = `${PREFIX}wo-item-${String(i).padStart(2, '0')}`;
+    const [existingItem] = await params.db
+      .select({ id: schema.workOrderItems.id })
+      .from(schema.workOrderItems)
+      .where(
+        and(
+          eq(schema.workOrderItems.workOrderComboId, comboId),
+          eq(schema.workOrderItems.name, itemName),
+        ),
+      )
+      .limit(1);
+    if (existingItem) {
+      params.stats.skipped += 1;
+    } else {
+      await params.db.insert(schema.workOrderItems).values({
+        tenantId: params.tenantId,
+        workOrderComboId: comboId,
+        name: itemName,
+        description: `Seed WO line ${i}`,
+        category: 'Labour',
+        itemType: 'Labour',
+        quantity: '2',
+        tax: '0.1',
+        unitCost: '500',
+        markupType: 'percent',
+        markupValue: '10',
+        sortIndex: 0,
+      });
+      params.stats.inserted += 1;
+    }
+
+    out.push({ workOrderId: woId, groupId, comboId });
+  }
+  return out;
+}
+
+// -----------------------------------------------------------------------
+// RFQs → groups → combos → items
+// -----------------------------------------------------------------------
+
+interface RfqBundle {
+  rfqId: string;
+  groupId: string;
+  comboId: string;
+}
+
+async function seedRfqs(params: {
+  db: SeedDb;
+  tenantId: string;
+  stats: Stats;
+  lookups: Record<string, string>;
+  claimIds: string[];
+  jobIds: string[];
+  vendorIds: string[];
+  quoteBundles: QuoteBundle[];
+}): Promise<RfqBundle[]> {
+  const out: RfqBundle[] = [];
+  const rfqStatuses = ['rfq-status-sent', 'rfq-status-received', 'rfq-status-closed'];
+  for (let i = 1; i <= COUNT; i += 1) {
+    const rfqNumber = `RFQ-SEED-${String(i).padStart(4, '0')}`;
+
+    let rfqId: string;
+    const [existing] = await params.db
+      .select({ id: schema.rfqs.id })
+      .from(schema.rfqs)
+      .where(
+        and(
+          eq(schema.rfqs.tenantId, params.tenantId),
+          eq(schema.rfqs.rfqNumber, rfqNumber),
+        ),
+      )
+      .limit(1);
+
+    if (existing) {
+      rfqId = existing.id;
+      params.stats.skipped += 1;
+    } else {
+      const sentDate = new Date();
+      sentDate.setDate(sentDate.getDate() - i * 2);
+      const dueDate = new Date(sentDate);
+      dueDate.setDate(dueDate.getDate() + 14);
+      const [inserted] = await params.db
+        .insert(schema.rfqs)
+        .values({
+          tenantId: params.tenantId,
+          claimId: params.claimIds[(i - 1) % params.claimIds.length],
+          jobId: params.jobIds[(i - 1) % params.jobIds.length],
+          quoteId: params.quoteBundles[(i - 1) % params.quoteBundles.length]?.quoteId,
+          vendorId: params.vendorIds[(i - 1) % params.vendorIds.length],
+          rfqNumber,
+          name: `Seed RFQ ${i}`,
+          note: `Seed RFQ #${i}: request for quote from downstream vendor.`,
+          statusLookupId: params.lookups[pick(rfqStatuses, i - 1)],
+          sentDate,
+          dueDate,
+          includePricing: i % 2 === 0,
+          includeQuantities: true,
+          rfqToEmail: `vendor${i}@example.com`,
+          rfqToName: `Vendor ${i}`,
+        })
+        .returning({ id: schema.rfqs.id });
+      rfqId = inserted.id;
+      params.stats.inserted += 1;
+    }
+
+    const groupDesc = `${PREFIX}rfq-group-${String(i).padStart(2, '0')}`;
+    let groupId: string;
+    const [existingGroup] = await params.db
+      .select({ id: schema.rfqGroups.id })
+      .from(schema.rfqGroups)
+      .where(
+        and(
+          eq(schema.rfqGroups.rfqId, rfqId),
+          eq(schema.rfqGroups.description, groupDesc),
+        ),
+      )
+      .limit(1);
+    if (existingGroup) {
+      groupId = existingGroup.id;
+      params.stats.skipped += 1;
+    } else {
+      const [inserted] = await params.db
+        .insert(schema.rfqGroups)
+        .values({
+          tenantId: params.tenantId,
+          rfqId,
+          description: groupDesc,
+          sortIndex: 0,
+        })
+        .returning({ id: schema.rfqGroups.id });
+      groupId = inserted.id;
+      params.stats.inserted += 1;
+    }
+
+    const comboName = `${PREFIX}rfq-combo-${String(i).padStart(2, '0')}`;
+    let comboId: string;
+    const [existingCombo] = await params.db
+      .select({ id: schema.rfqCombos.id })
+      .from(schema.rfqCombos)
+      .where(
+        and(
+          eq(schema.rfqCombos.rfqGroupId, groupId),
+          eq(schema.rfqCombos.name, comboName),
+        ),
+      )
+      .limit(1);
+    if (existingCombo) {
+      comboId = existingCombo.id;
+      params.stats.skipped += 1;
+    } else {
+      const [inserted] = await params.db
+        .insert(schema.rfqCombos)
+        .values({
+          tenantId: params.tenantId,
+          rfqGroupId: groupId,
+          name: comboName,
+          description: `Seed RFQ combo bundle ${i}`,
+          category: 'Labour',
+          quantity: '1',
+          sortIndex: 0,
+        })
+        .returning({ id: schema.rfqCombos.id });
+      comboId = inserted.id;
+      params.stats.inserted += 1;
+    }
+
+    const itemName = `${PREFIX}rfq-item-${String(i).padStart(2, '0')}`;
+    const [existingItem] = await params.db
+      .select({ id: schema.rfqItems.id })
+      .from(schema.rfqItems)
+      .where(
+        and(
+          eq(schema.rfqItems.rfqComboId, comboId),
+          eq(schema.rfqItems.name, itemName),
+        ),
+      )
+      .limit(1);
+    if (existingItem) {
+      params.stats.skipped += 1;
+    } else {
+      await params.db.insert(schema.rfqItems).values({
+        tenantId: params.tenantId,
+        rfqComboId: comboId,
+        name: itemName,
+        description: `Seed RFQ line ${i}`,
+        category: 'Labour',
+        itemType: 'Labour',
+        quantity: '2',
+        tax: '0.1',
+        unitCost: '450',
+        buyCost: '400',
+        sortIndex: 0,
+      });
+      params.stats.inserted += 1;
+    }
+
+    out.push({ rfqId, groupId, comboId });
+  }
+  return out;
+}
+
+// -----------------------------------------------------------------------
+// Proposals → groups → combos → items
+// -----------------------------------------------------------------------
+
+interface ProposalBundle {
+  proposalId: string;
+  groupId: string;
+  comboId: string;
+}
+
+async function seedProposals(params: {
+  db: SeedDb;
+  tenantId: string;
+  stats: Stats;
+  lookups: Record<string, string>;
+  claimIds: string[];
+  jobIds: string[];
+  vendorIds: string[];
+  quoteBundles: QuoteBundle[];
+  rfqBundles: RfqBundle[];
+}): Promise<ProposalBundle[]> {
+  const out: ProposalBundle[] = [];
+  const proposalStatuses = [
+    'proposal-status-received',
+    'proposal-status-review',
+    'proposal-status-accepted',
+  ];
+  for (let i = 1; i <= COUNT; i += 1) {
+    const proposalNumber = `PROP-SEED-${String(i).padStart(4, '0')}`;
+
+    let proposalId: string;
+    const [existing] = await params.db
+      .select({ id: schema.proposals.id })
+      .from(schema.proposals)
+      .where(
+        and(
+          eq(schema.proposals.tenantId, params.tenantId),
+          eq(schema.proposals.proposalNumber, proposalNumber),
+        ),
+      )
+      .limit(1);
+
+    if (existing) {
+      proposalId = existing.id;
+      params.stats.skipped += 1;
+    } else {
+      const receivedDate = new Date();
+      receivedDate.setDate(receivedDate.getDate() - i);
+      const [inserted] = await params.db
+        .insert(schema.proposals)
+        .values({
+          tenantId: params.tenantId,
+          quoteId: params.quoteBundles[(i - 1) % params.quoteBundles.length].quoteId,
+          claimId: params.claimIds[(i - 1) % params.claimIds.length],
+          jobId: params.jobIds[(i - 1) % params.jobIds.length],
+          rfqId: params.rfqBundles[(i - 1) % params.rfqBundles.length].rfqId,
+          vendorId: params.vendorIds[(i - 1) % params.vendorIds.length],
+          proposalNumber,
+          name: `Seed Proposal ${i}`,
+          reference: `${PREFIX}proposal-${String(i).padStart(2, '0')}`,
+          note: `Seed proposal #${i}: vendor response to RFQ.`,
+          statusLookupId: params.lookups[pick(proposalStatuses, i - 1)],
+          proposalTypeLookupId: params.lookups['proposal-type-standard'],
+          receivedDate,
+          proposalDate: receivedDate,
+          expiresInDays: 30,
+          subTotal: '900.00',
+          totalTax: '90.00',
+          totalAmount: '990.00',
+          proposalToEmail: `contractor${i}@example.com`,
+          proposalToName: `Contractor ${i}`,
+          proposalFromName: `Vendor ${i}`,
+        })
+        .returning({ id: schema.proposals.id });
+      proposalId = inserted.id;
+      params.stats.inserted += 1;
+    }
+
+    const groupDesc = `${PREFIX}proposal-group-${String(i).padStart(2, '0')}`;
+    let groupId: string;
+    const [existingGroup] = await params.db
+      .select({ id: schema.proposalGroups.id })
+      .from(schema.proposalGroups)
+      .where(
+        and(
+          eq(schema.proposalGroups.proposalId, proposalId),
+          eq(schema.proposalGroups.description, groupDesc),
+        ),
+      )
+      .limit(1);
+    if (existingGroup) {
+      groupId = existingGroup.id;
+      params.stats.skipped += 1;
+    } else {
+      const [inserted] = await params.db
+        .insert(schema.proposalGroups)
+        .values({
+          tenantId: params.tenantId,
+          proposalId,
+          description: groupDesc,
+          sortIndex: 0,
+        })
+        .returning({ id: schema.proposalGroups.id });
+      groupId = inserted.id;
+      params.stats.inserted += 1;
+    }
+
+    const comboName = `${PREFIX}proposal-combo-${String(i).padStart(2, '0')}`;
+    let comboId: string;
+    const [existingCombo] = await params.db
+      .select({ id: schema.proposalCombos.id })
+      .from(schema.proposalCombos)
+      .where(
+        and(
+          eq(schema.proposalCombos.proposalGroupId, groupId),
+          eq(schema.proposalCombos.name, comboName),
+        ),
+      )
+      .limit(1);
+    if (existingCombo) {
+      comboId = existingCombo.id;
+      params.stats.skipped += 1;
+    } else {
+      const [inserted] = await params.db
+        .insert(schema.proposalCombos)
+        .values({
+          tenantId: params.tenantId,
+          proposalGroupId: groupId,
+          name: comboName,
+          description: `Seed proposal combo bundle ${i}`,
+          category: 'Labour',
+          quantity: '1',
+          sortIndex: 0,
+        })
+        .returning({ id: schema.proposalCombos.id });
+      comboId = inserted.id;
+      params.stats.inserted += 1;
+    }
+
+    const itemName = `${PREFIX}proposal-item-${String(i).padStart(2, '0')}`;
+    const [existingItem] = await params.db
+      .select({ id: schema.proposalItems.id })
+      .from(schema.proposalItems)
+      .where(
+        and(
+          eq(schema.proposalItems.proposalComboId, comboId),
+          eq(schema.proposalItems.name, itemName),
+        ),
+      )
+      .limit(1);
+    if (existingItem) {
+      params.stats.skipped += 1;
+    } else {
+      await params.db.insert(schema.proposalItems).values({
+        tenantId: params.tenantId,
+        proposalComboId: comboId,
+        name: itemName,
+        description: `Seed proposal line ${i}`,
+        category: 'Labour',
+        itemType: 'Labour',
+        quantity: '2',
+        tax: '0.1',
+        unitCost: '450',
+        buyCost: '400',
+        markupType: 'percent',
+        markupValue: '10',
+        sortIndex: 0,
+      });
+      params.stats.inserted += 1;
+    }
+
+    out.push({ proposalId, groupId, comboId });
+  }
+  return out;
+}
+
+// -----------------------------------------------------------------------
+// Bills
+// -----------------------------------------------------------------------
+
+async function seedBills(params: {
+  db: SeedDb;
+  tenantId: string;
+  stats: Stats;
+  lookups: Record<string, string>;
+  claimIds: string[];
+  jobIds: string[];
+  vendorIds: string[];
+  purchaseOrderBundles: PurchaseOrderBundle[];
+}): Promise<string[]> {
+  const ids: string[] = [];
+  const billStatuses = ['bill-status-received', 'bill-status-approved'];
+  const payStatuses = ['bill-pay-unpaid', 'bill-pay-paid', 'bill-pay-partial'];
+  for (let i = 1; i <= COUNT; i += 1) {
+    const billNumber = `BILL-SEED-${String(i).padStart(4, '0')}`;
+    const po = params.purchaseOrderBundles[(i - 1) % params.purchaseOrderBundles.length];
+
+    const [existing] = await params.db
+      .select({ id: schema.bills.id })
+      .from(schema.bills)
+      .where(
+        and(
+          eq(schema.bills.tenantId, params.tenantId),
+          eq(schema.bills.billNumber, billNumber),
+        ),
+      )
+      .limit(1);
+    if (existing) {
+      ids.push(existing.id);
+      params.stats.skipped += 1;
+      continue;
+    }
+
+    const invoiceNumber = `INV-SEED-${String(i).padStart(4, '0')}`;
+    const [invoice] = await params.db
+      .select({ id: schema.invoices.id })
+      .from(schema.invoices)
+      .where(
+        and(
+          eq(schema.invoices.tenantId, params.tenantId),
+          eq(schema.invoices.invoiceNumber, invoiceNumber),
+        ),
+      )
+      .limit(1);
+    if (!invoice) {
+      params.stats.skipped += 1;
+      continue;
+    }
+
+    const issueDate = new Date();
+    issueDate.setDate(issueDate.getDate() - i);
+    const dueDate = new Date(issueDate);
+    dueDate.setDate(dueDate.getDate() + 30);
+
+    const [inserted] = await params.db
+      .insert(schema.bills)
+      .values({
+        tenantId: params.tenantId,
+        invoiceId: invoice.id,
+        purchaseOrderId: po.purchaseOrderId,
+        claimId: params.claimIds[(i - 1) % params.claimIds.length],
+        jobId: params.jobIds[(i - 1) % params.jobIds.length],
+        vendorId: params.vendorIds[(i - 1) % params.vendorIds.length],
+        billNumber,
+        externalReference: extRef('bill', i),
+        issueDate,
+        receivedDate: issueDate,
+        dueDate,
+        statusLookupId: params.lookups[pick(billStatuses, i - 1)],
+        paymentStatusLookupId: params.lookups[pick(payStatuses, i - 1)],
+        subTotal: '1000.00',
+        totalTax: '100.00',
+        totalAmount: '1100.00',
+      })
+      .returning({ id: schema.bills.id });
+    ids.push(inserted.id);
+    params.stats.inserted += 1;
+  }
+  return ids;
+}
+
+// -----------------------------------------------------------------------
 // Tasks
 // -----------------------------------------------------------------------
 
@@ -896,12 +1510,70 @@ async function seedTasks(params: {
   stats: Stats;
   claimIds: string[];
   jobIds: string[];
+  workOrderIds: string[];
+  rfqIds: string[];
+  proposalIds: string[];
+  billIds: string[];
 }): Promise<void> {
   const priorities = ['Low', 'Medium', 'High', 'Critical'] as const;
   const statuses = ['Open', 'Completed'] as const;
-  for (let i = 1; i <= COUNT; i += 1) {
+
+  interface TaskSpec {
+    entityType: string;
+    entityId: string;
+    claimId: string | null;
+    jobId: string | null;
+  }
+
+  const specs: TaskSpec[] = [];
+  for (let i = 0; i < COUNT; i += 1) {
+    const claimId = params.claimIds[i % params.claimIds.length];
+    const jobId = params.jobIds[i % params.jobIds.length];
+    switch (i % 6) {
+      case 0:
+        specs.push({ entityType: 'Claim', entityId: claimId, claimId, jobId: null });
+        break;
+      case 1:
+        specs.push({ entityType: 'Job', entityId: jobId, claimId, jobId });
+        break;
+      case 2:
+        specs.push({
+          entityType: 'WorkOrder',
+          entityId: params.workOrderIds[i % params.workOrderIds.length],
+          claimId,
+          jobId,
+        });
+        break;
+      case 3:
+        specs.push({
+          entityType: 'RFQ',
+          entityId: params.rfqIds[i % params.rfqIds.length],
+          claimId,
+          jobId,
+        });
+        break;
+      case 4:
+        specs.push({
+          entityType: 'Proposal',
+          entityId: params.proposalIds[i % params.proposalIds.length],
+          claimId,
+          jobId,
+        });
+        break;
+      case 5:
+        specs.push({
+          entityType: 'Bill',
+          entityId: params.billIds[i % params.billIds.length],
+          claimId,
+          jobId,
+        });
+        break;
+    }
+  }
+
+  for (let i = 1; i <= specs.length; i += 1) {
+    const spec = specs[i - 1];
     const name = `${PREFIX}task-${String(i).padStart(2, '0')}`;
-    const claimId = params.claimIds[(i - 1) % params.claimIds.length];
     const [existing] = await params.db
       .select({ id: schema.tasks.id })
       .from(schema.tasks)
@@ -920,10 +1592,12 @@ async function seedTasks(params: {
     due.setDate(due.getDate() + i * 2);
     await params.db.insert(schema.tasks).values({
       tenantId: params.tenantId,
-      claimId,
-      jobId: i % 2 === 0 ? params.jobIds[(i - 1) % params.jobIds.length] : null,
+      claimId: spec.claimId,
+      jobId: spec.jobId,
+      relatedEntityType: spec.entityType,
+      relatedEntityId: spec.entityId,
       name,
-      description: `Seed task #${i}: follow-up action required.`,
+      description: `Seed task #${i} (${spec.entityType}): follow-up action required.`,
       dueDate: due,
       priority: pick(priorities, i - 1),
       status: pick(statuses, i - 1),
@@ -1190,7 +1864,67 @@ export async function seedSampleDataForTenant(params: {
   });
 
   await seedInvoices({ db, tenantId, stats, lookups, purchaseOrderBundles, claimIds, jobIds });
-  await seedTasks({ db, tenantId, stats, claimIds, jobIds });
+
+  const workOrderBundles = await seedWorkOrders({
+    db,
+    tenantId,
+    stats,
+    lookups,
+    purchaseOrderBundles,
+    claimIds,
+    jobIds,
+    vendorIds,
+  });
+  logger.info(`work orders ready (${workOrderBundles.length})`);
+
+  const rfqBundles = await seedRfqs({
+    db,
+    tenantId,
+    stats,
+    lookups,
+    claimIds,
+    jobIds,
+    vendorIds,
+    quoteBundles,
+  });
+  logger.info(`rfqs ready (${rfqBundles.length})`);
+
+  const proposalBundles = await seedProposals({
+    db,
+    tenantId,
+    stats,
+    lookups,
+    claimIds,
+    jobIds,
+    vendorIds,
+    quoteBundles,
+    rfqBundles,
+  });
+  logger.info(`proposals ready (${proposalBundles.length})`);
+
+  const billIds = await seedBills({
+    db,
+    tenantId,
+    stats,
+    lookups,
+    claimIds,
+    jobIds,
+    vendorIds,
+    purchaseOrderBundles,
+  });
+  logger.info(`bills ready (${billIds.length})`);
+
+  await seedTasks({
+    db,
+    tenantId,
+    stats,
+    claimIds,
+    jobIds,
+    workOrderIds: workOrderBundles.map((b) => b.workOrderId),
+    rfqIds: rfqBundles.map((b) => b.rfqId),
+    proposalIds: proposalBundles.map((b) => b.proposalId),
+    billIds,
+  });
   await seedMessages({ db, tenantId, stats, claimIds, jobIds });
   await seedAppointments({ db, tenantId, stats, jobIds, contactIds });
   await seedReports({ db, tenantId, stats, lookups, claimIds, jobIds });

@@ -12,7 +12,7 @@ and staging.
 
 | Name | What it does |
 |---|---|
-| `sample-data` | Populates the first organization in the DB with ~8 rows per core business table (contacts, vendors, claims, jobs, quotes + groups/combos/items, purchase_orders + groups/combos/items, invoices, tasks, messages, appointments + attendees, reports, attachments, lookup_values, claim_contacts, claim_assignees, job_contacts). All rows tagged with `external_reference` (or name/reference) prefixed `seed-*`, so re-running is a no-op. |
+| `sample-data` | Populates the first organization in the DB with ~8 rows per core business table (contacts, vendors, claims, jobs, quotes + groups/combos/items, purchase_orders + groups/combos/items, work_orders + groups/combos/items, rfqs + groups/combos/items, proposals + groups/combos/items, bills, invoices, tasks, messages, appointments + attendees, reports, attachments, lookup_values, claim_contacts, claim_assignees, job_contacts). All rows tagged with `external_reference` (or name/reference) prefixed `seed-*`, so re-running is a no-op. |
 
 ### Seeding a specific tenant on demand
 

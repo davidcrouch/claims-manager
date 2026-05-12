@@ -22,8 +22,9 @@ import { sql } from 'drizzle-orm';
 import { openDb, getDbHost } from './lib/db';
 import { runSeeds } from './lib/runner';
 import type { Seed } from './lib/runner';
+import sampleDataSeed from './entries/sample-data.seed';
 
-const SEEDS: Seed[] = [];
+const SEEDS: Seed[] = [sampleDataSeed];
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 

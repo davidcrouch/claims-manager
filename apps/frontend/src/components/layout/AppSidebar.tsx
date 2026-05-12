@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard,
   FileText,
@@ -11,16 +12,31 @@ import {
   ShoppingCart,
   Receipt,
   ClipboardList,
-  Building2,
-  Unplug,
+  ClipboardCheck,
+  FileQuestion,
+  FileInput,
+  ReceiptText,
+  TrendingUp,
+  TrendingDown,
+  CheckSquare,
+  Calendar,
+  MessageSquare,
+  CalendarCheck,
+  Users,
+  UserCog,
+  FolderOpen,
+  Settings,
   LogOut,
+  ChevronRight,
 } from 'lucide-react';
+import { Collapsible } from '@base-ui/react/collapsible';
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -45,17 +61,74 @@ export interface AppSidebarProps {
   user?: AppSidebarUser | null;
 }
 
-const navItems = [
-  { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { title: 'Claims', href: '/claims', icon: FileText },
-  { title: 'Jobs', href: '/jobs', icon: Briefcase },
-  { title: 'Quotes', href: '/quotes', icon: FileSpreadsheet },
-  { title: 'Purchase Orders', href: '/purchase-orders', icon: ShoppingCart },
-  { title: 'Invoices', href: '/invoices', icon: Receipt },
-  { title: 'Reports', href: '/reports', icon: ClipboardList },
-  { title: 'Vendors', href: '/vendors', icon: Building2 },
-  { title: 'Connections', href: '/connections', icon: Unplug },
-] as const;
+interface NavItem {
+  title: string;
+  href: string;
+  icon: LucideIcon;
+}
+
+interface NavGroup {
+  label: string | null;
+  items: NavItem[];
+  defaultOpen?: boolean;
+}
+
+const navGroups: NavGroup[] = [
+  {
+    label: null,
+    items: [
+      { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    ],
+  },
+  {
+    label: 'CUSTOMERS',
+    defaultOpen: true,
+    items: [
+      { title: 'Jobs', href: '/jobs', icon: Briefcase },
+      { title: 'Estimates/Quotes', href: '/quotes', icon: FileSpreadsheet },
+      { title: 'Work Orders', href: '/work-orders', icon: ClipboardCheck },
+      { title: 'Invoices', href: '/invoices', icon: Receipt },
+      { title: 'Claims', href: '/claims', icon: FileText },
+    ],
+  },
+  {
+    label: 'VENDORS',
+    defaultOpen: true,
+    items: [
+      { title: 'RFQs', href: '/rfqs', icon: FileQuestion },
+      { title: 'Proposals', href: '/proposals', icon: FileInput },
+      { title: 'POs', href: '/purchase-orders', icon: ShoppingCart },
+      { title: 'Bills', href: '/bills', icon: ReceiptText },
+    ],
+  },
+  {
+    label: 'OPERATIONS',
+    defaultOpen: true,
+    items: [
+      { title: 'Tasks', href: '/tasks', icon: CheckSquare },
+      { title: 'Schedule', href: '/schedule', icon: Calendar },
+      { title: 'Messages', href: '/messages', icon: MessageSquare },
+      { title: 'Appointments', href: '/appointments', icon: CalendarCheck },
+      { title: 'Contacts', href: '/contacts', icon: Users },
+      { title: 'Documents', href: '/admin/documents', icon: FolderOpen },
+    ],
+  },
+  {
+    label: 'FINANCE',
+    items: [
+      { title: 'Accounts Receivable', href: '/finance/ar', icon: TrendingUp },
+      { title: 'Accounts Payable', href: '/finance/ap', icon: TrendingDown },
+      { title: 'Reports', href: '/reports', icon: ClipboardList },
+    ],
+  },
+  {
+    label: 'ADMIN',
+    items: [
+      { title: 'Users', href: '/admin/users', icon: UserCog },
+      { title: 'Settings', href: '/admin/settings', icon: Settings },
+    ],
+  },
+];
 
 function getInitials(user?: AppSidebarUser | null): string {
   if (user?.given_name?.[0] && user?.family_name?.[0]) {
@@ -102,13 +175,15 @@ export function AppSidebar({ user }: AppSidebarProps) {
         </Link>
       </SidebarHeader>
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupContent>
+        {navGroups.map((group) => {
+          const menuItems = (
             <SidebarMenu>
-              {navItems.map((item) => {
-                const isActive =
-                  pathname === item.href ||
-                  (item.href !== '/dashboard' && pathname.startsWith(item.href));
+              {group.items.map((item) => {
+                const isActive = (() => {
+                  if (pathname === item.href) return true;
+                  if (item.href === '/dashboard') return false;
+                  return pathname.startsWith(item.href + '/');
+                })();
                 return (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
@@ -125,8 +200,35 @@ export function AppSidebar({ user }: AppSidebarProps) {
                 );
               })}
             </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+          );
+
+          if (!group.label) {
+            return (
+              <SidebarGroup key="top">
+                <SidebarGroupContent>{menuItems}</SidebarGroupContent>
+              </SidebarGroup>
+            );
+          }
+
+          return (
+            <Collapsible.Root
+              key={group.label}
+              defaultOpen={group.defaultOpen ?? false}
+            >
+              <SidebarGroup>
+                <Collapsible.Trigger className="group/collapsible flex w-full">
+                  <SidebarGroupLabel className="flex-1">
+                    {group.label}
+                    <ChevronRight className="ml-auto size-3.5 transition-transform duration-200 group-data-panel-open/collapsible:rotate-90" />
+                  </SidebarGroupLabel>
+                </Collapsible.Trigger>
+                <Collapsible.Panel className="overflow-hidden transition-all duration-200 data-ending-style:h-0 data-starting-style:h-0">
+                  <SidebarGroupContent>{menuItems}</SidebarGroupContent>
+                </Collapsible.Panel>
+              </SidebarGroup>
+            </Collapsible.Root>
+          );
+        })}
       </SidebarContent>
       <SidebarFooter className="pb-6">
         <SidebarMenu>

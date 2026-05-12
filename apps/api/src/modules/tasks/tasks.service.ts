@@ -28,6 +28,10 @@ export class TasksService {
     jobId?: string;
     claimId?: string;
     status?: string;
+    priority?: string;
+    entityType?: string;
+    entityId?: string;
+    assignedToUserId?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
     return this.tasksRepo.findAll({
@@ -37,6 +41,10 @@ export class TasksService {
       jobId: params.jobId,
       claimId: params.claimId,
       status: params.status,
+      priority: params.priority,
+      entityType: params.entityType,
+      entityId: params.entityId,
+      assignedToUserId: params.assignedToUserId,
     });
   }
 
@@ -55,27 +63,75 @@ export class TasksService {
     return this.tasksRepo.findByClaim({ claimId: params.claimId, tenantId });
   }
 
+  async findByEntity(params: { entityType: string; entityId: string }) {
+    const tenantId = this.tenantContext.getTenantId();
+    return this.tasksRepo.findByEntity({
+      tenantId,
+      entityType: params.entityType,
+      entityId: params.entityId,
+    });
+  }
+
+  async findOverdue() {
+    const tenantId = this.tenantContext.getTenantId();
+    return this.tasksRepo.findOverdue({ tenantId });
+  }
+
   async create(params: { body: Record<string, unknown> }) {
     const tenantId = this.tenantContext.getTenantId();
-    const connectionId = await this.resolveConnectionId(tenantId);
-    const apiTask = await this.crunchworkService.createTask({
-      connectionId,
-      body: params.body,
-    });
 
-    const apiObj = apiTask as Record<string, unknown>;
-    const insertData: TaskInsert = {
-      tenantId,
-      claimId: (apiObj.claimId ?? params.body?.claimId) as string,
-      jobId: (apiObj.jobId ?? params.body?.jobId) as string,
-      name: (apiObj.name ?? params.body?.name) as string,
-      description: apiObj.description as string,
-      dueDate: apiObj.dueDate ? new Date(apiObj.dueDate as string) : undefined,
-      priority: (apiObj.priority ?? params.body?.priority ?? 'Low') as string,
-      status: (apiObj.status ?? 'Open') as string,
-      taskPayload: apiTask as Record<string, unknown>,
-    };
-    return this.tasksRepo.create({ data: insertData });
+    const relatedEntityType = (params.body.relatedEntityType as string) ?? 'Job';
+    const relatedEntityId = (params.body.relatedEntityId as string) ??
+      (params.body.jobId as string) ?? (params.body.claimId as string);
+
+    let claimId = params.body.claimId as string | undefined;
+    let jobId = params.body.jobId as string | undefined;
+
+    if (relatedEntityType === 'Job') {
+      jobId = relatedEntityId;
+    } else if (relatedEntityType === 'Claim') {
+      claimId = relatedEntityId;
+    }
+
+    try {
+      const connectionId = await this.resolveConnectionId(tenantId);
+      const apiTask = await this.crunchworkService.createTask({
+        connectionId,
+        body: params.body,
+      });
+
+      const apiObj = apiTask as Record<string, unknown>;
+      const insertData: TaskInsert = {
+        tenantId,
+        relatedEntityType,
+        relatedEntityId,
+        claimId: (apiObj.claimId ?? claimId) as string,
+        jobId: (apiObj.jobId ?? jobId) as string,
+        name: (apiObj.name ?? params.body?.name) as string,
+        description: apiObj.description as string,
+        dueDate: apiObj.dueDate ? new Date(apiObj.dueDate as string) : undefined,
+        priority: (apiObj.priority ?? params.body?.priority ?? 'Low') as string,
+        status: (apiObj.status ?? 'Open') as string,
+        taskPayload: apiTask as Record<string, unknown>,
+      };
+      return this.tasksRepo.create({ data: insertData });
+    } catch {
+      const insertData: TaskInsert = {
+        tenantId,
+        relatedEntityType,
+        relatedEntityId,
+        claimId: claimId as string,
+        jobId: jobId as string,
+        name: params.body.name as string,
+        description: params.body.description as string,
+        dueDate: params.body.dueDate ? new Date(params.body.dueDate as string) : undefined,
+        priority: (params.body.priority as string) ?? 'Low',
+        status: 'Open',
+        assignedToUserId: params.body.assignedToUserId as string,
+        taskPayload: {},
+      };
+      return this.tasksRepo.create({ data: insertData });
+    }
   }
 
   async update(params: { id: string; body: Record<string, unknown> }) {

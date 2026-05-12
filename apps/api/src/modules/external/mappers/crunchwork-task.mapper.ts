@@ -109,12 +109,17 @@ export class CrunchworkTaskMapper implements EntityMapper {
     const rawPriority = ((payload.priority as string) ?? 'low').toLowerCase();
     const rawStatus = ((payload.status as string) ?? 'open').toLowerCase();
 
+    const resolvedEntityType = jobId ? 'Job' : 'Claim';
+    const resolvedEntityId = (jobId ?? claimId)!;
+
     const taskData = {
       tenantId: params.tenantId,
       name: (payload.name as string) ?? 'Untitled Task',
       description: (payload.description as string) ?? undefined,
       claimId: claimId ?? undefined,
       jobId: jobId ?? undefined,
+      relatedEntityType: resolvedEntityType,
+      relatedEntityId: resolvedEntityId,
       dueDate: payload.dueDate
         ? new Date(payload.dueDate as string)
         : undefined,

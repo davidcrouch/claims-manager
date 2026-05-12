@@ -10,6 +10,10 @@ import type {
   Quote,
   PurchaseOrder,
   Invoice,
+  WorkOrder,
+  Rfq,
+  Proposal,
+  Bill,
   Report,
   Task,
   Message,
@@ -19,6 +23,8 @@ import type {
   DashboardStats,
   RecentActivity,
   PaginatedResponse,
+  FinanceSummary,
+  AgingBucket,
   ProviderSummary,
   Provider,
   ProviderConnection,
@@ -331,6 +337,163 @@ export function createApiClient(options?: ApiClientOptions) {
         method: 'POST',
         body: JSON.stringify(body ?? {}),
       });
+    },
+
+    // Work Orders
+    getWorkOrders(params?: {
+      page?: number;
+      limit?: number;
+      jobId?: string;
+      purchaseOrderId?: string;
+    }): Promise<PaginatedResponse<WorkOrder>> {
+      const sp = new URLSearchParams();
+      if (params?.page != null) sp.set('page', String(params.page));
+      if (params?.limit != null) sp.set('limit', String(params.limit));
+      if (params?.jobId) sp.set('jobId', params.jobId);
+      if (params?.purchaseOrderId) sp.set('purchaseOrderId', params.purchaseOrderId);
+      return fetchApi<PaginatedResponse<WorkOrder>>(`/work-orders?${sp}`);
+    },
+
+    getWorkOrder(id: string): Promise<WorkOrder | null> {
+      return fetchApi<WorkOrder | null>(`/work-orders/${id}`);
+    },
+
+    getJobWorkOrders(jobId: string): Promise<WorkOrder[]> {
+      return fetchApi<WorkOrder[]>(`/work-orders/job/${jobId}`);
+    },
+
+    createWorkOrder(body: Record<string, unknown>): Promise<WorkOrder> {
+      return fetchApi<WorkOrder>('/work-orders', { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    updateWorkOrder(id: string, body: Record<string, unknown>): Promise<WorkOrder> {
+      return fetchApi<WorkOrder>(`/work-orders/${id}`, { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    // RFQs
+    getRfqs(params?: {
+      page?: number;
+      limit?: number;
+      jobId?: string;
+      quoteId?: string;
+      vendorId?: string;
+    }): Promise<PaginatedResponse<Rfq>> {
+      const sp = new URLSearchParams();
+      if (params?.page != null) sp.set('page', String(params.page));
+      if (params?.limit != null) sp.set('limit', String(params.limit));
+      if (params?.jobId) sp.set('jobId', params.jobId);
+      if (params?.quoteId) sp.set('quoteId', params.quoteId);
+      if (params?.vendorId) sp.set('vendorId', params.vendorId);
+      return fetchApi<PaginatedResponse<Rfq>>(`/rfqs?${sp}`);
+    },
+
+    getRfq(id: string): Promise<Rfq | null> {
+      return fetchApi<Rfq | null>(`/rfqs/${id}`);
+    },
+
+    getJobRfqs(jobId: string): Promise<Rfq[]> {
+      return fetchApi<Rfq[]>(`/rfqs/job/${jobId}`);
+    },
+
+    getQuoteRfqs(quoteId: string): Promise<Rfq[]> {
+      return fetchApi<Rfq[]>(`/rfqs/quote/${quoteId}`);
+    },
+
+    createRfq(body: Record<string, unknown>): Promise<Rfq> {
+      return fetchApi<Rfq>('/rfqs', { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    updateRfq(id: string, body: Record<string, unknown>): Promise<Rfq> {
+      return fetchApi<Rfq>(`/rfqs/${id}`, { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    // Proposals
+    getProposals(params?: {
+      page?: number;
+      limit?: number;
+      jobId?: string;
+      rfqId?: string;
+      vendorId?: string;
+    }): Promise<PaginatedResponse<Proposal>> {
+      const sp = new URLSearchParams();
+      if (params?.page != null) sp.set('page', String(params.page));
+      if (params?.limit != null) sp.set('limit', String(params.limit));
+      if (params?.jobId) sp.set('jobId', params.jobId);
+      if (params?.rfqId) sp.set('rfqId', params.rfqId);
+      if (params?.vendorId) sp.set('vendorId', params.vendorId);
+      return fetchApi<PaginatedResponse<Proposal>>(`/proposals?${sp}`);
+    },
+
+    getProposal(id: string): Promise<Proposal | null> {
+      return fetchApi<Proposal | null>(`/proposals/${id}`);
+    },
+
+    getJobProposals(jobId: string): Promise<Proposal[]> {
+      return fetchApi<Proposal[]>(`/proposals/job/${jobId}`);
+    },
+
+    getRfqProposals(rfqId: string): Promise<Proposal[]> {
+      return fetchApi<Proposal[]>(`/proposals/rfq/${rfqId}`);
+    },
+
+    createProposal(body: Record<string, unknown>): Promise<Proposal> {
+      return fetchApi<Proposal>('/proposals', { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    updateProposal(id: string, body: Record<string, unknown>): Promise<Proposal> {
+      return fetchApi<Proposal>(`/proposals/${id}`, { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    // Bills
+    getBills(params?: {
+      page?: number;
+      limit?: number;
+      jobId?: string;
+      purchaseOrderId?: string;
+      vendorId?: string;
+      invoiceId?: string;
+    }): Promise<PaginatedResponse<Bill>> {
+      const sp = new URLSearchParams();
+      if (params?.page != null) sp.set('page', String(params.page));
+      if (params?.limit != null) sp.set('limit', String(params.limit));
+      if (params?.jobId) sp.set('jobId', params.jobId);
+      if (params?.purchaseOrderId) sp.set('purchaseOrderId', params.purchaseOrderId);
+      if (params?.vendorId) sp.set('vendorId', params.vendorId);
+      if (params?.invoiceId) sp.set('invoiceId', params.invoiceId);
+      return fetchApi<PaginatedResponse<Bill>>(`/bills?${sp}`);
+    },
+
+    getBill(id: string): Promise<Bill | null> {
+      return fetchApi<Bill | null>(`/bills/${id}`);
+    },
+
+    getJobBills(jobId: string): Promise<Bill[]> {
+      return fetchApi<Bill[]>(`/bills/job/${jobId}`);
+    },
+
+    getPurchaseOrderBills(poId: string): Promise<Bill[]> {
+      return fetchApi<Bill[]>(`/bills/purchase-order/${poId}`);
+    },
+
+    createBill(body: Record<string, unknown>): Promise<Bill> {
+      return fetchApi<Bill>('/bills', { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    updateBill(id: string, body: Record<string, unknown>): Promise<Bill> {
+      return fetchApi<Bill>(`/bills/${id}`, { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    // Finance
+    getFinanceAr(): Promise<{ buckets: AgingBucket[]; totalOutstanding: number; totalOverdue: number; totalPaid: number }> {
+      return fetchApi('/finance/ar');
+    },
+
+    getFinanceAp(): Promise<{ buckets: AgingBucket[]; totalOutstanding: number; totalOverdue: number; totalPaid: number }> {
+      return fetchApi('/finance/ap');
+    },
+
+    getFinanceSummary(): Promise<FinanceSummary> {
+      return fetchApi<FinanceSummary>('/finance/summary');
     },
 
     getProviders(): Promise<ProviderSummary[]> {

@@ -33,6 +33,11 @@ export {
 } from './invoices.repository';
 export { PurchaseOrdersRepository } from './purchase-orders.repository';
 export {
+  WorkOrdersRepository,
+  type WorkOrderRow,
+  type WorkOrderInsert,
+} from './work-orders.repository';
+export {
   TasksRepository,
   type TaskRow,
   type TaskInsert,
@@ -97,3 +102,18 @@ export {
   type ExternalEventAttemptRow,
   type ExternalEventAttemptInsert,
 } from './external-event-attempts.repository';
+export {
+  RfqsRepository,
+  type RfqRow,
+  type RfqInsert,
+} from './rfqs.repository';
+export {
+  ProposalsRepository,
+  type ProposalRow,
+  type ProposalInsert,
+} from './proposals.repository';
+export {
+  BillsRepository,
+  type BillRow,
+  type BillInsert,
+} from './bills.repository';
