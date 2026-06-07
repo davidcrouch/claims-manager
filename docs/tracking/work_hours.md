@@ -271,7 +271,7 @@
   Split the **claim jobs view** into internal and linked tables, added missing claim fields, and upgraded **admin settings and user management** screens with structured layouts for organisation, notifications, and billing configuration.
   Replaced placeholder stubs with **line-item rendering** on work order and invoice detail pages, and added an **attachment upload zone** to job attachments.
 
-- `2026-06-08` `71d463e` **13.5 h**
+- `2026-06-08` `8269b5f` **13.5 h**
   `23 files | +3 529 −0 | Tier 2 standard | Heavy orchestration`
   Lay summary: Documented every screen in the upstream vendor portal and wrote matching build-ready specifications for the EnsureOS claims workspace.
   **Upstream UI observation specs and EnsureOS implementation specifications for the full product surface.** Walked through every page of the upstream Crunchwork Pulse vendor portal — claims, jobs, quotes, purchase orders, invoices, and activities — and recorded field layouts, navigation paths, status flows, and action buttons into a structured reference set.
