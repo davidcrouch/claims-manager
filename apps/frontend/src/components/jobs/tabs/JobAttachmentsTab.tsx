@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Paperclip, Download } from 'lucide-react';
+import { Paperclip, Download, Upload } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { fetchJobAttachmentsAction } from '@/app/(app)/jobs/[id]/actions';
 import {
   formatDate,
@@ -40,17 +41,32 @@ export function JobAttachmentsTab({ jobId }: { jobId: string }) {
 
   return (
     <Card>
-      <CardHeader className="pb-2">
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="flex items-center gap-2 text-sm">
           <Paperclip className="h-4 w-4 text-muted-foreground" />
           Attachments ({attachments.length})
         </CardTitle>
+        <Button size="sm" variant="outline" disabled title="Upload will be available once the attachments API supports file upload">
+          <Upload className="mr-1 h-3 w-3" />
+          Upload
+        </Button>
       </CardHeader>
       <CardContent className="px-0">
         {attachments.length === 0 ? (
-          <p className="px-4 text-sm text-muted-foreground">
-            No attachments linked to this job.
-          </p>
+          <div>
+            <div className="mx-4 mb-4 flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/25 bg-muted/10 py-8">
+              <Upload className="mb-2 h-8 w-8 text-muted-foreground/40" />
+              <p className="text-sm text-muted-foreground">
+                Drag & drop files here or click Upload
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground/60">
+                File upload will be available once the attachments API supports it
+              </p>
+            </div>
+            <p className="px-4 text-sm text-muted-foreground">
+              No attachments linked to this job.
+            </p>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">

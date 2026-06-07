@@ -1,11 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ListTodo } from 'lucide-react';
+import { ListTodo, Plus } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { fetchJobTasksAction } from '@/app/(app)/jobs/[id]/actions';
 import { formatDate, PhaseUnavailable } from '@/components/shared/detail';
+import { TaskFormDrawer } from '@/components/forms/TaskFormDrawer';
 import type { Task, LookupRef } from '@/types/api';
 
 function refName(value: string | LookupRef | null | undefined): string {
@@ -18,6 +20,8 @@ export function JobTasksTab({ jobId }: { jobId: string }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [phaseUnavailable, setPhaseUnavailable] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -31,7 +35,7 @@ export function JobTasksTab({ jobId }: { jobId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [jobId]);
+  }, [jobId, refreshKey]);
 
   if (loading) {
     return <p className="text-sm text-muted-foreground">Loading...</p>;
@@ -43,11 +47,15 @@ export function JobTasksTab({ jobId }: { jobId: string }) {
 
   return (
     <Card>
-      <CardHeader className="pb-2">
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="flex items-center gap-2 text-sm">
           <ListTodo className="h-4 w-4 text-muted-foreground" />
           Tasks ({tasks.length})
         </CardTitle>
+        <Button size="sm" variant="outline" onClick={() => setShowCreate(true)}>
+          <Plus className="mr-1 h-3 w-3" />
+          Create Task
+        </Button>
       </CardHeader>
       <CardContent className="px-0">
         {tasks.length === 0 ? (
@@ -96,6 +104,14 @@ export function JobTasksTab({ jobId }: { jobId: string }) {
           </div>
         )}
       </CardContent>
+      <TaskFormDrawer
+        open={showCreate}
+        onOpenChange={(open) => {
+          setShowCreate(open);
+          if (!open) setRefreshKey((k) => k + 1);
+        }}
+        jobId={jobId}
+      />
     </Card>
   );
 }

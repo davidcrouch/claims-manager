@@ -16,14 +16,19 @@ import {
   ExternalLink,
   Building2,
   Calendar,
+  Clock,
   ClipboardList,
   DollarSign,
   FileSignature,
   Hash,
   Layers,
+  ListTodo,
   MapPin,
+  MessageSquare,
   Package,
+  Paperclip,
   Phone,
+  Receipt,
   User,
   Users,
 } from 'lucide-react';
@@ -270,7 +275,7 @@ function OverviewTab({ po }: { po: PurchaseOrder }) {
               )
             }
           />
-          <DefRow label="Quote" value={po.quoteId ?? '—'} />
+          <DefRow label="Estimate" value={po.quoteId ?? '—'} />
         </SectionCard>
       </div>
 
@@ -418,7 +423,7 @@ function AllocationTab({ po }: { po: PurchaseOrder }) {
           value={asString(pick(allocation, 'vendorAllocationReportTypeId')) ?? '—'}
         />
         <DefRow
-          label="Quote revision ID"
+          label="Estimate revision ID"
           value={asString(pick(allocation, 'quoteRevisionId')) ?? '—'}
         />
         <DefRow
@@ -431,9 +436,6 @@ function AllocationTab({ po }: { po: PurchaseOrder }) {
 }
 
 function LineItemsTab() {
-  // §9 groups → combos → items and §9.4 inline invoices are not yet returned
-  // by `GET /purchase-orders/:id`. See docs/mapping/purchase_orders.md §9 and
-  // docs/implementation/11_PURCHASE_ORDERS_MODULE.md acceptance criteria.
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -448,6 +450,87 @@ function LineItemsTab() {
           <code className="font-mono">purchase_order_combos</code> and{' '}
           <code className="font-mono">purchase_order_items</code>, they will be
           rendered here.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function BillsTab() {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">Bills</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm text-muted-foreground">
+          Bills received from the downstream vendor against this PO will appear
+          here once the bills API is connected.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ActivitiesTab() {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">Activities</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm text-muted-foreground">
+          Tasks and appointments linked to this purchase order will appear here
+          once the activities API is connected.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function CommunicationsTab() {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">Communications</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm text-muted-foreground">
+          Emails and messages associated with this purchase order will appear
+          here once the communications API is connected.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TimelineTab({ po }: { po: PurchaseOrder }) {
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      <SectionCard
+        title="Local audit"
+        icon={<Clock className="h-4 w-4 text-muted-foreground" />}
+      >
+        <DefRow label="Created" value={formatDateTime(po.createdAt)} />
+        <DefRow label="Updated" value={formatDateTime(po.updatedAt)} />
+        <DefRow label="Deleted" value={po.deletedAt ? formatDateTime(po.deletedAt) : '—'} />
+        <DefRow label="Created by (user id)" value={po.createdByUserId ?? '—'} />
+        <DefRow label="Updated by (user id)" value={po.updatedByUserId ?? '—'} />
+      </SectionCard>
+    </div>
+  );
+}
+
+function AttachmentsTab() {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">Attachments</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm text-muted-foreground">
+          Attachments linked to this purchase order will appear here once the
+          attachments API is connected.
         </p>
       </CardContent>
     </Card>
@@ -495,7 +578,17 @@ function AuditTab({ po }: { po: PurchaseOrder }) {
 
 // ---------- container -------------------------------------------------------
 
-type PoTab = 'overview' | 'parties' | 'allocation' | 'lineItems' | 'audit';
+type PoTab =
+  | 'overview'
+  | 'parties'
+  | 'line-items'
+  | 'allocation'
+  | 'bills'
+  | 'activities'
+  | 'communications'
+  | 'timeline'
+  | 'attachments'
+  | 'audit';
 
 export function PurchaseOrderDetail({ po }: { po: PurchaseOrder }) {
   const [tab, setTab] = useState<PoTab>('overview');
@@ -503,8 +596,13 @@ export function PurchaseOrderDetail({ po }: { po: PurchaseOrder }) {
   const tabs: Array<{ id: PoTab; label: string; icon: typeof Calendar }> = [
     { id: 'overview', label: 'Overview', icon: Calendar },
     { id: 'parties', label: 'Parties', icon: Users },
+    { id: 'line-items', label: 'Line Items', icon: Package },
     { id: 'allocation', label: 'Allocation', icon: Layers },
-    { id: 'lineItems', label: 'Line Items', icon: Package },
+    { id: 'bills', label: 'Bills', icon: Receipt },
+    { id: 'activities', label: 'Activities', icon: ListTodo },
+    { id: 'communications', label: 'Communications', icon: MessageSquare },
+    { id: 'timeline', label: 'Timeline', icon: Clock },
+    { id: 'attachments', label: 'Attachments', icon: Paperclip },
     { id: 'audit', label: 'Audit', icon: MapPin },
   ];
 
@@ -534,8 +632,13 @@ export function PurchaseOrderDetail({ po }: { po: PurchaseOrder }) {
       <div className="pt-4">
         {tab === 'overview' && <OverviewTab po={po} />}
         {tab === 'parties' && <PartiesTab po={po} />}
+        {tab === 'line-items' && <LineItemsTab />}
         {tab === 'allocation' && <AllocationTab po={po} />}
-        {tab === 'lineItems' && <LineItemsTab />}
+        {tab === 'bills' && <BillsTab />}
+        {tab === 'activities' && <ActivitiesTab />}
+        {tab === 'communications' && <CommunicationsTab />}
+        {tab === 'timeline' && <TimelineTab po={po} />}
+        {tab === 'attachments' && <AttachmentsTab />}
         {tab === 'audit' && <AuditTab po={po} />}
       </div>
     </div>

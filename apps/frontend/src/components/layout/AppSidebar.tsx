@@ -84,11 +84,11 @@ const navGroups: NavGroup[] = [
     label: 'CUSTOMERS',
     defaultOpen: true,
     items: [
+      { title: 'Claims', href: '/claims', icon: FileText },
       { title: 'Jobs', href: '/jobs', icon: Briefcase },
-      { title: 'Estimates/Quotes', href: '/quotes', icon: FileSpreadsheet },
+      { title: 'Estimates', href: '/quotes', icon: FileSpreadsheet },
       { title: 'Work Orders', href: '/work-orders', icon: ClipboardCheck },
       { title: 'Invoices', href: '/invoices', icon: Receipt },
-      { title: 'Claims', href: '/claims', icon: FileText },
     ],
   },
   {

@@ -11,7 +11,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const api = await getServerApiClient();
-  if (!api) return { title: 'Quote | EnsureOS' };
+  if (!api) return { title: 'Estimate | EnsureOS' };
 
   const quote = await api.getQuote(id).catch(() => null);
   const title = quote?.quoteNumber ?? quote?.externalReference ?? id;

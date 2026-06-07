@@ -2,7 +2,7 @@
 
 import { getSession, getAccessToken } from '@/lib/auth';
 import { createApiClient } from '@/lib/api-client';
-import type { Quote, Invoice, Report } from '@/types/api';
+import type { Quote, Invoice, Report, Task } from '@/types/api';
 
 async function getApi() {
   const session = await getSession();
@@ -45,6 +45,18 @@ export async function createReportAction(body: Record<string, unknown>): Promise
   } catch (err) {
     console.error('[createReportAction]', err);
     return { success: false, error: err instanceof Error ? err.message : 'Failed to create report' };
+  }
+}
+
+export async function createTaskAction(body: Record<string, unknown>): Promise<{ success: boolean; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    await api.createTask(body);
+    return { success: true };
+  } catch (err) {
+    console.error('[createTaskAction]', err);
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to create task' };
   }
 }
 

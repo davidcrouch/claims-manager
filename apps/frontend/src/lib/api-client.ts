@@ -324,6 +324,10 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<Report>('/reports', { method: 'POST', body: JSON.stringify(body) });
     },
 
+    createTask(body: Record<string, unknown>): Promise<Task> {
+      return fetchApi<Task>('/tasks', { method: 'POST', body: JSON.stringify(body) });
+    },
+
     createAppointment(body: Record<string, unknown>): Promise<unknown> {
       return fetchApi<unknown>('/appointments', { method: 'POST', body: JSON.stringify(body) });
     },

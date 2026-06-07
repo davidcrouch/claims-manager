@@ -9,6 +9,7 @@ import { Receipt } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -28,9 +29,17 @@ import type { PurchaseOrder } from '@/types/api';
 const invoiceFormSchema = z.object({
   purchaseOrderId: z.string().min(1, 'Purchase order is required'),
   invoiceNumber: z.string().optional(),
+  totalAmount: z.coerce.number().optional(),
+  issueDate: z.string().optional(),
+  dueDate: z.string().optional(),
+  note: z.string().optional(),
 });
 
 type InvoiceFormValues = z.infer<typeof invoiceFormSchema>;
+
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 export interface InvoiceFormDrawerProps {
   open: boolean;
@@ -52,6 +61,10 @@ export function InvoiceFormDrawer({
     defaultValues: {
       purchaseOrderId: '',
       invoiceNumber: '',
+      totalAmount: undefined,
+      issueDate: todayISO(),
+      dueDate: '',
+      note: '',
     },
   });
 
@@ -62,10 +75,21 @@ export function InvoiceFormDrawer({
       const result = await createInvoiceAction({
         purchaseOrderId: values.purchaseOrderId,
         invoiceNumber: values.invoiceNumber || undefined,
+        totalAmount: values.totalAmount ?? undefined,
+        issueDate: values.issueDate || undefined,
+        dueDate: values.dueDate || undefined,
+        note: values.note || undefined,
       });
       if (result.success) {
         onOpenChange(false);
-        form.reset({ purchaseOrderId: '', invoiceNumber: '' });
+        form.reset({
+          purchaseOrderId: '',
+          invoiceNumber: '',
+          totalAmount: undefined,
+          issueDate: todayISO(),
+          dueDate: '',
+          note: '',
+        });
         router.refresh();
       } else {
         setError(result.error ?? 'Failed to submit invoice');
@@ -125,6 +149,46 @@ export function InvoiceFormDrawer({
                 id="invoiceNumber"
                 {...form.register('invoiceNumber')}
                 placeholder="e.g. INV-001"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="totalAmount">Total Amount (optional)</Label>
+              <Input
+                id="totalAmount"
+                type="number"
+                step="0.01"
+                min="0"
+                {...form.register('totalAmount')}
+                placeholder="0.00"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="issueDate">Issue Date (optional)</Label>
+              <Input
+                id="issueDate"
+                type="date"
+                {...form.register('issueDate')}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="dueDate">Due Date (optional)</Label>
+              <Input
+                id="dueDate"
+                type="date"
+                {...form.register('dueDate')}
+              />
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="note">Note (optional)</Label>
+              <Textarea
+                id="note"
+                {...form.register('note')}
+                placeholder="Add a note..."
+                rows={4}
               />
             </div>
           </div>

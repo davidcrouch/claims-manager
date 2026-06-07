@@ -201,6 +201,63 @@ export default async function DashboardPage() {
           />
         </DashboardSection>
 
+        <section>
+          <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Upcoming
+          </h3>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2 pb-2">
+                <CalendarCheck className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Upcoming Appointments</span>
+              </CardHeader>
+              <CardContent>
+                {stats?.upcomingAppointments ? (
+                  <div>
+                    <p className="text-sm">
+                      You have {stats.upcomingAppointments} appointment(s) in the next 7 days.
+                    </p>
+                    <Link
+                      href="/appointments"
+                      className="mt-2 inline-block text-sm text-primary hover:underline"
+                    >
+                      View all →
+                    </Link>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No upcoming appointments.</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2 pb-2">
+                <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Overdue Tasks</span>
+              </CardHeader>
+              <CardContent>
+                {stats?.overdueTaskCount ? (
+                  <div>
+                    <p className="text-sm">
+                      You have{' '}
+                      <span className="font-semibold text-destructive">{stats.overdueTaskCount}</span>{' '}
+                      overdue task(s) that need attention.
+                    </p>
+                    <Link
+                      href="/tasks?status=Open&overdue=true"
+                      className="mt-2 inline-block text-sm text-primary hover:underline"
+                    >
+                      View all →
+                    </Link>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No overdue tasks.</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+
         <Card>
           <CardHeader>
             <h2 className="text-lg font-semibold">Recent Activity</h2>

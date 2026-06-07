@@ -25,23 +25,15 @@ import {
 } from '@/components/layout/ListPageHeader';
 import type { Invoice, PaginatedResponse } from '@/types/api';
 
+import { formatCurrency } from '@/components/shared/detail';
+
 const SORT_OPTIONS: SortOption[] = [
   { key: 'updated_at', label: 'Updated' },
   { key: 'created_at', label: 'Created' },
   { key: 'invoice_number', label: 'Invoice #' },
+  { key: 'total_amount', label: 'Total' },
 ];
 const ALLOWED_SORT_FIELDS = SORT_OPTIONS.map((o) => o.key);
-
-function formatAmount(value?: string | null): string {
-  if (!value) return '';
-  const n = Number(value);
-  if (Number.isNaN(n)) return value;
-  return n.toLocaleString(undefined, {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 2,
-  });
-}
 
 export interface InvoicesListClientProps {
   initialData: PaginatedResponse<Invoice>;
@@ -141,6 +133,12 @@ export function InvoicesListClient({
             b.invoiceNumber ?? '',
             sortOrder,
           );
+        case 'total_amount':
+          return compareValues(
+            Number(a.totalAmount ?? 0),
+            Number(b.totalAmount ?? 0),
+            sortOrder,
+          );
         case 'created_at':
           return compareDates(a.createdAt, b.createdAt, sortOrder);
         case 'updated_at':
@@ -164,7 +162,7 @@ export function InvoicesListClient({
     if (sum === 0) return null;
     return sum.toLocaleString(undefined, {
       style: 'currency',
-      currency: 'USD',
+      currency: 'AUD',
       maximumFractionDigits: 0,
     });
   }, [visibleRows]);
@@ -223,6 +221,7 @@ export function InvoicesListClient({
                   <th scope="col" className="px-4 py-3">Invoice #</th>
                   <th scope="col" className="px-4 py-3">Status</th>
                   <th scope="col" className="px-4 py-3">Total</th>
+                  <th scope="col" className="px-4 py-3">Issue Date</th>
                   <th scope="col" className="px-4 py-3">Created</th>
                   <th scope="col" className="px-4 py-3">Updated</th>
                 </tr>
@@ -246,7 +245,10 @@ export function InvoicesListClient({
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {formatAmount(inv.totalAmount)}
+                        {formatCurrency(inv.totalAmount)}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                        {formatDate(inv.issueDate)}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                         {formatDate(inv.createdAt)}

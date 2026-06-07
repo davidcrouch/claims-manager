@@ -4,12 +4,14 @@ import { useCallback } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import {
   Calendar,
+  Clock,
   Users,
   FileText,
   FileSignature,
   Receipt,
   ListTodo,
   MessageSquare,
+  Mail,
   FileBarChart,
   Paperclip,
   Info,
@@ -25,6 +27,8 @@ import { JobTasksTab } from './tabs/JobTasksTab';
 import { JobMessagesTab } from './tabs/JobMessagesTab';
 import { JobReportsTab } from './tabs/JobReportsTab';
 import { JobAttachmentsTab } from './tabs/JobAttachmentsTab';
+import { JobCommunicationsTab } from './tabs/JobCommunicationsTab';
+import { JobTimelineTab } from './tabs/JobTimelineTab';
 import { hasTypeDetails } from './util/jobType';
 import type { Job, Claim } from '@/types/api';
 
@@ -38,8 +42,10 @@ const VALID_TABS = [
   'invoices',
   'tasks',
   'messages',
+  'communications',
   'reports',
   'attachments',
+  'timeline',
 ] as const;
 
 type TabValue = (typeof VALID_TABS)[number];
@@ -89,13 +95,15 @@ export function JobDetail({
       : []),
     { id: 'parties', label: 'Parties', icon: Users },
     { id: 'appointments', label: 'Appointments', icon: Calendar },
-    { id: 'quotes', label: 'Quotes', icon: FileText },
+    { id: 'quotes', label: 'Estimates', icon: FileText },
     { id: 'purchase-orders', label: 'Purchase Orders', icon: FileSignature },
     { id: 'invoices', label: 'Invoices', icon: Receipt },
     { id: 'tasks', label: 'Tasks', icon: ListTodo },
     { id: 'messages', label: 'Messages', icon: MessageSquare },
+    { id: 'communications', label: 'Communications', icon: Mail },
     { id: 'reports', label: 'Reports', icon: FileBarChart },
     { id: 'attachments', label: 'Attachments', icon: Paperclip },
+    { id: 'timeline', label: 'Timeline', icon: Clock },
   ];
 
   return (
@@ -144,7 +152,11 @@ export function JobDetail({
         {activeTab === 'reports' && (
           <JobReportsTab jobId={job.id} claimId={claimId} />
         )}
+        {activeTab === 'communications' && (
+          <JobCommunicationsTab jobId={job.id} />
+        )}
         {activeTab === 'attachments' && <JobAttachmentsTab jobId={job.id} />}
+        {activeTab === 'timeline' && <JobTimelineTab job={job} />}
       </div>
     </div>
   );

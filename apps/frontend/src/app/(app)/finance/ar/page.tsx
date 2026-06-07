@@ -8,13 +8,22 @@ export default async function AccountsReceivablePage() {
   const api = await getServerApiClient();
   if (!api) redirect('/api/auth/login');
 
-  const summary = await api.getFinanceAr().catch((err: unknown) => {
-    console.error(
-      'frontend:AccountsReceivablePage - getFinanceAr failed:',
-      err instanceof Error ? err.message : err,
-    );
-    return { buckets: [], totalOutstanding: 0, totalOverdue: 0, totalPaid: 0 };
-  });
+  const [summary, invoicesRes] = await Promise.all([
+    api.getFinanceAr().catch((err: unknown) => {
+      console.error(
+        'frontend:AccountsReceivablePage - getFinanceAr failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return { buckets: [], totalOutstanding: 0, totalOverdue: 0, totalPaid: 0 };
+    }),
+    api.getInvoices({ limit: 100 }).catch((err: unknown) => {
+      console.error(
+        'frontend:AccountsReceivablePage - getInvoices failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return { data: [], total: 0, page: 1, limit: 100 };
+    }),
+  ]);
 
-  return <FinanceArClient summary={summary} />;
+  return <FinanceArClient summary={summary} invoices={invoicesRes.data} />;
 }

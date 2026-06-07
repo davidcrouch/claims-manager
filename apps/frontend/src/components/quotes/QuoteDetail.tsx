@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import {
   FileSpreadsheet,
@@ -14,6 +15,10 @@ import {
   Layers,
   StickyNote,
   Tag,
+  Calendar,
+  ClipboardList,
+  MessageSquare,
+  Paperclip,
 } from 'lucide-react';
 import {
   Card,
@@ -45,7 +50,7 @@ import type {
 const PREFIX = 'frontend:QuoteDetail';
 
 // ---------------------------------------------------------------------------
-// Helpers — extract JSONB buckets and CW api_payload safely.
+// Helpers
 // ---------------------------------------------------------------------------
 
 function getApi(quote: Quote): Dict {
@@ -147,9 +152,7 @@ function getCustomData(quote: Quote): Dict {
 }
 
 // ---------------------------------------------------------------------------
-// CW groups / combos / items — read from api_payload until the mapper
-// promotes them into quote_groups / quote_combos / quote_items.
-// Shapes match Insurance REST API v17 §3.3.6.
+// Line items types
 // ---------------------------------------------------------------------------
 
 interface ApiLookup {
@@ -240,7 +243,7 @@ function dimensionSummary(g: ApiGroup): string {
 }
 
 // ---------------------------------------------------------------------------
-// Section components
+// Header
 // ---------------------------------------------------------------------------
 
 export function QuotePageHeader({ quote }: { quote: Quote }) {
@@ -252,307 +255,215 @@ export function QuotePageHeader({ quote }: { quote: Quote }) {
     quote.id;
   const statusName =
     quote.status?.name ?? approval.statusName ?? 'Unknown';
+  const quoteTypeName = quote.quoteType?.name ?? approval.quoteTypeName;
 
   return (
-    <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1">
-      <BackButton href="/quotes" label="Back to quotes" />
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100">
-        <FileSpreadsheet className="h-4 w-4 text-amber-600" />
-      </span>
-      <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
-      <StatusBadge status={statusName} />
-      {approval.statusType && approval.statusType !== statusName && (
-        <span className="text-xs text-muted-foreground">
-          ({approval.statusType})
+    <div className="flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-2">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+        <BackButton href="/quotes" label="Back to estimates" />
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100">
+          <FileSpreadsheet className="h-4 w-4 text-amber-600" />
         </span>
-      )}
-      {quote.jobId && (
-        <Link
-          href={`/jobs/${quote.jobId}`}
-          className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-        >
-          View job
-          <ExternalLink className="h-3 w-3" />
-        </Link>
-      )}
-      {!quote.jobId && quote.claimId && (
-        <Link
-          href={`/claims/${quote.claimId}`}
-          className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-        >
-          View claim
-          <ExternalLink className="h-3 w-3" />
-        </Link>
-      )}
+        <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
+        <StatusBadge status={statusName} />
+        {quoteTypeName && quoteTypeName !== 'Estimate' && quoteTypeName !== 'Quote' && (
+          <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+            <Tag className="h-3 w-3" />
+            {quoteTypeName}
+          </span>
+        )}
+        {quote.jobId && (
+          <Link
+            href={`/jobs/${quote.jobId}`}
+            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+          >
+            View Job
+            <ExternalLink className="h-3 w-3" />
+          </Link>
+        )}
+        {quote.claimId && (
+          <Link
+            href={`/claims/${quote.claimId}`}
+            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+          >
+            View Claim
+            <ExternalLink className="h-3 w-3" />
+          </Link>
+        )}
+      </div>
+      <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1 text-xs">
+        <div className="flex items-baseline gap-1">
+          <span className="text-muted-foreground">Total:</span>
+          <span className="font-medium">{formatCurrency(quote.totalAmount)}</span>
+        </div>
+        <div className="flex items-baseline gap-1">
+          <span className="text-muted-foreground">Estimate date:</span>
+          <span className="font-medium">{formatDate(quote.quoteDate)}</span>
+        </div>
+        <div className="flex items-baseline gap-1">
+          <span className="text-muted-foreground">Updated:</span>
+          <span className="font-medium">{formatDateTime(quote.updatedAt)}</span>
+        </div>
+      </div>
     </div>
   );
 }
 
-function SummaryCards({ quote }: { quote: Quote }) {
+// ---------------------------------------------------------------------------
+// Overview Tab
+// ---------------------------------------------------------------------------
+
+function OverviewTab({ quote }: { quote: Quote }) {
   const approval = getApprovalInfo(quote);
   const statusName = quote.status?.name ?? approval.statusName ?? 'Unknown';
   const quoteTypeName = quote.quoteType?.name ?? approval.quoteTypeName ?? '—';
-
-  return (
-    <div className="grid gap-4 md:grid-cols-4">
-      <Card size="sm">
-        <CardContent className="px-4">
-          <p className="text-xs text-muted-foreground">Status</p>
-          <p className="mt-1 text-sm font-medium">{statusName}</p>
-        </CardContent>
-      </Card>
-      <Card size="sm">
-        <CardContent className="px-4">
-          <p className="text-xs text-muted-foreground">Quote type</p>
-          <p className="mt-1 text-sm font-medium">{quoteTypeName}</p>
-        </CardContent>
-      </Card>
-      <Card size="sm">
-        <CardContent className="px-4">
-          <p className="text-xs text-muted-foreground">Total</p>
-          <p className="mt-1 text-sm font-medium">
-            {formatCurrency(quote.totalAmount)}
-          </p>
-        </CardContent>
-      </Card>
-      <Card size="sm">
-        <CardContent className="px-4">
-          <p className="text-xs text-muted-foreground">Quote date</p>
-          <p className="mt-1 text-sm font-medium">
-            {formatDate(quote.quoteDate)}
-          </p>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function IdentifiersSection({ quote }: { quote: Quote }) {
+  const schedule = getScheduleInfo(quote);
   const custom = getCustomData(quote);
   const insurerRef = asString(pick(custom, 'cwExternalReference'));
   const cwCreated = asString(pick(custom, 'cwCreatedAtDate'));
   const cwUpdated = asString(pick(custom, 'cwUpdatedAtDate'));
-  const approval = getApprovalInfo(quote);
-
-  return (
-    <SectionCard
-      title="Quote Identifiers"
-      icon={<FileSignature className="h-4 w-4 text-muted-foreground" />}
-    >
-      <DefRow label="Name" value={quote.name ?? '—'} />
-      <DefRow label="Quote number" value={quote.quoteNumber ?? '—'} />
-      <DefRow label="Reference" value={quote.reference ?? '—'} />
-      <DefRow
-        label="Crunchwork ID"
-        value={
-          quote.externalReference ? (
-            <span className="font-mono text-xs">{quote.externalReference}</span>
-          ) : (
-            '—'
-          )
-        }
-      />
-      <DefRow label="Insurer reference" value={insurerRef ?? '—'} />
-      <DefRow
-        label="Status type"
-        value={approval.statusType ?? '—'}
-      />
-      <DefRow label="Created" value={formatDateTime(quote.createdAt)} />
-      <DefRow label="Updated" value={formatDateTime(quote.updatedAt)} />
-      {cwCreated && (
-        <DefRow label="Crunchwork created" value={formatDateTime(cwCreated)} />
-      )}
-      {cwUpdated && (
-        <DefRow label="Crunchwork updated" value={formatDateTime(cwUpdated)} />
-      )}
-    </SectionCard>
-  );
-}
-
-function FinancialsSection({ quote }: { quote: Quote }) {
-  return (
-    <SectionCard
-      title="Financials"
-      icon={<Calculator className="h-4 w-4 text-muted-foreground" />}
-    >
-      <DefRow label="Sub total" value={formatCurrency(quote.subTotal)} />
-      <DefRow label="Total tax" value={formatCurrency(quote.totalTax)} />
-      <DefRow label="Total" value={formatCurrency(quote.totalAmount)} />
-      <DefRow
-        label="Expires in"
-        value={
-          typeof quote.expiresInDays === 'number'
-            ? `${quote.expiresInDays} day${quote.expiresInDays === 1 ? '' : 's'}`
-            : '—'
-        }
-      />
-    </SectionCard>
-  );
-}
-
-function ScheduleSection({ quote }: { quote: Quote }) {
-  const schedule = getScheduleInfo(quote);
-  return (
-    <SectionCard
-      title="Schedule"
-      icon={<CalendarClock className="h-4 w-4 text-muted-foreground" />}
-    >
-      <DefRow
-        label="Estimated start"
-        value={formatDate(
-          quote.estimatedStartDate ?? schedule.estimatedStartDate ?? null,
-        )}
-      />
-      <DefRow
-        label="Estimated completion"
-        value={formatDate(
-          quote.estimatedCompletionDate ??
-            schedule.estimatedCompletionDate ??
-            null,
-        )}
-      />
-      <DefRow
-        label="Reason for variation"
-        value={schedule.reasonForVariation ?? '—'}
-      />
-    </SectionCard>
-  );
-}
-
-function ApprovalSection({ quote }: { quote: Quote }) {
-  const approval = getApprovalInfo(quote);
   const autoApproved = asBool(quote.isAutoApproved) ?? approval.isAutoApproved;
-  return (
-    <SectionCard
-      title="Approval"
-      icon={<ShieldCheck className="h-4 w-4 text-muted-foreground" />}
-    >
-      <DefRow
-        label="Auto-approved"
-        value={<BoolPill value={autoApproved} />}
-      />
-      <DefRow label="Status name" value={approval.statusName ?? '—'} />
-      <DefRow label="Status type" value={approval.statusType ?? '—'} />
-      <DefRow label="Quote type" value={approval.quoteTypeName ?? '—'} />
-      <DefRow
-        label="Created by"
-        value={
-          approval.createdByName
-            ? `${approval.createdByName}${
-                approval.createdByExternalReference
-                  ? ` (${approval.createdByExternalReference})`
-                  : ''
-              }`
-            : (quote.createdByUserId ?? '—')
-        }
-      />
-      <DefRow
-        label="Updated by"
-        value={
-          approval.updatedByName
-            ? `${approval.updatedByName}${
-                approval.updatedByExternalReference
-                  ? ` (${approval.updatedByExternalReference})`
-                  : ''
-              }`
-            : (quote.updatedByUserId ?? '—')
-        }
-      />
-    </SectionCard>
-  );
-}
-
-function NoteSection({ quote }: { quote: Quote }) {
-  if (!quote.note) return null;
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm">
-          <StickyNote className="h-4 w-4 text-muted-foreground" />
-          Note
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="whitespace-pre-wrap text-sm">{quote.note}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
-function PartyCard({
-  title,
-  party,
-  icon,
-}: {
-  title: string;
-  party: QuotePartyPayload;
-  icon: React.ReactNode;
-}) {
-  const address = formatPartyAddress(party);
-  const hasAny =
-    party.name ??
-    party.contactName ??
-    party.email ??
-    party.phoneNumber ??
-    party.companyRegistrationNumber ??
-    party.clientReference ??
-    address;
-  if (!hasAny) return null;
-  return (
-    <SectionCard title={title} icon={icon}>
-      <DefRow label="Name" value={party.name ?? '—'} />
-      <DefRow label="Contact" value={party.contactName ?? '—'} />
-      <DefRow label="Email" value={party.email ?? '—'} />
-      <DefRow label="Phone" value={party.phoneNumber ?? '—'} />
-      <DefRow
-        label="Company registration"
-        value={party.companyRegistrationNumber ?? '—'}
-      />
-      <DefRow label="Client reference" value={party.clientReference ?? '—'} />
-      <DefRow label="Address" value={address || '—'} />
-      <DefRow label="Suburb" value={party.suburb ?? '—'} />
-      <DefRow label="State" value={party.state ?? '—'} />
-      <DefRow label="Postcode" value={party.postCode ?? '—'} />
-      <DefRow label="Country" value={party.country ?? '—'} />
-    </SectionCard>
-  );
-}
-
-function PartiesSection({ quote }: { quote: Quote }) {
-  const to = getParty(quote, 'quoteTo');
-  const forParty = getParty(quote, 'quoteFor');
-  const from = getParty(quote, 'quoteFrom');
-  const anyTo = to.name || to.email || to.phoneNumber;
-  const anyFor = forParty.name || forParty.email || forParty.phoneNumber;
-  const anyFrom = from.name || from.email || from.phoneNumber;
-  if (!anyTo && !anyFor && !anyFrom) return null;
 
   return (
-    <div className="grid gap-4 md:grid-cols-3">
-      {anyTo && (
-        <PartyCard
-          title="Quote To (recipient)"
-          party={to}
-          icon={<Users className="h-4 w-4 text-muted-foreground" />}
-        />
-      )}
-      {anyFor && (
-        <PartyCard
-          title="Quote For (customer)"
-          party={forParty}
-          icon={<Users className="h-4 w-4 text-muted-foreground" />}
-        />
-      )}
-      {anyFrom && (
-        <PartyCard
-          title="Quote From (vendor)"
-          party={from}
-          icon={<Building2 className="h-4 w-4 text-muted-foreground" />}
-        />
-      )}
+    <div className="space-y-4">
+      {/* KPI Row */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card size="sm">
+          <CardContent className="px-4">
+            <p className="text-xs text-muted-foreground">Status</p>
+            <p className="mt-1 text-sm font-medium">{statusName}</p>
+          </CardContent>
+        </Card>
+        <Card size="sm">
+          <CardContent className="px-4">
+            <p className="text-xs text-muted-foreground">Estimate type</p>
+            <p className="mt-1 text-sm font-medium">{quoteTypeName}</p>
+          </CardContent>
+        </Card>
+        <Card size="sm">
+          <CardContent className="px-4">
+            <p className="text-xs text-muted-foreground">Total</p>
+            <p className="mt-1 text-sm font-medium">{formatCurrency(quote.totalAmount)}</p>
+          </CardContent>
+        </Card>
+        <Card size="sm">
+          <CardContent className="px-4">
+            <p className="text-xs text-muted-foreground">Estimate date</p>
+            <p className="mt-1 text-sm font-medium">{formatDate(quote.quoteDate)}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Identifiers */}
+        <SectionCard
+          title="Identifiers"
+          icon={<FileSignature className="h-4 w-4 text-muted-foreground" />}
+        >
+          <DefRow label="Name" value={quote.name ?? '—'} />
+          <DefRow label="Estimate number" value={quote.quoteNumber ?? '—'} />
+          <DefRow label="Reference" value={quote.reference ?? '—'} />
+          <DefRow
+            label="CW ID"
+            value={
+              quote.externalReference ? (
+                <span className="font-mono text-xs">{quote.externalReference}</span>
+              ) : (
+                '—'
+              )
+            }
+          />
+          {insurerRef && <DefRow label="Insurer reference" value={insurerRef} />}
+          <DefRow label="Status type" value={approval.statusType ?? '—'} />
+          <DefRow label="Created" value={formatDateTime(quote.createdAt)} />
+          <DefRow label="Updated" value={formatDateTime(quote.updatedAt)} />
+          {cwCreated && <DefRow label="CW created" value={formatDateTime(cwCreated)} />}
+          {cwUpdated && <DefRow label="CW updated" value={formatDateTime(cwUpdated)} />}
+        </SectionCard>
+
+        {/* Financials */}
+        <SectionCard
+          title="Financials"
+          icon={<Calculator className="h-4 w-4 text-muted-foreground" />}
+        >
+          <DefRow label="Sub total (ex. tax)" value={formatCurrency(quote.subTotal)} />
+          <DefRow label="Total tax" value={formatCurrency(quote.totalTax)} />
+          <DefRow label="Total (incl. tax)" value={formatCurrency(quote.totalAmount)} />
+          <DefRow
+            label="Expires in"
+            value={
+              typeof quote.expiresInDays === 'number'
+                ? `${quote.expiresInDays} day${quote.expiresInDays === 1 ? '' : 's'}`
+                : '—'
+            }
+          />
+        </SectionCard>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Schedule */}
+        <SectionCard
+          title="Schedule"
+          icon={<CalendarClock className="h-4 w-4 text-muted-foreground" />}
+        >
+          <DefRow
+            label="Estimated start"
+            value={formatDate(quote.estimatedStartDate ?? schedule.estimatedStartDate ?? null)}
+          />
+          <DefRow
+            label="Estimated completion"
+            value={formatDate(quote.estimatedCompletionDate ?? schedule.estimatedCompletionDate ?? null)}
+          />
+          <DefRow label="Reason for variation" value={schedule.reasonForVariation ?? '—'} />
+        </SectionCard>
+
+        {/* Approval */}
+        <SectionCard
+          title="Approval"
+          icon={<ShieldCheck className="h-4 w-4 text-muted-foreground" />}
+        >
+          <DefRow label="Auto-approved" value={<BoolPill value={autoApproved} />} />
+          <DefRow label="Status name" value={approval.statusName ?? '—'} />
+          <DefRow label="Estimate type" value={approval.quoteTypeName ?? '—'} />
+          <DefRow
+            label="Created by"
+            value={
+              approval.createdByName
+                ? `${approval.createdByName}${approval.createdByExternalReference ? ` (${approval.createdByExternalReference})` : ''}`
+                : (quote.createdByUserId ?? '—')
+            }
+          />
+          <DefRow
+            label="Updated by"
+            value={
+              approval.updatedByName
+                ? `${approval.updatedByName}${approval.updatedByExternalReference ? ` (${approval.updatedByExternalReference})` : ''}`
+                : (quote.updatedByUserId ?? '—')
+            }
+          />
+        </SectionCard>
+      </div>
+
+      {quote.note ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <StickyNote className="h-4 w-4 text-muted-foreground" />
+              Note
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="whitespace-pre-wrap text-sm">{quote.note}</p>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Line Items Tab
+// ---------------------------------------------------------------------------
 
 function ItemRow({ item }: { item: ApiItem }) {
   const tags = item.tags ?? [];
@@ -564,9 +475,7 @@ function ItemRow({ item }: { item: ApiItem }) {
           <p className="font-medium">
             {item.name ?? '—'}
             {item.type && (
-              <span className="ml-2 text-xs font-normal text-muted-foreground">
-                {item.type}
-              </span>
+              <span className="ml-2 text-xs font-normal text-muted-foreground">{item.type}</span>
             )}
             {item.internal && (
               <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -581,12 +490,8 @@ function ItemRow({ item }: { item: ApiItem }) {
             {item.category && <span>{item.category}</span>}
             {item.subCategory && <span>/ {item.subCategory}</span>}
             {item.pcps && <span>• PCPS: {item.pcps}</span>}
-            {item.unitType && (
-              <span>• Unit: {lookupDisplay(item.unitType)}</span>
-            )}
-            {item.lineScopeStatus && (
-              <span>• Scope: {lookupDisplay(item.lineScopeStatus)}</span>
-            )}
+            {item.unitType && <span>• Unit: {lookupDisplay(item.unitType)}</span>}
+            {item.lineScopeStatus && <span>• Scope: {lookupDisplay(item.lineScopeStatus)}</span>}
           </div>
         </div>
         <div className="shrink-0 text-right text-xs text-muted-foreground">
@@ -597,16 +502,9 @@ function ItemRow({ item }: { item: ApiItem }) {
             )}
           </p>
           <p>
-            Unit:{' '}
-            <span className="font-mono">{formatCurrency(item.unitCost)}</span>
+            Unit: <span className="font-mono">{formatCurrency(item.unitCost)}</span>
             {typeof item.buyCost === 'number' && (
-              <>
-                {' '}
-                • Buy:{' '}
-                <span className="font-mono">
-                  {formatCurrency(item.buyCost)}
-                </span>
-              </>
+              <> • Buy: <span className="font-mono">{formatCurrency(item.buyCost)}</span></>
             )}
           </p>
           {(item.markupType || typeof item.markupValue === 'number') && (
@@ -617,23 +515,17 @@ function ItemRow({ item }: { item: ApiItem }) {
                 {item.markupType === 'Percentage' ? '%' : ''}
               </span>{' '}
               {item.markupType && (
-                <span className="text-[10px] uppercase tracking-wide">
-                  ({item.markupType})
-                </span>
+                <span className="text-[10px] uppercase tracking-wide">({item.markupType})</span>
               )}
             </p>
           )}
-          <p className="font-medium text-foreground">
-            Total: {formatCurrency(item.total)}
-          </p>
+          <p className="font-medium text-foreground">Total: {formatCurrency(item.total)}</p>
           {typeof item.totalTax === 'number' && (
             <p>of which tax {formatCurrency(item.totalTax)}</p>
           )}
-          {(typeof item.allocatedCost === 'number' ||
-            typeof item.committedCost === 'number') && (
+          {(typeof item.allocatedCost === 'number' || typeof item.committedCost === 'number') && (
             <p className="text-[11px]">
-              Allocated {formatCurrency(item.allocatedCost)} · Committed{' '}
-              {formatCurrency(item.committedCost)}
+              Allocated {formatCurrency(item.allocatedCost)} · Committed {formatCurrency(item.committedCost)}
             </p>
           )}
         </div>
@@ -641,26 +533,17 @@ function ItemRow({ item }: { item: ApiItem }) {
       {(tags.length > 0 || mismatches.length > 0 || item.note) && (
         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
           {tags.map((t) => (
-            <span
-              key={t}
-              className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-muted-foreground"
-            >
+            <span key={t} className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
               <Tag className="h-3 w-3" />
               {t}
             </span>
           ))}
           {mismatches.map((m, i) => (
-            <span
-              key={i}
-              className="inline-flex items-center rounded bg-amber-100 px-1.5 py-0.5 text-amber-700"
-              title={`Catalog value: ${m.catalogValue ?? ''}`}
-            >
+            <span key={i} className="inline-flex items-center rounded bg-amber-100 px-1.5 py-0.5 text-amber-700" title={`Catalog value: ${m.catalogValue ?? ''}`}>
               Catalog mismatch: {m.property}
             </span>
           ))}
-          {item.note && (
-            <span className="text-muted-foreground">Note: {item.note}</span>
-          )}
+          {item.note && <span className="text-muted-foreground">Note: {item.note}</span>}
         </div>
       )}
     </div>
@@ -677,50 +560,32 @@ function ComboBlock({ combo }: { combo: ApiCombo }) {
             <Package className="mr-1 inline h-3 w-3 text-muted-foreground" />
             {combo.name ?? 'Combo'}
             {typeof combo.quantity === 'number' && (
-              <span className="ml-2 text-xs text-muted-foreground">
-                × {combo.quantity}
-              </span>
+              <span className="ml-2 text-xs text-muted-foreground">× {combo.quantity}</span>
             )}
           </p>
-          {combo.description && (
-            <p className="text-xs text-muted-foreground">{combo.description}</p>
-          )}
+          {combo.description && <p className="text-xs text-muted-foreground">{combo.description}</p>}
           <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
             {combo.category && <span>{combo.category}</span>}
             {combo.subCategory && <span>/ {combo.subCategory}</span>}
-            {combo.lineScopeStatus && (
-              <span>Scope: {lookupDisplay(combo.lineScopeStatus)}</span>
-            )}
+            {combo.lineScopeStatus && <span>Scope: {lookupDisplay(combo.lineScopeStatus)}</span>}
             {combo.catalogComboId && (
-              <span className="font-mono text-[10px]">
-                catalog: {combo.catalogComboId}
-              </span>
+              <span className="font-mono text-[10px]">catalog: {combo.catalogComboId}</span>
             )}
           </div>
         </div>
         <div className="shrink-0 text-right text-xs text-muted-foreground">
-          <p className="font-medium text-foreground">
-            Total: {formatCurrency(combo.total)}
-          </p>
-          {typeof combo.subTotal === 'number' && (
-            <p>Sub: {formatCurrency(combo.subTotal)}</p>
-          )}
-          {typeof combo.totalTax === 'number' && (
-            <p>Tax: {formatCurrency(combo.totalTax)}</p>
-          )}
-          {(typeof combo.allocatedCost === 'number' ||
-            typeof combo.committedCost === 'number') && (
+          <p className="font-medium text-foreground">Total: {formatCurrency(combo.total)}</p>
+          {typeof combo.subTotal === 'number' && <p>Sub: {formatCurrency(combo.subTotal)}</p>}
+          {typeof combo.totalTax === 'number' && <p>Tax: {formatCurrency(combo.totalTax)}</p>}
+          {(typeof combo.allocatedCost === 'number' || typeof combo.committedCost === 'number') && (
             <p className="text-[11px]">
-              Alloc {formatCurrency(combo.allocatedCost)} · Comm{' '}
-              {formatCurrency(combo.committedCost)}
+              Alloc {formatCurrency(combo.allocatedCost)} · Comm {formatCurrency(combo.committedCost)}
             </p>
           )}
         </div>
       </div>
       {items.length === 0 ? (
-        <p className="px-4 py-2 text-xs text-muted-foreground">
-          No line items in this combo.
-        </p>
+        <p className="px-4 py-2 text-xs text-muted-foreground">No line items in this combo.</p>
       ) : (
         items.map((it, i) => <ItemRow key={it.id ?? i} item={it} />)
       )}
@@ -731,10 +596,7 @@ function ComboBlock({ combo }: { combo: ApiCombo }) {
 function GroupBlock({ group, index }: { group: ApiGroup; index: number }) {
   const combos = group.combos ?? [];
   const items = group.items ?? [];
-  const label =
-    group.groupLabel?.name ??
-    group.groupLabel?.externalReference ??
-    `Group ${index + 1}`;
+  const label = group.groupLabel?.name ?? group.groupLabel?.externalReference ?? `Group ${index + 1}`;
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -744,16 +606,9 @@ function GroupBlock({ group, index }: { group: ApiGroup; index: number }) {
             {label}
           </span>
           <span className="text-xs font-normal text-muted-foreground">
-            {typeof group.subTotal === 'number' && (
-              <>Sub {formatCurrency(group.subTotal)} · </>
-            )}
-            {typeof group.totalTax === 'number' && (
-              <>Tax {formatCurrency(group.totalTax)} · </>
-            )}
-            Total{' '}
-            <span className="font-medium text-foreground">
-              {formatCurrency(group.total)}
-            </span>
+            {typeof group.subTotal === 'number' && <>Sub {formatCurrency(group.subTotal)} · </>}
+            {typeof group.totalTax === 'number' && <>Tax {formatCurrency(group.totalTax)} · </>}
+            Total <span className="font-medium text-foreground">{formatCurrency(group.total)}</span>
           </span>
         </CardTitle>
         <div className="flex flex-wrap gap-x-3 text-xs text-muted-foreground">
@@ -764,35 +619,25 @@ function GroupBlock({ group, index }: { group: ApiGroup; index: number }) {
       <CardContent className="space-y-3">
         {items.length > 0 && (
           <div className="rounded border border-border/60">
-            <p className="px-4 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Direct items
-            </p>
-            {items.map((it, i) => (
-              <ItemRow key={it.id ?? i} item={it} />
-            ))}
+            <p className="px-4 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">Direct items</p>
+            {items.map((it, i) => <ItemRow key={it.id ?? i} item={it} />)}
           </div>
         )}
-        {combos.map((c, i) => (
-          <ComboBlock key={c.id ?? i} combo={c} />
-        ))}
+        {combos.map((c, i) => <ComboBlock key={c.id ?? i} combo={c} />)}
         {items.length === 0 && combos.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            No items or combos in this group.
-          </p>
+          <p className="text-sm text-muted-foreground">No items or combos in this group.</p>
         )}
       </CardContent>
     </Card>
   );
 }
 
-function LineItemsSection({ quote }: { quote: Quote }) {
+function LineItemsTab({ quote }: { quote: Quote }) {
   const groups = getGroups(quote);
 
   if (groups.length === 0) {
     if (process.env.NODE_ENV !== 'production') {
-      console.debug(
-        `${PREFIX}.LineItemsSection — no groups on quote ${quote.id}`,
-      );
+      console.debug(`${PREFIX}.LineItemsTab — no groups on estimate ${quote.id}`);
     }
     return (
       <Card>
@@ -803,9 +648,7 @@ function LineItemsSection({ quote }: { quote: Quote }) {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">
-            No groups, combos, or items on this quote yet.
-          </p>
+          <p className="text-sm text-muted-foreground">No groups, combos, or items on this estimate yet.</p>
         </CardContent>
       </Card>
     );
@@ -813,37 +656,190 @@ function LineItemsSection({ quote }: { quote: Quote }) {
 
   return (
     <div className="space-y-4">
-      {groups.map((g, i) => (
-        <GroupBlock key={g.id ?? i} group={g} index={i} />
-      ))}
+      {groups.map((g, i) => <GroupBlock key={g.id ?? i} group={g} index={i} />)}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Public component
+// Parties Tab
 // ---------------------------------------------------------------------------
 
-export function QuoteDetail({ quote }: { quote: Quote }) {
+function PartyCard({
+  title,
+  party,
+  icon,
+}: {
+  title: string;
+  party: QuotePartyPayload;
+  icon: React.ReactNode;
+}) {
+  const address = formatPartyAddress(party);
   return (
-    <div className="space-y-4">
-      <SummaryCards quote={quote} />
+    <SectionCard title={title} icon={icon}>
+      <DefRow label="Name" value={party.name ?? '—'} />
+      <DefRow label="Contact" value={party.contactName ?? '—'} />
+      <DefRow label="Email" value={party.email ?? '—'} />
+      <DefRow label="Phone" value={party.phoneNumber ?? '—'} />
+      <DefRow label="Company reg. #" value={party.companyRegistrationNumber ?? '—'} />
+      <DefRow label="Client reference" value={party.clientReference ?? '—'} />
+      <DefRow label="Address" value={address || '—'} />
+    </SectionCard>
+  );
+}
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <IdentifiersSection quote={quote} />
-        <FinancialsSection quote={quote} />
+function PartiesTab({ quote }: { quote: Quote }) {
+  const to = getParty(quote, 'quoteTo');
+  const forParty = getParty(quote, 'quoteFor');
+  const from = getParty(quote, 'quoteFrom');
+
+  return (
+    <div className="grid gap-4 md:grid-cols-3">
+      <PartyCard
+        title="Estimate To (recipient)"
+        party={to}
+        icon={<Users className="h-4 w-4 text-muted-foreground" />}
+      />
+      <PartyCard
+        title="Estimate For (customer)"
+        party={forParty}
+        icon={<Users className="h-4 w-4 text-muted-foreground" />}
+      />
+      <PartyCard
+        title="Estimate From (vendor)"
+        party={from}
+        icon={<Building2 className="h-4 w-4 text-muted-foreground" />}
+      />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Placeholder Tabs
+// ---------------------------------------------------------------------------
+
+function ActivitiesTab() {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">Activities</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm text-muted-foreground">
+          Tasks and appointments linked to this estimate will appear here once the
+          activities API is connected.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function CommunicationsTab() {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">Communications</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm text-muted-foreground">
+          Emails associated with this estimate will appear here once the
+          communications API is connected.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TimelineTab({ quote }: { quote: Quote }) {
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      <SectionCard
+        title="Local audit"
+        icon={<Calendar className="h-4 w-4 text-muted-foreground" />}
+      >
+        <DefRow label="Created" value={formatDateTime(quote.createdAt)} />
+        <DefRow label="Updated" value={formatDateTime(quote.updatedAt)} />
+        <DefRow label="Created by (user id)" value={quote.createdByUserId ?? '—'} />
+        <DefRow label="Updated by (user id)" value={quote.updatedByUserId ?? '—'} />
+      </SectionCard>
+    </div>
+  );
+}
+
+function AttachmentsTab() {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">Attachments</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm text-muted-foreground">
+          Attachments linked to this estimate will appear here once the attachments
+          API is connected.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Container with tabs
+// ---------------------------------------------------------------------------
+
+type QuoteTab =
+  | 'overview'
+  | 'line-items'
+  | 'parties'
+  | 'activities'
+  | 'communications'
+  | 'timeline'
+  | 'attachments';
+
+export function QuoteDetail({ quote }: { quote: Quote }) {
+  const [tab, setTab] = useState<QuoteTab>('overview');
+
+  const tabs: Array<{ id: QuoteTab; label: string; icon: typeof Calendar }> = [
+    { id: 'overview', label: 'Overview', icon: FileSignature },
+    { id: 'line-items', label: 'Line Items', icon: Layers },
+    { id: 'parties', label: 'Parties', icon: Users },
+    { id: 'activities', label: 'Activities', icon: ClipboardList },
+    { id: 'communications', label: 'Communications', icon: MessageSquare },
+    { id: 'timeline', label: 'Timeline', icon: Calendar },
+    { id: 'attachments', label: 'Attachments', icon: Paperclip },
+  ];
+
+  return (
+    <div className="flex flex-col">
+      <div className="flex flex-wrap gap-0 border-b border-slate-200">
+        {tabs.map((t) => {
+          const Icon = t.icon;
+          const active = tab === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className={`inline-flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t-md ${
+                active
+                  ? 'border-amber-600 bg-amber-50 text-amber-600'
+                  : 'border-transparent bg-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {t.label}
+            </button>
+          );
+        })}
       </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <ScheduleSection quote={quote} />
-        <ApprovalSection quote={quote} />
+      <div className="pt-4">
+        {tab === 'overview' && <OverviewTab quote={quote} />}
+        {tab === 'line-items' && <LineItemsTab quote={quote} />}
+        {tab === 'parties' && <PartiesTab quote={quote} />}
+        {tab === 'activities' && <ActivitiesTab />}
+        {tab === 'communications' && <CommunicationsTab />}
+        {tab === 'timeline' && <TimelineTab quote={quote} />}
+        {tab === 'attachments' && <AttachmentsTab />}
       </div>
-
-      <PartiesSection quote={quote} />
-
-      <NoteSection quote={quote} />
-
-      <LineItemsSection quote={quote} />
     </div>
   );
 }

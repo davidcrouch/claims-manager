@@ -1,12 +1,7 @@
-import { ComingSoon } from '@/components/shared/ComingSoon';
+import { ScheduleClient } from '@/components/schedule/ScheduleClient';
 
 export const metadata = { title: 'Schedule — EnsureOS' };
 
 export default function SchedulePage() {
-  return (
-    <ComingSoon
-      title="Schedule"
-      description="The calendar and schedule view is coming soon. You'll see appointments, task due dates, and job timelines in a unified calendar."
-    />
-  );
+  return <ScheduleClient />;
 }

@@ -41,7 +41,7 @@ export function JobQuotesTab({
       <div className="flex justify-end">
         <Button onClick={() => setDrawerOpen(true)} size="sm">
           <FileText className="h-4 w-4 mr-2" />
-          Create Quote
+          Create Estimate
         </Button>
       </div>
       <QuoteFormDrawer
@@ -59,16 +59,16 @@ export function JobQuotesTab({
           {loading ? (
             <p className="px-4 text-sm text-muted-foreground">Loading...</p>
           ) : quotes.length === 0 ? (
-            <p className="px-4 text-sm text-muted-foreground">No quotes.</p>
+            <p className="px-4 text-sm text-muted-foreground">No estimates.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
-                    <th className="px-4 py-2">Quote #</th>
+                    <th className="px-4 py-2">Estimate #</th>
                     <th className="px-4 py-2">External ref</th>
                     <th className="px-4 py-2">Status</th>
-                    <th className="px-4 py-2">Quote date</th>
+                    <th className="px-4 py-2">Estimate date</th>
                     <th className="px-4 py-2 text-right">Total</th>
                   </tr>
                 </thead>

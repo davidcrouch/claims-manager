@@ -28,7 +28,7 @@ import type { Quote, PaginatedResponse } from '@/types/api';
 const SORT_OPTIONS: SortOption[] = [
   { key: 'updated_at', label: 'Updated' },
   { key: 'created_at', label: 'Created' },
-  { key: 'quote_number', label: 'Quote #' },
+  { key: 'quote_number', label: 'Estimate #' },
 ];
 const ALLOWED_SORT_FIELDS = SORT_OPTIONS.map((o) => o.key);
 
@@ -174,7 +174,7 @@ export function QuotesListClient({
       <SetPageHeader>
         <ListPageHeader
           icon={FileSpreadsheet}
-          title="Quotes"
+          title="Estimates"
           total={data.total}
           showing={visibleRows.length}
           search={debouncedSearch}
@@ -194,7 +194,7 @@ export function QuotesListClient({
           />
 
           <SearchInput
-            placeholder="Search quotes by quote # or reference..."
+            placeholder="Search estimates by estimate # or reference..."
             value={search}
             onChange={setSearch}
           />
@@ -218,11 +218,11 @@ export function QuotesListClient({
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50">
                 <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                  <th scope="col" className="px-4 py-3">Quote #</th>
+                  <th scope="col" className="px-4 py-3">Estimate #</th>
                   <th scope="col" className="px-4 py-3">Status</th>
                   <th scope="col" className="px-4 py-3">Reference</th>
                   <th scope="col" className="px-4 py-3">Total</th>
-                  <th scope="col" className="px-4 py-3">Quote Date</th>
+                  <th scope="col" className="px-4 py-3">Estimate Date</th>
                   <th scope="col" className="px-4 py-3">Updated</th>
                 </tr>
               </thead>
@@ -264,7 +264,7 @@ export function QuotesListClient({
             </table>
           </div>
         ) : (
-          <ListEmptyState label="No quotes found." />
+          <ListEmptyState label="No estimates found." />
         )}
       </div>
     </div>

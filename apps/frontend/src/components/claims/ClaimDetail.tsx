@@ -15,6 +15,12 @@ import {
   Mail,
   Home,
   Droplets,
+  ExternalLink,
+  Clock,
+  Paperclip,
+  MessageSquare,
+  ListTodo,
+  UserCheck,
 } from 'lucide-react';
 import {
   Card,
@@ -92,7 +98,6 @@ function getCustomData(claim: Claim): Dict {
 function OverviewTab({ claim }: { claim: Claim }) {
   const api = getApi(claim);
   const address = formatAddress(claim);
-  const policy = getPolicy(claim);
   const status =
     (claim.status as { name?: string })?.name ??
     ((api.status as Dict | undefined)?.name as string | undefined) ??
@@ -101,26 +106,6 @@ function OverviewTab({ claim }: { claim: Claim }) {
   const account =
     (claim.account as { name?: string })?.name ??
     ((api.account as Dict | undefined)?.name as string | undefined);
-
-  const catCode =
-    ((api.catCode as Dict | undefined)?.name as string | undefined) ??
-    ((api.catCode as Dict | undefined)?.Name as string | undefined);
-
-  const lossType = (api.lossType as Dict | undefined)?.name as
-    | string
-    | undefined;
-
-  const priority =
-    asString((api.priority as Dict | undefined)?.name) ??
-    asString(api.priority);
-  const decision =
-    asString((api.claimDecision as Dict | undefined)?.name) ??
-    asString(api.claimDecision);
-
-  const policyType =
-    asString((api.policyType as Dict | undefined)?.name) ??
-    asString(api.policyType) ??
-    asString(pick(policy, 'policyTypeName', 'policyType'));
 
   return (
     <div className="space-y-4">
@@ -174,9 +159,6 @@ function OverviewTab({ claim }: { claim: Claim }) {
             value={account ?? '—'}
           />
           <DefRow label="Status" value={status} />
-          <DefRow label="Priority" value={priority ?? '—'} />
-          <DefRow label="Claim decision" value={decision ?? '—'} />
-          <DefRow label="CAT code" value={catCode ?? '—'} />
         </SectionCard>
 
         <SectionCard
@@ -195,33 +177,18 @@ function OverviewTab({ claim }: { claim: Claim }) {
         </SectionCard>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <SectionCard
-          title="Loss Summary"
-          icon={<Droplets className="h-4 w-4 text-muted-foreground" />}
-        >
-          <DefRow label="Date of loss" value={formatDate(claim.dateOfLoss)} />
-          <DefRow label="Loss type" value={lossType ?? '—'} />
-          <DefRow label="Total loss" value={<BoolPill value={claim.totalLoss} />} />
-          <DefRow
-            label="Contents damaged"
-            value={<BoolPill value={claim.contentsDamaged} />}
-          />
-        </SectionCard>
-
-        <SectionCard
-          title="Policy Summary"
-          icon={<Building2 className="h-4 w-4 text-muted-foreground" />}
-        >
-          <DefRow label="Policy name" value={claim.policyName ?? '—'} />
-          <DefRow label="Policy number" value={claim.policyNumber ?? '—'} />
-          <DefRow label="Policy type" value={policyType ?? '—'} />
-          <DefRow
-            label="Inception date"
-            value={formatDate(asString(pick(policy, 'policyInceptionDate')) ?? null)}
-          />
-        </SectionCard>
-      </div>
+      <SectionCard
+        title="People & Assignments"
+        icon={<UserCheck className="h-4 w-4 text-muted-foreground" />}
+      >
+        <DefRow label="Claim consultant" value={asString(pick(api, 'claimConsultant')) ?? '—'} />
+        <DefRow label="Property assessor" value={asString(pick(api, 'propertyAssessor')) ?? '—'} />
+        <DefRow label="Internal auditor" value={asString(pick(api, 'internalAuditor')) ?? '—'} />
+        <DefRow label="Desktop assessor" value={asString(pick(api, 'desktopAssessor')) ?? '—'} />
+        <DefRow label="Technical assessor" value={asString(pick(api, 'technicalAssessor')) ?? '—'} />
+        <DefRow label="Broker reference" value={asString(pick(api, 'brokerReference')) ?? '—'} />
+        <DefRow label="Hazardous waste" value={<BoolPill value={asBool(pick(api, 'hazardousWaste'))} />} />
+      </SectionCard>
 
       {asString(api.incidentDescription) || claim.incidentDescription ? (
         <Card>
@@ -302,6 +269,10 @@ function PolicyTab({ claim }: { claim: Claim }) {
         <DefRow label="Line of business" value={lineOfBusiness ?? '—'} />
         <DefRow label="Inception date" value={formatDate(inceptionDate ?? null)} />
         <DefRow label="ABN" value={abn ?? '—'} />
+        <DefRow
+          label="Flood coverage"
+          value={asString(pick(api, 'floodCoverageFlag', 'floodCoverage')) ?? '—'}
+        />
       </SectionCard>
 
       <SectionCard
@@ -613,64 +584,136 @@ function PartiesTab({ claim }: { claim: Claim }) {
   );
 }
 
+function isLinkedJob(job: { vendorSnapshot?: Record<string, unknown> }): boolean {
+  const snap = job.vendorSnapshot;
+  if (!snap) return false;
+  const name = snap.name ?? snap.companyName ?? snap.vendorName;
+  return typeof name === 'string' && name.trim().length > 0;
+}
+
 function JobsTab({ claim }: { claim: Claim }) {
   const jobs = claim.jobs ?? [];
-  return (
-    <Card>
-      <CardContent className="px-0">
-        {jobs.length === 0 ? (
+  const internalJobs = jobs.filter((j) => !isLinkedJob(j));
+  const linkedJobs = jobs.filter((j) => isLinkedJob(j));
+
+  if (jobs.length === 0) {
+    return (
+      <Card>
+        <CardContent className="px-0">
           <p className="px-4 text-sm text-muted-foreground">
             No jobs linked to this claim.
           </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-2">Reference</th>
-                  <th className="px-4 py-2">Job type</th>
-                  <th className="px-4 py-2">Status</th>
-                  <th className="px-4 py-2">Request date</th>
-                  <th className="px-4 py-2">Updated</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/60">
-                {jobs.map((job) => {
-                  const statusName =
-                    (job.status as { name?: string })?.name ?? 'Unknown';
-                  const typeName =
-                    (job.jobType as { name?: string })?.name ?? '—';
-                  return (
-                    <tr key={job.id} className="hover:bg-muted/30">
-                      <td className="px-4 py-2 font-medium">
-                        <Link
-                          href={`/jobs/${job.id}`}
-                          className="text-primary hover:underline"
-                        >
-                          {job.externalReference ?? job.id}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-2 text-muted-foreground">
-                        {typeName}
-                      </td>
-                      <td className="px-4 py-2">
-                        <StatusBadge status={statusName} />
-                      </td>
-                      <td className="px-4 py-2 text-muted-foreground">
-                        {formatDate(job.requestDate)}
-                      </td>
-                      <td className="px-4 py-2 text-muted-foreground">
-                        {formatDate(job.updatedAt)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Internal Jobs ({internalJobs.length})</CardTitle>
+        </CardHeader>
+        <CardContent className="px-0">
+          {internalJobs.length === 0 ? (
+            <p className="px-4 text-sm text-muted-foreground">No internal jobs.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-2">Job type</th>
+                    <th className="px-4 py-2">Job reference</th>
+                    <th className="px-4 py-2">Assigned to</th>
+                    <th className="px-4 py-2">Last updated</th>
+                    <th className="px-4 py-2">Status</th>
+                    <th className="px-4 py-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {internalJobs.map((job) => {
+                    const statusName =
+                      (job.status as { name?: string })?.name ?? 'Unknown';
+                    const typeName =
+                      (job.jobType as { name?: string })?.name ?? '—';
+                    return (
+                      <tr key={job.id} className="hover:bg-muted/30">
+                        <td className="px-4 py-2 text-muted-foreground">{typeName}</td>
+                        <td className="px-4 py-2 font-medium">
+                          <Link href={`/jobs/${job.id}`} className="text-primary hover:underline">
+                            {job.externalReference ?? job.id}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-2 text-muted-foreground">—</td>
+                        <td className="px-4 py-2 text-muted-foreground">{formatDate(job.updatedAt)}</td>
+                        <td className="px-4 py-2"><StatusBadge status={statusName} /></td>
+                        <td className="px-4 py-2">
+                          <Link href={`/jobs/${job.id}`} className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                            View <ExternalLink className="h-3 w-3" />
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Linked Jobs ({linkedJobs.length})</CardTitle>
+        </CardHeader>
+        <CardContent className="px-0">
+          {linkedJobs.length === 0 ? (
+            <p className="px-4 text-sm text-muted-foreground">No linked vendor jobs.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-2">Job type</th>
+                    <th className="px-4 py-2">Job reference</th>
+                    <th className="px-4 py-2">Vendor name</th>
+                    <th className="px-4 py-2">Vendor contact number</th>
+                    <th className="px-4 py-2">Vendor contact email</th>
+                    <th className="px-4 py-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {linkedJobs.map((job) => {
+                    const statusName =
+                      (job.status as { name?: string })?.name ?? 'Unknown';
+                    const typeName =
+                      (job.jobType as { name?: string })?.name ?? '—';
+                    const snap = job.vendorSnapshot ?? {};
+                    const vendorName = (snap.name ?? snap.companyName ?? snap.vendorName ?? '—') as string;
+                    const vendorPhone = (snap.contactNumber ?? snap.phone ?? snap.phoneNumber ?? '—') as string;
+                    const vendorEmail = (snap.contactEmail ?? snap.email ?? '—') as string;
+                    return (
+                      <tr key={job.id} className="hover:bg-muted/30">
+                        <td className="px-4 py-2 text-muted-foreground">{typeName}</td>
+                        <td className="px-4 py-2 font-medium">
+                          <Link href={`/jobs/${job.id}`} className="text-primary hover:underline">
+                            {job.externalReference ?? job.id}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-2 text-muted-foreground">{vendorName}</td>
+                        <td className="px-4 py-2 text-muted-foreground">{vendorPhone}</td>
+                        <td className="px-4 py-2 text-muted-foreground">{vendorEmail}</td>
+                        <td className="px-4 py-2"><StatusBadge status={statusName} /></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -678,7 +721,6 @@ function ComplianceTab({ claim }: { claim: Claim }) {
   const api = getApi(claim);
   const vulnerability = getVulnerability(claim);
   const contention = getContention(claim);
-  const custom = getCustomData(claim);
 
   const vulnerableCustomer =
     asBool(claim.vulnerableCustomer as unknown) ??
@@ -696,10 +738,6 @@ function ComplianceTab({ claim }: { claim: Claim }) {
   const contentiousActivityDetails =
     asString(pick(api, 'contentiousActivityDetails')) ??
     asString(pick(contention, 'activityDetails'));
-
-  const cwUpdatedAt =
-    asString(pick(custom, 'cwUpdatedAtDate')) ??
-    asString(pick(api, 'updatedAtDate'));
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -743,23 +781,72 @@ function ComplianceTab({ claim }: { claim: Claim }) {
           </CardContent>
         </Card>
       ) : null}
-
-      <Card className="md:col-span-2">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Audit trail</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <dl>
-            <DefRow label="Created" value={formatDateTime(claim.createdAt)} />
-            <DefRow label="Updated" value={formatDateTime(claim.updatedAt)} />
-            <DefRow
-              label="Last Crunchwork update"
-              value={cwUpdatedAt ? formatDateTime(cwUpdatedAt) : '—'}
-            />
-          </dl>
-        </CardContent>
-      </Card>
     </div>
+  );
+}
+
+function ActivitiesTab() {
+  return (
+    <Card>
+      <CardContent className="py-8 text-center">
+        <p className="text-sm text-muted-foreground">
+          Tasks and appointments linked to this claim will appear here once the
+          activities API is connected.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function CommunicationsTab() {
+  return (
+    <Card>
+      <CardContent className="py-8 text-center">
+        <p className="text-sm text-muted-foreground">
+          Emails associated with this claim will appear here once the
+          communications API is connected.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TimelineTab({ claim }: { claim: Claim }) {
+  const api = getApi(claim);
+  const custom = getCustomData(claim);
+  const cwUpdatedAt =
+    asString(pick(custom, 'cwUpdatedAtDate')) ??
+    asString(pick(api, 'updatedAtDate'));
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">Audit trail</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <dl>
+          <DefRow label="Created" value={formatDateTime(claim.createdAt)} />
+          <DefRow label="Updated" value={formatDateTime(claim.updatedAt)} />
+          <DefRow
+            label="Last Crunchwork update"
+            value={cwUpdatedAt ? formatDateTime(cwUpdatedAt) : '—'}
+          />
+        </dl>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AttachmentsTab() {
+  return (
+    <Card>
+      <CardContent className="py-8 text-center">
+        <p className="text-sm text-muted-foreground">
+          Attachments linked to this claim will appear here once the attachments
+          API is connected.
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -827,7 +914,11 @@ type ClaimTab =
   | 'loss'
   | 'parties'
   | 'jobs'
-  | 'compliance';
+  | 'compliance'
+  | 'activities'
+  | 'communications'
+  | 'timeline'
+  | 'attachments';
 
 export function ClaimDetail({ claim }: { claim: Claim }) {
   const jobs = claim.jobs ?? [];
@@ -850,6 +941,10 @@ export function ClaimDetail({ claim }: { claim: Claim }) {
       count: jobs.length > 0 ? jobs.length : undefined,
     },
     { id: 'compliance', label: 'Compliance', icon: ShieldAlert },
+    { id: 'activities', label: 'Activities', icon: ListTodo },
+    { id: 'communications', label: 'Communications', icon: MessageSquare },
+    { id: 'timeline', label: 'Timeline', icon: Clock },
+    { id: 'attachments', label: 'Attachments', icon: Paperclip },
   ];
 
   return (
@@ -893,6 +988,10 @@ export function ClaimDetail({ claim }: { claim: Claim }) {
         {tab === 'parties' && <PartiesTab claim={claim} />}
         {tab === 'jobs' && <JobsTab claim={claim} />}
         {tab === 'compliance' && <ComplianceTab claim={claim} />}
+        {tab === 'activities' && <ActivitiesTab />}
+        {tab === 'communications' && <CommunicationsTab />}
+        {tab === 'timeline' && <TimelineTab claim={claim} />}
+        {tab === 'attachments' && <AttachmentsTab />}
       </div>
     </div>
   );

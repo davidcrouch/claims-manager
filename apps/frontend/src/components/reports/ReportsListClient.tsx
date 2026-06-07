@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ClipboardList } from 'lucide-react';
+import { ClipboardList, Plus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import {
   SortTabs,
   SearchInput,
@@ -167,7 +168,7 @@ export function ReportsListClient({
           search={debouncedSearch}
           statusSelectedCount={statusFilter.size}
           breakdown={combinedBreakdown}
-          accent="indigo"
+          accent="slate"
         />
       </SetPageHeader>
       <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
@@ -192,6 +193,10 @@ export function ReportsListClient({
             onClearAll={clearStatuses}
             onSelectAll={selectAllStatuses}
           />
+          <Button size="sm" className="shrink-0" disabled title="Select a job first — create reports from a Job's detail page">
+            <Plus className="mr-1 h-4 w-4" />
+            Create Report
+          </Button>
         </div>
       </div>
 
@@ -204,19 +209,20 @@ export function ReportsListClient({
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50">
                 <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                  <th scope="col" className="px-4 py-3">Title</th>
-                  <th scope="col" className="px-4 py-3">Status</th>
+                  <th scope="col" className="px-4 py-3">Report #</th>
                   <th scope="col" className="px-4 py-3">Type</th>
-                  <th scope="col" className="px-4 py-3">Reference</th>
+                  <th scope="col" className="px-4 py-3">Job Ref</th>
+                  <th scope="col" className="px-4 py-3">Status</th>
                   <th scope="col" className="px-4 py-3">Created</th>
-                  <th scope="col" className="px-4 py-3">Updated</th>
+                  <th scope="col" className="px-4 py-3">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {visibleRows.map((report) => {
-                  const title = report.title ?? report.id;
+                  const ref = report.reference ?? report.title ?? report.id;
                   const statusName = report.status?.name ?? 'Unknown';
                   const typeName = report.reportType?.name ?? '';
+                  const jobRef = report.jobId ?? '';
                   return (
                     <tr
                       key={report.id}
@@ -224,22 +230,44 @@ export function ReportsListClient({
                       className="cursor-pointer transition-colors hover:bg-slate-50"
                     >
                       <td className="px-4 py-3 font-medium text-slate-900">
-                        {title}
+                        {ref}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{typeName}</td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {jobRef ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/jobs/${report.jobId}`);
+                            }}
+                            className="text-primary hover:underline"
+                          >
+                            {jobRef}
+                          </button>
+                        ) : (
+                          '—'
+                        )}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
                         <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
                           {statusName}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{typeName}</td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {report.reference ?? ''}
-                      </td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                         {formatDate(report.createdAt)}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {formatDate(report.updatedAt)}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            router.push(`/reports/${report.id}`);
+                          }}
+                          className="text-xs text-primary hover:underline"
+                        >
+                          View
+                        </button>
                       </td>
                     </tr>
                   );
