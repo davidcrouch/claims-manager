@@ -249,17 +249,6 @@
   Updated the **application shell** with a larger brand mark, a new tagline, and a tightened dashboard header so the product reads as one coherent workspace.
   Aligned every create flow on the new drawer so future forms drop in without duplicating layout code.
 
-- `2026-06-08` `820d7a2` **22 h**
-  `60 files | +7 035 −1 457 | Tier 2 standard | Moderate orchestration`
-  Lay summary: Every screen in the product now matches its design specification, with missing tabs, action buttons, creation forms, and data tables filled in across jobs, work orders, invoices, purchase orders, claims, finance, and administration.
-  **Comprehensive UI audit and implementation of all outstanding specification gaps.** Audited every page against its design specification and addressed every identified gap across the full product surface.
-  Added missing **tabs and detail sections** to jobs (Timeline, Communications), purchase orders (Bills, Activities, Communications, Timeline, Attachments), work orders, and invoices so each record shows all planned information.
-  Delivered **status-driven action buttons** on work orders (Accept, Decline, Start Work, Complete), proposals (Accept, Reject, Request Revision), and bills (Approve, Reject, Mark Paid) with server-side status mutations.
-  Created and improved **creation forms** — new Task form, and extended the Quote and Invoice forms with all specified fields — and wired them to standalone list pages and detail tabs.
-  Populated **finance tables** (Accounts Receivable and Accounts Payable) with live invoice and bill data including search, sort, and status filtering, and added an **Upcoming panel** to the dashboard.
-  Split the **claim jobs view** into internal and linked tables, added missing claim fields, and upgraded **admin settings and user management** screens with structured layouts for organisation, notifications, and billing configuration.
-  Replaced placeholder stubs with **line-item rendering** on work order and invoice detail pages, and added an **attachment upload zone** to job attachments.
-
 - `2026-05-13` `ddc2b5d` **8 h**
   `81 files | +18 078 −128 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   (Drizzle snapshot JSON accounts for ~10 426 of the insertions; hand-written delta is ~7 650 lines.)
@@ -270,3 +259,14 @@
   Broadened **tasks** to relate cleanly to multiple parent record types as those operational objects come online.
   Refreshed **staging deployment notes and configuration** so hosted trial environments stay aligned with the new surface area.
   Captured **implementation plans and billing references** alongside the release for traceability and invoicing.
+
+- `2026-06-08` `820d7a2` **22 h**
+  `60 files | +7 035 −1 457 | Tier 2 standard | Moderate orchestration`
+  Lay summary: Every screen in the product now matches its design specification, with missing tabs, action buttons, creation forms, and data tables filled in across jobs, work orders, invoices, purchase orders, claims, finance, and administration.
+  **Comprehensive UI audit and implementation of all outstanding specification gaps.** Audited every page against its design specification and addressed every identified gap across the full product surface.
+  Added missing **tabs and detail sections** to jobs (Timeline, Communications), purchase orders (Bills, Activities, Communications, Timeline, Attachments), work orders, and invoices so each record shows all planned information.
+  Delivered **status-driven action buttons** on work orders (Accept, Decline, Start Work, Complete), proposals (Accept, Reject, Request Revision), and bills (Approve, Reject, Mark Paid) with server-side status mutations.
+  Created and improved **creation forms** — new Task form, and extended the Quote and Invoice forms with all specified fields — and wired them to standalone list pages and detail tabs.
+  Populated **finance tables** (Accounts Receivable and Accounts Payable) with live invoice and bill data including search, sort, and status filtering, and added an **Upcoming panel** to the dashboard.
+  Split the **claim jobs view** into internal and linked tables, added missing claim fields, and upgraded **admin settings and user management** screens with structured layouts for organisation, notifications, and billing configuration.
+  Replaced placeholder stubs with **line-item rendering** on work order and invoice detail pages, and added an **attachment upload zone** to job attachments.
