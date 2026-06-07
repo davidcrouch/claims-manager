@@ -249,7 +249,7 @@
   Updated the **application shell** with a larger brand mark, a new tagline, and a tightened dashboard header so the product reads as one coherent workspace.
   Aligned every create flow on the new drawer so future forms drop in without duplicating layout code.
 
-- `2026-06-08` `908f28a` **22 h**
+- `2026-06-08` `820d7a2` **22 h**
   `60 files | +7 035 −1 457 | Tier 2 standard | Moderate orchestration`
   Lay summary: Every screen in the product now matches its design specification, with missing tabs, action buttons, creation forms, and data tables filled in across jobs, work orders, invoices, purchase orders, claims, finance, and administration.
   **Comprehensive UI audit and implementation of all outstanding specification gaps.** Audited every page against its design specification and addressed every identified gap across the full product surface.
