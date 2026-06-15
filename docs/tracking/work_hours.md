@@ -281,7 +281,7 @@
   Added a README index linking each specification to its file and functional area for easy navigation.
   Updated the repository ignore rules to exclude Terraform provider binaries and local state files from version control.
 
-- `2026-06-15` `PENDING` **38 h**
+- `2026-06-15` `ddc250a` **38 h**
   `170 files | +21 264 −40 419 | Tier 2 standard / Tier 3 complex / Tier 4 deep integration | Heavy orchestration`
   Lay summary: Teams can now manage a product and service catalogue, build quotes from catalogue items, and rely on a new behind-the-scenes layer that keeps records consistent when data moves in and out of the system.
   **Catalogue module, domain layer, quote line-item integration, webhook proxy, and implementation specifications.** Delivered a full **product and service catalogue** with categories, item types, assemblies, pricing, CSV import, and an admin workspace for browsing, creating, and maintaining catalogue records.
