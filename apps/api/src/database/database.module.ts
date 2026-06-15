@@ -28,6 +28,11 @@ import {
   RfqsRepository,
   ProposalsRepository,
   BillsRepository,
+  JobContactsRepository,
+  CatalogItemTypesRepository,
+  CatalogCategoriesRepository,
+  CatalogItemsRepository,
+  CatalogAssemblyComponentsRepository,
 } from './repositories';
 
 const repositories = [
@@ -58,6 +63,11 @@ const repositories = [
   RfqsRepository,
   ProposalsRepository,
   BillsRepository,
+  JobContactsRepository,
+  CatalogItemTypesRepository,
+  CatalogCategoriesRepository,
+  CatalogItemsRepository,
+  CatalogAssemblyComponentsRepository,
 ];
 
 @Global()

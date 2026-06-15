@@ -6,22 +6,11 @@ import {
   Plug,
   Bell,
   CreditCard,
-  Plus,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { StatusBadge } from '@/components/ui/status-badge';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { ListPageHeader } from '@/components/layout/ListPageHeader';
 import { cn } from '@/lib/utils';
-
-interface Connection {
-  id: string;
-  name?: string;
-  providerCode?: string;
-  isActive?: boolean;
-  lastSyncAt?: string;
-}
 
 const TABS = [
   { id: 'general', label: 'General', icon: Settings },
@@ -30,19 +19,11 @@ const TABS = [
   { id: 'billing', label: 'Billing', icon: CreditCard },
 ] as const;
 
-function formatDateTime(value?: string | null): string {
-  if (!value) return '—';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString();
-}
-
 interface Props {
   initialTab: string;
-  connections: Connection[];
 }
 
-export function SettingsPageClient({ initialTab, connections }: Props) {
+export function SettingsPageClient({ initialTab }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const activeTab = searchParams.get('tab') ?? initialTab;
@@ -127,78 +108,20 @@ export function SettingsPageClient({ initialTab, connections }: Props) {
 
         {activeTab === 'connections' && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">
-                Manage your integration connections.{' '}
-                {connections.length} connection(s) configured.
-              </p>
-              <Button size="sm">
-                <Plus className="mr-1 h-4 w-4" />
-                Add Connection
-              </Button>
-            </div>
-
-            {connections.length === 0 ? (
-              <Card>
-                <CardContent className="py-8 text-center">
-                  <p className="text-sm text-muted-foreground">
-                    No connections configured.
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                <table className="min-w-full divide-y divide-slate-200 text-sm">
-                  <thead className="bg-slate-50">
-                    <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                      <th scope="col" className="px-4 py-3">Provider</th>
-                      <th scope="col" className="px-4 py-3">Status</th>
-                      <th scope="col" className="px-4 py-3">Last Sync</th>
-                      <th scope="col" className="px-4 py-3">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {connections.map((conn) => (
-                      <tr key={conn.id} className="hover:bg-slate-50">
-                        <td className="px-4 py-3 font-medium text-slate-900">
-                          {conn.name ?? conn.providerCode ?? '—'}
-                        </td>
-                        <td className="px-4 py-3">
-                          <StatusBadge
-                            status={conn.isActive ? 'Connected' : 'Disconnected'}
-                          />
-                        </td>
-                        <td className="px-4 py-3 text-slate-600">
-                          {formatDateTime(conn.lastSyncAt)}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              className="text-xs text-primary hover:underline"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              type="button"
-                              className="text-xs text-primary hover:underline"
-                            >
-                              Test
-                            </button>
-                            <button
-                              type="button"
-                              className="text-xs text-destructive hover:underline"
-                            >
-                              Disconnect
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <Card>
+              <CardContent className="flex flex-col items-center gap-3 py-10">
+                <Plug className="h-8 w-8 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">
+                  Connections have moved to their own page.
+                </p>
+                <a
+                  href="/connections"
+                  className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors"
+                >
+                  Go to Connections
+                </a>
+              </CardContent>
+            </Card>
           </div>
         )}
 

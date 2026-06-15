@@ -27,7 +27,14 @@ const ALLOWED_SORT_FIELDS = SORT_OPTIONS.map((o) => o.key);
 
 const STATUS_OPTIONS: StatusOption[] = [
   { id: 'pending', name: 'Pending' },
-  { id: 'processed', name: 'Processed' },
+  { id: 'fetched', name: 'Fetched' },
+  { id: 'completed', name: 'Completed' },
+  { id: 'completed_unmapped', name: 'Unmapped' },
+  { id: 'dispatched', name: 'Dispatched' },
+  { id: 'retry_scheduled', name: 'Retry Scheduled' },
+  { id: 'fetch_failed', name: 'Fetch Failed' },
+  { id: 'dispatch_failed', name: 'Dispatch Failed' },
+  { id: 'mapper_failed', name: 'Mapper Failed' },
   { id: 'failed', name: 'Failed' },
 ];
 
@@ -43,12 +50,22 @@ function formatTimestamp(iso: string): string {
 
 function statusBadgeClass(status: string): string {
   switch (status) {
-    case 'processed':
+    case 'completed':
       return 'bg-emerald-100 text-emerald-700';
-    case 'failed':
-      return 'bg-rose-100 text-rose-700';
+    case 'dispatched':
+    case 'fetched':
+      return 'bg-sky-100 text-sky-700';
     case 'pending':
       return 'bg-amber-100 text-amber-700';
+    case 'retry_scheduled':
+      return 'bg-orange-100 text-orange-700';
+    case 'completed_unmapped':
+      return 'bg-slate-100 text-slate-600';
+    case 'failed':
+    case 'fetch_failed':
+    case 'dispatch_failed':
+    case 'mapper_failed':
+      return 'bg-rose-100 text-rose-700';
     default:
       return 'bg-slate-100 text-slate-700';
   }

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ExternalObjectService } from './external-object.service';
 import { NestedEntityExtractor } from './nested-entity-extractor.service';
 import { LookupResolver } from './lookup-resolver.service';
@@ -19,6 +19,8 @@ import { InProcessProjectionService } from './in-process-projection.service';
 import { ParentRecoveryService } from './parent-recovery.service';
 import { CrunchworkModule } from '../../crunchwork/crunchwork.module';
 import { More0Module } from '../../more0/more0.module';
+import { DomainModule } from '../domain/domain.module';
+import { CatalogModule } from '../catalog/catalog.module';
 
 const mappers = [
   CrunchworkJobMapper,
@@ -34,7 +36,7 @@ const mappers = [
 ];
 
 @Module({
-  imports: [CrunchworkModule, More0Module],
+  imports: [CrunchworkModule, More0Module, CatalogModule, forwardRef(() => DomainModule)],
   controllers: [ExternalController],
   providers: [
     ExternalObjectService,

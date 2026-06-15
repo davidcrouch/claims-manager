@@ -3,6 +3,7 @@ import { QuotesRepository, type QuoteInsert } from '../../database/repositories'
 import { TenantContext } from '../../tenant/tenant-context';
 import { CrunchworkService } from '../../crunchwork/crunchwork.service';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
+import { CatalogOutboundService } from '../catalog/services/catalog-outbound.service';
 
 @Injectable()
 export class QuotesService {
@@ -11,6 +12,7 @@ export class QuotesService {
     private readonly tenantContext: TenantContext,
     private readonly crunchworkService: CrunchworkService,
     @Optional() private readonly connectionResolver?: ConnectionResolverService,
+    @Optional() private readonly catalogOutbound?: CatalogOutboundService,
   ) {}
 
   private async resolveConnectionId(tenantId: string): Promise<string> {
@@ -51,9 +53,12 @@ export class QuotesService {
   async create(params: { body: Record<string, unknown> }) {
     const tenantId = this.tenantContext.getTenantId();
     const connectionId = await this.resolveConnectionId(tenantId);
+    const outboundBody = this.catalogOutbound
+      ? await this.catalogOutbound.enrichPayload({ tenantId, body: params.body })
+      : params.body;
     const apiQuote = await this.crunchworkService.createQuote({
       connectionId,
-      body: params.body,
+      body: outboundBody,
     });
 
     const apiObj = apiQuote as Record<string, unknown>;
@@ -74,10 +79,13 @@ export class QuotesService {
 
     const tenantId = this.tenantContext.getTenantId();
     const connectionId = await this.resolveConnectionId(tenantId);
+    const outboundBody = this.catalogOutbound
+      ? await this.catalogOutbound.enrichPayload({ tenantId, body: params.body })
+      : params.body;
     const apiQuote = await this.crunchworkService.updateQuote({
       connectionId,
       quoteId: params.id,
-      body: params.body,
+      body: outboundBody,
     });
 
     return this.quotesRepo.update({

@@ -33,7 +33,7 @@ const labelClass =
   'mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500';
 
 export function RegisterPage({
-  uid: _uid,
+  uid,
   error,
   email,
   googleAuthUrl,
@@ -78,6 +78,42 @@ export function RegisterPage({
           }
         });
       }
+
+      var uid = ${JSON.stringify(uid)};
+      var startOver = ${JSON.stringify(startOverUrl || '')};
+      if (!uid || uid === 'expired') return;
+
+      var KEEPALIVE_MS = 10 * 60 * 1000;
+      var timer = null;
+
+      function ping() {
+        fetch('/login/session-refresh?interaction=' + encodeURIComponent(uid))
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (!data.success) { onExpired(); }
+          })
+          .catch(function() {});
+      }
+
+      function onExpired() {
+        stop();
+        if (startOver) { window.location.href = startOver; }
+        else { window.location.reload(); }
+      }
+
+      function start() {
+        if (timer) return;
+        timer = setInterval(ping, KEEPALIVE_MS);
+      }
+      function stop() {
+        if (timer) { clearInterval(timer); timer = null; }
+      }
+
+      if (document.visibilityState === 'visible') start();
+      document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible') { ping(); start(); }
+        else { stop(); }
+      });
     })();
   `;
 

@@ -31,7 +31,11 @@ export {
   type InvoiceRow,
   type InvoiceInsert,
 } from './invoices.repository';
-export { PurchaseOrdersRepository } from './purchase-orders.repository';
+export {
+  PurchaseOrdersRepository,
+  type PurchaseOrderRow,
+  type PurchaseOrderInsert,
+} from './purchase-orders.repository';
 export {
   WorkOrdersRepository,
   type WorkOrderRow,
@@ -117,3 +121,28 @@ export {
   type BillRow,
   type BillInsert,
 } from './bills.repository';
+export {
+  JobContactsRepository,
+  type JobContactRow,
+  type JobContactInsert,
+} from './job-contacts.repository';
+export {
+  CatalogItemTypesRepository,
+  type CatalogItemTypeRow,
+  type CatalogItemTypeInsert,
+} from './catalog-item-types.repository';
+export {
+  CatalogCategoriesRepository,
+  type CatalogCategoryRow,
+  type CatalogCategoryInsert,
+} from './catalog-categories.repository';
+export {
+  CatalogItemsRepository,
+  type CatalogItemRow,
+  type CatalogItemInsert,
+} from './catalog-items.repository';
+export {
+  CatalogAssemblyComponentsRepository,
+  type CatalogAssemblyComponentRow,
+  type CatalogAssemblyComponentInsert,
+} from './catalog-assembly-components.repository';

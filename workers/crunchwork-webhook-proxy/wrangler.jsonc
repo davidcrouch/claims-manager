@@ -1,0 +1,12 @@
+{
+  "name": "crunchwork-webhook-proxy",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-14",
+
+  "routes": [
+    {
+      "pattern": "ensure-test.more0.dev/api/webhook",
+      "zone_name": "more0.dev"
+    }
+  ]
+}

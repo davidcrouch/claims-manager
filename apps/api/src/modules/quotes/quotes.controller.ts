@@ -1,9 +1,16 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { CatalogSelectionService } from '../catalog/services/catalog-selection.service';
+import { CatalogMismatchService } from '../catalog/services/catalog-mismatch.service';
+import { AddCatalogAssemblyDto, AddCatalogPrimitiveDto } from '../catalog/dto/catalog.dto';
 import { QuotesService } from './quotes.service';
 
 @Controller('quotes')
 export class QuotesController {
-  constructor(private readonly quotesService: QuotesService) {}
+  constructor(
+    private readonly quotesService: QuotesService,
+    private readonly catalogSelectionService: CatalogSelectionService,
+    private readonly catalogMismatchService: CatalogMismatchService,
+  ) {}
 
   @Get()
   async findAll(
@@ -38,5 +45,55 @@ export class QuotesController {
   @Post(':id')
   async update(@Param('id') id: string, @Body() body: Record<string, unknown>) {
     return this.quotesService.update({ id, body });
+  }
+
+  @Get(':id/groups')
+  listQuoteGroups(@Param('id') id: string) {
+    return this.catalogSelectionService.listQuoteGroups({ quoteId: id });
+  }
+
+  @Get(':id/line-items')
+  getQuoteLineItems(@Param('id') id: string) {
+    return this.catalogSelectionService.getQuoteLineItems({ quoteId: id });
+  }
+
+  @Post(':id/groups')
+  ensureQuoteGroup(@Param('id') id: string) {
+    return this.catalogSelectionService.ensureDefaultQuoteGroup({ quoteId: id });
+  }
+
+  @Post(':quoteId/groups/:groupId/catalog-items')
+  addCatalogItem(
+    @Param('groupId') groupId: string,
+    @Body() body: AddCatalogPrimitiveDto,
+  ) {
+    return this.catalogSelectionService.addPrimitiveToQuote({
+      quoteGroupId: body.quoteComboId ? undefined : groupId,
+      quoteComboId: body.quoteComboId,
+      catalogItemId: body.catalogItemId,
+      quantity: body.quantity,
+    });
+  }
+
+  @Post(':quoteId/groups/:groupId/catalog-assemblies')
+  addCatalogAssembly(
+    @Param('groupId') groupId: string,
+    @Body() body: AddCatalogAssemblyDto,
+  ) {
+    return this.catalogSelectionService.addAssemblyToQuote({
+      quoteGroupId: groupId,
+      catalogAssemblyId: body.catalogAssemblyId,
+      quantity: body.quantity,
+    });
+  }
+
+  @Get(':id/catalog-mismatches')
+  getCatalogMismatches(@Param('id') id: string) {
+    return this.catalogMismatchService.scanQuote({ quoteId: id, apply: false });
+  }
+
+  @Post(':id/catalog-mismatches/scan')
+  scanCatalogMismatches(@Param('id') id: string) {
+    return this.catalogMismatchService.scanQuote({ quoteId: id, apply: true });
   }
 }

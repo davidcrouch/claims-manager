@@ -13,15 +13,9 @@ export default async function SettingsPage({
   if (!api) redirect('/api/auth/login');
   const params = await searchParams;
 
-  let connections: any[] = [];
-  if (params.tab === 'connections') {
-    connections = await api.getConnections().catch(() => []);
-  }
-
   return (
     <SettingsPageClient
       initialTab={params.tab ?? 'general'}
-      connections={connections}
     />
   );
 }

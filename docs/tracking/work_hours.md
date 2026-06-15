@@ -280,3 +280,13 @@
   Captured the recursive contractor-chain concept — customers upstream, vendors downstream — so every module knows which direction data flows.
   Added a README index linking each specification to its file and functional area for easy navigation.
   Updated the repository ignore rules to exclude Terraform provider binaries and local state files from version control.
+
+- `2026-06-15` `PENDING` **38 h**
+  `170 files | +21 264 −40 419 | Tier 2 standard / Tier 3 complex / Tier 4 deep integration | Heavy orchestration`
+  Lay summary: Teams can now manage a product and service catalogue, build quotes from catalogue items, and rely on a new behind-the-scenes layer that keeps records consistent when data moves in and out of the system.
+  **Catalogue module, domain layer, quote line-item integration, webhook proxy, and implementation specifications.** Delivered a full **product and service catalogue** with categories, item types, assemblies, pricing, CSV import, and an admin workspace for browsing, creating, and maintaining catalogue records.
+  Built the **domain layer** — transformers, use-case projections, shared services, workflow engine, document issuance, and outbound sync — so jobs, quotes, purchase orders, and related records stay consistent as data flows through the application.
+  Integrated **catalogue selection into quotes** with line-item tables, drag-and-drop assembly expansion, unresolved-item handling, and server actions that persist selections against live quote records.
+  Added a **Cloudflare webhook proxy worker** and supporting documentation so inbound vendor events can be routed securely to the API in staging and production.
+  Shipped **sample building-repairs catalogue data** and a generator script so teams can trial import and quoting workflows without manual data entry.
+  Captured **implementation specifications** for the domain layer, catalogue module, and webhook proxy, and removed obsolete example bundle artefacts from the repository.

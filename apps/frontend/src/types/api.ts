@@ -703,3 +703,47 @@ export interface RecentActivity {
   timestamp: string;
   description: string;
 }
+
+export interface CatalogItemType {
+  id: string;
+  tenantId: string;
+  code: string;
+  name: string;
+  sortIndex: number;
+  isActive: boolean;
+}
+
+export interface CatalogCategory {
+  id: string;
+  tenantId: string;
+  parentCategoryId: string | null;
+  code: string;
+  name: string;
+  sortIndex: number;
+  isActive: boolean;
+  children?: CatalogCategory[];
+}
+
+export interface CatalogItem {
+  id: string;
+  tenantId: string;
+  code: string;
+  name: string;
+  description: string | null;
+  kind: 'primitive' | 'assembly';
+  typeId: string;
+  categoryId: string | null;
+  subCategoryId: string | null;
+  unitTypeLookupId: string | null;
+  unitCost: string | null;
+  buyCost: string | null;
+  markupType: string | null;
+  markupValue: string | null;
+  taxRate: string | null;
+  pricingMode: string | null;
+  fixedUnitCost: string | null;
+  computedUnitCost: string | null;
+  isActive: boolean;
+  externalReference?: string | null;
+  components?: unknown[];
+}

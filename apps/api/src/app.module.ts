@@ -39,6 +39,10 @@ import { ProposalsModule } from './modules/proposals/proposals.module';
 import { BillsModule } from './modules/bills/bills.module';
 import { RfqsModule } from './modules/rfqs/rfqs.module';
 import { FinanceModule } from './modules/finance/finance.module';
+import { DomainModule } from './modules/domain/domain.module';
+import { WorkflowModule } from './modules/domain/workflows/workflow.module';
+import { OutboundModule } from './modules/domain/outbound/outbound.module';
+import { CatalogModule } from './modules/catalog/catalog.module';
 import { TenantInterceptor } from './tenant/tenant.interceptor';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -99,6 +103,10 @@ import { S3Module } from './common/s3/s3.module';
     ProposalsModule,
     BillsModule,
     FinanceModule,
+    DomainModule,
+    WorkflowModule,
+    OutboundModule,
+    CatalogModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: HttpExceptionFilter },

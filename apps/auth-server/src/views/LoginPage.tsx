@@ -30,7 +30,7 @@ const inputClass =
   'w-full rounded-lg border px-4 py-2.5 text-sm shadow-sm outline-none transition-colors duration-200 placeholder:text-slate-400 focus:border-[#3e86d4] focus:ring-2 focus:ring-[rgba(62,134,212,0.2)]';
 
 export function LoginPage({
-  uid: _uid,
+  uid,
   error,
   registered,
   googleAuthUrl,
@@ -55,6 +55,42 @@ export function LoginPage({
           }
         });
       }
+
+      var uid = ${JSON.stringify(uid)};
+      var startOver = ${JSON.stringify(startOverUrl || '')};
+      if (!uid || uid === 'expired') return;
+
+      var KEEPALIVE_MS = 10 * 60 * 1000;
+      var timer = null;
+
+      function ping() {
+        fetch('/login/session-refresh?interaction=' + encodeURIComponent(uid))
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (!data.success) { onExpired(); }
+          })
+          .catch(function() {});
+      }
+
+      function onExpired() {
+        stop();
+        if (startOver) { window.location.href = startOver; }
+        else { window.location.reload(); }
+      }
+
+      function start() {
+        if (timer) return;
+        timer = setInterval(ping, KEEPALIVE_MS);
+      }
+      function stop() {
+        if (timer) { clearInterval(timer); timer = null; }
+      }
+
+      if (document.visibilityState === 'visible') start();
+      document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible') { ping(); start(); }
+        else { stop(); }
+      });
     })();
   `;
 

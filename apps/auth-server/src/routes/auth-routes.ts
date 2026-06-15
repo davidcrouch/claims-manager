@@ -36,7 +36,8 @@ import { inspect } from 'node:util';
 import isEmpty from 'lodash/isEmpty.js';
 import { storeAuthResult, deleteStoredAuthResult, CLAIMS_MANAGER_UI_CLIENT_ID } from '../config/oidc-provider.js';
 import { getStaticClients } from '../config/static-clients.js';
-import { getClientId, getApiUrl, getBaseUrl, getPostLogoutRedirectUrl, getEnvVarWithDefault } from '../config/env-validation.js';
+import { getClientId, getApiUrl, getBaseUrl, getPostLogoutRedirectUrl, getEnvVarWithDefault, getTokenTtlConfig } from '../config/env-validation.js';
+import { GlobalCacheManager, type IUnifiedRedisClient } from '../lib/cache/global-cache-manager.js';
 // Local db services for user operations
 import { createUsersService, createUserIdentitiesService } from '../db/services/index.js';
 import type { NewUser, AccessContext } from '../schemas/index.js';
@@ -642,17 +643,37 @@ export default function createAuthRoutes(
                });
             }
 
-            // Check if the interaction still exists and is valid
+            // Validate the interaction and extend its TTL in Redis
             try {
                const interactionDetails = await provider.interactionDetails(req, res);
                
                if (interactionDetails && interactionDetails.uid === interaction) {
-                  span.setAttributes({ 'auth.session_valid': true });
+                  const ttlConfig = getTokenTtlConfig();
+                  const interactionTtl = ttlConfig.interaction;
+
+                  try {
+                     const redis = await GlobalCacheManager.getInstance('auth-server');
+                     const interactionKey = `oidc:Interaction:${interactionDetails.jti}`;
+                     const uidKey = `oidc:uid:${interactionDetails.uid}`;
+                     await redis.expire(interactionKey, interactionTtl);
+                     await redis.expire(uidKey, interactionTtl);
+                     log.info({
+                        interaction,
+                        ttl: interactionTtl
+                     }, 'auth-server:auth-routes:session-refresh - Extended interaction TTL');
+                  } catch (redisError) {
+                     log.warn({
+                        interaction,
+                        error: redisError.message
+                     }, 'auth-server:auth-routes:session-refresh - Failed to extend TTL, session still valid');
+                  }
+
+                  span.setAttributes({ 'auth.session_valid': true, 'auth.ttl_extended': true });
                   span.setStatus({ code: SpanStatusCode.OK });
                   return res.json({ 
                      success: true, 
                      message: 'Session refreshed successfully',
-                     expires_in: 3600 // 60 minutes
+                     expires_in: interactionTtl
                   });
                } else {
                   span.setAttributes({ 'auth.session_valid': false, 'auth.error': 'session_expired' });
@@ -2771,13 +2792,27 @@ export default function createAuthRoutes(
     * @param res - Express Response object
     * @param next - Express NextFunction
     */
-   app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+   app.use(async (err: any, req: Request, res: Response, next: NextFunction) => {
       if (err.name === 'SessionNotFound') {
-         // Handle interaction expired / session not found error
-         log.warn({ 
-            uid: req.params.uid 
-         }, 'auth-server:auth-routes:error-handler - Interaction session not found');
-         return res.status(400).send('Session expired. Please try again.');
+         const uid = req.params.uid;
+         log.warn({ uid }, 'auth-server:auth-routes:error-handler - Interaction session not found');
+
+         const startOverUrl = await getStartOverUrl(uid || '', req, res);
+         const baseUrl = getRequestBaseUrl(req);
+
+         const html = renderPage(
+            React.createElement(LoginPage, {
+               uid: uid || '',
+               error: 'Your session has expired. Please sign in again.',
+               googleAuthUrl: `${baseUrl}/login/google/start?interaction=expired`,
+               loginActionUrl: `${baseUrl}/interaction/expired/login`,
+               registerUrl: `${baseUrl}/register`,
+               resetPasswordUrl: `${baseUrl}/reset-password`,
+               startOverUrl,
+            }),
+            { title: 'EnsureOS — Session expired' }
+         );
+         return res.status(400).send(html);
       }
       
       // Pass other errors to Express default error handler

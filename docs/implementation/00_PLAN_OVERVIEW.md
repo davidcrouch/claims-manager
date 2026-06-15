@@ -135,6 +135,14 @@ The **claims list view** is served from the local DB, populated by the above. To
 
 ---
 
+## Cloudflare Workers Infrastructure
+
+| # | Document | Title | Scope |
+|---|----------|-------|-------|
+| 34 | `34_CLOUDFLARE_WEBHOOK_PROXY.md` | Cloudflare Webhook Proxy | Crunchwork → EnsureOS transparent proxy Worker |
+
+---
+
 ## Contractor (Prime) Menu Restructure & New Entities
 
 Implements the grouped sidebar navigation from `docs/Ensure Roles.pdf` with new entity types, finance views, and cross-entity operations pages.
@@ -152,6 +160,14 @@ Implements the grouped sidebar navigation from `docs/Ensure Roles.pdf` with new 
 | 33h | `33h_OPERATIONS_STANDALONE_PAGES.md` | Operations Standalone Pages | Schedule, Messages, Appointments, Contacts |
 | 33i | `33i_ADMIN_PAGES.md` | Admin Pages | Users, Documents, Settings (Connections tab) |
 | 33j | `33j_DASHBOARD_ENHANCEMENT.md` | Dashboard Enhancement | Clickable metrics linked to new pages |
+
+---
+
+## Item Catalogue
+
+| # | Document | Title | Scope |
+|---|----------|-------|-------|
+| 36 | `36_CATALOGUE_MODULE.md` | Item Catalogue Module | Master catalogue (types, categories, items, assemblies/BOM), pricing, document selection |
 
 ---
 

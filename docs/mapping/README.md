@@ -17,6 +17,7 @@ the `api_payload` catch-all JSONB column.
 | [`purchase_orders.md`](./purchase_orders.md) | Purchase Order | `docs/Insurance REST API-v17-20260304_100318.pdf` §3.3.8 | **Spec — full CW field coverage; mapper partial (gaps tracked in §11)** |
 | [`reports.md`](./reports.md) | Report | `docs/Insurance REST API-v17-20260304_100318.pdf` §3.3.14 | Stub (minimum mapper coverage) |
 | [`appointments.md`](./appointments.md) | Appointment | `docs/Insurance REST API-v17-20260304_100318.pdf` §3.3.10 | Stub (minimum mapper coverage) |
+| [`catalogue.md`](./catalogue.md) | Catalogue / line-item refs | Catalogue module v1 + quote line `catalogItemId` | **Inbound/outbound ref mapping** |
 
 Stub-coverage docs describe only the fields the temporary in-process orchestrator (see [`docs/implementation/29_TEMPORARY_WEBHOOK_ORCHESTRATOR.md`](../implementation/29_TEMPORARY_WEBHOOK_ORCHESTRATOR.md)) currently persists. The remaining CW fields are still captured verbatim in `api_payload`, but are treated as backlog until the mapper and this doc are both expanded.
 

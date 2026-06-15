@@ -1,8 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
 import { eq, and, desc } from 'drizzle-orm';
-import { DRIZZLE } from '../drizzle.module';
-import type { DrizzleDB } from '../drizzle.module';
+import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { attachments } from '../schema';
 
 export type AttachmentRow = typeof attachments.$inferSelect;
@@ -39,16 +38,19 @@ export class AttachmentsRepository {
       .orderBy(desc(attachments.createdAt));
   }
 
-  async create(params: { data: AttachmentInsert }): Promise<AttachmentRow> {
-    const [inserted] = await this.db.insert(attachments).values(params.data).returning();
+  async create(params: { data: AttachmentInsert; tx?: DrizzleDbOrTx }): Promise<AttachmentRow> {
+    const db = params.tx ?? this.db;
+    const [inserted] = await db.insert(attachments).values(params.data).returning();
     return inserted!;
   }
 
   async update(params: {
     id: string;
     data: Partial<AttachmentInsert>;
+    tx?: DrizzleDbOrTx;
   }): Promise<AttachmentRow | null> {
-    const [updated] = await this.db
+    const db = params.tx ?? this.db;
+    const [updated] = await db
       .update(attachments)
       .set({ ...params.data, updatedAt: new Date() })
       .where(eq(attachments.id, params.id))

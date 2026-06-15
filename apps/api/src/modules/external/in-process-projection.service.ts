@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import {
   ExternalObjectsRepository,
   ExternalProcessingLogRepository,
@@ -6,6 +6,7 @@ import {
 } from '../../database/repositories';
 import { DRIZZLE, type DrizzleDB } from '../../database/drizzle.module';
 import { EntityMapperRegistry } from './entity-mapper.registry';
+import { UseCaseRegistry } from '../domain/use-cases/use-case.registry';
 
 export type InProcessProjectionOutcome =
   | {
@@ -37,6 +38,7 @@ export class InProcessProjectionService {
     private readonly externalObjectsRepo: ExternalObjectsRepository,
     private readonly processingLogRepo: ExternalProcessingLogRepository,
     private readonly webhookRepo: InboundWebhookEventsRepository,
+    @Optional() private readonly useCaseRegistry?: UseCaseRegistry,
   ) {}
 
   async run(params: {
@@ -52,12 +54,15 @@ export class InProcessProjectionService {
       `${logPrefix} — entity=${params.providerEntityType} externalObjectId=${params.externalObjectId} webhookEventId=${params.webhookEventId}`,
     );
 
-    const mapper = this.mapperRegistry.get({
-      entityType: params.providerEntityType,
-    });
-    if (!mapper) {
+    // Try domain use case first, fall back to legacy mapper
+    const useCase = this.useCaseRegistry?.get(params.providerEntityType);
+    const mapper = useCase
+      ? undefined
+      : this.mapperRegistry.get({ entityType: params.providerEntityType });
+
+    if (!useCase && !mapper) {
       this.logger.warn(
-        `${logPrefix} — no mapper registered for entityType=${params.providerEntityType}; marking skipped_no_mapper`,
+        `${logPrefix} — no use case or mapper registered for entityType=${params.providerEntityType}; marking skipped_no_mapper`,
       );
       await this.processingLogRepo.updateStatus({
         id: params.processingLogId,
@@ -73,6 +78,12 @@ export class InProcessProjectionService {
       return { status: 'skipped_no_mapper' };
     }
 
+    if (useCase) {
+      this.logger.log(
+        `${logPrefix} — using domain use case for entityType=${params.providerEntityType}`,
+      );
+    }
+
     const externalObject = await this.externalObjectsRepo.findById({
       id: params.externalObjectId,
     });
@@ -83,12 +94,29 @@ export class InProcessProjectionService {
     }
 
     return this.db.transaction(async (tx) => {
-      const result = await mapper.map({
-        externalObject: externalObject as unknown as Record<string, unknown>,
-        tenantId: params.tenantId,
-        connectionId: params.connectionId,
-        tx,
-      });
+      let result: { internalEntityId: string; internalEntityType: string; skipped?: string };
+
+      if (useCase) {
+        const ucResult = await useCase.execute({
+          externalObject: externalObject as unknown as Record<string, unknown>,
+          tenantId: params.tenantId,
+          connectionId: params.connectionId,
+          tx,
+        });
+
+        result = {
+          internalEntityId: ucResult.internalEntityId,
+          internalEntityType: ucResult.internalEntityType,
+          skipped: ucResult.status === 'skipped' ? ucResult.reason : undefined,
+        };
+      } else {
+        result = await mapper!.map({
+          externalObject: externalObject as unknown as Record<string, unknown>,
+          tenantId: params.tenantId,
+          connectionId: params.connectionId,
+          tx,
+        });
+      }
 
       if (result.skipped) {
         this.logger.warn(

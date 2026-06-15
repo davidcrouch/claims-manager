@@ -157,6 +157,8 @@ export const claimContacts = pgTable(
     claimId: uuid('claim_id').notNull().references(() => claims.id, { onDelete: 'cascade' }),
     contactId: uuid('contact_id').notNull().references(() => contacts.id, { onDelete: 'cascade' }),
     sortIndex: integer('sort_index').notNull().default(0),
+    visibility: text('visibility').notNull().default('org'),
+    createdByUserId: text('created_by_user_id'),
     sourcePayload: jsonb('source_payload').notNull().default({}),
   },
   (t) => [uniqueIndex('UQ_claim_contact').on(t.claimId, t.contactId)],
@@ -338,7 +340,9 @@ export const quoteCombos = pgTable(
       .notNull()
       .references(() => quoteGroups.id, { onDelete: 'cascade' }),
     externalReference: text('external_reference'),
-    catalogComboId: uuid('catalog_combo_id'),
+    catalogComboId: uuid('catalog_combo_id').references((): AnyPgColumn => catalogItems.id, {
+      onDelete: 'set null',
+    }),
     lineScopeStatusLookupId: uuid('line_scope_status_lookup_id').references(() => lookupValues.id),
     name: text('name'),
     description: text('description'),
@@ -369,7 +373,9 @@ export const quoteItems = pgTable(
     quoteGroupId: uuid('quote_group_id').references(() => quoteGroups.id, { onDelete: 'cascade' }),
     quoteComboId: uuid('quote_combo_id').references(() => quoteCombos.id, { onDelete: 'cascade' }),
     externalReference: text('external_reference'),
-    catalogItemId: uuid('catalog_item_id'),
+    catalogItemId: uuid('catalog_item_id').references((): AnyPgColumn => catalogItems.id, {
+      onDelete: 'set null',
+    }),
     lineScopeStatusLookupId: uuid('line_scope_status_lookup_id').references(() => lookupValues.id),
     unitTypeLookupId: uuid('unit_type_lookup_id').references(() => lookupValues.id),
     name: text('name'),
@@ -500,7 +506,9 @@ export const purchaseOrderCombos = pgTable(
     purchaseOrderGroupId: uuid('purchase_order_group_id')
       .notNull()
       .references(() => purchaseOrderGroups.id, { onDelete: 'cascade' }),
-    catalogComboId: uuid('catalog_combo_id'),
+    catalogComboId: uuid('catalog_combo_id').references((): AnyPgColumn => catalogItems.id, {
+      onDelete: 'set null',
+    }),
     quoteComboId: uuid('quote_combo_id'),
     name: text('name'),
     description: text('description'),
@@ -533,7 +541,9 @@ export const purchaseOrderItems = pgTable(
       () => purchaseOrderCombos.id,
       { onDelete: 'cascade' },
     ),
-    catalogItemId: uuid('catalog_item_id'),
+    catalogItemId: uuid('catalog_item_id').references((): AnyPgColumn => catalogItems.id, {
+      onDelete: 'set null',
+    }),
     quoteLineItemId: uuid('quote_line_item_id'),
     unitTypeLookupId: uuid('unit_type_lookup_id'),
     name: text('name'),
@@ -618,6 +628,8 @@ export const jobContacts = pgTable(
     jobId: uuid('job_id').notNull().references(() => jobs.id, { onDelete: 'cascade' }),
     contactId: uuid('contact_id').notNull().references(() => contacts.id, { onDelete: 'cascade' }),
     sortIndex: integer('sort_index').notNull().default(0),
+    visibility: text('visibility').notNull().default('org'),
+    createdByUserId: text('created_by_user_id'),
     sourcePayload: jsonb('source_payload').notNull().default({}),
   },
   (t) => [uniqueIndex('UQ_job_contact').on(t.jobId, t.contactId)],
@@ -1153,6 +1165,9 @@ export const workOrders = pgTable(
     totalAmount: numeric('total_amount', { precision: 14, scale: 2 }),
     adjustedTotal: numeric('adjusted_total', { precision: 14, scale: 2 }),
     workOrderPayload: jsonb('work_order_payload').notNull().default({}),
+    sourceVersionNumber: integer('source_version_number').notNull().default(1),
+    latestAvailableVersion: integer('latest_available_version').notNull().default(1),
+    versionAcknowledged: boolean('version_acknowledged').notNull().default(true),
     createdByUserId: text('created_by_user_id'),
     updatedByUserId: text('updated_by_user_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -1202,7 +1217,9 @@ export const workOrderCombos = pgTable(
     workOrderGroupId: uuid('work_order_group_id')
       .notNull()
       .references(() => workOrderGroups.id, { onDelete: 'cascade' }),
-    catalogComboId: uuid('catalog_combo_id'),
+    catalogComboId: uuid('catalog_combo_id').references((): AnyPgColumn => catalogItems.id, {
+      onDelete: 'set null',
+    }),
     name: text('name'),
     description: text('description'),
     category: text('category'),
@@ -1234,7 +1251,9 @@ export const workOrderItems = pgTable(
       () => workOrderCombos.id,
       { onDelete: 'cascade' },
     ),
-    catalogItemId: uuid('catalog_item_id'),
+    catalogItemId: uuid('catalog_item_id').references((): AnyPgColumn => catalogItems.id, {
+      onDelete: 'set null',
+    }),
     unitTypeLookupId: uuid('unit_type_lookup_id'),
     name: text('name'),
     description: text('description'),
@@ -1430,6 +1449,9 @@ export const proposals = pgTable(
     proposalFromName: text('proposal_from_name'),
     customData: jsonb('custom_data').notNull().default({}),
     proposalPayload: jsonb('proposal_payload').notNull().default({}),
+    sourceVersionNumber: integer('source_version_number').notNull().default(1),
+    latestAvailableVersion: integer('latest_available_version').notNull().default(1),
+    versionAcknowledged: boolean('version_acknowledged').notNull().default(true),
     createdByUserId: text('created_by_user_id'),
     updatedByUserId: text('updated_by_user_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -1570,6 +1592,9 @@ export const bills = pgTable(
     totalAmount: numeric('total_amount', { precision: 14, scale: 2 }),
     isDeleted: boolean('is_deleted').notNull().default(false),
     billPayload: jsonb('bill_payload').notNull().default({}),
+    sourceVersionNumber: integer('source_version_number').notNull().default(1),
+    latestAvailableVersion: integer('latest_available_version').notNull().default(1),
+    versionAcknowledged: boolean('version_acknowledged').notNull().default(true),
     createdByUserId: text('created_by_user_id'),
     updatedByUserId: text('updated_by_user_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -1586,6 +1611,259 @@ export const bills = pgTable(
     index('idx_bills_due_date').on(t.tenantId, t.dueDate),
     index('idx_bills_payment_status').on(t.tenantId, t.paymentStatusLookupId),
     unique('UQ_bills_tenant_number').on(t.tenantId, t.purchaseOrderId, t.billNumber),
+  ],
+);
+
+// ── Document Versions ──────────────────────────────────────────
+export const documentVersions = pgTable(
+  'document_versions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    documentType: text('document_type').notNull(),
+    documentId: uuid('document_id').notNull(),
+    versionNumber: integer('version_number').notNull(),
+    snapshot: jsonb('snapshot').notNull(),
+    lineItemSnapshot: jsonb('line_item_snapshot').notNull().default([]),
+    issuedAt: timestamp('issued_at', { withTimezone: true }).notNull(),
+    issuedByUserId: text('issued_by_user_id'),
+    supersededAt: timestamp('superseded_at', { withTimezone: true }),
+    metadata: jsonb('metadata').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('UQ_doc_version').on(t.tenantId, t.documentType, t.documentId, t.versionNumber),
+    index('idx_doc_versions_doc').on(t.tenantId, t.documentType, t.documentId),
+  ],
+);
+
+// ── Item Allocations (WO items → PO items) ────────────────────
+export const itemAllocations = pgTable(
+  'item_allocations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    sourceWorkOrderItemId: uuid('source_work_order_item_id')
+      .notNull()
+      .references(() => workOrderItems.id, { onDelete: 'cascade' }),
+    targetPurchaseOrderItemId: uuid('target_purchase_order_item_id')
+      .notNull()
+      .references(() => purchaseOrderItems.id, { onDelete: 'cascade' }),
+    allocatedQuantity: numeric('allocated_quantity', { precision: 14, scale: 4 }),
+    allocatedAmount: numeric('allocated_amount', { precision: 14, scale: 2 }),
+    allocationType: text('allocation_type').notNull().default('full'),
+    notes: text('notes'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('chk_allocation_type', sql`allocation_type IN ('full', 'partial', 'split')`),
+    index('idx_item_alloc_source').on(t.tenantId, t.sourceWorkOrderItemId),
+    index('idx_item_alloc_target').on(t.tenantId, t.targetPurchaseOrderItemId),
+  ],
+);
+
+// ── Outbound Sync Queue ───────────────────────────────────────
+export const outboundSyncQueue = pgTable(
+  'outbound_sync_queue',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    connectionId: uuid('connection_id')
+      .notNull()
+      .references(() => integrationConnections.id, { onDelete: 'cascade' }),
+
+    entityType: text('entity_type').notNull(),
+    entityId: uuid('entity_id').notNull(),
+    action: text('action').notNull(),
+    payload: jsonb('payload').notNull(),
+
+    status: text('status').notNull().default('pending'),
+    priority: integer('priority').notNull().default(0),
+    attempts: integer('attempts').notNull().default(0),
+    maxAttempts: integer('max_attempts').notNull().default(5),
+    lastError: text('last_error'),
+    lastAttemptedAt: timestamp('last_attempted_at', { withTimezone: true }),
+
+    scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull().defaultNow(),
+    notBefore: timestamp('not_before', { withTimezone: true }),
+
+    sourceEvent: text('source_event'),
+    idempotencyKey: text('idempotency_key'),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    processedAt: timestamp('processed_at', { withTimezone: true }),
+  },
+  (t) => [
+    check('chk_outbound_status', sql`status IN ('pending', 'processing', 'sent', 'failed', 'cancelled')`),
+    index('idx_outbound_poll').on(t.status, t.scheduledAt, t.priority),
+    index('idx_outbound_entity').on(t.tenantId, t.entityType, t.entityId),
+    index('idx_outbound_connection').on(t.connectionId, t.status),
+  ],
+);
+
+// ── Item Catalogue ─────────────────────────────────────────────
+
+export const catalogItemTypes = pgTable(
+  'catalog_item_types',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    code: text('code').notNull(),
+    name: text('name').notNull(),
+    sortIndex: integer('sort_index').notNull().default(0),
+    isActive: boolean('is_active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('UQ_catalog_item_types_tenant_code').on(t.tenantId, t.code),
+    index('idx_catalog_item_types_tenant').on(t.tenantId, t.isActive),
+  ],
+);
+
+export const catalogCategories = pgTable(
+  'catalog_categories',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    parentCategoryId: uuid('parent_category_id').references((): AnyPgColumn => catalogCategories.id, {
+      onDelete: 'restrict',
+    }),
+    code: text('code').notNull(),
+    name: text('name').notNull(),
+    sortIndex: integer('sort_index').notNull().default(0),
+    isActive: boolean('is_active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('UQ_catalog_categories_tenant_parent_code').on(
+      t.tenantId,
+      t.parentCategoryId,
+      t.code,
+    ),
+    index('idx_catalog_categories_tenant').on(t.tenantId, t.isActive),
+    index('idx_catalog_categories_parent').on(t.tenantId, t.parentCategoryId),
+  ],
+);
+
+export const catalogItems = pgTable(
+  'catalog_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    code: text('code').notNull(),
+    name: text('name').notNull(),
+    description: text('description'),
+    kind: text('kind').notNull(),
+    typeId: uuid('type_id')
+      .notNull()
+      .references(() => catalogItemTypes.id),
+    categoryId: uuid('category_id').references(() => catalogCategories.id),
+    subCategoryId: uuid('sub_category_id').references(() => catalogCategories.id),
+    unitTypeLookupId: uuid('unit_type_lookup_id').references(() => lookupValues.id),
+    unitCost: numeric('unit_cost', { precision: 14, scale: 4 }),
+    buyCost: numeric('buy_cost', { precision: 14, scale: 4 }),
+    markupType: text('markup_type'),
+    markupValue: numeric('markup_value', { precision: 14, scale: 4 }),
+    taxRate: numeric('tax_rate', { precision: 14, scale: 4 }),
+    pricingMode: text('pricing_mode'),
+    fixedUnitCost: numeric('fixed_unit_cost', { precision: 14, scale: 4 }),
+    computedUnitCost: numeric('computed_unit_cost', { precision: 14, scale: 4 }),
+    computedCostAt: timestamp('computed_cost_at', { withTimezone: true }),
+    externalReference: text('external_reference'),
+    isActive: boolean('is_active').notNull().default(true),
+    effectiveFrom: date('effective_from'),
+    effectiveTo: date('effective_to'),
+    metadata: jsonb('metadata').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('UQ_catalog_items_tenant_code').on(t.tenantId, t.code),
+    uniqueIndex('UQ_catalog_items_tenant_extref')
+      .on(t.tenantId, t.externalReference)
+      .where(sql`external_reference IS NOT NULL`),
+    index('idx_catalog_items_tenant').on(t.tenantId, t.isActive, t.deletedAt),
+    index('idx_catalog_items_type').on(t.tenantId, t.typeId),
+    index('idx_catalog_items_category').on(t.tenantId, t.categoryId),
+    index('idx_catalog_items_kind').on(t.tenantId, t.kind),
+    check('chk_catalog_items_kind', sql`kind IN ('primitive', 'assembly')`),
+    check(
+      'chk_catalog_items_primitive_unit',
+      sql`kind = 'assembly' OR unit_type_lookup_id IS NOT NULL`,
+    ),
+    check(
+      'chk_catalog_items_assembly_pricing',
+      sql`kind = 'primitive' OR pricing_mode IS NOT NULL`,
+    ),
+  ],
+);
+
+export const catalogAssemblyComponents = pgTable(
+  'catalog_assembly_components',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    assemblyId: uuid('assembly_id')
+      .notNull()
+      .references(() => catalogItems.id, { onDelete: 'cascade' }),
+    componentId: uuid('component_id')
+      .notNull()
+      .references(() => catalogItems.id, { onDelete: 'restrict' }),
+    quantity: numeric('quantity', { precision: 14, scale: 4 }).notNull().default('1'),
+    wasteFactor: numeric('waste_factor', { precision: 8, scale: 4 }).notNull().default('1'),
+    sortIndex: integer('sort_index').notNull().default(0),
+    isOptional: boolean('is_optional').notNull().default(false),
+    notes: text('notes'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_catalog_bom_assembly').on(t.tenantId, t.assemblyId),
+    index('idx_catalog_bom_component').on(t.tenantId, t.componentId),
+    check('chk_bom_no_self_ref', sql`assembly_id != component_id`),
+  ],
+);
+
+// ── Entity Workflow State ──────────────────────────────────────
+export const entityWorkflowState = pgTable(
+  'entity_workflow_state',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    entityType: text('entity_type').notNull(),
+    entityId: uuid('entity_id').notNull(),
+    workflowName: text('workflow_name').notNull(),
+    currentStep: text('current_step').notNull(),
+    enteredAt: timestamp('entered_at', { withTimezone: true }).notNull().defaultNow(),
+    enteredByUserId: text('entered_by_user_id'),
+    metadata: jsonb('metadata').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('UQ_workflow_state').on(t.tenantId, t.entityType, t.entityId, t.workflowName),
+    index('idx_workflow_state_entity').on(t.tenantId, t.entityType, t.entityId),
+    index('idx_workflow_state_step').on(t.tenantId, t.entityType, t.currentStep),
   ],
 );
 

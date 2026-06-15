@@ -25,6 +25,9 @@ import type {
   PaginatedResponse,
   FinanceSummary,
   AgingBucket,
+  CatalogItem,
+  CatalogItemType,
+  CatalogCategory,
   ProviderSummary,
   Provider,
   ProviderConnection,
@@ -563,6 +566,182 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params?.limit != null) sp.set('limit', String(params.limit));
       if (params?.status) sp.set('status', params.status);
       return fetchApi<PaginatedResponse<WebhookEvent>>(`/connections/${id}/webhook-events?${sp}`);
+    },
+
+    getCatalogTypes(): Promise<CatalogItemType[]> {
+      return fetchApi<CatalogItemType[]>('/catalog/types');
+    },
+
+    getCatalogCategoriesTree(): Promise<CatalogCategory[]> {
+      return fetchApi<CatalogCategory[]>('/catalog/categories/tree');
+    },
+
+    getCatalogItems(params?: {
+      kind?: 'primitive' | 'assembly';
+      typeId?: string;
+      categoryId?: string;
+      q?: string;
+      page?: number;
+      limit?: number;
+    }): Promise<PaginatedResponse<CatalogItem>> {
+      const sp = new URLSearchParams();
+      if (params?.kind) sp.set('kind', params.kind);
+      if (params?.typeId) sp.set('typeId', params.typeId);
+      if (params?.categoryId) sp.set('categoryId', params.categoryId);
+      if (params?.q) sp.set('q', params.q);
+      if (params?.page != null) sp.set('page', String(params.page));
+      if (params?.limit != null) sp.set('limit', String(params.limit));
+      return fetchApi<PaginatedResponse<CatalogItem>>(`/catalog/items?${sp}`);
+    },
+
+    getCatalogItem(id: string): Promise<CatalogItem> {
+      return fetchApi<CatalogItem>(`/catalog/items/${id}`);
+    },
+
+    createCatalogItem(body: Record<string, unknown>): Promise<CatalogItem> {
+      return fetchApi<CatalogItem>('/catalog/items', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+
+    updateCatalogItem(id: string, body: Record<string, unknown>): Promise<CatalogItem> {
+      return fetchApi<CatalogItem>(`/catalog/items/${id}`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+
+    deleteCatalogItem(id: string): Promise<void> {
+      return fetchApi<void>(`/catalog/items/${id}`, { method: 'DELETE' });
+    },
+
+    replaceCatalogBom(id: string, lines: Record<string, unknown>[]): Promise<unknown> {
+      return fetchApi(`/catalog/items/${id}/components`, {
+        method: 'PUT',
+        body: JSON.stringify({ lines }),
+      });
+    },
+
+    createCatalogCategory(body: Record<string, unknown>): Promise<CatalogCategory> {
+      return fetchApi<CatalogCategory>('/catalog/categories', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+
+    getCatalogImportTemplate(): Promise<{ csv: string; columns: string[] }> {
+      return fetchApi<{ csv: string; columns: string[] }>('/catalog/import/template');
+    },
+
+    previewCatalogImport(csv: string): Promise<{
+      totalRows: number;
+      validRows: number;
+      warningRows: number;
+      errorRows: number;
+      skippedRows: number;
+      willCreate: number;
+      willUpdate: number;
+      categoriesToCreate: string[];
+      rows: Array<{
+        row: number;
+        code: string;
+        displayName: string;
+        lineItemDescription: string | null;
+        kind: string;
+        typeCode: string;
+        categoryCode: string | null;
+        unitTypeRef: string | null;
+        status: 'ok' | 'warning' | 'error' | 'skipped';
+        action: 'create' | 'update' | 'skip';
+        message?: string;
+      }>;
+    }> {
+      return fetchApi('/catalog/import/preview', {
+        method: 'POST',
+        body: JSON.stringify({ csv }),
+      });
+    },
+
+    importCatalogCsv(csv: string): Promise<{
+      created: number;
+      updated: number;
+      skipped: number;
+      errors: number;
+      results: Array<{ row: number; code: string; status: string; message?: string }>;
+    }> {
+      return fetchApi('/catalog/import/csv', {
+        method: 'POST',
+        body: JSON.stringify({ csv }),
+      });
+    },
+
+    getCatalogUnresolvedReferences(): Promise<unknown[]> {
+      return fetchApi<unknown[]>('/catalog/unresolved-references');
+    },
+
+    getQuoteCatalogMismatches(quoteId: string): Promise<{
+      mismatches: Array<{
+        quoteItemId: string;
+        catalogCode: string | null;
+        property: string;
+        snapshotValue: string;
+        catalogValue: string;
+      }>;
+      updatedCount: number;
+    }> {
+      return fetchApi(`/quotes/${quoteId}/catalog-mismatches`);
+    },
+
+    scanQuoteCatalogMismatches(quoteId: string): Promise<{
+      mismatches: unknown[];
+      updatedCount: number;
+    }> {
+      return fetchApi(`/quotes/${quoteId}/catalog-mismatches/scan`, { method: 'POST' });
+    },
+
+    getQuoteGroups(quoteId: string): Promise<Array<{ id: string; description: string | null }>> {
+      return fetchApi(`/quotes/${quoteId}/groups`);
+    },
+
+    getQuoteLineItems(quoteId: string): Promise<Array<Record<string, unknown>>> {
+      return fetchApi(`/quotes/${quoteId}/line-items`);
+    },
+
+    ensureQuoteGroup(quoteId: string): Promise<{ id: string; description: string | null }> {
+      return fetchApi(`/quotes/${quoteId}/groups`, { method: 'POST' });
+    },
+
+    addCatalogItemToQuote(params: {
+      quoteId: string;
+      groupId: string;
+      catalogItemId: string;
+      quantity: string;
+      quoteComboId?: string;
+    }): Promise<unknown> {
+      return fetchApi(`/quotes/${params.quoteId}/groups/${params.groupId}/catalog-items`, {
+        method: 'POST',
+        body: JSON.stringify({
+          catalogItemId: params.catalogItemId,
+          quantity: params.quantity,
+          quoteComboId: params.quoteComboId,
+        }),
+      });
+    },
+
+    addCatalogAssemblyToQuote(params: {
+      quoteId: string;
+      groupId: string;
+      catalogAssemblyId: string;
+      quantity: string;
+    }): Promise<unknown> {
+      return fetchApi(`/quotes/${params.quoteId}/groups/${params.groupId}/catalog-assemblies`, {
+        method: 'POST',
+        body: JSON.stringify({
+          catalogAssemblyId: params.catalogAssemblyId,
+          quantity: params.quantity,
+        }),
+      });
     },
   };
 }

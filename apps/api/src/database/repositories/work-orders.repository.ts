@@ -1,8 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
 import { eq, and, isNull, desc, sql } from 'drizzle-orm';
-import { DRIZZLE } from '../drizzle.module';
-import type { DrizzleDB } from '../drizzle.module';
+import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { workOrders } from '../schema';
 
 export type WorkOrderRow = typeof workOrders.$inferSelect;
@@ -85,16 +84,19 @@ export class WorkOrdersRepository {
       .orderBy(desc(workOrders.updatedAt));
   }
 
-  async create(params: { data: WorkOrderInsert }): Promise<WorkOrderRow> {
-    const [row] = await this.db.insert(workOrders).values(params.data).returning();
+  async create(params: { data: WorkOrderInsert; tx?: DrizzleDbOrTx }): Promise<WorkOrderRow> {
+    const db = params.tx ?? this.db;
+    const [row] = await db.insert(workOrders).values(params.data).returning();
     return row;
   }
 
   async update(params: {
     id: string;
     data: Partial<WorkOrderInsert>;
+    tx?: DrizzleDbOrTx;
   }): Promise<WorkOrderRow | null> {
-    const [updated] = await this.db
+    const db = params.tx ?? this.db;
+    const [updated] = await db
       .update(workOrders)
       .set({ ...params.data, updatedAt: new Date() })
       .where(eq(workOrders.id, params.id))

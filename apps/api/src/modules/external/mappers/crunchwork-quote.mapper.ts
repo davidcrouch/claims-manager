@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { CatalogInboundService } from '../../catalog/services/catalog-inbound.service';
 import {
   QuotesRepository,
   ExternalLinksRepository,
@@ -16,6 +17,7 @@ export class CrunchworkQuoteMapper implements EntityMapper {
     private readonly quotesRepo: QuotesRepository,
     private readonly externalLinksRepo: ExternalLinksRepository,
     private readonly externalObjectService: ExternalObjectService,
+    @Optional() private readonly catalogInbound?: CatalogInboundService,
   ) {}
 
   async map(params: {
@@ -29,13 +31,21 @@ export class CrunchworkQuoteMapper implements EntityMapper {
     skipped?: string;
   }> {
     const extObj = params.externalObject;
-    const payload = extObj.latestPayload as Record<string, unknown>;
+    const rawPayload = extObj.latestPayload as Record<string, unknown>;
     const externalObjectId = extObj.id as string;
     const tx = params.tx;
 
     this.logger.log(
       `CrunchworkQuoteMapper.map — externalObjectId=${externalObjectId}`,
     );
+
+    const payload = this.catalogInbound
+      ? await this.catalogInbound.processQuotePayload({
+          tenantId: params.tenantId,
+          quoteId: (rawPayload.id as string) ?? externalObjectId,
+          payload: rawPayload,
+        })
+      : rawPayload;
 
     const existingLinks = await this.externalLinksRepo.findByExternalObjectId({
       externalObjectId,

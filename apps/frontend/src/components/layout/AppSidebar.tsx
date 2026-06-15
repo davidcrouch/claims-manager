@@ -25,9 +25,11 @@ import {
   Users,
   UserCog,
   FolderOpen,
+  Unplug,
   Settings,
   LogOut,
   ChevronRight,
+  Package,
 } from 'lucide-react';
 import { Collapsible } from '@base-ui/react/collapsible';
 import {
@@ -124,6 +126,8 @@ const navGroups: NavGroup[] = [
   {
     label: 'ADMIN',
     items: [
+      { title: 'Connections', href: '/connections', icon: Unplug },
+      { title: 'Catalogue', href: '/admin/catalog', icon: Package },
       { title: 'Users', href: '/admin/users', icon: UserCog },
       { title: 'Settings', href: '/admin/settings', icon: Settings },
     ],
