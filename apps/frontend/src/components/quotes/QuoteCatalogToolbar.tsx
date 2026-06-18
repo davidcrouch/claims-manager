@@ -17,6 +17,7 @@ export interface QuoteCatalogToolbarProps {
   pending?: boolean;
   onOpenCatalogDrawer: () => void;
   message?: string | null;
+  children?: React.ReactNode;
 }
 
 export function QuoteCatalogToolbar({
@@ -26,6 +27,7 @@ export function QuoteCatalogToolbar({
   pending = false,
   onOpenCatalogDrawer,
   message = null,
+  children,
 }: QuoteCatalogToolbarProps) {
   const router = useRouter();
   const [mismatchCount, setMismatchCount] = useState(0);
@@ -94,6 +96,7 @@ export function QuoteCatalogToolbar({
             <RefreshCw className="mr-1 h-4 w-4" />
             Scan price drift
           </Button>
+          {children}
         </div>
       </div>
 

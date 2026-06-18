@@ -1,11 +1,12 @@
 import { BadRequestException, Injectable, NotFoundException, Inject } from '@nestjs/common';
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../../../database/drizzle.module';
 import {
   CatalogCategoriesRepository,
   CatalogItemTypesRepository,
   CatalogItemsRepository,
   CatalogAssemblyComponentsRepository,
+  LookupsRepository,
 } from '../../../database/repositories';
 import {
   purchaseOrderCombos,
@@ -29,6 +30,32 @@ import { CatalogPricingService } from './catalog-pricing.service';
 
 type DocumentKind = 'quote' | 'purchase_order' | 'work_order';
 
+const MARKUP_TYPE_MAP: Record<string, string> = {
+  percent: 'Percentage',
+  percentage: 'Percentage',
+  fixed: 'Absolute',
+  absolute: 'Absolute',
+};
+
+const CW_ITEM_TYPE_MAP: Record<string, string> = {
+  material: 'Material',
+  labour: 'Labour',
+  equipment: 'Hire',
+  hire: 'Hire',
+  vendor: 'Other',
+  other: 'Other',
+};
+
+function normaliseCwItemType(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return CW_ITEM_TYPE_MAP[value.toLowerCase()] ?? value;
+}
+
+function normaliseCwMarkupType(value: string | null | undefined): string | null {
+  if (!value || value === 'none') return null;
+  return MARKUP_TYPE_MAP[value.toLowerCase()] ?? null;
+}
+
 @Injectable()
 export class CatalogSelectionService {
   constructor(
@@ -38,6 +65,7 @@ export class CatalogSelectionService {
     private readonly categoriesRepo: CatalogCategoriesRepository,
     private readonly bomRepo: CatalogAssemblyComponentsRepository,
     private readonly pricingService: CatalogPricingService,
+    private readonly lookupsRepo: LookupsRepository,
     private readonly tenantContext: TenantContext,
   ) {}
 
@@ -230,12 +258,145 @@ export class CatalogSelectionService {
     return row;
   }
 
+  async createQuoteGroup(params: {
+    quoteId: string;
+    groupLabelLookupId?: string;
+    description?: string;
+  }) {
+    const tenantId = this.getTenantId();
+    const existing = await this.listQuoteGroups({ quoteId: params.quoteId });
+    const nextIndex = existing.length > 0
+      ? Math.max(...existing.map((g) => g.sortIndex)) + 1
+      : 0;
+
+    const [row] = await this.db
+      .insert(quoteGroups)
+      .values({
+        tenantId,
+        quoteId: params.quoteId,
+        groupLabelLookupId: params.groupLabelLookupId ?? null,
+        description: params.description ?? null,
+        sortIndex: nextIndex,
+      })
+      .returning();
+    return row;
+  }
+
+  async updateQuoteGroup(params: {
+    quoteId: string;
+    groupId: string;
+    groupLabelLookupId?: string;
+    description?: string;
+    dimensions?: Record<string, unknown>;
+  }) {
+    const tenantId = this.getTenantId();
+    const [existing] = await this.db
+      .select()
+      .from(quoteGroups)
+      .where(
+        and(
+          eq(quoteGroups.id, params.groupId),
+          eq(quoteGroups.quoteId, params.quoteId),
+          eq(quoteGroups.tenantId, tenantId),
+        ),
+      );
+    if (!existing) throw new NotFoundException('Quote group not found');
+
+    const updates: Record<string, unknown> = {};
+    if (params.groupLabelLookupId !== undefined) updates.groupLabelLookupId = params.groupLabelLookupId || null;
+    if (params.description !== undefined) updates.description = params.description || null;
+    if (params.dimensions !== undefined) updates.dimensions = params.dimensions;
+
+    if (Object.keys(updates).length === 0) return existing;
+
+    const [row] = await this.db
+      .update(quoteGroups)
+      .set(updates)
+      .where(eq(quoteGroups.id, params.groupId))
+      .returning();
+    return row;
+  }
+
+  async deleteQuoteGroup(params: { quoteId: string; groupId: string }) {
+    const tenantId = this.getTenantId();
+    const allGroups = await this.listQuoteGroups({ quoteId: params.quoteId });
+    const target = allGroups.find((g) => g.id === params.groupId);
+    if (!target) throw new NotFoundException('Quote group not found');
+
+    const itemCount = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(quoteItems)
+      .where(
+        and(
+          eq(quoteItems.tenantId, tenantId),
+          eq(quoteItems.quoteGroupId, params.groupId),
+          isNull(quoteItems.deletedAt),
+        ),
+      );
+
+    const comboCount = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(quoteCombos)
+      .where(
+        and(
+          eq(quoteCombos.tenantId, tenantId),
+          eq(quoteCombos.quoteGroupId, params.groupId),
+          isNull(quoteCombos.deletedAt),
+        ),
+      );
+
+    const totalChildren = (itemCount[0]?.count ?? 0) + (comboCount[0]?.count ?? 0);
+    if (allGroups.length <= 1 && totalChildren > 0) {
+      throw new BadRequestException(
+        'Cannot delete the only group when it contains line items — move or delete items first',
+      );
+    }
+
+    await this.db.delete(quoteGroups).where(eq(quoteGroups.id, params.groupId));
+    return { deleted: true, childrenRemoved: totalChildren };
+  }
+
+  async reorderQuoteGroups(params: { quoteId: string; groupIds: string[] }) {
+    const tenantId = this.getTenantId();
+    const existing = await this.listQuoteGroups({ quoteId: params.quoteId });
+    const existingIds = new Set(existing.map((g) => g.id));
+
+    for (const id of params.groupIds) {
+      if (!existingIds.has(id)) {
+        throw new BadRequestException(`Group ${id} does not belong to this quote`);
+      }
+    }
+
+    await Promise.all(
+      params.groupIds.map((id, index) =>
+        this.db
+          .update(quoteGroups)
+          .set({ sortIndex: index })
+          .where(
+            and(
+              eq(quoteGroups.id, id),
+              eq(quoteGroups.tenantId, tenantId),
+            ),
+          ),
+      ),
+    );
+
+    return this.listQuoteGroups({ quoteId: params.quoteId });
+  }
+
   async getQuoteLineItems(params: { quoteId: string }) {
     const tenantId = this.getTenantId();
     const groups = await this.listQuoteGroups({ quoteId: params.quoteId });
     if (groups.length === 0) return [];
 
     const groupIds = groups.map((g) => g.id);
+
+    const lookupIds = new Set<string>();
+    for (const g of groups) {
+      if (g.groupLabelLookupId) lookupIds.add(g.groupLabelLookupId);
+    }
+    const lookupMap = await this.lookupsRepo.findByIds({ ids: [...lookupIds], tenantId });
+
     const combos = await this.db
       .select()
       .from(quoteCombos)
@@ -307,11 +468,18 @@ export class CatalogSelectionService {
       const groupTotals = (group.totals as Record<string, unknown>) ?? {};
       const groupCombos = combosByGroup.get(group.id) ?? [];
 
+      const lookupValue = group.groupLabelLookupId
+        ? lookupMap.get(group.groupLabelLookupId)
+        : null;
+      const groupLabelObj = lookupValue
+        ? { id: lookupValue.id, name: lookupValue.name, externalReference: lookupValue.externalReference }
+        : group.description
+          ? { name: group.description }
+          : { name: `Group ${index + 1}` };
+
       return {
         id: group.id,
-        groupLabel: group.description
-          ? { name: group.description }
-          : { name: `Group ${index + 1}` },
+        groupLabel: groupLabelObj,
         description: group.description,
         length: asNumber(dimensions.length),
         width: asNumber(dimensions.width),
@@ -343,6 +511,197 @@ export class CatalogSelectionService {
           };
         }),
       };
+    });
+  }
+
+  /**
+   * Builds the `groups` array shaped for the Crunchwork POST /quotes body.
+   * Resolves all lookup IDs to their external references.
+   */
+  async buildOutboundQuoteGroups(params: { quoteId: string }): Promise<Record<string, unknown>[]> {
+    const tenantId = this.getTenantId();
+    const groups = await this.listQuoteGroups({ quoteId: params.quoteId });
+    if (groups.length === 0) return [];
+
+    const groupIds = groups.map((g) => g.id);
+    const combos = await this.db
+      .select()
+      .from(quoteCombos)
+      .where(
+        and(
+          eq(quoteCombos.tenantId, tenantId),
+          inArray(quoteCombos.quoteGroupId, groupIds),
+          isNull(quoteCombos.deletedAt),
+        ),
+      )
+      .orderBy(quoteCombos.sortIndex);
+
+    const comboIds = combos.map((c) => c.id);
+    const directItems =
+      groupIds.length > 0
+        ? await this.db
+            .select()
+            .from(quoteItems)
+            .where(
+              and(
+                eq(quoteItems.tenantId, tenantId),
+                inArray(quoteItems.quoteGroupId, groupIds),
+                isNull(quoteItems.deletedAt),
+              ),
+            )
+            .orderBy(quoteItems.sortIndex)
+        : [];
+
+    const comboItems =
+      comboIds.length > 0
+        ? await this.db
+            .select()
+            .from(quoteItems)
+            .where(
+              and(
+                eq(quoteItems.tenantId, tenantId),
+                inArray(quoteItems.quoteComboId, comboIds),
+                isNull(quoteItems.deletedAt),
+              ),
+            )
+            .orderBy(quoteItems.sortIndex)
+        : [];
+
+    const allItems = [...directItems, ...comboItems];
+    const lookupIds = new Set<string>();
+    for (const g of groups) {
+      if (g.groupLabelLookupId) lookupIds.add(g.groupLabelLookupId);
+    }
+    for (const c of combos) {
+      if (c.lineScopeStatusLookupId) lookupIds.add(c.lineScopeStatusLookupId);
+    }
+    for (const item of allItems) {
+      if (item.lineScopeStatusLookupId) lookupIds.add(item.lineScopeStatusLookupId);
+      if (item.unitTypeLookupId) lookupIds.add(item.unitTypeLookupId);
+    }
+
+    const lookupMap = await this.lookupsRepo.findByIds({
+      ids: [...lookupIds],
+      tenantId,
+    });
+
+    const resolveLookup = (id: string | null) => {
+      if (!id) return undefined;
+      const lv = lookupMap.get(id);
+      if (!lv) return undefined;
+      return { name: lv.name, externalReference: lv.externalReference };
+    };
+
+    const combosByGroup = new Map<string, typeof combos>();
+    for (const combo of combos) {
+      const list = combosByGroup.get(combo.quoteGroupId) ?? [];
+      list.push(combo);
+      combosByGroup.set(combo.quoteGroupId, list);
+    }
+    const directItemsByGroup = new Map<string, typeof directItems>();
+    for (const item of directItems) {
+      if (!item.quoteGroupId) continue;
+      const list = directItemsByGroup.get(item.quoteGroupId) ?? [];
+      list.push(item);
+      directItemsByGroup.set(item.quoteGroupId, list);
+    }
+    const comboItemsByCombo = new Map<string, typeof comboItems>();
+    for (const item of comboItems) {
+      if (!item.quoteComboId) continue;
+      const list = comboItemsByCombo.get(item.quoteComboId) ?? [];
+      list.push(item);
+      comboItemsByCombo.set(item.quoteComboId, list);
+    }
+
+    const catalogItemIds = new Set<string>();
+    for (const item of allItems) {
+      if (item.catalogItemId) catalogItemIds.add(item.catalogItemId);
+    }
+    for (const combo of combos) {
+      if (combo.catalogComboId) catalogItemIds.add(combo.catalogComboId);
+    }
+    const catalogExtRefMap = await this.itemsRepo.findExternalReferences({
+      tenantId,
+      ids: [...catalogItemIds],
+    });
+
+    const mapItem = (row: typeof quoteItems.$inferSelect): Record<string, unknown> => {
+      const result: Record<string, unknown> = {};
+      if (row.externalReference) result.id = row.externalReference;
+      if (row.catalogItemId) {
+        const extRef = catalogExtRefMap.get(row.catalogItemId);
+        if (extRef) result.catalogItemId = extRef;
+      }
+      if (row.name) result.name = row.name;
+      if (row.description) result.description = row.description;
+      if (row.itemType) result.type = normaliseCwItemType(row.itemType);
+      if (row.category) result.category = row.category;
+      if (row.subCategory) result.subCategory = row.subCategory;
+      result.index = row.sortIndex;
+      if (row.quantity) result.quantity = parseDecimal(row.quantity);
+      if (row.tax) result.tax = parseDecimal(row.tax);
+      if (row.unitCost) result.unitCost = parseDecimal(row.unitCost);
+      if (row.buyCost) result.buyCost = parseDecimal(row.buyCost);
+      const cwMarkup = normaliseCwMarkupType(row.markupType);
+      if (cwMarkup) result.markupType = cwMarkup;
+      if (row.markupValue) result.markupValue = parseDecimal(row.markupValue);
+      if (row.internal != null) result.internal = row.internal;
+      if (row.note) result.note = row.note;
+      const tags = Array.isArray(row.tags) ? (row.tags as string[]) : [];
+      if (tags.length > 0) result.tags = tags;
+      const lss = resolveLookup(row.lineScopeStatusLookupId);
+      if (lss) result.lineScopeStatus = lss;
+      const ut = resolveLookup(row.unitTypeLookupId);
+      if (ut) result.unitType = ut;
+      return result;
+    };
+
+    return groups.map((group) => {
+      const dims = (group.dimensions as Record<string, unknown>) ?? {};
+      const groupCombos = combosByGroup.get(group.id) ?? [];
+      const groupLabel = resolveLookup(group.groupLabelLookupId);
+      if (!groupLabel?.externalReference) {
+        throw new BadRequestException(
+          `Quote group "${group.description || group.id}" has no group label with an external reference — ` +
+          `assign a group label lookup before publishing`,
+        );
+      }
+
+      const result: Record<string, unknown> = {};
+      if (group.externalReference) result.id = group.externalReference;
+      result.groupLabel = groupLabel;
+      if (group.description) result.description = group.description;
+      if (dims.length) result.length = dims.length;
+      if (dims.width) result.width = dims.width;
+      if (dims.height) result.height = dims.height;
+      result.index = group.sortIndex;
+
+      const groupDirectItems = (directItemsByGroup.get(group.id) ?? []).map(mapItem);
+      if (groupDirectItems.length > 0) result.items = groupDirectItems;
+
+      if (groupCombos.length > 0) {
+        result.combos = groupCombos.map((combo) => {
+          const comboResult: Record<string, unknown> = {};
+          if (combo.externalReference) comboResult.id = combo.externalReference;
+          if (combo.catalogComboId) {
+            const extRef = catalogExtRefMap.get(combo.catalogComboId);
+            if (extRef) comboResult.catalogComboId = extRef;
+          }
+          if (combo.name) comboResult.name = combo.name;
+          if (combo.description) comboResult.description = combo.description;
+          if (combo.category) comboResult.category = combo.category;
+          if (combo.subCategory) comboResult.subCategory = combo.subCategory;
+          comboResult.index = combo.sortIndex;
+          if (combo.quantity) comboResult.quantity = parseDecimal(combo.quantity);
+          const lss = resolveLookup(combo.lineScopeStatusLookupId);
+          if (lss) comboResult.lineScopeStatus = lss;
+          const items = (comboItemsByCombo.get(combo.id) ?? []).map(mapItem);
+          if (items.length > 0) comboResult.items = items;
+          return comboResult;
+        });
+      }
+
+      return result;
     });
   }
 

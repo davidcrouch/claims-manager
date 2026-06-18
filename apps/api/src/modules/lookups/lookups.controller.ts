@@ -6,8 +6,14 @@ export class LookupsController {
   constructor(private readonly lookupsService: LookupsService) {}
 
   @Get()
-  async findByDomain(@Query('domain') domain: string) {
-    return this.lookupsService.findByDomain({ domain: domain || '' });
+  async findByDomain(
+    @Query('domain') domain: string,
+    @Query('providerCode') providerCode?: string,
+  ) {
+    return this.lookupsService.findByDomain({
+      domain: domain || '',
+      providerCode: providerCode || undefined,
+    });
   }
 
   @Get(':id')

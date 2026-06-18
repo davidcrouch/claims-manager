@@ -70,6 +70,9 @@ export class ProjectJobUseCase implements ProjectionUseCase {
     if (resolvedParents.claim) result.entity.claimId = resolvedParents.claim;
     if (resolvedParents.vendor) result.entity.vendorId = resolvedParents.vendor;
 
+    // Record which provider connection created this job
+    result.entity.connectionId = connectionId;
+
     // Claim is required for job creation
     if (!existingEntity && !result.entity.claimId) {
       throw new Error(

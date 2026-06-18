@@ -28,6 +28,7 @@ export class LookupResolutionService {
     externalReference: string;
     name?: string;
     tenantId: string;
+    providerCode?: string;
     autoCreate?: boolean;
     sourceEntity?: string;
     sourceEntityId?: string;
@@ -36,16 +37,19 @@ export class LookupResolutionService {
     if (!params.externalReference) return null;
     const db = params.tx ?? this.db;
 
+    const conditions = [
+      eq(lookupValues.tenantId, params.tenantId),
+      eq(lookupValues.domain, params.domain),
+      eq(lookupValues.externalReference, params.externalReference),
+    ];
+    if (params.providerCode) {
+      conditions.push(eq(lookupValues.providerCode, params.providerCode));
+    }
+
     const [existing] = await db
       .select()
       .from(lookupValues)
-      .where(
-        and(
-          eq(lookupValues.tenantId, params.tenantId),
-          eq(lookupValues.domain, params.domain),
-          eq(lookupValues.externalReference, params.externalReference),
-        ),
-      )
+      .where(and(...conditions))
       .limit(1);
 
     if (existing) return existing.id;
@@ -59,6 +63,7 @@ export class LookupResolutionService {
         .values({
           tenantId: params.tenantId,
           domain: params.domain,
+          providerCode: params.providerCode ?? null,
           externalReference: params.externalReference,
           name: params.name ?? params.externalReference,
           metadata: {},
@@ -111,6 +116,7 @@ export class LookupResolutionService {
     tenantId: string;
     domain: string;
     field: unknown;
+    providerCode?: string;
     autoCreate?: boolean;
     tx?: DrizzleDbOrTx;
   }): Promise<string | null> {
@@ -122,6 +128,7 @@ export class LookupResolutionService {
         domain: params.domain,
         externalReference: params.field,
         name: params.field,
+        providerCode: params.providerCode,
         autoCreate: false,
         tx: params.tx,
       });
@@ -139,6 +146,7 @@ export class LookupResolutionService {
         domain: params.domain,
         externalReference,
         name,
+        providerCode: params.providerCode,
         autoCreate: params.autoCreate ?? false,
         tx: params.tx,
       });
@@ -154,6 +162,7 @@ export class LookupResolutionService {
   async resolveAll(params: {
     lookups: LookupRequest[];
     tenantId: string;
+    providerCode?: string;
     sourceEntity?: string;
     sourceEntityId?: string;
     tx?: DrizzleDbOrTx;
@@ -165,6 +174,7 @@ export class LookupResolutionService {
         externalReference: lookup.externalReference,
         name: lookup.name,
         tenantId: params.tenantId,
+        providerCode: params.providerCode,
         autoCreate: lookup.autoCreate,
         sourceEntity: params.sourceEntity,
         sourceEntityId: params.sourceEntityId,

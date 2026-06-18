@@ -9,12 +9,16 @@ export class LookupsService {
     private readonly tenantContext: TenantContext,
   ) {}
 
-  async findByDomain(params: { domain: string }) {
+  async findByDomain(params: { domain: string; providerCode?: string }) {
     if (!this.tenantContext.hasTenant()) {
       return [];
     }
     const tenantId = this.tenantContext.getTenantId();
-    return this.lookupsRepo.findByDomain({ tenantId, domain: params.domain });
+    return this.lookupsRepo.findByDomain({
+      tenantId,
+      domain: params.domain,
+      providerCode: params.providerCode,
+    });
   }
 
   async findOne(params: { id: string }) {

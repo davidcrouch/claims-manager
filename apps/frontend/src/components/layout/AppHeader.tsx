@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 
 export function AppHeader() {
   return (
-    <header className="flex min-h-14 items-center gap-4 border-b bg-background px-4 py-2">
+    <header className="sticky top-0 z-20 flex min-h-14 items-center gap-4 border-b bg-background px-4 py-2">
       <SidebarTrigger />
       <SidebarRail />
       <div className="flex min-w-0 flex-1 items-center justify-between gap-4">

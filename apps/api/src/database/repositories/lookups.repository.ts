@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { asc } from 'drizzle-orm';
 import { DRIZZLE } from '../drizzle.module';
 import type { DrizzleDB } from '../drizzle.module';
@@ -15,17 +15,20 @@ export class LookupsRepository {
   async findByDomain(params: {
     tenantId: string;
     domain: string;
+    providerCode?: string;
   }): Promise<LookupValueRow[]> {
+    const conditions = [
+      eq(lookupValues.tenantId, params.tenantId),
+      eq(lookupValues.domain, params.domain),
+      eq(lookupValues.isActive, true),
+    ];
+    if (params.providerCode) {
+      conditions.push(eq(lookupValues.providerCode, params.providerCode));
+    }
     return this.db
       .select()
       .from(lookupValues)
-      .where(
-        and(
-          eq(lookupValues.tenantId, params.tenantId),
-          eq(lookupValues.domain, params.domain),
-          eq(lookupValues.isActive, true),
-        ),
-      )
+      .where(and(...conditions))
       .orderBy(asc(lookupValues.name));
   }
 
@@ -36,5 +39,23 @@ export class LookupsRepository {
       .where(and(eq(lookupValues.id, params.id), eq(lookupValues.tenantId, params.tenantId)))
       .limit(1);
     return row ?? null;
+  }
+
+  async findByIds(params: { ids: string[]; tenantId: string }): Promise<Map<string, LookupValueRow>> {
+    if (params.ids.length === 0) return new Map();
+    const rows = await this.db
+      .select()
+      .from(lookupValues)
+      .where(
+        and(
+          eq(lookupValues.tenantId, params.tenantId),
+          inArray(lookupValues.id, params.ids),
+        ),
+      );
+    const map = new Map<string, LookupValueRow>();
+    for (const row of rows) {
+      map.set(row.id, row);
+    }
+    return map;
   }
 }

@@ -157,6 +157,31 @@ export class CatalogItemsRepository {
     return row ?? null;
   }
 
+  /**
+   * Bulk-fetch external references for a set of catalog item IDs.
+   * Returns a Map of internalId -> externalReference (only items that have one).
+   */
+  async findExternalReferences(params: {
+    tenantId: string;
+    ids: string[];
+  }): Promise<Map<string, string>> {
+    if (params.ids.length === 0) return new Map();
+    const rows = await this.db
+      .select({ id: catalogItems.id, externalReference: catalogItems.externalReference })
+      .from(catalogItems)
+      .where(
+        and(
+          eq(catalogItems.tenantId, params.tenantId),
+          inArray(catalogItems.id, params.ids),
+        ),
+      );
+    const map = new Map<string, string>();
+    for (const row of rows) {
+      if (row.externalReference) map.set(row.id, row.externalReference);
+    }
+    return map;
+  }
+
   async softDelete(params: {
     tenantId: string;
     id: string;

@@ -149,6 +149,65 @@ async function seedLookups(params: {
 }
 
 // -----------------------------------------------------------------------
+// Crunchwork group labels (real external references, not seed-prefixed)
+// -----------------------------------------------------------------------
+
+const CW_GROUP_LABELS: readonly string[] = [
+  'Alfresco', 'Awning', 'BBQ Area', 'Balcony', 'Bar', 'Bathroom',
+  'Bathroom 2', 'Bathroom 3', 'Bedroom 1', 'Bedroom 2', 'Bedroom 3',
+  'Bedroom 4', 'Bedroom 5', 'Bedroom 6', 'Board Room', 'Built In Robe',
+  'Carport', 'Cash Settlement Recommended', 'Closet', 'Deck', 'Demolition',
+  'Dining', 'Ensuite', 'Entry', 'External', 'Family', 'Fees', 'Fencing',
+  'Front Patio', 'Games Room', 'Garage', 'Garden Shed', 'Gazebo', 'General',
+  'Granny Flat', 'Hallway', 'Internal', 'Kayak Room', 'Kitchen', 'Kitchen 2',
+  'Laundry', 'Liability Item', 'Library', 'Living Area', 'Living Room 2',
+  'Lounge', 'Lunch Room', 'Main Bedroom', 'Make Safe', 'Media Room', 'Office',
+  'Office 2', 'Office 3', 'Office 4', 'Open Plan Room', 'Pantry', 'Passage',
+  'Passage 2', 'Passage 3', 'Patio', 'Pergola Area', 'Powder Room',
+  'Preliminaries', 'Prime Cost', 'Procurement Items', 'Provisional Sum',
+  'Roof', 'Rumpus Room', 'Sauna', 'Shed', 'Staff Room', 'Stairwell',
+  'Store Room', 'Store Room 1', 'Store Room 2', 'Store Room 3', 'Store Room 4',
+  'Study', 'Sunroom', 'Swimming Pool', 'Tennis Court', 'Theatre Room',
+  'Toilet', 'Unit 1', 'Unit 2', 'Unit 3', 'Unit 4', 'Unit 5', 'Unit 6',
+  'Validation Items', 'Verandah', 'Waiting Room 1', 'Walk In Robe', 'Other',
+];
+
+async function seedCrunchworkGroupLabels(params: {
+  db: SeedDb;
+  tenantId: string;
+  stats: Stats;
+}): Promise<void> {
+  for (const name of CW_GROUP_LABELS) {
+    const [existing] = await params.db
+      .select({ id: schema.lookupValues.id })
+      .from(schema.lookupValues)
+      .where(
+        and(
+          eq(schema.lookupValues.tenantId, params.tenantId),
+          eq(schema.lookupValues.domain, 'group_label'),
+          eq(schema.lookupValues.providerCode, 'crunchwork'),
+          eq(schema.lookupValues.externalReference, name),
+        ),
+      )
+      .limit(1);
+    if (existing) {
+      params.stats.skipped += 1;
+      continue;
+    }
+    await params.db
+      .insert(schema.lookupValues)
+      .values({
+        tenantId: params.tenantId,
+        domain: 'group_label',
+        providerCode: 'crunchwork',
+        name,
+        externalReference: name,
+      });
+    params.stats.inserted += 1;
+  }
+}
+
+// -----------------------------------------------------------------------
 // Generic upsert-by-external-reference helper (typed per table below)
 // -----------------------------------------------------------------------
 
@@ -1840,6 +1899,9 @@ export async function seedSampleDataForTenant(params: {
 
   const lookups = await seedLookups({ db, tenantId, stats });
   logger.info(`lookups ready (${Object.keys(lookups).length})`);
+
+  await seedCrunchworkGroupLabels({ db, tenantId, stats });
+  logger.info(`crunchwork group labels ready (${CW_GROUP_LABELS.length})`);
 
   const contactIds = await seedContacts({ db, tenantId, stats, lookups });
   const vendorIds = await seedVendors({ db, tenantId, stats });

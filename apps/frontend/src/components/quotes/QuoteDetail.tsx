@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   FileSpreadsheet,
@@ -18,6 +19,8 @@ import {
   ClipboardList,
   MessageSquare,
   Paperclip,
+  Send,
+  Package,
 } from 'lucide-react';
 import {
   Card,
@@ -25,6 +28,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { BackButton } from '@/components/layout/BackButton';
 import {
@@ -46,6 +50,7 @@ import type {
   QuoteApprovalInfo,
 } from '@/types/api';
 import { QuoteLineItemsTab } from '@/components/quotes/QuoteLineItemsTab';
+import { publishQuoteAction } from '@/app/(app)/mutations';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -154,6 +159,8 @@ function getCustomData(quote: Quote): Dict {
 // ---------------------------------------------------------------------------
 
 export function QuotePageHeader({ quote }: { quote: Quote }) {
+  const router = useRouter();
+  const [publishing, setPublishing] = useState(false);
   const approval = getApprovalInfo(quote);
   const title =
     quote.quoteNumber ??
@@ -163,6 +170,16 @@ export function QuotePageHeader({ quote }: { quote: Quote }) {
   const statusName =
     quote.status?.name ?? approval.statusName ?? 'Unknown';
   const quoteTypeName = quote.quoteType?.name ?? approval.quoteTypeName;
+  const isDraft = !quote.externalReference;
+
+  async function handlePublish() {
+    setPublishing(true);
+    const result = await publishQuoteAction(quote.id);
+    setPublishing(false);
+    if (result.success) {
+      router.refresh();
+    }
+  }
 
   return (
     <div className="flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-2">
@@ -172,7 +189,11 @@ export function QuotePageHeader({ quote }: { quote: Quote }) {
           <FileSpreadsheet className="h-4 w-4 text-amber-600" />
         </span>
         <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
-        <StatusBadge status={statusName} />
+        {isDraft ? (
+          <StatusBadge status="Draft" />
+        ) : (
+          <StatusBadge status={statusName} />
+        )}
         {quoteTypeName && quoteTypeName !== 'Estimate' && quoteTypeName !== 'Quote' && (
           <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
             <Tag className="h-3 w-3" />
@@ -199,6 +220,16 @@ export function QuotePageHeader({ quote }: { quote: Quote }) {
         )}
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1 text-xs">
+        {isDraft && (
+          <Button
+            size="sm"
+            onClick={handlePublish}
+            disabled={publishing}
+          >
+            <Send className="mr-1.5 h-3.5 w-3.5" />
+            {publishing ? 'Publishing...' : 'Publish to Crunchwork'}
+          </Button>
+        )}
         <div className="flex items-baseline gap-1">
           <span className="text-muted-foreground">Total:</span>
           <span className="font-medium">{formatCurrency(quote.totalAmount)}</span>
@@ -504,6 +535,7 @@ type QuoteTab =
 
 export function QuoteDetail({ quote }: { quote: Quote }) {
   const [tab, setTab] = useState<QuoteTab>('overview');
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const tabs: Array<{ id: QuoteTab; label: string; icon: typeof Calendar }> = [
     { id: 'overview', label: 'Overview', icon: FileSignature },
@@ -517,30 +549,50 @@ export function QuoteDetail({ quote }: { quote: Quote }) {
 
   return (
     <div className="flex flex-col">
-      <div className="flex flex-wrap gap-0 border-b border-slate-200">
-        {tabs.map((t) => {
-          const Icon = t.icon;
-          const active = tab === t.id;
-          return (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setTab(t.id)}
-              className={`inline-flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t-md ${
-                active
-                  ? 'border-amber-600 bg-amber-50 text-amber-600'
-                  : 'border-transparent bg-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700'
-              }`}
+      <div className="sticky top-14 z-10 flex items-center gap-0 border-b border-slate-200 bg-white">
+        <div className="flex flex-wrap gap-0">
+          {tabs.map((t) => {
+            const Icon = t.icon;
+            const active = tab === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTab(t.id)}
+                className={`inline-flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t-md ${
+                  active
+                    ? 'border-amber-600 bg-amber-50 text-amber-600'
+                    : 'border-transparent bg-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="ml-auto flex items-center gap-2 pb-px">
+          {tab === 'line-items' && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setDrawerOpen(true)}
             >
-              <Icon className="h-3.5 w-3.5" />
-              {t.label}
-            </button>
-          );
-        })}
+              <Package className="mr-1.5 h-3.5 w-3.5" />
+              Catalogue
+            </Button>
+          )}
+        </div>
       </div>
       <div className="pt-4">
         {tab === 'overview' && <OverviewTab quote={quote} />}
-        {tab === 'line-items' && <QuoteLineItemsTab quote={quote} />}
+        {tab === 'line-items' && (
+          <QuoteLineItemsTab
+            quote={quote}
+            drawerOpen={drawerOpen}
+            onDrawerOpenChange={setDrawerOpen}
+          />
+        )}
         {tab === 'parties' && <PartiesTab quote={quote} />}
         {tab === 'activities' && <ActivitiesTab />}
         {tab === 'communications' && <CommunicationsTab />}

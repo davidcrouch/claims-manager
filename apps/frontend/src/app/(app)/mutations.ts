@@ -24,6 +24,18 @@ export async function createQuoteAction(body: Record<string, unknown>): Promise<
   }
 }
 
+export async function publishQuoteAction(id: string): Promise<{ success: boolean; quote?: Quote; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const quote = await api.publishQuote(id);
+    return { success: true, quote };
+  } catch (err) {
+    console.error('[publishQuoteAction]', err);
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to publish quote' };
+  }
+}
+
 export async function createInvoiceAction(body: Record<string, unknown>): Promise<{ success: boolean; invoice?: Invoice; error?: string }> {
   const api = await getApi();
   if (!api) return { success: false, error: 'Not authenticated' };

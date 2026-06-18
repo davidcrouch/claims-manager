@@ -172,3 +172,114 @@ export async function addCatalogAssemblyToQuoteAction(params: {
     };
   }
 }
+
+export async function createQuoteGroupAction(params: {
+  quoteId: string;
+  groupLabelLookupId?: string;
+  description?: string;
+}): Promise<{ success: boolean; group?: { id: string; description: string | null }; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+
+  try {
+    const group = await api.createQuoteGroup(params.quoteId, {
+      groupLabelLookupId: params.groupLabelLookupId,
+      description: params.description,
+    });
+    revalidatePath(`/quotes/${params.quoteId}`);
+    return { success: true, group };
+  } catch (err) {
+    console.error('[quotes/actions.createQuoteGroupAction]', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to create group',
+    };
+  }
+}
+
+export async function updateQuoteGroupAction(params: {
+  quoteId: string;
+  groupId: string;
+  groupLabelLookupId?: string;
+  description?: string;
+  dimensions?: Record<string, unknown>;
+}): Promise<{ success: boolean; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+
+  try {
+    await api.updateQuoteGroup(params.quoteId, params.groupId, {
+      groupLabelLookupId: params.groupLabelLookupId,
+      description: params.description,
+      dimensions: params.dimensions,
+    });
+    revalidatePath(`/quotes/${params.quoteId}`);
+    return { success: true };
+  } catch (err) {
+    console.error('[quotes/actions.updateQuoteGroupAction]', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to update group',
+    };
+  }
+}
+
+export async function deleteQuoteGroupAction(params: {
+  quoteId: string;
+  groupId: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+
+  try {
+    await api.deleteQuoteGroup(params.quoteId, params.groupId);
+    revalidatePath(`/quotes/${params.quoteId}`);
+    return { success: true };
+  } catch (err) {
+    console.error('[quotes/actions.deleteQuoteGroupAction]', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to delete group',
+    };
+  }
+}
+
+export async function reorderQuoteGroupsAction(params: {
+  quoteId: string;
+  groupIds: string[];
+}): Promise<{ success: boolean; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+
+  try {
+    await api.reorderQuoteGroups(params.quoteId, params.groupIds);
+    revalidatePath(`/quotes/${params.quoteId}`);
+    return { success: true };
+  } catch (err) {
+    console.error('[quotes/actions.reorderQuoteGroupsAction]', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to reorder groups',
+    };
+  }
+}
+
+export async function fetchGroupLabelLookupsAction(): Promise<{
+  success: boolean;
+  options?: Array<{ id: string; name?: string; externalReference?: string }>;
+  error?: string;
+}> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+
+  try {
+    const options = await api.getLookupsByDomain('group_label');
+    return { success: true, options: options as Array<{ id: string; name?: string; externalReference?: string }> };
+  } catch (err) {
+    console.error('[quotes/actions.fetchGroupLabelLookupsAction]', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to load group labels',
+    };
+  }
+}

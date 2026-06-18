@@ -33,7 +33,7 @@ export function formatDate(value?: string | null): string {
   if (!value) return '—';
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString(undefined, {
+  return d.toLocaleDateString('en-AU', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -44,7 +44,15 @@ export function formatDateTime(value?: string | null): string {
   if (!value) return '—';
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString();
+  return d.toLocaleString('en-AU', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  });
 }
 
 export function formatCurrency(value: unknown): string {
@@ -52,11 +60,11 @@ export function formatCurrency(value: unknown): string {
   const n = typeof value === 'number' ? value : Number(value);
   if (Number.isNaN(n)) return String(value);
   try {
-    return new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency: 'AUD',
+    const formatted = new Intl.NumberFormat(undefined, {
+      minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(n);
+    return n < 0 ? `-$${formatted.replace('-', '')}` : `$${formatted}`;
   } catch {
     return `$${n.toFixed(2)}`;
   }

@@ -111,7 +111,7 @@ export function QuoteFormDrawer({
       open={open}
       onOpenChange={onOpenChange}
       title="Create Estimate"
-      description="Create a new estimate for this job. The Crunchwork API will generate the estimate details."
+      description="Create a new draft estimate for this job. You can publish it to Crunchwork later."
       icon={<FileSignature className="h-5 w-5" />}
     >
       <form

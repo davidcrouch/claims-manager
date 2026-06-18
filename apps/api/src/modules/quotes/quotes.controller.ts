@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { CatalogSelectionService } from '../catalog/services/catalog-selection.service';
 import { CatalogMismatchService } from '../catalog/services/catalog-mismatch.service';
 import { AddCatalogAssemblyDto, AddCatalogPrimitiveDto } from '../catalog/dto/catalog.dto';
+import { CreateQuoteGroupDto, UpdateQuoteGroupDto, ReorderQuoteGroupsDto } from './dto/quote-group.dto';
 import { QuotesService } from './quotes.service';
 
 @Controller('quotes')
@@ -47,6 +48,11 @@ export class QuotesController {
     return this.quotesService.update({ id, body });
   }
 
+  @Post(':id/publish')
+  async publish(@Param('id') id: string) {
+    return this.quotesService.publish({ id });
+  }
+
   @Get(':id/groups')
   listQuoteGroups(@Param('id') id: string) {
     return this.catalogSelectionService.listQuoteGroups({ quoteId: id });
@@ -58,8 +64,48 @@ export class QuotesController {
   }
 
   @Post(':id/groups')
-  ensureQuoteGroup(@Param('id') id: string) {
-    return this.catalogSelectionService.ensureDefaultQuoteGroup({ quoteId: id });
+  createOrEnsureQuoteGroup(@Param('id') id: string, @Body() body: CreateQuoteGroupDto) {
+    if (body.groupLabelLookupId || body.description) {
+      return this.catalogSelectionService.createQuoteGroup({
+        quoteId: id,
+        groupLabelLookupId: body.groupLabelLookupId,
+        description: body.description,
+      });
+    }
+    return this.catalogSelectionService.ensureDefaultQuoteGroup({
+      quoteId: id,
+    });
+  }
+
+  @Patch(':id/groups/reorder')
+  reorderQuoteGroups(@Param('id') id: string, @Body() body: ReorderQuoteGroupsDto) {
+    return this.catalogSelectionService.reorderQuoteGroups({
+      quoteId: id,
+      groupIds: body.groupIds,
+    });
+  }
+
+  @Patch(':quoteId/groups/:groupId')
+  updateQuoteGroup(
+    @Param('quoteId') quoteId: string,
+    @Param('groupId') groupId: string,
+    @Body() body: UpdateQuoteGroupDto,
+  ) {
+    return this.catalogSelectionService.updateQuoteGroup({
+      quoteId,
+      groupId,
+      groupLabelLookupId: body.groupLabelLookupId,
+      description: body.description,
+      dimensions: body.dimensions,
+    });
+  }
+
+  @Delete(':quoteId/groups/:groupId')
+  deleteQuoteGroup(
+    @Param('quoteId') quoteId: string,
+    @Param('groupId') groupId: string,
+  ) {
+    return this.catalogSelectionService.deleteQuoteGroup({ quoteId, groupId });
   }
 
   @Post(':quoteId/groups/:groupId/catalog-items')

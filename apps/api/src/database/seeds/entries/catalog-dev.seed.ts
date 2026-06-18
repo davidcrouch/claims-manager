@@ -148,12 +148,21 @@ const seed: Seed = {
       );
     if (units.length === 0) {
       for (const u of [
-        { name: 'Each', externalReference: 'ea' },
-        { name: 'Hour', externalReference: 'hr' },
+        { name: 'Each', externalReference: 'EA' },
+        { name: 'Hour', externalReference: 'HR' },
+        { name: 'Square Metre', externalReference: 'M2' },
+        { name: 'Linear Metre', externalReference: 'LM' },
+        { name: 'Lot', externalReference: 'LOT' },
+        { name: 'Kilometre', externalReference: 'KM' },
+        { name: 'Cubic Metre', externalReference: 'M3' },
+        { name: 'Days', externalReference: 'DAYS' },
+        { name: 'Item', externalReference: 'ITEM' },
+        { name: 'Week', externalReference: 'WK' },
       ]) {
         await db.insert(schema.lookupValues).values({
           tenantId,
           domain: 'unit_type',
+          providerCode: 'crunchwork',
           name: u.name,
           externalReference: u.externalReference,
           isActive: true,

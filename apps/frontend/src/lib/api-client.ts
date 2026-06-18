@@ -311,6 +311,10 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<Quote>('/quotes', { method: 'POST', body: JSON.stringify(body) });
     },
 
+    publishQuote(id: string): Promise<Quote> {
+      return fetchApi<Quote>(`/quotes/${id}/publish`, { method: 'POST' });
+    },
+
     createInvoice(body: Record<string, unknown>): Promise<Invoice> {
       return fetchApi<Invoice>('/invoices', { method: 'POST', body: JSON.stringify(body) });
     },
@@ -710,6 +714,38 @@ export function createApiClient(options?: ApiClientOptions) {
 
     ensureQuoteGroup(quoteId: string): Promise<{ id: string; description: string | null }> {
       return fetchApi(`/quotes/${quoteId}/groups`, { method: 'POST' });
+    },
+
+    createQuoteGroup(
+      quoteId: string,
+      body: { groupLabelLookupId?: string; description?: string },
+    ): Promise<{ id: string; description: string | null }> {
+      return fetchApi(`/quotes/${quoteId}/groups`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+
+    updateQuoteGroup(
+      quoteId: string,
+      groupId: string,
+      body: { groupLabelLookupId?: string; description?: string; dimensions?: Record<string, unknown> },
+    ): Promise<{ id: string; description: string | null }> {
+      return fetchApi(`/quotes/${quoteId}/groups/${groupId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      });
+    },
+
+    deleteQuoteGroup(quoteId: string, groupId: string): Promise<{ deleted: boolean }> {
+      return fetchApi(`/quotes/${quoteId}/groups/${groupId}`, { method: 'DELETE' });
+    },
+
+    reorderQuoteGroups(quoteId: string, groupIds: string[]): Promise<unknown> {
+      return fetchApi(`/quotes/${quoteId}/groups/reorder`, {
+        method: 'PATCH',
+        body: JSON.stringify({ groupIds }),
+      });
     },
 
     addCatalogItemToQuote(params: {

@@ -27,6 +27,7 @@ export const lookupValues = pgTable(
       .notNull()
       .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     domain: text('domain').notNull(),
+    providerCode: text('provider_code'),
     name: text('name'),
     externalReference: text('external_reference'),
     metadata: jsonb('metadata').notNull().default({}),
@@ -35,7 +36,7 @@ export const lookupValues = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex('UQ_lookup_tenant_domain_extref').on(t.tenantId, t.domain, t.externalReference),
+    uniqueIndex('UQ_lookup_tenant_domain_provider_extref').on(t.tenantId, t.domain, t.providerCode, t.externalReference),
     index('idx_lookup_values_domain').on(t.tenantId, t.domain),
   ],
 );
@@ -221,6 +222,7 @@ export const jobs = pgTable(
     claimId: uuid('claim_id').notNull().references(() => claims.id, { onDelete: 'cascade' }),
     parentClaimId: uuid('parent_claim_id'),
     vendorId: uuid('vendor_id').references(() => vendors.id),
+    connectionId: uuid('connection_id').references(() => integrationConnections.id),
     parentJobId: uuid('parent_job_id').references((): AnyPgColumn => jobs.id),
     externalReference: text('external_reference'),
     jobTypeLookupId: uuid('job_type_lookup_id').notNull().references(() => lookupValues.id),

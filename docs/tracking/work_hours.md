@@ -290,3 +290,14 @@
   Added a **Cloudflare webhook proxy worker** and supporting documentation so inbound vendor events can be routed securely to the API in staging and production.
   Shipped **sample building-repairs catalogue data** and a generator script so teams can trial import and quoting workflows without manual data entry.
   Captured **implementation specifications** for the domain layer, catalogue module, and webhook proxy, and removed obsolete example bundle artefacts from the repository.
+
+- `2026-06-19` `ba454e8` **20.5 h**
+  `34 files | +2963 −461 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  Lay summary: Quotes can now be organised into labelled groups with assembly items that expand into their component lines, and lookup data is scoped so each vendor connection keeps its own reference values.
+  **Quote line-item groups, assembly bill-of-materials expansion, and provider-scoped lookups.** Added **create, edit, delete, and reorder** flows for quote line-item groups with label lookups, descriptions, and dimensions surfaced in the quote detail workspace.
+  Rebuilt the **quote line-items table** with grouped sections, drag-and-drop between groups, inline editing, and dialogs for managing group metadata from the quote screen.
+  Extended **catalogue selection** so assemblies expand into child line items from bill-of-materials data, with outbound quote payloads grouped to match the upstream vendor format.
+  Improved the **catalog picker drawer** with assembly-aware drag targets and clearer handling when adding items into an existing quote group.
+  Shipped **database migrations** for lookup provider codes and job connection tracking, plus assembly BOM seed data so quoting workflows can be exercised end to end.
+  Wired **API and server actions** for group CRUD, group-label lookup resolution, and catalogue item queries used by the quote UI.
+  Validated end-to-end quoting flows — group management, assembly expansion, and catalogue pick-and-drop — against sample building-repairs data.
