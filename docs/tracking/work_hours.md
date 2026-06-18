@@ -291,7 +291,7 @@
   Shipped **sample building-repairs catalogue data** and a generator script so teams can trial import and quoting workflows without manual data entry.
   Captured **implementation specifications** for the domain layer, catalogue module, and webhook proxy, and removed obsolete example bundle artefacts from the repository.
 
-- `2026-06-19` `ba454e8` **20.5 h**
+- `2026-06-19` `a78f00b` **20.5 h**
   `34 files | +2963 −461 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Quotes can now be organised into labelled groups with assembly items that expand into their component lines, and lookup data is scoped so each vendor connection keeps its own reference values.
   **Quote line-item groups, assembly bill-of-materials expansion, and provider-scoped lookups.** Added **create, edit, delete, and reorder** flows for quote line-item groups with label lookups, descriptions, and dimensions surfaced in the quote detail workspace.
