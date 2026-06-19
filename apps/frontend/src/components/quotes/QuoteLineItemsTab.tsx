@@ -4,9 +4,10 @@ import { useCallback, useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Quote } from '@/types/api';
 import { CatalogPickerDrawer } from '@/components/catalog/CatalogPickerDrawer';
-import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
+import { QuoteLineItemsTable, type DeleteItemRequest } from '@/components/quotes/QuoteLineItemsTable';
 import { EditGroupDialog } from '@/components/quotes/EditGroupDialog';
 import { DeleteGroupDialog } from '@/components/quotes/DeleteGroupDialog';
+import { DeleteItemDialog } from '@/components/quotes/DeleteItemDialog';
 import type { CatalogDragPayload, GroupLabelDragPayload } from '@/components/catalog/catalog-drag';
 import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
 import { getPayloadGroups } from '@/components/quotes/quote-line-items.utils';
@@ -16,8 +17,11 @@ import {
   createQuoteGroupAction,
   updateQuoteGroupAction,
   deleteQuoteGroupAction,
+  deleteQuoteItemAction,
+  deleteQuoteComboAction,
   reorderQuoteGroupsAction,
   getQuoteLineItemsAction,
+  saveQuoteLineItemsAction,
 } from '@/app/(app)/quotes/actions';
 
 const PREFIX = 'frontend:QuoteLineItemsTab';
@@ -41,6 +45,8 @@ export function QuoteLineItemsTab({
 
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [deletingGroupId, setDeletingGroupId] = useState<string | null>(null);
+  const [deletingItem, setDeletingItem] = useState<DeleteItemRequest | null>(null);
+  const [structurallyDirty, setStructurallyDirty] = useState(false);
 
   const loadLineItems = useCallback(async () => {
     const result = await getQuoteLineItemsAction(quote.id);
@@ -82,6 +88,7 @@ export function QuoteLineItemsTab({
       }
 
       setMessage(`Added ${payload.code} to estimate`);
+      setStructurallyDirty(true);
       await loadLineItems();
       router.refresh();
     });
@@ -139,6 +146,97 @@ export function QuoteLineItemsTab({
     });
   }
 
+  function handleDeleteItem(request: DeleteItemRequest) {
+    setDeletingItem(request);
+  }
+
+  function confirmDeleteItem(removeFromCatalogAssembly: boolean) {
+    if (!deletingItem) return;
+    const { itemId } = deletingItem;
+    setDeletingItem(null);
+    startTransition(async () => {
+      const result = await deleteQuoteItemAction({ quoteId: quote.id, itemId, removeFromCatalogAssembly });
+      if (!result.success) {
+        console.error(`${PREFIX}.confirmDeleteItem — ${result.error}`);
+        setMessage(result.error ?? 'Failed to delete item');
+        return;
+      }
+      const extra = result.removedFromCatalog ? ' (also removed from catalogue assembly)' : '';
+      setMessage(`Item deleted${extra}`);
+      setStructurallyDirty(true);
+      await loadLineItems();
+      router.refresh();
+    });
+  }
+
+  function handleDeleteCombo(comboId: string) {
+    startTransition(async () => {
+      const result = await deleteQuoteComboAction({ quoteId: quote.id, comboId });
+      if (!result.success) {
+        console.error(`${PREFIX}.handleDeleteCombo — ${result.error}`);
+        setMessage(result.error ?? 'Failed to delete assembly');
+        return;
+      }
+      setMessage('Assembly deleted');
+      setStructurallyDirty(true);
+      await loadLineItems();
+      router.refresh();
+    });
+  }
+
+  function handleSaveLineItems(edits: Record<string, Record<string, string>>) {
+    setMessage(null);
+    startTransition(async () => {
+      const items: Array<{ id: string; name?: string; description?: string; quantity?: string; unitCost?: string; markupValue?: string; tax?: string }> = [];
+      const combos: Array<{ id: string; quantity?: string }> = [];
+
+      for (const [rowKey, fields] of Object.entries(edits)) {
+        const isCombo = rowKey.includes('-combo-') && !rowKey.includes('-item-');
+        const idMatch = rowKey.match(/(?:combo|item)-([0-9a-f-]{36})(?:-item-|$)/);
+        if (!idMatch) continue;
+
+        if (isCombo) {
+          const comboId = rowKey.match(/-combo-([0-9a-f-]{36})$/)?.[1];
+          if (comboId) {
+            combos.push({ id: comboId, quantity: fields.quantity });
+          }
+        } else {
+          const itemId = rowKey.match(/-item-([0-9a-f-]{36})$/)?.[1];
+          if (itemId) {
+            const taxDecimal = fields.tax ? String(parseFloat(fields.tax) / 100) : undefined;
+            items.push({
+              id: itemId,
+              name: fields.name,
+              description: fields.description,
+              quantity: fields.quantity,
+              unitCost: fields.unitCost,
+              markupValue: fields.markupValue,
+              tax: taxDecimal,
+            });
+          }
+        }
+      }
+
+      if (items.length === 0 && combos.length === 0) {
+        setStructurallyDirty(false);
+        setMessage('Changes saved');
+        return;
+      }
+
+      const result = await saveQuoteLineItemsAction({ quoteId: quote.id, items, combos });
+      if (!result.success) {
+        console.error(`${PREFIX}.handleSaveLineItems — ${result.error}`);
+        setMessage(result.error ?? 'Failed to save line items');
+        return;
+      }
+
+      setMessage(`Saved ${result.updated} line item${result.updated !== 1 ? 's' : ''}`);
+      setStructurallyDirty(false);
+      await loadLineItems();
+      router.refresh();
+    });
+  }
+
   function handleMoveGroup(groupId: string, direction: 'up' | 'down') {
     const currentIds = groups.map((g) => g.id).filter(Boolean) as string[];
     const idx = currentIds.indexOf(groupId);
@@ -178,9 +276,13 @@ export function QuoteLineItemsTab({
         onGroupLabelDrop={handleGroupLabelDrop}
         onEditGroup={(id) => setEditingGroupId(id)}
         onDeleteGroup={(id) => setDeletingGroupId(id)}
+        onDeleteItem={handleDeleteItem}
+        onDeleteCombo={handleDeleteCombo}
         onMoveGroupUp={(id) => handleMoveGroup(id, 'up')}
         onMoveGroupDown={(id) => handleMoveGroup(id, 'down')}
         onOpenCatalogDrawer={() => onDrawerOpenChange(true)}
+        onSave={handleSaveLineItems}
+        structurallyDirty={structurallyDirty}
       />
 
       {editingGroup && (
@@ -199,6 +301,17 @@ export function QuoteLineItemsTab({
           onOpenChange={(open) => { if (!open) setDeletingGroupId(null); }}
           group={deletingGroup}
           onConfirm={() => handleDeleteGroup(deletingGroupId!)}
+          pending={pending}
+        />
+      )}
+
+      {deletingItem && (
+        <DeleteItemDialog
+          open={!!deletingItem}
+          onOpenChange={(open) => { if (!open) setDeletingItem(null); }}
+          itemName={deletingItem.itemName}
+          isAssemblyChild={deletingItem.isAssemblyChild}
+          onConfirm={confirmDeleteItem}
           pending={pending}
         />
       )}

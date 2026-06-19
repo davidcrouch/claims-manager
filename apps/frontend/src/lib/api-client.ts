@@ -741,6 +741,15 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi(`/quotes/${quoteId}/groups/${groupId}`, { method: 'DELETE' });
     },
 
+    deleteQuoteItem(quoteId: string, itemId: string, options?: { removeFromCatalogAssembly?: boolean }): Promise<{ deleted: boolean; removedFromCatalog?: boolean }> {
+      const qs = options?.removeFromCatalogAssembly ? '?removeFromCatalogAssembly=true' : '';
+      return fetchApi(`/quotes/${quoteId}/items/${itemId}${qs}`, { method: 'DELETE' });
+    },
+
+    deleteQuoteCombo(quoteId: string, comboId: string): Promise<{ deleted: boolean }> {
+      return fetchApi(`/quotes/${quoteId}/combos/${comboId}`, { method: 'DELETE' });
+    },
+
     reorderQuoteGroups(quoteId: string, groupIds: string[]): Promise<unknown> {
       return fetchApi(`/quotes/${quoteId}/groups/reorder`, {
         method: 'PATCH',
@@ -777,6 +786,19 @@ export function createApiClient(options?: ApiClientOptions) {
           catalogAssemblyId: params.catalogAssemblyId,
           quantity: params.quantity,
         }),
+      });
+    },
+
+    updateQuoteLineItems(
+      quoteId: string,
+      body: {
+        items: Array<{ id: string; name?: string; description?: string; quantity?: string; unitCost?: string; markupValue?: string; tax?: string }>;
+        combos: Array<{ id: string; quantity?: string }>;
+      },
+    ): Promise<{ updated: number }> {
+      return fetchApi(`/quotes/${quoteId}/line-items`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
       });
     },
   };

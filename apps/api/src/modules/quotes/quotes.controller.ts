@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestj
 import { CatalogSelectionService } from '../catalog/services/catalog-selection.service';
 import { CatalogMismatchService } from '../catalog/services/catalog-mismatch.service';
 import { AddCatalogAssemblyDto, AddCatalogPrimitiveDto } from '../catalog/dto/catalog.dto';
-import { CreateQuoteGroupDto, UpdateQuoteGroupDto, ReorderQuoteGroupsDto } from './dto/quote-group.dto';
+import { CreateQuoteGroupDto, UpdateQuoteGroupDto, ReorderQuoteGroupsDto, UpdateQuoteLineItemsDto } from './dto/quote-group.dto';
 import { QuotesService } from './quotes.service';
 
 @Controller('quotes')
@@ -63,6 +63,15 @@ export class QuotesController {
     return this.catalogSelectionService.getQuoteLineItems({ quoteId: id });
   }
 
+  @Patch(':id/line-items')
+  updateQuoteLineItems(@Param('id') id: string, @Body() body: UpdateQuoteLineItemsDto) {
+    return this.catalogSelectionService.updateQuoteLineItems({
+      quoteId: id,
+      items: body.items,
+      combos: body.combos,
+    });
+  }
+
   @Post(':id/groups')
   createOrEnsureQuoteGroup(@Param('id') id: string, @Body() body: CreateQuoteGroupDto) {
     if (body.groupLabelLookupId || body.description) {
@@ -106,6 +115,27 @@ export class QuotesController {
     @Param('groupId') groupId: string,
   ) {
     return this.catalogSelectionService.deleteQuoteGroup({ quoteId, groupId });
+  }
+
+  @Delete(':quoteId/items/:itemId')
+  deleteQuoteItem(
+    @Param('quoteId') quoteId: string,
+    @Param('itemId') itemId: string,
+    @Query('removeFromCatalogAssembly') removeFromCatalogAssembly?: string,
+  ) {
+    return this.catalogSelectionService.deleteQuoteItem({
+      quoteId,
+      itemId,
+      removeFromCatalogAssembly: removeFromCatalogAssembly === 'true',
+    });
+  }
+
+  @Delete(':quoteId/combos/:comboId')
+  deleteQuoteCombo(
+    @Param('quoteId') quoteId: string,
+    @Param('comboId') comboId: string,
+  ) {
+    return this.catalogSelectionService.deleteQuoteCombo({ quoteId, comboId });
   }
 
   @Post(':quoteId/groups/:groupId/catalog-items')

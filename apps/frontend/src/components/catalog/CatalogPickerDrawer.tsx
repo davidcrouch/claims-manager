@@ -228,12 +228,29 @@ export function CatalogPickerDrawer({ open, onOpenChange }: CatalogPickerDrawerP
   const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<string>('items');
   const [pinned, setPinned] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const { open: sidebarOpen, setOpen: setSidebarOpen } = useSidebar();
   const sidebarStateBeforePin = useRef<boolean | null>(null);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (!open) {
+      setIsDragging(false);
+      return;
+    }
+    const onStart = () => setIsDragging(true);
+    const onEnd = () => setIsDragging(false);
+    document.addEventListener('dragstart', onStart);
+    document.addEventListener('dragend', onEnd);
+    return () => {
+      document.removeEventListener('dragstart', onStart);
+      document.removeEventListener('dragend', onEnd);
+      setIsDragging(false);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -293,11 +310,18 @@ export function CatalogPickerDrawer({ open, onOpenChange }: CatalogPickerDrawerP
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
         >
-          <div
-            className={`absolute inset-0 ${pinned ? 'pointer-events-none' : 'pointer-events-auto cursor-default bg-slate-900/15'}`}
-            aria-hidden
-            onClick={() => { if (!pinned) onOpenChange(false); }}
-          />
+          {/* Visual backdrop (always inert — never blocks drag events) */}
+          {!pinned && (
+            <div className="absolute inset-0 bg-slate-900/15 pointer-events-none" aria-hidden />
+          )}
+          {/* Click-outside-to-close layer — unmounted during drag so it
+              cannot intercept drag events passing to drop targets below */}
+          {!pinned && !isDragging && (
+            <div
+              className="absolute inset-0 pointer-events-auto cursor-default"
+              onClick={() => onOpenChange(false)}
+            />
+          )}
           <motion.aside
             role="dialog"
             aria-modal="true"

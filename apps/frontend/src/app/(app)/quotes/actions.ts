@@ -264,6 +264,73 @@ export async function reorderQuoteGroupsAction(params: {
   }
 }
 
+export async function deleteQuoteItemAction(params: {
+  quoteId: string;
+  itemId: string;
+  removeFromCatalogAssembly?: boolean;
+}): Promise<{ success: boolean; removedFromCatalog?: boolean; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+
+  try {
+    const result = await api.deleteQuoteItem(params.quoteId, params.itemId, {
+      removeFromCatalogAssembly: params.removeFromCatalogAssembly,
+    });
+    revalidatePath(`/quotes/${params.quoteId}`);
+    return { success: true, removedFromCatalog: result.removedFromCatalog };
+  } catch (err) {
+    console.error('[quotes/actions.deleteQuoteItemAction]', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to delete item',
+    };
+  }
+}
+
+export async function deleteQuoteComboAction(params: {
+  quoteId: string;
+  comboId: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+
+  try {
+    await api.deleteQuoteCombo(params.quoteId, params.comboId);
+    revalidatePath(`/quotes/${params.quoteId}`);
+    return { success: true };
+  } catch (err) {
+    console.error('[quotes/actions.deleteQuoteComboAction]', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to delete assembly',
+    };
+  }
+}
+
+export async function saveQuoteLineItemsAction(params: {
+  quoteId: string;
+  items: Array<{ id: string; name?: string; description?: string; quantity?: string; unitCost?: string; markupValue?: string; tax?: string }>;
+  combos: Array<{ id: string; quantity?: string }>;
+}): Promise<{ success: boolean; updated?: number; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+
+  try {
+    const result = await api.updateQuoteLineItems(params.quoteId, {
+      items: params.items,
+      combos: params.combos,
+    });
+    revalidatePath(`/quotes/${params.quoteId}`);
+    return { success: true, updated: result.updated };
+  } catch (err) {
+    console.error('[quotes/actions.saveQuoteLineItemsAction]', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to save line items',
+    };
+  }
+}
+
 export async function fetchGroupLabelLookupsAction(): Promise<{
   success: boolean;
   options?: Array<{ id: string; name?: string; externalReference?: string }>;

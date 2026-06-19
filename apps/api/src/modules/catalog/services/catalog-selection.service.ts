@@ -9,6 +9,7 @@ import {
   LookupsRepository,
 } from '../../../database/repositories';
 import {
+  catalogAssemblyComponents,
   purchaseOrderCombos,
   purchaseOrderGroups,
   purchaseOrderItems,
@@ -356,6 +357,87 @@ export class CatalogSelectionService {
     return { deleted: true, childrenRemoved: totalChildren };
   }
 
+  async deleteQuoteItem(params: { quoteId: string; itemId: string; removeFromCatalogAssembly?: boolean }) {
+    const tenantId = this.getTenantId();
+    const [item] = await this.db
+      .select({
+        id: quoteItems.id,
+        quoteComboId: quoteItems.quoteComboId,
+        catalogItemId: quoteItems.catalogItemId,
+      })
+      .from(quoteItems)
+      .where(
+        and(
+          eq(quoteItems.id, params.itemId),
+          eq(quoteItems.tenantId, tenantId),
+          isNull(quoteItems.deletedAt),
+        ),
+      );
+    if (!item) throw new NotFoundException('Quote item not found');
+
+    await this.db
+      .update(quoteItems)
+      .set({ deletedAt: new Date() })
+      .where(eq(quoteItems.id, params.itemId));
+
+    let removedFromCatalog = false;
+    if (params.removeFromCatalogAssembly && item.quoteComboId && item.catalogItemId) {
+      const [combo] = await this.db
+        .select({ catalogComboId: quoteCombos.catalogComboId })
+        .from(quoteCombos)
+        .where(eq(quoteCombos.id, item.quoteComboId));
+
+      if (combo?.catalogComboId) {
+        const deleted = await this.db
+          .delete(catalogAssemblyComponents)
+          .where(
+            and(
+              eq(catalogAssemblyComponents.tenantId, tenantId),
+              eq(catalogAssemblyComponents.assemblyId, combo.catalogComboId),
+              eq(catalogAssemblyComponents.componentId, item.catalogItemId),
+            ),
+          )
+          .returning({ id: catalogAssemblyComponents.id });
+        removedFromCatalog = deleted.length > 0;
+      }
+    }
+
+    return { deleted: true, removedFromCatalog };
+  }
+
+  async deleteQuoteCombo(params: { quoteId: string; comboId: string }) {
+    const tenantId = this.getTenantId();
+    const [combo] = await this.db
+      .select({ id: quoteCombos.id })
+      .from(quoteCombos)
+      .where(
+        and(
+          eq(quoteCombos.id, params.comboId),
+          eq(quoteCombos.tenantId, tenantId),
+          isNull(quoteCombos.deletedAt),
+        ),
+      );
+    if (!combo) throw new NotFoundException('Quote assembly not found');
+
+    await this.db
+      .update(quoteCombos)
+      .set({ deletedAt: new Date() })
+      .where(eq(quoteCombos.id, params.comboId));
+
+    await this.db
+      .update(quoteItems)
+      .set({ deletedAt: new Date() })
+      .where(
+        and(
+          eq(quoteItems.quoteComboId, params.comboId),
+          eq(quoteItems.tenantId, tenantId),
+          isNull(quoteItems.deletedAt),
+        ),
+      );
+
+    return { deleted: true };
+  }
+
   async reorderQuoteGroups(params: { quoteId: string; groupIds: string[] }) {
     const tenantId = this.getTenantId();
     const existing = await this.listQuoteGroups({ quoteId: params.quoteId });
@@ -382,6 +464,63 @@ export class CatalogSelectionService {
     );
 
     return this.listQuoteGroups({ quoteId: params.quoteId });
+  }
+
+  async updateQuoteLineItems(params: {
+    quoteId: string;
+    items: Array<{
+      id: string;
+      name?: string;
+      description?: string;
+      quantity?: string;
+      unitCost?: string;
+      markupValue?: string;
+      tax?: string;
+    }>;
+    combos: Array<{
+      id: string;
+      quantity?: string;
+    }>;
+  }) {
+    const tenantId = this.getTenantId();
+
+    await this.db.transaction(async (tx) => {
+      for (const item of params.items) {
+        const updates: Record<string, unknown> = { updatedAt: new Date() };
+        if (item.name !== undefined) updates.name = item.name;
+        if (item.description !== undefined) updates.description = item.description;
+        if (item.quantity !== undefined) updates.quantity = item.quantity;
+        if (item.unitCost !== undefined) updates.unitCost = item.unitCost;
+        if (item.markupValue !== undefined) updates.markupValue = item.markupValue;
+        if (item.tax !== undefined) updates.tax = item.tax;
+
+        const totals = computeLineTotals({
+          quantity: item.quantity ?? '0',
+          unitCost: item.unitCost ?? '0',
+          taxRate: item.tax,
+        });
+        updates.totals = totals;
+
+        await tx
+          .update(quoteItems)
+          .set(updates)
+          .where(and(eq(quoteItems.id, item.id), eq(quoteItems.tenantId, tenantId)));
+      }
+
+      for (const combo of params.combos) {
+        const updates: Record<string, unknown> = {};
+        if (combo.quantity !== undefined) updates.quantity = combo.quantity;
+
+        if (Object.keys(updates).length > 0) {
+          await tx
+            .update(quoteCombos)
+            .set(updates)
+            .where(and(eq(quoteCombos.id, combo.id), eq(quoteCombos.tenantId, tenantId)));
+        }
+      }
+    });
+
+    return { updated: params.items.length + params.combos.length };
   }
 
   async getQuoteLineItems(params: { quoteId: string }) {

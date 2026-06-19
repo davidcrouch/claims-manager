@@ -1,21 +1,22 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ChevronDown,
   ChevronRight,
-  ChevronsDownUp,
-  ChevronsUpDown,
   GripVertical,
   Layers,
   Package,
   MoreVertical,
   Pencil,
+  Save,
   Search,
   Trash2,
   ArrowUp,
   ArrowDown,
+  Eye,
+  EyeOff,
   X,
 } from 'lucide-react';
 import { formatCurrency } from '@/components/shared/detail';
@@ -43,66 +44,360 @@ function lookupDisplay(l?: { name?: string; externalReference?: string }): strin
   return l.name ?? l.externalReference ?? '—';
 }
 
+/* ---- Inline-edit types & helpers ---- */
+
+type EditableFieldKey = 'name' | 'description' | 'quantity' | 'unitCost' | 'markupValue' | 'tax';
+type ColumnKey = 'name' | 'type' | 'category' | 'quantity' | 'unitCost' | 'extended' | 'markupValue' | 'tax' | 'total';
+
+function getEditableFields(showMarkup: boolean, showGst: boolean): EditableFieldKey[] {
+  const fields: EditableFieldKey[] = ['name', 'description', 'quantity', 'unitCost'];
+  if (showMarkup) fields.push('markupValue');
+  if (showGst) fields.push('tax');
+  return fields;
+}
+
+function nearestEditableField(
+  clicked: ColumnKey,
+  showMarkup: boolean,
+  showGst: boolean,
+): EditableFieldKey {
+  const editableFields = getEditableFields(showMarkup, showGst);
+  if ((editableFields as string[]).includes(clicked)) return clicked as EditableFieldKey;
+
+  const allCols: ColumnKey[] = ['name', 'type', 'category', 'quantity', 'unitCost', 'extended'];
+  if (showMarkup) allCols.push('markupValue');
+  if (showGst) allCols.push('tax');
+  allCols.push('total');
+
+  const idx = allCols.indexOf(clicked);
+  for (let dist = 1; dist < allCols.length; dist++) {
+    const left = idx - dist;
+    if (left >= 0 && (editableFields as string[]).includes(allCols[left])) {
+      return allCols[left] as EditableFieldKey;
+    }
+    const right = idx + dist;
+    if (right < allCols.length && (editableFields as string[]).includes(allCols[right])) {
+      return allCols[right] as EditableFieldKey;
+    }
+  }
+  return editableFields[0];
+}
+
+
+type RowEntry =
+  | { kind: 'item'; key: string; item: ApiItem }
+  | { kind: 'assembly'; key: string; combo: ApiCombo };
+
+const ASSEMBLY_EDITABLE_FIELDS: EditableFieldKey[] = ['quantity'];
+
+function initItemInputs(item: ApiItem): Record<EditableFieldKey, string> {
+  return {
+    name: item.name ?? '',
+    description: item.description ?? '',
+    quantity: String(item.quantity ?? 0),
+    unitCost: String(item.unitCost ?? 0),
+    markupValue: String(item.markupValue ?? 19),
+    tax: typeof item.tax === 'number' ? String(+(item.tax * 100).toFixed(2)) : '0',
+  };
+}
+
+function initComboInputs(combo: ApiCombo): Record<EditableFieldKey, string> {
+  return {
+    name: combo.name ?? '',
+    description: combo.description ?? '',
+    quantity: String(combo.quantity ?? 0),
+    unitCost: '0',
+    markupValue: '0',
+    tax: '0',
+  };
+}
+
 /* ---- Sub-components ---- */
 
-function ItemRow({ item, indented }: { item: ApiItem; indented?: boolean }) {
+function ItemRow({
+  item,
+  rowKey,
+  indented,
+  showMarkup,
+  showGst,
+  isEditing,
+  selectedField,
+  editInputs,
+  onRowClick,
+  onCellSelect,
+  onInputChange,
+  onCellKeyDown,
+  onDelete,
+  isPrimaryEdit,
+  isMultiSelected,
+  isDirtyRow,
+}: {
+  item: ApiItem;
+  rowKey: string;
+  indented?: boolean;
+  showMarkup: boolean;
+  showGst: boolean;
+  isEditing: boolean;
+  selectedField: EditableFieldKey | null;
+  editInputs: Record<EditableFieldKey, string> | null;
+  onRowClick: (e: React.MouseEvent, rowKey: string, item: ApiItem) => void;
+  onCellSelect: (rowKey: string, field: EditableFieldKey) => void;
+  onInputChange: (rowKey: string, field: EditableFieldKey, value: string) => void;
+  onCellKeyDown: (e: React.KeyboardEvent) => void;
+  onDelete?: (request: DeleteItemRequest) => void;
+  isPrimaryEdit?: boolean;
+  isMultiSelected?: boolean;
+  isDirtyRow?: boolean;
+}) {
+  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const mismatches = item.mismatches ?? [];
+
+  const qty = editInputs ? parseFloat(editInputs.quantity) || 0 : (item.quantity ?? 0);
+  const unitCost = editInputs ? parseFloat(editInputs.unitCost) || 0 : (item.unitCost ?? 0);
+  const mkVal = editInputs ? parseFloat(editInputs.markupValue) || 0 : (item.markupValue ?? 19);
+  const taxPct = editInputs ? parseFloat(editInputs.tax) || 0 : (typeof item.tax === 'number' ? +(item.tax * 100).toFixed(2) : 0);
+
+  const extended = qty * unitCost;
+  const markupAmt = item.markupType === 'fixed' ? mkVal * qty : extended * (mkVal / 100);
+  const sub = extended + markupAmt;
+  const total = sub + sub * (taxPct / 100);
+
+  useEffect(() => {
+    if (isEditing && selectedField && isPrimaryEdit !== false) {
+      const el = inputRefs.current[selectedField];
+      if (el) { el.focus(); el.select(); }
+    }
+  }, [isEditing, selectedField, isPrimaryEdit]);
+
+  const editCellCls = (field: EditableFieldKey) =>
+    isEditing
+      ? cn(
+          'whitespace-nowrap p-0 transition-shadow',
+          selectedField === field
+            ? 'shadow-[inset_0_0_0_2px_#2563eb] bg-white relative z-[1]'
+            : isMultiSelected
+              ? 'shadow-[inset_0_0_0_1px_#93c5fd33] bg-blue-50/30'
+              : 'shadow-[inset_0_0_0_1px_#d4a84733] bg-amber-50/40',
+        )
+      : 'whitespace-nowrap px-4 py-2.5';
+
+  const nameColTdCls = isEditing
+    ? cn(
+        'p-0 transition-shadow',
+        isMultiSelected
+          ? 'shadow-[inset_0_0_0_1px_#93c5fd33] bg-blue-50/30'
+          : 'shadow-[inset_0_0_0_1px_#d4a84733] bg-amber-50/40',
+      )
+    : 'px-4 py-2.5';
+
+  const subCellCls = (field: EditableFieldKey) =>
+    cn(
+      'transition-shadow rounded-sm',
+      selectedField === field
+        ? 'shadow-[inset_0_0_0_2px_#2563eb] bg-white relative z-[1]'
+        : '',
+    );
+
+  const roCellCls = cn('whitespace-nowrap px-4 py-2.5', isEditing && (isMultiSelected ? 'bg-blue-50/30' : 'bg-amber-50/40'));
+
+  const inputCls = (align: 'left' | 'right' = 'right') =>
+    cn('w-full bg-transparent px-4 py-2.5 outline-none', align === 'right' ? 'text-right font-mono text-slate-700' : 'font-medium text-slate-900');
+
+  const cellClick = (field: EditableFieldKey) => (e: React.MouseEvent) => {
+    if (isEditing) { e.stopPropagation(); onCellSelect(rowKey, field); }
+  };
+
   return (
-    <tr className="transition-colors hover:bg-slate-50">
-      <td className="min-w-[10rem] px-4 py-2.5">
-        <div className={cn('font-medium text-slate-900', indented && 'pl-7')}>
-          {item.name ?? '—'}
-          {item.internal && (
-            <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] font-normal uppercase tracking-wide text-muted-foreground">
-              internal
-            </span>
-          )}
-        </div>
-        {item.description && (
-          <p className={cn('mt-0.5 line-clamp-1 text-xs text-slate-500', indented && 'pl-7')}>
-            {item.description}
-          </p>
-        )}
-        {mismatches.length > 0 && (
-          <span className={cn(
-            'mt-1 inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700',
-            indented && 'ml-7',
-          )}>
-            <AlertTriangle className="h-3 w-3" />
-            Catalogue mismatch
-          </span>
+    <tr
+      data-item-row
+      className={cn(
+        'cursor-pointer transition-colors',
+        isEditing
+          ? isMultiSelected
+            ? 'ring-2 ring-inset ring-blue-400 bg-blue-50/30'
+            : 'ring-2 ring-inset ring-amber-300 bg-amber-50/40'
+          : isDirtyRow
+            ? 'bg-emerald-100 hover:bg-emerald-200 hover:ring-2 hover:ring-inset hover:ring-emerald-400'
+            : 'hover:bg-amber-50/40 hover:ring-2 hover:ring-inset hover:ring-amber-300',
+      )}
+      onClick={(e) => onRowClick(e, rowKey, item)}
+    >
+      {/* Name + Description (editable as separate cells) */}
+      <td data-col="name" className={cn(nameColTdCls, 'min-w-0')} onClick={cellClick('name')}>
+        {isEditing && editInputs ? (
+          <div className={cn(indented && 'pl-7')}>
+            <div
+              className={subCellCls('name')}
+              onClick={(e) => { e.stopPropagation(); onCellSelect(rowKey, 'name'); }}
+            >
+              <input
+                ref={(el) => { inputRefs.current.name = el; }}
+                value={editInputs.name}
+                onChange={(e) => onInputChange(rowKey, 'name', e.target.value)}
+                onKeyDown={onCellKeyDown}
+                onFocus={() => onCellSelect(rowKey, 'name')}
+                className={cn(inputCls('left'), 'truncate')}
+              />
+            </div>
+            <div
+              className={subCellCls('description')}
+              onClick={(e) => { e.stopPropagation(); onCellSelect(rowKey, 'description'); }}
+            >
+              <input
+                ref={(el) => { inputRefs.current.description = el; }}
+                value={editInputs.description}
+                onChange={(e) => onInputChange(rowKey, 'description', e.target.value)}
+                onKeyDown={onCellKeyDown}
+                onFocus={() => onCellSelect(rowKey, 'description')}
+                placeholder="Description…"
+                className="w-full bg-transparent px-4 py-1.5 text-xs text-slate-500 outline-none placeholder:text-slate-300"
+              />
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className={cn('truncate font-medium text-slate-900', indented && 'pl-7')}>
+              {(editInputs?.name ?? item.name) || '—'}
+              {item.internal && (
+                <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] font-normal uppercase tracking-wide text-muted-foreground">
+                  internal
+                </span>
+              )}
+            </div>
+            {(item.description || editInputs?.description) && (
+              <p className={cn('mt-0.5 line-clamp-1 text-xs text-slate-500', indented && 'pl-7')}>
+                {editInputs?.description ?? item.description}
+              </p>
+            )}
+            {mismatches.length > 0 && (
+              <span className={cn(
+                'mt-1 inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700',
+                indented && 'ml-7',
+              )}>
+                <AlertTriangle className="h-3 w-3" />
+                Catalogue mismatch
+              </span>
+            )}
+          </>
         )}
       </td>
-      <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
-        {item.type ?? '—'}
-      </td>
-      <td className="px-4 py-2.5 text-slate-600">
+
+      {/* Type (read-only) */}
+      <td data-col="type" className={cn(roCellCls, 'text-slate-600')}>{item.type ?? '—'}</td>
+
+      {/* Category (read-only) */}
+      <td data-col="category" className={cn(roCellCls, 'truncate text-slate-600')}>
         {[item.category, item.subCategory].filter(Boolean).join(' / ') || '—'}
       </td>
-      <td className="whitespace-nowrap px-4 py-2.5 text-right font-mono text-slate-700">
-        {item.quantity ?? 0}
-        {item.unitType && (
-          <span className="ml-1 text-xs text-slate-400">
-            {lookupDisplay(item.unitType)}
+
+      {/* Qty (editable) */}
+      <td data-col="quantity" className={cn(editCellCls('quantity'), 'text-right')} onClick={cellClick('quantity')}>
+        {isEditing && editInputs ? (
+          <input
+            ref={(el) => { inputRefs.current.quantity = el; }}
+            value={editInputs.quantity}
+            onChange={(e) => onInputChange(rowKey, 'quantity', e.target.value)}
+            onKeyDown={onCellKeyDown}
+            className={inputCls('right')}
+          />
+        ) : (
+          <span className="font-mono text-slate-700">
+            {qty}
+            {item.unitType && <span className="ml-1 text-xs text-slate-400">{lookupDisplay(item.unitType)}</span>}
           </span>
         )}
       </td>
-      <td className="whitespace-nowrap px-4 py-2.5 text-right font-mono text-slate-700">
-        {formatCurrency(item.unitCost)}
+
+      {/* Unit Cost (editable) */}
+      <td data-col="unitCost" className={cn(editCellCls('unitCost'), 'text-right')} onClick={cellClick('unitCost')}>
+        {isEditing && editInputs ? (
+          <input
+            ref={(el) => { inputRefs.current.unitCost = el; }}
+            value={editInputs.unitCost}
+            onChange={(e) => onInputChange(rowKey, 'unitCost', e.target.value)}
+            onKeyDown={onCellKeyDown}
+            className={inputCls('right')}
+          />
+        ) : (
+          <span className="font-mono text-slate-700">{formatCurrency(unitCost)}</span>
+        )}
       </td>
-      <td className="whitespace-nowrap px-4 py-2.5 text-right font-mono text-slate-700">
-        {formatCurrency((item.unitCost ?? 0) * (item.quantity ?? 0))}
+
+      {/* Extended (computed) */}
+      <td data-col="extended" className={cn(roCellCls, 'text-right font-mono text-slate-700')}>
+        {formatCurrency(extended)}
       </td>
-      <td className="whitespace-nowrap px-4 py-2.5 text-right font-mono text-slate-700">
-        {item.markupType === 'fixed'
-          ? formatCurrency(item.markupValue)
-          : `${item.markupValue ?? 19}%`}
+
+      {/* Markup (editable, conditional) */}
+      {showMarkup && (
+        <td data-col="markupValue" className={cn(editCellCls('markupValue'), 'text-right')} onClick={cellClick('markupValue')}>
+          {isEditing && editInputs ? (
+            <input
+              ref={(el) => { inputRefs.current.markupValue = el; }}
+              value={editInputs.markupValue}
+              onChange={(e) => onInputChange(rowKey, 'markupValue', e.target.value)}
+              onKeyDown={onCellKeyDown}
+              className={inputCls('right')}
+            />
+          ) : (
+            <span className="font-mono text-slate-700">
+              {item.markupType === 'fixed' ? formatCurrency(mkVal) : `${mkVal}%`}
+            </span>
+          )}
+        </td>
+      )}
+
+      {/* GST (editable, conditional) */}
+      {showGst && (
+        <td data-col="tax" className={cn(editCellCls('tax'), 'text-right')} onClick={cellClick('tax')}>
+          {isEditing && editInputs ? (
+            <input
+              ref={(el) => { inputRefs.current.tax = el; }}
+              value={editInputs.tax}
+              onChange={(e) => onInputChange(rowKey, 'tax', e.target.value)}
+              onKeyDown={onCellKeyDown}
+              className={inputCls('right')}
+            />
+          ) : (
+            <span className="font-mono text-slate-700">
+              {taxPct ? `${taxPct}%` : '—'}
+            </span>
+          )}
+        </td>
+      )}
+
+      {/* Total (computed) */}
+      <td data-col="total" className={cn(roCellCls, 'text-right font-medium text-slate-900')}>
+        {formatCurrency(editInputs ? total : item.total)}
       </td>
-      <td className="whitespace-nowrap px-4 py-2.5 text-right font-mono text-slate-700">
-        {typeof item.tax === 'number' ? `${+(item.tax * 100).toFixed(2)}%` : '—'}
-      </td>
-      <td className="whitespace-nowrap px-4 py-2.5 text-right font-medium text-slate-900">
-        {formatCurrency(item.total)}
+
+      {/* Actions */}
+      <td className="w-10 px-1 py-2.5 text-center">
+        {onDelete && item.id && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() => onDelete({ itemId: item.id!, itemName: item.name, isAssemblyChild: !!indented })}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="mr-2 h-3.5 w-3.5" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </td>
     </tr>
   );
@@ -115,6 +410,19 @@ function AssemblyBlock({
   comboItemCount,
   isCollapsed,
   onToggle,
+  showMarkup,
+  showGst,
+  editState,
+  editInputs,
+  selectedRows,
+  dirtyRowKeys,
+  onItemClick,
+  onAssemblyClick,
+  onCellSelect,
+  onInputChange,
+  onCellKeyDown,
+  onDeleteCombo,
+  onDeleteItem,
 }: {
   combo: ApiCombo;
   comboKey: string;
@@ -122,19 +430,62 @@ function AssemblyBlock({
   comboItemCount: number;
   isCollapsed: boolean;
   onToggle: () => void;
+  showMarkup: boolean;
+  showGst: boolean;
+  editState: { rowKey: string; field: EditableFieldKey } | null;
+  editInputs: Record<string, Record<EditableFieldKey, string>>;
+  selectedRows: Set<string>;
+  dirtyRowKeys: Set<string>;
+  onItemClick: (e: React.MouseEvent, rowKey: string, item: ApiItem) => void;
+  onAssemblyClick: (e: React.MouseEvent, rowKey: string, combo: ApiCombo) => void;
+  onCellSelect: (rowKey: string, field: EditableFieldKey) => void;
+  onInputChange: (rowKey: string, field: EditableFieldKey, value: string) => void;
+  onCellKeyDown: (e: React.KeyboardEvent) => void;
+  onDeleteCombo?: (comboId: string) => void;
+  onDeleteItem?: (request: DeleteItemRequest) => void;
 }) {
   const comboName = combo.name ?? 'Assembly';
   const comboCategory =
     [combo.category, combo.subCategory].filter(Boolean).join(' / ') || '—';
+  const isEditing = editState?.rowKey === comboKey || (selectedRows.has(comboKey) && editState !== null);
+  const comboInputs = editInputs[comboKey] ?? null;
+  const qtyInputRef = useRef<HTMLInputElement | null>(null);
+
+  const isPrimary = editState?.rowKey === comboKey;
+  const isComboMultiSelected = selectedRows.size > 1 && selectedRows.has(comboKey);
+  const comboBg = isComboMultiSelected ? 'bg-blue-50/30' : 'bg-amber-50/40';
+  const comboRing = isComboMultiSelected
+    ? 'ring-2 ring-inset ring-blue-400 bg-blue-50/30'
+    : 'ring-2 ring-inset ring-amber-300 bg-amber-50/40';
+
+  useEffect(() => {
+    if (isEditing && isPrimary && editState?.field === 'quantity') {
+      qtyInputRef.current?.focus();
+      qtyInputRef.current?.select();
+    }
+  }, [isEditing, isPrimary, editState?.field]);
 
   return (
     <>
       {/* Assembly header row */}
       <tr
-        className="cursor-pointer bg-slate-200 transition-colors hover:bg-slate-300"
-        onClick={onToggle}
+        data-item-row
+        className={cn(
+          'cursor-pointer transition-colors',
+          isEditing
+            ? comboRing
+            : dirtyRowKeys.has(comboKey)
+              ? 'bg-emerald-200 hover:bg-emerald-300'
+              : 'bg-slate-200 hover:bg-slate-300',
+        )}
+        onClick={(e) => {
+          const wasEditing = isEditing;
+          onAssemblyClick(e, comboKey, combo);
+          if (!wasEditing && isCollapsed) { onToggle(); return; }
+          if (wasEditing) onToggle();
+        }}
       >
-        <td className="px-4 py-2.5" colSpan={1}>
+        <td className={cn('px-4 py-2.5', isEditing && comboBg)} colSpan={1}>
           <div className="flex items-center gap-2">
             {isCollapsed ? (
               <ChevronRight className="h-3.5 w-3.5 text-slate-600" />
@@ -148,31 +499,111 @@ function AssemblyBlock({
             </span>
           </div>
         </td>
-        <td className="px-4 py-2.5 text-xs text-slate-600">Assembly</td>
-        <td className="px-4 py-2.5 text-xs text-slate-600">{comboCategory}</td>
-        <td className="whitespace-nowrap px-4 py-2.5 text-right font-mono text-slate-700">
-          {combo.quantity ?? '—'}
+        <td className={cn('px-4 py-2.5 text-xs text-slate-600', isEditing && comboBg)}>Assembly</td>
+        <td className={cn('px-4 py-2.5 text-xs text-slate-600', isEditing && comboBg)}>{comboCategory}</td>
+        <td
+          data-col="quantity"
+          className={cn(
+            'whitespace-nowrap text-right',
+            isEditing
+              ? cn(
+                  'p-0 transition-shadow',
+                  editState?.field === 'quantity'
+                    ? 'shadow-[inset_0_0_0_2px_#2563eb] bg-white relative z-[1]'
+                    : isComboMultiSelected
+                      ? 'shadow-[inset_0_0_0_1px_#93c5fd33] bg-blue-50/30'
+                      : 'shadow-[inset_0_0_0_1px_#d4a84733] bg-amber-50/40',
+                )
+              : 'px-4 py-2.5',
+          )}
+          onClick={isEditing ? (e) => { e.stopPropagation(); onCellSelect(comboKey, 'quantity'); } : undefined}
+        >
+          {isEditing && comboInputs ? (
+            <input
+              ref={qtyInputRef}
+              value={comboInputs.quantity}
+              onChange={(e) => onInputChange(comboKey, 'quantity', e.target.value)}
+              onKeyDown={onCellKeyDown}
+              className="w-full bg-transparent px-4 py-2.5 text-right font-mono text-slate-700 outline-none"
+            />
+          ) : (
+            <span className="font-mono text-slate-700">{combo.quantity ?? '—'}</span>
+          )}
         </td>
-        <td className="px-4 py-2.5" />
-        <td className="px-4 py-2.5" />
-        <td className="px-4 py-2.5" />
-        <td className="px-4 py-2.5" />
-        <td className="whitespace-nowrap px-4 py-2.5 text-right font-semibold text-slate-900">
+        <td className={cn('px-4 py-2.5', isEditing && comboBg)} />
+        <td className={cn('px-4 py-2.5', isEditing && comboBg)} />
+        {showMarkup && <td className={cn('px-4 py-2.5', isEditing && comboBg)} />}
+        {showGst && <td className={cn('px-4 py-2.5', isEditing && comboBg)} />}
+        <td className={cn('whitespace-nowrap px-4 py-2.5 text-right font-semibold text-slate-900', isEditing && comboBg)}>
           {formatCurrency(combo.total)}
+        </td>
+
+        {/* Actions */}
+        <td className="w-10 px-1 py-2.5 text-center">
+          {onDeleteCombo && combo.id && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                }
+              />
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => onDeleteCombo(combo.id!)}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="mr-2 h-3.5 w-3.5" />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </td>
       </tr>
 
       {/* Assembly child items */}
       {!isCollapsed &&
-        comboItems.map((item, idx) => (
-          <ItemRow
-            key={`${comboKey}-item-${item.id ?? idx}`}
-            item={item}
-            indented
-          />
-        ))}
+        comboItems.map((item, idx) => {
+          const itemKey = `${comboKey}-item-${item.id ?? idx}`;
+          const itemEditing = editState?.rowKey === itemKey || (selectedRows.has(itemKey) && editState !== null);
+          const itemPrimary = editState?.rowKey === itemKey;
+          return (
+            <ItemRow
+              key={itemKey}
+              item={item}
+              rowKey={itemKey}
+              indented
+              showMarkup={showMarkup}
+              showGst={showGst}
+              isEditing={itemEditing}
+              selectedField={itemEditing ? (editState?.field ?? null) : null}
+              editInputs={editInputs[itemKey] ?? null}
+              isPrimaryEdit={itemPrimary}
+              isMultiSelected={selectedRows.size > 1 && selectedRows.has(itemKey)}
+              isDirtyRow={dirtyRowKeys.has(itemKey)}
+              onRowClick={onItemClick}
+              onCellSelect={onCellSelect}
+              onInputChange={onInputChange}
+              onCellKeyDown={onCellKeyDown}
+              onDelete={onDeleteItem}
+            />
+          );
+        })}
     </>
   );
+}
+
+export interface DeleteItemRequest {
+  itemId: string;
+  itemName?: string;
+  isAssemblyChild: boolean;
 }
 
 export interface QuoteLineItemsTableProps {
@@ -183,9 +614,13 @@ export interface QuoteLineItemsTableProps {
   onGroupLabelDrop?: (payload: GroupLabelDragPayload) => void;
   onEditGroup?: (groupId: string) => void;
   onDeleteGroup?: (groupId: string) => void;
+  onDeleteItem?: (request: DeleteItemRequest) => void;
+  onDeleteCombo?: (comboId: string) => void;
   onMoveGroupUp?: (groupId: string) => void;
   onMoveGroupDown?: (groupId: string) => void;
   onOpenCatalogDrawer?: () => void;
+  onSave?: (edits: Record<string, Record<EditableFieldKey, string>>) => void;
+  structurallyDirty?: boolean;
 }
 
 export function QuoteLineItemsTable({
@@ -196,13 +631,31 @@ export function QuoteLineItemsTable({
   onGroupLabelDrop,
   onEditGroup,
   onDeleteGroup,
+  onDeleteItem,
+  onDeleteCombo,
   onMoveGroupUp,
   onMoveGroupDown,
   onOpenCatalogDrawer,
+  onSave,
+  structurallyDirty,
 }: QuoteLineItemsTableProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [collapsedCombos, setCollapsedCombos] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
+  const [showMarkup, setShowMarkup] = useState(true);
+  const [showGst, setShowGst] = useState(true);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+
+  // Inline edit state
+  const [editState, setEditState] = useState<{ rowKey: string; field: EditableFieldKey } | null>(null);
+  const [editInputs, setEditInputs] = useState<Record<string, Record<EditableFieldKey, string>>>({});
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setEditInputs({});
+    setEditState(null);
+    setSelectedRows(new Set());
+  }, [groups]);
 
   const toggleCollapse = (groupId: string) => {
     setCollapsed((prev) => {
@@ -222,6 +675,25 @@ export function QuoteLineItemsTable({
     });
   };
 
+  const allCollapsed = useMemo(() => {
+    if (groups.length === 0) return false;
+    return groups.every((g, i) => collapsed.has(g.id ?? `group-${i}`));
+  }, [groups, collapsed]);
+
+  const toggleAll = () => {
+    if (allCollapsed) {
+      setCollapsed(new Set());
+      setCollapsedCombos(new Set());
+    } else {
+      const allGroupIds = groups.map((g, i) => g.id ?? `group-${i}`);
+      setCollapsed(new Set(allGroupIds));
+      const allComboKeys = groups.flatMap((g, gi) =>
+        (g.combos ?? []).map((c, ci) => `${g.id ?? `group-${gi}`}-combo-${c.id ?? ci}`),
+      );
+      setCollapsedCombos(new Set(allComboKeys));
+    }
+  };
+
   const totalItems = useMemo(
     () =>
       groups.reduce(
@@ -233,6 +705,65 @@ export function QuoteLineItemsTable({
       ),
     [groups],
   );
+
+  const itemRowIndex = useMemo(() => {
+    const rows: RowEntry[] = [];
+    for (let gi = 0; gi < groups.length; gi++) {
+      const g = groups[gi];
+      const gId = g.id ?? `group-${gi}`;
+      for (let ii = 0; ii < (g.items ?? []).length; ii++) {
+        const item = g.items![ii];
+        rows.push({ kind: 'item', key: `${gId}-item-${item.id ?? ii}`, item });
+      }
+      for (let ci = 0; ci < (g.combos ?? []).length; ci++) {
+        const combo = g.combos![ci];
+        const comboKey = `${gId}-combo-${combo.id ?? ci}`;
+        rows.push({ kind: 'assembly', key: comboKey, combo });
+        for (let ii = 0; ii < (combo.items ?? []).length; ii++) {
+          const item = combo.items![ii];
+          rows.push({ kind: 'item', key: `${comboKey}-item-${item.id ?? ii}`, item });
+        }
+      }
+    }
+    return rows;
+  }, [groups]);
+
+  const isDirty = useMemo(() => {
+    if (structurallyDirty) return true;
+    const keys = Object.keys(editInputs);
+    if (keys.length === 0) return false;
+    for (const entry of itemRowIndex) {
+      const inputs = editInputs[entry.key];
+      if (!inputs) continue;
+      if (entry.kind === 'item') {
+        const orig = initItemInputs(entry.item);
+        for (const f of Object.keys(orig) as EditableFieldKey[]) {
+          if (inputs[f] !== orig[f]) return true;
+        }
+      } else {
+        const orig = initComboInputs(entry.combo);
+        if (inputs.quantity !== orig.quantity) return true;
+      }
+    }
+    return false;
+  }, [editInputs, itemRowIndex, structurallyDirty]);
+
+  const dirtyEdits = useMemo(() => {
+    const result: Record<string, Record<EditableFieldKey, string>> = {};
+    for (const entry of itemRowIndex) {
+      const inputs = editInputs[entry.key];
+      if (!inputs) continue;
+      const orig = entry.kind === 'item' ? initItemInputs(entry.item) : initComboInputs(entry.combo);
+      let changed = false;
+      for (const f of Object.keys(orig) as EditableFieldKey[]) {
+        if (inputs[f] !== orig[f]) { changed = true; break; }
+      }
+      if (changed) result[entry.key] = inputs;
+    }
+    return result;
+  }, [editInputs, itemRowIndex]);
+
+  const dirtyRowKeys = useMemo(() => new Set(Object.keys(dirtyEdits)), [dirtyEdits]);
 
   const grandTotals = useMemo(() => {
     let subTotal = 0;
@@ -269,6 +800,186 @@ export function QuoteLineItemsTable({
     return { subTotal: subTotal - markup, markup, totalTax, total };
   }, [groups]);
 
+  /* ---- Inline-edit handlers ---- */
+
+  function handleItemClick(e: React.MouseEvent, rowKey: string, item: ApiItem) {
+    const td = (e.target as HTMLElement).closest('td');
+    const col = (td?.dataset.col as ColumnKey) ?? null;
+    const field = col ? nearestEditableField(col, showMarkup, showGst) : 'name';
+
+    setEditInputs((prev) => {
+      if (prev[rowKey]) return prev;
+      return { ...prev, [rowKey]: initItemInputs(item) };
+    });
+
+    if (e.ctrlKey || e.metaKey) {
+      setSelectedRows((prev) => {
+        const next = new Set(prev);
+        if (next.size === 0 && editState) next.add(editState.rowKey);
+        if (next.has(rowKey)) {
+          next.delete(rowKey);
+          if (next.size <= 1) return new Set();
+        } else {
+          next.add(rowKey);
+        }
+        return next;
+      });
+      setEditState({ rowKey, field });
+    } else {
+      setSelectedRows(new Set());
+      setEditState({ rowKey, field });
+    }
+    setSelectedKey(null);
+  }
+
+  function handleAssemblyClick(e: React.MouseEvent, rowKey: string, combo: ApiCombo) {
+    setEditInputs((prev) => {
+      if (prev[rowKey]) return prev;
+      return { ...prev, [rowKey]: initComboInputs(combo) };
+    });
+
+    if (e.ctrlKey || e.metaKey) {
+      setSelectedRows((prev) => {
+        const next = new Set(prev);
+        if (next.size === 0 && editState) next.add(editState.rowKey);
+        if (next.has(rowKey)) {
+          next.delete(rowKey);
+          if (next.size <= 1) return new Set();
+        } else {
+          next.add(rowKey);
+        }
+        return next;
+      });
+      setEditState({ rowKey, field: 'quantity' });
+    } else {
+      setSelectedRows(new Set());
+      setEditState({ rowKey, field: 'quantity' });
+    }
+    setSelectedKey(null);
+  }
+
+  function handleCellSelect(rowKey: string, field: EditableFieldKey) {
+    setEditState({ rowKey, field });
+  }
+
+  function handleInputChange(rowKey: string, field: EditableFieldKey, value: string) {
+    setEditInputs((prev) => {
+      if (selectedRows.size > 1 && selectedRows.has(rowKey)) {
+        const next = { ...prev };
+        for (const key of selectedRows) {
+          if (next[key]) next[key] = { ...next[key], [field]: value };
+        }
+        return next;
+      }
+      return { ...prev, [rowKey]: { ...prev[rowKey], [field]: value } };
+    });
+  }
+
+  function navigateToRow(rowIdx: number, field: EditableFieldKey) {
+    if (rowIdx < 0 || rowIdx >= visibleRowIndex.length) return;
+    const target = visibleRowIndex[rowIdx];
+    const effectiveField = target.kind === 'assembly' ? 'quantity' : field;
+    setEditInputs((prev) => {
+      if (prev[target.key]) return prev;
+      const inputs = target.kind === 'assembly'
+        ? initComboInputs(target.combo)
+        : initItemInputs(target.item);
+      return { ...prev, [target.key]: inputs };
+    });
+    setEditState({ rowKey: target.key, field: effectiveField });
+  }
+
+  function handleCellKeyDown(e: React.KeyboardEvent) {
+    if (!editState) return;
+    const currentRow = visibleRowIndex.find((r) => r.key === editState.rowKey);
+    const fields = currentRow?.kind === 'assembly'
+      ? ASSEMBLY_EDITABLE_FIELDS
+      : getEditableFields(showMarkup, showGst);
+    const colIdx = fields.indexOf(editState.field);
+
+    switch (e.key) {
+      case 'ArrowLeft':
+        e.preventDefault();
+        if (editState.field === 'description') {
+          setEditState({ ...editState, field: 'name' });
+        } else if (colIdx > 0) {
+          const prev = fields[colIdx - 1];
+          setEditState({ ...editState, field: prev === 'description' ? 'name' : prev });
+        }
+        break;
+      case 'ArrowRight':
+        e.preventDefault();
+        if (editState.field === 'name') {
+          setEditState({ ...editState, field: 'description' });
+        } else if (colIdx < fields.length - 1) {
+          setEditState({ ...editState, field: fields[colIdx + 1] });
+        }
+        break;
+      case 'ArrowUp': {
+        e.preventDefault();
+        if (selectedRows.size > 1) break;
+        if (editState.field === 'description') {
+          setEditState({ ...editState, field: 'name' });
+        } else if (editState.field === 'name') {
+          const rowIdx = visibleRowIndex.findIndex((r) => r.key === editState.rowKey);
+          if (rowIdx > 0) navigateToRow(rowIdx - 1, 'description');
+        } else {
+          const rowIdx = visibleRowIndex.findIndex((r) => r.key === editState.rowKey);
+          if (rowIdx > 0) navigateToRow(rowIdx - 1, editState.field);
+        }
+        break;
+      }
+      case 'ArrowDown': {
+        e.preventDefault();
+        if (selectedRows.size > 1) break;
+        if (editState.field === 'name') {
+          setEditState({ ...editState, field: 'description' });
+        } else if (editState.field === 'description') {
+          const rowIdx = visibleRowIndex.findIndex((r) => r.key === editState.rowKey);
+          if (rowIdx >= 0 && rowIdx < visibleRowIndex.length - 1) navigateToRow(rowIdx + 1, 'name');
+        } else {
+          const rowIdx = visibleRowIndex.findIndex((r) => r.key === editState.rowKey);
+          if (rowIdx >= 0 && rowIdx < visibleRowIndex.length - 1) navigateToRow(rowIdx + 1, editState.field);
+        }
+        break;
+      }
+      case 'Tab':
+        e.preventDefault();
+        if (e.shiftKey) {
+          if (editState.field === 'description') {
+            setEditState({ ...editState, field: 'name' });
+          } else if (colIdx > 0) {
+            const prev = fields[colIdx - 1];
+            setEditState({ ...editState, field: prev === 'description' ? 'name' : prev });
+          }
+        } else {
+          if (editState.field === 'name') {
+            setEditState({ ...editState, field: 'description' });
+          } else if (colIdx < fields.length - 1) {
+            setEditState({ ...editState, field: fields[colIdx + 1] });
+          }
+        }
+        break;
+      case 'Escape':
+      case 'Enter':
+        e.preventDefault();
+        setEditState(null);
+        setSelectedRows(new Set());
+        break;
+    }
+  }
+
+  useEffect(() => {
+    if (!editState) return;
+    function onMouseDown(e: MouseEvent) {
+      if ((e.target as HTMLElement).closest('tr[data-item-row]')) return;
+      setEditState(null);
+      setSelectedRows(new Set());
+    }
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, [editState]);
+
   const filteredGroups = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     if (!term) return groups;
@@ -302,6 +1013,28 @@ export function QuoteLineItemsTable({
       .filter(Boolean) as ApiGroup[];
   }, [groups, searchTerm]);
 
+  const visibleRowIndex = useMemo(() => {
+    const rows: RowEntry[] = [];
+    for (let gi = 0; gi < filteredGroups.length; gi++) {
+      const g = filteredGroups[gi];
+      const gId = g.id ?? `group-${gi}`;
+      for (let ii = 0; ii < (g.items ?? []).length; ii++) {
+        const item = g.items![ii];
+        rows.push({ kind: 'item', key: `${gId}-item-${item.id ?? ii}`, item });
+      }
+      for (let ci = 0; ci < (g.combos ?? []).length; ci++) {
+        const combo = g.combos![ci];
+        const comboKey = `${gId}-combo-${combo.id ?? ci}`;
+        rows.push({ kind: 'assembly', key: comboKey, combo });
+        for (let ii = 0; ii < (combo.items ?? []).length; ii++) {
+          const item = combo.items![ii];
+          rows.push({ kind: 'item', key: `${comboKey}-item-${item.id ?? ii}`, item });
+        }
+      }
+    }
+    return rows;
+  }, [filteredGroups]);
+
   const tableDropProps = {
     onDragOver: (e: React.DragEvent) => {
       if (!hasGroupLabelDrag(e.dataTransfer)) return;
@@ -328,11 +1061,21 @@ export function QuoteLineItemsTable({
     return (
       <div className="space-y-3" {...tableDropProps}>
         {onOpenCatalogDrawer && (
-          <div className="flex justify-end">
-            <Button size="sm" variant="outline" onClick={onOpenCatalogDrawer}>
-              <Package className="mr-1.5 h-3.5 w-3.5" />
-              Catalogue
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="outline" onClick={onOpenCatalogDrawer} title="Open catalogue">
+              <Package className="h-4 w-4" />
             </Button>
+            {onSave && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!isDirty}
+                onClick={() => onSave(dirtyEdits)}
+                title="Save changes"
+              >
+                <Save className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         )}
         <div
@@ -355,16 +1098,24 @@ export function QuoteLineItemsTable({
     <div className="space-y-3" {...tableDropProps}>
       <div
         data-slot="quote-line-items-toolbar"
-        className="sticky top-[105px] z-[9] flex items-center justify-between rounded-lg border-2 border-slate-400 bg-slate-100 px-5 py-4 shadow-md"
+        className="sticky top-[105px] z-[9] flex cursor-pointer items-center justify-between rounded-lg border-2 border-slate-400 bg-slate-100 px-5 py-4 shadow-md transition-colors hover:bg-slate-200"
+        onClick={toggleAll}
       >
         <div className="flex items-center gap-2">
+          <span className="flex items-center text-slate-600">
+            {allCollapsed ? (
+              <ChevronRight className="h-4 w-4" />
+            ) : (
+              <ChevronDown className="h-4 w-4" />
+            )}
+          </span>
           <Layers className="h-4 w-4 text-slate-600" />
           <p className="text-sm font-semibold text-slate-800">
             {groups.length} group{groups.length !== 1 ? 's' : ''} &middot; {totalItems} line
             {totalItems !== 1 ? 's' : ''}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
           <div className="relative w-96">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
             <Input
@@ -385,56 +1136,78 @@ export function QuoteLineItemsTable({
             )}
           </div>
           {onOpenCatalogDrawer && (
-            <Button size="sm" variant="outline" onClick={onOpenCatalogDrawer}>
-              <Package className="mr-1.5 h-3.5 w-3.5" />
-              Catalogue
+            <Button size="sm" variant="outline" onClick={onOpenCatalogDrawer} title="Open catalogue">
+              <Package className="h-4 w-4" />
             </Button>
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1 border border-slate-300 px-2 text-xs text-slate-600 hover:text-slate-900"
-            onClick={() => {
-              setCollapsed(new Set());
-              setCollapsedCombos(new Set());
-            }}
-            title="Expand all"
-          >
-            <ChevronsUpDown className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1 border border-slate-300 px-2 text-xs text-slate-600 hover:text-slate-900"
-            onClick={() => {
-              const allGroupIds = groups.map((g, i) => g.id ?? `group-${i}`);
-              setCollapsed(new Set(allGroupIds));
-              const allComboKeys = groups.flatMap((g, gi) =>
-                (g.combos ?? []).map((c, ci) => `${g.id ?? `group-${gi}`}-combo-${c.id ?? ci}`),
-              );
-              setCollapsedCombos(new Set(allComboKeys));
-            }}
-            title="Collapse all"
-          >
-            <ChevronsDownUp className="h-3.5 w-3.5" />
-          </Button>
+          {onSave && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!isDirty}
+              onClick={() => onSave(dirtyEdits)}
+              title="Save changes"
+            >
+              <Save className="h-4 w-4" />
+            </Button>
+          )}
         </div>
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-6" onClick={(e) => e.stopPropagation()}>
           <div className="text-sm text-slate-600">
             Subtotal{' '}
             <span className="text-base font-semibold tabular-nums text-slate-900">
               {formatCurrency(grandTotals.subTotal)}
             </span>
           </div>
-          <div className="text-sm text-slate-600">
+          <div
+            className={cn(
+              'group/markup flex cursor-pointer select-none items-center gap-1 text-sm text-slate-600 transition-opacity hover:opacity-70',
+              !showMarkup && 'line-through decoration-red-500',
+            )}
+            onClick={() => setShowMarkup((v) => !v)}
+            title={showMarkup ? 'Hide markup column' : 'Show markup column'}
+          >
+            <span className="relative inline-flex items-center">
+              {showMarkup ? (
+                <>
+                  <Eye className="h-3.5 w-3.5 opacity-0 group-hover/markup:opacity-100 transition-opacity text-slate-400" />
+                  <EyeOff className="absolute inset-0 h-3.5 w-3.5 opacity-0 transition-opacity" />
+                </>
+              ) : (
+                <>
+                  <EyeOff className="h-3.5 w-3.5 text-red-400 opacity-0 group-hover/markup:opacity-100 transition-opacity" />
+                  <Eye className="absolute inset-0 h-3.5 w-3.5 opacity-0 transition-opacity" />
+                </>
+              )}
+            </span>
             Markup{' '}
-            <span className="text-base font-semibold tabular-nums text-slate-900">
+            <span className={cn('text-base font-semibold tabular-nums text-slate-900', !showMarkup && 'opacity-40')}>
               {formatCurrency(grandTotals.markup)}
             </span>
           </div>
-          <div className="text-sm text-slate-600">
+          <div
+            className={cn(
+              'group/gst flex cursor-pointer select-none items-center gap-1 text-sm text-slate-600 transition-opacity hover:opacity-70',
+              !showGst && 'line-through decoration-red-500',
+            )}
+            onClick={() => setShowGst((v) => !v)}
+            title={showGst ? 'Hide GST column' : 'Show GST column'}
+          >
+            <span className="relative inline-flex items-center">
+              {showGst ? (
+                <>
+                  <Eye className="h-3.5 w-3.5 opacity-0 group-hover/gst:opacity-100 transition-opacity text-slate-400" />
+                  <EyeOff className="absolute inset-0 h-3.5 w-3.5 opacity-0 transition-opacity" />
+                </>
+              ) : (
+                <>
+                  <EyeOff className="h-3.5 w-3.5 text-red-400 opacity-0 group-hover/gst:opacity-100 transition-opacity" />
+                  <Eye className="absolute inset-0 h-3.5 w-3.5 opacity-0 transition-opacity" />
+                </>
+              )}
+            </span>
             GST{' '}
-            <span className="text-base font-semibold tabular-nums text-slate-900">
+            <span className={cn('text-base font-semibold tabular-nums text-slate-900', !showGst && 'opacity-40')}>
               {formatCurrency(grandTotals.totalTax)}
             </span>
           </div>
@@ -509,8 +1282,14 @@ export function QuoteLineItemsTable({
           >
             {/* Group header */}
             <div
-              className="flex cursor-pointer items-center gap-2 bg-blue-100 px-4 py-3 transition-colors hover:bg-blue-200"
-              onClick={() => toggleCollapse(gId)}
+              className={cn(
+                'flex cursor-pointer items-center gap-2 bg-blue-100 px-4 py-3 transition-colors hover:bg-blue-200',
+                selectedKey === `group-${gId}` && 'ring-2 ring-inset ring-amber-300 bg-amber-50/60',
+              )}
+              onClick={() => {
+                setSelectedKey(selectedKey === `group-${gId}` ? null : `group-${gId}`);
+                toggleCollapse(gId);
+              }}
             >
               <span className="flex items-center text-blue-600">
                 {isCollapsed ? (
@@ -596,7 +1375,19 @@ export function QuoteLineItemsTable({
               <div className="bg-white">
                 {totalLineCount > 0 ? (
                   <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-slate-100 text-sm">
+                    <table className="w-full table-fixed divide-y divide-slate-100 text-sm">
+                      <colgroup>
+                        <col className="w-[32%]" />
+                        <col className="w-[10%]" />
+                        <col className="w-[10%]" />
+                        <col className="w-[8%]" />
+                        <col className="w-[9%]" />
+                        <col className="w-[10%]" />
+                        {showMarkup && <col className="w-[8%]" />}
+                        {showGst && <col className="w-[7%]" />}
+                        <col className="w-[10%]" />
+                        <col className="w-10" />
+                      </colgroup>
                       <thead className="bg-slate-50/50">
                         <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-400">
                           <th scope="col" className="px-4 py-2">Name</th>
@@ -605,16 +1396,39 @@ export function QuoteLineItemsTable({
                           <th scope="col" className="px-4 py-2 text-right">Qty</th>
                           <th scope="col" className="px-4 py-2 text-right">Unit</th>
                           <th scope="col" className="px-4 py-2 text-right">Extended</th>
-                          <th scope="col" className="px-4 py-2 text-right">Markup</th>
-                          <th scope="col" className="px-4 py-2 text-right">GST</th>
+                          {showMarkup && <th scope="col" className="px-4 py-2 text-right">Markup</th>}
+                          {showGst && <th scope="col" className="px-4 py-2 text-right">GST</th>}
                           <th scope="col" className="px-4 py-2 text-right">Total</th>
+                          <th scope="col" className="w-10" />
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50">
-                        {/* Standalone items (not part of an assembly) */}
-                        {standaloneItems.map((item, idx) => (
-                          <ItemRow key={item.id ?? `standalone-${idx}`} item={item} />
-                        ))}
+                        {/* Standalone items */}
+                        {standaloneItems.map((item, idx) => {
+                          const itemKey = `${gId}-item-${item.id ?? idx}`;
+                          const itemEditing = editState?.rowKey === itemKey || (selectedRows.has(itemKey) && editState !== null);
+                          const itemPrimary = editState?.rowKey === itemKey;
+                          return (
+                            <ItemRow
+                              key={itemKey}
+                              item={item}
+                              rowKey={itemKey}
+                              showMarkup={showMarkup}
+                              showGst={showGst}
+                              isEditing={itemEditing}
+                              selectedField={itemEditing ? (editState?.field ?? null) : null}
+                              editInputs={editInputs[itemKey] ?? null}
+                              isPrimaryEdit={itemPrimary}
+                              isMultiSelected={selectedRows.size > 1 && selectedRows.has(itemKey)}
+                              isDirtyRow={dirtyRowKeys.has(itemKey)}
+                              onRowClick={handleItemClick}
+                              onCellSelect={handleCellSelect}
+                              onInputChange={handleInputChange}
+                              onCellKeyDown={handleCellKeyDown}
+                              onDelete={onDeleteItem}
+                            />
+                          );
+                        })}
 
                         {/* Assembly (combo) groups */}
                         {combos.map((combo, comboIdx) => {
@@ -632,6 +1446,19 @@ export function QuoteLineItemsTable({
                               comboItemCount={comboItemCount}
                               isCollapsed={isComboCollapsed}
                               onToggle={() => toggleCombo(comboKey)}
+                              showMarkup={showMarkup}
+                              showGst={showGst}
+                              editState={editState}
+                              editInputs={editInputs}
+                              selectedRows={selectedRows}
+                              dirtyRowKeys={dirtyRowKeys}
+                              onItemClick={handleItemClick}
+                              onAssemblyClick={handleAssemblyClick}
+                              onCellSelect={handleCellSelect}
+                              onInputChange={handleInputChange}
+                              onCellKeyDown={handleCellKeyDown}
+                              onDeleteCombo={onDeleteCombo}
+                              onDeleteItem={onDeleteItem}
                             />
                           );
                         })}
