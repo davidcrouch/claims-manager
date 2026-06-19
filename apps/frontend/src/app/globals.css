@@ -199,3 +199,13 @@
     @apply font-sans;
   }
 }
+
+/* Pinned catalogue drawer: hide chrome so estimate line items use full height */
+html[data-catalog-drawer-pinned='true'] [data-slot='app-header'],
+html[data-catalog-drawer-pinned='true'] [data-slot='quote-detail-tabs'] {
+  display: none;
+}
+
+html[data-catalog-drawer-pinned='true'] [data-slot='quote-line-items-toolbar'] {
+  top: 0;
+}

@@ -301,3 +301,11 @@
   Shipped **database migrations** for lookup provider codes and job connection tracking, plus assembly BOM seed data so quoting workflows can be exercised end to end.
   Wired **API and server actions** for group CRUD, group-label lookup resolution, and catalogue item queries used by the quote UI.
   Validated end-to-end quoting flows — group management, assembly expansion, and catalogue pick-and-drop — against sample building-repairs data.
+
+- `2026-06-19` `46238c3` **0.5 h**
+  `6 files | +77 −42 | Tier 2 standard | Light orchestration`
+  Lay summary: Fixed a deployment build error on the quote screen and improved the pinned catalogue drawer so line items use the full screen height.
+  **Quote line-items build fix and pinned catalogue drawer layout.** Corrected the group actions menu trigger so production builds pass TypeScript checks after the dropdown component library upgrade.
+  Moved the **Catalogue** button into the line-items toolbar so it stays visible while editing groups and items.
+  When the catalogue drawer is **pinned open**, the app header and quote tabs hide automatically so the estimate table can use the full viewport height.
+  Adjusted the **sticky toolbar** offset when chrome is hidden, keeping group controls accessible at the top of the line-items view.

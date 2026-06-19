@@ -20,7 +20,6 @@ import {
   MessageSquare,
   Paperclip,
   Send,
-  Package,
 } from 'lucide-react';
 import {
   Card,
@@ -549,7 +548,7 @@ export function QuoteDetail({ quote }: { quote: Quote }) {
 
   return (
     <div className="flex flex-col">
-      <div className="sticky top-14 z-10 flex items-center gap-0 border-b border-slate-200 bg-white">
+      <div className="sticky top-14 z-10 flex items-center gap-0 border-b border-slate-200 bg-white" data-slot="quote-detail-tabs">
         <div className="flex flex-wrap gap-0">
           {tabs.map((t) => {
             const Icon = t.icon;
@@ -570,18 +569,6 @@ export function QuoteDetail({ quote }: { quote: Quote }) {
               </button>
             );
           })}
-        </div>
-        <div className="ml-auto flex items-center gap-2 pb-px">
-          {tab === 'line-items' && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setDrawerOpen(true)}
-            >
-              <Package className="mr-1.5 h-3.5 w-3.5" />
-              Catalogue
-            </Button>
-          )}
         </div>
       </div>
       <div className="pt-4">

@@ -9,6 +9,7 @@ import {
   ChevronsUpDown,
   GripVertical,
   Layers,
+  Package,
   MoreVertical,
   Pencil,
   Search,
@@ -184,6 +185,7 @@ export interface QuoteLineItemsTableProps {
   onDeleteGroup?: (groupId: string) => void;
   onMoveGroupUp?: (groupId: string) => void;
   onMoveGroupDown?: (groupId: string) => void;
+  onOpenCatalogDrawer?: () => void;
 }
 
 export function QuoteLineItemsTable({
@@ -196,6 +198,7 @@ export function QuoteLineItemsTable({
   onDeleteGroup,
   onMoveGroupUp,
   onMoveGroupDown,
+  onOpenCatalogDrawer,
 }: QuoteLineItemsTableProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [collapsedCombos, setCollapsedCombos] = useState<Set<string>>(new Set());
@@ -323,25 +326,37 @@ export function QuoteLineItemsTable({
 
   if (groups.length === 0) {
     return (
-      <div
-        {...tableDropProps}
-        className={cn(
-          'flex min-h-[12rem] items-center justify-center rounded-lg border-2 border-dashed text-sm text-slate-500 transition-all',
-          activeDropKey === 'table-root'
-            ? 'border-emerald-400 bg-emerald-50/40 ring-2 ring-emerald-500/30'
-            : 'border-slate-200',
+      <div className="space-y-3" {...tableDropProps}>
+        {onOpenCatalogDrawer && (
+          <div className="flex justify-end">
+            <Button size="sm" variant="outline" onClick={onOpenCatalogDrawer}>
+              <Package className="mr-1.5 h-3.5 w-3.5" />
+              Catalogue
+            </Button>
+          </div>
         )}
-      >
-        {activeDropKey === 'table-root'
-          ? 'Release to create a new group'
-          : 'No groups yet. Add a group or drag a group label here.'}
+        <div
+          className={cn(
+            'flex min-h-[12rem] items-center justify-center rounded-lg border-2 border-dashed text-sm text-slate-500 transition-all',
+            activeDropKey === 'table-root'
+              ? 'border-emerald-400 bg-emerald-50/40 ring-2 ring-emerald-500/30'
+              : 'border-slate-200',
+          )}
+        >
+          {activeDropKey === 'table-root'
+            ? 'Release to create a new group'
+            : 'No groups yet. Add a group or drag a group label here.'}
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-3" {...tableDropProps}>
-      <div className="sticky top-[105px] z-[9] flex items-center justify-between rounded-lg border-2 border-slate-400 bg-slate-100 px-5 py-4 shadow-md">
+      <div
+        data-slot="quote-line-items-toolbar"
+        className="sticky top-[105px] z-[9] flex items-center justify-between rounded-lg border-2 border-slate-400 bg-slate-100 px-5 py-4 shadow-md"
+      >
         <div className="flex items-center gap-2">
           <Layers className="h-4 w-4 text-slate-600" />
           <p className="text-sm font-semibold text-slate-800">
@@ -369,6 +384,12 @@ export function QuoteLineItemsTable({
               </button>
             )}
           </div>
+          {onOpenCatalogDrawer && (
+            <Button size="sm" variant="outline" onClick={onOpenCatalogDrawer}>
+              <Package className="mr-1.5 h-3.5 w-3.5" />
+              Catalogue
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="sm"
@@ -518,16 +539,18 @@ export function QuoteLineItemsTable({
 
               {(onEditGroup || onDeleteGroup || onMoveGroupUp || onMoveGroupDown) && (
                 <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    }
+                  />
                   <DropdownMenuContent align="end">
                     {onEditGroup && (
                       <DropdownMenuItem onClick={() => onEditGroup(gId)}>

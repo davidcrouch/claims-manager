@@ -180,6 +180,7 @@ export function QuoteLineItemsTab({
         onDeleteGroup={(id) => setDeletingGroupId(id)}
         onMoveGroupUp={(id) => handleMoveGroup(id, 'up')}
         onMoveGroupDown={(id) => handleMoveGroup(id, 'down')}
+        onOpenCatalogDrawer={() => onDrawerOpenChange(true)}
       />
 
       {editingGroup && (

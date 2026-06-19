@@ -246,14 +246,25 @@ export function CatalogPickerDrawer({ open, onOpenChange }: CatalogPickerDrawerP
 
   useEffect(() => {
     const inset = document.querySelector('[data-slot="sidebar-inset"]') as HTMLElement | null;
-    if (!inset) return;
+    const root = document.documentElement;
+
     if (open && pinned) {
-      inset.style.transition = 'margin-right 0.2s ease';
-      inset.style.marginRight = '28rem';
+      root.dataset.catalogDrawerPinned = 'true';
+      if (inset) {
+        inset.style.transition = 'margin-right 0.2s ease';
+        inset.style.marginRight = '28rem';
+      }
     } else {
-      inset.style.marginRight = '';
+      delete root.dataset.catalogDrawerPinned;
+      if (inset) {
+        inset.style.marginRight = '';
+      }
     }
-    return () => { inset.style.marginRight = ''; };
+
+    return () => {
+      delete root.dataset.catalogDrawerPinned;
+      if (inset) inset.style.marginRight = '';
+    };
   }, [open, pinned]);
 
   function handleTogglePin() {
