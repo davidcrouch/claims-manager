@@ -310,7 +310,7 @@
   When the catalogue drawer is **pinned open**, the app header and quote tabs hide automatically so the estimate table can use the full viewport height.
   Adjusted the **sticky toolbar** offset when chrome is hidden, keeping group controls accessible at the top of the line-items view.
 
-- `2026-06-19` `7346b2a` **6.5 h**
+- `2026-06-19` `5c38559` **6.5 h**
   `10 files | +1431 −129 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Quote line items can now be edited inline, deleted with clear confirmation, and assembly components can optionally be removed from the catalogue when deleted from an estimate.
   **Quote line-item inline editing, delete flows, and assembly-aware catalogue removal.** Rebuilt the **quote line-items table** with inline editing for quantities, costs, markup, tax, and descriptions, plus batch save that recalculates totals on the server.
