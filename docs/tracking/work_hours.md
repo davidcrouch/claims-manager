@@ -320,7 +320,7 @@
   Refined the **catalogue picker drawer** and quote tab layout so editing, deleting, and adding items work smoothly alongside pinned catalogue browsing.
   Updated **sticky toolbar and table styling** so grouped rows, assembly children, and action menus stay usable during long editing sessions.
 
-- `2026-06-21` `354decf` **24 h**
+- `2026-06-21` `96497e6` **24 h**
   `121 files | +7541 −34890 | Tier 2 standard / Tier 3 complex / Tier 4 integration | Moderate orchestration`
   Lay summary: Staff can now keep structured job journals with pages and attachments, while appointments, contacts, and jobs screens were upgraded with clearer tables, forms, and vendor sync support.
   **Journals module, appointments overhaul, and multi-screen job workspace improvements.** Delivered a full **journals feature** — database schema, API, file storage for page attachments, list and detail screens, and a journals tab on each job.
