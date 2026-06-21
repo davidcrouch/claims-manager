@@ -11,6 +11,10 @@ import type {
   Invoice,
   Task,
   Attachment,
+  WorkOrder,
+  Rfq,
+  Proposal,
+  Bill,
 } from '@/types/api';
 import type { PaginatedResponse } from '@/types/api';
 
@@ -88,6 +92,30 @@ export async function acknowledgeMessageAction(id: string): Promise<{ success: b
     console.error('[jobs/[id]/actions acknowledgeMessageAction]', err);
     return { success: false, error: err instanceof Error ? err.message : 'Failed to acknowledge' };
   }
+}
+
+export async function fetchJobWorkOrdersAction(jobId: string): Promise<WorkOrder[] | null> {
+  const api = await getApi();
+  if (!api) return null;
+  return api.getJobWorkOrders(jobId);
+}
+
+export async function fetchJobRfqsAction(jobId: string): Promise<Rfq[] | null> {
+  const api = await getApi();
+  if (!api) return null;
+  return api.getJobRfqs(jobId);
+}
+
+export async function fetchJobProposalsAction(jobId: string): Promise<Proposal[] | null> {
+  const api = await getApi();
+  if (!api) return null;
+  return api.getJobProposals(jobId);
+}
+
+export async function fetchJobBillsAction(jobId: string): Promise<Bill[] | null> {
+  const api = await getApi();
+  if (!api) return null;
+  return api.getJobBills(jobId);
 }
 
 export async function fetchJobInvoicesAction(

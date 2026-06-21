@@ -2,7 +2,7 @@
 
 import { getSession, getAccessToken } from '@/lib/auth';
 import { createApiClient } from '@/lib/api-client';
-import type { Quote, Invoice, Report, Task, Contact } from '@/types/api';
+import type { Quote, Invoice, Report, Task, Contact, WorkOrder, Rfq, Proposal, Bill, PurchaseOrder } from '@/types/api';
 
 async function getApi() {
   const session = await getSession();
@@ -121,5 +121,65 @@ export async function createContactAction(body: Record<string, unknown>): Promis
   } catch (err) {
     console.error('[createContactAction]', err);
     return { success: false, error: err instanceof Error ? err.message : 'Failed to create contact' };
+  }
+}
+
+export async function createPurchaseOrderAction(body: Record<string, unknown>): Promise<{ success: boolean; purchaseOrder?: PurchaseOrder; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const purchaseOrder = await api.createPurchaseOrder(body);
+    return { success: true, purchaseOrder };
+  } catch (err) {
+    console.error('[createPurchaseOrderAction]', err);
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to create purchase order' };
+  }
+}
+
+export async function createWorkOrderAction(body: Record<string, unknown>): Promise<{ success: boolean; workOrder?: WorkOrder; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const workOrder = await api.createWorkOrder(body);
+    return { success: true, workOrder };
+  } catch (err) {
+    console.error('[createWorkOrderAction]', err);
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to create work order' };
+  }
+}
+
+export async function createRfqAction(body: Record<string, unknown>): Promise<{ success: boolean; rfq?: Rfq; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const rfq = await api.createRfq(body);
+    return { success: true, rfq };
+  } catch (err) {
+    console.error('[createRfqAction]', err);
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to create RFQ' };
+  }
+}
+
+export async function createProposalAction(body: Record<string, unknown>): Promise<{ success: boolean; proposal?: Proposal; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const proposal = await api.createProposal(body);
+    return { success: true, proposal };
+  } catch (err) {
+    console.error('[createProposalAction]', err);
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to create proposal' };
+  }
+}
+
+export async function createBillAction(body: Record<string, unknown>): Promise<{ success: boolean; bill?: Bill; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const bill = await api.createBill(body);
+    return { success: true, bill };
+  } catch (err) {
+    console.error('[createBillAction]', err);
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to create bill' };
   }
 }

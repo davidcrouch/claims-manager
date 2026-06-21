@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
-import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { JournalsPageClient } from '@/components/journals/JournalsPageClient';
 import type { Metadata } from 'next';
 
@@ -20,14 +19,5 @@ export default async function JournalsPage() {
     return { data: [], total: 0 };
   });
 
-  return (
-    <>
-      <SetPageHeader>
-        <div className="flex items-center justify-between">
-          <h1 className="text-lg font-semibold">Journals</h1>
-        </div>
-      </SetPageHeader>
-      <JournalsPageClient initialData={result} />
-    </>
-  );
+  return <JournalsPageClient initialData={result} />;
 }

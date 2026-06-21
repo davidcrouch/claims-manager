@@ -13,14 +13,14 @@ import {
   SheetFooter,
 } from '@/components/ui/sheet';
 import type { Journal } from '@/types/api';
-import type { ApiClient } from '@/lib/api-client';
 
 export interface JournalFormDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   entityType?: string;
   entityId?: string;
-  api: ApiClient;
+  createJournal: (data: { name: string; description?: string }) => Promise<Journal | null>;
+  linkJournal?: (journalId: string) => Promise<boolean>;
   onCreated?: (journal: Journal) => void;
 }
 
@@ -29,7 +29,8 @@ export function JournalFormDrawer({
   onOpenChange,
   entityType,
   entityId,
-  api,
+  createJournal,
+  linkJournal,
   onCreated,
 }: JournalFormDrawerProps) {
   const [name, setName] = useState('');
@@ -42,18 +43,18 @@ export function JournalFormDrawer({
 
     setSubmitting(true);
     try {
-      const journal = await api.createJournal({
+      const journal = await createJournal({
         name: name.trim(),
         description: description.trim() || undefined,
       });
 
-      if (entityType && entityId) {
-        await api.linkJournalToEntity(journal.id, entityType, entityId);
+      if (journal && entityType && entityId && linkJournal) {
+        await linkJournal(journal.id);
       }
 
       setName('');
       setDescription('');
-      onCreated?.(journal);
+      if (journal) onCreated?.(journal);
     } catch (err) {
       console.error('JournalFormDrawer.handleSubmit:', err);
     } finally {

@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
-import Link from 'next/link';
-import { FileBarChart, Search, X } from 'lucide-react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { Search, X, Plus } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ReportFormDrawer } from '@/components/forms/ReportFormDrawer';
-import { fetchJobReportsAction } from '@/app/(app)/jobs/[id]/actions';
+import { BillFormDrawer } from '@/components/forms/BillFormDrawer';
+import { fetchJobBillsAction } from '@/app/(app)/jobs/[id]/actions';
+import { formatCurrency } from '@/components/shared/detail';
 import {
   isArchivedStatus,
   compareDates,
@@ -16,66 +17,62 @@ import {
   ValueFilterMenu,
   SortableColumnHeader,
 } from '@/components/shared/list-filters';
-import type { Report } from '@/types/api';
+import type { Bill } from '@/types/api';
 
 type ListTab = 'active' | 'archived' | 'all';
 
-type ReportSortField =
-  | 'title'
+type BillSortField =
+  | 'bill_number'
   | 'status'
-  | 'type'
-  | 'reference'
+  | 'total_amount'
+  | 'received_date'
+  | 'due_date'
   | 'updated_at';
 
-interface ColDef { key: ReportSortField; label: string }
+interface ColDef { key: BillSortField; label: string }
 
 const TABLE_COLUMNS: ColDef[] = [
-  { key: 'title', label: 'Title' },
+  { key: 'bill_number', label: 'Bill #' },
   { key: 'status', label: 'Status' },
-  { key: 'type', label: 'Type' },
-  { key: 'reference', label: 'Reference' },
+  { key: 'total_amount', label: 'Amount' },
+  { key: 'received_date', label: 'Received' },
+  { key: 'due_date', label: 'Due Date' },
   { key: 'updated_at', label: 'Updated' },
 ];
 
-function getSortValue(r: Report, field: ReportSortField): string | null | undefined {
+function getSortValue(bill: Bill, field: BillSortField): string | number | null | undefined {
   switch (field) {
-    case 'title': return r.title ?? r.id;
-    case 'status': return r.status?.name;
-    case 'type': return r.reportType?.name;
-    case 'reference': return r.reference;
-    case 'updated_at': return r.updatedAt;
+    case 'bill_number': return bill.billNumber ?? bill.externalReference ?? bill.id;
+    case 'status': return bill.status?.name;
+    case 'total_amount': { const n = Number(bill.totalAmount); return Number.isFinite(n) ? n : null; }
+    case 'received_date': return bill.receivedDate;
+    case 'due_date': return bill.dueDate;
+    case 'updated_at': return bill.updatedAt;
     default: return null;
   }
 }
 
-export function JobReportsTab({
-  jobId,
-  claimId,
-}: {
-  jobId: string;
-  claimId: string;
-}) {
-  const [reports, setReports] = useState<Report[]>([]);
+export function JobBillsTab({ jobId }: { jobId: string }) {
+  const router = useRouter();
+  const [bills, setBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const [tab, setTab] = useState<ListTab>('active');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
-  const [columnSort, setColumnSort] = useState<{ field: ReportSortField; order: 'asc' | 'desc' }>({
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [columnSort, setColumnSort] = useState<{ field: BillSortField; order: 'asc' | 'desc' }>({
     field: 'updated_at',
     order: 'desc',
   });
 
-  const load = useCallback(async () => {
+  const load = useCallback(() => {
     setLoading(true);
-    try {
-      const data = await fetchJobReportsAction(jobId);
-      setReports(data ?? []);
-    } finally {
-      setLoading(false);
-    }
+    fetchJobBillsAction(jobId)
+      .then((data) => setBills(data ?? []))
+      .catch((err) => console.error('JobBillsTab:', err))
+      .finally(() => setLoading(false));
   }, [jobId]);
 
   useEffect(() => { load(); }, [load]);
@@ -85,24 +82,24 @@ export function JobReportsTab({
     return () => clearTimeout(t);
   }, [search]);
 
-  const handleColumnSort = (field: ReportSortField) => {
+  const handleColumnSort = (field: BillSortField) => {
     setColumnSort((prev) => {
       if (prev.field === field) return { field, order: prev.order === 'asc' ? 'desc' : 'asc' };
-      return { field, order: field === 'title' ? 'asc' : 'desc' };
+      return { field, order: field === 'bill_number' ? 'asc' : 'desc' };
     });
   };
 
-  const uniqueTypes = useMemo(() => {
+  const uniqueStatuses = useMemo(() => {
     const names = new Set<string>();
-    for (const r of reports) {
-      const n = r.reportType?.name?.trim();
+    for (const b of bills) {
+      const n = b.status?.name?.trim();
       if (n) names.add(n);
     }
     return [...names].sort((a, b) => a.localeCompare(b));
-  }, [reports]);
+  }, [bills]);
 
-  const toggleType = (name: string) => {
-    setTypeFilter((prev) => {
+  const toggleStatus = (name: string) => {
+    setStatusFilter((prev) => {
       const next = new Set(prev);
       if (next.has(name)) next.delete(name);
       else next.add(name);
@@ -111,40 +108,39 @@ export function JobReportsTab({
   };
 
   const visibleRows = useMemo(() => {
-    let rows = reports;
+    let rows = bills;
 
     if (tab !== 'all') {
-      rows = rows.filter((r) => {
-        const archived = isArchivedStatus(r.status?.name);
+      rows = rows.filter((b) => {
+        const archived = isArchivedStatus(b.status?.name);
         return tab === 'archived' ? archived : !archived;
       });
     }
 
-    if (typeFilter.size > 0) {
-      rows = rows.filter((r) => {
-        const n = r.reportType?.name?.trim();
-        return n ? typeFilter.has(n) : false;
+    if (statusFilter.size > 0) {
+      rows = rows.filter((b) => {
+        const n = b.status?.name?.trim();
+        return n ? statusFilter.has(n) : false;
       });
     }
 
     const query = debouncedSearch.trim().toLowerCase();
     if (query) {
-      rows = rows.filter((r) => {
-        const title = (r.title ?? '').toLowerCase();
-        const ref = (r.reference ?? '').toLowerCase();
-        return title.includes(query) || ref.includes(query);
+      rows = rows.filter((b) => {
+        const num = (b.billNumber ?? '').toLowerCase();
+        const ref = (b.externalReference ?? '').toLowerCase();
+        return num.includes(query) || ref.includes(query);
       });
     }
 
-    const isDate = columnSort.field === 'updated_at';
+    const isDate = columnSort.field === 'received_date' || columnSort.field === 'due_date' || columnSort.field === 'updated_at';
     return [...rows].sort((a, b) => {
       const aVal = getSortValue(a, columnSort.field);
       const bVal = getSortValue(b, columnSort.field);
-      return isDate
-        ? compareDates(aVal, bVal, columnSort.order)
-        : compareValues(aVal, bVal, columnSort.order);
+      if (isDate) return compareDates(aVal as string, bVal as string, columnSort.order);
+      return compareValues(aVal, bVal, columnSort.order);
     });
-  }, [reports, tab, typeFilter, debouncedSearch, columnSort]);
+  }, [bills, tab, statusFilter, debouncedSearch, columnSort]);
 
   if (loading) {
     return <p className="text-sm text-slate-400">Loading...</p>;
@@ -164,7 +160,7 @@ export function JobReportsTab({
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
           <Input
-            placeholder="Search reports..."
+            placeholder="Search bills..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="h-10 w-full pl-9 pr-9"
@@ -181,30 +177,29 @@ export function JobReportsTab({
         </div>
 
         <ValueFilterMenu
-          options={uniqueTypes}
-          selected={typeFilter}
-          onToggle={toggleType}
-          onClearAll={() => setTypeFilter(new Set())}
-          onSelectAll={() => setTypeFilter(new Set(uniqueTypes))}
-          emptyLabel="All types"
-          menuTitle="Filter by type"
-          itemNoun={{ singular: 'type', plural: 'types' }}
+          options={uniqueStatuses}
+          selected={statusFilter}
+          onToggle={toggleStatus}
+          onClearAll={() => setStatusFilter(new Set())}
+          onSelectAll={() => setStatusFilter(new Set(uniqueStatuses))}
+          emptyLabel="All statuses"
+          menuTitle="Filter by status"
+          itemNoun={{ singular: 'status', plural: 'statuses' }}
         />
 
         <Button onClick={() => setDrawerOpen(true)} size="sm">
-          <FileBarChart className="h-4 w-4 mr-2" />
-          Create Report
+          <Plus className="h-4 w-4 mr-2" />
+          Create Bill
         </Button>
       </div>
 
-      <ReportFormDrawer
+      <BillFormDrawer
         open={drawerOpen}
         onOpenChange={(open) => {
           setDrawerOpen(open);
           if (!open) load();
         }}
         jobId={jobId}
-        claimId={claimId}
       />
 
       {visibleRows.length === 0 ? (
@@ -213,7 +208,7 @@ export function JobReportsTab({
             <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-100">
               <Search size={24} className="text-slate-400" />
             </div>
-            <p className="text-sm text-slate-400">No reports found.</p>
+            <p className="text-sm text-slate-400">No bills found.</p>
           </div>
         </div>
       ) : (
@@ -234,27 +229,28 @@ export function JobReportsTab({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {visibleRows.map((r) => {
-                const statusName = r.status?.name ?? 'Unknown';
+              {visibleRows.map((bill) => {
+                const statusName = bill.status?.name ?? 'Unknown';
                 return (
-                  <tr key={r.id} className="cursor-pointer transition-colors hover:bg-slate-50">
-                    <td className="px-4 py-3 font-medium text-slate-900">
-                      <Link
-                        href={`/reports/${r.id}`}
-                        className="text-primary hover:underline"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {r.title ?? r.id}
-                      </Link>
+                  <tr
+                    key={bill.id}
+                    onClick={() => router.push(`/bills/${bill.id}`)}
+                    className="cursor-pointer transition-colors hover:bg-slate-50"
+                  >
+                    <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
+                      {bill.billNumber ?? bill.externalReference ?? bill.id}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
                       <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
                         {statusName}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{r.reportType?.name ?? '—'}</td>
-                    <td className="px-4 py-3 text-slate-600">{r.reference ?? '—'}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDate(r.updatedAt)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-right font-medium text-slate-900">
+                      {formatCurrency(bill.totalAmount)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDate(bill.receivedDate)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDate(bill.dueDate)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDate(bill.updatedAt)}</td>
                   </tr>
                 );
               })}

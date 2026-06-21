@@ -76,8 +76,8 @@ export function InvoiceFormDrawer({
         purchaseOrderId: values.purchaseOrderId,
         invoiceNumber: values.invoiceNumber || undefined,
         totalAmount: values.totalAmount ?? undefined,
-        issueDate: values.issueDate || undefined,
-        dueDate: values.dueDate || undefined,
+        issueDate: values.issueDate ? new Date(values.issueDate).toISOString() : undefined,
+        dueDate: values.dueDate ? new Date(values.dueDate).toISOString() : undefined,
         note: values.note || undefined,
       });
       if (result.success) {

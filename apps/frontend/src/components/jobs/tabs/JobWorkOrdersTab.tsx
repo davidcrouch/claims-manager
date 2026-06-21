@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
-import Link from 'next/link';
-import { FileBarChart, Search, X } from 'lucide-react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { Search, X, Plus } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ReportFormDrawer } from '@/components/forms/ReportFormDrawer';
-import { fetchJobReportsAction } from '@/app/(app)/jobs/[id]/actions';
+import { WorkOrderFormDrawer } from '@/components/forms/WorkOrderFormDrawer';
+import { fetchJobWorkOrdersAction } from '@/app/(app)/jobs/[id]/actions';
+import { formatCurrency } from '@/components/shared/detail';
 import {
   isArchivedStatus,
   compareDates,
@@ -16,46 +17,44 @@ import {
   ValueFilterMenu,
   SortableColumnHeader,
 } from '@/components/shared/list-filters';
-import type { Report } from '@/types/api';
+import type { WorkOrder } from '@/types/api';
 
 type ListTab = 'active' | 'archived' | 'all';
 
-type ReportSortField =
-  | 'title'
+type WOSortField =
+  | 'wo_number'
   | 'status'
   | 'type'
-  | 'reference'
+  | 'start_date'
+  | 'total'
   | 'updated_at';
 
-interface ColDef { key: ReportSortField; label: string }
+interface ColDef { key: WOSortField; label: string }
 
 const TABLE_COLUMNS: ColDef[] = [
-  { key: 'title', label: 'Title' },
+  { key: 'wo_number', label: 'WO #' },
   { key: 'status', label: 'Status' },
   { key: 'type', label: 'Type' },
-  { key: 'reference', label: 'Reference' },
+  { key: 'start_date', label: 'Start' },
+  { key: 'total', label: 'Total' },
   { key: 'updated_at', label: 'Updated' },
 ];
 
-function getSortValue(r: Report, field: ReportSortField): string | null | undefined {
+function getSortValue(wo: WorkOrder, field: WOSortField): string | number | null | undefined {
   switch (field) {
-    case 'title': return r.title ?? r.id;
-    case 'status': return r.status?.name;
-    case 'type': return r.reportType?.name;
-    case 'reference': return r.reference;
-    case 'updated_at': return r.updatedAt;
+    case 'wo_number': return wo.workOrderNumber ?? wo.externalId ?? wo.id;
+    case 'status': return wo.status?.name;
+    case 'type': return wo.workOrderType?.name;
+    case 'start_date': return wo.startDate;
+    case 'total': { const n = Number(wo.totalAmount); return Number.isFinite(n) ? n : null; }
+    case 'updated_at': return wo.updatedAt;
     default: return null;
   }
 }
 
-export function JobReportsTab({
-  jobId,
-  claimId,
-}: {
-  jobId: string;
-  claimId: string;
-}) {
-  const [reports, setReports] = useState<Report[]>([]);
+export function JobWorkOrdersTab({ jobId }: { jobId: string }) {
+  const router = useRouter();
+  const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -63,19 +62,17 @@ export function JobReportsTab({
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
-  const [columnSort, setColumnSort] = useState<{ field: ReportSortField; order: 'asc' | 'desc' }>({
+  const [columnSort, setColumnSort] = useState<{ field: WOSortField; order: 'asc' | 'desc' }>({
     field: 'updated_at',
     order: 'desc',
   });
 
-  const load = useCallback(async () => {
+  const load = useCallback(() => {
     setLoading(true);
-    try {
-      const data = await fetchJobReportsAction(jobId);
-      setReports(data ?? []);
-    } finally {
-      setLoading(false);
-    }
+    fetchJobWorkOrdersAction(jobId)
+      .then((data) => setWorkOrders(data ?? []))
+      .catch((err) => console.error('JobWorkOrdersTab:', err))
+      .finally(() => setLoading(false));
   }, [jobId]);
 
   useEffect(() => { load(); }, [load]);
@@ -85,21 +82,21 @@ export function JobReportsTab({
     return () => clearTimeout(t);
   }, [search]);
 
-  const handleColumnSort = (field: ReportSortField) => {
+  const handleColumnSort = (field: WOSortField) => {
     setColumnSort((prev) => {
       if (prev.field === field) return { field, order: prev.order === 'asc' ? 'desc' : 'asc' };
-      return { field, order: field === 'title' ? 'asc' : 'desc' };
+      return { field, order: field === 'wo_number' ? 'asc' : 'desc' };
     });
   };
 
   const uniqueTypes = useMemo(() => {
     const names = new Set<string>();
-    for (const r of reports) {
-      const n = r.reportType?.name?.trim();
+    for (const wo of workOrders) {
+      const n = wo.workOrderType?.name?.trim();
       if (n) names.add(n);
     }
     return [...names].sort((a, b) => a.localeCompare(b));
-  }, [reports]);
+  }, [workOrders]);
 
   const toggleType = (name: string) => {
     setTypeFilter((prev) => {
@@ -111,40 +108,40 @@ export function JobReportsTab({
   };
 
   const visibleRows = useMemo(() => {
-    let rows = reports;
+    let rows = workOrders;
 
     if (tab !== 'all') {
-      rows = rows.filter((r) => {
-        const archived = isArchivedStatus(r.status?.name);
+      rows = rows.filter((wo) => {
+        const archived = isArchivedStatus(wo.status?.name);
         return tab === 'archived' ? archived : !archived;
       });
     }
 
     if (typeFilter.size > 0) {
-      rows = rows.filter((r) => {
-        const n = r.reportType?.name?.trim();
+      rows = rows.filter((wo) => {
+        const n = wo.workOrderType?.name?.trim();
         return n ? typeFilter.has(n) : false;
       });
     }
 
     const query = debouncedSearch.trim().toLowerCase();
     if (query) {
-      rows = rows.filter((r) => {
-        const title = (r.title ?? '').toLowerCase();
-        const ref = (r.reference ?? '').toLowerCase();
-        return title.includes(query) || ref.includes(query);
+      rows = rows.filter((wo) => {
+        const num = (wo.workOrderNumber ?? '').toLowerCase();
+        const name = (wo.name ?? '').toLowerCase();
+        return num.includes(query) || name.includes(query);
       });
     }
 
-    const isDate = columnSort.field === 'updated_at';
+    const isDate = columnSort.field === 'start_date' || columnSort.field === 'updated_at';
     return [...rows].sort((a, b) => {
       const aVal = getSortValue(a, columnSort.field);
       const bVal = getSortValue(b, columnSort.field);
       return isDate
-        ? compareDates(aVal, bVal, columnSort.order)
+        ? compareDates(aVal as string, bVal as string, columnSort.order)
         : compareValues(aVal, bVal, columnSort.order);
     });
-  }, [reports, tab, typeFilter, debouncedSearch, columnSort]);
+  }, [workOrders, tab, typeFilter, debouncedSearch, columnSort]);
 
   if (loading) {
     return <p className="text-sm text-slate-400">Loading...</p>;
@@ -164,7 +161,7 @@ export function JobReportsTab({
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
           <Input
-            placeholder="Search reports..."
+            placeholder="Search work orders..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="h-10 w-full pl-9 pr-9"
@@ -192,19 +189,18 @@ export function JobReportsTab({
         />
 
         <Button onClick={() => setDrawerOpen(true)} size="sm">
-          <FileBarChart className="h-4 w-4 mr-2" />
-          Create Report
+          <Plus className="h-4 w-4 mr-2" />
+          Create Work Order
         </Button>
       </div>
 
-      <ReportFormDrawer
+      <WorkOrderFormDrawer
         open={drawerOpen}
         onOpenChange={(open) => {
           setDrawerOpen(open);
           if (!open) load();
         }}
         jobId={jobId}
-        claimId={claimId}
       />
 
       {visibleRows.length === 0 ? (
@@ -213,7 +209,7 @@ export function JobReportsTab({
             <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-100">
               <Search size={24} className="text-slate-400" />
             </div>
-            <p className="text-sm text-slate-400">No reports found.</p>
+            <p className="text-sm text-slate-400">No work orders found.</p>
           </div>
         </div>
       ) : (
@@ -234,27 +230,28 @@ export function JobReportsTab({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {visibleRows.map((r) => {
-                const statusName = r.status?.name ?? 'Unknown';
+              {visibleRows.map((wo) => {
+                const statusName = wo.status?.name ?? 'Unknown';
                 return (
-                  <tr key={r.id} className="cursor-pointer transition-colors hover:bg-slate-50">
-                    <td className="px-4 py-3 font-medium text-slate-900">
-                      <Link
-                        href={`/reports/${r.id}`}
-                        className="text-primary hover:underline"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {r.title ?? r.id}
-                      </Link>
+                  <tr
+                    key={wo.id}
+                    onClick={() => router.push(`/work-orders/${wo.id}`)}
+                    className="cursor-pointer transition-colors hover:bg-slate-50"
+                  >
+                    <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
+                      {wo.workOrderNumber ?? wo.externalId ?? wo.id}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
                       <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
                         {statusName}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{r.reportType?.name ?? '—'}</td>
-                    <td className="px-4 py-3 text-slate-600">{r.reference ?? '—'}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDate(r.updatedAt)}</td>
+                    <td className="px-4 py-3 text-slate-600">{wo.workOrderType?.name ?? '—'}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDate(wo.startDate)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-right font-medium text-slate-900">
+                      {formatCurrency(wo.totalAmount)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDate(wo.updatedAt)}</td>
                   </tr>
                 );
               })}

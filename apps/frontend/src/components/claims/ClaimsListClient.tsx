@@ -1,23 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import {
-  ArrowDown,
-  ArrowUp,
-  ChevronDown,
-  Filter,
-  Search,
-  X,
-} from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { FileText } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import {
   ListPageHeader,
@@ -25,7 +13,16 @@ import {
 } from '@/components/layout/ListPageHeader';
 import { fetchClaimsAction } from '@/app/(app)/claims/actions';
 import type { Claim, PaginatedResponse } from '@/types/api';
-import { normalizeSortParam } from './claims-list-helpers';
+import {
+  normalizeSortParam,
+  ARCHIVED_STATUS_NAMES,
+} from './claims-list-helpers';
+import {
+  compareValues,
+  compareDates,
+  ValueFilterMenu,
+  SortableColumnHeader,
+} from '@/components/shared/list-filters';
 
 function formatAddress(claim: Claim): string {
   const addr = claim.address as
@@ -47,153 +44,81 @@ function formatDate(value?: string | null): string {
   return d.toLocaleDateString();
 }
 
-const SORT_OPTIONS = [
-  { key: 'updated_at', label: 'Updated' },
-  { key: 'created_at', label: 'Created' },
+type ClaimTab = 'active' | 'archived' | 'all';
+
+const VALID_TABS = new Set<ClaimTab>(['active', 'archived', 'all']);
+
+function parseTab(param: string | null): ClaimTab {
+  if (param && VALID_TABS.has(param as ClaimTab)) return param as ClaimTab;
+  return 'active';
+}
+
+function statusIdsForTab(
+  tab: ClaimTab,
+  statusOptions: { id: string; name: string }[],
+): string {
+  if (tab === 'all') return '';
+  const archivedIds: string[] = [];
+  const activeIds: string[] = [];
+  for (const opt of statusOptions) {
+    if (ARCHIVED_STATUS_NAMES.has(opt.name.trim().toLowerCase())) {
+      archivedIds.push(opt.id);
+    } else {
+      activeIds.push(opt.id);
+    }
+  }
+  const ids = tab === 'archived' ? archivedIds : activeIds;
+  return ids.sort().join(',');
+}
+
+type ColumnSortField =
+  | 'claim_number'
+  | 'status'
+  | 'policy'
+  | 'address'
+  | 'account'
+  | 'lodgement_date'
+  | 'updated_at';
+
+interface ColumnDef {
+  key: ColumnSortField;
+  label: string;
+}
+
+const TABLE_COLUMNS: ColumnDef[] = [
   { key: 'claim_number', label: 'Claim #' },
+  { key: 'status', label: 'Status' },
+  { key: 'policy', label: 'Policy' },
+  { key: 'address', label: 'Address' },
+  { key: 'account', label: 'Account' },
+  { key: 'lodgement_date', label: 'Lodged' },
+  { key: 'updated_at', label: 'Updated' },
 ];
 
-function parseSort(sortParam: string | null): {
-  field: string;
-  order: 'asc' | 'desc';
-} {
-  if (!sortParam) {
-    return { field: 'updated_at', order: 'desc' };
+const SERVER_SORT_FIELDS = new Set(['claim_number', 'updated_at', 'created_at']);
+
+function getClaimSortValue(
+  claim: Claim,
+  field: ColumnSortField,
+): string | null | undefined {
+  switch (field) {
+    case 'claim_number':
+      return claim.claimNumber ?? claim.externalReference ?? claim.id;
+    case 'status':
+      return (claim.status as { name?: string })?.name;
+    case 'policy':
+      return claim.policyNumber ?? claim.policyName;
+    case 'address':
+      return formatAddress(claim) || null;
+    case 'account':
+      return (claim.account as { name?: string })?.name;
+    case 'lodgement_date':
+      return claim.lodgementDate;
+    case 'updated_at':
+      return claim.updatedAt;
+    default:
+      return null;
   }
-  const lastUnderscore = sortParam.lastIndexOf('_');
-  if (lastUnderscore <= 0) {
-    return { field: 'updated_at', order: 'desc' };
-  }
-  const order = sortParam.slice(lastUnderscore + 1);
-  const field = sortParam.slice(0, lastUnderscore);
-  if (order !== 'asc' && order !== 'desc') {
-    return { field: 'updated_at', order: 'desc' };
-  }
-  if (!['updated_at', 'created_at', 'claim_number'].includes(field)) {
-    return { field: 'updated_at', order: 'desc' };
-  }
-  return { field, order };
-}
-
-function buildSortString(field: string, order: 'asc' | 'desc') {
-  return `${field}_${order}`;
-}
-
-function statusIdsKey(ids: Set<string>) {
-  return [...ids].sort().join(',');
-}
-
-function parseStatusIdsFromSearchParam(param: string | null): Set<string> {
-  if (!param) return new Set();
-  return new Set(param.split(',').map((s) => s.trim()).filter(Boolean));
-}
-
-function SortButton({
-  field,
-  label,
-  activeField,
-  sortOrder,
-  onSort,
-}: {
-  field: string;
-  label: string;
-  activeField: string;
-  sortOrder: string;
-  onSort: (field: string) => void;
-}) {
-  const isActive = activeField === field;
-  return (
-    <button
-      type="button"
-      onClick={() => onSort(field)}
-      className={`flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-        isActive
-          ? 'bg-slate-100 text-slate-900 shadow-sm'
-          : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
-      }`}
-    >
-      {label}
-      {isActive &&
-        (sortOrder === 'asc' ? (
-          <ArrowUp size={12} className="text-indigo-600" />
-        ) : (
-          <ArrowDown size={12} className="text-indigo-600" />
-        ))}
-    </button>
-  );
-}
-
-function StatusFilterMenu({
-  options,
-  selected,
-  onSelectionChange,
-  onClearAll,
-  onSelectAll,
-}: {
-  options: { id: string; name: string }[];
-  selected: Set<string>;
-  onSelectionChange: (id: string, checked: boolean) => void;
-  onClearAll: () => void;
-  onSelectAll: () => void;
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        className="flex min-w-[140px] cursor-pointer items-center justify-between rounded-md border border-slate-200 bg-white py-2 pl-3 pr-2 text-sm font-medium text-slate-700 outline-none hover:bg-slate-50 focus-visible:border-indigo-500 focus-visible:ring-1 focus-visible:ring-indigo-500"
-      >
-        <span className="flex items-center gap-2">
-          <Filter size={14} className="text-slate-400" />
-          {selected.size === 0
-            ? 'All statuses'
-            : `${selected.size} status${selected.size !== 1 ? 'es' : ''}`}
-        </span>
-        <ChevronDown size={14} className="text-slate-400" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-[220px] p-2" align="end">
-        <div className="mb-2 flex items-center justify-between border-b border-slate-100 pb-2">
-          <span className="text-xs font-medium text-slate-500">
-            Filter by status
-          </span>
-          <div className="flex gap-1">
-            <button
-              type="button"
-              onClick={onSelectAll}
-              className="text-xs text-indigo-600 hover:underline"
-            >
-              All
-            </button>
-            <span className="text-slate-300">|</span>
-            <button
-              type="button"
-              onClick={onClearAll}
-              className="text-xs text-indigo-600 hover:underline"
-            >
-              None
-            </button>
-          </div>
-        </div>
-        <div className="max-h-[280px] space-y-0.5 overflow-y-auto">
-          {options.map((opt) => (
-            <DropdownMenuCheckboxItem
-              key={opt.id}
-              checked={selected.has(opt.id)}
-              onCheckedChange={(checked) =>
-                onSelectionChange(opt.id, checked === true)
-              }
-              className="cursor-pointer"
-            >
-              {opt.name}
-            </DropdownMenuCheckboxItem>
-          ))}
-          {options.length === 0 && (
-            <p className="px-2 py-1.5 text-xs text-slate-400">
-              No status values loaded
-            </p>
-          )}
-        </div>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
 }
 
 export interface ClaimsListClientProps {
@@ -216,9 +141,14 @@ export function ClaimsListClient({
   const [sort, setSort] = useState(() =>
     normalizeSortParam(searchParams.get('sort'))
   );
-  const [statusFilter, setStatusFilter] = useState<Set<string>>(() =>
-    parseStatusIdsFromSearchParam(searchParams.get('status'))
+  const [tab, setTab] = useState<ClaimTab>(() =>
+    parseTab(searchParams.get('tab'))
   );
+  const [columnSort, setColumnSort] = useState<{
+    field: ColumnSortField;
+    order: 'asc' | 'desc';
+  } | null>(null);
+  const [accountFilter, setAccountFilter] = useState<Set<string>>(new Set());
 
   const lastFetchKeyRef = useRef<string | null>(initialFetchKey);
 
@@ -227,14 +157,19 @@ export function ClaimsListClient({
     return () => clearTimeout(t);
   }, [search]);
 
+  const statusKey = useMemo(
+    () => statusIdsForTab(tab, statusOptions),
+    [tab, statusOptions],
+  );
+
   useEffect(() => {
-    const statusKey = statusIdsKey(statusFilter);
-    const fetchKey = `${debouncedSearch}|${sort}|${statusKey}`;
+    const fetchKey = `${debouncedSearch}|${sort}|${tab}|${statusKey}`;
 
     const params = new URLSearchParams(searchParams.toString());
     params.set('search', debouncedSearch);
     params.set('sort', sort);
     params.set('page', '1');
+    params.set('tab', tab);
     if (statusKey) {
       params.set('status', statusKey);
     } else {
@@ -247,39 +182,88 @@ export function ClaimsListClient({
     }
     lastFetchKeyRef.current = fetchKey;
 
+    setColumnSort(null);
+
     fetchClaimsAction({
       search: debouncedSearch || undefined,
       sort,
       status: statusKey || undefined,
     }).then((res) => res && setData(res));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams: router.replace syncs URL; full dep causes loops
-  }, [debouncedSearch, sort, statusFilter]);
+  }, [debouncedSearch, sort, tab, statusKey]);
 
-  const { field: activeSortField, order: sortOrder } = parseSort(sort);
-
-  const handleSort = (field: string) => {
-    if (activeSortField === field) {
-      setSort(
-        buildSortString(field, sortOrder === 'asc' ? 'desc' : 'asc')
-      );
-    } else {
-      const defaultOrder = field === 'claim_number' ? 'asc' : 'desc';
-      setSort(buildSortString(field, defaultOrder));
+  const handleColumnSort = (field: ColumnSortField) => {
+    if (SERVER_SORT_FIELDS.has(field)) {
+      const serverField = field === 'lodgement_date' ? 'created_at' : field;
+      const currentServerField = sort.replace(/_(?:asc|desc)$/, '');
+      if (currentServerField === serverField) {
+        const currentOrder = sort.endsWith('_asc') ? 'asc' : 'desc';
+        setSort(`${serverField}_${currentOrder === 'asc' ? 'desc' : 'asc'}`);
+      } else {
+        const defaultOrder = serverField === 'claim_number' ? 'asc' : 'desc';
+        setSort(`${serverField}_${defaultOrder}`);
+      }
+      setColumnSort(null);
+      return;
     }
-  };
 
-  const setStatusChecked = (id: string, checked: boolean) => {
-    setStatusFilter((prev) => {
-      const next = new Set(prev);
-      if (checked) next.add(id);
-      else next.delete(id);
-      return next;
+    setColumnSort((prev) => {
+      if (prev?.field === field) {
+        return { field, order: prev.order === 'asc' ? 'desc' : 'asc' };
+      }
+      return { field, order: 'asc' };
     });
   };
 
-  const clearStatuses = () => setStatusFilter(new Set());
-  const selectAllStatuses = () =>
-    setStatusFilter(new Set(statusOptions.map((o) => o.id)));
+  const activeColumnField: ColumnSortField | null = columnSort
+    ? columnSort.field
+    : SERVER_SORT_FIELDS.has(sort.replace(/_(?:asc|desc)$/, ''))
+      ? (sort.replace(/_(?:asc|desc)$/, '') as ColumnSortField)
+      : null;
+  const activeColumnOrder: 'asc' | 'desc' = columnSort
+    ? columnSort.order
+    : sort.endsWith('_asc')
+      ? 'asc'
+      : 'desc';
+
+  const uniqueAccounts = useMemo(() => {
+    const names = new Set<string>();
+    for (const claim of data.data) {
+      const name = (claim.account as { name?: string })?.name?.trim();
+      if (name) names.add(name);
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [data.data]);
+
+  const toggleAccount = (name: string) => {
+    setAccountFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
+  const clearAccounts = () => setAccountFilter(new Set());
+  const selectAllAccounts = () => setAccountFilter(new Set(uniqueAccounts));
+
+  const filteredAndSortedData = useMemo(() => {
+    let rows = data.data;
+    if (accountFilter.size > 0) {
+      rows = rows.filter((claim) => {
+        const name = (claim.account as { name?: string })?.name?.trim();
+        return name ? accountFilter.has(name) : false;
+      });
+    }
+    if (!columnSort) return rows;
+    const isDate = columnSort.field === 'lodgement_date' || columnSort.field === 'updated_at';
+    return [...rows].sort((a, b) => {
+      const aVal = getClaimSortValue(a, columnSort.field);
+      const bVal = getClaimSortValue(b, columnSort.field);
+      return isDate
+        ? compareDates(aVal, bVal, columnSort.order)
+        : compareValues(aVal, bVal, columnSort.order);
+    });
+  }, [data.data, columnSort, accountFilter]);
 
   const breakdown = computeStatusBreakdown(
     data.data,
@@ -295,25 +279,22 @@ export function ClaimsListClient({
           total={data.total}
           showing={data.data.length}
           search={debouncedSearch}
-          statusSelectedCount={statusFilter.size}
           breakdown={breakdown}
           accent="blue"
         />
       </SetPageHeader>
       <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
-          <div className="flex items-center rounded-md border border-slate-200 bg-white p-1">
-            {SORT_OPTIONS.map((option) => (
-              <SortButton
-                key={option.key}
-                field={option.key}
-                label={option.label}
-                activeField={activeSortField}
-                sortOrder={sortOrder}
-                onSort={handleSort}
-              />
-            ))}
-          </div>
+          <Tabs
+            value={tab}
+            onValueChange={(val) => setTab(val as ClaimTab)}
+          >
+            <TabsList>
+              <TabsTrigger value="active">Active</TabsTrigger>
+              <TabsTrigger value="archived">Archived</TabsTrigger>
+              <TabsTrigger value="all">All</TabsTrigger>
+            </TabsList>
+          </Tabs>
 
           <div className="relative flex-1">
             <Search
@@ -337,12 +318,15 @@ export function ClaimsListClient({
             )}
           </div>
 
-          <StatusFilterMenu
-            options={statusOptions}
-            selected={statusFilter}
-            onSelectionChange={setStatusChecked}
-            onClearAll={clearStatuses}
-            onSelectAll={selectAllStatuses}
+          <ValueFilterMenu
+            options={uniqueAccounts}
+            selected={accountFilter}
+            onToggle={toggleAccount}
+            onClearAll={clearAccounts}
+            onSelectAll={selectAllAccounts}
+            emptyLabel="All accounts"
+            menuTitle="Filter by account"
+            itemNoun={{ singular: 'account', plural: 'accounts' }}
           />
         </div>
       </div>
@@ -351,22 +335,25 @@ export function ClaimsListClient({
         className="flex-1 px-6 pb-6"
         style={{ minHeight: 0, overflow: 'auto' }}
       >
-        {data.data.length > 0 ? (
+        {filteredAndSortedData.length > 0 ? (
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50">
                 <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                  <th scope="col" className="px-4 py-3">Claim #</th>
-                  <th scope="col" className="px-4 py-3">Status</th>
-                  <th scope="col" className="px-4 py-3">Policy</th>
-                  <th scope="col" className="px-4 py-3">Address</th>
-                  <th scope="col" className="px-4 py-3">Account</th>
-                  <th scope="col" className="px-4 py-3">Lodged</th>
-                  <th scope="col" className="px-4 py-3">Updated</th>
+                  {TABLE_COLUMNS.map((col) => (
+                    <SortableColumnHeader
+                      key={col.key}
+                      columnKey={col.key}
+                      label={col.label}
+                      activeField={activeColumnField}
+                      sortOrder={activeColumnOrder}
+                      onSort={handleColumnSort}
+                    />
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {data.data.map((claim) => {
+                {filteredAndSortedData.map((claim) => {
                   const claimNo =
                     claim.claimNumber ?? claim.externalReference ?? claim.id;
                   const statusName =

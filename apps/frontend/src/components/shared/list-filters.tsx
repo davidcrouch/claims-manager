@@ -9,9 +9,11 @@
 import {
   ArrowDown,
   ArrowUp,
+  CheckSquare,
   ChevronDown,
   Filter,
   Search,
+  Square,
   X,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -19,8 +21,11 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { cn } from '@/lib/utils';
 
 export interface StatusOption {
   id: string;
@@ -302,4 +307,136 @@ export function formatDate(value?: string | null): string {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return '';
   return d.toLocaleDateString();
+}
+
+export const ARCHIVED_STATUS_NAMES = new Set(['archived', 'closed']);
+
+export function isArchivedStatus(name: string | null | undefined): boolean {
+  return !!name && ARCHIVED_STATUS_NAMES.has(name.trim().toLowerCase());
+}
+
+export function ValueFilterMenu(props: {
+  options: string[];
+  selected: Set<string>;
+  onToggle: (name: string) => void;
+  onClearAll: () => void;
+  onSelectAll: () => void;
+  emptyLabel?: string;
+  menuTitle?: string;
+  itemNoun?: { singular: string; plural: string };
+}) {
+  const {
+    options,
+    selected,
+    onToggle,
+    onClearAll,
+    onSelectAll,
+    emptyLabel = 'All',
+    menuTitle = 'Filter',
+    itemNoun = { singular: 'item', plural: 'items' },
+  } = props;
+  const filterActive = selected.size > 0;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger className="flex min-w-[220px] cursor-pointer items-center justify-between rounded-md border border-slate-200 bg-white py-2 pl-3 pr-2 text-sm font-medium text-slate-700 outline-none hover:bg-slate-50 focus-visible:border-indigo-500 focus-visible:ring-1 focus-visible:ring-indigo-500">
+        <span className="truncate">
+          {selected.size === 0
+            ? emptyLabel
+            : selected.size === 1
+              ? [...selected][0]
+              : `${selected.size} ${itemNoun.plural}`}
+        </span>
+        {filterActive ? (
+          <Filter size={14} className="ml-1 shrink-0 text-amber-500" />
+        ) : (
+          <ChevronDown size={14} className="ml-1 shrink-0 text-slate-400" />
+        )}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="min-w-[320px]" align="end">
+        <div className="flex items-center justify-between px-2 py-1.5">
+          <span className="text-xs font-medium text-muted-foreground">
+            {menuTitle}
+          </span>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={onSelectAll}
+              className="rounded px-1.5 py-0.5 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-50"
+            >
+              All
+            </button>
+            <button
+              type="button"
+              onClick={onClearAll}
+              className="rounded px-1.5 py-0.5 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-50"
+            >
+              None
+            </button>
+          </div>
+        </div>
+        <DropdownMenuSeparator />
+        <div className="max-h-[280px] overflow-y-auto">
+          {options.map((name) => {
+            const isVisible = !selected.size || selected.has(name);
+            return (
+              <DropdownMenuItem
+                key={name}
+                onClick={(e) => {
+                  e.preventDefault();
+                  onToggle(name);
+                }}
+                closeOnClick={false}
+                className="justify-between"
+              >
+                <span className={cn('text-sm', !isVisible && 'text-slate-400')}>
+                  {name}
+                </span>
+                {isVisible ? (
+                  <CheckSquare className="h-4 w-4 shrink-0 text-blue-600" />
+                ) : (
+                  <Square className="h-4 w-4 shrink-0 text-slate-400" />
+                )}
+              </DropdownMenuItem>
+            );
+          })}
+          {options.length === 0 && (
+            <p className="px-2 py-1.5 text-xs text-slate-400">
+              No {itemNoun.singular} values
+            </p>
+          )}
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+export function SortableColumnHeader<K extends string>(props: {
+  columnKey: K;
+  label: string;
+  activeField: K | null;
+  sortOrder: 'asc' | 'desc';
+  onSort: (field: K) => void;
+}) {
+  const { columnKey, label, activeField, sortOrder, onSort } = props;
+  const isActive = activeField === columnKey;
+  return (
+    <th
+      scope="col"
+      className="cursor-pointer select-none px-4 py-3 transition-colors hover:text-slate-700"
+      onClick={() => onSort(columnKey)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {isActive ? (
+          sortOrder === 'asc' ? (
+            <ArrowUp size={12} className="text-indigo-600" />
+          ) : (
+            <ArrowDown size={12} className="text-indigo-600" />
+          )
+        ) : (
+          <ArrowUp size={12} className="text-slate-300" />
+        )}
+      </span>
+    </th>
+  );
 }

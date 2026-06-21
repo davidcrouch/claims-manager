@@ -179,6 +179,26 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<PurchaseOrder[]>(`/purchase-orders/job/${jobId}`);
     },
 
+    getTasks(params?: {
+      page?: number;
+      limit?: number;
+      search?: string;
+      status?: string;
+      priority?: string;
+      sort?: string;
+      order?: 'asc' | 'desc';
+    }): Promise<PaginatedResponse<Task>> {
+      const sp = new URLSearchParams();
+      if (params?.page != null) sp.set('page', String(params.page));
+      if (params?.limit != null) sp.set('limit', String(params.limit));
+      if (params?.search) sp.set('search', params.search);
+      if (params?.status) sp.set('status', params.status);
+      if (params?.priority) sp.set('priority', params.priority);
+      if (params?.sort) sp.set('sort', params.sort);
+      if (params?.order) sp.set('order', params.order);
+      return fetchApi<PaginatedResponse<Task>>(`/tasks?${sp}`);
+    },
+
     getJobTasks(jobId: string): Promise<Task[]> {
       return fetchApi<Task[]>(`/tasks/job/${jobId}`);
     },
@@ -259,6 +279,10 @@ export function createApiClient(options?: ApiClientOptions) {
 
     getPurchaseOrder(id: string): Promise<PurchaseOrder | null> {
       return fetchApi<PurchaseOrder | null>(`/purchase-orders/${id}`);
+    },
+
+    createPurchaseOrder(body: Record<string, unknown>): Promise<PurchaseOrder> {
+      return fetchApi<PurchaseOrder>('/purchase-orders', { method: 'POST', body: JSON.stringify(body) });
     },
 
     getInvoices(params: {

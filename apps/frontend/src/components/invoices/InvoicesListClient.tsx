@@ -2,21 +2,17 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Receipt } from 'lucide-react';
+import { Receipt, Search, X } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  SortTabs,
-  SearchInput,
-  StatusFilterMenu,
-  ListEmptyState,
   type StatusOption,
-  type SortOption,
-  buildSortString,
-  parseSort,
-  statusIdsKey,
-  parseStatusIdsFromSearchParam,
   compareDates,
   compareValues,
   formatDate,
+  isArchivedStatus,
+  ValueFilterMenu,
+  SortableColumnHeader,
 } from '@/components/shared/list-filters';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import {
@@ -24,16 +20,45 @@ import {
   computeStatusBreakdown,
 } from '@/components/layout/ListPageHeader';
 import type { Invoice, PaginatedResponse } from '@/types/api';
-
 import { formatCurrency } from '@/components/shared/detail';
 
-const SORT_OPTIONS: SortOption[] = [
-  { key: 'updated_at', label: 'Updated' },
-  { key: 'created_at', label: 'Created' },
+type ListTab = 'active' | 'archived' | 'all';
+const VALID_TABS = new Set<ListTab>(['active', 'archived', 'all']);
+function parseTab(param: string | null): ListTab {
+  if (param && VALID_TABS.has(param as ListTab)) return param as ListTab;
+  return 'active';
+}
+
+type InvSortField =
+  | 'invoice_number'
+  | 'status'
+  | 'total_amount'
+  | 'issue_date'
+  | 'created_at'
+  | 'updated_at';
+
+interface ColDef { key: InvSortField; label: string }
+
+const TABLE_COLUMNS: ColDef[] = [
   { key: 'invoice_number', label: 'Invoice #' },
+  { key: 'status', label: 'Status' },
   { key: 'total_amount', label: 'Total' },
+  { key: 'issue_date', label: 'Issue Date' },
+  { key: 'created_at', label: 'Created' },
+  { key: 'updated_at', label: 'Updated' },
 ];
-const ALLOWED_SORT_FIELDS = SORT_OPTIONS.map((o) => o.key);
+
+function getInvSortValue(inv: Invoice, field: InvSortField): string | number | null | undefined {
+  switch (field) {
+    case 'invoice_number': return inv.invoiceNumber ?? inv.id;
+    case 'status': return inv.status?.name;
+    case 'total_amount': { const n = Number(inv.totalAmount); return Number.isFinite(n) ? n : null; }
+    case 'issue_date': return inv.issueDate;
+    case 'created_at': return inv.createdAt;
+    case 'updated_at': return inv.updatedAt;
+    default: return null;
+  }
+}
 
 export interface InvoicesListClientProps {
   initialData: PaginatedResponse<Invoice>;
@@ -51,17 +76,12 @@ export function InvoicesListClient({
   const [data] = useState(initialData);
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [debouncedSearch, setDebouncedSearch] = useState(search);
-  const [sort, setSort] = useState(() => {
-    const parsed = parseSort({
-      sortParam: searchParams.get('sort'),
-      allowedFields: ALLOWED_SORT_FIELDS,
-      defaultField: 'updated_at',
-    });
-    return buildSortString(parsed.field, parsed.order);
+  const [tab, setTab] = useState<ListTab>(() => parseTab(searchParams.get('tab')));
+  const [columnSort, setColumnSort] = useState<{ field: InvSortField; order: 'asc' | 'desc' }>({
+    field: 'updated_at',
+    order: 'desc',
   });
-  const [statusFilter, setStatusFilter] = useState<Set<string>>(() =>
-    parseStatusIdsFromSearchParam(searchParams.get('status')),
-  );
+  const [statusNameFilter, setStatusNameFilter] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -69,53 +89,56 @@ export function InvoicesListClient({
   }, [search]);
 
   useEffect(() => {
-    const statusKey = statusIdsKey(statusFilter);
     const params = new URLSearchParams(searchParams.toString());
     params.set('search', debouncedSearch);
-    params.set('sort', sort);
+    params.set('tab', tab);
     params.set('page', '1');
-    if (statusKey) params.set('status', statusKey);
-    else params.delete('status');
     router.replace(`/invoices?${params}`, { scroll: false });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop: router.replace updates URL -> searchParams changes -> effect re-runs
-  }, [debouncedSearch, sort, statusFilter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop
+  }, [debouncedSearch, tab]);
 
-  const { field: activeSortField, order: sortOrder } = parseSort({
-    sortParam: sort,
-    allowedFields: ALLOWED_SORT_FIELDS,
-    defaultField: 'updated_at',
-  });
-
-  const handleSort = (field: string) => {
-    if (activeSortField === field) {
-      setSort(buildSortString(field, sortOrder === 'asc' ? 'desc' : 'asc'));
-    } else {
-      const defaultOrder = field === 'invoice_number' ? 'asc' : 'desc';
-      setSort(buildSortString(field, defaultOrder));
-    }
-  };
-
-  const setStatusChecked = (id: string, checked: boolean) => {
-    setStatusFilter((prev) => {
-      const next = new Set(prev);
-      if (checked) next.add(id);
-      else next.delete(id);
-      return next;
+  const handleColumnSort = (field: InvSortField) => {
+    setColumnSort((prev) => {
+      if (prev.field === field) {
+        return { field, order: prev.order === 'asc' ? 'desc' : 'asc' };
+      }
+      return { field, order: field === 'invoice_number' ? 'asc' : 'desc' };
     });
   };
 
-  const clearStatuses = () => setStatusFilter(new Set());
-  const selectAllStatuses = () =>
-    setStatusFilter(new Set(statusOptions.map((o) => o.id)));
+  const uniqueStatuses = useMemo(() => {
+    const names = new Set<string>();
+    for (const inv of data.data) {
+      const name = inv.status?.name?.trim();
+      if (name) names.add(name);
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [data.data]);
+
+  const toggleStatusName = (name: string) => {
+    setStatusNameFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
 
   const visibleRows = useMemo(() => {
     const query = debouncedSearch.trim().toLowerCase();
     let rows = data.data;
 
-    if (statusFilter.size > 0) {
+    if (tab !== 'all') {
       rows = rows.filter((inv) => {
-        const sid = inv.statusLookupId ?? inv.status?.id;
-        return sid ? statusFilter.has(sid) : false;
+        const archived = isArchivedStatus(inv.status?.name);
+        return tab === 'archived' ? archived : !archived;
+      });
+    }
+
+    if (statusNameFilter.size > 0) {
+      rows = rows.filter((inv) => {
+        const name = inv.status?.name?.trim();
+        return name ? statusNameFilter.has(name) : false;
       });
     }
 
@@ -125,35 +148,17 @@ export function InvoicesListClient({
       );
     }
 
-    const sorted = [...rows].sort((a, b) => {
-      switch (activeSortField) {
-        case 'invoice_number':
-          return compareValues(
-            a.invoiceNumber ?? '',
-            b.invoiceNumber ?? '',
-            sortOrder,
-          );
-        case 'total_amount':
-          return compareValues(
-            Number(a.totalAmount ?? 0),
-            Number(b.totalAmount ?? 0),
-            sortOrder,
-          );
-        case 'created_at':
-          return compareDates(a.createdAt, b.createdAt, sortOrder);
-        case 'updated_at':
-        default:
-          return compareDates(a.updatedAt, b.updatedAt, sortOrder);
-      }
+    const isDate = columnSort.field === 'issue_date' || columnSort.field === 'created_at' || columnSort.field === 'updated_at';
+    return [...rows].sort((a, b) => {
+      const aVal = getInvSortValue(a, columnSort.field);
+      const bVal = getInvSortValue(b, columnSort.field);
+      return isDate
+        ? compareDates(aVal as string, bVal as string, columnSort.order)
+        : compareValues(aVal, bVal, columnSort.order);
     });
+  }, [data.data, tab, statusNameFilter, debouncedSearch, columnSort]);
 
-    return sorted;
-  }, [data.data, debouncedSearch, statusFilter, activeSortField, sortOrder]);
-
-  const breakdown = computeStatusBreakdown(
-    visibleRows,
-    (i) => i.status?.name,
-  );
+  const breakdown = computeStatusBreakdown(visibleRows, (i) => i.status?.name);
   const totalValue = useMemo(() => {
     const sum = visibleRows.reduce((acc, inv) => {
       const n = Number(inv.totalAmount);
@@ -176,7 +181,6 @@ export function InvoicesListClient({
           total={data.total}
           showing={visibleRows.length}
           search={debouncedSearch}
-          statusSelectedCount={statusFilter.size}
           breakdown={breakdown}
           stats={totalValue ? [{ label: 'Total value', value: totalValue }] : undefined}
           accent="teal"
@@ -184,25 +188,45 @@ export function InvoicesListClient({
       </SetPageHeader>
       <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
-          <SortTabs
-            options={SORT_OPTIONS}
-            activeField={activeSortField}
-            sortOrder={sortOrder}
-            onSort={handleSort}
-          />
+          <Tabs value={tab} onValueChange={(val) => setTab(val as ListTab)}>
+            <TabsList>
+              <TabsTrigger value="active">Active</TabsTrigger>
+              <TabsTrigger value="archived">Archived</TabsTrigger>
+              <TabsTrigger value="all">All</TabsTrigger>
+            </TabsList>
+          </Tabs>
 
-          <SearchInput
-            placeholder="Search invoices by invoice #..."
-            value={search}
-            onChange={setSearch}
-          />
+          <div className="relative flex-1">
+            <Search
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+              size={16}
+            />
+            <Input
+              placeholder="Search invoices by invoice #..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-10 w-full pl-9 pr-9"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
 
-          <StatusFilterMenu
-            options={statusOptions}
-            selected={statusFilter}
-            onSelectionChange={setStatusChecked}
-            onClearAll={clearStatuses}
-            onSelectAll={selectAllStatuses}
+          <ValueFilterMenu
+            options={uniqueStatuses}
+            selected={statusNameFilter}
+            onToggle={toggleStatusName}
+            onClearAll={() => setStatusNameFilter(new Set())}
+            onSelectAll={() => setStatusNameFilter(new Set(uniqueStatuses))}
+            emptyLabel="All statuses"
+            menuTitle="Filter by status"
+            itemNoun={{ singular: 'status', plural: 'statuses' }}
           />
 
           {headerAction}
@@ -218,12 +242,16 @@ export function InvoicesListClient({
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50">
                 <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                  <th scope="col" className="px-4 py-3">Invoice #</th>
-                  <th scope="col" className="px-4 py-3">Status</th>
-                  <th scope="col" className="px-4 py-3">Total</th>
-                  <th scope="col" className="px-4 py-3">Issue Date</th>
-                  <th scope="col" className="px-4 py-3">Created</th>
-                  <th scope="col" className="px-4 py-3">Updated</th>
+                  {TABLE_COLUMNS.map((col) => (
+                    <SortableColumnHeader
+                      key={col.key}
+                      columnKey={col.key}
+                      label={col.label}
+                      activeField={columnSort.field}
+                      sortOrder={columnSort.order}
+                      onSort={handleColumnSort}
+                    />
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -263,7 +291,14 @@ export function InvoicesListClient({
             </table>
           </div>
         ) : (
-          <ListEmptyState label="No invoices found." />
+          <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50">
+            <div className="flex flex-col items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-100">
+                <Search size={24} className="text-slate-400" />
+              </div>
+              <p className="text-sm text-slate-400">No invoices found.</p>
+            </div>
+          </div>
         )}
       </div>
     </div>

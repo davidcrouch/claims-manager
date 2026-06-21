@@ -51,7 +51,13 @@ import type {
 } from '@/types/api';
 import { QuoteLineItemsTab } from '@/components/quotes/QuoteLineItemsTab';
 import { JournalList } from '@/components/journals/JournalList';
-import { useApiClient } from '@/hooks/useApiClient';
+import {
+  fetchJournalsByEntityAction,
+  fetchJournalsListAction,
+  createJournalAction,
+  linkJournalAction,
+  unlinkJournalAction,
+} from '@/app/(app)/journals/actions';
 import { publishQuoteAction } from '@/app/(app)/mutations';
 
 // ---------------------------------------------------------------------------
@@ -539,7 +545,6 @@ type QuoteTab =
 export function QuoteDetail({ quote }: { quote: Quote }) {
   const [tab, setTab] = useState<QuoteTab>('overview');
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const journalApi = useApiClient();
 
   const tabs: Array<{ id: QuoteTab; label: string; icon: typeof Calendar }> = [
     { id: 'overview', label: 'Overview', icon: FileSignature },
@@ -592,7 +597,15 @@ export function QuoteDetail({ quote }: { quote: Quote }) {
         {tab === 'timeline' && <TimelineTab quote={quote} />}
         {tab === 'attachments' && <AttachmentsTab />}
         {tab === 'journals' && (
-          <JournalList parentType="quote" parentId={quote.id} api={journalApi} />
+          <JournalList
+            entityType="Quote"
+            entityId={quote.id}
+            fetchJournals={() => fetchJournalsByEntityAction('Quote', quote.id)}
+            fetchAllJournals={() => fetchJournalsListAction()}
+            createJournal={(data) => createJournalAction(data)}
+            linkJournal={(jId) => linkJournalAction(jId, 'Quote', quote.id)}
+            unlinkJournal={(jId) => unlinkJournalAction(jId, 'Quote', quote.id)}
+          />
         )}
       </div>
     </div>

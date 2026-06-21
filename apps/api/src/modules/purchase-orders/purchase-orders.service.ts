@@ -1,4 +1,4 @@
-import { Injectable, Optional, BadRequestException } from '@nestjs/common';
+import { Injectable, Optional, BadRequestException, Logger } from '@nestjs/common';
 import { PurchaseOrdersRepository } from '../../database/repositories';
 import { TenantContext } from '../../tenant/tenant-context';
 import { CrunchworkService } from '../../crunchwork/crunchwork.service';
@@ -6,6 +6,8 @@ import { ConnectionResolverService } from '../external/connection-resolver.servi
 
 @Injectable()
 export class PurchaseOrdersService {
+  private readonly logger = new Logger(PurchaseOrdersService.name);
+
   constructor(
     private readonly purchaseOrdersRepo: PurchaseOrdersRepository,
     private readonly tenantContext: TenantContext,
@@ -46,6 +48,12 @@ export class PurchaseOrdersService {
   async findByJob(params: { jobId: string }) {
     const tenantId = this.tenantContext.getTenantId();
     return this.purchaseOrdersRepo.findByJob({ jobId: params.jobId, tenantId });
+  }
+
+  async create(params: { body: Record<string, unknown> }) {
+    const tenantId = this.tenantContext.getTenantId();
+    this.logger.log(`api:PurchaseOrdersService.create tenantId=${tenantId}`);
+    return this.purchaseOrdersRepo.create({ data: { ...params.body, tenantId } as any });
   }
 
   async update(params: { id: string; body: Record<string, unknown> }) {

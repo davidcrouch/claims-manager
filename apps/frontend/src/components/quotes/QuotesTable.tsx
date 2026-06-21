@@ -1,10 +1,31 @@
 'use client';
 
-import Link from 'next/link';
 import { Trash2 } from 'lucide-react';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { formatDate } from '@/components/shared/list-filters';
+import { formatDate, SortableColumnHeader } from '@/components/shared/list-filters';
 import type { Quote } from '@/types/api';
+
+type Dict = Record<string, unknown>;
+
+export function getEstimateTypeName(quote: Quote): string {
+  if (quote.quoteType?.name) return quote.quoteType.name;
+  const approval = (quote.approvalInfo as Dict | undefined) ?? {};
+  if (typeof approval.quoteTypeName === 'string' && approval.quoteTypeName) {
+    return approval.quoteTypeName;
+  }
+  const api = (quote.apiPayload as Dict | undefined) ?? {};
+  const apiQuoteType =
+    (api.quoteType as Dict | undefined) ??
+    (api.quoteTypeId as Dict | undefined) ??
+    {};
+  if (typeof apiQuoteType.name === 'string' && apiQuoteType.name) {
+    return apiQuoteType.name;
+  }
+  const custom = (quote.customData as Dict | undefined) ?? {};
+  if (typeof custom.quoteType === 'string' && custom.quoteType) {
+    return custom.quoteType;
+  }
+  return '';
+}
 
 function formatAmount(value?: string | null): string {
   if (!value) return '';
@@ -17,12 +38,36 @@ function formatAmount(value?: string | null): string {
   });
 }
 
+export type QuoteSortField =
+  | 'quote_number'
+  | 'status'
+  | 'estimate_type'
+  | 'reference'
+  | 'total_amount'
+  | 'quote_date'
+  | 'updated_at';
+
+interface ColDef { key: QuoteSortField; label: string }
+
+const TABLE_COLUMNS: ColDef[] = [
+  { key: 'quote_number', label: 'Estimate #' },
+  { key: 'reference', label: 'Reference' },
+  { key: 'status', label: 'Status' },
+  { key: 'estimate_type', label: 'Estimate Type' },
+  { key: 'total_amount', label: 'Total' },
+  { key: 'quote_date', label: 'Estimate Date' },
+  { key: 'updated_at', label: 'Updated' },
+];
+
 export interface QuotesTableProps {
   quotes: Quote[];
   onRowClick?: (quote: Quote) => void;
   onDelete?: (quoteId: string) => void;
   deletingId?: string | null;
   showActions?: boolean;
+  sortField?: QuoteSortField;
+  sortOrder?: 'asc' | 'desc';
+  onSort?: (field: QuoteSortField) => void;
 }
 
 export function QuotesTable({
@@ -31,6 +76,9 @@ export function QuotesTable({
   onDelete,
   deletingId,
   showActions = false,
+  sortField,
+  sortOrder = 'desc',
+  onSort,
 }: QuotesTableProps) {
   if (quotes.length === 0) return null;
 
@@ -39,12 +87,22 @@ export function QuotesTable({
       <table className="min-w-full divide-y divide-slate-200 text-sm">
         <thead className="bg-slate-50">
           <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-            <th scope="col" className="px-4 py-3">Estimate #</th>
-            <th scope="col" className="px-4 py-3">Status</th>
-            <th scope="col" className="px-4 py-3">Reference</th>
-            <th scope="col" className="px-4 py-3">Total</th>
-            <th scope="col" className="px-4 py-3">Estimate Date</th>
-            <th scope="col" className="px-4 py-3">Updated</th>
+            {onSort
+              ? TABLE_COLUMNS.map((col) => (
+                  <SortableColumnHeader
+                    key={col.key}
+                    columnKey={col.key}
+                    label={col.label}
+                    activeField={sortField ?? null}
+                    sortOrder={sortOrder}
+                    onSort={onSort}
+                  />
+                ))
+              : TABLE_COLUMNS.map((col) => (
+                  <th key={col.key} scope="col" className="px-4 py-3">
+                    {col.label}
+                  </th>
+                ))}
             {showActions && (
               <th scope="col" className="px-4 py-3 w-10">
                 <span className="sr-only">Actions</span>
@@ -63,32 +121,18 @@ export function QuotesTable({
                 className="cursor-pointer transition-colors hover:bg-slate-50"
               >
                 <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
-                  {onRowClick ? (
-                    <button
-                      type="button"
-                      className="text-primary hover:underline"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onRowClick(quote);
-                      }}
-                    >
-                      {num}
-                    </button>
-                  ) : (
-                    <Link
-                      href={`/quotes/${quote.id}`}
-                      className="text-primary hover:underline"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {num}
-                    </Link>
-                  )}
-                </td>
-                <td className="whitespace-nowrap px-4 py-3">
-                  <StatusBadge status={statusName} />
+                  {num}
                 </td>
                 <td className="px-4 py-3 text-slate-600">
                   {quote.name ?? ''}
+                </td>
+                <td className="whitespace-nowrap px-4 py-3">
+                  <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                    {statusName}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-slate-600">
+                  {getEstimateTypeName(quote)}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                   {formatAmount(quote.totalAmount)}

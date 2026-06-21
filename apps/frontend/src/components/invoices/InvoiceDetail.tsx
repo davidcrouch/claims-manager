@@ -26,7 +26,13 @@ import {
 } from '@/components/shared/detail';
 import type { Invoice } from '@/types/api';
 import { JournalList } from '@/components/journals/JournalList';
-import { useApiClient } from '@/hooks/useApiClient';
+import {
+  fetchJournalsByEntityAction,
+  fetchJournalsListAction,
+  createJournalAction,
+  linkJournalAction,
+  unlinkJournalAction,
+} from '@/app/(app)/journals/actions';
 
 // ---------- header ----------------------------------------------------------
 
@@ -305,7 +311,6 @@ type InvTab =
 
 export function InvoiceDetail({ invoice }: { invoice: Invoice }) {
   const [tab, setTab] = useState<InvTab>('overview');
-  const journalApi = useApiClient();
 
   const tabs: Array<{ id: InvTab; label: string; icon: typeof Calendar }> = [
     { id: 'overview', label: 'Overview', icon: FileSignature },
@@ -347,7 +352,15 @@ export function InvoiceDetail({ invoice }: { invoice: Invoice }) {
         {tab === 'communications' && <CommunicationsTab />}
         {tab === 'attachments' && <AttachmentsTab />}
         {tab === 'journals' && (
-          <JournalList parentType="invoice" parentId={invoice.id} api={journalApi} />
+          <JournalList
+            entityType="Invoice"
+            entityId={invoice.id}
+            fetchJournals={() => fetchJournalsByEntityAction('Invoice', invoice.id)}
+            fetchAllJournals={() => fetchJournalsListAction()}
+            createJournal={(data) => createJournalAction(data)}
+            linkJournal={(jId) => linkJournalAction(jId, 'Invoice', invoice.id)}
+            unlinkJournal={(jId) => unlinkJournalAction(jId, 'Invoice', invoice.id)}
+          />
         )}
         {tab === 'timeline' && <TimelineTab invoice={invoice} />}
       </div>

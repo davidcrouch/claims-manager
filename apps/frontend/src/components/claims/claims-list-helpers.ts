@@ -13,12 +13,19 @@ export function normalizeSortParam(param: string | null): string {
   return param && ALLOWED_SORT.has(param) ? param : DEFAULT_CLAIMS_SORT;
 }
 
+export const ARCHIVED_STATUS_NAMES = new Set([
+  'archived',
+  'closed',
+]);
+
 export function buildClaimsListFetchKeyFromPageParams(params: {
   search?: string;
   sort?: string;
   status?: string;
+  tab?: string;
 }): string {
   const sort = normalizeSortParam(params.sort ?? null);
+  const tab = params.tab ?? 'active';
   const statusSorted = params.status
     ? params.status
         .split(',')
@@ -27,5 +34,5 @@ export function buildClaimsListFetchKeyFromPageParams(params: {
         .sort()
         .join(',')
     : '';
-  return `${params.search ?? ''}|${sort}|${statusSorted}`;
+  return `${params.search ?? ''}|${sort}|${tab}|${statusSorted}`;
 }

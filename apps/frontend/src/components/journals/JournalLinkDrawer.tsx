@@ -12,14 +12,13 @@ import {
   SheetDescription,
 } from '@/components/ui/sheet';
 import type { Journal } from '@/types/api';
-import type { ApiClient } from '@/lib/api-client';
 
 export interface JournalLinkDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   entityType: string;
-  entityId: string;
-  api: ApiClient;
+  fetchAllJournals: () => Promise<Journal[]>;
+  linkJournal: (journalId: string) => Promise<boolean>;
   onLinked?: () => void;
 }
 
@@ -27,8 +26,8 @@ export function JournalLinkDrawer({
   open,
   onOpenChange,
   entityType,
-  entityId,
-  api,
+  fetchAllJournals,
+  linkJournal,
   onLinked,
 }: JournalLinkDrawerProps) {
   const [search, setSearch] = useState('');
@@ -39,12 +38,11 @@ export function JournalLinkDrawer({
   useEffect(() => {
     if (!open) return;
     setLoading(true);
-    api
-      .getJournals({ limit: 100, status: 'active' })
-      .then((res) => setAllJournals(res.data))
+    fetchAllJournals()
+      .then((data) => setAllJournals(data))
       .catch((err) => console.error('JournalLinkDrawer.load:', err))
       .finally(() => setLoading(false));
-  }, [open, api]);
+  }, [open, fetchAllJournals]);
 
   const filtered = allJournals.filter(
     (j) =>
@@ -55,7 +53,7 @@ export function JournalLinkDrawer({
   const handleLink = async (journalId: string) => {
     setLinkingId(journalId);
     try {
-      await api.linkJournalToEntity(journalId, entityType, entityId);
+      await linkJournal(journalId);
       onLinked?.();
     } catch (err) {
       console.error('JournalLinkDrawer.handleLink:', err);

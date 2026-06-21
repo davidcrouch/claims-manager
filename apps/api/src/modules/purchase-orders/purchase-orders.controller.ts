@@ -30,6 +30,11 @@ export class PurchaseOrdersController {
     return this.purchaseOrdersService.findByJob({ jobId });
   }
 
+  @Post()
+  async create(@Body() body: Record<string, unknown>) {
+    return this.purchaseOrdersService.create({ body });
+  }
+
   @Get(':id')
   async findOne(@Param('id') id: string) {
     return this.purchaseOrdersService.findOne({ id });

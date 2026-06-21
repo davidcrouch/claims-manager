@@ -17,6 +17,10 @@ import { JobAppointmentsTab } from './tabs/JobAppointmentsTab';
 import { JobQuotesTab } from './tabs/JobQuotesTab';
 import { JobPurchaseOrdersTab } from './tabs/JobPurchaseOrdersTab';
 import { JobInvoicesTab } from './tabs/JobInvoicesTab';
+import { JobWorkOrdersTab } from './tabs/JobWorkOrdersTab';
+import { JobRfqsTab } from './tabs/JobRfqsTab';
+import { JobProposalsTab } from './tabs/JobProposalsTab';
+import { JobBillsTab } from './tabs/JobBillsTab';
 import { JobTasksTab } from './tabs/JobTasksTab';
 import { JobMessagesTab } from './tabs/JobMessagesTab';
 import { JobReportsTab } from './tabs/JobReportsTab';
@@ -33,8 +37,12 @@ const VALID_TABS = [
   'parties',
   'appointments',
   'quotes',
+  'work-orders',
   'purchase-orders',
   'invoices',
+  'rfqs',
+  'proposals',
+  'bills',
   'tasks',
   'messages',
   'communications',
@@ -134,10 +142,16 @@ export function JobDetail({
         {activeTab === 'quotes' && (
           <JobQuotesTab jobId={job.id} claimId={claimId} />
         )}
+        {activeTab === 'work-orders' && (
+          <JobWorkOrdersTab jobId={job.id} />
+        )}
         {activeTab === 'purchase-orders' && (
           <JobPurchaseOrdersTab jobId={job.id} />
         )}
         {activeTab === 'invoices' && <JobInvoicesTab jobId={job.id} />}
+        {activeTab === 'rfqs' && <JobRfqsTab jobId={job.id} />}
+        {activeTab === 'proposals' && <JobProposalsTab jobId={job.id} />}
+        {activeTab === 'bills' && <JobBillsTab jobId={job.id} />}
         {activeTab === 'tasks' && <JobTasksTab jobId={job.id} />}
         {activeTab === 'messages' && (
           <JobMessagesTab jobId={job.id} claimId={claimId} />
