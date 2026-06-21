@@ -152,6 +152,26 @@ export class S3Service {
     return url;
   }
 
+  async getSignedUploadUrl(params: {
+    key: string;
+    contentType: string;
+    expiresIn?: number;
+  }): Promise<string> {
+    const logPrefix = 'S3Service.getSignedUploadUrl';
+    const command = new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: params.key,
+      ContentType: params.contentType,
+    });
+    const url = await getSignedUrl(this.client, command, {
+      expiresIn: params.expiresIn ?? 600,
+    });
+    this.logger.debug(
+      `${logPrefix} — bucket=${this.bucket} key=${params.key} contentType=${params.contentType} expiresIn=${params.expiresIn ?? 600}`,
+    );
+    return url;
+  }
+
   private sanitizeSegment(value: string): string {
     return (value || 'unknown')
       .toString()

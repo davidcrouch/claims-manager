@@ -25,6 +25,13 @@ export const PROVIDER_REGISTRY: ProviderRegistryEntry[] = [
     isActive: true,
     metadata: {},
   },
+  {
+    code: 'direct',
+    name: 'Direct',
+    description: 'Local operations without an external provider',
+    isActive: true,
+    metadata: { isInternal: true },
+  },
 ];
 
 export function findProviderByCode(

@@ -2,7 +2,7 @@
 
 import { getSession, getAccessToken } from '@/lib/auth';
 import { createApiClient } from '@/lib/api-client';
-import type { Quote, Invoice, Report, Task } from '@/types/api';
+import type { Quote, Invoice, Report, Task, Contact } from '@/types/api';
 
 async function getApi() {
   const session = await getSession();
@@ -81,5 +81,45 @@ export async function createAppointmentAction(body: Record<string, unknown>): Pr
   } catch (err) {
     console.error('[createAppointmentAction]', err);
     return { success: false, error: err instanceof Error ? err.message : 'Failed to create appointment' };
+  }
+}
+
+export async function updateAppointmentAction(
+  id: string,
+  body: Record<string, unknown>,
+): Promise<{ success: boolean; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    await api.updateAppointment(id, body);
+    return { success: true };
+  } catch (err) {
+    console.error('[updateAppointmentAction]', err);
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to update appointment' };
+  }
+}
+
+export async function searchContactsAction(
+  query: string,
+): Promise<{ id: string; type: 'USER' | 'CONTACT'; name: string; email?: string }[]> {
+  const api = await getApi();
+  if (!api) return [];
+  try {
+    return await api.searchContacts(query, 'CONTACT');
+  } catch (err) {
+    console.error('[searchContactsAction]', err);
+    return [];
+  }
+}
+
+export async function createContactAction(body: Record<string, unknown>): Promise<{ success: boolean; contact?: Contact; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const contact = await api.createContact(body);
+    return { success: true, contact };
+  } catch (err) {
+    console.error('[createContactAction]', err);
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to create contact' };
   }
 }

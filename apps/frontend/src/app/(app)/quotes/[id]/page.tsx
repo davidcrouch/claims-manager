@@ -14,7 +14,7 @@ export async function generateMetadata({
   if (!api) return { title: 'Estimate | EnsureOS' };
 
   const quote = await api.getQuote(id).catch(() => null);
-  const title = quote?.quoteNumber ?? quote?.externalReference ?? id;
+  const title = quote?.name ?? quote?.quoteNumber ?? quote?.externalReference ?? id;
   return { title: `${title} | EnsureOS` };
 }
 

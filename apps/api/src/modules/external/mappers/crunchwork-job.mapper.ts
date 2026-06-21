@@ -52,7 +52,7 @@ export class CrunchworkJobMapper implements EntityMapper {
         id: existingLink.internalEntityId,
         data: {
           apiPayload: payload,
-          externalReference: payload.id as string,
+          externalReference: (payload.externalReference as string) ?? (payload.id as string),
         },
         tx,
       });
@@ -102,7 +102,7 @@ export class CrunchworkJobMapper implements EntityMapper {
     const jobData: JobInsert = {
       tenantId: params.tenantId,
       claimId: nested.claimId,
-      externalReference: payload.id as string,
+      externalReference: (payload.externalReference as string) ?? (payload.id as string),
       jobTypeLookupId,
       apiPayload: payload,
       vendorId: nested.vendorId,
@@ -110,23 +110,25 @@ export class CrunchworkJobMapper implements EntityMapper {
 
     const created = await this.jobsRepo.createIfNotExists({ data: jobData, tx });
 
+    const extRef = (payload.externalReference as string) ?? (payload.id as string);
+
     let jobId: string;
     if (created) {
       jobId = created.id;
     } else {
       const raced = await this.jobsRepo.findByExternalReference({
         tenantId: params.tenantId,
-        externalReference: payload.id as string,
+        externalReference: extRef,
         tx,
       });
       if (!raced) {
         throw new Error(
           `CrunchworkJobMapper.map — insert skipped by onConflictDoNothing but no existing row found ` +
-            `by externalReference=${payload.id as string} for tenant=${params.tenantId}.`,
+            `by externalReference=${extRef} for tenant=${params.tenantId}.`,
         );
       }
       this.logger.warn(
-        `CrunchworkJobMapper.map — lost race on job insert externalReference=${payload.id as string}; updating winner id=${raced.id}`,
+        `CrunchworkJobMapper.map — lost race on job insert externalReference=${extRef}; updating winner id=${raced.id}`,
       );
       await this.jobsRepo.update({
         id: raced.id,

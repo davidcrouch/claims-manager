@@ -12,6 +12,7 @@ import {
   ClipboardList,
   MessageSquare,
   Paperclip,
+  BookOpen,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -24,6 +25,8 @@ import {
   formatCurrency,
 } from '@/components/shared/detail';
 import type { Invoice } from '@/types/api';
+import { JournalList } from '@/components/journals/JournalList';
+import { useApiClient } from '@/hooks/useApiClient';
 
 // ---------- header ----------------------------------------------------------
 
@@ -297,10 +300,12 @@ type InvTab =
   | 'activities'
   | 'communications'
   | 'attachments'
+  | 'journals'
   | 'timeline';
 
 export function InvoiceDetail({ invoice }: { invoice: Invoice }) {
   const [tab, setTab] = useState<InvTab>('overview');
+  const journalApi = useApiClient();
 
   const tabs: Array<{ id: InvTab; label: string; icon: typeof Calendar }> = [
     { id: 'overview', label: 'Overview', icon: FileSignature },
@@ -308,6 +313,7 @@ export function InvoiceDetail({ invoice }: { invoice: Invoice }) {
     { id: 'activities', label: 'Activities', icon: ClipboardList },
     { id: 'communications', label: 'Communications', icon: MessageSquare },
     { id: 'attachments', label: 'Attachments', icon: Paperclip },
+    { id: 'journals', label: 'Journals', icon: BookOpen },
     { id: 'timeline', label: 'Timeline', icon: Calendar },
   ];
 
@@ -340,6 +346,9 @@ export function InvoiceDetail({ invoice }: { invoice: Invoice }) {
         {tab === 'activities' && <ActivitiesTab />}
         {tab === 'communications' && <CommunicationsTab />}
         {tab === 'attachments' && <AttachmentsTab />}
+        {tab === 'journals' && (
+          <JournalList parentType="invoice" parentId={invoice.id} api={journalApi} />
+        )}
         {tab === 'timeline' && <TimelineTab invoice={invoice} />}
       </div>
     </div>

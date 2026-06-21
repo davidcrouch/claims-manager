@@ -1,5 +1,5 @@
 import { Injectable, Optional, BadRequestException } from '@nestjs/common';
-import { ClaimsRepository, type ClaimInsert } from '../../database/repositories';
+import { ClaimsRepository, type ClaimInsert, type ClaimViewRow } from '../../database/repositories';
 import { TenantContext } from '../../tenant/tenant-context';
 import { CrunchworkService } from '../../crunchwork/crunchwork.service';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
@@ -30,7 +30,7 @@ export class ClaimsService {
     status?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
-    return this.claimsRepo.findAll({
+    const result = await this.claimsRepo.findAll({
       tenantId,
       page: params.page,
       limit: params.limit,
@@ -38,11 +38,26 @@ export class ClaimsService {
       sort: params.sort,
       status: params.status,
     });
+    return { data: result.data.map(this.shapeClaimResponse), total: result.total };
   }
 
   async findOne(params: { id: string }) {
     const tenantId = this.tenantContext.getTenantId();
-    return this.claimsRepo.findOne({ id: params.id, tenantId });
+    const claim = await this.claimsRepo.findOne({ id: params.id, tenantId });
+    return claim ? this.shapeClaimResponse(claim) : null;
+  }
+
+  private shapeClaimResponse(row: ClaimViewRow) {
+    const { statusName, statusExternalReference, accountName, accountExternalReference, ...rest } = row;
+    return {
+      ...rest,
+      status: row.statusLookupId
+        ? { id: row.statusLookupId, name: statusName ?? undefined, externalReference: statusExternalReference ?? undefined }
+        : undefined,
+      account: row.accountLookupId
+        ? { id: row.accountLookupId, name: accountName ?? undefined, externalReference: accountExternalReference ?? undefined }
+        : undefined,
+    };
   }
 
   async create(params: { body: Record<string, unknown> }) {

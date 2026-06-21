@@ -38,7 +38,7 @@ export class JobTransformer implements EntityTransformer<JobInsert> {
 
     const entity: Partial<JobInsert> = {
       tenantId,
-      externalReference: asString(payload.id),
+      externalReference: asString(payload.externalReference) ?? asString(payload.id),
       requestDate: asDateString(payload.requestDate),
       collectExcess: asBool(payload.collectExcess),
       excess: asString(payload.excess),
@@ -108,6 +108,7 @@ export class JobTransformer implements EntityTransformer<JobInsert> {
           domain: 'job_status',
           externalReference: extRef,
           name: asString((payload.status as Record<string, unknown>).name),
+          autoCreate: true,
         });
       }
     }

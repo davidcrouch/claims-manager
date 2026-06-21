@@ -20,6 +20,7 @@ import {
   MessageSquare,
   Paperclip,
   Send,
+  BookOpen,
 } from 'lucide-react';
 import {
   Card,
@@ -49,6 +50,8 @@ import type {
   QuoteApprovalInfo,
 } from '@/types/api';
 import { QuoteLineItemsTab } from '@/components/quotes/QuoteLineItemsTab';
+import { JournalList } from '@/components/journals/JournalList';
+import { useApiClient } from '@/hooks/useApiClient';
 import { publishQuoteAction } from '@/app/(app)/mutations';
 
 // ---------------------------------------------------------------------------
@@ -162,8 +165,8 @@ export function QuotePageHeader({ quote }: { quote: Quote }) {
   const [publishing, setPublishing] = useState(false);
   const approval = getApprovalInfo(quote);
   const title =
-    quote.quoteNumber ??
     quote.name ??
+    quote.quoteNumber ??
     quote.externalReference ??
     quote.id;
   const statusName =
@@ -226,7 +229,7 @@ export function QuotePageHeader({ quote }: { quote: Quote }) {
             disabled={publishing}
           >
             <Send className="mr-1.5 h-3.5 w-3.5" />
-            {publishing ? 'Publishing...' : 'Publish to Crunchwork'}
+            {publishing ? 'Publishing...' : 'Publish'}
           </Button>
         )}
         <div className="flex items-baseline gap-1">
@@ -433,9 +436,9 @@ function PartiesTab({ quote }: { quote: Quote }) {
   return (
     <div className="grid gap-4 md:grid-cols-3">
       <PartyCard
-        title="Estimate To (recipient)"
-        party={to}
-        icon={<Users className="h-4 w-4 text-muted-foreground" />}
+        title="Estimate From (vendor)"
+        party={from}
+        icon={<Building2 className="h-4 w-4 text-muted-foreground" />}
       />
       <PartyCard
         title="Estimate For (customer)"
@@ -443,9 +446,9 @@ function PartiesTab({ quote }: { quote: Quote }) {
         icon={<Users className="h-4 w-4 text-muted-foreground" />}
       />
       <PartyCard
-        title="Estimate From (vendor)"
-        party={from}
-        icon={<Building2 className="h-4 w-4 text-muted-foreground" />}
+        title="Estimate To (recipient)"
+        party={to}
+        icon={<Users className="h-4 w-4 text-muted-foreground" />}
       />
     </div>
   );
@@ -530,20 +533,23 @@ type QuoteTab =
   | 'activities'
   | 'communications'
   | 'timeline'
-  | 'attachments';
+  | 'attachments'
+  | 'journals';
 
 export function QuoteDetail({ quote }: { quote: Quote }) {
   const [tab, setTab] = useState<QuoteTab>('overview');
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const journalApi = useApiClient();
 
   const tabs: Array<{ id: QuoteTab; label: string; icon: typeof Calendar }> = [
     { id: 'overview', label: 'Overview', icon: FileSignature },
-    { id: 'line-items', label: 'Line Items', icon: Layers },
+    { id: 'line-items', label: 'Take Off', icon: Layers },
     { id: 'parties', label: 'Parties', icon: Users },
     { id: 'activities', label: 'Activities', icon: ClipboardList },
     { id: 'communications', label: 'Communications', icon: MessageSquare },
-    { id: 'timeline', label: 'Timeline', icon: Calendar },
     { id: 'attachments', label: 'Attachments', icon: Paperclip },
+    { id: 'journals', label: 'Journals', icon: BookOpen },
+    { id: 'timeline', label: 'Timeline', icon: Calendar },
   ];
 
   return (
@@ -585,6 +591,9 @@ export function QuoteDetail({ quote }: { quote: Quote }) {
         {tab === 'communications' && <CommunicationsTab />}
         {tab === 'timeline' && <TimelineTab quote={quote} />}
         {tab === 'attachments' && <AttachmentsTab />}
+        {tab === 'journals' && (
+          <JournalList parentType="quote" parentId={quote.id} api={journalApi} />
+        )}
       </div>
     </div>
   );

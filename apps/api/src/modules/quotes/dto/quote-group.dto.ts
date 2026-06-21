@@ -41,6 +41,10 @@ export class LineItemUpdateDto {
 
   @IsOptional()
   @IsString()
+  component?: string;
+
+  @IsOptional()
+  @IsString()
   description?: string;
 
   @IsOptional()
@@ -63,6 +67,18 @@ export class LineItemUpdateDto {
 export class ComboUpdateDto {
   @IsUUID()
   id!: string;
+
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  component?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
 
   @IsOptional()
   @IsString()

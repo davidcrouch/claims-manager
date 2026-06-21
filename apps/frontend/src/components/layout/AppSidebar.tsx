@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard,
@@ -30,6 +30,8 @@ import {
   LogOut,
   ChevronRight,
   Package,
+  BookOpen,
+  ArrowLeft,
 } from 'lucide-react';
 import { Collapsible } from '@base-ui/react/collapsible';
 import {
@@ -67,12 +69,66 @@ interface NavItem {
   title: string;
   href: string;
   icon: LucideIcon;
+  tab?: string;
 }
 
 interface NavGroup {
   label: string | null;
   items: NavItem[];
   defaultOpen?: boolean;
+}
+
+interface DetailContext {
+  type: 'job';
+  id: string;
+  basePath: string;
+}
+
+function parseDetailContext(pathname: string): DetailContext | null {
+  const jobMatch = pathname.match(/^\/jobs\/([^/?]+)/);
+  if (jobMatch) {
+    return { type: 'job', id: jobMatch[1], basePath: `/jobs/${jobMatch[1]}` };
+  }
+  return null;
+}
+
+const DETAIL_HIDDEN_LABELS = new Set(['CUSTOMERS', 'VENDORS', 'OPERATIONS']);
+
+function getJobDetailGroups(basePath: string): NavGroup[] {
+  return [
+    {
+      label: 'Customers',
+      defaultOpen: true,
+      items: [
+        { title: 'Estimates', href: `${basePath}?tab=quotes`, icon: FileSpreadsheet, tab: 'quotes' },
+        { title: 'Work Orders', href: `${basePath}?tab=work-orders`, icon: ClipboardCheck, tab: 'work-orders' },
+        { title: 'Invoices', href: `${basePath}?tab=invoices`, icon: Receipt, tab: 'invoices' },
+      ],
+    },
+    {
+      label: 'Vendors',
+      defaultOpen: true,
+      items: [
+        { title: 'RFQs', href: `${basePath}?tab=rfqs`, icon: FileQuestion, tab: 'rfqs' },
+        { title: 'Proposals', href: `${basePath}?tab=proposals`, icon: FileInput, tab: 'proposals' },
+        { title: 'Purchase Orders', href: `${basePath}?tab=purchase-orders`, icon: ShoppingCart, tab: 'purchase-orders' },
+        { title: 'Bills', href: `${basePath}?tab=bills`, icon: ReceiptText, tab: 'bills' },
+      ],
+    },
+    {
+      label: 'Operations',
+      defaultOpen: true,
+      items: [
+        { title: 'Journals', href: `${basePath}?tab=journals`, icon: BookOpen, tab: 'journals' },
+        { title: 'Tasks', href: `${basePath}?tab=tasks`, icon: CheckSquare, tab: 'tasks' },
+        { title: 'Schedule', href: `${basePath}?tab=schedule`, icon: Calendar, tab: 'schedule' },
+        { title: 'Messages', href: `${basePath}?tab=messages`, icon: MessageSquare, tab: 'messages' },
+        { title: 'Appointments', href: `${basePath}?tab=appointments`, icon: CalendarCheck, tab: 'appointments' },
+        { title: 'Contacts', href: `${basePath}?tab=parties`, icon: Users, tab: 'parties' },
+        { title: 'Documents', href: `${basePath}?tab=attachments`, icon: FolderOpen, tab: 'attachments' },
+      ],
+    },
+  ];
 }
 
 const navGroups: NavGroup[] = [
@@ -107,6 +163,7 @@ const navGroups: NavGroup[] = [
     label: 'OPERATIONS',
     defaultOpen: true,
     items: [
+      { title: 'Journals', href: '/journals', icon: BookOpen },
       { title: 'Tasks', href: '/tasks', icon: CheckSquare },
       { title: 'Schedule', href: '/schedule', icon: Calendar },
       { title: 'Messages', href: '/messages', icon: MessageSquare },
@@ -149,8 +206,90 @@ function getDisplayName(user?: AppSidebarUser | null): string {
 
 export function AppSidebar({ user }: AppSidebarProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const initials = getInitials(user);
   const displayName = getDisplayName(user);
+
+  const detailContext = parseDetailContext(pathname);
+
+  const detailGroups = detailContext?.type === 'job'
+    ? getJobDetailGroups(detailContext.basePath)
+    : [];
+
+  const dashboardGroup = navGroups[0];
+  const middleGroups = detailContext
+    ? detailGroups
+    : navGroups.filter((g) => g.label !== null && DETAIL_HIDDEN_LABELS.has(g.label));
+  const persistentGroups = navGroups.filter(
+    (g) => g.label !== null && !DETAIL_HIDDEN_LABELS.has(g.label),
+  );
+
+  function isItemActive(item: NavItem): boolean {
+    if (item.tab !== undefined) {
+      const currentTab = searchParams.get('tab');
+      return (
+        detailContext !== null &&
+        pathname === detailContext.basePath &&
+        currentTab === item.tab
+      );
+    }
+    if (pathname === item.href) return true;
+    if (item.href === '/dashboard') return false;
+    return pathname.startsWith(item.href + '/');
+  }
+
+  function renderMenuItems(group: NavGroup) {
+    return (
+      <SidebarMenu>
+        {group.items.map((item) => (
+          <SidebarMenuItem key={item.href}>
+            <SidebarMenuButton
+              render={
+                <Link
+                  href={item.href}
+                  scroll={item.tab !== undefined ? false : undefined}
+                >
+                  <item.icon className="size-4" />
+                  <span>{item.title}</span>
+                </Link>
+              }
+              isActive={isItemActive(item)}
+              tooltip={item.title}
+            />
+          </SidebarMenuItem>
+        ))}
+      </SidebarMenu>
+    );
+  }
+
+  function renderCollapsibleGroup(group: NavGroup, indent = false) {
+    return (
+      <Collapsible.Root
+        key={group.label}
+        defaultOpen={group.defaultOpen ?? false}
+      >
+        <SidebarGroup className={indent ? 'py-1' : undefined}>
+          <Collapsible.Trigger className="group/collapsible flex w-full">
+            <SidebarGroupLabel
+              className={
+                indent
+                  ? 'flex-1 pl-4 text-emerald-400/80 group-data-[collapsible=icon]:pl-0'
+                  : 'flex-1'
+              }
+            >
+              {group.label}
+              <ChevronRight className="ml-auto size-3.5 transition-transform duration-200 group-data-panel-open/collapsible:rotate-90" />
+            </SidebarGroupLabel>
+          </Collapsible.Trigger>
+          <Collapsible.Panel className="overflow-hidden transition-all duration-200 data-ending-style:h-0 data-starting-style:h-0">
+            <SidebarGroupContent className={indent ? 'pl-5 group-data-[collapsible=icon]:pl-0' : undefined}>
+              {renderMenuItems(group)}
+            </SidebarGroupContent>
+          </Collapsible.Panel>
+        </SidebarGroup>
+      </Collapsible.Root>
+    );
+  }
 
   return (
     <Sidebar collapsible="icon">
@@ -179,60 +318,66 @@ export function AppSidebar({ user }: AppSidebarProps) {
         </Link>
       </SidebarHeader>
       <SidebarContent>
-        {navGroups.map((group) => {
-          const menuItems = (
-            <SidebarMenu>
-              {group.items.map((item) => {
-                const isActive = (() => {
-                  if (pathname === item.href) return true;
-                  if (item.href === '/dashboard') return false;
-                  return pathname.startsWith(item.href + '/');
-                })();
-                return (
-                  <SidebarMenuItem key={item.href}>
+        {/* Dashboard — always visible */}
+        <SidebarGroup key="top">
+          <SidebarGroupContent>
+            {renderMenuItems(dashboardGroup)}
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Detail mode: back link, heading, then sub-groups */}
+        {detailContext && (
+          <>
+            <SidebarGroup className="pb-0">
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <SidebarMenuItem>
                     <SidebarMenuButton
+                      size="sm"
                       render={
-                        <Link href={item.href}>
-                          <item.icon className="size-4" />
-                          <span>{item.title}</span>
+                        <Link href="/jobs">
+                          <ArrowLeft className="size-4" />
+                          <span>Back to Jobs</span>
                         </Link>
                       }
-                      isActive={isActive}
-                      tooltip={item.title}
+                      tooltip="Back to Jobs"
                     />
                   </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          );
+                </SidebarMenu>
+              </SidebarGroupContent>
+              <SidebarGroupLabel className="font-semibold tracking-wider text-sidebar-foreground/90">
+                JOB DETAIL
+              </SidebarGroupLabel>
+              <SidebarGroupContent className="pl-3 group-data-[collapsible=icon]:pl-0">
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      render={
+                        <Link href={detailContext.basePath} scroll={false}>
+                          <LayoutDashboard className="size-4" />
+                          <span>Overview</span>
+                        </Link>
+                      }
+                      isActive={
+                        pathname === detailContext.basePath &&
+                        !searchParams.get('tab')
+                      }
+                      tooltip="Overview"
+                    />
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </>
+        )}
 
-          if (!group.label) {
-            return (
-              <SidebarGroup key="top">
-                <SidebarGroupContent>{menuItems}</SidebarGroupContent>
-              </SidebarGroup>
-            );
-          }
+        {/* Middle groups: detail sub-groups or top-level groups */}
+        {middleGroups.map((group) =>
+          renderCollapsibleGroup(group, !!detailContext),
+        )}
 
-          return (
-            <Collapsible.Root
-              key={group.label}
-              defaultOpen={group.defaultOpen ?? false}
-            >
-              <SidebarGroup>
-                <Collapsible.Trigger className="group/collapsible flex w-full">
-                  <SidebarGroupLabel className="flex-1">
-                    {group.label}
-                    <ChevronRight className="ml-auto size-3.5 transition-transform duration-200 group-data-panel-open/collapsible:rotate-90" />
-                  </SidebarGroupLabel>
-                </Collapsible.Trigger>
-                <Collapsible.Panel className="overflow-hidden transition-all duration-200 data-ending-style:h-0 data-starting-style:h-0">
-                  <SidebarGroupContent>{menuItems}</SidebarGroupContent>
-                </Collapsible.Panel>
-              </SidebarGroup>
-            </Collapsible.Root>
-          );
-        })}
+        {/* Finance, Admin — always visible */}
+        {persistentGroups.map((group) => renderCollapsibleGroup(group))}
       </SidebarContent>
       <SidebarFooter className="pb-6">
         <SidebarMenu>

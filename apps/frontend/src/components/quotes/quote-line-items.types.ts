@@ -7,6 +7,7 @@ export interface ApiLookup {
 export interface ApiItem {
   id?: string;
   name?: string;
+  component?: string;
   description?: string;
   type?: string;
   category?: string;
@@ -36,6 +37,7 @@ export interface ApiItem {
 export interface ApiCombo {
   id?: string;
   name?: string;
+  component?: string;
   description?: string;
   category?: string;
   subCategory?: string | null;

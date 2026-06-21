@@ -132,6 +132,19 @@ export async function fetchJobTasksAction(
   }
 }
 
+export async function fetchJobContactsAction(
+  jobId: string,
+): Promise<{ id: string; type: 'CONTACT'; name: string; email?: string }[]> {
+  const api = await getApi();
+  if (!api) return [];
+  try {
+    return await api.getJobContacts(jobId);
+  } catch (err) {
+    console.error('[jobs/[id]/actions fetchJobContactsAction]', err);
+    return [];
+  }
+}
+
 export async function fetchJobAttachmentsAction(
   jobId: string,
 ): Promise<PhaseGatedResult<Attachment>> {

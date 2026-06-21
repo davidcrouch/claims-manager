@@ -1,17 +1,19 @@
 'use client';
 
-import { useState } from 'react';
-import { CalendarCheck, Plus } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useState, useEffect, useCallback } from 'react';
+import { CalendarCheck } from 'lucide-react';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { ListPageHeader } from '@/components/layout/ListPageHeader';
 import {
   SortTabs,
   SearchInput,
   StatusFilterMenu,
-  ListEmptyState,
   type SortOption,
 } from '@/components/shared/list-filters';
+import { AppointmentsTable } from '@/components/appointments/AppointmentsTable';
+import { AppointmentFormDrawer } from '@/components/forms/AppointmentFormDrawer';
+import { fetchAppointmentsAction } from '@/app/(app)/appointments/actions';
+import type { Appointment } from '@/types/api';
 
 const SORT_OPTIONS: SortOption[] = [
   { key: 'start_date', label: 'Start' },
@@ -21,16 +23,50 @@ const SORT_OPTIONS: SortOption[] = [
 ];
 
 const STATUS_OPTIONS = [
-  { id: 'scheduled', name: 'Scheduled' },
-  { id: 'completed', name: 'Completed' },
-  { id: 'cancelled', name: 'Cancelled' },
+  { id: 'Scheduled', name: 'Scheduled' },
+  { id: 'Completed', name: 'Completed' },
+  { id: 'Cancelled', name: 'Cancelled' },
 ];
 
 export function AppointmentsListClient() {
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [sortField, setSortField] = useState('start_date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [page, setPage] = useState(1);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
+  const limit = 50;
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const status = statusFilter.size === 1 ? [...statusFilter][0] : undefined;
+      const res = await fetchAppointmentsAction({
+        page,
+        limit,
+        search: search || undefined,
+        status,
+        sort: sortField,
+        order: sortOrder,
+      });
+      setAppointments(res.data);
+      setTotal(res.total);
+    } finally {
+      setLoading(false);
+    }
+  }, [page, search, sortField, sortOrder, statusFilter]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, sortField, sortOrder, statusFilter]);
 
   const handleSort = (field: string) => {
     if (sortField === field) {
@@ -41,13 +77,28 @@ export function AppointmentsListClient() {
     }
   };
 
+  function handleRowClick(appointment: Appointment) {
+    setEditingAppointment(appointment);
+    setDrawerOpen(true);
+  }
+
+  function handleDrawerClose(open: boolean) {
+    setDrawerOpen(open);
+    if (!open) {
+      setEditingAppointment(null);
+      load();
+    }
+  }
+
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
       <SetPageHeader>
         <ListPageHeader
           icon={CalendarCheck}
           title="Appointments"
-          total={0}
+          total={total}
           accent="slate"
         />
       </SetPageHeader>
@@ -61,7 +112,7 @@ export function AppointmentsListClient() {
             onSort={handleSort}
           />
           <SearchInput
-            placeholder="Search appointments by title, entity, or location..."
+            placeholder="Search appointments by title..."
             value={search}
             onChange={setSearch}
           />
@@ -79,36 +130,51 @@ export function AppointmentsListClient() {
             onClearAll={() => setStatusFilter(new Set())}
             onSelectAll={() => setStatusFilter(new Set(STATUS_OPTIONS.map((o) => o.id)))}
           />
-          <Button size="sm" className="shrink-0" disabled title="Create from a Job detail page">
-            <Plus className="mr-1 h-4 w-4" />
-            Create Appointment
-          </Button>
         </div>
       </div>
 
       <div className="flex-1 px-6 pb-6" style={{ minHeight: 0, overflow: 'auto' }}>
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50">
-              <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                <th scope="col" className="px-4 py-3">Start</th>
-                <th scope="col" className="px-4 py-3">Duration</th>
-                <th scope="col" className="px-4 py-3">Title</th>
-                <th scope="col" className="px-4 py-3">Entity</th>
-                <th scope="col" className="px-4 py-3">Location</th>
-                <th scope="col" className="px-4 py-3">Address</th>
-                <th scope="col" className="px-4 py-3">Attendees</th>
-                <th scope="col" className="px-4 py-3">Status</th>
-                <th scope="col" className="px-4 py-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {/* Data rows will render here once the appointments API is connected */}
-            </tbody>
-          </table>
-        </div>
-        <ListEmptyState label="No appointments yet. Appointments will appear here once the appointments API is connected." />
+        <AppointmentsTable
+          appointments={appointments}
+          loading={loading}
+          onRowClick={handleRowClick}
+        />
+
+        {!loading && totalPages > 1 && (
+          <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
+            <span>
+              Page {page} of {totalPages} ({total} total)
+            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="rounded border px-3 py-1 hover:bg-muted disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+                className="rounded border px-3 py-1 hover:bg-muted disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+
+      {editingAppointment && (
+        <AppointmentFormDrawer
+          open={drawerOpen}
+          onOpenChange={handleDrawerClose}
+          jobId={editingAppointment.jobId}
+          appointment={editingAppointment}
+        />
+      )}
     </div>
   );
 }

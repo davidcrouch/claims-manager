@@ -495,6 +495,21 @@ export interface Vendor {
   updatedAt?: string;
 }
 
+export interface Contact {
+  id: string;
+  tenantId: string;
+  externalReference?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+  mobilePhone?: string | null;
+  homePhone?: string | null;
+  workPhone?: string | null;
+  notes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface AppointmentAttendee {
   id?: string;
   appointmentId?: string;
@@ -746,4 +761,80 @@ export interface CatalogItem {
   isActive: boolean;
   externalReference?: string | null;
   components?: unknown[];
+}
+
+// Journals
+export interface JournalEntityLink {
+  id: string;
+  tenantId: string;
+  journalId: string;
+  entityType: string;
+  entityId: string;
+  createdAt: string;
+}
+
+export interface Journal {
+  id: string;
+  tenantId: string;
+  name: string;
+  description: string | null;
+  status: string;
+  address: Record<string, unknown>;
+  addressPostcode: string | null;
+  addressSuburb: string | null;
+  addressState: string | null;
+  addressCountry: string | null;
+  latitude: string | null;
+  longitude: string | null;
+  thumbnailUrl: string | null;
+  thumbnailStorageKey: string | null;
+  metadata: Record<string, unknown>;
+  createdByUserId: string | null;
+  updatedByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+  pageCount?: number;
+  entityLinks?: JournalEntityLink[];
+}
+
+export interface JournalPageAttachment {
+  id: string;
+  tenantId: string;
+  journalPageId: string;
+  fileName: string;
+  mimeType: string;
+  fileSize: number | null;
+  storageProvider: string;
+  storageKey: string;
+  fileUrl: string | null;
+  caption: string | null;
+  sortIndex: number;
+  width: number | null;
+  height: number | null;
+  durationSeconds: string | null;
+  thumbnailStorageKey: string | null;
+  metadata: Record<string, unknown>;
+  createdByUserId: string | null;
+  createdAt: string;
+}
+
+export interface JournalPage {
+  id: string;
+  tenantId: string;
+  journalId: string;
+  body: string | null;
+  bodyFormat: string;
+  latitude: string | null;
+  longitude: string | null;
+  locationAccuracy: string | null;
+  locationLabel: string | null;
+  capturedAt: string;
+  sortIndex: number;
+  metadata: Record<string, unknown>;
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+  attachments?: JournalPageAttachment[];
 }

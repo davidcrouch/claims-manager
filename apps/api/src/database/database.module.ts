@@ -33,6 +33,9 @@ import {
   CatalogCategoriesRepository,
   CatalogItemsRepository,
   CatalogAssemblyComponentsRepository,
+  JournalsRepository,
+  JournalPagesRepository,
+  JournalPageAttachmentsRepository,
 } from './repositories';
 
 const repositories = [
@@ -68,6 +71,9 @@ const repositories = [
   CatalogCategoriesRepository,
   CatalogItemsRepository,
   CatalogAssemblyComponentsRepository,
+  JournalsRepository,
+  JournalPagesRepository,
+  JournalPageAttachmentsRepository,
 ];
 
 @Global()

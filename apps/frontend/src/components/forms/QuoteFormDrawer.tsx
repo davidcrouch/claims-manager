@@ -25,12 +25,19 @@ import {
 } from '@/components/forms/BottomFormDrawer';
 import { createQuoteAction } from '@/app/(app)/mutations';
 
+function todayISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 const quoteFormSchema = z.object({
   jobId: z.string().min(1, 'Job is required'),
   claimId: z.string().min(1, 'Claim is required'),
   quoteType: z.string().optional(),
   name: z.string().optional(),
   note: z.string().optional(),
+  estimateDate: z.string().min(1, 'Estimate date is required'),
+  expiresInDays: z.string().min(1, 'Expires in days is required'),
   estimatedStart: z.string().optional(),
   estimatedCompletion: z.string().optional(),
 });
@@ -62,6 +69,8 @@ export function QuoteFormDrawer({
       quoteType: '',
       name: '',
       note: '',
+      estimateDate: todayISO(),
+      expiresInDays: '30',
       estimatedStart: '',
       estimatedCompletion: '',
     },
@@ -81,6 +90,8 @@ export function QuoteFormDrawer({
         quoteType: values.quoteType || undefined,
         name: values.name || undefined,
         note: values.note || undefined,
+        estimateDate: values.estimateDate || undefined,
+        expiresInDays: values.expiresInDays ? Number(values.expiresInDays) : undefined,
         estimatedStart: values.estimatedStart || undefined,
         estimatedCompletion: values.estimatedCompletion || undefined,
       });
@@ -92,6 +103,8 @@ export function QuoteFormDrawer({
           quoteType: '',
           name: '',
           note: '',
+          estimateDate: todayISO(),
+          expiresInDays: '30',
           estimatedStart: '',
           estimatedCompletion: '',
         });
@@ -125,7 +138,7 @@ export function QuoteFormDrawer({
 
           <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="quoteType">Quote Type (optional)</Label>
+              <Label htmlFor="quoteType">Type (optional)</Label>
               <Select
                 value={form.watch('quoteType')}
                 onValueChange={(v) => form.setValue('quoteType', v ?? '')}
@@ -134,9 +147,13 @@ export function QuoteFormDrawer({
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Initial">Initial</SelectItem>
+                  <SelectItem value="Validation">Validation</SelectItem>
                   <SelectItem value="Variation">Variation</SelectItem>
-                  <SelectItem value="Supplementary">Supplementary</SelectItem>
+                  <SelectItem value="Tender Quote">Tender Quote</SelectItem>
+                  <SelectItem value="Variation - PC/PS">Variation - PC/PS</SelectItem>
+                  <SelectItem value="Liability Quote">Liability Quote</SelectItem>
+                  <SelectItem value="Scope Of Work">Scope Of Work</SelectItem>
+                  <SelectItem value="Quote">Quote</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -147,6 +164,26 @@ export function QuoteFormDrawer({
                 id="name"
                 {...form.register('name')}
                 placeholder="Estimate name"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="estimateDate">Estimate Date</Label>
+              <Input
+                id="estimateDate"
+                type="date"
+                {...form.register('estimateDate')}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="expiresInDays">Expires In (days)</Label>
+              <Input
+                id="expiresInDays"
+                type="number"
+                min="1"
+                {...form.register('expiresInDays')}
+                placeholder="e.g. 30"
               />
             </div>
 

@@ -10,12 +10,21 @@ import {
   desc,
   asc,
   inArray,
+  aliasedTable,
+  getTableColumns,
 } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
-import { claims } from '../schema';
+import { claims, lookupValues } from '../schema';
 
 export type ClaimRow = typeof claims.$inferSelect;
 export type ClaimInsert = typeof claims.$inferInsert;
+
+export interface ClaimViewRow extends ClaimRow {
+  statusName: string | null;
+  statusExternalReference: string | null;
+  accountName: string | null;
+  accountExternalReference: string | null;
+}
 
 function buildOrderBy(sort?: string) {
   switch (sort) {
@@ -46,10 +55,13 @@ export class ClaimsRepository {
     search?: string;
     sort?: string;
     status?: string;
-  }): Promise<{ data: ClaimRow[]; total: number }> {
+  }): Promise<{ data: ClaimViewRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
     const skip = (page - 1) * limit;
+
+    const statusLookup = aliasedTable(lookupValues, 'status_lookup');
+    const accountLookup = aliasedTable(lookupValues, 'account_lookup');
 
     const statusIds = params.status
       ? params.status
@@ -84,8 +96,16 @@ export class ClaimsRepository {
 
     const [data, countResult] = await Promise.all([
       this.db
-        .select()
+        .select({
+          ...getTableColumns(claims),
+          statusName: statusLookup.name,
+          statusExternalReference: statusLookup.externalReference,
+          accountName: accountLookup.name,
+          accountExternalReference: accountLookup.externalReference,
+        })
         .from(claims)
+        .leftJoin(statusLookup, eq(claims.statusLookupId, statusLookup.id))
+        .leftJoin(accountLookup, eq(claims.accountLookupId, accountLookup.id))
         .where(whereClause)
         .orderBy(...orderBy)
         .limit(limit)
@@ -97,10 +117,35 @@ export class ClaimsRepository {
     ]);
 
     const total = countResult[0]?.count ?? 0;
-    return { data, total };
+    return { data: data as ClaimViewRow[], total };
   }
 
   async findOne(params: {
+    id: string;
+    tenantId: string;
+  }): Promise<ClaimViewRow | null> {
+    const statusLookup = aliasedTable(lookupValues, 'status_lookup');
+    const accountLookup = aliasedTable(lookupValues, 'account_lookup');
+
+    const [row] = await this.db
+      .select({
+        ...getTableColumns(claims),
+        statusName: statusLookup.name,
+        statusExternalReference: statusLookup.externalReference,
+        accountName: accountLookup.name,
+        accountExternalReference: accountLookup.externalReference,
+      })
+      .from(claims)
+      .leftJoin(statusLookup, eq(claims.statusLookupId, statusLookup.id))
+      .leftJoin(accountLookup, eq(claims.accountLookupId, accountLookup.id))
+      .where(
+        and(eq(claims.id, params.id), eq(claims.tenantId, params.tenantId)),
+      )
+      .limit(1);
+    return (row as ClaimViewRow) ?? null;
+  }
+
+  async findByIdAndTenant(params: {
     id: string;
     tenantId: string;
   }): Promise<ClaimRow | null> {
@@ -112,13 +157,6 @@ export class ClaimsRepository {
       )
       .limit(1);
     return row ?? null;
-  }
-
-  async findByIdAndTenant(params: {
-    id: string;
-    tenantId: string;
-  }): Promise<ClaimRow | null> {
-    return this.findOne(params);
   }
 
   async findByExternalReference(params: {

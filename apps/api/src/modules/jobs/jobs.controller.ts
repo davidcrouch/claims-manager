@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Post,
   Query,
 } from '@nestjs/common';
@@ -26,20 +27,24 @@ export class JobsController {
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string) {
+  async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.jobsService.findOne({ id });
   }
 
   @Post()
-  async create(@Body() body: Record<string, unknown>) {
-    return this.jobsService.create({ body });
+  async create(
+    @Body() body: Record<string, unknown>,
+    @Query('provider') providerOverride?: string,
+  ) {
+    return this.jobsService.create({ body, providerOverride });
   }
 
   @Post(':id')
   async update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() body: Record<string, unknown>,
+    @Query('provider') providerOverride?: string,
   ) {
-    return this.jobsService.update({ id, body });
+    return this.jobsService.update({ id, body, providerOverride });
   }
 }

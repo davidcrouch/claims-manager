@@ -81,6 +81,21 @@ export class CrunchworkQuoteMapper implements EntityMapper {
       name: (payload.name as string) ?? undefined,
       reference: (payload.reference as string) ?? undefined,
       note: (payload.note as string) ?? undefined,
+      quoteDate: (payload.date ?? payload.quoteDate)
+        ? new Date((payload.date ?? payload.quoteDate) as string)
+        : undefined,
+      expiresInDays: payload.expiresInDays != null
+        ? Number(payload.expiresInDays)
+        : undefined,
+      subTotal: payload.subTotal != null
+        ? String(payload.subTotal)
+        : undefined,
+      totalTax: payload.totalTax != null
+        ? String(payload.totalTax)
+        : undefined,
+      totalAmount: (payload.total ?? payload.totalAmount) != null
+        ? String(payload.total ?? payload.totalAmount)
+        : undefined,
       apiPayload: payload,
     };
 

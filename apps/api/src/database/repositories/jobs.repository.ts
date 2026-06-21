@@ -1,11 +1,20 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, isNull, desc, sql, gte } from 'drizzle-orm';
+import { eq, and, isNull, desc, sql, gte, aliasedTable, getTableColumns } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
-import { jobs, lookupValues } from '../schema';
+import { jobs, lookupValues, vendors } from '../schema';
 
 export type JobRow = typeof jobs.$inferSelect;
 export type JobInsert = typeof jobs.$inferInsert;
+
+export interface JobViewRow extends JobRow {
+  statusName: string | null;
+  statusExternalReference: string | null;
+  jobTypeName: string | null;
+  jobTypeExternalReference: string | null;
+  vendorName: string | null;
+  vendorExternalReference: string | null;
+}
 
 @Injectable()
 export class JobsRepository {
@@ -16,10 +25,13 @@ export class JobsRepository {
     page?: number;
     limit?: number;
     claimId?: string;
-  }): Promise<{ data: JobRow[]; total: number }> {
+  }): Promise<{ data: JobViewRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
     const skip = (page - 1) * limit;
+
+    const statusLookup = aliasedTable(lookupValues, 'status_lookup');
+    const jobTypeLookup = aliasedTable(lookupValues, 'job_type_lookup');
 
     const baseWhere = and(
       eq(jobs.tenantId, params.tenantId),
@@ -31,8 +43,19 @@ export class JobsRepository {
 
     const [data, countResult] = await Promise.all([
       this.db
-        .select()
+        .select({
+          ...this.jobColumns(),
+          statusName: statusLookup.name,
+          statusExternalReference: statusLookup.externalReference,
+          jobTypeName: jobTypeLookup.name,
+          jobTypeExternalReference: jobTypeLookup.externalReference,
+          vendorName: vendors.name,
+          vendorExternalReference: vendors.externalReference,
+        })
         .from(jobs)
+        .leftJoin(statusLookup, eq(jobs.statusLookupId, statusLookup.id))
+        .leftJoin(jobTypeLookup, eq(jobs.jobTypeLookupId, jobTypeLookup.id))
+        .leftJoin(vendors, eq(jobs.vendorId, vendors.id))
         .where(whereClause)
         .orderBy(desc(jobs.updatedAt))
         .limit(limit)
@@ -44,10 +67,36 @@ export class JobsRepository {
     ]);
 
     const total = countResult[0]?.count ?? 0;
-    return { data, total };
+    return { data: data as JobViewRow[], total };
   }
 
   async findOne(params: {
+    id: string;
+    tenantId: string;
+  }): Promise<JobViewRow | null> {
+    const statusLookup = aliasedTable(lookupValues, 'status_lookup');
+    const jobTypeLookup = aliasedTable(lookupValues, 'job_type_lookup');
+
+    const [row] = await this.db
+      .select({
+        ...this.jobColumns(),
+        statusName: statusLookup.name,
+        statusExternalReference: statusLookup.externalReference,
+        jobTypeName: jobTypeLookup.name,
+        jobTypeExternalReference: jobTypeLookup.externalReference,
+        vendorName: vendors.name,
+        vendorExternalReference: vendors.externalReference,
+      })
+      .from(jobs)
+      .leftJoin(statusLookup, eq(jobs.statusLookupId, statusLookup.id))
+      .leftJoin(jobTypeLookup, eq(jobs.jobTypeLookupId, jobTypeLookup.id))
+      .leftJoin(vendors, eq(jobs.vendorId, vendors.id))
+      .where(and(eq(jobs.id, params.id), eq(jobs.tenantId, params.tenantId)))
+      .limit(1);
+    return (row as JobViewRow) ?? null;
+  }
+
+  async findByIdAndTenant(params: {
     id: string;
     tenantId: string;
   }): Promise<JobRow | null> {
@@ -57,13 +106,6 @@ export class JobsRepository {
       .where(and(eq(jobs.id, params.id), eq(jobs.tenantId, params.tenantId)))
       .limit(1);
     return row ?? null;
-  }
-
-  async findByIdAndTenant(params: {
-    id: string;
-    tenantId: string;
-  }): Promise<JobRow | null> {
-    return this.findOne(params);
   }
 
   async create(params: {
@@ -167,5 +209,9 @@ export class JobsRepository {
       .where(and(eq(jobs.tenantId, params.tenantId), isNull(jobs.deletedAt)))
       .groupBy(sql`COALESCE(${lookupValues.name}, 'Unknown')`);
     return result as { status: string; count: string }[];
+  }
+
+  private jobColumns() {
+    return getTableColumns(jobs);
   }
 }

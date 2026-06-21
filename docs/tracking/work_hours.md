@@ -319,3 +319,13 @@
   Wired **server actions and API client** methods so the quote workspace persists edits and deletions without a full page reload.
   Refined the **catalogue picker drawer** and quote tab layout so editing, deleting, and adding items work smoothly alongside pinned catalogue browsing.
   Updated **sticky toolbar and table styling** so grouped rows, assembly children, and action menus stay usable during long editing sessions.
+
+- `2026-06-21` `354decf` **24 h**
+  `121 files | +7541 −34890 | Tier 2 standard / Tier 3 complex / Tier 4 integration | Moderate orchestration`
+  Lay summary: Staff can now keep structured job journals with pages and attachments, while appointments, contacts, and jobs screens were upgraded with clearer tables, forms, and vendor sync support.
+  **Journals module, appointments overhaul, and multi-screen job workspace improvements.** Delivered a full **journals feature** — database schema, API, file storage for page attachments, list and detail screens, and a journals tab on each job.
+  Rebuilt **appointments** with a dedicated table layout, richer create/edit drawer, server actions, and tighter job and contact linking from the appointments list and job tab.
+  Added **contact create and edit** flows via a form drawer and expanded contact API endpoints used by the contacts list.
+  Extended **jobs** with sync-status tracking, entity lookup views, outbound adapter updates for vendor push, and backfill utilities for external references and status values.
+  Improved **quotes and invoices** list and detail screens with shared table components, API client helpers, and navigation updates in the app sidebar.
+  Consolidated **database migrations** and added new migrations for job sync status and cross-entity lookup views, plus implementation docs for journals and provider adapter architecture.

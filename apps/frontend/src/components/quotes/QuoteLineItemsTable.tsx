@@ -3,8 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
+  CheckSquare,
   ChevronDown,
   ChevronRight,
+  Filter,
   GripVertical,
   Layers,
   Package,
@@ -12,6 +14,7 @@ import {
   Pencil,
   Save,
   Search,
+  Square,
   Trash2,
   ArrowUp,
   ArrowDown,
@@ -34,6 +37,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
@@ -46,15 +50,17 @@ function lookupDisplay(l?: { name?: string; externalReference?: string }): strin
 
 /* ---- Inline-edit types & helpers ---- */
 
-type EditableFieldKey = 'name' | 'description' | 'quantity' | 'unitCost' | 'markupValue' | 'tax';
+type EditableFieldKey = 'name' | 'component' | 'description' | 'quantity' | 'unitCost' | 'markupValue' | 'tax';
 type ColumnKey = 'name' | 'type' | 'category' | 'quantity' | 'unitCost' | 'extended' | 'markupValue' | 'tax' | 'total';
 
 function getEditableFields(showMarkup: boolean, showGst: boolean): EditableFieldKey[] {
-  const fields: EditableFieldKey[] = ['name', 'description', 'quantity', 'unitCost'];
+  const fields: EditableFieldKey[] = ['name', 'component', 'description', 'quantity', 'unitCost'];
   if (showMarkup) fields.push('markupValue');
   if (showGst) fields.push('tax');
   return fields;
 }
+
+const NAME_COL_FIELDS: EditableFieldKey[] = ['name', 'component', 'description'];
 
 function nearestEditableField(
   clicked: ColumnKey,
@@ -88,11 +94,12 @@ type RowEntry =
   | { kind: 'item'; key: string; item: ApiItem }
   | { kind: 'assembly'; key: string; combo: ApiCombo };
 
-const ASSEMBLY_EDITABLE_FIELDS: EditableFieldKey[] = ['quantity'];
+const ASSEMBLY_EDITABLE_FIELDS: EditableFieldKey[] = ['name', 'component', 'description', 'quantity'];
 
 function initItemInputs(item: ApiItem): Record<EditableFieldKey, string> {
   return {
     name: item.name ?? '',
+    component: item.component ?? '',
     description: item.description ?? '',
     quantity: String(item.quantity ?? 0),
     unitCost: String(item.unitCost ?? 0),
@@ -104,6 +111,7 @@ function initItemInputs(item: ApiItem): Record<EditableFieldKey, string> {
 function initComboInputs(combo: ApiCombo): Record<EditableFieldKey, string> {
   return {
     name: combo.name ?? '',
+    component: combo.component ?? '',
     description: combo.description ?? '',
     quantity: String(combo.quantity ?? 0),
     unitCost: '0',
@@ -179,7 +187,7 @@ function ItemRow({
               ? 'shadow-[inset_0_0_0_1px_#93c5fd33] bg-blue-50/30'
               : 'shadow-[inset_0_0_0_1px_#d4a84733] bg-amber-50/40',
         )
-      : 'whitespace-nowrap px-4 py-2.5';
+      : 'whitespace-nowrap px-4 py-2.5 hover:bg-amber-50 hover:shadow-[inset_0_0_0_2px_#d97706]';
 
   const nameColTdCls = isEditing
     ? cn(
@@ -188,7 +196,7 @@ function ItemRow({
           ? 'shadow-[inset_0_0_0_1px_#93c5fd33] bg-blue-50/30'
           : 'shadow-[inset_0_0_0_1px_#d4a84733] bg-amber-50/40',
       )
-    : 'px-4 py-2.5';
+    : 'px-4 py-2.5 hover:bg-amber-50 hover:shadow-[inset_0_0_0_2px_#d97706]';
 
   const subCellCls = (field: EditableFieldKey) =>
     cn(
@@ -222,25 +230,44 @@ function ItemRow({
       )}
       onClick={(e) => onRowClick(e, rowKey, item)}
     >
-      {/* Name + Description (editable as separate cells) */}
+      {/* Name / Component / Description (editable as separate cells) */}
       <td data-col="name" className={cn(nameColTdCls, 'min-w-0')} onClick={cellClick('name')}>
         {isEditing && editInputs ? (
           <div className={cn(indented && 'pl-7')}>
-            <div
-              className={subCellCls('name')}
-              onClick={(e) => { e.stopPropagation(); onCellSelect(rowKey, 'name'); }}
-            >
-              <input
-                ref={(el) => { inputRefs.current.name = el; }}
-                value={editInputs.name}
-                onChange={(e) => onInputChange(rowKey, 'name', e.target.value)}
-                onKeyDown={onCellKeyDown}
-                onFocus={() => onCellSelect(rowKey, 'name')}
-                className={cn(inputCls('left'), 'truncate')}
-              />
+            {/* Top row: Name + Component side by side */}
+            <div className="flex">
+              <div
+                className={cn('flex-1 min-w-0', subCellCls('name'))}
+                onClick={(e) => { e.stopPropagation(); onCellSelect(rowKey, 'name'); }}
+              >
+                <input
+                  ref={(el) => { inputRefs.current.name = el; }}
+                  value={editInputs.name}
+                  onChange={(e) => onInputChange(rowKey, 'name', e.target.value)}
+                  onKeyDown={onCellKeyDown}
+                  onFocus={() => onCellSelect(rowKey, 'name')}
+                  placeholder="Name…"
+                  className={cn(inputCls('left'), 'truncate')}
+                />
+              </div>
+              <div
+                className={cn('flex-1 min-w-0 border-l border-slate-200', subCellCls('component'))}
+                onClick={(e) => { e.stopPropagation(); onCellSelect(rowKey, 'component'); }}
+              >
+                <input
+                  ref={(el) => { inputRefs.current.component = el; }}
+                  value={editInputs.component}
+                  onChange={(e) => onInputChange(rowKey, 'component', e.target.value)}
+                  onKeyDown={onCellKeyDown}
+                  onFocus={() => onCellSelect(rowKey, 'component')}
+                  placeholder="Component…"
+                  className={cn(inputCls('left'), 'truncate text-slate-600 !font-normal')}
+                />
+              </div>
             </div>
+            {/* Bottom row: Description full width */}
             <div
-              className={subCellCls('description')}
+              className={cn('border-t border-slate-100', subCellCls('description'))}
               onClick={(e) => { e.stopPropagation(); onCellSelect(rowKey, 'description'); }}
             >
               <input
@@ -258,6 +285,11 @@ function ItemRow({
           <>
             <div className={cn('truncate font-medium text-slate-900', indented && 'pl-7')}>
               {(editInputs?.name ?? item.name) || '—'}
+              {(editInputs?.component ?? item.component) && (
+                <span className="font-normal text-slate-600">
+                  {' - '}{editInputs?.component ?? item.component}
+                </span>
+              )}
               {item.internal && (
                 <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] font-normal uppercase tracking-wide text-muted-foreground">
                   internal
@@ -449,6 +481,9 @@ function AssemblyBlock({
     [combo.category, combo.subCategory].filter(Boolean).join(' / ') || '—';
   const isEditing = editState?.rowKey === comboKey || (selectedRows.has(comboKey) && editState !== null);
   const comboInputs = editInputs[comboKey] ?? null;
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
+  const componentInputRef = useRef<HTMLInputElement | null>(null);
+  const descriptionInputRef = useRef<HTMLInputElement | null>(null);
   const qtyInputRef = useRef<HTMLInputElement | null>(null);
 
   const isPrimary = editState?.rowKey === comboKey;
@@ -459,9 +494,20 @@ function AssemblyBlock({
     : 'ring-2 ring-inset ring-amber-300 bg-amber-50/40';
 
   useEffect(() => {
-    if (isEditing && isPrimary && editState?.field === 'quantity') {
-      qtyInputRef.current?.focus();
-      qtyInputRef.current?.select();
+    if (isEditing && isPrimary) {
+      if (editState?.field === 'name') {
+        nameInputRef.current?.focus();
+        nameInputRef.current?.select();
+      } else if (editState?.field === 'component') {
+        componentInputRef.current?.focus();
+        componentInputRef.current?.select();
+      } else if (editState?.field === 'description') {
+        descriptionInputRef.current?.focus();
+        descriptionInputRef.current?.select();
+      } else if (editState?.field === 'quantity') {
+        qtyInputRef.current?.focus();
+        qtyInputRef.current?.select();
+      }
     }
   }, [isEditing, isPrimary, editState?.field]);
 
@@ -479,30 +525,142 @@ function AssemblyBlock({
               : 'bg-slate-200 hover:bg-slate-300',
         )}
         onClick={(e) => {
-          const wasEditing = isEditing;
-          onAssemblyClick(e, comboKey, combo);
-          if (!wasEditing && isCollapsed) { onToggle(); return; }
-          if (wasEditing) onToggle();
+          if (isEditing) {
+            onToggle();
+            return;
+          }
+          const target = e.target as HTMLElement;
+          const fieldArea = target.closest('[data-assembly-field]');
+          if (fieldArea) {
+            onAssemblyClick(e, comboKey, combo);
+            if (isCollapsed) onToggle();
+          } else {
+            onToggle();
+          }
         }}
       >
-        <td className={cn('px-4 py-2.5', isEditing && comboBg)} colSpan={1}>
-          <div className="flex items-center gap-2">
-            {isCollapsed ? (
-              <ChevronRight className="h-3.5 w-3.5 text-slate-600" />
-            ) : (
-              <ChevronDown className="h-3.5 w-3.5 text-slate-600" />
-            )}
-            <Layers className="h-3.5 w-3.5 text-slate-500" />
-            <span className="text-sm font-semibold text-slate-900">{comboName}</span>
-            <span className="rounded-full bg-slate-300 px-2 py-0.5 text-[10px] font-medium text-slate-700">
-              {comboItemCount} item{comboItemCount !== 1 ? 's' : ''}
-            </span>
-          </div>
+        <td
+          className={cn(
+            'p-0',
+            isEditing
+              ? isComboMultiSelected
+                ? 'shadow-[inset_0_0_0_1px_#93c5fd33] bg-blue-50/30'
+                : 'shadow-[inset_0_0_0_1px_#d4a84733] bg-amber-50/40'
+              : 'px-4 py-2.5 hover:bg-amber-50 hover:shadow-[inset_0_0_0_2px_#d97706]',
+          )}
+          colSpan={1}
+        >
+          {isEditing && comboInputs ? (
+            <div className="pl-2">
+              {/* Top row: Name + Component + item count */}
+              <div className="flex items-center">
+                <div className="flex items-center gap-1.5 shrink-0 pr-1">
+                  {isCollapsed ? (
+                    <ChevronRight className="h-3.5 w-3.5 text-slate-600" />
+                  ) : (
+                    <ChevronDown className="h-3.5 w-3.5 text-slate-600" />
+                  )}
+                  <Layers className="h-3.5 w-3.5 text-slate-500" />
+                </div>
+                <div
+                  className={cn(
+                    'flex-1 min-w-0 rounded-sm transition-shadow',
+                    editState?.field === 'name'
+                      ? 'shadow-[inset_0_0_0_2px_#2563eb] bg-white relative z-[1]'
+                      : '',
+                  )}
+                  onClick={(e) => { e.stopPropagation(); onCellSelect(comboKey, 'name'); }}
+                >
+                  <input
+                    ref={nameInputRef}
+                    value={comboInputs.name}
+                    onChange={(e) => onInputChange(comboKey, 'name', e.target.value)}
+                    onKeyDown={onCellKeyDown}
+                    onFocus={() => onCellSelect(comboKey, 'name')}
+                    placeholder="Name…"
+                    className="w-full bg-transparent px-4 py-2 text-sm font-semibold text-slate-900 outline-none placeholder:text-slate-300 truncate"
+                  />
+                </div>
+                <div
+                  className={cn(
+                    'flex-1 min-w-0 border-l border-slate-200 rounded-sm transition-shadow',
+                    editState?.field === 'component'
+                      ? 'shadow-[inset_0_0_0_2px_#2563eb] bg-white relative z-[1]'
+                      : '',
+                  )}
+                  onClick={(e) => { e.stopPropagation(); onCellSelect(comboKey, 'component'); }}
+                >
+                  <input
+                    ref={componentInputRef}
+                    value={comboInputs.component}
+                    onChange={(e) => onInputChange(comboKey, 'component', e.target.value)}
+                    onKeyDown={onCellKeyDown}
+                    onFocus={() => onCellSelect(comboKey, 'component')}
+                    placeholder="Component…"
+                    className="w-full bg-transparent px-4 py-2 text-sm text-slate-600 outline-none placeholder:text-slate-300 truncate"
+                  />
+                </div>
+              </div>
+              {/* Bottom row: Description full width */}
+              <div
+                className={cn(
+                  'border-t border-slate-100 rounded-sm transition-shadow',
+                  editState?.field === 'description'
+                    ? 'shadow-[inset_0_0_0_2px_#2563eb] bg-white relative z-[1]'
+                    : '',
+                )}
+                onClick={(e) => { e.stopPropagation(); onCellSelect(comboKey, 'description'); }}
+              >
+                <input
+                  ref={descriptionInputRef}
+                  value={comboInputs.description}
+                  onChange={(e) => onInputChange(comboKey, 'description', e.target.value)}
+                  onKeyDown={onCellKeyDown}
+                  onFocus={() => onCellSelect(comboKey, 'description')}
+                  placeholder="Description…"
+                  className="w-full bg-transparent px-4 py-1.5 text-xs text-slate-500 outline-none placeholder:text-slate-300"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              {isCollapsed ? (
+                <ChevronRight className="h-3.5 w-3.5 text-slate-600" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5 text-slate-600" />
+              )}
+              <Layers className="h-3.5 w-3.5 text-slate-500" />
+              <div
+                className="flex-1 min-w-0"
+                data-assembly-field="name"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-slate-900 truncate">
+                    {comboName}
+                    {(comboInputs?.component ?? combo.component) && (
+                      <span className="font-normal text-slate-600">
+                        {' - '}{comboInputs?.component ?? combo.component}
+                      </span>
+                    )}
+                  </span>
+                  <span className="shrink-0 rounded-full bg-slate-300 px-2 py-0.5 text-[10px] font-medium text-slate-700">
+                    {comboItemCount} item{comboItemCount !== 1 ? 's' : ''}
+                  </span>
+                </div>
+                {(combo.description || comboInputs?.description) && (
+                  <p className="mt-0.5 line-clamp-1 text-xs text-slate-500">
+                    {comboInputs?.description ?? combo.description}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
         </td>
         <td className={cn('px-4 py-2.5 text-xs text-slate-600', isEditing && comboBg)}>Assembly</td>
         <td className={cn('px-4 py-2.5 text-xs text-slate-600', isEditing && comboBg)}>{comboCategory}</td>
         <td
           data-col="quantity"
+          data-assembly-field="quantity"
           className={cn(
             'whitespace-nowrap text-right',
             isEditing
@@ -514,7 +672,7 @@ function AssemblyBlock({
                       ? 'shadow-[inset_0_0_0_1px_#93c5fd33] bg-blue-50/30'
                       : 'shadow-[inset_0_0_0_1px_#d4a84733] bg-amber-50/40',
                 )
-              : 'px-4 py-2.5',
+              : 'px-4 py-2.5 hover:bg-amber-50 hover:shadow-[inset_0_0_0_2px_#d97706]',
           )}
           onClick={isEditing ? (e) => { e.stopPropagation(); onCellSelect(comboKey, 'quantity'); } : undefined}
         >
@@ -644,6 +802,10 @@ export function QuoteLineItemsTable({
   const [searchTerm, setSearchTerm] = useState('');
   const [showMarkup, setShowMarkup] = useState(true);
   const [showGst, setShowGst] = useState(true);
+  const [suppressMarkupIcon, setSuppressMarkupIcon] = useState(false);
+  const [suppressGstIcon, setSuppressGstIcon] = useState(false);
+  const [hiddenGroupIds, setHiddenGroupIds] = useState<Set<string>>(new Set());
+  const [groupFilterOpen, setGroupFilterOpen] = useState(false);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   // Inline edit state
@@ -833,6 +995,11 @@ export function QuoteLineItemsTable({
   }
 
   function handleAssemblyClick(e: React.MouseEvent, rowKey: string, combo: ApiCombo) {
+    const target = e.target as HTMLElement;
+    const fieldEl = target.closest('[data-assembly-field]');
+    const assemblyField = fieldEl?.getAttribute('data-assembly-field');
+    const field: EditableFieldKey = assemblyField === 'quantity' ? 'quantity' : 'name';
+
     setEditInputs((prev) => {
       if (prev[rowKey]) return prev;
       return { ...prev, [rowKey]: initComboInputs(combo) };
@@ -850,10 +1017,10 @@ export function QuoteLineItemsTable({
         }
         return next;
       });
-      setEditState({ rowKey, field: 'quantity' });
+      setEditState({ rowKey, field });
     } else {
       setSelectedRows(new Set());
-      setEditState({ rowKey, field: 'quantity' });
+      setEditState({ rowKey, field });
     }
     setSelectedKey(null);
   }
@@ -878,7 +1045,10 @@ export function QuoteLineItemsTable({
   function navigateToRow(rowIdx: number, field: EditableFieldKey) {
     if (rowIdx < 0 || rowIdx >= visibleRowIndex.length) return;
     const target = visibleRowIndex[rowIdx];
-    const effectiveField = target.kind === 'assembly' ? 'quantity' : field;
+    let effectiveField = field;
+    if (target.kind === 'assembly') {
+      effectiveField = ASSEMBLY_EDITABLE_FIELDS.includes(field) ? field : 'name';
+    }
     setEditInputs((prev) => {
       if (prev[target.key]) return prev;
       const inputs = target.kind === 'assembly'
@@ -896,21 +1066,27 @@ export function QuoteLineItemsTable({
       ? ASSEMBLY_EDITABLE_FIELDS
       : getEditableFields(showMarkup, showGst);
     const colIdx = fields.indexOf(editState.field);
+    const inNameCol = NAME_COL_FIELDS.includes(editState.field);
 
     switch (e.key) {
       case 'ArrowLeft':
         e.preventDefault();
-        if (editState.field === 'description') {
+        if (editState.field === 'component') {
           setEditState({ ...editState, field: 'name' });
-        } else if (colIdx > 0) {
+        } else if (editState.field === 'description') {
+          setEditState({ ...editState, field: 'component' });
+        } else if (!inNameCol && colIdx > 0) {
           const prev = fields[colIdx - 1];
-          setEditState({ ...editState, field: prev === 'description' ? 'name' : prev });
+          setEditState({ ...editState, field: prev === 'description' ? 'component' : prev });
         }
         break;
       case 'ArrowRight':
         e.preventDefault();
         if (editState.field === 'name') {
-          setEditState({ ...editState, field: 'description' });
+          setEditState({ ...editState, field: 'component' });
+        } else if (editState.field === 'component' || editState.field === 'description') {
+          const qtyIdx = fields.indexOf('quantity');
+          if (qtyIdx >= 0) setEditState({ ...editState, field: 'quantity' });
         } else if (colIdx < fields.length - 1) {
           setEditState({ ...editState, field: fields[colIdx + 1] });
         }
@@ -920,7 +1096,7 @@ export function QuoteLineItemsTable({
         if (selectedRows.size > 1) break;
         if (editState.field === 'description') {
           setEditState({ ...editState, field: 'name' });
-        } else if (editState.field === 'name') {
+        } else if (editState.field === 'name' || editState.field === 'component') {
           const rowIdx = visibleRowIndex.findIndex((r) => r.key === editState.rowKey);
           if (rowIdx > 0) navigateToRow(rowIdx - 1, 'description');
         } else {
@@ -932,7 +1108,7 @@ export function QuoteLineItemsTable({
       case 'ArrowDown': {
         e.preventDefault();
         if (selectedRows.size > 1) break;
-        if (editState.field === 'name') {
+        if (editState.field === 'name' || editState.field === 'component') {
           setEditState({ ...editState, field: 'description' });
         } else if (editState.field === 'description') {
           const rowIdx = visibleRowIndex.findIndex((r) => r.key === editState.rowKey);
@@ -947,13 +1123,17 @@ export function QuoteLineItemsTable({
         e.preventDefault();
         if (e.shiftKey) {
           if (editState.field === 'description') {
+            setEditState({ ...editState, field: 'component' });
+          } else if (editState.field === 'component') {
             setEditState({ ...editState, field: 'name' });
-          } else if (colIdx > 0) {
+          } else if (!inNameCol && colIdx > 0) {
             const prev = fields[colIdx - 1];
-            setEditState({ ...editState, field: prev === 'description' ? 'name' : prev });
+            setEditState({ ...editState, field: prev === 'description' ? 'description' : prev });
           }
         } else {
           if (editState.field === 'name') {
+            setEditState({ ...editState, field: 'component' });
+          } else if (editState.field === 'component') {
             setEditState({ ...editState, field: 'description' });
           } else if (colIdx < fields.length - 1) {
             setEditState({ ...editState, field: fields[colIdx + 1] });
@@ -980,23 +1160,34 @@ export function QuoteLineItemsTable({
     return () => document.removeEventListener('mousedown', onMouseDown);
   }, [editState]);
 
-  const filteredGroups = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
-    if (!term) return groups;
+  const groupFilterActive = hiddenGroupIds.size > 0;
 
-    return groups
+  const filteredGroups = useMemo(() => {
+    let result = groups;
+
+    if (hiddenGroupIds.size > 0) {
+      result = result.filter((g, i) => !hiddenGroupIds.has(g.id ?? `group-${i}`));
+    }
+
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return result;
+
+    return result
       .map((group) => {
         const filteredItems = (group.items ?? []).filter(
           (item) =>
             (item.name ?? '').toLowerCase().includes(term) ||
+            (item.component ?? '').toLowerCase().includes(term) ||
             (item.description ?? '').toLowerCase().includes(term),
         );
         const filteredCombos = (group.combos ?? [])
           .map((combo) => {
-            const comboNameMatch = (combo.name ?? '').toLowerCase().includes(term);
+            const comboNameMatch = (combo.name ?? '').toLowerCase().includes(term) ||
+              (combo.component ?? '').toLowerCase().includes(term);
             const matchingItems = (combo.items ?? []).filter(
               (item) =>
                 (item.name ?? '').toLowerCase().includes(term) ||
+                (item.component ?? '').toLowerCase().includes(term) ||
                 (item.description ?? '').toLowerCase().includes(term),
             );
             if (comboNameMatch || matchingItems.length > 0) {
@@ -1011,7 +1202,7 @@ export function QuoteLineItemsTable({
         return null;
       })
       .filter(Boolean) as ApiGroup[];
-  }, [groups, searchTerm]);
+  }, [groups, searchTerm, hiddenGroupIds]);
 
   const visibleRowIndex = useMemo(() => {
     const rows: RowEntry[] = [];
@@ -1059,7 +1250,15 @@ export function QuoteLineItemsTable({
 
   if (groups.length === 0) {
     return (
-      <div className="space-y-3" {...tableDropProps}>
+      <div
+        className={cn(
+          'min-h-[calc(100vh-12rem)] space-y-3 rounded-xl border-2 border-dashed p-1 transition-all',
+          activeDropKey === 'table-root'
+            ? 'border-emerald-400 bg-emerald-50/30 ring-2 ring-emerald-500/30'
+            : 'border-transparent',
+        )}
+        {...tableDropProps}
+      >
         {onOpenCatalogDrawer && (
           <div className="flex justify-end gap-2">
             <Button size="sm" variant="outline" onClick={onOpenCatalogDrawer} title="Open catalogue">
@@ -1082,12 +1281,12 @@ export function QuoteLineItemsTable({
           className={cn(
             'flex min-h-[12rem] items-center justify-center rounded-lg border-2 border-dashed text-sm text-slate-500 transition-all',
             activeDropKey === 'table-root'
-              ? 'border-emerald-400 bg-emerald-50/40 ring-2 ring-emerald-500/30'
+              ? 'border-emerald-400 bg-emerald-50/40'
               : 'border-slate-200',
           )}
         >
           {activeDropKey === 'table-root'
-            ? 'Release to create a new group'
+            ? 'Release anywhere to create a new group'
             : 'No groups yet. Add a group or drag a group label here.'}
         </div>
       </div>
@@ -1095,7 +1294,15 @@ export function QuoteLineItemsTable({
   }
 
   return (
-    <div className="space-y-3" {...tableDropProps}>
+    <div
+      className={cn(
+        'min-h-[calc(100vh-12rem)] space-y-3 rounded-xl border-2 border-dashed p-1 transition-all',
+        activeDropKey === 'table-root'
+          ? 'border-emerald-400 bg-emerald-50/30 ring-2 ring-emerald-500/30'
+          : 'border-transparent',
+      )}
+      {...tableDropProps}
+    >
       <div
         data-slot="quote-line-items-toolbar"
         className="sticky top-[105px] z-[9] flex cursor-pointer items-center justify-between rounded-lg border-2 border-slate-400 bg-slate-100 px-5 py-4 shadow-md transition-colors hover:bg-slate-200"
@@ -1110,10 +1317,82 @@ export function QuoteLineItemsTable({
             )}
           </span>
           <Layers className="h-4 w-4 text-slate-600" />
-          <p className="text-sm font-semibold text-slate-800">
-            {groups.length} group{groups.length !== 1 ? 's' : ''} &middot; {totalItems} line
-            {totalItems !== 1 ? 's' : ''}
-          </p>
+          <span onClick={(e) => e.stopPropagation()}>
+            <DropdownMenu open={groupFilterOpen} onOpenChange={setGroupFilterOpen}>
+              <DropdownMenuTrigger>
+                <span
+                  className="group/groupfilter inline-flex !cursor-default items-center gap-1"
+                  title={groupFilterActive ? 'Group filter active' : 'Filter groups'}
+                >
+                  <span className="text-sm font-semibold text-slate-800">
+                    {groups.length} group{groups.length !== 1 ? 's' : ''} &middot; {totalItems} line
+                    {totalItems !== 1 ? 's' : ''}
+                  </span>
+                  {groupFilterActive ? (
+                    <Filter className="h-4 w-4 text-amber-500" />
+                  ) : (
+                    <Filter className="h-4 w-4 text-slate-400 opacity-0 group-hover/groupfilter:opacity-100 transition-opacity" />
+                  )}
+                </span>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="min-w-[240px]" onMouseLeave={() => setGroupFilterOpen(false)}>
+                <div className="flex items-center justify-between px-2 py-1.5">
+                  <span className="text-xs font-medium text-muted-foreground">Filter groups</span>
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      className="rounded px-1.5 py-0.5 text-xs font-medium text-blue-600 hover:bg-blue-50 transition-colors"
+                      onClick={() => setHiddenGroupIds(new Set())}
+                    >
+                      All
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded px-1.5 py-0.5 text-xs font-medium text-blue-600 hover:bg-blue-50 transition-colors"
+                      onClick={() =>
+                        setHiddenGroupIds(
+                          new Set(groups.map((g, i) => g.id ?? `group-${i}`)),
+                        )
+                      }
+                    >
+                      None
+                    </button>
+                  </div>
+                </div>
+                <DropdownMenuSeparator />
+                {groups.map((g, i) => {
+                  const gId = g.id ?? `group-${i}`;
+                  const label = groupLabel(g, i);
+                  const isVisible = !hiddenGroupIds.has(gId);
+                  return (
+                    <DropdownMenuItem
+                      key={gId}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setHiddenGroupIds((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(gId)) next.delete(gId);
+                          else next.add(gId);
+                          return next;
+                        });
+                      }}
+                      closeOnClick={false}
+                      className="justify-between"
+                    >
+                      <span className={cn('text-sm', !isVisible && 'text-slate-400')}>
+                        {label}
+                      </span>
+                      {isVisible ? (
+                        <CheckSquare className="h-4 w-4 text-blue-600 shrink-0" />
+                      ) : (
+                        <Square className="h-4 w-4 text-slate-400 shrink-0" />
+                      )}
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </span>
         </div>
         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
           <div className="relative w-96">
@@ -1160,23 +1439,21 @@ export function QuoteLineItemsTable({
             </span>
           </div>
           <div
-            className={cn(
-              'group/markup flex cursor-pointer select-none items-center gap-1 text-sm text-slate-600 transition-opacity hover:opacity-70',
-              !showMarkup && 'line-through decoration-red-500',
-            )}
-            onClick={() => setShowMarkup((v) => !v)}
+            className="group/markup flex !cursor-default select-none items-center gap-1 text-sm text-slate-600 transition-opacity hover:opacity-70"
+            onClick={() => {
+              setShowMarkup((v) => !v);
+              setSuppressMarkupIcon(true);
+            }}
+            onMouseLeave={() => setSuppressMarkupIcon(false)}
             title={showMarkup ? 'Hide markup column' : 'Show markup column'}
           >
             <span className="relative inline-flex items-center">
               {showMarkup ? (
-                <>
-                  <Eye className="h-3.5 w-3.5 opacity-0 group-hover/markup:opacity-100 transition-opacity text-slate-400" />
-                  <EyeOff className="absolute inset-0 h-3.5 w-3.5 opacity-0 transition-opacity" />
-                </>
+                <EyeOff className={cn('h-3.5 w-3.5 text-red-500 transition-opacity', suppressMarkupIcon ? 'opacity-0' : 'opacity-0 group-hover/markup:opacity-100')} />
               ) : (
                 <>
-                  <EyeOff className="h-3.5 w-3.5 text-red-400 opacity-0 group-hover/markup:opacity-100 transition-opacity" />
-                  <Eye className="absolute inset-0 h-3.5 w-3.5 opacity-0 transition-opacity" />
+                  <EyeOff className={cn('h-3.5 w-3.5 text-red-400 transition-opacity', suppressMarkupIcon ? 'opacity-100' : 'group-hover/markup:opacity-0')} />
+                  <Eye className={cn('absolute inset-0 h-3.5 w-3.5 text-green-500 transition-opacity', suppressMarkupIcon ? 'opacity-0' : 'opacity-0 group-hover/markup:opacity-100')} />
                 </>
               )}
             </span>
@@ -1186,23 +1463,21 @@ export function QuoteLineItemsTable({
             </span>
           </div>
           <div
-            className={cn(
-              'group/gst flex cursor-pointer select-none items-center gap-1 text-sm text-slate-600 transition-opacity hover:opacity-70',
-              !showGst && 'line-through decoration-red-500',
-            )}
-            onClick={() => setShowGst((v) => !v)}
+            className="group/gst flex !cursor-default select-none items-center gap-1 text-sm text-slate-600 transition-opacity hover:opacity-70"
+            onClick={() => {
+              setShowGst((v) => !v);
+              setSuppressGstIcon(true);
+            }}
+            onMouseLeave={() => setSuppressGstIcon(false)}
             title={showGst ? 'Hide GST column' : 'Show GST column'}
           >
             <span className="relative inline-flex items-center">
               {showGst ? (
-                <>
-                  <Eye className="h-3.5 w-3.5 opacity-0 group-hover/gst:opacity-100 transition-opacity text-slate-400" />
-                  <EyeOff className="absolute inset-0 h-3.5 w-3.5 opacity-0 transition-opacity" />
-                </>
+                <EyeOff className={cn('h-3.5 w-3.5 text-red-500 transition-opacity', suppressGstIcon ? 'opacity-0' : 'opacity-0 group-hover/gst:opacity-100')} />
               ) : (
                 <>
-                  <EyeOff className="h-3.5 w-3.5 text-red-400 opacity-0 group-hover/gst:opacity-100 transition-opacity" />
-                  <Eye className="absolute inset-0 h-3.5 w-3.5 opacity-0 transition-opacity" />
+                  <EyeOff className={cn('h-3.5 w-3.5 text-red-400 transition-opacity', suppressGstIcon ? 'opacity-100' : 'group-hover/gst:opacity-0')} />
+                  <Eye className={cn('absolute inset-0 h-3.5 w-3.5 text-green-500 transition-opacity', suppressGstIcon ? 'opacity-0' : 'opacity-0 group-hover/gst:opacity-100')} />
                 </>
               )}
             </span>
@@ -1221,8 +1496,8 @@ export function QuoteLineItemsTable({
       </div>
 
       {activeDropKey === 'table-root' && (
-        <div className="rounded-lg border-2 border-dashed border-emerald-400 bg-emerald-50/40 px-4 py-2.5 text-center text-xs font-medium text-emerald-700">
-          Release to create a new group
+        <div className="rounded-lg bg-emerald-100/80 px-4 py-2.5 text-center text-xs font-medium text-emerald-700">
+          Release anywhere to create a new group
         </div>
       )}
 

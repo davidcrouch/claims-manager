@@ -52,6 +52,9 @@ export function QuoteLineItemsTab({
     const result = await getQuoteLineItemsAction(quote.id);
     if (result.success && result.groups) {
       setDbGroups(result.groups as ApiGroup[]);
+    } else if (!result.success) {
+      console.error(`${PREFIX}.loadLineItems — ${result.error}`);
+      setMessage(result.error ?? 'Failed to load line items');
     }
   }, [quote.id]);
 
@@ -187,8 +190,8 @@ export function QuoteLineItemsTab({
   function handleSaveLineItems(edits: Record<string, Record<string, string>>) {
     setMessage(null);
     startTransition(async () => {
-      const items: Array<{ id: string; name?: string; description?: string; quantity?: string; unitCost?: string; markupValue?: string; tax?: string }> = [];
-      const combos: Array<{ id: string; quantity?: string }> = [];
+      const items: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string; unitCost?: string; markupValue?: string; tax?: string }> = [];
+      const combos: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string }> = [];
 
       for (const [rowKey, fields] of Object.entries(edits)) {
         const isCombo = rowKey.includes('-combo-') && !rowKey.includes('-item-');
@@ -198,7 +201,7 @@ export function QuoteLineItemsTab({
         if (isCombo) {
           const comboId = rowKey.match(/-combo-([0-9a-f-]{36})$/)?.[1];
           if (comboId) {
-            combos.push({ id: comboId, quantity: fields.quantity });
+            combos.push({ id: comboId, name: fields.name, component: fields.component, description: fields.description, quantity: fields.quantity });
           }
         } else {
           const itemId = rowKey.match(/-item-([0-9a-f-]{36})$/)?.[1];
@@ -207,6 +210,7 @@ export function QuoteLineItemsTab({
             items.push({
               id: itemId,
               name: fields.name,
+              component: fields.component,
               description: fields.description,
               quantity: fields.quantity,
               unitCost: fields.unitCost,

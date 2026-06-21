@@ -1,11 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, isNull, desc, sql } from 'drizzle-orm';
+import { eq, and, isNull, desc, sql, aliasedTable, getTableColumns } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
-import { quotes } from '../schema';
+import { quotes, lookupValues } from '../schema';
 
 export type QuoteRow = typeof quotes.$inferSelect;
 export type QuoteInsert = typeof quotes.$inferInsert;
+
+export interface QuoteViewRow extends QuoteRow {
+  statusName: string | null;
+  statusExternalReference: string | null;
+  quoteTypeName: string | null;
+  quoteTypeExternalReference: string | null;
+}
 
 @Injectable()
 export class QuotesRepository {
@@ -17,10 +24,13 @@ export class QuotesRepository {
     limit?: number;
     jobId?: string;
     statusId?: string;
-  }): Promise<{ data: QuoteRow[]; total: number }> {
+  }): Promise<{ data: QuoteViewRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
     const skip = (page - 1) * limit;
+
+    const statusLookup = aliasedTable(lookupValues, 'status_lookup');
+    const quoteTypeLookup = aliasedTable(lookupValues, 'quote_type_lookup');
 
     let whereClause = and(
       eq(quotes.tenantId, params.tenantId),
@@ -38,8 +48,16 @@ export class QuotesRepository {
 
     const [data, countResult] = await Promise.all([
       this.db
-        .select()
+        .select({
+          ...getTableColumns(quotes),
+          statusName: statusLookup.name,
+          statusExternalReference: statusLookup.externalReference,
+          quoteTypeName: quoteTypeLookup.name,
+          quoteTypeExternalReference: quoteTypeLookup.externalReference,
+        })
         .from(quotes)
+        .leftJoin(statusLookup, eq(quotes.statusLookupId, statusLookup.id))
+        .leftJoin(quoteTypeLookup, eq(quotes.quoteTypeLookupId, quoteTypeLookup.id))
         .where(whereClause)
         .orderBy(desc(quotes.updatedAt))
         .limit(limit)
@@ -51,7 +69,7 @@ export class QuotesRepository {
     ]);
 
     const total = countResult[0]?.count ?? 0;
-    return { data, total };
+    return { data: data as QuoteViewRow[], total };
   }
 
   async findOne(params: {
@@ -71,17 +89,30 @@ export class QuotesRepository {
   async findByJob(params: {
     jobId: string;
     tenantId: string;
-  }): Promise<QuoteRow[]> {
-    return this.db
-      .select()
+  }): Promise<QuoteViewRow[]> {
+    const statusLookup = aliasedTable(lookupValues, 'status_lookup');
+    const quoteTypeLookup = aliasedTable(lookupValues, 'quote_type_lookup');
+
+    const data = await this.db
+      .select({
+        ...getTableColumns(quotes),
+        statusName: statusLookup.name,
+        statusExternalReference: statusLookup.externalReference,
+        quoteTypeName: quoteTypeLookup.name,
+        quoteTypeExternalReference: quoteTypeLookup.externalReference,
+      })
       .from(quotes)
+      .leftJoin(statusLookup, eq(quotes.statusLookupId, statusLookup.id))
+      .leftJoin(quoteTypeLookup, eq(quotes.quoteTypeLookupId, quoteTypeLookup.id))
       .where(
         and(
           eq(quotes.jobId, params.jobId),
           eq(quotes.tenantId, params.tenantId),
+          isNull(quotes.deletedAt),
         ),
       )
       .orderBy(desc(quotes.updatedAt));
+    return data as QuoteViewRow[];
   }
 
   async create(params: {
@@ -105,6 +136,33 @@ export class QuotesRepository {
       .where(eq(quotes.id, params.id))
       .returning();
     return updated ?? null;
+  }
+
+  async softDelete(params: {
+    id: string;
+    tenantId: string;
+  }): Promise<QuoteRow | null> {
+    const [updated] = await this.db
+      .update(quotes)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(
+        and(eq(quotes.id, params.id), eq(quotes.tenantId, params.tenantId)),
+      )
+      .returning();
+    return updated ?? null;
+  }
+
+  async hardDelete(params: {
+    id: string;
+    tenantId: string;
+  }): Promise<boolean> {
+    const result = await this.db
+      .delete(quotes)
+      .where(
+        and(eq(quotes.id, params.id), eq(quotes.tenantId, params.tenantId)),
+      )
+      .returning();
+    return result.length > 0;
   }
 
   async countByTenant(params: { tenantId: string }): Promise<number> {

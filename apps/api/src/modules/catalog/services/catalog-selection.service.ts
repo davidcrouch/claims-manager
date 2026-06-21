@@ -471,6 +471,7 @@ export class CatalogSelectionService {
     items: Array<{
       id: string;
       name?: string;
+      component?: string;
       description?: string;
       quantity?: string;
       unitCost?: string;
@@ -479,6 +480,9 @@ export class CatalogSelectionService {
     }>;
     combos: Array<{
       id: string;
+      name?: string;
+      component?: string;
+      description?: string;
       quantity?: string;
     }>;
   }) {
@@ -488,6 +492,7 @@ export class CatalogSelectionService {
       for (const item of params.items) {
         const updates: Record<string, unknown> = { updatedAt: new Date() };
         if (item.name !== undefined) updates.name = item.name;
+        if (item.component !== undefined) updates.component = item.component;
         if (item.description !== undefined) updates.description = item.description;
         if (item.quantity !== undefined) updates.quantity = item.quantity;
         if (item.unitCost !== undefined) updates.unitCost = item.unitCost;
@@ -509,9 +514,13 @@ export class CatalogSelectionService {
 
       for (const combo of params.combos) {
         const updates: Record<string, unknown> = {};
+        if (combo.name !== undefined) updates.name = combo.name;
+        if (combo.component !== undefined) updates.component = combo.component;
+        if (combo.description !== undefined) updates.description = combo.description;
         if (combo.quantity !== undefined) updates.quantity = combo.quantity;
 
         if (Object.keys(updates).length > 0) {
+          updates.updatedAt = new Date();
           await tx
             .update(quoteCombos)
             .set(updates)
@@ -635,6 +644,7 @@ export class CatalogSelectionService {
           return {
             id: combo.id,
             name: combo.name,
+            component: combo.component,
             description: combo.description,
             category: combo.category,
             subCategory: combo.subCategory,
@@ -853,6 +863,7 @@ export class CatalogSelectionService {
     return {
       id: row.id,
       name: row.name,
+      component: row.component,
       description: row.description,
       type: row.itemType,
       category: row.category,

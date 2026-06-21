@@ -1,8 +1,8 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy, Inject } from '@nestjs/common';
-import { eq, and, lte, lt, sql } from 'drizzle-orm';
+import { eq, and, lte, sql } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
-import { outboundSyncQueue, integrationConnections } from '../../../database/schema';
-import type { OutboundAdapter } from './outbound-adapter.interface';
+import { outboundSyncQueue, integrationConnections, jobs } from '../../../database/schema';
+import type { OutboundAdapter, OutboundPushResult } from './outbound-adapter.interface';
 
 interface OutboundQueueRow {
   id: string;
@@ -129,19 +129,19 @@ export class OutboundWorkerService implements OnModuleInit, OnModuleDestroy {
 
     if (!connection) {
       this.logger.error(`${logPrefix} — connection ${record.connectionId} not found`);
-      await this.markFailed(record.id, 'Connection not found');
+      await this.markFailed(record.id, record.entityType, record.entityId, 'Connection not found');
       return;
     }
 
     const adapter = this.adapters.get(connection.providerCode);
     if (!adapter) {
       this.logger.error(`${logPrefix} — no adapter for provider '${connection.providerCode}'`);
-      await this.markFailed(record.id, `No adapter for ${connection.providerCode}`);
+      await this.markFailed(record.id, record.entityType, record.entityId, `No adapter for ${connection.providerCode}`);
       return;
     }
 
     try {
-      await adapter.push({
+      const result = await adapter.push({
         connectionId: record.connectionId,
         entityType: record.entityType,
         entityId: record.entityId,
@@ -150,17 +150,37 @@ export class OutboundWorkerService implements OnModuleInit, OnModuleDestroy {
       });
 
       await this.markSent(record.id);
+      await this.patchEntity(record, result);
       this.logger.log(`${logPrefix} — sent ${record.entityType}:${record.entityId} action=${record.action}`);
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       this.logger.warn(`${logPrefix} — failed: ${errorMsg}`);
 
       if (record.attempts + 1 >= record.maxAttempts) {
-        await this.markFailed(record.id, errorMsg);
+        await this.markFailed(record.id, record.entityType, record.entityId, errorMsg);
       } else {
         const backoffMs = Math.min(1000 * Math.pow(2, record.attempts), 300_000);
         await this.scheduleRetry(record.id, backoffMs, errorMsg);
       }
+    }
+  }
+
+  private async patchEntity(record: OutboundQueueRow, result: OutboundPushResult): Promise<void> {
+    if (record.entityType === 'job') {
+      const patchData: Record<string, unknown> = {
+        syncStatus: 'synced',
+        updatedAt: new Date(),
+      };
+      if (result.externalReference) {
+        patchData.externalReference = result.externalReference;
+      }
+      if (result.responsePayload) {
+        patchData.apiPayload = result.responsePayload;
+      }
+      await this.db
+        .update(jobs)
+        .set(patchData)
+        .where(eq(jobs.id, record.entityId));
     }
   }
 
@@ -171,11 +191,18 @@ export class OutboundWorkerService implements OnModuleInit, OnModuleDestroy {
       .where(eq(outboundSyncQueue.id, id));
   }
 
-  private async markFailed(id: string, error: string): Promise<void> {
+  private async markFailed(id: string, entityType: string, entityId: string, error: string): Promise<void> {
     await this.db
       .update(outboundSyncQueue)
       .set({ status: 'failed', lastError: error })
       .where(eq(outboundSyncQueue.id, id));
+
+    if (entityType === 'job') {
+      await this.db
+        .update(jobs)
+        .set({ syncStatus: 'failed', updatedAt: new Date() })
+        .where(eq(jobs.id, entityId));
+    }
   }
 
   private async scheduleRetry(id: string, backoffMs: number, error: string): Promise<void> {

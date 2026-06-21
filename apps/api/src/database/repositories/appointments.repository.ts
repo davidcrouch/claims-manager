@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, asc } from 'drizzle-orm';
+import { eq, and, asc, desc, ilike, sql } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { appointments } from '../schema';
 
@@ -10,6 +10,52 @@ export type AppointmentInsert = typeof appointments.$inferInsert;
 @Injectable()
 export class AppointmentsRepository {
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
+
+  async findAll(params: {
+    tenantId: string;
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+    sort?: string;
+    order?: 'asc' | 'desc';
+  }): Promise<{ data: AppointmentRow[]; total: number }> {
+    const page = params.page ?? 1;
+    const limit = Math.min(params.limit ?? 20, 100);
+    const skip = (page - 1) * limit;
+
+    const conditions = [eq(appointments.tenantId, params.tenantId)];
+    if (params.search) {
+      conditions.push(ilike(appointments.name, `%${params.search}%`));
+    }
+    if (params.status) {
+      conditions.push(eq(appointments.status, params.status));
+    }
+    const where = and(...conditions);
+
+    const sortCol =
+      params.sort === 'name' ? appointments.name :
+      params.sort === 'status' ? appointments.status :
+      params.sort === 'location' ? appointments.location :
+      appointments.startDate;
+    const orderBy = params.order === 'desc' ? desc(sortCol) : asc(sortCol);
+
+    const [data, countResult] = await Promise.all([
+      this.db
+        .select()
+        .from(appointments)
+        .where(where)
+        .orderBy(orderBy)
+        .limit(limit)
+        .offset(skip),
+      this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(appointments)
+        .where(where),
+    ]);
+
+    return { data, total: countResult[0]?.count ?? 0 };
+  }
 
   async findOne(params: {
     id: string;

@@ -15,6 +15,12 @@ async function getApi() {
   return createApiClient({ token, tenantId });
 }
 
+export async function fetchQuoteAction(quoteId: string): Promise<Quote | null> {
+  const api = await getApi();
+  if (!api) return null;
+  return api.getQuote(quoteId);
+}
+
 export async function fetchQuotesAction(params: {
   page?: number;
   limit?: number;
@@ -31,6 +37,27 @@ export async function fetchQuotesAction(params: {
     jobId: params.jobId,
     statusId: params.statusId,
   });
+}
+
+export async function deleteQuoteAction(quoteId: string): Promise<{
+  success: boolean;
+  softDeleted?: boolean;
+  error?: string;
+}> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+
+  try {
+    const result = await api.deleteQuote(quoteId);
+    revalidatePath('/quotes');
+    return { success: true, softDeleted: result.softDeleted };
+  } catch (err) {
+    console.error('[quotes/actions.deleteQuoteAction]', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to delete estimate',
+    };
+  }
 }
 
 export async function getQuoteCatalogMismatchesAction(quoteId: string): Promise<{
@@ -309,8 +336,8 @@ export async function deleteQuoteComboAction(params: {
 
 export async function saveQuoteLineItemsAction(params: {
   quoteId: string;
-  items: Array<{ id: string; name?: string; description?: string; quantity?: string; unitCost?: string; markupValue?: string; tax?: string }>;
-  combos: Array<{ id: string; quantity?: string }>;
+  items: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string; unitCost?: string; markupValue?: string; tax?: string }>;
+  combos: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string }>;
 }): Promise<{ success: boolean; updated?: number; error?: string }> {
   const api = await getApi();
   if (!api) return { success: false, error: 'Not authenticated' };

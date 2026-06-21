@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CrunchworkService } from '../../../../crunchwork/crunchwork.service';
-import type { OutboundAdapter, OutboundAdapterPushParams } from '../outbound-adapter.interface';
+import type { OutboundAdapter, OutboundAdapterPushParams, OutboundPushResult } from '../outbound-adapter.interface';
 
 @Injectable()
 export class CrunchworkOutboundAdapter implements OutboundAdapter {
@@ -8,7 +8,7 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
 
   constructor(private readonly crunchwork: CrunchworkService) {}
 
-  async push(params: OutboundAdapterPushParams): Promise<void> {
+  async push(params: OutboundAdapterPushParams): Promise<OutboundPushResult> {
     const { connectionId, entityType, entityId, action, payload } = params;
 
     this.logger.log(
@@ -17,36 +17,28 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
 
     switch (entityType) {
       case 'job':
-        await this.pushJob(connectionId, entityId, action, payload);
-        break;
+        return this.pushJob(connectionId, entityId, action, payload);
       case 'invoice':
-        await this.pushInvoice(connectionId, entityId, action, payload);
-        break;
+        return this.pushInvoice(connectionId, entityId, action, payload);
       case 'quote':
-        await this.pushQuote(connectionId, entityId, action, payload);
-        break;
+        return this.pushQuote(connectionId, entityId, action, payload);
       case 'purchase_order':
-        await this.pushPurchaseOrder(connectionId, entityId, action, payload);
-        break;
+        return this.pushPurchaseOrder(connectionId, entityId, action, payload);
       case 'task':
-        await this.pushTask(connectionId, entityId, action, payload);
-        break;
+        return this.pushTask(connectionId, entityId, action, payload);
       case 'message':
-        await this.pushMessage(connectionId, entityId, action, payload);
-        break;
+        return this.pushMessage(connectionId, entityId, action, payload);
       case 'appointment':
-        await this.pushAppointment(connectionId, entityId, action, payload);
-        break;
+        return this.pushAppointment(connectionId, entityId, action, payload);
       case 'report':
-        await this.pushReport(connectionId, entityId, action, payload);
-        break;
+        return this.pushReport(connectionId, entityId, action, payload);
       case 'attachment':
-        await this.pushAttachment(connectionId, entityId, action, payload);
-        break;
+        return this.pushAttachment(connectionId, entityId, action, payload);
       default:
         this.logger.warn(
           `CrunchworkOutboundAdapter.push — unsupported entityType '${entityType}'`,
         );
+        return {};
     }
   }
 
@@ -55,18 +47,23 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
     entityId: string,
     action: string,
     payload: Record<string, unknown>,
-  ): Promise<void> {
-    const externalId = (payload.externalId as string) ?? entityId;
+  ): Promise<OutboundPushResult> {
     if (action === 'create') {
-      // Job creation not yet supported outbound
-      this.logger.warn('CrunchworkOutboundAdapter.pushJob — create not supported');
-      return;
+      const response = await this.crunchwork.createJob({ connectionId, body: payload });
+      const responseObj = response as Record<string, unknown>;
+      return {
+        externalReference: (responseObj.id as string) ?? null,
+        responsePayload: responseObj,
+      };
     }
-    await this.crunchwork.updateJob({
+
+    const externalId = (payload.externalId as string) ?? entityId;
+    const response = await this.crunchwork.updateJob({
       connectionId,
       jobId: externalId,
       body: this.transformJobPayload(action, payload),
     });
+    return { responsePayload: response as Record<string, unknown> };
   }
 
   private async pushInvoice(
@@ -74,13 +71,18 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
     entityId: string,
     action: string,
     payload: Record<string, unknown>,
-  ): Promise<void> {
+  ): Promise<OutboundPushResult> {
     const externalId = (payload.externalId as string) ?? entityId;
     if (action === 'create' || action === 'issue') {
-      await this.crunchwork.createInvoice({ connectionId, body: payload });
-      return;
+      const response = await this.crunchwork.createInvoice({ connectionId, body: payload });
+      const responseObj = response as Record<string, unknown>;
+      return {
+        externalReference: (responseObj.id as string) ?? null,
+        responsePayload: responseObj,
+      };
     }
-    await this.crunchwork.updateInvoice({ connectionId, invoiceId: externalId, body: payload });
+    const response = await this.crunchwork.updateInvoice({ connectionId, invoiceId: externalId, body: payload });
+    return { responsePayload: response as Record<string, unknown> };
   }
 
   private async pushQuote(
@@ -88,15 +90,18 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
     entityId: string,
     action: string,
     payload: Record<string, unknown>,
-  ): Promise<void> {
-    const externalId = (payload.externalId as string) ?? entityId;
+  ): Promise<OutboundPushResult> {
     if (action === 'create') {
-      // Quote creation — pass-through
-      this.logger.warn('CrunchworkOutboundAdapter.pushQuote — create not yet mapped');
-      return;
+      const response = await this.crunchwork.createQuote({ connectionId, body: payload });
+      const responseObj = response as Record<string, unknown>;
+      return {
+        externalReference: (responseObj.id as string) ?? null,
+        responsePayload: responseObj,
+      };
     }
-    // For update/status_change, use the get + compare pattern (future)
-    this.logger.debug(`CrunchworkOutboundAdapter.pushQuote — ${action} for ${externalId}`);
+    const externalId = (payload.externalId as string) ?? entityId;
+    const response = await this.crunchwork.updateQuote({ connectionId, quoteId: externalId, body: payload });
+    return { responsePayload: response as Record<string, unknown> };
   }
 
   private async pushPurchaseOrder(
@@ -104,13 +109,14 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
     entityId: string,
     action: string,
     payload: Record<string, unknown>,
-  ): Promise<void> {
+  ): Promise<OutboundPushResult> {
     const externalId = (payload.externalId as string) ?? entityId;
-    await this.crunchwork.updatePurchaseOrder({
+    const response = await this.crunchwork.updatePurchaseOrder({
       connectionId,
       purchaseOrderId: externalId,
       body: payload,
     });
+    return { responsePayload: response as Record<string, unknown> };
   }
 
   private async pushTask(
@@ -118,13 +124,18 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
     entityId: string,
     action: string,
     payload: Record<string, unknown>,
-  ): Promise<void> {
+  ): Promise<OutboundPushResult> {
     const externalId = (payload.externalId as string) ?? entityId;
     if (action === 'create') {
-      await this.crunchwork.createTask({ connectionId, body: payload });
-      return;
+      const response = await this.crunchwork.createTask({ connectionId, body: payload });
+      const responseObj = response as Record<string, unknown>;
+      return {
+        externalReference: (responseObj.id as string) ?? null,
+        responsePayload: responseObj,
+      };
     }
-    await this.crunchwork.updateTask({ connectionId, taskId: externalId, body: payload });
+    const response = await this.crunchwork.updateTask({ connectionId, taskId: externalId, body: payload });
+    return { responsePayload: response as Record<string, unknown> };
   }
 
   private async pushMessage(
@@ -132,15 +143,21 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
     entityId: string,
     action: string,
     payload: Record<string, unknown>,
-  ): Promise<void> {
+  ): Promise<OutboundPushResult> {
     if (action === 'create') {
-      await this.crunchwork.createMessage({ connectionId, body: payload });
-      return;
+      const response = await this.crunchwork.createMessage({ connectionId, body: payload });
+      const responseObj = response as Record<string, unknown>;
+      return {
+        externalReference: (responseObj.id as string) ?? null,
+        responsePayload: responseObj,
+      };
     }
     const externalId = (payload.externalId as string) ?? entityId;
     if (action === 'acknowledge') {
-      await this.crunchwork.acknowledgeMessage({ connectionId, messageId: externalId });
+      const response = await this.crunchwork.acknowledgeMessage({ connectionId, messageId: externalId });
+      return { responsePayload: response as Record<string, unknown> };
     }
+    return {};
   }
 
   private async pushAppointment(
@@ -148,25 +165,30 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
     entityId: string,
     action: string,
     payload: Record<string, unknown>,
-  ): Promise<void> {
+  ): Promise<OutboundPushResult> {
     const externalId = (payload.externalId as string) ?? entityId;
     if (action === 'create') {
-      await this.crunchwork.createAppointment({ connectionId, body: payload });
-      return;
+      const response = await this.crunchwork.createAppointment({ connectionId, body: payload });
+      const responseObj = response as Record<string, unknown>;
+      return {
+        externalReference: (responseObj.id as string) ?? null,
+        responsePayload: responseObj,
+      };
     }
     if (action === 'cancel') {
-      await this.crunchwork.cancelAppointment({
+      const response = await this.crunchwork.cancelAppointment({
         connectionId,
         appointmentId: externalId,
         body: payload,
       });
-      return;
+      return { responsePayload: response as Record<string, unknown> };
     }
-    await this.crunchwork.updateAppointment({
+    const response = await this.crunchwork.updateAppointment({
       connectionId,
       appointmentId: externalId,
       body: payload,
     });
+    return { responsePayload: response as Record<string, unknown> };
   }
 
   private async pushReport(
@@ -174,9 +196,10 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
     entityId: string,
     action: string,
     payload: Record<string, unknown>,
-  ): Promise<void> {
+  ): Promise<OutboundPushResult> {
     const externalId = (payload.externalId as string) ?? entityId;
-    await this.crunchwork.updateReport({ connectionId, reportId: externalId, body: payload });
+    const response = await this.crunchwork.updateReport({ connectionId, reportId: externalId, body: payload });
+    return { responsePayload: response as Record<string, unknown> };
   }
 
   private async pushAttachment(
@@ -184,17 +207,22 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
     entityId: string,
     action: string,
     payload: Record<string, unknown>,
-  ): Promise<void> {
+  ): Promise<OutboundPushResult> {
     const externalId = (payload.externalId as string) ?? entityId;
     if (action === 'create') {
-      await this.crunchwork.createAttachment({ connectionId, body: payload });
-      return;
+      const response = await this.crunchwork.createAttachment({ connectionId, body: payload });
+      const responseObj = response as Record<string, unknown>;
+      return {
+        externalReference: (responseObj.id as string) ?? null,
+        responsePayload: responseObj,
+      };
     }
-    await this.crunchwork.updateAttachment({
+    const response = await this.crunchwork.updateAttachment({
       connectionId,
       attachmentId: externalId,
       body: payload,
     });
+    return { responsePayload: response as Record<string, unknown> };
   }
 
   private transformJobPayload(

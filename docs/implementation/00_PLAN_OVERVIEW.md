@@ -171,6 +171,14 @@ Implements the grouped sidebar navigation from `docs/Ensure Roles.pdf` with new 
 
 ---
 
+## Journals
+
+| # | Document | Title | Scope |
+|---|----------|-------|-------|
+| 37 | `37_JOURNALS_MODULE.md` | Journals Module | Location-aware multimedia journals (pages, photos, attachments) for Jobs, Quotes, and Invoices |
+
+---
+
 ## UI Implementation Plans (Next.js Frontend)
 
 The Next.js frontend implements `docs/design/02_UI_SPECIFICATION.md` with SSR, communicating with the NestJS API at `apps/api`.

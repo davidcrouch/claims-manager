@@ -169,6 +169,7 @@ interface GroupLabelOption {
 function GroupLabelsTab({ open }: { open: boolean }) {
   const [labels, setLabels] = useState<GroupLabelOption[]>([]);
   const [loading, setLoading] = useState(false);
+  const [groupQuery, setGroupQuery] = useState('');
 
   useEffect(() => {
     if (!open) return;
@@ -181,19 +182,43 @@ function GroupLabelsTab({ open }: { open: boolean }) {
     });
   }, [open]);
 
+  useEffect(() => {
+    if (open) return;
+    setGroupQuery('');
+  }, [open]);
+
+  const filtered = groupQuery
+    ? labels.filter((l) => {
+        const text = (l.name ?? l.externalReference ?? l.id).toLowerCase();
+        return text.includes(groupQuery.toLowerCase());
+      })
+    : labels;
+
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-      {loading && labels.length === 0 && (
-        <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
-      )}
-      {!loading && labels.length === 0 && (
-        <p className="py-8 text-center text-sm text-muted-foreground">
-          No group labels found
-        </p>
-      )}
-      {labels.length > 0 && (
-        <ul className="space-y-2">
-          {labels.map((label) => {
+    <>
+      <div className="border-b border-slate-100 px-5 py-3">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            className="pl-8"
+            placeholder="Search groups…"
+            value={groupQuery}
+            onChange={(e) => setGroupQuery(e.target.value)}
+          />
+        </div>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        {loading && labels.length === 0 && (
+          <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
+        )}
+        {!loading && filtered.length === 0 && (
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            {groupQuery ? 'No matching groups' : 'No groups found'}
+          </p>
+        )}
+        {filtered.length > 0 && (
+          <ul className="space-y-2">
+            {filtered.map((label) => {
             const displayName = label.name ?? label.externalReference ?? label.id;
             const payload: GroupLabelDragPayload = { id: label.id, name: displayName };
             return (
@@ -218,7 +243,8 @@ function GroupLabelsTab({ open }: { open: boolean }) {
           })}
         </ul>
       )}
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -383,7 +409,7 @@ export function CatalogPickerDrawer({ open, onOpenChange }: CatalogPickerDrawerP
                   </TabsTrigger>
                   <TabsTrigger value="groups" className="flex-1 gap-1.5 text-xs">
                     <Tag className="h-3.5 w-3.5" />
-                    Group Labels
+                    Groups
                   </TabsTrigger>
                 </TabsList>
               </div>

@@ -1,8 +1,18 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { FileSpreadsheet } from 'lucide-react';
+import { AlertTriangle, FileSpreadsheet } from 'lucide-react';
+import { deleteQuoteAction } from '@/app/(app)/quotes/actions';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   SortTabs,
   SearchInput,
@@ -16,13 +26,13 @@ import {
   parseStatusIdsFromSearchParam,
   compareDates,
   compareValues,
-  formatDate,
 } from '@/components/shared/list-filters';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import {
   ListPageHeader,
   computeStatusBreakdown,
 } from '@/components/layout/ListPageHeader';
+import { QuotesTable } from './QuotesTable';
 import type { Quote, PaginatedResponse } from '@/types/api';
 
 const SORT_OPTIONS: SortOption[] = [
@@ -31,17 +41,6 @@ const SORT_OPTIONS: SortOption[] = [
   { key: 'quote_number', label: 'Estimate #' },
 ];
 const ALLOWED_SORT_FIELDS = SORT_OPTIONS.map((o) => o.key);
-
-function formatAmount(value?: string | null): string {
-  if (!value) return '';
-  const n = Number(value);
-  if (Number.isNaN(n)) return value;
-  return n.toLocaleString(undefined, {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 2,
-  });
-}
 
 export interface QuotesListClientProps {
   initialData: PaginatedResponse<Quote>;
@@ -54,7 +53,14 @@ export function QuotesListClient({
 }: QuotesListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [data] = useState(initialData);
+  const [isPending, startTransition] = useTransition();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [data, setData] = useState(initialData);
+
+  useEffect(() => {
+    setData(initialData);
+  }, [initialData]);
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [sort, setSort] = useState(() => {
@@ -128,8 +134,8 @@ export function QuotesListClient({
     if (query) {
       rows = rows.filter((q) => {
         const num = (q.quoteNumber ?? '').toLowerCase();
-        const ref = (q.externalReference ?? '').toLowerCase();
-        return num.includes(query) || ref.includes(query);
+        const name = (q.name ?? '').toLowerCase();
+        return num.includes(query) || name.includes(query);
       });
     }
 
@@ -214,59 +220,70 @@ export function QuotesListClient({
         style={{ minHeight: 0, overflow: 'auto' }}
       >
         {visibleRows.length > 0 ? (
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50">
-                <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                  <th scope="col" className="px-4 py-3">Estimate #</th>
-                  <th scope="col" className="px-4 py-3">Status</th>
-                  <th scope="col" className="px-4 py-3">Reference</th>
-                  <th scope="col" className="px-4 py-3">Total</th>
-                  <th scope="col" className="px-4 py-3">Estimate Date</th>
-                  <th scope="col" className="px-4 py-3">Updated</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {visibleRows.map((quote) => {
-                  const num =
-                    quote.quoteNumber ?? quote.externalReference ?? quote.id;
-                  const statusName = quote.status?.name ?? 'Unknown';
-                  return (
-                    <tr
-                      key={quote.id}
-                      onClick={() => router.push(`/quotes/${quote.id}`)}
-                      className="cursor-pointer transition-colors hover:bg-slate-50"
-                    >
-                      <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
-                        {num}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3">
-                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
-                          {statusName}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {quote.externalReference ?? ''}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {formatAmount(quote.totalAmount)}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {formatDate(quote.quoteDate)}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {formatDate(quote.updatedAt)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <QuotesTable
+            quotes={visibleRows}
+            onRowClick={(q) => router.push(`/quotes/${q.id}`)}
+            onDelete={(id) => setConfirmDeleteId(id)}
+            deletingId={isPending ? deletingId : null}
+            showActions
+          />
         ) : (
           <ListEmptyState label="No estimates found." />
         )}
       </div>
+
+      <Dialog
+        open={confirmDeleteId !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmDeleteId(null);
+        }}
+      >
+        <DialogContent showCloseButton={false} className="sm:max-w-sm">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle>Delete Estimate</DialogTitle>
+                <DialogDescription className="mt-1">
+                  This action cannot be undone. The estimate and all its line items will be permanently removed.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmDeleteId(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={isPending && deletingId === confirmDeleteId}
+              onClick={() => {
+                if (!confirmDeleteId) return;
+                const idToDelete = confirmDeleteId;
+                setDeletingId(idToDelete);
+                startTransition(async () => {
+                  await deleteQuoteAction(idToDelete);
+                  setData((prev) => ({
+                    ...prev,
+                    data: prev.data.filter((q) => q.id !== idToDelete),
+                    total: Math.max(0, prev.total - 1),
+                  }));
+                  setDeletingId(null);
+                  setConfirmDeleteId(null);
+                  router.refresh();
+                });
+              }}
+            >
+              {isPending && deletingId === confirmDeleteId ? 'Deleting…' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

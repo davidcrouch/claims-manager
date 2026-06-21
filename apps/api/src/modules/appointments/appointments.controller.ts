@@ -1,9 +1,28 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { AppointmentsService } from './appointments.service';
 
 @Controller('appointments')
 export class AppointmentsController {
   constructor(private readonly appointmentsService: AppointmentsService) {}
+
+  @Get()
+  async findAll(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('status') status?: string,
+    @Query('sort') sort?: string,
+    @Query('order') order?: string,
+  ) {
+    return this.appointmentsService.findAll({
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      search: search || undefined,
+      status: status || undefined,
+      sort: sort || undefined,
+      order: order === 'desc' ? 'desc' : 'asc',
+    });
+  }
 
   @Get('job/:jobId')
   async findByJob(@Param('jobId') jobId: string) {

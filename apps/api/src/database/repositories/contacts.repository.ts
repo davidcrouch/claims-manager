@@ -86,6 +86,35 @@ export class ContactsRepository {
     return row ?? null;
   }
 
+  async findByEmail(params: {
+    tenantId: string;
+    email: string;
+  }): Promise<ContactRow | null> {
+    const [row] = await this.db
+      .select()
+      .from(contacts)
+      .where(
+        and(
+          eq(contacts.tenantId, params.tenantId),
+          ilike(contacts.email, params.email),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
+  async create(params: {
+    data: ContactInsert;
+    tx?: DrizzleDbOrTx;
+  }): Promise<ContactRow> {
+    const db = params.tx ?? this.db;
+    const [row] = await db
+      .insert(contacts)
+      .values(params.data)
+      .returning();
+    return row;
+  }
+
   /**
    * Idempotent upsert keyed on `(tenant_id, external_reference)` — matches the
    * `UQ_contacts_tenant_extref` unique index. Callers must pass a non-empty

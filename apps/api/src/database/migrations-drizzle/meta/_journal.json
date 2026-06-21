@@ -71,6 +71,48 @@
       "when": 1779000000000,
       "tag": "0009_catalogue_module",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1779100000000,
+      "tag": "0010_lookup_provider_code",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1779200000000,
+      "tag": "0011_job_connection_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1779300000000,
+      "tag": "0012_quote_item_component",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1779400000000,
+      "tag": "0013_contacts_unique_email",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1782198000000,
+      "tag": "0014_job_sync_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1782284400000,
+      "tag": "0015_entity_lookup_views",
+      "breakpoints": true
     }
   ]
 }

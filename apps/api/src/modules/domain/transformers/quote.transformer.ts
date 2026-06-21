@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { EntityTransformer, TransformResult, LookupRequest, ParentRef } from './transformer.interface';
 import type { QuoteInsert } from '../../../database/repositories';
-import { asString, isPlainObject } from './transform-utils';
+import { asString, asTimestamp, asNumericString, isPlainObject } from './transform-utils';
 
 @Injectable()
 export class QuoteTransformer implements EntityTransformer<QuoteInsert> {
@@ -21,6 +21,11 @@ export class QuoteTransformer implements EntityTransformer<QuoteInsert> {
       name: asString(payload.name),
       reference: asString(payload.reference),
       note: asString(payload.note),
+      quoteDate: asTimestamp(payload.date ?? payload.quoteDate),
+      expiresInDays: payload.expiresInDays != null ? Number(payload.expiresInDays) : undefined,
+      subTotal: asNumericString(payload.subTotal),
+      totalTax: asNumericString(payload.totalTax),
+      totalAmount: asNumericString(payload.total ?? payload.totalAmount),
       apiPayload: payload,
     };
 

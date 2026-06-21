@@ -30,6 +30,9 @@ export class WebhooksService implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
+    this.logger.log(
+      `WebhooksService.onModuleInit — setting connectionResolver on CrunchworkService (resolver=${!!this.connectionResolver}, crunchwork=${!!this.crunchworkService})`,
+    );
     this.crunchworkService.setConnectionResolver(this.connectionResolver);
   }
 
@@ -174,6 +177,7 @@ export class WebhooksService implements OnModuleInit {
       }
 
       // Legacy in-process path: fetch CW → upsert → project inline.
+      this.crunchworkService.setConnectionResolver(this.connectionResolver);
       let fullPayload: Record<string, unknown>;
       try {
         fullPayload = await this.crunchworkService.fetchEntityByType({

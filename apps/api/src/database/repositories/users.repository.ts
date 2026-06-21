@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { eq, and, or, ilike, asc } from 'drizzle-orm';
 import { DRIZZLE } from '../drizzle.module';
 import type { DrizzleDB } from '../drizzle.module';
 import { users, organizationUsers } from '../schema';
@@ -35,6 +35,29 @@ export class UsersRepository {
       .from(users)
       .innerJoin(organizationUsers, eq(users.id, organizationUsers.userId))
       .where(eq(organizationUsers.organizationId, params.organizationId));
+    return rows.map((r) => r.user);
+  }
+
+  async searchByOrganization(params: {
+    organizationId: string;
+    search?: string;
+    limit?: number;
+  }): Promise<UserRow[]> {
+    const limit = Math.min(params.limit ?? 20, 100);
+    const searchPattern = params.search ? `%${params.search}%` : null;
+
+    const baseCondition = eq(organizationUsers.organizationId, params.organizationId);
+    const whereClause = searchPattern
+      ? and(baseCondition, or(ilike(users.name, searchPattern), ilike(users.email, searchPattern)))
+      : baseCondition;
+
+    const rows = await this.db
+      .select({ user: users })
+      .from(users)
+      .innerJoin(organizationUsers, eq(users.id, organizationUsers.userId))
+      .where(whereClause)
+      .orderBy(asc(users.name))
+      .limit(limit);
     return rows.map((r) => r.user);
   }
 

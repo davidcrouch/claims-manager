@@ -2,9 +2,10 @@ export {
   ClaimsRepository,
   type ClaimRow,
   type ClaimInsert,
+  type ClaimViewRow,
 } from './claims.repository';
 export { LookupsRepository } from './lookups.repository';
-export { JobsRepository, type JobRow, type JobInsert } from './jobs.repository';
+export { JobsRepository, type JobRow, type JobInsert, type JobViewRow } from './jobs.repository';
 export {
   ContactsRepository,
   type ContactRow,
@@ -25,6 +26,7 @@ export {
   QuotesRepository,
   type QuoteRow,
   type QuoteInsert,
+  type QuoteViewRow,
 } from './quotes.repository';
 export {
   InvoicesRepository,
@@ -146,3 +148,20 @@ export {
   type CatalogAssemblyComponentRow,
   type CatalogAssemblyComponentInsert,
 } from './catalog-assembly-components.repository';
+export {
+  JournalsRepository,
+  type JournalRow,
+  type JournalInsert,
+  type JournalEntityLinkRow,
+  type JournalEntityLinkInsert,
+} from './journals.repository';
+export {
+  JournalPagesRepository,
+  type JournalPageRow,
+  type JournalPageInsert,
+} from './journal-pages.repository';
+export {
+  JournalPageAttachmentsRepository,
+  type JournalPageAttachmentRow,
+  type JournalPageAttachmentInsert,
+} from './journal-page-attachments.repository';

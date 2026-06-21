@@ -243,6 +243,7 @@ export const jobs = pgTable(
     addressState: text('address_state'),
     addressCountry: text('address_country'),
     jobInstructions: text('job_instructions'),
+    syncStatus: text('sync_status'),
     apiPayload: jsonb('api_payload').notNull().default({}),
     customData: jsonb('custom_data').notNull().default({}),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -347,6 +348,7 @@ export const quoteCombos = pgTable(
     }),
     lineScopeStatusLookupId: uuid('line_scope_status_lookup_id').references(() => lookupValues.id),
     name: text('name'),
+    component: text('component'),
     description: text('description'),
     category: text('category'),
     subCategory: text('sub_category'),
@@ -381,6 +383,7 @@ export const quoteItems = pgTable(
     lineScopeStatusLookupId: uuid('line_scope_status_lookup_id').references(() => lookupValues.id),
     unitTypeLookupId: uuid('unit_type_lookup_id').references(() => lookupValues.id),
     name: text('name'),
+    component: text('component'),
     description: text('description'),
     category: text('category'),
     subCategory: text('sub_category'),
@@ -1841,6 +1844,129 @@ export const catalogAssemblyComponents = pgTable(
     index('idx_catalog_bom_assembly').on(t.tenantId, t.assemblyId),
     index('idx_catalog_bom_component').on(t.tenantId, t.componentId),
     check('chk_bom_no_self_ref', sql`assembly_id != component_id`),
+  ],
+);
+
+// ── Journals ──────────────────────────────────────────────────
+
+export const journals = pgTable(
+  'journals',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    name: text('name').notNull(),
+    description: text('description'),
+    status: text('status').notNull().default('active'),
+    address: jsonb('address').notNull().default({}),
+    addressPostcode: text('address_postcode'),
+    addressSuburb: text('address_suburb'),
+    addressState: text('address_state'),
+    addressCountry: text('address_country'),
+    latitude: numeric('latitude', { precision: 10, scale: 7 }),
+    longitude: numeric('longitude', { precision: 10, scale: 7 }),
+    thumbnailUrl: text('thumbnail_url'),
+    thumbnailStorageKey: text('thumbnail_storage_key'),
+    metadata: jsonb('metadata').notNull().default({}),
+    createdByUserId: text('created_by_user_id'),
+    updatedByUserId: text('updated_by_user_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [
+    check('chk_journal_status', sql`status IN ('active', 'archived', 'deleted')`),
+    index('idx_journals_tenant').on(t.tenantId, t.status),
+  ],
+);
+
+export const journalEntityLinks = pgTable(
+  'journal_entity_links',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    journalId: uuid('journal_id')
+      .notNull()
+      .references(() => journals.id, { onDelete: 'cascade' }),
+    entityType: text('entity_type').notNull(),
+    entityId: uuid('entity_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check(
+      'chk_journal_link_entity_type',
+      sql`entity_type IN ('Job', 'Quote', 'Invoice')`,
+    ),
+    uniqueIndex('UQ_journal_entity_link').on(t.journalId, t.entityType, t.entityId),
+    index('idx_journal_links_entity').on(t.tenantId, t.entityType, t.entityId),
+    index('idx_journal_links_journal').on(t.tenantId, t.journalId),
+  ],
+);
+
+export const journalPages = pgTable(
+  'journal_pages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    journalId: uuid('journal_id')
+      .notNull()
+      .references(() => journals.id, { onDelete: 'cascade' }),
+    body: text('body'),
+    bodyFormat: text('body_format').notNull().default('plaintext'),
+    latitude: numeric('latitude', { precision: 10, scale: 7 }),
+    longitude: numeric('longitude', { precision: 10, scale: 7 }),
+    locationAccuracy: numeric('location_accuracy', { precision: 10, scale: 2 }),
+    locationLabel: text('location_label'),
+    capturedAt: timestamp('captured_at', { withTimezone: true }).notNull().defaultNow(),
+    sortIndex: integer('sort_index').notNull().default(0),
+    metadata: jsonb('metadata').notNull().default({}),
+    createdByUserId: text('created_by_user_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [
+    check('chk_page_body_format', sql`body_format IN ('plaintext', 'markdown', 'html')`),
+    index('idx_journal_pages_journal').on(t.tenantId, t.journalId),
+    index('idx_journal_pages_captured').on(t.journalId, t.capturedAt),
+    index('idx_journal_pages_sort').on(t.journalId, t.sortIndex),
+  ],
+);
+
+export const journalPageAttachments = pgTable(
+  'journal_page_attachments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    journalPageId: uuid('journal_page_id')
+      .notNull()
+      .references(() => journalPages.id, { onDelete: 'cascade' }),
+    fileName: text('file_name').notNull(),
+    mimeType: text('mime_type').notNull(),
+    fileSize: bigint('file_size', { mode: 'number' }),
+    storageProvider: text('storage_provider').notNull().default('r2'),
+    storageKey: text('storage_key').notNull(),
+    fileUrl: text('file_url'),
+    caption: text('caption'),
+    sortIndex: integer('sort_index').notNull().default(0),
+    width: integer('width'),
+    height: integer('height'),
+    durationSeconds: numeric('duration_seconds', { precision: 10, scale: 2 }),
+    thumbnailStorageKey: text('thumbnail_storage_key'),
+    metadata: jsonb('metadata').notNull().default({}),
+    createdByUserId: text('created_by_user_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_journal_page_attachments_page').on(t.tenantId, t.journalPageId),
+    index('idx_journal_page_attachments_type').on(t.tenantId, t.mimeType),
   ],
 );
 

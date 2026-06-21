@@ -48,6 +48,11 @@ export class QuotesController {
     return this.quotesService.update({ id, body });
   }
 
+  @Delete(':id')
+  async delete(@Param('id') id: string) {
+    return this.quotesService.delete({ id });
+  }
+
   @Post(':id/publish')
   async publish(@Param('id') id: string) {
     return this.quotesService.publish({ id });

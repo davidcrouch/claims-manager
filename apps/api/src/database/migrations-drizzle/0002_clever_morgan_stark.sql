@@ -1,1 +1,0 @@
-ALTER TABLE "integration_connections" ADD COLUMN "base_api" text;

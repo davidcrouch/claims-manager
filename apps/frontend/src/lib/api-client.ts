@@ -20,6 +20,7 @@ import type {
   Vendor,
   Appointment,
   Attachment,
+  Contact,
   DashboardStats,
   RecentActivity,
   PaginatedResponse,
@@ -36,6 +37,8 @@ import type {
   WebhookEvent,
   CreateConnectionPayload,
   UpdateConnectionPayload,
+  Journal,
+  JournalPage,
 } from '@/types/api';
 
 export interface ApiClientOptions {
@@ -186,6 +189,24 @@ export function createApiClient(options?: ApiClientOptions) {
 
     getJobReports(jobId: string): Promise<Report[]> {
       return fetchApi<Report[]>(`/reports/job/${jobId}`);
+    },
+
+    getAppointments(params?: {
+      page?: number;
+      limit?: number;
+      search?: string;
+      status?: string;
+      sort?: string;
+      order?: 'asc' | 'desc';
+    }): Promise<PaginatedResponse<Appointment>> {
+      const sp = new URLSearchParams();
+      if (params?.page != null) sp.set('page', String(params.page));
+      if (params?.limit != null) sp.set('limit', String(params.limit));
+      if (params?.search) sp.set('search', params.search);
+      if (params?.status) sp.set('status', params.status);
+      if (params?.sort) sp.set('sort', params.sort);
+      if (params?.order) sp.set('order', params.order);
+      return fetchApi<PaginatedResponse<Appointment>>(`/appointments?${sp}`);
     },
 
     getJobAppointments(jobId: string): Promise<Appointment[]> {
@@ -347,6 +368,46 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<unknown>(`/appointments/${id}/cancel`, {
         method: 'POST',
         body: JSON.stringify(body ?? {}),
+      });
+    },
+
+    // Contacts
+    getContacts(params?: {
+      page?: number;
+      limit?: number;
+      search?: string;
+    }): Promise<PaginatedResponse<Contact>> {
+      const sp = new URLSearchParams();
+      if (params?.page != null) sp.set('page', String(params.page));
+      if (params?.limit != null) sp.set('limit', String(params.limit));
+      if (params?.search) sp.set('search', params.search);
+      return fetchApi<PaginatedResponse<Contact>>(`/contacts?${sp}`);
+    },
+
+    getJobContacts(jobId: string): Promise<{ id: string; type: 'CONTACT'; name: string; email?: string }[]> {
+      return fetchApi(`/contacts/job/${jobId}`);
+    },
+
+    createContact(body: Record<string, unknown>): Promise<Contact> {
+      return fetchApi<Contact>('/contacts', { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    searchContacts(
+      query: string,
+      type?: 'USER' | 'CONTACT',
+    ): Promise<{ id: string; type: 'USER' | 'CONTACT'; name: string; email?: string }[]> {
+      const sp = new URLSearchParams({ search: query, limit: '20' });
+      if (type === 'USER') {
+        return fetchApi(`/contacts/search-users?${sp}`);
+      }
+      return fetchApi(`/contacts?${sp}`).then((res: any) => {
+        const data: any[] = Array.isArray(res) ? res : res?.data ?? [];
+        return data.map((c: any) => ({
+          id: c.id,
+          type: 'CONTACT' as const,
+          name: [c.firstName, c.lastName].filter(Boolean).join(' ') || c.email || 'Unknown',
+          email: c.email ?? undefined,
+        }));
       });
     },
 
@@ -737,6 +798,10 @@ export function createApiClient(options?: ApiClientOptions) {
       });
     },
 
+    deleteQuote(quoteId: string): Promise<{ deleted: boolean; softDeleted: boolean }> {
+      return fetchApi(`/quotes/${quoteId}`, { method: 'DELETE' });
+    },
+
     deleteQuoteGroup(quoteId: string, groupId: string): Promise<{ deleted: boolean }> {
       return fetchApi(`/quotes/${quoteId}/groups/${groupId}`, { method: 'DELETE' });
     },
@@ -792,14 +857,172 @@ export function createApiClient(options?: ApiClientOptions) {
     updateQuoteLineItems(
       quoteId: string,
       body: {
-        items: Array<{ id: string; name?: string; description?: string; quantity?: string; unitCost?: string; markupValue?: string; tax?: string }>;
-        combos: Array<{ id: string; quantity?: string }>;
+        items: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string; unitCost?: string; markupValue?: string; tax?: string }>;
+        combos: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string }>;
       },
     ): Promise<{ updated: number }> {
       return fetchApi(`/quotes/${quoteId}/line-items`, {
         method: 'PATCH',
         body: JSON.stringify(body),
       });
+    },
+
+    // -- Journals --
+
+    getJournals(params?: {
+      page?: number;
+      limit?: number;
+      status?: string;
+    }): Promise<PaginatedResponse<Journal>> {
+      const sp = new URLSearchParams();
+      if (params?.page != null) sp.set('page', String(params.page));
+      if (params?.limit != null) sp.set('limit', String(params.limit));
+      if (params?.status) sp.set('status', params.status);
+      return fetchApi<PaginatedResponse<Journal>>(`/journals?${sp}`);
+    },
+
+    getJournal(id: string): Promise<Journal> {
+      return fetchApi<Journal>(`/journals/${id}`);
+    },
+
+    getJournalsByEntity(entityType: string, entityId: string): Promise<Journal[]> {
+      return fetchApi<Journal[]>(`/journals/entity/${entityType}/${entityId}`);
+    },
+
+    createJournal(data: {
+      name: string;
+      description?: string;
+      address?: Record<string, unknown>;
+      latitude?: number;
+      longitude?: number;
+    }): Promise<Journal> {
+      return fetchApi<Journal>('/journals', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    updateJournal(id: string, data: {
+      name?: string;
+      description?: string;
+      status?: string;
+      address?: Record<string, unknown>;
+      latitude?: number;
+      longitude?: number;
+    }): Promise<Journal> {
+      return fetchApi<Journal>(`/journals/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      });
+    },
+
+    deleteJournal(id: string): Promise<{ deleted: boolean }> {
+      return fetchApi(`/journals/${id}`, { method: 'DELETE' });
+    },
+
+    linkJournalToEntity(journalId: string, entityType: string, entityId: string): Promise<unknown> {
+      return fetchApi(`/journals/${journalId}/link`, {
+        method: 'POST',
+        body: JSON.stringify({ entityType, entityId }),
+      });
+    },
+
+    unlinkJournalFromEntity(journalId: string, entityType: string, entityId: string): Promise<{ unlinked: boolean }> {
+      return fetchApi(`/journals/${journalId}/link/${entityType}/${entityId}`, {
+        method: 'DELETE',
+      });
+    },
+
+    getJournalPages(journalId: string, params?: {
+      limit?: number;
+      offset?: number;
+    }): Promise<{ data: JournalPage[]; total: number }> {
+      const sp = new URLSearchParams();
+      if (params?.limit != null) sp.set('limit', String(params.limit));
+      if (params?.offset != null) sp.set('offset', String(params.offset));
+      return fetchApi(`/journals/${journalId}/pages?${sp}`);
+    },
+
+    getJournalPage(journalId: string, pageId: string): Promise<JournalPage> {
+      return fetchApi<JournalPage>(`/journals/${journalId}/pages/${pageId}`);
+    },
+
+    createJournalPage(journalId: string, data: {
+      body?: string;
+      bodyFormat?: string;
+      latitude?: number;
+      longitude?: number;
+      locationAccuracy?: number;
+      locationLabel?: string;
+      capturedAt?: string;
+    }): Promise<JournalPage> {
+      return fetchApi<JournalPage>(`/journals/${journalId}/pages`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    updateJournalPage(journalId: string, pageId: string, data: {
+      body?: string;
+      bodyFormat?: string;
+      latitude?: number;
+      longitude?: number;
+      locationLabel?: string;
+    }): Promise<JournalPage> {
+      return fetchApi<JournalPage>(`/journals/${journalId}/pages/${pageId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      });
+    },
+
+    deleteJournalPage(journalId: string, pageId: string): Promise<{ deleted: boolean }> {
+      return fetchApi(`/journals/${journalId}/pages/${pageId}`, { method: 'DELETE' });
+    },
+
+    createJournalPageAttachment(journalId: string, pageId: string, data: {
+      fileName: string;
+      mimeType: string;
+      fileSize?: number;
+      storageKey: string;
+      fileUrl?: string;
+      caption?: string;
+      width?: number;
+      height?: number;
+    }): Promise<unknown> {
+      return fetchApi(`/journals/${journalId}/pages/${pageId}/attachments`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    deleteJournalPageAttachment(
+      journalId: string,
+      pageId: string,
+      attachmentId: string,
+    ): Promise<{ deleted: boolean }> {
+      return fetchApi(`/journals/${journalId}/pages/${pageId}/attachments/${attachmentId}`, {
+        method: 'DELETE',
+      });
+    },
+
+    getJournalUploadUrl(
+      journalId: string,
+      pageId: string,
+      fileName: string,
+      mimeType: string,
+    ): Promise<{ uploadUrl: string; storageKey: string; fileId: string }> {
+      return fetchApi(`/journals/${journalId}/pages/${pageId}/upload-url`, {
+        method: 'POST',
+        body: JSON.stringify({ fileName, mimeType }),
+      });
+    },
+
+    getJournalDownloadUrl(
+      journalId: string,
+      pageId: string,
+      attachmentId: string,
+    ): Promise<{ downloadUrl: string; fileName: string; mimeType: string }> {
+      return fetchApi(`/journals/${journalId}/pages/${pageId}/attachments/${attachmentId}/download`);
     },
   };
 }
