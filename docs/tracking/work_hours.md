@@ -330,7 +330,7 @@
   Improved **quotes and invoices** list and detail screens with shared table components, API client helpers, and navigation updates in the app sidebar.
   Consolidated **database migrations** and added new migrations for job sync status and cross-entity lookup views, plus implementation docs for journals and provider adapter architecture.
 
-- `2026-06-21` `SHORT_SHA` **12 h**
+- `2026-06-21` `e50a92f` **12 h**
   `49 files | +4353 −1972 | Tier 2 standard | Moderate orchestration`
   Lay summary: All list screens now have sortable column headers and active/archived tabs, and new create-record forms were added for purchase orders, work orders, RFQs, proposals, and bills.
   **List-page upgrade with sortable columns, active/archived tabs, and new entity create forms.** Replaced the previous sort-tab and status-filter controls with clickable sortable column headers and active/archived/all tabs across all list screens — claims, jobs, invoices, quotes, reports, tasks, bills, proposals, purchase orders, RFQs, and work orders.
