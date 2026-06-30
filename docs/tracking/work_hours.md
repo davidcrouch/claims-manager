@@ -340,7 +340,7 @@
   Extended the **claims page** to derive active vs. archived status from lookup values, so the tabs auto-filter without hard-coded status IDs.
   Added a **purchase-order create endpoint** on the API and expanded the frontend API client with new entity create and query methods.
 
-- `2026-06-30` `6dbb61a` **32 h**
+- `2026-06-30` `9393b56` **32 h**
   `206 files | +10317 −1819 | Tier 2 standard / Tier 3 complex / Tier 4 integration | Heavy orchestration`
   Lay summary: Staff can manage multiple price catalogues, receive in-app notifications, view a unified schedule, and work RFQs and quotes end-to-end with improved lists, attachments, and provider sync.
   **Multi-catalog management, notifications, schedule, RFQ workflow, and Crunchwork integration sync.** Delivered **multi-catalog administration** — create and edit catalogues, import line items from spreadsheets, browse assemblies, and pick catalogue items from quotes and jobs.
