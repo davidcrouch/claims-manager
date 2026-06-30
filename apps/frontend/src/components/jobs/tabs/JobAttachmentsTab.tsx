@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Paperclip, Download, Upload } from 'lucide-react';
+import { Paperclip, Upload, Eye } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { fetchJobAttachmentsAction } from '@/app/(app)/jobs/[id]/actions';
@@ -100,19 +100,15 @@ export function JobAttachmentsTab({ jobId }: { jobId: string }) {
                       {a.uploadedByName ? ` by ${a.uploadedByName}` : ''}
                     </td>
                     <td className="px-4 py-2 text-right">
-                      {a.fileUrl ? (
-                        <a
-                          href={a.fileUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-primary hover:underline"
-                        >
-                          <Download className="h-3 w-3" />
-                          Download
-                        </a>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
+                      <a
+                        href={`/api/attachments/${a.id}/download?disposition=inline`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-primary hover:underline"
+                      >
+                        <Eye className="h-3 w-3" />
+                        View
+                      </a>
                     </td>
                   </tr>
                 ))}

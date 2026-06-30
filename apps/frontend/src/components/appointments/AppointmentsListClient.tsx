@@ -10,6 +10,7 @@ import {
   StatusFilterMenu,
   type SortOption,
 } from '@/components/shared/list-filters';
+import { TablePagination } from '@/components/shared/table-pagination';
 import { AppointmentsTable } from '@/components/appointments/AppointmentsTable';
 import { AppointmentFormDrawer } from '@/components/forms/AppointmentFormDrawer';
 import { fetchAppointmentsAction } from '@/app/(app)/appointments/actions';
@@ -39,7 +40,7 @@ export function AppointmentsListClient() {
   const [page, setPage] = useState(1);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
-  const limit = 50;
+  const limit = 20;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -90,8 +91,6 @@ export function AppointmentsListClient() {
     }
   }
 
-  const totalPages = Math.max(1, Math.ceil(total / limit));
-
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
       <SetPageHeader>
@@ -138,32 +137,18 @@ export function AppointmentsListClient() {
           appointments={appointments}
           loading={loading}
           onRowClick={handleRowClick}
+          sortField={sortField}
+          sortOrder={sortOrder}
+          onSort={handleSort}
         />
 
-        {!loading && totalPages > 1 && (
-          <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
-            <span>
-              Page {page} of {totalPages} ({total} total)
-            </span>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="rounded border px-3 py-1 hover:bg-muted disabled:opacity-50"
-              >
-                Previous
-              </button>
-              <button
-                type="button"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
-                className="rounded border px-3 py-1 hover:bg-muted disabled:opacity-50"
-              >
-                Next
-              </button>
-            </div>
-          </div>
+        {!loading && (
+          <TablePagination
+            page={page}
+            pageSize={limit}
+            total={total}
+            onPageChange={setPage}
+          />
         )}
       </div>
 

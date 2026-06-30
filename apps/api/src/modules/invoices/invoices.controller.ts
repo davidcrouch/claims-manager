@@ -11,12 +11,14 @@ export class InvoicesController {
     @Query('limit') limit?: string,
     @Query('purchaseOrderId') purchaseOrderId?: string,
     @Query('statusId') statusId?: string,
+    @Query('sort') sort?: string,
   ) {
     return this.invoicesService.findAll({
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
       purchaseOrderId,
       statusId,
+      sort,
     });
   }
 

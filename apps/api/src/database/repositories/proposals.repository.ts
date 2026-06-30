@@ -1,11 +1,45 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, isNull, desc, sql } from 'drizzle-orm';
+import { eq, and, isNull, desc, asc, sql } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { proposals } from '../schema';
 
 export type ProposalRow = typeof proposals.$inferSelect;
 export type ProposalInsert = typeof proposals.$inferInsert;
+
+function buildProposalsOrderBy(sort?: string) {
+  switch (sort) {
+    case 'updated_at_asc':
+      return [asc(proposals.updatedAt)];
+    case 'created_at_desc':
+      return [desc(proposals.createdAt)];
+    case 'created_at_asc':
+      return [asc(proposals.createdAt)];
+    case 'proposal_number_asc':
+      return [asc(proposals.proposalNumber)];
+    case 'proposal_number_desc':
+      return [desc(proposals.proposalNumber)];
+    case 'total_amount_asc':
+      return [asc(proposals.totalAmount)];
+    case 'total_amount_desc':
+      return [desc(proposals.totalAmount)];
+    case 'received_date_asc':
+      return [asc(proposals.receivedDate)];
+    case 'received_date_desc':
+      return [desc(proposals.receivedDate)];
+    case 'status_asc':
+      return [asc(proposals.statusLookupId)];
+    case 'status_desc':
+      return [desc(proposals.statusLookupId)];
+    case 'vendor_asc':
+      return [asc(proposals.proposalToName)];
+    case 'vendor_desc':
+      return [desc(proposals.proposalToName)];
+    case 'updated_at_desc':
+    default:
+      return [desc(proposals.updatedAt)];
+  }
+}
 
 @Injectable()
 export class ProposalsRepository {
@@ -18,6 +52,7 @@ export class ProposalsRepository {
     jobId?: string;
     rfqId?: string;
     vendorId?: string;
+    sort?: string;
   }): Promise<{ data: ProposalRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
@@ -42,7 +77,7 @@ export class ProposalsRepository {
         .select()
         .from(proposals)
         .where(whereClause)
-        .orderBy(desc(proposals.updatedAt))
+        .orderBy(...buildProposalsOrderBy(params.sort))
         .limit(limit)
         .offset(skip),
       this.db

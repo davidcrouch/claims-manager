@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Search, X } from 'lucide-react';
 import { FileText } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import {
@@ -23,6 +24,9 @@ import {
   ValueFilterMenu,
   SortableColumnHeader,
 } from '@/components/shared/list-filters';
+import { TablePagination } from '@/components/shared/table-pagination';
+
+const PAGE_SIZE = 20;
 
 function formatAddress(claim: Claim): string {
   const addr = claim.address as
@@ -95,8 +99,6 @@ const TABLE_COLUMNS: ColumnDef[] = [
   { key: 'updated_at', label: 'Updated' },
 ];
 
-const SERVER_SORT_FIELDS = new Set(['claim_number', 'updated_at', 'created_at']);
-
 function getClaimSortValue(
   claim: Claim,
   field: ColumnSortField,
@@ -123,7 +125,6 @@ function getClaimSortValue(
 
 export interface ClaimsListClientProps {
   initialData: PaginatedResponse<Claim>;
-  /** Matches server list query so the first client effect can skip a duplicate fetch */
   initialFetchKey: string;
   statusOptions: { id: string; name: string }[];
 }
@@ -144,6 +145,10 @@ export function ClaimsListClient({
   const [tab, setTab] = useState<ClaimTab>(() =>
     parseTab(searchParams.get('tab'))
   );
+  const [page, setPage] = useState(() => {
+    const p = parseInt(searchParams.get('page') ?? '1', 10);
+    return Number.isFinite(p) && p > 0 ? p : 1;
+  });
   const [columnSort, setColumnSort] = useState<{
     field: ColumnSortField;
     order: 'asc' | 'desc';
@@ -163,12 +168,12 @@ export function ClaimsListClient({
   );
 
   useEffect(() => {
-    const fetchKey = `${debouncedSearch}|${sort}|${tab}|${statusKey}`;
+    const fetchKey = `${debouncedSearch}|${sort}|${tab}|${statusKey}|${page}`;
 
     const params = new URLSearchParams(searchParams.toString());
     params.set('search', debouncedSearch);
     params.set('sort', sort);
-    params.set('page', '1');
+    params.set('page', String(page));
     params.set('tab', tab);
     if (statusKey) {
       params.set('status', statusKey);
@@ -188,9 +193,13 @@ export function ClaimsListClient({
       search: debouncedSearch || undefined,
       sort,
       status: statusKey || undefined,
+      page,
+      limit: PAGE_SIZE,
     }).then((res) => res && setData(res));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams: router.replace syncs URL; full dep causes loops
-  }, [debouncedSearch, sort, tab, statusKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, sort, tab, statusKey, page]);
+
+  const SERVER_SORT_FIELDS = new Set(['claim_number', 'updated_at', 'created_at']);
 
   const handleColumnSort = (field: ColumnSortField) => {
     if (SERVER_SORT_FIELDS.has(field)) {
@@ -204,6 +213,7 @@ export function ClaimsListClient({
         setSort(`${serverField}_${defaultOrder}`);
       }
       setColumnSort(null);
+      setPage(1);
       return;
     }
 
@@ -213,6 +223,20 @@ export function ClaimsListClient({
       }
       return { field, order: 'asc' };
     });
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage);
+  };
+
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    setPage(1);
+  };
+
+  const handleTabChange = (val: string) => {
+    setTab(val as ClaimTab);
+    setPage(1);
   };
 
   const activeColumnField: ColumnSortField | null = columnSort
@@ -287,7 +311,7 @@ export function ClaimsListClient({
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
           <Tabs
             value={tab}
-            onValueChange={(val) => setTab(val as ClaimTab)}
+            onValueChange={handleTabChange}
           >
             <TabsList>
               <TabsTrigger value="active">Active</TabsTrigger>
@@ -304,13 +328,13 @@ export function ClaimsListClient({
             <Input
               placeholder="Search claims by claim number, reference, or policy..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               className="h-10 w-full pl-9 pr-9"
             />
             {search && (
               <button
                 type="button"
-                onClick={() => setSearch('')}
+                onClick={() => handleSearchChange('')}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
               >
                 <X size={14} />
@@ -373,9 +397,7 @@ export function ClaimsListClient({
                         {claimNo}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
-                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
-                          {statusName}
-                        </span>
+                        <StatusBadge status={statusName} />
                       </td>
                       <td className="px-4 py-3 text-slate-600">{policy}</td>
                       <td className="px-4 py-3 text-slate-600">
@@ -395,6 +417,12 @@ export function ClaimsListClient({
                 })}
               </tbody>
             </table>
+            <TablePagination
+              page={page}
+              pageSize={PAGE_SIZE}
+              total={data.total}
+              onPageChange={handlePageChange}
+            />
           </div>
         ) : (
           <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50">

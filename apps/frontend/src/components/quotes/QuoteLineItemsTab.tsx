@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import type { Quote } from '@/types/api';
+import { toast } from 'sonner';
+import type { Quote, CatalogType } from '@/types/api';
 import { CatalogPickerDrawer } from '@/components/catalog/CatalogPickerDrawer';
 import { QuoteLineItemsTable, type DeleteItemRequest } from '@/components/quotes/QuoteLineItemsTable';
 import { EditGroupDialog } from '@/components/quotes/EditGroupDialog';
@@ -30,16 +31,17 @@ export function QuoteLineItemsTab({
   quote,
   drawerOpen,
   onDrawerOpenChange,
+  catalogType,
 }: {
   quote: Quote;
   drawerOpen: boolean;
   onDrawerOpenChange: (open: boolean) => void;
+  catalogType?: CatalogType;
 }) {
   const router = useRouter();
   const payloadGroups = getPayloadGroups(quote);
   const [dbGroups, setDbGroups] = useState<ApiGroup[] | null>(null);
   const [quantity, setQuantity] = useState('1');
-  const [message, setMessage] = useState<string | null>(null);
   const [activeDropKey, setActiveDropKey] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -54,7 +56,7 @@ export function QuoteLineItemsTab({
       setDbGroups(result.groups as ApiGroup[]);
     } else if (!result.success) {
       console.error(`${PREFIX}.loadLineItems — ${result.error}`);
-      setMessage(result.error ?? 'Failed to load line items');
+      toast.error(result.error ?? 'Failed to load line items');
     }
   }, [quote.id]);
 
@@ -62,11 +64,9 @@ export function QuoteLineItemsTab({
     void loadLineItems();
   }, [loadLineItems]);
 
-  const groups =
-    dbGroups && dbGroups.length > 0 ? dbGroups : payloadGroups;
+  const groups = dbGroups !== null ? dbGroups : payloadGroups;
 
   function handleCatalogDrop(payload: CatalogDragPayload, groupId?: string) {
-    setMessage(null);
     startTransition(async () => {
       const qty = quantity.trim() || '1';
       const result =
@@ -86,11 +86,11 @@ export function QuoteLineItemsTab({
 
       if (!result.success) {
         console.error(`${PREFIX}.handleCatalogDrop — ${result.error ?? 'add failed'}`);
-        setMessage(result.error ?? 'Failed to add catalogue item');
+        toast.error(result.error ?? 'Failed to add catalogue item');
         return;
       }
 
-      setMessage(`Added ${payload.code} to estimate`);
+      toast.success(`Added ${payload.code} to estimate`);
       setStructurallyDirty(true);
       await loadLineItems();
       router.refresh();
@@ -98,7 +98,6 @@ export function QuoteLineItemsTab({
   }
 
   function handleGroupLabelDrop(payload: GroupLabelDragPayload) {
-    setMessage(null);
     startTransition(async () => {
       const result = await createQuoteGroupAction({
         quoteId: quote.id,
@@ -106,10 +105,10 @@ export function QuoteLineItemsTab({
       });
       if (!result.success) {
         console.error(`${PREFIX}.handleGroupLabelDrop — ${result.error ?? 'create failed'}`);
-        setMessage(result.error ?? 'Failed to create group');
+        toast.error(result.error ?? 'Failed to create group');
         return;
       }
-      setMessage(`Created group "${payload.name}"`);
+      toast.success(`Created group "${payload.name}"`);
       await loadLineItems();
       router.refresh();
     });
@@ -125,11 +124,11 @@ export function QuoteLineItemsTab({
         description: params.description,
       });
       if (!result.success) {
-        setMessage(result.error ?? 'Failed to update group');
+        toast.error(result.error ?? 'Failed to update group');
         return;
       }
       setEditingGroupId(null);
-      setMessage('Group updated');
+      toast.success('Group updated');
       await loadLineItems();
       router.refresh();
     });
@@ -139,11 +138,11 @@ export function QuoteLineItemsTab({
     startTransition(async () => {
       const result = await deleteQuoteGroupAction({ quoteId: quote.id, groupId });
       if (!result.success) {
-        setMessage(result.error ?? 'Failed to delete group');
+        toast.error(result.error ?? 'Failed to delete group');
         return;
       }
       setDeletingGroupId(null);
-      setMessage('Group deleted');
+      toast.success('Group deleted');
       await loadLineItems();
       router.refresh();
     });
@@ -161,11 +160,11 @@ export function QuoteLineItemsTab({
       const result = await deleteQuoteItemAction({ quoteId: quote.id, itemId, removeFromCatalogAssembly });
       if (!result.success) {
         console.error(`${PREFIX}.confirmDeleteItem — ${result.error}`);
-        setMessage(result.error ?? 'Failed to delete item');
+        toast.error(result.error ?? 'Failed to delete item');
         return;
       }
       const extra = result.removedFromCatalog ? ' (also removed from catalogue assembly)' : '';
-      setMessage(`Item deleted${extra}`);
+      toast.success(`Item deleted${extra}`);
       setStructurallyDirty(true);
       await loadLineItems();
       router.refresh();
@@ -177,10 +176,10 @@ export function QuoteLineItemsTab({
       const result = await deleteQuoteComboAction({ quoteId: quote.id, comboId });
       if (!result.success) {
         console.error(`${PREFIX}.handleDeleteCombo — ${result.error}`);
-        setMessage(result.error ?? 'Failed to delete assembly');
+        toast.error(result.error ?? 'Failed to delete assembly');
         return;
       }
-      setMessage('Assembly deleted');
+      toast.success('Assembly deleted');
       setStructurallyDirty(true);
       await loadLineItems();
       router.refresh();
@@ -188,9 +187,8 @@ export function QuoteLineItemsTab({
   }
 
   function handleSaveLineItems(edits: Record<string, Record<string, string>>) {
-    setMessage(null);
     startTransition(async () => {
-      const items: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string; unitCost?: string; markupValue?: string; tax?: string }> = [];
+      const items: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string; unitCost?: string; markupValue?: string; tax?: string; unitType?: string }> = [];
       const combos: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string }> = [];
 
       for (const [rowKey, fields] of Object.entries(edits)) {
@@ -206,7 +204,7 @@ export function QuoteLineItemsTab({
         } else {
           const itemId = rowKey.match(/-item-([0-9a-f-]{36})$/)?.[1];
           if (itemId) {
-            const taxDecimal = fields.tax ? String(parseFloat(fields.tax) / 100) : undefined;
+            const taxValue = fields.tax ?? undefined;
             items.push({
               id: itemId,
               name: fields.name,
@@ -215,7 +213,8 @@ export function QuoteLineItemsTab({
               quantity: fields.quantity,
               unitCost: fields.unitCost,
               markupValue: fields.markupValue,
-              tax: taxDecimal,
+              tax: taxValue,
+              unitType: fields.unitType,
             });
           }
         }
@@ -223,18 +222,18 @@ export function QuoteLineItemsTab({
 
       if (items.length === 0 && combos.length === 0) {
         setStructurallyDirty(false);
-        setMessage('Changes saved');
+        toast.success('Changes saved');
         return;
       }
 
       const result = await saveQuoteLineItemsAction({ quoteId: quote.id, items, combos });
       if (!result.success) {
         console.error(`${PREFIX}.handleSaveLineItems — ${result.error}`);
-        setMessage(result.error ?? 'Failed to save line items');
+        toast.error(result.error ?? 'Failed to save line items');
         return;
       }
 
-      setMessage(`Saved ${result.updated} line item${result.updated !== 1 ? 's' : ''}`);
+      toast.success(`Saved ${result.updated} line item${result.updated !== 1 ? 's' : ''}`);
       setStructurallyDirty(false);
       await loadLineItems();
       router.refresh();
@@ -255,7 +254,7 @@ export function QuoteLineItemsTab({
     startTransition(async () => {
       const result = await reorderQuoteGroupsAction({ quoteId: quote.id, groupIds: newOrder });
       if (!result.success) {
-        setMessage(result.error ?? 'Failed to reorder groups');
+        toast.error(result.error ?? 'Failed to reorder groups');
         return;
       }
       await loadLineItems();
@@ -268,9 +267,7 @@ export function QuoteLineItemsTab({
 
   return (
     <div className="space-y-4">
-      {message && <p className="text-xs text-muted-foreground">{message}</p>}
-
-      <CatalogPickerDrawer open={drawerOpen} onOpenChange={onDrawerOpenChange} />
+      <CatalogPickerDrawer open={drawerOpen} onOpenChange={onDrawerOpenChange} catalogType={catalogType} />
 
       <QuoteLineItemsTable
         groups={groups}

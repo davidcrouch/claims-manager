@@ -2,6 +2,8 @@
 
 import { Trash2 } from 'lucide-react';
 import { formatDate, SortableColumnHeader } from '@/components/shared/list-filters';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { TypeBadge } from '@/components/ui/type-badge';
 import type { Quote } from '@/types/api';
 
 type Dict = Record<string, unknown>;
@@ -31,9 +33,9 @@ function formatAmount(value?: string | null): string {
   if (!value) return '';
   const n = Number(value);
   if (Number.isNaN(n)) return value;
-  return n.toLocaleString(undefined, {
+  return n.toLocaleString('en-AU', {
     style: 'currency',
-    currency: 'USD',
+    currency: 'AUD',
     maximumFractionDigits: 2,
   });
 }
@@ -114,6 +116,7 @@ export function QuotesTable({
           {quotes.map((quote) => {
             const num = quote.quoteNumber ?? quote.name ?? quote.id;
             const statusName = quote.status?.name ?? 'Unknown';
+            const estimateType = getEstimateTypeName(quote);
             return (
               <tr
                 key={quote.id}
@@ -127,12 +130,10 @@ export function QuotesTable({
                   {quote.name ?? ''}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3">
-                  <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
-                    {statusName}
-                  </span>
+                  <StatusBadge status={statusName} />
                 </td>
-                <td className="px-4 py-3 text-slate-600">
-                  {getEstimateTypeName(quote)}
+                <td className="px-4 py-3">
+                  <TypeBadge type={estimateType} />
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                   {formatAmount(quote.totalAmount)}

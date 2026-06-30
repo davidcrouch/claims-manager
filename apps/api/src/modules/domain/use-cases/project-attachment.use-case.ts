@@ -39,6 +39,10 @@ export class ProjectAttachmentUseCase implements ProjectionUseCase {
     // 2. Transform
     const result = this.transformer.transform({ payload, tenantId });
 
+    this.logger.debug(
+      `ProjectAttachmentUseCase.execute — transformed relatedRecordType=${(result.entity as Record<string, unknown>).relatedRecordType} parentRefs=${JSON.stringify(result.parentRefs)}`,
+    );
+
     // 3. Resolve scoped parent via ExternalObjectService
     for (const ref of result.parentRefs) {
       const internalId = await this.externalObjectService.resolveInternalEntityId({
@@ -50,11 +54,21 @@ export class ProjectAttachmentUseCase implements ProjectionUseCase {
       });
       if (internalId) {
         (result.entity as Record<string, unknown>).relatedRecordId = internalId;
+        this.logger.debug(
+          `ProjectAttachmentUseCase.execute — resolved parent ${ref.entityType}/${ref.externalId} → ${internalId}`,
+        );
+      } else {
+        this.logger.warn(
+          `ProjectAttachmentUseCase.execute — could not resolve parent ${ref.entityType}/${ref.externalId}`,
+        );
       }
     }
 
     // Default relatedRecordId if unresolved
     if (!(result.entity as Record<string, unknown>).relatedRecordId) {
+      this.logger.warn(
+        `ProjectAttachmentUseCase.execute — no parent resolved, using nil UUID`,
+      );
       (result.entity as Record<string, unknown>).relatedRecordId = '00000000-0000-0000-0000-000000000000';
     }
 

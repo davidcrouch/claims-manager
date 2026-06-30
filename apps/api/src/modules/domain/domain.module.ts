@@ -24,6 +24,7 @@ import { VersioningService } from './services/versioning.service';
 import { VisibilityService } from './services/visibility.service';
 import { ItemLineageService } from './services/item-lineage.service';
 import { DocumentIssuanceService } from './services/document-issuance.service';
+import { VendorSyncService } from './services/vendor-sync.service';
 
 // Use cases
 import { ProjectClaimUseCase } from './use-cases/project-claim.use-case';
@@ -64,6 +65,7 @@ import { UseCaseRegistry } from './use-cases/use-case.registry';
     VisibilityService,
     ItemLineageService,
     DocumentIssuanceService,
+    VendorSyncService,
 
     // Use cases
     ProjectClaimUseCase,
@@ -90,6 +92,7 @@ import { UseCaseRegistry } from './use-cases/use-case.registry';
     VisibilityService,
     ItemLineageService,
     DocumentIssuanceService,
+    VendorSyncService,
   ],
 })
 export class DomainModule {}

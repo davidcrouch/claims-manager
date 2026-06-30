@@ -51,4 +51,10 @@ export class ConnectionsController {
       limit: limit ? parseInt(limit, 10) : undefined,
     });
   }
+
+  @Get(':id/docs-url')
+  async getDocsUrl(@Param('id') id: string) {
+    const tenantId = this.tenantContext.getTenantId();
+    return this.providersService.getDocsUrl({ id, tenantId });
+  }
 }

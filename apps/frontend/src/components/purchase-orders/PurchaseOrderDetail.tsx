@@ -5,11 +5,10 @@
  *
  * Field coverage and section layout track `docs/mapping/purchase_orders.md`
  * (§2 identity / §3 parents / §4 lookups / §5 service window / §6 parties /
- * §7 scalars / §8 adjustment+allocation / §10 payload fallback). §9 line items
- * and §9.4 inline invoices require API changes (see the Line Items tab).
+ * §7 scalars / §8 adjustment+allocation / §9 line items / §10 payload fallback).
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
   ShoppingCart,
@@ -31,6 +30,7 @@ import {
   Receipt,
   User,
   Users,
+  Loader2,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -46,6 +46,9 @@ import {
   type Dict,
 } from '@/components/shared/detail';
 import type { PurchaseOrder } from '@/types/api';
+import { getPurchaseOrderLineItemsAction } from '@/app/(app)/purchase-orders/actions';
+import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
+import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
 
 // ---------- helpers ---------------------------------------------------------
 
@@ -435,25 +438,65 @@ function AllocationTab({ po }: { po: PurchaseOrder }) {
   );
 }
 
-function LineItemsTab() {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Line items</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">
-          Groups, combos, items and inline invoices (mapping doc §9) are not yet
-          included in the <code className="font-mono">GET /purchase-orders/:id</code>{' '}
-          response. Once the API is extended to hydrate{' '}
-          <code className="font-mono">purchase_order_groups</code>,{' '}
-          <code className="font-mono">purchase_order_combos</code> and{' '}
-          <code className="font-mono">purchase_order_items</code>, they will be
-          rendered here.
-        </p>
-      </CardContent>
-    </Card>
-  );
+function LineItemsTab({ po }: { po: PurchaseOrder }) {
+  const [groups, setGroups] = useState<ApiGroup[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const result = await getPurchaseOrderLineItemsAction(po.id);
+    if (result.success && result.groups) {
+      setGroups(result.groups as ApiGroup[]);
+    } else {
+      setError(result.error ?? 'Failed to load line items');
+    }
+    setLoading(false);
+  }, [po.id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-12">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Line items</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-destructive">{error}</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!groups || groups.length === 0) {
+    return (
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Line items</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            No line items found for this purchase order.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return <QuoteLineItemsTable groups={groups} readOnly />;
 }
 
 function BillsTab() {
@@ -632,7 +675,7 @@ export function PurchaseOrderDetail({ po }: { po: PurchaseOrder }) {
       <div className="pt-4">
         {tab === 'overview' && <OverviewTab po={po} />}
         {tab === 'parties' && <PartiesTab po={po} />}
-        {tab === 'line-items' && <LineItemsTab />}
+        {tab === 'line-items' && <LineItemsTab po={po} />}
         {tab === 'allocation' && <AllocationTab po={po} />}
         {tab === 'bills' && <BillsTab />}
         {tab === 'activities' && <ActivitiesTab />}

@@ -1,10 +1,40 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { and, asc, eq, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { catalogItems } from '../schema';
 
 export type CatalogItemRow = typeof catalogItems.$inferSelect;
 export type CatalogItemInsert = typeof catalogItems.$inferInsert;
+
+function buildCatalogItemsOrderBy(sort?: string) {
+  switch (sort) {
+    case 'code_desc':
+      return [desc(catalogItems.code)];
+    case 'name_asc':
+      return [asc(catalogItems.name)];
+    case 'name_desc':
+      return [desc(catalogItems.name)];
+    case 'kind_asc':
+      return [asc(catalogItems.kind)];
+    case 'kind_desc':
+      return [desc(catalogItems.kind)];
+    case 'type_asc':
+      return [asc(catalogItems.typeId)];
+    case 'type_desc':
+      return [desc(catalogItems.typeId)];
+    case 'category_asc':
+      return [asc(catalogItems.categoryId)];
+    case 'category_desc':
+      return [desc(catalogItems.categoryId)];
+    case 'unit_cost_asc':
+      return [asc(catalogItems.unitCost)];
+    case 'unit_cost_desc':
+      return [desc(catalogItems.unitCost)];
+    case 'code_asc':
+    default:
+      return [asc(catalogItems.code)];
+  }
+}
 
 @Injectable()
 export class CatalogItemsRepository {
@@ -12,6 +42,7 @@ export class CatalogItemsRepository {
 
   async findMany(params: {
     tenantId: string;
+    catalogId?: string;
     kind?: 'primitive' | 'assembly';
     typeId?: string;
     categoryIds?: string[];
@@ -19,9 +50,11 @@ export class CatalogItemsRepository {
     isActive?: boolean;
     page?: number;
     limit?: number;
+    sort?: string;
   }): Promise<{ data: CatalogItemRow[]; total: number }> {
     const page = params.page ?? 1;
-    const limit = Math.min(params.limit ?? 20, 100);
+    const maxLimit = params.search?.trim() ? 500 : 100;
+    const limit = Math.min(params.limit ?? 20, maxLimit);
     const offset = (page - 1) * limit;
 
     const conditions = [
@@ -29,6 +62,9 @@ export class CatalogItemsRepository {
       isNull(catalogItems.deletedAt),
     ];
 
+    if (params.catalogId) {
+      conditions.push(eq(catalogItems.catalogId, params.catalogId));
+    }
     if (params.kind) {
       conditions.push(eq(catalogItems.kind, params.kind));
     }
@@ -55,13 +91,14 @@ export class CatalogItemsRepository {
     }
 
     const whereClause = and(...conditions);
+    const orderBy = buildCatalogItemsOrderBy(params.sort);
 
     const [data, countResult] = await Promise.all([
       this.db
         .select()
         .from(catalogItems)
         .where(whereClause)
-        .orderBy(asc(catalogItems.code))
+        .orderBy(...orderBy)
         .limit(limit)
         .offset(offset),
       this.db
@@ -96,17 +133,20 @@ export class CatalogItemsRepository {
   async findByCode(params: {
     tenantId: string;
     code: string;
+    catalogId?: string;
   }): Promise<CatalogItemRow | null> {
+    const conditions = [
+      eq(catalogItems.tenantId, params.tenantId),
+      eq(catalogItems.code, params.code),
+      isNull(catalogItems.deletedAt),
+    ];
+    if (params.catalogId) {
+      conditions.push(eq(catalogItems.catalogId, params.catalogId));
+    }
     const [row] = await this.db
       .select()
       .from(catalogItems)
-      .where(
-        and(
-          eq(catalogItems.tenantId, params.tenantId),
-          eq(catalogItems.code, params.code),
-          isNull(catalogItems.deletedAt),
-        ),
-      )
+      .where(and(...conditions))
       .limit(1);
     return row ?? null;
   }
@@ -114,17 +154,20 @@ export class CatalogItemsRepository {
   async findByExternalReference(params: {
     tenantId: string;
     externalReference: string;
+    catalogId?: string;
   }): Promise<CatalogItemRow | null> {
+    const conditions = [
+      eq(catalogItems.tenantId, params.tenantId),
+      eq(catalogItems.externalReference, params.externalReference),
+      isNull(catalogItems.deletedAt),
+    ];
+    if (params.catalogId) {
+      conditions.push(eq(catalogItems.catalogId, params.catalogId));
+    }
     const [row] = await this.db
       .select()
       .from(catalogItems)
-      .where(
-        and(
-          eq(catalogItems.tenantId, params.tenantId),
-          eq(catalogItems.externalReference, params.externalReference),
-          isNull(catalogItems.deletedAt),
-        ),
-      )
+      .where(and(...conditions))
       .limit(1);
     return row ?? null;
   }

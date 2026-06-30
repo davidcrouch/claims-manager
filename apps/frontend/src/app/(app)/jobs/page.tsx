@@ -6,7 +6,7 @@ import type { Claim, Job, PaginatedResponse } from '@/types/api';
 export default async function JobsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; search?: string }>;
+  searchParams: Promise<{ page?: string; search?: string; sort?: string }>;
 }) {
   const api = await getServerApiClient();
   if (!api) redirect('/api/auth/login');
@@ -15,12 +15,13 @@ export default async function JobsPage({
   const emptyJobs: PaginatedResponse<Job> = { data: [], total: 0 };
   const emptyClaims: PaginatedResponse<Claim> = { data: [], total: 0 };
 
-  const [initialJobs, claimsRes, jobTypesRes, statusLookupsRes] = await Promise.all([
+  const [initialJobs, claimsRes, jobTypesRes, statusLookupsRes, unreadJobIds] = await Promise.all([
     api
       .getJobs({
         page: parseInt(params.page ?? '1', 10),
         limit: 20,
         search: params.search,
+        sort: params.sort,
       })
       .catch((err: unknown) => {
         console.error(
@@ -38,6 +39,7 @@ export default async function JobsPage({
     }),
     api.getLookupsByDomain('job_type').catch(() => []),
     api.getLookupsByDomain('job_status').catch(() => []),
+    api.getUnreadEntityIds('job').catch(() => [] as string[]),
   ]);
 
   const claims = claimsRes?.data ?? [];
@@ -55,6 +57,7 @@ export default async function JobsPage({
       claims={claims}
       jobTypes={jobTypes}
       statusOptions={statusOptions}
+      unreadJobIds={unreadJobIds}
     />
   );
 }

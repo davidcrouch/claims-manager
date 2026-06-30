@@ -7,9 +7,9 @@ import { GripVertical, Layers, Package, Pin, PinOff, Search, Tag, X } from 'luci
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useSidebar } from '@/components/ui/sidebar';
-import { searchCatalogItemsAction } from '@/app/(app)/admin/catalog/actions';
+import { searchCatalogItemsAction, fetchCatalogsAction } from '@/app/(app)/admin/catalog/actions';
 import { fetchGroupLabelLookupsAction } from '@/app/(app)/quotes/actions';
-import type { CatalogItem } from '@/types/api';
+import type { Catalog, CatalogItem, CatalogType } from '@/types/api';
 import {
   setCatalogDragData,
   setGroupLabelDragData,
@@ -21,6 +21,7 @@ import { formatCurrency } from '@/components/shared/detail';
 export interface CatalogPickerDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  catalogType?: CatalogType;
 }
 
 function toDragPayload(item: CatalogItem): CatalogDragPayload {
@@ -83,11 +84,35 @@ function CatalogRow({ item }: { item: CatalogItem }) {
 
 /* ---- Items Tab ---- */
 
-function ItemsTab({ open }: { open: boolean }) {
+function ItemsTab({ open, catalogType }: { open: boolean; catalogType?: CatalogType }) {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [pending, startTransition] = useTransition();
+  const [catalogs, setCatalogs] = useState<Catalog[]>([]);
+  const [selectedCatalogId, setSelectedCatalogId] = useState<string>('');
+
+  useEffect(() => {
+    if (!open) return;
+    fetchCatalogsAction({ type: catalogType === 'internal' ? undefined : catalogType }).then((list) => {
+      let sorted: Catalog[];
+      if (catalogType === 'crunchwork') {
+        sorted = [...list].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      } else if (catalogType === 'internal') {
+        sorted = [...list].sort((a, b) => {
+          if (a.type === 'internal' && b.type !== 'internal') return -1;
+          if (a.type !== 'internal' && b.type === 'internal') return 1;
+          return a.name.localeCompare(b.name);
+        });
+      } else {
+        sorted = list;
+      }
+      setCatalogs(sorted);
+      if (sorted.length === 1) {
+        setSelectedCatalogId(sorted[0].id);
+      }
+    });
+  }, [open, catalogType]);
 
   useEffect(() => {
     if (!open) return;
@@ -98,39 +123,51 @@ function ItemsTab({ open }: { open: boolean }) {
   useEffect(() => {
     if (!open) return;
     startTransition(async () => {
+      const searchParams = {
+        catalogId: selectedCatalogId || undefined,
+        q: debouncedQuery || undefined,
+        limit: debouncedQuery ? 200 : 40,
+      };
       const [primitives, assemblies] = await Promise.all([
-        searchCatalogItemsAction({
-          q: debouncedQuery || undefined,
-          kind: 'primitive',
-          limit: 40,
-        }),
-        searchCatalogItemsAction({
-          q: debouncedQuery || undefined,
-          kind: 'assembly',
-          limit: 40,
-        }),
+        searchCatalogItemsAction({ ...searchParams, kind: 'primitive' }),
+        searchCatalogItemsAction({ ...searchParams, kind: 'assembly' }),
       ]);
       const merged = [...primitives, ...assemblies].sort((a, b) =>
         a.code.localeCompare(b.code),
       );
       setItems(merged);
     });
-  }, [open, debouncedQuery]);
+  }, [open, debouncedQuery, selectedCatalogId]);
 
   useEffect(() => {
     if (open) return;
     setQuery('');
     setDebouncedQuery('');
+    setSelectedCatalogId('');
   }, [open]);
 
   return (
     <>
-      <div className="border-b border-slate-100 px-5 py-3">
+      <div className="space-y-2 border-b border-slate-100 px-5 py-3">
+        {catalogs.length > 1 && (
+          <select
+            className="flex h-8 w-full rounded-md border border-input bg-transparent px-2 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            value={selectedCatalogId}
+            onChange={(e) => setSelectedCatalogId(e.target.value)}
+          >
+            <option value="">All catalogues</option>
+            {catalogs.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} ({c.type})
+              </option>
+            ))}
+          </select>
+        )}
         <div className="relative">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             className="pl-8"
-            placeholder="Search by code or name…"
+            placeholder="Search by name, code or description…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             autoFocus
@@ -250,7 +287,7 @@ function GroupLabelsTab({ open }: { open: boolean }) {
 
 /* ---- Main Drawer ---- */
 
-export function CatalogPickerDrawer({ open, onOpenChange }: CatalogPickerDrawerProps) {
+export function CatalogPickerDrawer({ open, onOpenChange, catalogType }: CatalogPickerDrawerProps) {
   const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<string>('items');
   const [pinned, setPinned] = useState(false);
@@ -415,7 +452,7 @@ export function CatalogPickerDrawer({ open, onOpenChange }: CatalogPickerDrawerP
               </div>
 
               <TabsContent value="items" className="flex min-h-0 flex-1 flex-col">
-                <ItemsTab open={open} />
+                <ItemsTab open={open} catalogType={catalogType} />
               </TabsContent>
 
               <TabsContent value="groups" className="flex min-h-0 flex-1 flex-col">

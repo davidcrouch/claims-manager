@@ -40,6 +40,9 @@ export default async function JobDetailPage({
     notFound();
   }
 
+  // Fire-and-forget: mark any unread notifications for this job as read
+  api.markEntityNotificationsRead('job', id).catch(() => {});
+
   let parentClaim: Claim | null = null;
   if (job.claimId) {
     parentClaim = await api.getClaim(job.claimId).catch((err: unknown) => {

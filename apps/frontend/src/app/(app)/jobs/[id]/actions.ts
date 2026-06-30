@@ -173,6 +173,24 @@ export async function fetchJobContactsAction(
   }
 }
 
+export async function updateJobDatesAction(
+  jobId: string,
+  dates: { bookedDate?: string | null; attendanceDate?: string | null },
+): Promise<{ success: boolean; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const job = await api.getJob(jobId);
+    const existing = (job?.customData as Record<string, unknown>) ?? {};
+    const merged = { ...existing, ...dates };
+    await api.updateJob(jobId, { customData: merged });
+    return { success: true };
+  } catch (err) {
+    console.error('[jobs/[id]/actions updateJobDatesAction]', err);
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to update dates' };
+  }
+}
+
 export async function fetchJobAttachmentsAction(
   jobId: string,
 ): Promise<PhaseGatedResult<Attachment>> {

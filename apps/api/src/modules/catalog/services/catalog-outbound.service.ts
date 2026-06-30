@@ -59,6 +59,9 @@ export class CatalogOutboundService {
     if (catalogItem?.externalReference) {
       params.item.catalogItemId = catalogItem.externalReference;
     }
+    if (catalogItem?.catalogId) {
+      params.item.catalogId = catalogItem.catalogId;
+    }
   }
 
   private async mapComboRef(params: {
@@ -74,6 +77,9 @@ export class CatalogOutboundService {
     });
     if (catalogItem?.externalReference) {
       params.combo.catalogComboId = catalogItem.externalReference;
+    }
+    if (catalogItem?.catalogId) {
+      params.combo.catalogId = catalogItem.catalogId;
     }
   }
 }

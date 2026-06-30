@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
@@ -10,21 +10,28 @@ import {
   XCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   BottomFormDrawer,
   BottomFormDrawerBody,
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
 import {
+  fetchCatalogsAction,
+  createCatalogAction,
   importCatalogCsvAction,
   previewCatalogImportAction,
 } from '@/app/(app)/admin/catalog/actions';
+import type { Catalog, CatalogType } from '@/types/api';
 
 export interface CatalogImportDialogProps {
   templateCsv: string;
+  catalogId?: string;
+  catalogType?: CatalogType;
 }
 
-type WizardStep = 'select' | 'review' | 'confirm' | 'importing' | 'report';
+type WizardStep = 'catalog' | 'select' | 'review' | 'confirm' | 'importing' | 'report';
 
 interface PreviewRow {
   row: number;
@@ -59,8 +66,9 @@ interface ImportAggregate {
   results: Array<{ row: number; code: string; status: string; message?: string }>;
 }
 
-const STEPS: WizardStep[] = ['select', 'review', 'confirm', 'importing', 'report'];
+const STEPS: WizardStep[] = ['catalog', 'select', 'review', 'confirm', 'importing', 'report'];
 const STEP_LABELS: Record<WizardStep, string> = {
+  catalog: 'Select catalogue',
   select: 'Select file',
   review: 'Review rows',
   confirm: 'Confirm',
@@ -70,11 +78,35 @@ const STEP_LABELS: Record<WizardStep, string> = {
 
 const CHUNK_SIZE = 40;
 
-export function CatalogImportDialog({ templateCsv }: CatalogImportDialogProps) {
+const CATALOG_TYPES: { value: CatalogType; label: string }[] = [
+  { value: 'internal', label: 'Internal' },
+  { value: 'crunchwork', label: 'Crunchwork' },
+];
+
+export function CatalogImportDialog({
+  templateCsv,
+  catalogId: initialCatalogId,
+  catalogType: initialCatalogType,
+}: CatalogImportDialogProps) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
-  const [step, setStep] = useState<WizardStep>('select');
+  const [step, setStep] = useState<WizardStep>(initialCatalogId ? 'select' : 'catalog');
+
+  // Catalogue selection state
+  const [catalogs, setCatalogs] = useState<Catalog[]>([]);
+  const [selectedCatalogId, setSelectedCatalogId] = useState<string | undefined>(initialCatalogId);
+  const [selectedCatalogType, setSelectedCatalogType] = useState<CatalogType>(
+    initialCatalogType ?? 'internal',
+  );
+  const [isCreatingNew, setIsCreatingNew] = useState(false);
+  const [newCatalogName, setNewCatalogName] = useState('');
+  const [newCatalogDescription, setNewCatalogDescription] = useState('');
+  const [newCatalogType, setNewCatalogType] = useState<CatalogType>('internal');
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+
+  // File + import state
   const [fileName, setFileName] = useState<string | null>(null);
   const [csv, setCsv] = useState('');
   const [preview, setPreview] = useState<PreviewSummary | null>(null);
@@ -83,23 +115,65 @@ export function CatalogImportDialog({ templateCsv }: CatalogImportDialogProps) {
   const [importProgress, setImportProgress] = useState({ done: 0, total: 0 });
   const [importResult, setImportResult] = useState<ImportAggregate | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<PreviewRow['status'] | null>(null);
 
   const reset = useCallback(() => {
-    setStep('select');
+    setStep(initialCatalogId ? 'select' : 'catalog');
+    setSelectedCatalogId(initialCatalogId);
+    setSelectedCatalogType(initialCatalogType ?? 'internal');
+    setIsCreatingNew(false);
+    setNewCatalogName('');
+    setNewCatalogDescription('');
+    setNewCatalogType('internal');
+    setCatalogError(null);
     setFileName(null);
     setCsv('');
     setPreview(null);
     setPreviewError(null);
     setPreviewLoading(false);
+    setStatusFilter(null);
     setImportProgress({ done: 0, total: 0 });
     setImportResult(null);
     setImportError(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
-  }, []);
+  }, [initialCatalogId, initialCatalogType]);
+
+  useEffect(() => {
+    if (open && !initialCatalogId) {
+      fetchCatalogsAction().then((list) => setCatalogs(list));
+    }
+  }, [open, initialCatalogId]);
 
   function handleOpenChange(next: boolean) {
     setOpen(next);
     if (!next) reset();
+  }
+
+  async function handleCatalogNext() {
+    if (isCreatingNew) {
+      if (!newCatalogName.trim()) {
+        setCatalogError('Name is required');
+        return;
+      }
+      setCatalogLoading(true);
+      setCatalogError(null);
+      const res = await createCatalogAction({
+        name: newCatalogName.trim(),
+        description: newCatalogDescription.trim() || undefined,
+        type: newCatalogType,
+      });
+      setCatalogLoading(false);
+      if (!res.success) {
+        setCatalogError(res.error ?? 'Failed to create catalogue');
+        return;
+      }
+      setSelectedCatalogId(res.id);
+      setSelectedCatalogType(newCatalogType);
+    } else if (!selectedCatalogId) {
+      setCatalogError('Select a catalogue or create a new one');
+      return;
+    }
+    setStep('select');
   }
 
   async function handleFileSelect(file: File | null) {
@@ -117,7 +191,7 @@ export function CatalogImportDialog({ templateCsv }: CatalogImportDialogProps) {
     }
     setPreviewLoading(true);
     setPreviewError(null);
-    const res = await previewCatalogImportAction(csv);
+    const res = await previewCatalogImportAction(csv, selectedCatalogId);
     setPreviewLoading(false);
     if (!res.success) {
       setPreviewError(res.error ?? 'Failed to parse CSV');
@@ -166,7 +240,7 @@ export function CatalogImportDialog({ templateCsv }: CatalogImportDialogProps) {
       for (let i = 0; i < data.length; i += CHUNK_SIZE) {
         const chunkLines = data.slice(i, i + CHUNK_SIZE);
         const chunkCsv = [header, ...chunkLines].join('\n');
-        const res = await importCatalogCsvAction(chunkCsv);
+        const res = await importCatalogCsvAction(chunkCsv, selectedCatalogId);
         if (!res.success) {
           throw new Error(res.error ?? 'Import batch failed');
         }
@@ -194,6 +268,10 @@ export function CatalogImportDialog({ templateCsv }: CatalogImportDialogProps) {
     : 0;
 
   const stepIndex = STEPS.indexOf(step);
+
+  const selectedCatalogName = isCreatingNew
+    ? newCatalogName
+    : catalogs.find((c) => c.id === selectedCatalogId)?.name ?? '';
 
   return (
     <>
@@ -229,12 +307,109 @@ export function CatalogImportDialog({ templateCsv }: CatalogImportDialogProps) {
         </div>
 
         <BottomFormDrawerBody className="px-8">
+          {step === 'catalog' && (
+            <div className="mx-auto max-w-lg space-y-6">
+              <p className="text-sm text-muted-foreground">
+                Choose which catalogue to import items into, or create a new one.
+                The catalogue type determines the expected CSV column format.
+              </p>
+
+              <div className="space-y-3">
+                <label className="flex items-center gap-3">
+                  <input
+                    type="radio"
+                    name="catalog-mode"
+                    checked={!isCreatingNew}
+                    onChange={() => setIsCreatingNew(false)}
+                    className="h-4 w-4"
+                  />
+                  <span className="text-sm font-medium">Existing catalogue</span>
+                </label>
+
+                {!isCreatingNew && (
+                  <select
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    value={selectedCatalogId ?? ''}
+                    onChange={(e) => {
+                      setSelectedCatalogId(e.target.value || undefined);
+                      const cat = catalogs.find((c) => c.id === e.target.value);
+                      if (cat) setSelectedCatalogType(cat.type as CatalogType);
+                    }}
+                  >
+                    <option value="">Select a catalogue…</option>
+                    {catalogs.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.type})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <label className="flex items-center gap-3">
+                  <input
+                    type="radio"
+                    name="catalog-mode"
+                    checked={isCreatingNew}
+                    onChange={() => setIsCreatingNew(true)}
+                    className="h-4 w-4"
+                  />
+                  <span className="text-sm font-medium">Create new catalogue</span>
+                </label>
+
+                {isCreatingNew && (
+                  <div className="space-y-4 pl-7">
+                    <div>
+                      <Label htmlFor="import-catalog-name">Name</Label>
+                      <Input
+                        id="import-catalog-name"
+                        placeholder="e.g. Crunchwork Aug 2025"
+                        value={newCatalogName}
+                        onChange={(e) => setNewCatalogName(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="import-catalog-desc">Description</Label>
+                      <Input
+                        id="import-catalog-desc"
+                        placeholder="Optional"
+                        value={newCatalogDescription}
+                        onChange={(e) => setNewCatalogDescription(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="import-catalog-type">Type</Label>
+                      <select
+                        id="import-catalog-type"
+                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        value={newCatalogType}
+                        onChange={(e) => setNewCatalogType(e.target.value as CatalogType)}
+                      >
+                        {CATALOG_TYPES.map((t) => (
+                          <option key={t.value} value={t.value}>
+                            {t.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {catalogError && (
+                <p className="text-sm text-destructive" role="alert">
+                  {catalogError}
+                </p>
+              )}
+            </div>
+          )}
+
           {step === 'select' && (
             <div className="mx-auto max-w-xl space-y-6">
               <p className="text-sm text-muted-foreground">
-                Upload a CSV with columns: code, display_name, line_item_description, kind,
-                type_code, category_code, unit_type_ref, and pricing fields. Missing categories
-                are created automatically on import.
+                Upload a CSV file matching the{' '}
+                <span className="font-medium capitalize">{selectedCatalogType}</span> column format.
               </p>
               <div
                 className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-200 bg-slate-50/50 px-6 py-12 text-center"
@@ -260,12 +435,14 @@ export function CatalogImportDialog({ templateCsv }: CatalogImportDialogProps) {
                   </p>
                 )}
               </div>
-              <details className="text-xs text-muted-foreground">
-                <summary className="cursor-pointer font-medium">Download template</summary>
-                <pre className="mt-2 max-h-32 overflow-auto rounded border bg-muted p-2 font-mono text-[10px]">
-                  {templateCsv.trim()}
-                </pre>
-              </details>
+              {templateCsv && (
+                <details className="text-xs text-muted-foreground">
+                  <summary className="cursor-pointer font-medium">Download template</summary>
+                  <pre className="mt-2 max-h-32 overflow-auto rounded border bg-muted p-2 font-mono text-[10px]">
+                    {templateCsv.trim()}
+                  </pre>
+                </details>
+              )}
               {previewError && (
                 <p className="text-sm text-destructive" role="alert">
                   {previewError}
@@ -277,16 +454,50 @@ export function CatalogImportDialog({ templateCsv }: CatalogImportDialogProps) {
           {step === 'review' && preview && (
             <div className="space-y-4">
               <div className="flex flex-wrap gap-3 text-sm">
-                <span className="rounded-md bg-slate-100 px-2 py-1">{preview.totalRows} rows</span>
-                <span className="rounded-md bg-emerald-100 px-2 py-1 text-emerald-800">
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter(null)}
+                  className={`rounded-md px-2 py-1 transition-colors ${
+                    statusFilter === null
+                      ? 'bg-slate-900 text-white'
+                      : 'bg-slate-100 hover:bg-slate-200'
+                  }`}
+                >
+                  {preview.totalRows} rows
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter(statusFilter === 'ok' ? null : 'ok')}
+                  className={`rounded-md px-2 py-1 transition-colors ${
+                    statusFilter === 'ok'
+                      ? 'bg-emerald-600 text-white ring-2 ring-emerald-300'
+                      : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                  }`}
+                >
                   {preview.validRows} ok
-                </span>
-                <span className="rounded-md bg-amber-100 px-2 py-1 text-amber-800">
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter(statusFilter === 'warning' ? null : 'warning')}
+                  className={`rounded-md px-2 py-1 transition-colors ${
+                    statusFilter === 'warning'
+                      ? 'bg-amber-600 text-white ring-2 ring-amber-300'
+                      : 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                  }`}
+                >
                   {preview.warningRows} warnings
-                </span>
-                <span className="rounded-md bg-red-100 px-2 py-1 text-red-800">
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter(statusFilter === 'error' ? null : 'error')}
+                  className={`rounded-md px-2 py-1 transition-colors ${
+                    statusFilter === 'error'
+                      ? 'bg-red-600 text-white ring-2 ring-red-300'
+                      : 'bg-red-100 text-red-800 hover:bg-red-200'
+                  }`}
+                >
                   {preview.errorRows} errors
-                </span>
+                </button>
                 <span className="rounded-md bg-slate-100 px-2 py-1">
                   {preview.willCreate} new · {preview.willUpdate} updates
                 </span>
@@ -310,7 +521,9 @@ export function CatalogImportDialog({ templateCsv }: CatalogImportDialogProps) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {preview.rows.map((row) => (
+                    {preview.rows
+                      .filter((row) => !statusFilter || row.status === statusFilter)
+                      .map((row) => (
                       <tr
                         key={row.row}
                         className={
@@ -346,6 +559,15 @@ export function CatalogImportDialog({ templateCsv }: CatalogImportDialogProps) {
             <div className="mx-auto max-w-lg space-y-4">
               <h3 className="text-sm font-medium">Ready to import</h3>
               <ul className="space-y-2 text-sm text-muted-foreground">
+                {selectedCatalogName && (
+                  <li>
+                    Catalogue: <strong className="text-foreground">{selectedCatalogName}</strong>
+                    {' '}
+                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs capitalize">
+                      {selectedCatalogType}
+                    </span>
+                  </li>
+                )}
                 <li>
                   <strong className="text-foreground">{importableCount}</strong> rows will be
                   imported ({preview.willCreate} new, {preview.willUpdate} updates)
@@ -448,10 +670,26 @@ export function CatalogImportDialog({ templateCsv }: CatalogImportDialogProps) {
 
         <BottomFormDrawerFooter>
           <div className="flex w-full items-center justify-between gap-3">
-            {step === 'select' && (
+            {step === 'catalog' && (
               <>
                 <Button variant="outline" onClick={() => handleOpenChange(false)}>
                   Cancel
+                </Button>
+                <Button
+                  onClick={() => void handleCatalogNext()}
+                  disabled={catalogLoading}
+                >
+                  {catalogLoading ? 'Creating…' : 'Next: Select file'}
+                </Button>
+              </>
+            )}
+            {step === 'select' && (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => (initialCatalogId ? handleOpenChange(false) : setStep('catalog'))}
+                >
+                  {initialCatalogId ? 'Cancel' : 'Back'}
                 </Button>
                 <Button onClick={() => void runPreview()} disabled={!csv || previewLoading}>
                   {previewLoading ? 'Parsing…' : 'Next: Review rows'}

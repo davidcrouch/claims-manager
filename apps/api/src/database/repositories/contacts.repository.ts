@@ -1,12 +1,34 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, or, ilike, asc, sql } from 'drizzle-orm';
+import { eq, and, or, ilike, asc, desc, sql } from 'drizzle-orm';
 import { DRIZZLE } from '../drizzle.module';
 import type { DrizzleDB, DrizzleDbOrTx } from '../drizzle.module';
 import { contacts } from '../schema';
 
 export type ContactRow = typeof contacts.$inferSelect;
 export type ContactInsert = typeof contacts.$inferInsert;
+
+function buildContactsOrderBy(sort?: string) {
+  switch (sort) {
+    case 'name_desc':
+      return [desc(contacts.lastName), desc(contacts.firstName)];
+    case 'email_asc':
+      return [asc(contacts.email)];
+    case 'email_desc':
+      return [desc(contacts.email)];
+    case 'phone_asc':
+      return [asc(contacts.mobilePhone)];
+    case 'phone_desc':
+      return [desc(contacts.mobilePhone)];
+    case 'created_at_asc':
+      return [asc(contacts.createdAt)];
+    case 'created_at_desc':
+      return [desc(contacts.createdAt)];
+    case 'name_asc':
+    default:
+      return [asc(contacts.lastName), asc(contacts.firstName)];
+  }
+}
 
 @Injectable()
 export class ContactsRepository {
@@ -17,6 +39,7 @@ export class ContactsRepository {
     page?: number;
     limit?: number;
     search?: string;
+    sort?: string;
   }): Promise<{ data: ContactRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
@@ -35,12 +58,14 @@ export class ContactsRepository {
         )
       : eq(contacts.tenantId, params.tenantId);
 
+    const orderBy = buildContactsOrderBy(params.sort);
+
     const [data, countResult] = await Promise.all([
       this.db
         .select()
         .from(contacts)
         .where(whereClause)
-        .orderBy(asc(contacts.lastName), asc(contacts.firstName))
+        .orderBy(...orderBy)
         .limit(limit)
         .offset(skip),
       this.db

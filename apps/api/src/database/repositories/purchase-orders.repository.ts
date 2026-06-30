@@ -1,11 +1,45 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, isNull, desc, sql } from 'drizzle-orm';
+import { eq, and, isNull, desc, asc, sql } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { purchaseOrders } from '../schema';
 
 export type PurchaseOrderRow = typeof purchaseOrders.$inferSelect;
 export type PurchaseOrderInsert = typeof purchaseOrders.$inferInsert;
+
+function buildPurchaseOrdersOrderBy(sort?: string) {
+  switch (sort) {
+    case 'updated_at_asc':
+      return [asc(purchaseOrders.updatedAt)];
+    case 'created_at_desc':
+      return [desc(purchaseOrders.createdAt)];
+    case 'created_at_asc':
+      return [asc(purchaseOrders.createdAt)];
+    case 'purchase_order_number_asc':
+      return [asc(purchaseOrders.purchaseOrderNumber)];
+    case 'purchase_order_number_desc':
+      return [desc(purchaseOrders.purchaseOrderNumber)];
+    case 'total_amount_asc':
+      return [asc(purchaseOrders.totalAmount)];
+    case 'total_amount_desc':
+      return [desc(purchaseOrders.totalAmount)];
+    case 'external_id_asc':
+      return [asc(purchaseOrders.externalId)];
+    case 'external_id_desc':
+      return [desc(purchaseOrders.externalId)];
+    case 'status_asc':
+      return [asc(purchaseOrders.statusLookupId)];
+    case 'status_desc':
+      return [desc(purchaseOrders.statusLookupId)];
+    case 'vendor_asc':
+      return [asc(purchaseOrders.vendorId)];
+    case 'vendor_desc':
+      return [desc(purchaseOrders.vendorId)];
+    case 'updated_at_desc':
+    default:
+      return [desc(purchaseOrders.updatedAt)];
+  }
+}
 
 @Injectable()
 export class PurchaseOrdersRepository {
@@ -17,6 +51,7 @@ export class PurchaseOrdersRepository {
     limit?: number;
     jobId?: string;
     vendorId?: string;
+    sort?: string;
   }): Promise<{ data: PurchaseOrderRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
@@ -38,7 +73,7 @@ export class PurchaseOrdersRepository {
         .select()
         .from(purchaseOrders)
         .where(whereClause)
-        .orderBy(desc(purchaseOrders.updatedAt))
+        .orderBy(...buildPurchaseOrdersOrderBy(params.sort))
         .limit(limit)
         .offset(skip),
       this.db

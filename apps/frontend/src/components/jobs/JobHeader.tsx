@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import {
   Briefcase,
-  Building2,
   MapPin,
   Tag,
   ExternalLink,
@@ -40,20 +39,6 @@ function addressLine(job: Job): string {
   return fallback;
 }
 
-function vendorDisplay(job: Job): { name?: string; externalReference?: string } {
-  const api = getApi(job);
-  const apiVendor = (api.vendor as Dict | undefined) ?? {};
-  return {
-    name:
-      (job.vendor?.name as string | undefined) ??
-      (apiVendor.name as string | undefined) ??
-      ((job.vendorSnapshot as Dict | undefined)?.name as string | undefined),
-    externalReference:
-      (job.vendor?.externalReference as string | undefined) ??
-      (apiVendor.externalReference as string | undefined),
-  };
-}
-
 /**
  * Compact page-header renderer for a job. Designed to live inside the top
  * title bar (see `SetPageHeader`).
@@ -65,7 +50,7 @@ export function JobPageHeader({
   job: Job;
   parentClaim?: Claim | null;
 }) {
-  const title = job.externalReference ?? job.id;
+  const title = job.externalJobId ?? job.externalReference ?? job.id;
   const api = getApi(job);
   const statusName =
     job.status?.name ??
@@ -74,7 +59,6 @@ export function JobPageHeader({
   const jobTypeName =
     job.jobType?.name ??
     ((api.jobType as Dict | undefined)?.name as string | undefined);
-  const vendor = vendorDisplay(job);
   const address = addressLine(job);
 
   const parentClaimNumber =
@@ -96,17 +80,6 @@ export function JobPageHeader({
           <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
             <Tag className="h-3 w-3" />
             {jobTypeName}
-          </span>
-        )}
-        {vendor.name && (
-          <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-            <Building2 className="h-3 w-3" />
-            {vendor.name}
-            {vendor.externalReference && (
-              <span className="font-mono text-[10px] opacity-70">
-                · {vendor.externalReference}
-              </span>
-            )}
           </span>
         )}
         {address && (

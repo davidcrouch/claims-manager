@@ -12,6 +12,7 @@ export class ProposalsController {
     @Query('jobId') jobId?: string,
     @Query('rfqId') rfqId?: string,
     @Query('vendorId') vendorId?: string,
+    @Query('sort') sort?: string,
   ) {
     return this.proposalsService.findAll({
       page: page ? parseInt(page, 10) : 1,
@@ -19,6 +20,7 @@ export class ProposalsController {
       jobId,
       rfqId,
       vendorId,
+      sort,
     });
   }
 

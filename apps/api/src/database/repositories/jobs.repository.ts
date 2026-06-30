@@ -1,8 +1,34 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, isNull, desc, sql, gte, aliasedTable, getTableColumns } from 'drizzle-orm';
+import { eq, and, isNull, desc, asc, sql, gte, ilike, or, aliasedTable, getTableColumns } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
-import { jobs, lookupValues, vendors } from '../schema';
+import { jobs, lookupValues, vendors, integrationConnections } from '../schema';
+
+function buildJobOrderBy(sort?: string) {
+  switch (sort) {
+    case 'updated_at_asc':
+      return [asc(jobs.updatedAt)];
+    case 'created_at_desc':
+      return [desc(jobs.createdAt)];
+    case 'created_at_asc':
+      return [asc(jobs.createdAt)];
+    case 'external_reference_asc':
+      return [asc(jobs.externalReference)];
+    case 'external_reference_desc':
+      return [desc(jobs.externalReference)];
+    case 'request_date_asc':
+      return [asc(jobs.requestDate)];
+    case 'request_date_desc':
+      return [desc(jobs.requestDate)];
+    case 'address_asc':
+      return [asc(jobs.addressSuburb)];
+    case 'address_desc':
+      return [desc(jobs.addressSuburb)];
+    case 'updated_at_desc':
+    default:
+      return [desc(jobs.updatedAt)];
+  }
+}
 
 export type JobRow = typeof jobs.$inferSelect;
 export type JobInsert = typeof jobs.$inferInsert;
@@ -14,6 +40,7 @@ export interface JobViewRow extends JobRow {
   jobTypeExternalReference: string | null;
   vendorName: string | null;
   vendorExternalReference: string | null;
+  connectionProviderCode: string | null;
 }
 
 @Injectable()
@@ -25,6 +52,8 @@ export class JobsRepository {
     page?: number;
     limit?: number;
     claimId?: string;
+    sort?: string;
+    search?: string;
   }): Promise<{ data: JobViewRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
@@ -33,13 +62,44 @@ export class JobsRepository {
     const statusLookup = aliasedTable(lookupValues, 'status_lookup');
     const jobTypeLookup = aliasedTable(lookupValues, 'job_type_lookup');
 
-    const baseWhere = and(
+    const whereParts = [
       eq(jobs.tenantId, params.tenantId),
       isNull(jobs.deletedAt),
-    );
-    const whereClause = params.claimId
-      ? and(baseWhere, eq(jobs.claimId, params.claimId))
-      : baseWhere;
+    ];
+
+    if (params.claimId) {
+      whereParts.push(eq(jobs.claimId, params.claimId));
+    }
+
+    if (params.search) {
+      const term = `%${params.search}%`;
+      whereParts.push(
+        or(
+          ilike(jobs.externalReference, term),
+          ilike(jobs.addressSuburb, term),
+        )!,
+      );
+    }
+
+    const whereClause = and(...whereParts);
+
+    let orderBy;
+    switch (params.sort) {
+      case 'status_asc':
+        orderBy = [asc(statusLookup.name)];
+        break;
+      case 'status_desc':
+        orderBy = [desc(statusLookup.name)];
+        break;
+      case 'job_type_asc':
+        orderBy = [asc(jobTypeLookup.name)];
+        break;
+      case 'job_type_desc':
+        orderBy = [desc(jobTypeLookup.name)];
+        break;
+      default:
+        orderBy = buildJobOrderBy(params.sort);
+    }
 
     const [data, countResult] = await Promise.all([
       this.db
@@ -51,13 +111,15 @@ export class JobsRepository {
           jobTypeExternalReference: jobTypeLookup.externalReference,
           vendorName: vendors.name,
           vendorExternalReference: vendors.externalReference,
+          connectionProviderCode: integrationConnections.providerCode,
         })
         .from(jobs)
         .leftJoin(statusLookup, eq(jobs.statusLookupId, statusLookup.id))
         .leftJoin(jobTypeLookup, eq(jobs.jobTypeLookupId, jobTypeLookup.id))
         .leftJoin(vendors, eq(jobs.vendorId, vendors.id))
+        .leftJoin(integrationConnections, eq(jobs.connectionId, integrationConnections.id))
         .where(whereClause)
-        .orderBy(desc(jobs.updatedAt))
+        .orderBy(...orderBy)
         .limit(limit)
         .offset(skip),
       this.db
@@ -86,11 +148,13 @@ export class JobsRepository {
         jobTypeExternalReference: jobTypeLookup.externalReference,
         vendorName: vendors.name,
         vendorExternalReference: vendors.externalReference,
+        connectionProviderCode: integrationConnections.providerCode,
       })
       .from(jobs)
       .leftJoin(statusLookup, eq(jobs.statusLookupId, statusLookup.id))
       .leftJoin(jobTypeLookup, eq(jobs.jobTypeLookupId, jobTypeLookup.id))
       .leftJoin(vendors, eq(jobs.vendorId, vendors.id))
+      .leftJoin(integrationConnections, eq(jobs.connectionId, integrationConnections.id))
       .where(and(eq(jobs.id, params.id), eq(jobs.tenantId, params.tenantId)))
       .limit(1);
     return (row as JobViewRow) ?? null;

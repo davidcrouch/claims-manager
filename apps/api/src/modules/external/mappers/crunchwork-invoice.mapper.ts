@@ -45,11 +45,16 @@ export class CrunchworkInvoiceMapper implements EntityMapper {
       (l) => l.internalEntityType === 'invoice',
     );
 
+    // Crunchwork sends parent refs as either nested object { id } or flat string field
+    const cwPoId =
+      ((payload.purchaseOrder as Record<string, unknown>)?.id as string) ??
+      (payload.purchaseOrderId as string) ??
+      undefined;
+
     const purchaseOrderId = await this.resolveFK({
       connectionId: params.connectionId,
       providerEntityType: 'purchase_order',
-      providerEntityId: (payload.purchaseOrder as Record<string, unknown>)
-        ?.id as string,
+      providerEntityId: cwPoId,
       internalEntityType: 'purchase_order',
       tx: params.tx,
     });

@@ -29,6 +29,7 @@ import {
   ProposalsRepository,
   BillsRepository,
   JobContactsRepository,
+  CatalogsRepository,
   CatalogItemTypesRepository,
   CatalogCategoriesRepository,
   CatalogItemsRepository,
@@ -36,6 +37,7 @@ import {
   JournalsRepository,
   JournalPagesRepository,
   JournalPageAttachmentsRepository,
+  NotificationsRepository,
 } from './repositories';
 
 const repositories = [
@@ -67,6 +69,7 @@ const repositories = [
   ProposalsRepository,
   BillsRepository,
   JobContactsRepository,
+  CatalogsRepository,
   CatalogItemTypesRepository,
   CatalogCategoriesRepository,
   CatalogItemsRepository,
@@ -74,6 +77,7 @@ const repositories = [
   JournalsRepository,
   JournalPagesRepository,
   JournalPageAttachmentsRepository,
+  NotificationsRepository,
 ];
 
 @Global()

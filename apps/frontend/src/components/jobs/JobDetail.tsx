@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import {
   Calendar,
@@ -9,8 +9,10 @@ import {
   Mail,
   FileBarChart,
   Info,
+  Save,
 } from 'lucide-react';
-import { JobOverviewTab } from './tabs/JobOverviewTab';
+import { Button } from '@/components/ui/button';
+import { JobOverviewTab, type JobOverviewTabHandle } from './tabs/JobOverviewTab';
 import { JobTypeDetailsTab } from './tabs/JobTypeDetailsTab';
 import { JobPartiesTab } from './tabs/JobPartiesTab';
 import { JobAppointmentsTab } from './tabs/JobAppointmentsTab';
@@ -28,13 +30,16 @@ import { JobAttachmentsTab } from './tabs/JobAttachmentsTab';
 import { JobCommunicationsTab } from './tabs/JobCommunicationsTab';
 import { JobTimelineTab } from './tabs/JobTimelineTab';
 import { JobJournalsTab } from './tabs/JobJournalsTab';
+import { ScheduleClient } from '@/components/schedule/ScheduleClient';
 import { hasTypeDetails } from './util/jobType';
+import { updateJobDatesAction } from '@/app/(app)/jobs/[id]/actions';
 import type { Job, Claim } from '@/types/api';
 
 const VALID_TABS = [
   'overview',
   'type-details',
   'parties',
+  'schedule',
   'appointments',
   'quotes',
   'work-orders',
@@ -74,6 +79,8 @@ export function JobDetail({
   const searchParams = useSearchParams();
   const showTypeDetails = hasTypeDetails(job);
   const activeTab = normaliseTab(searchParams.get('tab'), showTypeDetails);
+  const overviewRef = useRef<JobOverviewTabHandle>(null);
+  const [saving, setSaving] = useState(false);
 
   const onTabChange = useCallback(
     (value: string | null) => {
@@ -89,6 +96,18 @@ export function JobDetail({
     },
     [pathname, router, searchParams],
   );
+
+  const handleSave = useCallback(async () => {
+    const pending = overviewRef.current?.getPendingDates();
+    if (!pending) return;
+    setSaving(true);
+    try {
+      await updateJobDatesAction(job.id, pending);
+      router.refresh();
+    } finally {
+      setSaving(false);
+    }
+  }, [job.id, router]);
 
   const claimId = job.claimId ?? '';
 
@@ -108,39 +127,53 @@ export function JobDetail({
   return (
     <div className="flex flex-col">
       {showTabBar && (
-        <div className="flex flex-wrap gap-0 border-b border-slate-200">
-          {overviewTabs.map((t) => {
-            const Icon = t.icon;
-            const active = activeTab === t.id;
-            return (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => onTabChange(t.id)}
-                className={`inline-flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t-md ${
-                  active
-                    ? 'border-emerald-600 bg-emerald-50 text-emerald-600'
-                    : 'border-transparent bg-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700'
-                }`}
-              >
-                <Icon className="h-3.5 w-3.5" />
-                {t.label}
-              </button>
-            );
-          })}
+        <div className="flex items-center border-b border-slate-200">
+          <div className="flex flex-wrap gap-0">
+            {overviewTabs.map((t) => {
+              const Icon = t.icon;
+              const active = activeTab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => onTabChange(t.id)}
+                  className={`inline-flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t-md ${
+                    active
+                      ? 'border-emerald-600 bg-emerald-50 text-emerald-600'
+                      : 'border-transparent bg-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                  }`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
+          <div className="ml-auto pr-2">
+            <Button
+              size="sm"
+              onClick={handleSave}
+              disabled={saving}
+              className="gap-1.5"
+            >
+              <Save className="h-3.5 w-3.5" />
+              {saving ? 'Saving...' : 'Save'}
+            </Button>
+          </div>
         </div>
       )}
       <div className={showTabBar ? 'pt-4' : undefined}>
         {activeTab === 'overview' && (
-          <JobOverviewTab job={job} parentClaim={parentClaim} />
+          <JobOverviewTab ref={overviewRef} job={job} parentClaim={parentClaim} saving={saving} />
         )}
         {activeTab === 'type-details' && showTypeDetails && (
           <JobTypeDetailsTab job={job} />
         )}
         {activeTab === 'parties' && <JobPartiesTab job={job} />}
+        {activeTab === 'schedule' && <ScheduleClient jobId={job.id} />}
         {activeTab === 'appointments' && <JobAppointmentsTab jobId={job.id} job={job} />}
         {activeTab === 'quotes' && (
-          <JobQuotesTab jobId={job.id} claimId={claimId} />
+          <JobQuotesTab jobId={job.id} claimId={claimId} jobProvider={job.provider === 'crunchwork' ? 'crunchwork' : 'internal'} />
         )}
         {activeTab === 'work-orders' && (
           <JobWorkOrdersTab jobId={job.id} />

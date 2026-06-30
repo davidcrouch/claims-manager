@@ -1,11 +1,29 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, isNull, desc, sql } from 'drizzle-orm';
+import { eq, and, isNull, desc, asc, sql } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { reports } from '../schema';
 
 export type ReportRow = typeof reports.$inferSelect;
 export type ReportInsert = typeof reports.$inferInsert;
+
+function buildReportsOrderBy(sort?: string) {
+  switch (sort) {
+    case 'updated_at_asc':
+      return [asc(reports.updatedAt)];
+    case 'created_at_desc':
+      return [desc(reports.createdAt)];
+    case 'created_at_asc':
+      return [asc(reports.createdAt)];
+    case 'title_asc':
+      return [asc(reports.title)];
+    case 'title_desc':
+      return [desc(reports.title)];
+    case 'updated_at_desc':
+    default:
+      return [desc(reports.updatedAt)];
+  }
+}
 
 @Injectable()
 export class ReportsRepository {
@@ -18,6 +36,7 @@ export class ReportsRepository {
     jobId?: string;
     claimId?: string;
     reportTypeId?: string;
+    sort?: string;
   }): Promise<{ data: ReportRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
@@ -45,7 +64,7 @@ export class ReportsRepository {
         .select()
         .from(reports)
         .where(whereClause)
-        .orderBy(desc(reports.updatedAt))
+        .orderBy(...buildReportsOrderBy(params.sort))
         .limit(limit)
         .offset(skip),
       this.db

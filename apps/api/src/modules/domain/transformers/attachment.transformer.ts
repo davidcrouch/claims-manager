@@ -1,10 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import type { EntityTransformer, TransformResult, ParentRef } from './transformer.interface';
-import { asString, isPlainObject } from './transform-utils';
+import { asString } from './transform-utils';
 
 const SCOPE_TO_RECORD_TYPE: Record<string, string> = {
   job: 'Job', claim: 'Claim', quote: 'Quote',
   purchase_order: 'PurchaseOrder', report: 'Report', invoice: 'Invoice',
+};
+
+const RECORD_TYPE_TO_SCOPE: Record<string, string> = {
+  Job: 'job', Claim: 'claim', Quote: 'quote',
+  PurchaseOrder: 'purchase_order', Report: 'report', Invoice: 'invoice',
 };
 
 const SCOPE_TO_ENTITY_TYPE: Record<string, string> = {
@@ -22,9 +27,13 @@ export class AttachmentTransformer implements EntityTransformer {
     const { payload, tenantId } = params;
     const parentRefs: ParentRef[] = [];
 
-    const scope = (asString(payload.scope) ?? '').toLowerCase();
-    const relatedRecordType = SCOPE_TO_RECORD_TYPE[scope] ?? 'Job';
-    const scopeId = asString(payload.scopeId);
+    const rawScope = asString(payload.scope);
+    const cwRecordType = asString(payload.relatedRecordType);
+    const scope = (rawScope ?? (cwRecordType ? RECORD_TYPE_TO_SCOPE[cwRecordType] : undefined) ?? '').toLowerCase();
+
+    const relatedRecordType = SCOPE_TO_RECORD_TYPE[scope] ?? (cwRecordType || 'Job');
+
+    const scopeId = asString(payload.scopeId) ?? asString(payload.relatedRecordId);
 
     const entity: Record<string, unknown> = {
       tenantId,
@@ -39,7 +48,6 @@ export class AttachmentTransformer implements EntityTransformer {
       apiPayload: payload,
     };
 
-    // Resolve scope → parent entity
     const providerType = SCOPE_TO_ENTITY_TYPE[scope];
     if (providerType && scopeId) {
       parentRefs.push({ entityType: providerType, externalId: scopeId, required: false });

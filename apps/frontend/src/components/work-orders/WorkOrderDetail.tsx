@@ -35,6 +35,8 @@ import {
 import { updateWorkOrderStatusAction } from '@/app/(app)/mutations-status';
 import { InvoiceFormDrawer } from '@/components/forms/InvoiceFormDrawer';
 import type { WorkOrder, PurchaseOrder } from '@/types/api';
+import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
+import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
 
 // ---------- helpers ---------------------------------------------------------
 
@@ -413,9 +415,9 @@ function PartiesTab({ wo }: { wo: WorkOrder }) {
 
 function LineItemsTab({ wo }: { wo: WorkOrder }) {
   const payload = (wo.workOrderPayload as Record<string, unknown>) ?? {};
-  const lineItems = (payload.lineItems ?? payload.items ?? []) as Array<Record<string, unknown>>;
+  const groups = (payload.groups ?? []) as ApiGroup[];
 
-  if (lineItems.length === 0) {
+  if (groups.length === 0) {
     return (
       <Card>
         <CardHeader className="pb-2">
@@ -430,39 +432,7 @@ function LineItemsTab({ wo }: { wo: WorkOrder }) {
     );
   }
 
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Line Items</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-left text-muted-foreground">
-                <th className="pb-2 pr-4 font-medium">Item Name</th>
-                <th className="pb-2 pr-4 font-medium">Description</th>
-                <th className="pb-2 pr-4 text-right font-medium">Quantity</th>
-                <th className="pb-2 pr-4 text-right font-medium">Unit Cost</th>
-                <th className="pb-2 text-right font-medium">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lineItems.map((item, idx) => (
-                <tr key={idx} className="border-b last:border-0">
-                  <td className="py-2 pr-4">{asString(item.name ?? item.itemName) ?? '—'}</td>
-                  <td className="py-2 pr-4 text-muted-foreground">{asString(item.description) ?? '—'}</td>
-                  <td className="py-2 pr-4 text-right">{item.quantity != null ? String(item.quantity) : '—'}</td>
-                  <td className="py-2 pr-4 text-right">{formatCurrency(item.unitCost ?? item.unitPrice ?? item.rate)}</td>
-                  <td className="py-2 text-right">{formatCurrency(item.total ?? item.amount ?? item.lineTotal)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
-    </Card>
-  );
+  return <QuoteLineItemsTable groups={groups} readOnly />;
 }
 
 function ActivitiesTab() {

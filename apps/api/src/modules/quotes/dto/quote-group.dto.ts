@@ -62,6 +62,10 @@ export class LineItemUpdateDto {
   @IsOptional()
   @IsString()
   tax?: string;
+
+  @IsOptional()
+  @IsString()
+  unitType?: string;
 }
 
 export class ComboUpdateDto {

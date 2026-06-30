@@ -14,7 +14,6 @@ import {
   Building2,
   Layers,
   StickyNote,
-  Tag,
   Calendar,
   ClipboardList,
   MessageSquare,
@@ -30,6 +29,7 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { TypeBadge } from '@/components/ui/type-badge';
 import { BackButton } from '@/components/layout/BackButton';
 import {
   DefRow,
@@ -48,7 +48,9 @@ import type {
   QuotePartyPayload,
   QuoteScheduleInfo,
   QuoteApprovalInfo,
+  CatalogType,
 } from '@/types/api';
+import { toast } from 'sonner';
 import { QuoteLineItemsTab } from '@/components/quotes/QuoteLineItemsTab';
 import { JournalList } from '@/components/journals/JournalList';
 import {
@@ -59,6 +61,7 @@ import {
   unlinkJournalAction,
 } from '@/app/(app)/journals/actions';
 import { publishQuoteAction } from '@/app/(app)/mutations';
+import { QuoteAttachmentsTab } from '@/components/quotes/QuoteAttachmentsTab';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -185,7 +188,12 @@ export function QuotePageHeader({ quote }: { quote: Quote }) {
     const result = await publishQuoteAction(quote.id);
     setPublishing(false);
     if (result.success) {
+      toast.success('Estimate published successfully');
       router.refresh();
+    } else {
+      toast.error('Failed to publish estimate', {
+        description: result.error,
+      });
     }
   }
 
@@ -203,10 +211,7 @@ export function QuotePageHeader({ quote }: { quote: Quote }) {
           <StatusBadge status={statusName} />
         )}
         {quoteTypeName && quoteTypeName !== 'Estimate' && quoteTypeName !== 'Quote' && (
-          <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-            <Tag className="h-3 w-3" />
-            {quoteTypeName}
-          </span>
+          <TypeBadge type={quoteTypeName} />
         )}
         {quote.jobId && (
           <Link
@@ -277,13 +282,17 @@ function OverviewTab({ quote }: { quote: Quote }) {
         <Card size="sm">
           <CardContent className="px-4">
             <p className="text-xs text-muted-foreground">Status</p>
-            <p className="mt-1 text-sm font-medium">{statusName}</p>
+            <div className="mt-1">
+              <StatusBadge status={statusName} />
+            </div>
           </CardContent>
         </Card>
         <Card size="sm">
           <CardContent className="px-4">
             <p className="text-xs text-muted-foreground">Estimate type</p>
-            <p className="mt-1 text-sm font-medium">{quoteTypeName}</p>
+            <div className="mt-1">
+              <TypeBadge type={quoteTypeName} />
+            </div>
           </CardContent>
         </Card>
         <Card size="sm">
@@ -370,7 +379,7 @@ function OverviewTab({ quote }: { quote: Quote }) {
         >
           <DefRow label="Auto-approved" value={<BoolPill value={autoApproved} />} />
           <DefRow label="Status name" value={approval.statusName ?? '—'} />
-          <DefRow label="Estimate type" value={approval.quoteTypeName ?? '—'} />
+          <DefRow label="Estimate type" value={<TypeBadge type={approval.quoteTypeName} />} />
           <DefRow
             label="Created by"
             value={
@@ -512,21 +521,6 @@ function TimelineTab({ quote }: { quote: Quote }) {
   );
 }
 
-function AttachmentsTab() {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Attachments</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">
-          Attachments linked to this estimate will appear here once the attachments
-          API is connected.
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Container with tabs
@@ -542,7 +536,7 @@ type QuoteTab =
   | 'attachments'
   | 'journals';
 
-export function QuoteDetail({ quote }: { quote: Quote }) {
+export function QuoteDetail({ quote, jobProvider }: { quote: Quote; jobProvider?: CatalogType }) {
   const [tab, setTab] = useState<QuoteTab>('overview');
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -589,13 +583,14 @@ export function QuoteDetail({ quote }: { quote: Quote }) {
             quote={quote}
             drawerOpen={drawerOpen}
             onDrawerOpenChange={setDrawerOpen}
+            catalogType={jobProvider}
           />
         )}
         {tab === 'parties' && <PartiesTab quote={quote} />}
         {tab === 'activities' && <ActivitiesTab />}
         {tab === 'communications' && <CommunicationsTab />}
         {tab === 'timeline' && <TimelineTab quote={quote} />}
-        {tab === 'attachments' && <AttachmentsTab />}
+        {tab === 'attachments' && <QuoteAttachmentsTab quoteId={quote.id} />}
         {tab === 'journals' && (
           <JournalList
             entityType="Quote"

@@ -1,11 +1,41 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, desc, asc, sql } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { invoices } from '../schema';
 
 export type InvoiceRow = typeof invoices.$inferSelect;
 export type InvoiceInsert = typeof invoices.$inferInsert;
+
+function buildInvoicesOrderBy(sort?: string) {
+  switch (sort) {
+    case 'updated_at_asc':
+      return [asc(invoices.updatedAt)];
+    case 'created_at_desc':
+      return [desc(invoices.createdAt)];
+    case 'created_at_asc':
+      return [asc(invoices.createdAt)];
+    case 'invoice_number_asc':
+      return [asc(invoices.invoiceNumber)];
+    case 'invoice_number_desc':
+      return [desc(invoices.invoiceNumber)];
+    case 'total_amount_asc':
+      return [asc(invoices.totalAmount)];
+    case 'total_amount_desc':
+      return [desc(invoices.totalAmount)];
+    case 'issue_date_asc':
+      return [asc(invoices.issueDate)];
+    case 'issue_date_desc':
+      return [desc(invoices.issueDate)];
+    case 'status_asc':
+      return [asc(invoices.statusLookupId)];
+    case 'status_desc':
+      return [desc(invoices.statusLookupId)];
+    case 'updated_at_desc':
+    default:
+      return [desc(invoices.updatedAt)];
+  }
+}
 
 @Injectable()
 export class InvoicesRepository {
@@ -17,6 +47,7 @@ export class InvoicesRepository {
     limit?: number;
     purchaseOrderId?: string;
     statusId?: string;
+    sort?: string;
   }): Promise<{ data: InvoiceRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
@@ -35,7 +66,7 @@ export class InvoicesRepository {
         .select()
         .from(invoices)
         .where(whereClause)
-        .orderBy(desc(invoices.updatedAt))
+        .orderBy(...buildInvoicesOrderBy(params.sort))
         .limit(limit)
         .offset(skip),
       this.db

@@ -127,6 +127,22 @@ export class CrunchworkService {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  private extractUpstreamDetail(error: unknown): { status?: number; body?: string } {
+    const axiosErr = error as {
+      response?: { status?: number; data?: unknown; headers?: Record<string, string> };
+      config?: { url?: string; method?: string };
+    };
+    const status = axiosErr?.response?.status;
+    let body: string | undefined;
+    if (axiosErr?.response?.data !== undefined) {
+      body =
+        typeof axiosErr.response.data === 'string'
+          ? axiosErr.response.data.slice(0, 500)
+          : JSON.stringify(axiosErr.response.data).slice(0, 500);
+    }
+    return { status, body };
+  }
+
   private async requestWithRetry<T>(options: {
     method: 'GET' | 'POST';
     path: string;
@@ -156,12 +172,15 @@ export class CrunchworkService {
           continue;
         }
         if (status && status >= 500) {
-          const delay = Math.pow(2, attempt) * 1000;
-          this.logger.warn(
-            `CrunchworkService.requestWithRetry — ${status}, retrying in ${delay}ms`,
-          );
-          await this.sleep(delay);
-          continue;
+          if (attempt < this.maxRetries) {
+            const delay = Math.pow(2, attempt) * 1000;
+            this.logger.warn(
+              `CrunchworkService.requestWithRetry — ${status}, retrying in ${delay}ms`,
+            );
+            await this.sleep(delay);
+            continue;
+          }
+          break;
         }
 
         if (status === 400) {
@@ -178,7 +197,19 @@ export class CrunchworkService {
         throw error;
       }
     }
-    throw lastError || new InternalServerErrorException();
+
+    const { status, body } = this.extractUpstreamDetail(lastError);
+    this.logger.error(
+      `CrunchworkService.requestWithRetry — ${options.method} ${options.path} failed after ${this.maxRetries + 1} attempts. ` +
+        `Upstream status=${status ?? 'unknown'}, body=${body ?? '(empty)'}`,
+    );
+    throw new InternalServerErrorException({
+      message: `Upstream service error: ${options.method} ${options.path} returned ${status ?? 'unknown'} after ${this.maxRetries + 1} attempts`,
+      error: 'Bad Gateway',
+      details: body,
+      upstreamStatus: status,
+      upstreamBody: body,
+    });
   }
 
   private static readonly ENTITY_FETCH_MAP: Record<string, { method: string; idParam: string }> = {
@@ -236,10 +267,17 @@ export class CrunchworkService {
         this.logger.debug(
           `CrunchworkService.fetchAttachmentWithScopedId — trying scopedId=${scopedId}`,
         );
-        return await this.getAttachment({
+        const result = await this.getAttachment({
           connectionId: params.connectionId,
           attachmentId: scopedId,
         });
+        if (!result.scope) {
+          result.scope = prefix.toLowerCase();
+        }
+        this.logger.debug(
+          `CrunchworkService.fetchAttachmentWithScopedId — resolved scope=${result.scope} scopeId=${result.scopeId ?? 'none'}`,
+        );
+        return result;
       } catch (error) {
         const status = (error as { response?: { status?: number } })?.response?.status;
         if (status === 404 || status === 400) {
@@ -343,6 +381,20 @@ export class CrunchworkService {
     });
   }
 
+  async updateJobStatus(params: { connectionId: string; jobId: string; body: Record<string, unknown> }): Promise<Record<string, unknown>> {
+    return this.requestWithRetry({ method: 'POST', path: `/jobs/${params.jobId}/status`, connectionId: params.connectionId, body: params.body });
+  }
+
+  async getJobMessages(params: { connectionId: string; jobId: string }): Promise<Record<string, unknown>[]> {
+    const result = await this.requestWithRetry<Record<string, unknown>[]>({ method: 'GET', path: `/jobs/${params.jobId}/messages`, connectionId: params.connectionId });
+    return Array.isArray(result) ? result : [result];
+  }
+
+  async getJobReports(params: { connectionId: string; jobId: string }): Promise<Record<string, unknown>[]> {
+    const result = await this.requestWithRetry<Record<string, unknown>[]>({ method: 'GET', path: `/jobs/${params.jobId}/reports`, connectionId: params.connectionId });
+    return Array.isArray(result) ? result : [result];
+  }
+
   async createQuote(params: { connectionId: string; body: Record<string, unknown> }): Promise<Record<string, unknown>> {
     return this.requestWithRetry({ method: 'POST', path: '/quotes', connectionId: params.connectionId, body: params.body });
   }
@@ -353,6 +405,10 @@ export class CrunchworkService {
 
   async getQuote(params: { connectionId: string; quoteId: string }): Promise<Record<string, unknown>> {
     return this.requestWithRetry({ method: 'GET', path: `/quotes/${params.quoteId}`, connectionId: params.connectionId });
+  }
+
+  async getQuoteByRevision(params: { connectionId: string; revisionId: string }): Promise<Record<string, unknown>> {
+    return this.requestWithRetry({ method: 'GET', path: `/quotes/revison/${params.revisionId}`, connectionId: params.connectionId });
   }
 
   async getJobQuotes(params: { connectionId: string; jobId: string }): Promise<Record<string, unknown>[]> {
@@ -482,5 +538,67 @@ export class CrunchworkService {
       params: paramsObj,
     });
     return Array.isArray(result) ? result : [result];
+  }
+
+  async getProgressInvoice(params: { connectionId: string; progressInvoiceId: string }): Promise<Record<string, unknown>> {
+    return this.requestWithRetry({ method: 'GET', path: `/progress-invoices/${params.progressInvoiceId}`, connectionId: params.connectionId });
+  }
+
+  async createProgressInvoice(params: { connectionId: string; body: Record<string, unknown> }): Promise<Record<string, unknown>> {
+    return this.requestWithRetry({ method: 'POST', path: '/progress-invoices', connectionId: params.connectionId, body: params.body });
+  }
+
+  async updateProgressInvoice(params: { connectionId: string; progressInvoiceId: string; body: Record<string, unknown> }): Promise<Record<string, unknown>> {
+    return this.requestWithRetry({ method: 'POST', path: `/progress-invoices/${params.progressInvoiceId}`, connectionId: params.connectionId, body: params.body });
+  }
+
+  async getReportTypeSchema(params: { connectionId: string; reportTypeId: string }): Promise<Record<string, unknown>> {
+    return this.requestWithRetry({ method: 'GET', path: `/report-types/${params.reportTypeId}/schema`, connectionId: params.connectionId });
+  }
+
+  async downloadAttachment(params: { connectionId: string; attachmentId: string }): Promise<Record<string, unknown>> {
+    return this.requestWithRetry({ method: 'GET', path: `/attachments/${params.attachmentId}/download`, connectionId: params.connectionId });
+  }
+
+  async downloadAttachmentStream(params: { connectionId: string; attachmentId: string }): Promise<import('stream').Readable> {
+    if (!this.connectionResolver) {
+      throw new Error(
+        'CrunchworkService.downloadAttachmentStream — connectionResolver not set. Call setConnectionResolver() during module init.',
+      );
+    }
+
+    const creds = await this.connectionResolver.getCredentials({
+      connectionId: params.connectionId,
+    });
+    const token = await this.authService.getAccessToken({
+      connectionId: params.connectionId,
+      credentials: {
+        clientId: creds.clientId,
+        clientSecret: creds.clientSecret,
+        authUrl: creds.authUrl,
+      },
+    });
+
+    const restBase = creds.baseApi || creds.baseUrl;
+    const url = `${restBase.replace(/\/$/, '')}/attachments/${params.attachmentId}/download`;
+    this.logger.debug(`CrunchworkService.downloadAttachmentStream — GET ${url}`);
+
+    const response = await firstValueFrom(
+      this.httpService.request({
+        method: 'GET',
+        url,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'active-tenant-id': creds.activeTenantId,
+        },
+        responseType: 'stream',
+      }),
+    );
+
+    return response.data as import('stream').Readable;
+  }
+
+  async postEvent(params: { connectionId: string; body: Record<string, unknown> }): Promise<Record<string, unknown>> {
+    return this.requestWithRetry({ method: 'POST', path: '/events', connectionId: params.connectionId, body: params.body });
   }
 }

@@ -7,6 +7,29 @@ import { tasks } from '../schema';
 export type TaskRow = typeof tasks.$inferSelect;
 export type TaskInsert = typeof tasks.$inferInsert;
 
+function buildTasksOrderBy(sort?: string) {
+  switch (sort) {
+    case 'updated_at_asc':
+      return [asc(tasks.updatedAt)];
+    case 'updated_at_desc':
+      return [desc(tasks.updatedAt)];
+    case 'created_at_desc':
+      return [desc(tasks.createdAt)];
+    case 'created_at_asc':
+      return [asc(tasks.createdAt)];
+    case 'due_date_asc':
+      return [asc(tasks.dueDate)];
+    case 'due_date_desc':
+      return [desc(tasks.dueDate)];
+    case 'priority_asc':
+      return [asc(tasks.priority)];
+    case 'priority_desc':
+      return [desc(tasks.priority)];
+    default:
+      return [asc(tasks.dueDate), desc(tasks.createdAt)];
+  }
+}
+
 @Injectable()
 export class TasksRepository {
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
@@ -22,6 +45,7 @@ export class TasksRepository {
     entityType?: string;
     entityId?: string;
     assignedToUserId?: string;
+    sort?: string;
   }): Promise<{ data: TaskRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
@@ -55,7 +79,7 @@ export class TasksRepository {
         .select()
         .from(tasks)
         .where(whereClause)
-        .orderBy(asc(tasks.dueDate), desc(tasks.createdAt))
+        .orderBy(...buildTasksOrderBy(params.sort))
         .limit(limit)
         .offset(skip),
       this.db

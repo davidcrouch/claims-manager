@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy, Inject } from '@nestjs/common';
-import { eq, and, lte, sql } from 'drizzle-orm';
+import { eq, and, lte, sql, inArray } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
 import { outboundSyncQueue, integrationConnections, jobs } from '../../../database/schema';
 import type { OutboundAdapter, OutboundPushResult } from './outbound-adapter.interface';
@@ -109,7 +109,7 @@ export class OutboundWorkerService implements OnModuleInit, OnModuleDestroy {
           lastAttemptedAt: now,
           attempts: sql`${outboundSyncQueue.attempts} + 1`,
         })
-        .where(sql`${outboundSyncQueue.id} = ANY(${ids})`);
+        .where(inArray(outboundSyncQueue.id, ids));
 
       return rows as OutboundQueueRow[];
     });

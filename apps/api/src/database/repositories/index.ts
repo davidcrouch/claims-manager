@@ -21,7 +21,7 @@ export {
   type ClaimAssigneeRow,
   type ClaimAssigneeInsert,
 } from './claim-assignees.repository';
-export { VendorsRepository } from './vendors.repository';
+export { VendorsRepository, type VendorRow, type VendorInsert } from './vendors.repository';
 export {
   QuotesRepository,
   type QuoteRow,
@@ -129,6 +129,11 @@ export {
   type JobContactInsert,
 } from './job-contacts.repository';
 export {
+  CatalogsRepository,
+  type CatalogRow,
+  type CatalogInsert,
+} from './catalogs.repository';
+export {
   CatalogItemTypesRepository,
   type CatalogItemTypeRow,
   type CatalogItemTypeInsert,
@@ -165,3 +170,8 @@ export {
   type JournalPageAttachmentRow,
   type JournalPageAttachmentInsert,
 } from './journal-page-attachments.repository';
+export {
+  NotificationsRepository,
+  type NotificationRow,
+  type NotificationInsert,
+} from './notifications.repository';

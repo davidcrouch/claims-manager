@@ -51,15 +51,19 @@ export class AppointmentsService {
 
   private buildOutboundBody(
     body: Record<string, unknown>,
-    jobExternalRef: string | null,
+    cwJobId: string | null,
   ): Record<string, unknown> {
-    const outbound: Record<string, unknown> = {
-      ...body,
-      jobId: jobExternalRef ?? body.jobId,
-    };
+    const outbound: Record<string, unknown> = { ...body };
+
+    if (cwJobId) {
+      outbound.jobId = cwJobId;
+    }
 
     if (typeof body.appointmentType === 'string') {
-      outbound.appointmentType = { name: body.appointmentType };
+      outbound.appointmentType = {
+        name: body.appointmentType,
+        externalReference: body.appointmentType,
+      };
     }
 
     const rawAttendees = body.attendees;
@@ -68,8 +72,10 @@ export class AppointmentsService {
         if (a.type && a.attendeeValue) return a;
         return {
           type: (a.attendeeType as string) ?? 'CONTACT',
-          attendeeValue: (a.name as string) ?? (a.email as string) ?? '',
-          ...(a.email ? { email: a.email } : {}),
+          attendeeValue: {
+            name: (a.name as string) ?? '',
+            ...(a.email ? { email: a.email } : {}),
+          },
         };
       });
     }
@@ -85,8 +91,10 @@ export class AppointmentsService {
       ? await this.jobsRepo.findOne({ id: internalJobId, tenantId })
       : null;
 
+    const cwJobId = (job?.apiPayload as Record<string, unknown>)?.id as string | undefined;
+
     const connectionId = await this.resolveConnectionId(tenantId);
-    const outboundBody = this.buildOutboundBody(params.body, job?.externalReference ?? null);
+    const outboundBody = this.buildOutboundBody(params.body, cwJobId ?? null);
 
     let apiAppointment: Record<string, unknown> = {};
     try {
@@ -131,8 +139,10 @@ export class AppointmentsService {
       ? await this.jobsRepo.findOne({ id: internalJobId, tenantId })
       : null;
 
+    const cwJobId = (job?.apiPayload as Record<string, unknown>)?.id as string | undefined;
+
     const connectionId = await this.resolveConnectionId(tenantId);
-    const outboundBody = this.buildOutboundBody(params.body, job?.externalReference ?? null);
+    const outboundBody = this.buildOutboundBody(params.body, cwJobId ?? null);
 
     const apiAppointment = await this.crunchworkService.updateAppointment({
       connectionId,

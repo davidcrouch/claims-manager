@@ -20,5 +20,6 @@ export interface EntityMapper {
     internalEntityId: string;
     internalEntityType: string;
     skipped?: string;
+    metadata?: Record<string, unknown>;
   }>;
 }

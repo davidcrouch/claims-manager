@@ -38,7 +38,8 @@ export class JobTransformer implements EntityTransformer<JobInsert> {
 
     const entity: Partial<JobInsert> = {
       tenantId,
-      externalReference: asString(payload.externalReference) ?? asString(payload.id),
+      externalReference: asString(payload.id),
+      externalJobId: asString(payload.externalReference),
       requestDate: asDateString(payload.requestDate),
       collectExcess: asBool(payload.collectExcess),
       excess: asString(payload.excess),
@@ -81,6 +82,7 @@ export class JobTransformer implements EntityTransformer<JobInsert> {
         entityType: 'vendor',
         externalId: asString(cwVendor.id)!,
         required: false,
+        nestedPayload: cwVendor,
       });
     }
 

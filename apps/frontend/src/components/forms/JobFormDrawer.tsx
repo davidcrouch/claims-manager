@@ -33,6 +33,7 @@ const jobFormSchema = z.object({
   makeSafeRequired: z.boolean().optional(),
   collectExcess: z.boolean().optional(),
   excess: z.string().optional(),
+  internal: z.boolean().optional(),
 });
 
 type JobFormValues = z.infer<typeof jobFormSchema>;
@@ -63,6 +64,7 @@ export function JobFormDrawer({
       makeSafeRequired: false,
       collectExcess: false,
       excess: '',
+      internal: true,
     },
   });
 
@@ -70,14 +72,17 @@ export function JobFormDrawer({
     setSubmitting(true);
     setError(null);
     try {
-      const result = await createJobAction({
-        claimId: values.claimId,
-        jobType: { id: values.jobTypeId },
-        jobInstructions: values.jobInstructions,
-        makeSafeRequired: values.makeSafeRequired,
-        collectExcess: values.collectExcess,
-        excess: values.excess ? parseFloat(values.excess) : undefined,
-      });
+      const result = await createJobAction(
+        {
+          claimId: values.claimId,
+          jobType: { id: values.jobTypeId },
+          jobInstructions: values.jobInstructions,
+          makeSafeRequired: values.makeSafeRequired,
+          collectExcess: values.collectExcess,
+          excess: values.excess ? parseFloat(values.excess) : undefined,
+        },
+        { provider: values.internal ? 'direct' : undefined },
+      );
       if (result.success) {
         onOpenChange(false);
         form.reset();
@@ -173,6 +178,18 @@ export function JobFormDrawer({
                 {...form.register('excess')}
                 placeholder="0.00"
               />
+            </div>
+
+            <div className="flex items-center gap-2 md:col-span-2">
+              <input
+                id="internal"
+                type="checkbox"
+                className="h-4 w-4 rounded border-gray-300"
+                {...form.register('internal')}
+              />
+              <Label htmlFor="internal" className="text-sm font-normal">
+                Internal job (not synced to external provider)
+              </Label>
             </div>
           </div>
 

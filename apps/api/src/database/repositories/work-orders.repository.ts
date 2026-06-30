@@ -1,11 +1,49 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, isNull, desc, sql } from 'drizzle-orm';
+import { eq, and, isNull, desc, asc, sql } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { workOrders } from '../schema';
 
 export type WorkOrderRow = typeof workOrders.$inferSelect;
 export type WorkOrderInsert = typeof workOrders.$inferInsert;
+
+function buildWorkOrdersOrderBy(sort?: string) {
+  switch (sort) {
+    case 'updated_at_asc':
+      return [asc(workOrders.updatedAt)];
+    case 'created_at_desc':
+      return [desc(workOrders.createdAt)];
+    case 'created_at_asc':
+      return [asc(workOrders.createdAt)];
+    case 'work_order_number_asc':
+      return [asc(workOrders.workOrderNumber)];
+    case 'work_order_number_desc':
+      return [desc(workOrders.workOrderNumber)];
+    case 'total_amount_asc':
+      return [asc(workOrders.totalAmount)];
+    case 'total_amount_desc':
+      return [desc(workOrders.totalAmount)];
+    case 'start_date_asc':
+      return [asc(workOrders.startDate)];
+    case 'start_date_desc':
+      return [desc(workOrders.startDate)];
+    case 'status_asc':
+      return [asc(workOrders.statusLookupId)];
+    case 'status_desc':
+      return [desc(workOrders.statusLookupId)];
+    case 'wo_type_asc':
+      return [asc(workOrders.workOrderTypeLookupId)];
+    case 'wo_type_desc':
+      return [desc(workOrders.workOrderTypeLookupId)];
+    case 'source_asc':
+      return [asc(workOrders.sourceExternalReference)];
+    case 'source_desc':
+      return [desc(workOrders.sourceExternalReference)];
+    case 'updated_at_desc':
+    default:
+      return [desc(workOrders.updatedAt)];
+  }
+}
 
 @Injectable()
 export class WorkOrdersRepository {
@@ -17,6 +55,7 @@ export class WorkOrdersRepository {
     limit?: number;
     jobId?: string;
     purchaseOrderId?: string;
+    sort?: string;
   }): Promise<{ data: WorkOrderRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
@@ -38,7 +77,7 @@ export class WorkOrdersRepository {
         .select()
         .from(workOrders)
         .where(whereClause)
-        .orderBy(desc(workOrders.updatedAt))
+        .orderBy(...buildWorkOrdersOrderBy(params.sort))
         .limit(limit)
         .offset(skip),
       this.db

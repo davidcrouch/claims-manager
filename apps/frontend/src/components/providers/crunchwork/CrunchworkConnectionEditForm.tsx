@@ -34,6 +34,7 @@ export function CrunchworkConnectionEditForm({
   const [baseUrl, setBaseUrl] = useState(connection.baseUrl);
   const [baseApi, setBaseApi] = useState(connection.baseApi ?? '');
   const [authUrl, setAuthUrl] = useState(connection.authUrl ?? '');
+  const [docsUrl, setDocsUrl] = useState(connection.docsUrl ?? '');
   const [clientIdentifier, setClientIdentifier] = useState(
     connection.clientIdentifier ?? '',
   );
@@ -58,6 +59,7 @@ export function CrunchworkConnectionEditForm({
       baseUrl,
       baseApi: baseApi || undefined,
       authUrl: authUrl || undefined,
+      docsUrl: docsUrl || undefined,
       clientIdentifier: clientIdentifier || undefined,
       providerTenantId: providerTenantId || undefined,
       config: {
@@ -139,6 +141,19 @@ export function CrunchworkConnectionEditForm({
         <div className="space-y-1.5">
           <Label>Auth Token URL</Label>
           <Input value={authUrl} onChange={(e) => setAuthUrl(e.target.value)} />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>API Documentation</Label>
+          <Input
+            type="url"
+            value={docsUrl}
+            onChange={(e) => setDocsUrl(e.target.value)}
+            placeholder="https://staging-iag.crunchwork.com/swagger-ui/index.html"
+          />
+          <p className="text-xs text-slate-400">
+            URL for the provider API documentation portal.
+          </p>
         </div>
 
         <div className="space-y-1.5">

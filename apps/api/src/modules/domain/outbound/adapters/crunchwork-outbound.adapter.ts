@@ -2,6 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { CrunchworkService } from '../../../../crunchwork/crunchwork.service';
 import type { OutboundAdapter, OutboundAdapterPushParams, OutboundPushResult } from '../outbound-adapter.interface';
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 @Injectable()
 export class CrunchworkOutboundAdapter implements OutboundAdapter {
   private readonly logger = new Logger('CrunchworkOutboundAdapter');
@@ -58,6 +61,12 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
     }
 
     const externalId = (payload.externalId as string) ?? entityId;
+    if (!UUID_RE.test(externalId)) {
+      this.logger.warn(
+        `CrunchworkOutboundAdapter.pushJob — externalId "${externalId}" is not a valid UUID, cannot sync to Crunchwork`,
+      );
+      return {};
+    }
     const response = await this.crunchwork.updateJob({
       connectionId,
       jobId: externalId,

@@ -4,7 +4,10 @@ import { getSession, getAccessToken } from '@/lib/auth';
 import { createApiClient } from '@/lib/api-client';
 import type { Job } from '@/types/api';
 
-export async function createJobAction(body: Record<string, unknown>): Promise<{ success: boolean; job?: Job; error?: string }> {
+export async function createJobAction(
+  body: Record<string, unknown>,
+  options?: { provider?: string },
+): Promise<{ success: boolean; job?: Job; error?: string }> {
   const session = await getSession();
   if (!session.authenticated) return { success: false, error: 'Not authenticated' };
 
@@ -13,7 +16,7 @@ export async function createJobAction(body: Record<string, unknown>): Promise<{ 
 
   try {
     const api = createApiClient({ token });
-    const job = await api.createJob(body);
+    const job = await api.createJob(body, options);
     return { success: true, job };
   } catch (err) {
     console.error('[createJobAction]', err);

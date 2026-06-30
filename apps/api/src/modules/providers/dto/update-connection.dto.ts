@@ -23,6 +23,10 @@ export class UpdateConnectionDto {
 
   @IsOptional()
   @IsString()
+  docsUrl?: string;
+
+  @IsOptional()
+  @IsString()
   authType?: string;
 
   @IsOptional()

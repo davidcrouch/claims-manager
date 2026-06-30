@@ -113,6 +113,48 @@
       "when": 1782284400000,
       "tag": "0015_entity_lookup_views",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1782370800000,
+      "tag": "0016_connection_docs_url",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1782457200000,
+      "tag": "0017_schedule_events_view",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1782543600000,
+      "tag": "0018_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1782630000000,
+      "tag": "0019_wo_purchase_order_nullable",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1782716400000,
+      "tag": "0020_backfill_job_connection_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1782802800000,
+      "tag": "0021_job_external_job_id",
+      "breakpoints": true
     }
   ]
 }

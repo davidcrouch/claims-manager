@@ -44,8 +44,10 @@ import { WorkflowModule } from './modules/domain/workflows/workflow.module';
 import { OutboundModule } from './modules/domain/outbound/outbound.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
 import { JournalsModule } from './modules/journals/journals.module';
+import { ScheduleModule } from './modules/schedule/schedule.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { TenantInterceptor } from './tenant/tenant.interceptor';
-import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { AllExceptionsFilter, HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { CommonModule } from './common/common.module';
 import { S3Module } from './common/s3/s3.module';
@@ -109,8 +111,11 @@ import { S3Module } from './common/s3/s3.module';
     OutboundModule,
     CatalogModule,
     JournalsModule,
+    ScheduleModule,
+    NotificationsModule,
   ],
   providers: [
+    { provide: APP_FILTER, useClass: AllExceptionsFilter },
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
     { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },
     {

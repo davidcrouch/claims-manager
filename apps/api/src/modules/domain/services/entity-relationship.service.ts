@@ -6,7 +6,7 @@ import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
 import type { ParentRef } from '../transformers/transformer.interface';
 import { ParentNotProjectedError } from '../../external/errors/parent-not-projected.error';
 import { ExternalObjectService } from '../../external/external-object.service';
-import { VendorsRepository } from '../../../database/repositories';
+import { VendorSyncService } from './vendor-sync.service';
 import { jobs, quotes, purchaseOrders, invoices, tasks } from '../../../database/schema';
 import type { UseCaseRegistry } from '../use-cases/use-case.registry';
 
@@ -20,7 +20,7 @@ export class EntityRelationshipService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
     private readonly externalObjectService: ExternalObjectService,
-    private readonly vendorsRepo: VendorsRepository,
+    private readonly vendorSync: VendorSyncService,
     private readonly moduleRef: ModuleRef,
   ) {}
 
@@ -39,7 +39,17 @@ export class EntityRelationshipService {
     for (const ref of params.parentRefs) {
       // Vendors use a different resolution path
       if (ref.entityType === 'vendor') {
-        const vendorId = await this.resolveVendor(ref.externalId, params.tenantId);
+        const vendorId = ref.nestedPayload
+          ? await this.vendorSync.syncFromCrunchworkPayload({
+              tenantId: params.tenantId,
+              cwVendor: ref.nestedPayload,
+              tx: params.tx,
+            })
+          : await this.vendorSync.findByCrunchworkId({
+              tenantId: params.tenantId,
+              crunchworkId: ref.externalId,
+              tx: params.tx,
+            });
         if (vendorId) resolved['vendor'] = vendorId;
         continue;
       }
@@ -169,16 +179,6 @@ export class EntityRelationshipService {
     });
 
     return result.status === 'completed' ? result.internalEntityId : undefined;
-  }
-
-  private async resolveVendor(externalId: string, tenantId: string): Promise<string | undefined> {
-    const existing = await this.vendorsRepo.findOne({ id: externalId, tenantId });
-    if (existing) return existing.id;
-
-    this.logger.debug(
-      `EntityRelationshipService.resolveVendor — vendor not found by id=${externalId}, skipping`,
-    );
-    return undefined;
   }
 
   private async findEntityParent(

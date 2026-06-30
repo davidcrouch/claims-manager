@@ -274,7 +274,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
               className={
                 indent
                   ? 'flex-1 pl-4 text-emerald-400/80 group-data-[collapsible=icon]:pl-0'
-                  : 'flex-1'
+                  : 'flex-1 text-yellow-400'
               }
             >
               {group.label}
@@ -345,7 +345,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
                   </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
-              <SidebarGroupLabel className="font-semibold tracking-wider text-sidebar-foreground/90">
+              <SidebarGroupLabel className="font-semibold tracking-wider text-yellow-400">
                 JOB DETAIL
               </SidebarGroupLabel>
               <SidebarGroupContent className="pl-3 group-data-[collapsible=icon]:pl-0">

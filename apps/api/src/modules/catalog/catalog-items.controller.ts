@@ -26,20 +26,24 @@ export class CatalogItemsController {
 
   @Get()
   findMany(
+    @Query('catalogId') catalogId?: string,
     @Query('kind') kind?: 'primitive' | 'assembly',
     @Query('typeId') typeId?: string,
     @Query('categoryId') categoryId?: string,
     @Query('q') search?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    @Query('sort') sort?: string,
   ) {
     return this.itemService.findMany({
+      catalogId,
       kind,
       typeId,
       categoryId,
       search,
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
+      sort,
     });
   }
 

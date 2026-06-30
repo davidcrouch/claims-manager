@@ -1,11 +1,45 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, isNull, desc, sql } from 'drizzle-orm';
+import { eq, and, isNull, desc, asc, sql } from 'drizzle-orm';
 import { DRIZZLE } from '../drizzle.module';
 import type { DrizzleDB } from '../drizzle.module';
 import { rfqs } from '../schema';
 
 export type RfqRow = typeof rfqs.$inferSelect;
 export type RfqInsert = typeof rfqs.$inferInsert;
+
+function buildRfqsOrderBy(sort?: string) {
+  switch (sort) {
+    case 'updated_at_asc':
+      return [asc(rfqs.updatedAt)];
+    case 'created_at_desc':
+      return [desc(rfqs.createdAt)];
+    case 'created_at_asc':
+      return [asc(rfqs.createdAt)];
+    case 'rfq_number_asc':
+      return [asc(rfqs.rfqNumber)];
+    case 'rfq_number_desc':
+      return [desc(rfqs.rfqNumber)];
+    case 'sent_date_asc':
+      return [asc(rfqs.sentDate)];
+    case 'sent_date_desc':
+      return [desc(rfqs.sentDate)];
+    case 'due_date_asc':
+      return [asc(rfqs.dueDate)];
+    case 'due_date_desc':
+      return [desc(rfqs.dueDate)];
+    case 'status_asc':
+      return [asc(rfqs.statusLookupId)];
+    case 'status_desc':
+      return [desc(rfqs.statusLookupId)];
+    case 'vendor_asc':
+      return [asc(rfqs.rfqToName)];
+    case 'vendor_desc':
+      return [desc(rfqs.rfqToName)];
+    case 'updated_at_desc':
+    default:
+      return [desc(rfqs.updatedAt)];
+  }
+}
 
 @Injectable()
 export class RfqsRepository {
@@ -18,6 +52,7 @@ export class RfqsRepository {
     jobId?: string;
     quoteId?: string;
     vendorId?: string;
+    sort?: string;
   }): Promise<{ data: RfqRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
@@ -42,7 +77,7 @@ export class RfqsRepository {
         .select()
         .from(rfqs)
         .where(whereClause)
-        .orderBy(desc(rfqs.updatedAt))
+        .orderBy(...buildRfqsOrderBy(params.sort))
         .limit(limit)
         .offset(skip),
       this.db

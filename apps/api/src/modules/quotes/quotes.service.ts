@@ -1,5 +1,14 @@
 import { Injectable, Optional, BadRequestException, Logger } from '@nestjs/common';
-import { QuotesRepository, JobsRepository, ClaimsRepository, type QuoteInsert, type QuoteViewRow, type JobRow } from '../../database/repositories';
+import {
+  QuotesRepository,
+  JobsRepository,
+  ClaimsRepository,
+  LookupsRepository,
+  type QuoteInsert,
+  type QuoteViewRow,
+  type QuoteRow,
+  type JobRow,
+} from '../../database/repositories';
 import { TenantContext } from '../../tenant/tenant-context';
 import { CrunchworkService } from '../../crunchwork/crunchwork.service';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
@@ -19,9 +28,69 @@ export class QuotesService {
     private readonly crunchworkService: CrunchworkService,
     private readonly catalogSelectionService: CatalogSelectionService,
     private readonly lookupResolver: LookupResolver,
+    private readonly lookupsRepo: LookupsRepository,
     @Optional() private readonly connectionResolver?: ConnectionResolverService,
     @Optional() private readonly catalogOutbound?: CatalogOutboundService,
   ) {}
+
+  private async resolvePublishedStatus(params: { tenantId: string }): Promise<{
+    lookupId: string;
+    outbound: { name: string; externalReference: string };
+  }> {
+    let lookupId =
+      (await this.lookupResolver.resolveByName({
+        tenantId: params.tenantId,
+        domain: 'quote_status',
+        name: 'Published',
+      })) ??
+      (await this.lookupResolver.resolve({
+        tenantId: params.tenantId,
+        domain: 'quote_status',
+        externalReference: 'Published',
+        name: 'Published',
+        autoCreate: true,
+      }));
+
+    if (!lookupId) {
+      throw new BadRequestException('Published quote status lookup not configured');
+    }
+
+    const lookup = await this.lookupsRepo.findOne({ id: lookupId, tenantId: params.tenantId });
+    if (!lookup?.externalReference) {
+      throw new BadRequestException('Published quote status lookup has no external reference');
+    }
+
+    return {
+      lookupId,
+      outbound: { name: lookup.name ?? 'Published', externalReference: lookup.externalReference },
+    };
+  }
+
+  private applyQuoteApiFields(params: {
+    apiObj: Record<string, unknown>;
+    existing: Pick<QuoteRow, 'quoteNumber' | 'name'>;
+    fallbackApiObj?: Record<string, unknown>;
+    base?: Partial<QuoteInsert>;
+  }): Partial<QuoteInsert> {
+    const { apiObj, existing, fallbackApiObj, base = {} } = params;
+    const source = { ...(fallbackApiObj ?? {}), ...apiObj };
+    const updateData: Partial<QuoteInsert> = { ...base };
+
+    if (source.quoteNumber) updateData.quoteNumber = String(source.quoteNumber);
+    if (source.name) updateData.name = String(source.name);
+    const cwDate = (source.date ?? source.quoteDate) as string | undefined;
+    if (cwDate) updateData.quoteDate = new Date(cwDate);
+    if (source.expiresInDays != null) updateData.expiresInDays = Number(source.expiresInDays);
+    if (source.subTotal != null) updateData.subTotal = String(source.subTotal);
+    if (source.totalTax != null) updateData.totalTax = String(source.totalTax);
+    const cwTotal = source.total ?? source.totalAmount;
+    if (cwTotal != null) updateData.totalAmount = String(cwTotal);
+
+    if (!updateData.quoteNumber) updateData.quoteNumber = existing.quoteNumber ?? undefined;
+    if (!updateData.name) updateData.name = existing.name ?? undefined;
+
+    return updateData;
+  }
 
   /**
    * Resolve the integration connection for publishing.
@@ -70,6 +139,7 @@ export class QuotesService {
     limit?: number;
     jobId?: string;
     statusId?: string;
+    sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
     const result = await this.quotesRepo.findAll({
@@ -78,6 +148,7 @@ export class QuotesService {
       limit: params.limit,
       jobId: params.jobId,
       statusId: params.statusId,
+      sort: params.sort,
     });
     return { data: result.data.map(this.shapeQuoteResponse), total: result.total };
   }
@@ -154,9 +225,11 @@ export class QuotesService {
     }
 
     const custom = (existing.customData ?? {}) as Record<string, unknown>;
+    const jobApiPayload = (job?.apiPayload ?? {}) as Record<string, unknown>;
+    const claimApiPayload = (claim?.apiPayload ?? {}) as Record<string, unknown>;
     const outboundBody: Record<string, unknown> = {
-      jobId: job?.externalReference ?? null,
-      claimId: claim?.externalReference ?? null,
+      jobId: (jobApiPayload.id as string) ?? job?.externalReference ?? null,
+      claimId: (claimApiPayload.id as string) ?? claim?.externalReference ?? null,
       name: existing.name,
       reference: existing.reference ?? undefined,
       note: existing.note,
@@ -180,30 +253,57 @@ export class QuotesService {
     const enriched = this.catalogOutbound
       ? await this.catalogOutbound.enrichPayload({ tenantId, body: outboundBody })
       : outboundBody;
-    const apiQuote = await this.crunchworkService.createQuote({
+    this.logger.debug(
+      `QuotesService.publish — outbound create payload groups=${groups.length}, ` +
+      `items=${groups.reduce((n, g) => n + (Array.isArray((g as any).items) ? (g as any).items.length : 0), 0)}, ` +
+      `combos=${groups.reduce((n, g) => n + (Array.isArray((g as any).combos) ? (g as any).combos.length : 0), 0)}`,
+    );
+    const createResponse = await this.crunchworkService.createQuote({
       connectionId,
       body: enriched,
     });
 
-    const apiObj = apiQuote as Record<string, unknown>;
+    const createObj = createResponse as Record<string, unknown>;
+    const cwQuoteId = createObj.id as string | undefined;
+    if (!cwQuoteId) {
+      throw new BadRequestException('Crunchwork did not return a quote id after upload');
+    }
+    this.logger.log(
+      `QuotesService.publish — draft quote uploaded to Crunchwork (cwQuoteId=${cwQuoteId})`,
+    );
+
+    const publishedStatus = await this.resolvePublishedStatus({ tenantId });
+    const publishBody: Record<string, unknown> = {
+      status: publishedStatus.outbound,
+    };
+    const enrichedPublish = this.catalogOutbound
+      ? await this.catalogOutbound.enrichPayload({ tenantId, body: publishBody })
+      : publishBody;
+    const updateResponse = await this.crunchworkService.updateQuote({
+      connectionId,
+      quoteId: cwQuoteId,
+      body: enrichedPublish,
+    });
+
+    const updateObj = updateResponse as Record<string, unknown>;
     const statusLookupId = await this.resolveStatusLookup({
       tenantId,
-      statusField: apiObj.status,
+      statusField: updateObj.status,
     });
-    const updateData: Partial<QuoteInsert> = {
-      externalReference: apiObj.id as string,
-      quoteNumber: (apiObj.quoteNumber as string) || existing.quoteNumber,
-      name: (apiObj.name as string) || existing.name,
-      statusLookupId: statusLookupId ?? undefined,
-      apiPayload: apiQuote as Record<string, unknown>,
-    };
-    const cwDate = (apiObj.date ?? apiObj.quoteDate) as string | undefined;
-    if (cwDate) updateData.quoteDate = new Date(cwDate);
-    if (apiObj.expiresInDays != null) updateData.expiresInDays = Number(apiObj.expiresInDays);
-    if (apiObj.subTotal != null) updateData.subTotal = String(apiObj.subTotal);
-    if (apiObj.totalTax != null) updateData.totalTax = String(apiObj.totalTax);
-    const cwTotal = apiObj.total ?? apiObj.totalAmount;
-    if (cwTotal != null) updateData.totalAmount = String(cwTotal);
+    this.logger.log(
+      `QuotesService.publish — Crunchwork quote status updated to Published (cwQuoteId=${cwQuoteId})`,
+    );
+
+    const updateData = this.applyQuoteApiFields({
+      apiObj: updateObj,
+      fallbackApiObj: createObj,
+      existing,
+      base: {
+        externalReference: cwQuoteId,
+        statusLookupId: statusLookupId ?? publishedStatus.lookupId,
+        apiPayload: updateResponse as Record<string, unknown>,
+      },
+    });
 
     return this.quotesRepo.update({ id: params.id, data: updateData });
   }

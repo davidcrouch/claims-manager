@@ -26,6 +26,7 @@ import type {
   PaginatedResponse,
   FinanceSummary,
   AgingBucket,
+  Catalog,
   CatalogItem,
   CatalogItemType,
   CatalogCategory,
@@ -100,7 +101,8 @@ async function handleResponse<T>(res: Response): Promise<T> {
   }
 
   if (res.status >= 500) {
-    throw new ApiError(`Server error: ${res.status}`, res.status, body);
+    const serverMsg = (body as { message?: string })?.message ?? `Server error: ${res.status}`;
+    throw new ApiError(serverMsg, res.status, body);
   }
 
   throw new ApiError(
@@ -237,10 +239,34 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<Invoice[]>(`/invoices/job/${jobId}`);
     },
 
+    getAttachments(params?: {
+      page?: number;
+      limit?: number;
+      search?: string;
+      relatedRecordType?: string;
+      sort?: string;
+    }): Promise<PaginatedResponse<Attachment>> {
+      const sp = new URLSearchParams();
+      if (params?.page != null) sp.set('page', String(params.page));
+      if (params?.limit != null) sp.set('limit', String(params.limit));
+      if (params?.search) sp.set('search', params.search);
+      if (params?.relatedRecordType) sp.set('relatedRecordType', params.relatedRecordType);
+      if (params?.sort) sp.set('sort', params.sort);
+      return fetchApi<PaginatedResponse<Attachment>>(`/attachments?${sp}`);
+    },
+
     getJobAttachments(jobId: string): Promise<Attachment[]> {
       const sp = new URLSearchParams({
         relatedRecordType: 'Job',
         relatedRecordId: jobId,
+      });
+      return fetchApi<Attachment[]>(`/attachments?${sp}`);
+    },
+
+    getQuoteAttachments(quoteId: string): Promise<Attachment[]> {
+      const sp = new URLSearchParams({
+        relatedRecordType: 'Quote',
+        relatedRecordId: quoteId,
       });
       return fetchApi<Attachment[]>(`/attachments?${sp}`);
     },
@@ -250,12 +276,14 @@ export function createApiClient(options?: ApiClientOptions) {
       limit?: number;
       jobId?: string;
       statusId?: string;
+      sort?: string;
     }): Promise<PaginatedResponse<Quote>> {
       const sp = new URLSearchParams();
       if (params.page != null) sp.set('page', String(params.page));
       if (params.limit != null) sp.set('limit', String(params.limit));
       if (params.jobId) sp.set('jobId', params.jobId);
       if (params.statusId) sp.set('statusId', params.statusId);
+      if (params.sort) sp.set('sort', params.sort);
       return fetchApi<PaginatedResponse<Quote>>(`/quotes?${sp}`);
     },
 
@@ -268,12 +296,14 @@ export function createApiClient(options?: ApiClientOptions) {
       limit?: number;
       jobId?: string;
       vendorId?: string;
+      sort?: string;
     }): Promise<PaginatedResponse<PurchaseOrder>> {
       const sp = new URLSearchParams();
       if (params.page != null) sp.set('page', String(params.page));
       if (params.limit != null) sp.set('limit', String(params.limit));
       if (params.jobId) sp.set('jobId', params.jobId);
       if (params.vendorId) sp.set('vendorId', params.vendorId);
+      if (params.sort) sp.set('sort', params.sort);
       return fetchApi<PaginatedResponse<PurchaseOrder>>(`/purchase-orders?${sp}`);
     },
 
@@ -285,15 +315,21 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<PurchaseOrder>('/purchase-orders', { method: 'POST', body: JSON.stringify(body) });
     },
 
+    getPurchaseOrderLineItems(poId: string): Promise<Array<Record<string, unknown>>> {
+      return fetchApi<Array<Record<string, unknown>>>(`/purchase-orders/${poId}/line-items`);
+    },
+
     getInvoices(params: {
       page?: number;
       limit?: number;
       purchaseOrderId?: string;
+      sort?: string;
     }): Promise<PaginatedResponse<Invoice>> {
       const sp = new URLSearchParams();
       if (params.page != null) sp.set('page', String(params.page));
       if (params.limit != null) sp.set('limit', String(params.limit));
       if (params.purchaseOrderId) sp.set('purchaseOrderId', params.purchaseOrderId);
+      if (params.sort) sp.set('sort', params.sort);
       return fetchApi<PaginatedResponse<Invoice>>(`/invoices?${sp}`);
     },
 
@@ -344,12 +380,17 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<unknown>('/lookups');
     },
 
-    getLookupsByDomain(domain: string): Promise<{ id: string; name?: string }[]> {
-      return fetchApi<{ id: string; name?: string }[]>(`/lookups?domain=${encodeURIComponent(domain)}`);
+    getLookupsByDomain(domain: string): Promise<{ id: string; name?: string; externalReference?: string }[]> {
+      return fetchApi<{ id: string; name?: string; externalReference?: string }[]>(`/lookups?domain=${encodeURIComponent(domain)}`);
     },
 
-    createJob(body: Record<string, unknown>): Promise<Job> {
-      return fetchApi<Job>('/jobs', { method: 'POST', body: JSON.stringify(body) });
+    createJob(body: Record<string, unknown>, options?: { provider?: string }): Promise<Job> {
+      const qs = options?.provider ? `?provider=${encodeURIComponent(options.provider)}` : '';
+      return fetchApi<Job>(`/jobs${qs}`, { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    updateJob(id: string, body: Record<string, unknown>): Promise<Job> {
+      return fetchApi<Job>(`/jobs/${id}`, { method: 'POST', body: JSON.stringify(body) });
     },
 
     createQuote(body: Record<string, unknown>): Promise<Quote> {
@@ -400,11 +441,13 @@ export function createApiClient(options?: ApiClientOptions) {
       page?: number;
       limit?: number;
       search?: string;
+      sort?: string;
     }): Promise<PaginatedResponse<Contact>> {
       const sp = new URLSearchParams();
       if (params?.page != null) sp.set('page', String(params.page));
       if (params?.limit != null) sp.set('limit', String(params.limit));
       if (params?.search) sp.set('search', params.search);
+      if (params?.sort) sp.set('sort', params.sort);
       return fetchApi<PaginatedResponse<Contact>>(`/contacts?${sp}`);
     },
 
@@ -441,12 +484,14 @@ export function createApiClient(options?: ApiClientOptions) {
       limit?: number;
       jobId?: string;
       purchaseOrderId?: string;
+      sort?: string;
     }): Promise<PaginatedResponse<WorkOrder>> {
       const sp = new URLSearchParams();
       if (params?.page != null) sp.set('page', String(params.page));
       if (params?.limit != null) sp.set('limit', String(params.limit));
       if (params?.jobId) sp.set('jobId', params.jobId);
       if (params?.purchaseOrderId) sp.set('purchaseOrderId', params.purchaseOrderId);
+      if (params?.sort) sp.set('sort', params.sort);
       return fetchApi<PaginatedResponse<WorkOrder>>(`/work-orders?${sp}`);
     },
 
@@ -473,6 +518,7 @@ export function createApiClient(options?: ApiClientOptions) {
       jobId?: string;
       quoteId?: string;
       vendorId?: string;
+      sort?: string;
     }): Promise<PaginatedResponse<Rfq>> {
       const sp = new URLSearchParams();
       if (params?.page != null) sp.set('page', String(params.page));
@@ -480,6 +526,7 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params?.jobId) sp.set('jobId', params.jobId);
       if (params?.quoteId) sp.set('quoteId', params.quoteId);
       if (params?.vendorId) sp.set('vendorId', params.vendorId);
+      if (params?.sort) sp.set('sort', params.sort);
       return fetchApi<PaginatedResponse<Rfq>>(`/rfqs?${sp}`);
     },
 
@@ -503,6 +550,10 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<Rfq>(`/rfqs/${id}`, { method: 'POST', body: JSON.stringify(body) });
     },
 
+    getRfqLineItems(rfqId: string): Promise<Array<Record<string, unknown>>> {
+      return fetchApi(`/rfqs/${rfqId}/line-items`);
+    },
+
     // Proposals
     getProposals(params?: {
       page?: number;
@@ -510,6 +561,7 @@ export function createApiClient(options?: ApiClientOptions) {
       jobId?: string;
       rfqId?: string;
       vendorId?: string;
+      sort?: string;
     }): Promise<PaginatedResponse<Proposal>> {
       const sp = new URLSearchParams();
       if (params?.page != null) sp.set('page', String(params.page));
@@ -517,6 +569,7 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params?.jobId) sp.set('jobId', params.jobId);
       if (params?.rfqId) sp.set('rfqId', params.rfqId);
       if (params?.vendorId) sp.set('vendorId', params.vendorId);
+      if (params?.sort) sp.set('sort', params.sort);
       return fetchApi<PaginatedResponse<Proposal>>(`/proposals?${sp}`);
     },
 
@@ -548,6 +601,7 @@ export function createApiClient(options?: ApiClientOptions) {
       purchaseOrderId?: string;
       vendorId?: string;
       invoiceId?: string;
+      sort?: string;
     }): Promise<PaginatedResponse<Bill>> {
       const sp = new URLSearchParams();
       if (params?.page != null) sp.set('page', String(params.page));
@@ -556,6 +610,7 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params?.purchaseOrderId) sp.set('purchaseOrderId', params.purchaseOrderId);
       if (params?.vendorId) sp.set('vendorId', params.vendorId);
       if (params?.invoiceId) sp.set('invoiceId', params.invoiceId);
+      if (params?.sort) sp.set('sort', params.sort);
       return fetchApi<PaginatedResponse<Bill>>(`/bills?${sp}`);
     },
 
@@ -638,6 +693,10 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<ConnectionDetail>(`/connections/${id}`);
     },
 
+    getConnectionDocsUrl(id: string): Promise<{ docsUrl: string; accessToken: string }> {
+      return fetchApi<{ docsUrl: string; accessToken: string }>(`/connections/${id}/docs-url`);
+    },
+
     updateConnection(id: string, body: UpdateConnectionPayload): Promise<ProviderConnection> {
       return fetchApi<ProviderConnection>(`/connections/${id}`, {
         method: 'PUT',
@@ -657,6 +716,30 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<PaginatedResponse<WebhookEvent>>(`/connections/${id}/webhook-events?${sp}`);
     },
 
+    getCatalogs(params?: { type?: string }): Promise<Catalog[]> {
+      const sp = new URLSearchParams();
+      if (params?.type) sp.set('type', params.type);
+      return fetchApi<Catalog[]>(`/catalogs?${sp}`);
+    },
+
+    getCatalog(id: string): Promise<Catalog> {
+      return fetchApi<Catalog>(`/catalogs/${id}`);
+    },
+
+    createCatalog(body: { name: string; description?: string; type: string }): Promise<Catalog> {
+      return fetchApi<Catalog>('/catalogs', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+
+    updateCatalog(id: string, body: Record<string, unknown>): Promise<Catalog> {
+      return fetchApi<Catalog>(`/catalogs/${id}`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+
     getCatalogTypes(): Promise<CatalogItemType[]> {
       return fetchApi<CatalogItemType[]>('/catalog/types');
     },
@@ -666,20 +749,24 @@ export function createApiClient(options?: ApiClientOptions) {
     },
 
     getCatalogItems(params?: {
+      catalogId?: string;
       kind?: 'primitive' | 'assembly';
       typeId?: string;
       categoryId?: string;
       q?: string;
       page?: number;
       limit?: number;
+      sort?: string;
     }): Promise<PaginatedResponse<CatalogItem>> {
       const sp = new URLSearchParams();
+      if (params?.catalogId) sp.set('catalogId', params.catalogId);
       if (params?.kind) sp.set('kind', params.kind);
       if (params?.typeId) sp.set('typeId', params.typeId);
       if (params?.categoryId) sp.set('categoryId', params.categoryId);
       if (params?.q) sp.set('q', params.q);
       if (params?.page != null) sp.set('page', String(params.page));
       if (params?.limit != null) sp.set('limit', String(params.limit));
+      if (params?.sort) sp.set('sort', params.sort);
       return fetchApi<PaginatedResponse<CatalogItem>>(`/catalog/items?${sp}`);
     },
 
@@ -705,6 +792,24 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<void>(`/catalog/items/${id}`, { method: 'DELETE' });
     },
 
+    getCatalogItemComponents(id: string): Promise<Array<{
+      id: string;
+      componentId: string;
+      quantity: string;
+      wasteFactor: string;
+      component?: { id?: string; code?: string; name?: string; description?: string | null; unitCost?: string | null; kind?: string; categoryId?: string | null; typeId?: string; unitTypeLookupId?: string | null; markupType?: string | null; markupValue?: string | null; taxRate?: string | null };
+      resolvedUnitCost?: string | null;
+    }>> {
+      return fetchApi(`/catalog/items/${id}/components`);
+    },
+
+    updateCatalogComponent(assemblyId: string, lineId: string, body: Record<string, unknown>): Promise<unknown> {
+      return fetchApi(`/catalog/items/${assemblyId}/components/${lineId}`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+
     replaceCatalogBom(id: string, lines: Record<string, unknown>[]): Promise<unknown> {
       return fetchApi(`/catalog/items/${id}/components`, {
         method: 'PUT',
@@ -719,11 +824,13 @@ export function createApiClient(options?: ApiClientOptions) {
       });
     },
 
-    getCatalogImportTemplate(): Promise<{ csv: string; columns: string[] }> {
-      return fetchApi<{ csv: string; columns: string[] }>('/catalog/import/template');
+    getCatalogImportTemplate(catalogType?: string): Promise<{ csv: string; columns: string[]; catalogType: string }> {
+      const sp = new URLSearchParams();
+      if (catalogType) sp.set('catalogType', catalogType);
+      return fetchApi<{ csv: string; columns: string[]; catalogType: string }>(`/catalog/import/template?${sp}`);
     },
 
-    previewCatalogImport(csv: string): Promise<{
+    previewCatalogImport(csv: string, catalogId?: string): Promise<{
       totalRows: number;
       validRows: number;
       warningRows: number;
@@ -748,11 +855,11 @@ export function createApiClient(options?: ApiClientOptions) {
     }> {
       return fetchApi('/catalog/import/preview', {
         method: 'POST',
-        body: JSON.stringify({ csv }),
+        body: JSON.stringify({ csv, catalogId }),
       });
     },
 
-    importCatalogCsv(csv: string): Promise<{
+    importCatalogCsv(csv: string, catalogId?: string): Promise<{
       created: number;
       updated: number;
       skipped: number;
@@ -761,7 +868,7 @@ export function createApiClient(options?: ApiClientOptions) {
     }> {
       return fetchApi('/catalog/import/csv', {
         method: 'POST',
-        body: JSON.stringify({ csv }),
+        body: JSON.stringify({ csv, catalogId }),
       });
     },
 
@@ -881,7 +988,7 @@ export function createApiClient(options?: ApiClientOptions) {
     updateQuoteLineItems(
       quoteId: string,
       body: {
-        items: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string; unitCost?: string; markupValue?: string; tax?: string }>;
+        items: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string; unitCost?: string; markupValue?: string; tax?: string; unitType?: string }>;
         combos: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string }>;
       },
     ): Promise<{ updated: number }> {
@@ -1047,6 +1154,59 @@ export function createApiClient(options?: ApiClientOptions) {
       attachmentId: string,
     ): Promise<{ downloadUrl: string; fileName: string; mimeType: string }> {
       return fetchApi(`/journals/${journalId}/pages/${pageId}/attachments/${attachmentId}/download`);
+    },
+
+    getScheduleEvents(params: {
+      from: string;
+      to: string;
+      eventType?: string;
+      jobId?: string;
+      limit?: number;
+    }): Promise<{ data: import('@/types/api').ScheduleEvent[]; total: number }> {
+      const sp = new URLSearchParams();
+      sp.set('from', params.from);
+      sp.set('to', params.to);
+      if (params.eventType) sp.set('eventType', params.eventType);
+      if (params.jobId) sp.set('jobId', params.jobId);
+      if (params.limit != null) sp.set('limit', String(params.limit));
+      return fetchApi(`/schedule/events?${sp}`);
+    },
+
+    // -- Notifications --
+
+    getNotifications(params?: {
+      entityType?: string;
+      isRead?: boolean;
+      page?: number;
+      limit?: number;
+    }): Promise<import('@/types/api').PaginatedResponse<import('@/types/api').AppNotification>> {
+      const sp = new URLSearchParams();
+      if (params?.entityType) sp.set('entityType', params.entityType);
+      if (params?.isRead !== undefined) sp.set('isRead', String(params.isRead));
+      if (params?.page != null) sp.set('page', String(params.page));
+      if (params?.limit != null) sp.set('limit', String(params.limit));
+      return fetchApi(`/notifications?${sp}`);
+    },
+
+    getUnreadNotificationCount(): Promise<{ count: number }> {
+      return fetchApi('/notifications/unread-count');
+    },
+
+    getUnreadEntityIds(entityType: string): Promise<string[]> {
+      return fetchApi(`/notifications/unread-entity-ids?entityType=${entityType}`);
+    },
+
+    markNotificationRead(id: string): Promise<{ ok: boolean }> {
+      return fetchApi(`/notifications/${id}/read`, { method: 'PATCH' });
+    },
+
+    markEntityNotificationsRead(
+      entityType: string,
+      entityId: string,
+    ): Promise<{ updated: number }> {
+      return fetchApi(`/notifications/entity/${entityType}/${entityId}/read`, {
+        method: 'PATCH',
+      });
     },
   };
 }

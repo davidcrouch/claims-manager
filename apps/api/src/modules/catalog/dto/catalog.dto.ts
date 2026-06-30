@@ -98,6 +98,10 @@ export class CreateCatalogItemDto {
 
   @IsOptional()
   @IsUUID()
+  catalogId?: string;
+
+  @IsOptional()
+  @IsUUID()
   categoryId?: string;
 
   @IsOptional()

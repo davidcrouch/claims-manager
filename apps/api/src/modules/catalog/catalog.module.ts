@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TenantModule } from '../../tenant/tenant.module';
+import { CatalogsController } from './catalogs.controller';
 import { CatalogTypesController } from './catalog-types.controller';
 import { CatalogCategoriesController } from './catalog-categories.controller';
 import { CatalogItemsController } from './catalog-items.controller';
@@ -7,6 +8,7 @@ import {
   CatalogImportController,
   CatalogUnresolvedController,
 } from './catalog-import.controller';
+import { CatalogsService } from './services/catalogs.service';
 import { CatalogBootstrapService } from './services/catalog-bootstrap.service';
 import { CatalogTypeService } from './services/catalog-type.service';
 import { CatalogCategoryService } from './services/catalog-category.service';
@@ -23,6 +25,7 @@ import { CatalogInboundService } from './services/catalog-inbound.service';
 @Module({
   imports: [TenantModule],
   controllers: [
+    CatalogsController,
     CatalogTypesController,
     CatalogCategoriesController,
     CatalogItemsController,
@@ -30,6 +33,7 @@ import { CatalogInboundService } from './services/catalog-inbound.service';
     CatalogUnresolvedController,
   ],
   providers: [
+    CatalogsService,
     CatalogBootstrapService,
     CatalogTypeService,
     CatalogCategoryService,
@@ -44,6 +48,7 @@ import { CatalogInboundService } from './services/catalog-inbound.service';
     CatalogInboundService,
   ],
   exports: [
+    CatalogsService,
     CatalogSelectionService,
     CatalogPricingService,
     CatalogItemService,

@@ -12,6 +12,7 @@ export interface JobsPageClientProps {
   claims: Claim[];
   jobTypes: { id: string; name?: string }[];
   statusOptions: { id: string; name: string }[];
+  unreadJobIds?: string[];
 }
 
 export function JobsPageClient({
@@ -19,6 +20,7 @@ export function JobsPageClient({
   claims,
   jobTypes,
   statusOptions,
+  unreadJobIds,
 }: JobsPageClientProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -27,6 +29,7 @@ export function JobsPageClient({
       <JobsListClient
         initialData={initialData}
         statusOptions={statusOptions}
+        unreadJobIds={unreadJobIds}
         headerAction={
           <Button onClick={() => setDrawerOpen(true)}>Create Job</Button>
         }

@@ -1,22 +1,50 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  CatalogsRepository,
   CatalogCategoriesRepository,
   CatalogItemTypesRepository,
+  type CatalogRow,
 } from '../../../database/repositories';
 import { DEFAULT_CATALOG_CATEGORIES, DEFAULT_CATALOG_TYPES } from '../catalog.utils';
+
+export const DEFAULT_CATALOG_NAME = 'Default';
 
 @Injectable()
 export class CatalogBootstrapService {
   private readonly logger = new Logger('CatalogBootstrapService');
 
   constructor(
+    private readonly catalogsRepo: CatalogsRepository,
     private readonly typesRepo: CatalogItemTypesRepository,
     private readonly categoriesRepo: CatalogCategoriesRepository,
   ) {}
 
   async ensureDefaults(params: { tenantId: string }): Promise<void> {
+    await this.ensureDefaultCatalog(params.tenantId);
     await this.ensureTypes(params.tenantId);
     await this.ensureCategories(params.tenantId);
+  }
+
+  async ensureDefaultCatalog(tenantId: string): Promise<CatalogRow> {
+    const existing = await this.catalogsRepo.findByName({
+      tenantId,
+      name: DEFAULT_CATALOG_NAME,
+    });
+    if (existing) return existing;
+
+    const catalog = await this.catalogsRepo.create({
+      tenantId,
+      data: {
+        name: DEFAULT_CATALOG_NAME,
+        description: 'Default item catalogue',
+        type: 'internal',
+        isActive: true,
+      },
+    });
+    this.logger.log(
+      `CatalogBootstrapService.ensureDefaultCatalog — created default catalogue for tenant=${tenantId}`,
+    );
+    return catalog;
   }
 
   private async ensureTypes(tenantId: string): Promise<void> {

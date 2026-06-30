@@ -21,6 +21,10 @@ export class CreateConnectionDto {
 
   @IsOptional()
   @IsString()
+  docsUrl?: string;
+
+  @IsOptional()
+  @IsString()
   authType?: string;
 
   @IsOptional()

@@ -6,7 +6,7 @@ import type { PaginatedResponse, PurchaseOrder } from '@/types/api';
 export default async function PurchaseOrdersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; jobId?: string }>;
+  searchParams: Promise<{ page?: string; jobId?: string; sort?: string }>;
 }) {
   const api = await getServerApiClient();
   if (!api) redirect('/api/auth/login');
@@ -19,6 +19,7 @@ export default async function PurchaseOrdersPage({
         page: parseInt(params.page ?? '1', 10),
         limit: 20,
         jobId: params.jobId,
+        sort: params.sort,
       })
       .catch((err: unknown) => {
         console.error(

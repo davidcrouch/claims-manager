@@ -42,11 +42,13 @@ export class ContactsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
+    @Query('sort') sort?: string,
   ) {
     return this.contactsService.findAll({
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
       search,
+      sort,
     });
   }
 

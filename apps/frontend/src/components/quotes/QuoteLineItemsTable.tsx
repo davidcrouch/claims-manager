@@ -50,11 +50,21 @@ function lookupDisplay(l?: { name?: string; externalReference?: string }): strin
 
 /* ---- Inline-edit types & helpers ---- */
 
-type EditableFieldKey = 'name' | 'component' | 'description' | 'quantity' | 'unitCost' | 'markupValue' | 'tax';
-type ColumnKey = 'name' | 'type' | 'category' | 'quantity' | 'unitCost' | 'extended' | 'markupValue' | 'tax' | 'total';
+type EditableFieldKey = 'name' | 'component' | 'description' | 'quantity' | 'unitType' | 'unitCost' | 'markupValue' | 'tax';
+type ColumnKey = 'name' | 'type' | 'category' | 'quantity' | 'unitType' | 'unitCost' | 'extended' | 'markupValue' | 'tax' | 'total';
+
+const UNIT_TYPE_OPTIONS = [
+  { value: 'EA', label: 'EA' },
+  { value: 'HR', label: 'HR' },
+  { value: 'ITEM', label: 'Item' },
+  { value: 'KM', label: 'KM' },
+  { value: 'LM', label: 'LM' },
+  { value: 'LOT', label: 'Lot' },
+  { value: 'M2', label: 'M²' },
+] as const;
 
 function getEditableFields(showMarkup: boolean, showGst: boolean): EditableFieldKey[] {
-  const fields: EditableFieldKey[] = ['name', 'component', 'description', 'quantity', 'unitCost'];
+  const fields: EditableFieldKey[] = ['name', 'component', 'description', 'quantity', 'unitType', 'unitCost'];
   if (showMarkup) fields.push('markupValue');
   if (showGst) fields.push('tax');
   return fields;
@@ -70,7 +80,7 @@ function nearestEditableField(
   const editableFields = getEditableFields(showMarkup, showGst);
   if ((editableFields as string[]).includes(clicked)) return clicked as EditableFieldKey;
 
-  const allCols: ColumnKey[] = ['name', 'type', 'category', 'quantity', 'unitCost', 'extended'];
+  const allCols: ColumnKey[] = ['name', 'type', 'category', 'quantity', 'unitType', 'unitCost', 'extended'];
   if (showMarkup) allCols.push('markupValue');
   if (showGst) allCols.push('tax');
   allCols.push('total');
@@ -102,9 +112,10 @@ function initItemInputs(item: ApiItem): Record<EditableFieldKey, string> {
     component: item.component ?? '',
     description: item.description ?? '',
     quantity: String(item.quantity ?? 0),
+    unitType: item.unitType?.externalReference ?? '',
     unitCost: String(item.unitCost ?? 0),
     markupValue: String(item.markupValue ?? 19),
-    tax: typeof item.tax === 'number' ? String(+(item.tax * 100).toFixed(2)) : '0',
+    tax: typeof item.tax === 'number' ? String(item.tax) : '0',
   };
 }
 
@@ -114,6 +125,7 @@ function initComboInputs(combo: ApiCombo): Record<EditableFieldKey, string> {
     component: combo.component ?? '',
     description: combo.description ?? '',
     quantity: String(combo.quantity ?? 0),
+    unitType: '',
     unitCost: '0',
     markupValue: '0',
     tax: '0',
@@ -128,6 +140,7 @@ function ItemRow({
   indented,
   showMarkup,
   showGst,
+  showCategory = true,
   isEditing,
   selectedField,
   editInputs,
@@ -145,6 +158,7 @@ function ItemRow({
   indented?: boolean;
   showMarkup: boolean;
   showGst: boolean;
+  showCategory?: boolean;
   isEditing: boolean;
   selectedField: EditableFieldKey | null;
   editInputs: Record<EditableFieldKey, string> | null;
@@ -163,17 +177,17 @@ function ItemRow({
   const qty = editInputs ? parseFloat(editInputs.quantity) || 0 : (item.quantity ?? 0);
   const unitCost = editInputs ? parseFloat(editInputs.unitCost) || 0 : (item.unitCost ?? 0);
   const mkVal = editInputs ? parseFloat(editInputs.markupValue) || 0 : (item.markupValue ?? 19);
-  const taxPct = editInputs ? parseFloat(editInputs.tax) || 0 : (typeof item.tax === 'number' ? +(item.tax * 100).toFixed(2) : 0);
+  const taxPct = editInputs ? parseFloat(editInputs.tax) || 0 : (item.tax ?? 0);
 
   const extended = qty * unitCost;
   const markupAmt = item.markupType === 'fixed' ? mkVal * qty : extended * (mkVal / 100);
-  const sub = extended + markupAmt;
-  const total = sub + sub * (taxPct / 100);
+  const gstAmt = (extended + markupAmt) * (taxPct / 100);
+  const total = extended + (showMarkup ? markupAmt : 0) + (showGst ? gstAmt : 0);
 
   useEffect(() => {
     if (isEditing && selectedField && isPrimaryEdit !== false) {
       const el = inputRefs.current[selectedField];
-      if (el) { el.focus(); el.select(); }
+      if (el) { el.focus(); if ('select' in el && typeof el.select === 'function') el.select(); }
     }
   }, [isEditing, selectedField, isPrimaryEdit]);
 
@@ -318,9 +332,11 @@ function ItemRow({
       <td data-col="type" className={cn(roCellCls, 'text-slate-600')}>{item.type ?? '—'}</td>
 
       {/* Category (read-only) */}
-      <td data-col="category" className={cn(roCellCls, 'truncate text-slate-600')}>
-        {[item.category, item.subCategory].filter(Boolean).join(' / ') || '—'}
-      </td>
+      {showCategory && (
+        <td data-col="category" className={cn(roCellCls, 'truncate text-slate-600')}>
+          {[item.category, item.subCategory].filter(Boolean).join(' / ') || '—'}
+        </td>
+      )}
 
       {/* Qty (editable) */}
       <td data-col="quantity" className={cn(editCellCls('quantity'), 'text-right')} onClick={cellClick('quantity')}>
@@ -333,14 +349,35 @@ function ItemRow({
             className={inputCls('right')}
           />
         ) : (
-          <span className="font-mono text-slate-700">
-            {qty}
-            {item.unitType && <span className="ml-1 text-xs text-slate-400">{lookupDisplay(item.unitType)}</span>}
+          <span className="font-mono text-slate-700">{qty}</span>
+        )}
+      </td>
+
+      {/* Unit (editable dropdown, e.g. M2, EA) */}
+      <td data-col="unitType" className={cn(editCellCls('unitType'), 'text-left')} onClick={cellClick('unitType')}>
+        {isEditing && editInputs ? (
+          <select
+            ref={(el) => { inputRefs.current.unitType = el as unknown as HTMLInputElement; }}
+            value={editInputs.unitType}
+            onChange={(e) => onInputChange(rowKey, 'unitType', e.target.value)}
+            onKeyDown={onCellKeyDown}
+            className="w-full bg-transparent px-4 py-2.5 text-sm text-slate-700 outline-none"
+          >
+            <option value="">—</option>
+            {UNIT_TYPE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        ) : (
+          <span className="text-slate-700">
+            {editInputs?.unitType
+              ? (UNIT_TYPE_OPTIONS.find((o) => o.value === editInputs.unitType)?.label ?? editInputs.unitType)
+              : item.unitType ? lookupDisplay(item.unitType) : '—'}
           </span>
         )}
       </td>
 
-      {/* Unit Cost (editable) */}
+      {/* Unit Price (editable) */}
       <td data-col="unitCost" className={cn(editCellCls('unitCost'), 'text-right')} onClick={cellClick('unitCost')}>
         {isEditing && editInputs ? (
           <input
@@ -400,7 +437,7 @@ function ItemRow({
 
       {/* Total (computed) */}
       <td data-col="total" className={cn(roCellCls, 'text-right font-medium text-slate-900')}>
-        {formatCurrency(editInputs ? total : item.total)}
+        {formatCurrency(total)}
       </td>
 
       {/* Actions */}
@@ -444,6 +481,7 @@ function AssemblyBlock({
   onToggle,
   showMarkup,
   showGst,
+  showCategory = true,
   editState,
   editInputs,
   selectedRows,
@@ -464,6 +502,7 @@ function AssemblyBlock({
   onToggle: () => void;
   showMarkup: boolean;
   showGst: boolean;
+  showCategory?: boolean;
   editState: { rowKey: string; field: EditableFieldKey } | null;
   editInputs: Record<string, Record<EditableFieldKey, string>>;
   selectedRows: Set<string>;
@@ -481,6 +520,26 @@ function AssemblyBlock({
     [combo.category, combo.subCategory].filter(Boolean).join(' / ') || '—';
   const isEditing = editState?.rowKey === comboKey || (selectedRows.has(comboKey) && editState !== null);
   const comboInputs = editInputs[comboKey] ?? null;
+
+  const comboTotal = useMemo(() => {
+    let sum = 0;
+    for (let idx = 0; idx < comboItems.length; idx++) {
+      const item = comboItems[idx];
+      const itemKey = `${comboKey}-item-${item.id ?? idx}`;
+      const inputs = editInputs[itemKey];
+      const qty = inputs ? parseFloat(inputs.quantity) || 0 : (item.quantity ?? 0);
+      const uc = inputs ? parseFloat(inputs.unitCost) || 0 : (item.unitCost ?? 0);
+      const ext = qty * uc;
+      const mkVal = inputs ? parseFloat(inputs.markupValue) || 0 : (item.markupValue ?? 19);
+      const mkAmt = item.markupType === 'fixed' ? mkVal * qty : ext * (mkVal / 100);
+      const taxPct = inputs
+        ? parseFloat(inputs.tax) || 0
+        : (item.tax ?? 0);
+      const gstAmt = (ext + mkAmt) * (taxPct / 100);
+      sum += ext + (showMarkup ? mkAmt : 0) + (showGst ? gstAmt : 0);
+    }
+    return sum;
+  }, [comboItems, comboKey, showMarkup, showGst, editInputs]);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
   const componentInputRef = useRef<HTMLInputElement | null>(null);
   const descriptionInputRef = useRef<HTMLInputElement | null>(null);
@@ -657,7 +716,9 @@ function AssemblyBlock({
           )}
         </td>
         <td className={cn('px-4 py-2.5 text-xs text-slate-600', isEditing && comboBg)}>Assembly</td>
-        <td className={cn('px-4 py-2.5 text-xs text-slate-600', isEditing && comboBg)}>{comboCategory}</td>
+        {showCategory && (
+          <td className={cn('px-4 py-2.5 text-xs text-slate-600', isEditing && comboBg)}>{comboCategory}</td>
+        )}
         <td
           data-col="quantity"
           data-assembly-field="quantity"
@@ -693,7 +754,7 @@ function AssemblyBlock({
         {showMarkup && <td className={cn('px-4 py-2.5', isEditing && comboBg)} />}
         {showGst && <td className={cn('px-4 py-2.5', isEditing && comboBg)} />}
         <td className={cn('whitespace-nowrap px-4 py-2.5 text-right font-semibold text-slate-900', isEditing && comboBg)}>
-          {formatCurrency(combo.total)}
+          {formatCurrency(comboTotal)}
         </td>
 
         {/* Actions */}
@@ -740,6 +801,7 @@ function AssemblyBlock({
               indented
               showMarkup={showMarkup}
               showGst={showGst}
+              showCategory={showCategory}
               isEditing={itemEditing}
               selectedField={itemEditing ? (editState?.field ?? null) : null}
               editInputs={editInputs[itemKey] ?? null}
@@ -764,11 +826,13 @@ export interface DeleteItemRequest {
   isAssemblyChild: boolean;
 }
 
+export type LineItemsMode = 'estimate' | 'catalog';
+
 export interface QuoteLineItemsTableProps {
   groups: ApiGroup[];
-  activeDropKey: string | null;
-  setActiveDropKey: (key: string | null) => void;
-  onCatalogDrop: (payload: CatalogDragPayload, groupId?: string) => void;
+  activeDropKey?: string | null;
+  setActiveDropKey?: (key: string | null) => void;
+  onCatalogDrop?: (payload: CatalogDragPayload, groupId?: string) => void;
   onGroupLabelDrop?: (payload: GroupLabelDragPayload) => void;
   onEditGroup?: (groupId: string) => void;
   onDeleteGroup?: (groupId: string) => void;
@@ -778,7 +842,43 @@ export interface QuoteLineItemsTableProps {
   onMoveGroupDown?: (groupId: string) => void;
   onOpenCatalogDrawer?: () => void;
   onSave?: (edits: Record<string, Record<EditableFieldKey, string>>) => void;
+  onDirtyChange?: (dirty: boolean, edits: Record<string, Record<EditableFieldKey, string>>) => void;
   structurallyDirty?: boolean;
+  readOnly?: boolean;
+  mode?: LineItemsMode;
+}
+
+function modeLabels(mode: LineItemsMode) {
+  if (mode === 'catalog') {
+    return {
+      groupSingular: 'category',
+      groupPlural: 'categories',
+      groupSingularCap: 'Category',
+      groupPluralCap: 'Categories',
+      lineSingular: 'item',
+      linePlural: 'items',
+      emptyDrop: 'Release anywhere to create a new category',
+      emptyState: 'No categories yet. Add a category to get started.',
+      addToDrop: (label: string) => `Release to add catalogue item to "${label}"`,
+      editGroup: 'Edit category',
+      deleteGroup: 'Delete category',
+      dragHint: 'Drag catalogue items here to add lines',
+    };
+  }
+  return {
+    groupSingular: 'group',
+    groupPlural: 'groups',
+    groupSingularCap: 'Group',
+    groupPluralCap: 'Groups',
+    lineSingular: 'line',
+    linePlural: 'lines',
+    emptyDrop: 'Release anywhere to create a new group',
+    emptyState: 'No groups yet. Add a group or drag a group label here.',
+    addToDrop: (label: string) => `Release to add catalogue item to "${label}"`,
+    editGroup: 'Edit group',
+    deleteGroup: 'Delete group',
+    dragHint: 'Drag catalogue items here to add lines',
+  };
 }
 
 export function QuoteLineItemsTable({
@@ -795,8 +895,13 @@ export function QuoteLineItemsTable({
   onMoveGroupDown,
   onOpenCatalogDrawer,
   onSave,
+  onDirtyChange,
   structurallyDirty,
+  readOnly,
+  mode = 'estimate',
 }: QuoteLineItemsTableProps) {
+  const labels = modeLabels(mode);
+  const showCategory = mode !== 'catalog';
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [collapsedCombos, setCollapsedCombos] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
@@ -927,40 +1032,51 @@ export function QuoteLineItemsTable({
 
   const dirtyRowKeys = useMemo(() => new Set(Object.keys(dirtyEdits)), [dirtyEdits]);
 
+  useEffect(() => {
+    onDirtyChange?.(isDirty, dirtyEdits);
+  }, [isDirty, dirtyEdits, onDirtyChange]);
+
   const grandTotals = useMemo(() => {
-    let subTotal = 0;
+    let extended = 0;
     let markup = 0;
     let totalTax = 0;
-    let total = 0;
 
-    function addItemMarkup(item: ApiItem) {
-      const cost = (item.unitCost ?? 0) * (item.quantity ?? 0);
-      if (item.markupType === 'fixed') {
-        markup += (item.markupValue ?? 0) * (item.quantity ?? 0);
-      } else {
-        const pct = item.markupValue ?? 19;
-        markup += cost * (pct / 100);
-      }
+    function addItem(item: ApiItem, rowKey: string) {
+      const inputs = editInputs[rowKey];
+      const qty = inputs ? parseFloat(inputs.quantity) || 0 : (item.quantity ?? 0);
+      const uc = inputs ? parseFloat(inputs.unitCost) || 0 : (item.unitCost ?? 0);
+      const cost = uc * qty;
+      extended += cost;
+      const mkVal = inputs ? parseFloat(inputs.markupValue) || 0 : (item.markupValue ?? 19);
+      const mkAmt = item.markupType === 'fixed' ? mkVal * qty : cost * (mkVal / 100);
+      markup += mkAmt;
+      const taxPct = inputs
+        ? parseFloat(inputs.tax) || 0
+        : (item.tax ?? 0);
+      totalTax += (cost + mkAmt) * (taxPct / 100);
     }
 
-    for (const g of groups) {
-      for (const item of g.items ?? []) {
-        subTotal += item.subTotal ?? 0;
-        totalTax += item.totalTax ?? 0;
-        total += item.total ?? 0;
-        addItemMarkup(item);
+    for (let gi = 0; gi < groups.length; gi++) {
+      const g = groups[gi];
+      const gId = g.id ?? `group-${gi}`;
+      for (let ii = 0; ii < (g.items ?? []).length; ii++) {
+        const item = g.items![ii];
+        addItem(item, `${gId}-item-${item.id ?? ii}`);
       }
-      for (const combo of g.combos ?? []) {
-        subTotal += combo.subTotal ?? 0;
-        totalTax += combo.totalTax ?? 0;
-        total += combo.total ?? 0;
-        for (const item of combo.items ?? []) {
-          addItemMarkup(item);
+      for (let ci = 0; ci < (g.combos ?? []).length; ci++) {
+        const combo = g.combos![ci];
+        const comboKey = `${gId}-combo-${combo.id ?? ci}`;
+        for (let ii = 0; ii < (combo.items ?? []).length; ii++) {
+          const item = combo.items![ii];
+          addItem(item, `${comboKey}-item-${item.id ?? ii}`);
         }
       }
     }
-    return { subTotal: subTotal - markup, markup, totalTax, total };
-  }, [groups]);
+
+    const subTotal = extended + (showMarkup ? markup : 0) + (showGst ? totalTax : 0);
+    const total = extended + markup + totalTax;
+    return { subTotal, markup, totalTax, total };
+  }, [groups, showMarkup, showGst, editInputs]);
 
   /* ---- Inline-edit handlers ---- */
 
@@ -1026,6 +1142,7 @@ export function QuoteLineItemsTable({
   }
 
   function handleCellSelect(rowKey: string, field: EditableFieldKey) {
+    if (readOnly) return;
     setEditState({ rowKey, field });
   }
 
@@ -1226,20 +1343,20 @@ export function QuoteLineItemsTable({
     return rows;
   }, [filteredGroups]);
 
-  const tableDropProps = {
+  const tableDropProps = readOnly ? {} : {
     onDragOver: (e: React.DragEvent) => {
       if (!hasGroupLabelDrag(e.dataTransfer)) return;
       e.preventDefault();
       if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-      setActiveDropKey('table-root');
+      setActiveDropKey?.('table-root');
     },
     onDragLeave: (e: React.DragEvent) => {
       if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-      if (activeDropKey === 'table-root') setActiveDropKey(null);
+      if (activeDropKey === 'table-root') setActiveDropKey?.(null);
     },
     onDrop: (e: React.DragEvent) => {
       e.preventDefault();
-      setActiveDropKey(null);
+      setActiveDropKey?.(null);
       const labelPayload = getGroupLabelDragData(e.dataTransfer);
       if (labelPayload && onGroupLabelDrop) {
         onGroupLabelDrop(labelPayload);
@@ -1286,8 +1403,8 @@ export function QuoteLineItemsTable({
           )}
         >
           {activeDropKey === 'table-root'
-            ? 'Release anywhere to create a new group'
-            : 'No groups yet. Add a group or drag a group label here.'}
+            ? labels.emptyDrop
+            : labels.emptyState}
         </div>
       </div>
     );
@@ -1305,7 +1422,10 @@ export function QuoteLineItemsTable({
     >
       <div
         data-slot="quote-line-items-toolbar"
-        className="sticky top-[105px] z-[9] flex cursor-pointer items-center justify-between rounded-lg border-2 border-slate-400 bg-slate-100 px-5 py-4 shadow-md transition-colors hover:bg-slate-200"
+        className={cn(
+          'sticky z-[9] flex cursor-pointer items-center justify-between rounded-lg border-2 border-slate-400 bg-slate-100 px-5 py-4 shadow-md transition-colors hover:bg-slate-200',
+          mode === 'catalog' ? 'top-[100px]' : 'top-[105px]',
+        )}
         onClick={toggleAll}
       >
         <div className="flex items-center gap-2">
@@ -1322,11 +1442,10 @@ export function QuoteLineItemsTable({
               <DropdownMenuTrigger>
                 <span
                   className="group/groupfilter inline-flex !cursor-default items-center gap-1"
-                  title={groupFilterActive ? 'Group filter active' : 'Filter groups'}
+                    title={groupFilterActive ? `${labels.groupSingularCap} filter active` : `Filter ${labels.groupPlural}`}
                 >
                   <span className="text-sm font-semibold text-slate-800">
-                    {groups.length} group{groups.length !== 1 ? 's' : ''} &middot; {totalItems} line
-                    {totalItems !== 1 ? 's' : ''}
+                    {groups.length} {groups.length !== 1 ? labels.groupPlural : labels.groupSingular} &middot; {totalItems} {totalItems !== 1 ? labels.linePlural : labels.lineSingular}
                   </span>
                   {groupFilterActive ? (
                     <Filter className="h-4 w-4 text-amber-500" />
@@ -1337,7 +1456,7 @@ export function QuoteLineItemsTable({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="min-w-[240px]" onMouseLeave={() => setGroupFilterOpen(false)}>
                 <div className="flex items-center justify-between px-2 py-1.5">
-                  <span className="text-xs font-medium text-muted-foreground">Filter groups</span>
+                  <span className="text-xs font-medium text-muted-foreground">Filter {labels.groupPlural}</span>
                   <div className="flex gap-1">
                     <button
                       type="button"
@@ -1362,7 +1481,7 @@ export function QuoteLineItemsTable({
                 <DropdownMenuSeparator />
                 {groups.map((g, i) => {
                   const gId = g.id ?? `group-${i}`;
-                  const label = groupLabel(g, i);
+                  const label = groupLabel(g, i, labels.groupSingularCap);
                   const isVisible = !hiddenGroupIds.has(gId);
                   return (
                     <DropdownMenuItem
@@ -1395,31 +1514,33 @@ export function QuoteLineItemsTable({
           </span>
         </div>
         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-          <div className="relative w-96">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-            <Input
-              type="text"
-              placeholder="Search line items…"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="h-8 border-slate-400 bg-white pl-8 pr-8 text-sm"
-            />
-            {searchTerm && (
-              <button
-                type="button"
-                onClick={() => setSearchTerm('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
+          {mode !== 'catalog' && (
+            <div className="relative w-96">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+              <Input
+                type="text"
+                placeholder="Search line items…"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="h-8 border-slate-400 bg-white pl-8 pr-8 text-sm"
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          )}
           {onOpenCatalogDrawer && (
             <Button size="sm" variant="outline" onClick={onOpenCatalogDrawer} title="Open catalogue">
               <Package className="h-4 w-4" />
             </Button>
           )}
-          {onSave && (
+          {onSave && mode !== 'catalog' && (
             <Button
               size="sm"
               variant="outline"
@@ -1497,7 +1618,7 @@ export function QuoteLineItemsTable({
 
       {activeDropKey === 'table-root' && (
         <div className="rounded-lg bg-emerald-100/80 px-4 py-2.5 text-center text-xs font-medium text-emerald-700">
-          Release anywhere to create a new group
+          {labels.emptyDrop}
         </div>
       )}
 
@@ -1509,38 +1630,56 @@ export function QuoteLineItemsTable({
 
       {filteredGroups.map((group, groupIndex) => {
         const gId = group.id ?? `group-${groupIndex}`;
-        const label = groupLabel(group, groupIndex);
+        const label = groupLabel(group, groupIndex, labels.groupSingularCap);
         const isCollapsed = searchTerm ? false : collapsed.has(gId);
         const dropKey = `group-drop-${gId}`;
         const isDropActive = activeDropKey === dropKey;
 
         const standaloneItems = group.items ?? [];
         const combos = group.combos ?? [];
-        const standaloneTotal = standaloneItems.reduce((sum, it) => sum + (it.total ?? 0), 0);
-        const comboTotal = combos.reduce((sum, c) => sum + (c.total ?? 0), 0);
-        const groupTotal = standaloneTotal + comboTotal;
+
+        function computeItemTotal(item: ApiItem, rowKey: string): number {
+          const inputs = editInputs[rowKey];
+          const qty = inputs ? parseFloat(inputs.quantity) || 0 : (item.quantity ?? 0);
+          const uc = inputs ? parseFloat(inputs.unitCost) || 0 : (item.unitCost ?? 0);
+          const ext = qty * uc;
+          const mkVal = inputs ? parseFloat(inputs.markupValue) || 0 : (item.markupValue ?? 19);
+          const mkAmt = item.markupType === 'fixed' ? mkVal * qty : ext * (mkVal / 100);
+          const taxPct = inputs
+            ? parseFloat(inputs.tax) || 0
+            : (item.tax ?? 0);
+          const gstAmt = (ext + mkAmt) * (taxPct / 100);
+          return ext + (showMarkup ? mkAmt : 0) + (showGst ? gstAmt : 0);
+        }
+
+        const standaloneTotal = standaloneItems.reduce((sum, it, idx) =>
+          sum + computeItemTotal(it, `${gId}-item-${it.id ?? idx}`), 0);
+        const comboTotalSum = combos.reduce((sum, c, ci) =>
+          sum + (c.items ?? []).reduce((s, it, ii) =>
+            s + computeItemTotal(it, `${gId}-combo-${c.id ?? ci}-item-${it.id ?? ii}`), 0), 0);
+        const groupTotal = standaloneTotal + comboTotalSum;
         const totalLineCount =
           standaloneItems.length +
           combos.reduce((cs, c) => cs + (c.items?.length ?? 0), 0);
 
-        const dropProps = {
+        const dropProps = readOnly ? {} : {
           onDragOver: (e: React.DragEvent) => {
             if (hasGroupLabelDrag(e.dataTransfer)) return;
             e.preventDefault();
             if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-            setActiveDropKey(dropKey);
+            setActiveDropKey?.(dropKey);
           },
           onDragLeave: (e: React.DragEvent) => {
             if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-            if (activeDropKey === dropKey) setActiveDropKey(null);
+            if (activeDropKey === dropKey) setActiveDropKey?.(null);
           },
           onDrop: (e: React.DragEvent) => {
             if (hasGroupLabelDrag(e.dataTransfer)) return;
             e.preventDefault();
-            setActiveDropKey(null);
+            setActiveDropKey?.(null);
             const payload = getCatalogDragData(e.dataTransfer);
             if (!payload) return;
-            onCatalogDrop(payload, group.id);
+            onCatalogDrop?.(payload, group.id);
           },
         };
 
@@ -1609,7 +1748,7 @@ export function QuoteLineItemsTable({
                     {onEditGroup && (
                       <DropdownMenuItem onClick={() => onEditGroup(gId)}>
                         <Pencil className="mr-2 h-3.5 w-3.5" />
-                        Edit group
+                        {labels.editGroup}
                       </DropdownMenuItem>
                     )}
                     {onMoveGroupUp && groupIndex > 0 && (
@@ -1630,7 +1769,7 @@ export function QuoteLineItemsTable({
                         className="text-destructive focus:text-destructive"
                       >
                         <Trash2 className="mr-2 h-3.5 w-3.5" />
-                        Delete group
+                        {labels.deleteGroup}
                       </DropdownMenuItem>
                     )}
                   </DropdownMenuContent>
@@ -1641,7 +1780,7 @@ export function QuoteLineItemsTable({
             {/* Drop indicator */}
             {isDropActive && (
               <div className="bg-amber-50 px-4 py-1.5 text-xs font-medium text-amber-700">
-                Release to add catalogue item to &ldquo;{label}&rdquo;
+                {labels.addToDrop(label)}
               </div>
             )}
 
@@ -1652,10 +1791,11 @@ export function QuoteLineItemsTable({
                   <div className="overflow-x-auto">
                     <table className="w-full table-fixed divide-y divide-slate-100 text-sm">
                       <colgroup>
-                        <col className="w-[32%]" />
+                        <col className={showCategory ? 'w-[28%]' : 'w-[38%]'} />
                         <col className="w-[10%]" />
-                        <col className="w-[10%]" />
-                        <col className="w-[8%]" />
+                        {showCategory && <col className="w-[10%]" />}
+                        <col className="w-[7%]" />
+                        <col className="w-[6%]" />
                         <col className="w-[9%]" />
                         <col className="w-[10%]" />
                         {showMarkup && <col className="w-[8%]" />}
@@ -1667,9 +1807,10 @@ export function QuoteLineItemsTable({
                         <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-400">
                           <th scope="col" className="px-4 py-2">Name</th>
                           <th scope="col" className="px-4 py-2">Type</th>
-                          <th scope="col" className="px-4 py-2">Category</th>
+                          {showCategory && <th scope="col" className="px-4 py-2">Category</th>}
                           <th scope="col" className="px-4 py-2 text-right">Qty</th>
-                          <th scope="col" className="px-4 py-2 text-right">Unit</th>
+                          <th scope="col" className="px-4 py-2">Unit</th>
+                          <th scope="col" className="px-4 py-2 text-right">Unit Price</th>
                           <th scope="col" className="px-4 py-2 text-right">Extended</th>
                           {showMarkup && <th scope="col" className="px-4 py-2 text-right">Markup</th>}
                           {showGst && <th scope="col" className="px-4 py-2 text-right">GST</th>}
@@ -1690,6 +1831,7 @@ export function QuoteLineItemsTable({
                               rowKey={itemKey}
                               showMarkup={showMarkup}
                               showGst={showGst}
+                              showCategory={showCategory}
                               isEditing={itemEditing}
                               selectedField={itemEditing ? (editState?.field ?? null) : null}
                               editInputs={editInputs[itemKey] ?? null}
@@ -1723,6 +1865,7 @@ export function QuoteLineItemsTable({
                               onToggle={() => toggleCombo(comboKey)}
                               showMarkup={showMarkup}
                               showGst={showGst}
+                              showCategory={showCategory}
                               editState={editState}
                               editInputs={editInputs}
                               selectedRows={selectedRows}
@@ -1742,7 +1885,7 @@ export function QuoteLineItemsTable({
                   </div>
                 ) : (
                   <div className="flex items-center justify-center py-8 text-sm text-slate-400">
-                    Drag catalogue items here to add lines
+                    {labels.dragHint}
                   </div>
                 )}
               </div>

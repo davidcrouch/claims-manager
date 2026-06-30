@@ -3,6 +3,7 @@ import { BadRequestException, RequestMethod, ValidationPipe } from '@nestjs/comm
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
+import { json, urlencoded } from 'express';
 import { v4 as uuid } from 'uuid';
 import { AppModule } from './app.module';
 
@@ -10,6 +11,9 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     rawBody: true,
   });
+
+  app.use(json({ limit: '50mb' }));
+  app.use(urlencoded({ extended: true, limit: '50mb' }));
   const configService = app.get(ConfigService);
 
   app.use((req: { headers: Record<string, string> }, res: { setHeader: (k: string, v: string) => void }, next: () => void) => {

@@ -8,7 +8,7 @@ export const metadata = { title: 'RFQs — EnsureOS' };
 export default async function RfqsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string }>;
+  searchParams: Promise<{ page?: string; sort?: string }>;
 }) {
   const api = await getServerApiClient();
   if (!api) redirect('/api/auth/login');
@@ -20,6 +20,7 @@ export default async function RfqsPage({
       .getRfqs({
         page: parseInt(params.page ?? '1', 10),
         limit: 20,
+        sort: params.sort,
       })
       .catch((err: unknown) => {
         console.error(

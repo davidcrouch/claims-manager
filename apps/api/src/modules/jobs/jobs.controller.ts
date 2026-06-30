@@ -18,11 +18,15 @@ export class JobsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('claimId') claimId?: string,
+    @Query('sort') sort?: string,
+    @Query('search') search?: string,
   ) {
     return this.jobsService.findAll({
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
       claimId,
+      sort,
+      search,
     });
   }
 

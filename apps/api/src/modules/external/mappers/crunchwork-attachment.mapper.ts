@@ -25,7 +25,7 @@ export class CrunchworkAttachmentMapper implements EntityMapper {
     tenantId: string;
     connectionId: string;
     tx?: DrizzleDbOrTx;
-  }): Promise<{ internalEntityId: string; internalEntityType: string }> {
+  }): Promise<{ internalEntityId: string; internalEntityType: string; metadata?: Record<string, unknown> }> {
     const extObj = params.externalObject;
     const payload = extObj.latestPayload as Record<string, unknown>;
     const externalObjectId = extObj.id as string;
@@ -70,6 +70,8 @@ export class CrunchworkAttachmentMapper implements EntityMapper {
       updatedAt: new Date(),
     };
 
+    const parentMetadata = this.buildParentMetadata(relatedRecordType, relatedRecordId);
+
     if (existingLink) {
       await db
         .update(attachments)
@@ -78,6 +80,7 @@ export class CrunchworkAttachmentMapper implements EntityMapper {
       return {
         internalEntityId: existingLink.internalEntityId,
         internalEntityType: 'attachment',
+        metadata: parentMetadata,
       };
     }
 
@@ -99,11 +102,38 @@ export class CrunchworkAttachmentMapper implements EntityMapper {
       tx: params.tx,
     });
 
-    return { internalEntityId: created.id, internalEntityType: 'attachment' };
+    return {
+      internalEntityId: created.id,
+      internalEntityType: 'attachment',
+      metadata: parentMetadata,
+    };
+  }
+
+  private buildParentMetadata(
+    relatedRecordType: string | null,
+    relatedRecordId: string | null,
+  ): Record<string, unknown> {
+    if (!relatedRecordId) return {};
+    const PARENT_TYPE_MAP: Record<string, string> = {
+      Job: 'job',
+      Claim: 'claim',
+      Quote: 'quote',
+      PurchaseOrder: 'purchase_order',
+      Report: 'report',
+      Invoice: 'invoice',
+    };
+    const parentType = relatedRecordType
+      ? PARENT_TYPE_MAP[relatedRecordType] ?? relatedRecordType.toLowerCase()
+      : 'job';
+    return {
+      parentEntityType: parentType,
+      parentEntityId: relatedRecordId,
+      ...(parentType === 'job' ? { jobId: relatedRecordId } : {}),
+    };
   }
 
   private resolveRelatedRecordType(payload: Record<string, unknown>): string {
-    const scope = payload.scope as string;
+    const scope = (payload.scope ?? payload.relatedRecordType) as string;
     const typeMap: Record<string, string> = {
       job: 'Job',
       claim: 'Claim',
@@ -111,8 +141,14 @@ export class CrunchworkAttachmentMapper implements EntityMapper {
       purchase_order: 'PurchaseOrder',
       report: 'Report',
       invoice: 'Invoice',
+      Job: 'Job',
+      Claim: 'Claim',
+      Quote: 'Quote',
+      PurchaseOrder: 'PurchaseOrder',
+      Report: 'Report',
+      Invoice: 'Invoice',
     };
-    return typeMap[scope?.toLowerCase()] ?? 'Job';
+    return typeMap[scope] ?? typeMap[scope?.toLowerCase()] ?? 'Job';
   }
 
   private async resolveRelatedRecordId(params: {
@@ -120,8 +156,8 @@ export class CrunchworkAttachmentMapper implements EntityMapper {
     connectionId: string;
     tx?: DrizzleDbOrTx;
   }): Promise<string | null> {
-    const scopeId = params.payload.scopeId as string;
-    const scope = params.payload.scope as string;
+    const scopeId = (params.payload.scopeId ?? params.payload.relatedRecordId) as string;
+    const scope = (params.payload.scope ?? params.payload.relatedRecordType) as string;
     if (!scopeId || !scope) return null;
 
     const typeMap: Record<string, string> = {
@@ -130,8 +166,13 @@ export class CrunchworkAttachmentMapper implements EntityMapper {
       quote: 'quote',
       purchase_order: 'purchase_order',
       report: 'report',
+      Job: 'job',
+      Claim: 'claim',
+      Quote: 'quote',
+      PurchaseOrder: 'purchase_order',
+      Report: 'report',
     };
-    const providerType = typeMap[scope?.toLowerCase()];
+    const providerType = typeMap[scope] ?? typeMap[scope?.toLowerCase()];
     if (!providerType) return null;
 
     return this.externalObjectService.resolveInternalEntityId({

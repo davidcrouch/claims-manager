@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { CheckSquare, Plus, Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { TypeBadge } from '@/components/ui/type-badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
@@ -12,13 +14,17 @@ import {
   computeStatusBreakdown,
 } from '@/components/layout/ListPageHeader';
 import {
-  compareDates,
-  compareValues,
   formatDate,
   ValueFilterMenu,
   SortableColumnHeader,
 } from '@/components/shared/list-filters';
 import { TaskFormDrawer } from '@/components/forms/TaskFormDrawer';
+import {
+  BottomFormDrawer,
+  BottomFormDrawerBody,
+  BottomFormDrawerFooter,
+} from '@/components/forms/BottomFormDrawer';
+import { TablePagination } from '@/components/shared/table-pagination';
 import { fetchTasksAction } from '@/app/(app)/tasks/actions';
 import type { Task, LookupRef } from '@/types/api';
 
@@ -67,17 +73,13 @@ function PriorityBadge({ priority }: { priority: string }) {
   );
 }
 
-function getTaskSortValue(task: Task, field: TaskSortField): string | null | undefined {
-  switch (field) {
-    case 'name': return task.name;
-    case 'status': return refName(task.status);
-    case 'priority': return refName(task.priority);
-    case 'task_type': return refName(task.taskType);
-    case 'assignee': return task.assigneeName ?? task.assignedToUserId;
-    case 'due_date': return task.dueDate;
-    case 'updated_at': return task.updatedAt;
-    default: return null;
-  }
+function DetailField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <span className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</span>
+      <div>{children}</div>
+    </div>
+  );
 }
 
 function isCompletedStatus(name: string | null | undefined): boolean {
@@ -86,21 +88,31 @@ function isCompletedStatus(name: string | null | undefined): boolean {
   return lower === 'completed' || lower === 'cancelled' || lower === 'closed';
 }
 
+const PAGE_SIZE = 20;
+
 export function TasksListClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [tab, setTab] = useState<ListTab>('open');
+  const [page, setPage] = useState(() => {
+    const p = parseInt(searchParams.get('page') ?? '1', 10);
+    return Number.isFinite(p) && p > 0 ? p : 1;
+  });
   const [columnSort, setColumnSort] = useState<{ field: TaskSortField; order: 'asc' | 'desc' }>({
     field: 'updated_at',
     order: 'desc',
   });
   const [priorityFilter, setPriorityFilter] = useState<Set<string>>(new Set());
   const [showCreateTask, setShowCreateTask] = useState(false);
-  const lastSearchRef = useRef<string | null>(debouncedSearch);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const lastFetchKeyRef = useRef<string | null>(null);
+
+  const sortParam = `${columnSort.field}_${columnSort.order}`;
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -111,19 +123,31 @@ export function TasksListClient() {
     setLoading(true);
     try {
       const res = await fetchTasksAction({
-        limit: 200,
+        page,
+        limit: PAGE_SIZE,
         search: debouncedSearch || undefined,
+        sort: sortParam,
       });
       setTasks(res.data);
       setTotal(res.total);
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch]);
+  }, [debouncedSearch, page, sortParam]);
 
   useEffect(() => {
+    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}`;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('search', debouncedSearch);
+    params.set('tab', tab);
+    params.set('page', String(page));
+    params.set('sort', sortParam);
+    router.replace(`/tasks?${params}`, { scroll: false });
+    if (lastFetchKeyRef.current === fetchKey) return;
+    lastFetchKeyRef.current = fetchKey;
     load();
-  }, [load]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop
+  }, [debouncedSearch, sortParam, tab, page]);
 
   const handleColumnSort = (field: TaskSortField) => {
     setColumnSort((prev) => {
@@ -132,7 +156,12 @@ export function TasksListClient() {
       }
       return { field, order: field === 'name' ? 'asc' : 'desc' };
     });
+    setPage(1);
   };
+
+  const handlePageChange = (newPage: number) => setPage(newPage);
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => { setSearch(e.target.value); setPage(1); };
+  const handleTabChange = (val: string) => { setTab(val as ListTab); setPage(1); };
 
   const uniquePriorities = useMemo(() => {
     const names = new Set<string>();
@@ -179,15 +208,8 @@ export function TasksListClient() {
       });
     }
 
-    const isDate = columnSort.field === 'due_date' || columnSort.field === 'updated_at';
-    return [...rows].sort((a, b) => {
-      const aVal = getTaskSortValue(a, columnSort.field);
-      const bVal = getTaskSortValue(b, columnSort.field);
-      return isDate
-        ? compareDates(aVal, bVal, columnSort.order)
-        : compareValues(aVal, bVal, columnSort.order);
-    });
-  }, [tasks, tab, priorityFilter, debouncedSearch, columnSort]);
+    return rows;
+  }, [tasks, tab, priorityFilter, debouncedSearch]);
 
   const breakdown = computeStatusBreakdown(visibleRows, (t) => refName(t.status));
 
@@ -212,7 +234,7 @@ export function TasksListClient() {
 
       <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
-          <Tabs value={tab} onValueChange={(val) => setTab(val as ListTab)}>
+          <Tabs value={tab} onValueChange={handleTabChange}>
             <TabsList>
               <TabsTrigger value="open">Open</TabsTrigger>
               <TabsTrigger value="completed">Completed</TabsTrigger>
@@ -228,13 +250,13 @@ export function TasksListClient() {
             <Input
               placeholder="Search tasks by name, type, or entity..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={handleSearchChange}
               className="h-10 w-full pl-9 pr-9"
             />
             {search && (
               <button
                 type="button"
-                onClick={() => setSearch('')}
+                onClick={() => { setSearch(''); setPage(1); }}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
               >
                 <X size={14} />
@@ -253,7 +275,7 @@ export function TasksListClient() {
             itemNoun={{ singular: 'priority', plural: 'priorities' }}
           />
 
-          <Button size="sm" className="shrink-0" onClick={() => setShowCreateTask(true)}>
+          <Button size="sm" className="shrink-0 bg-blue-600 text-white hover:bg-blue-500" onClick={() => setShowCreateTask(true)}>
             <Plus className="mr-1 h-4 w-4" />
             Create Task
           </Button>
@@ -284,21 +306,26 @@ export function TasksListClient() {
               <tbody className="divide-y divide-slate-100">
                 {visibleRows.map((task) => {
                   const statusName = refName(task.status);
+                  const taskTypeName =
+                    typeof task.taskType === 'string'
+                      ? task.taskType
+                      : task.taskType?.name ?? task.taskType?.externalReference;
                   return (
                     <tr
                       key={task.id}
+                      onClick={() => setSelectedTask(task)}
                       className="cursor-pointer transition-colors hover:bg-slate-50"
                     >
                       <td className="px-4 py-3 font-medium text-slate-900">{task.name}</td>
                       <td className="whitespace-nowrap px-4 py-3">
-                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
-                          {statusName}
-                        </span>
+                        <StatusBadge status={statusName} />
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
                         <PriorityBadge priority={refName(task.priority)} />
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{refName(task.taskType)}</td>
+                      <td className="px-4 py-3">
+                        <TypeBadge type={taskTypeName} />
+                      </td>
                       <td className="px-4 py-3 text-slate-600">
                         {task.assigneeName ?? task.assignedToUserId ?? '—'}
                       </td>
@@ -313,6 +340,7 @@ export function TasksListClient() {
                 })}
               </tbody>
             </table>
+            <TablePagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={handlePageChange} />
           </div>
         ) : (
           <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50">
@@ -327,6 +355,68 @@ export function TasksListClient() {
       </div>
 
       <TaskFormDrawer open={showCreateTask} onOpenChange={handleDrawerClose} />
+
+      <BottomFormDrawer
+        open={!!selectedTask}
+        onOpenChange={(open) => { if (!open) setSelectedTask(null); }}
+        title={selectedTask?.name ?? 'Task Detail'}
+        description="View task details"
+        icon={<CheckSquare className="h-5 w-5" />}
+      >
+        {selectedTask && (
+          <>
+            <BottomFormDrawerBody>
+              <div className="grid grid-cols-1 gap-x-8 gap-y-5 md:grid-cols-2">
+                <DetailField label="Status">
+                  <StatusBadge status={refName(selectedTask.status)} />
+                </DetailField>
+                <DetailField label="Priority">
+                  <PriorityBadge priority={refName(selectedTask.priority)} />
+                </DetailField>
+                <DetailField label="Type">
+                  <TypeBadge
+                    type={
+                      typeof selectedTask.taskType === 'string'
+                        ? selectedTask.taskType
+                        : selectedTask.taskType?.name ?? selectedTask.taskType?.externalReference
+                    }
+                  />
+                </DetailField>
+                <DetailField label="Assigned to">
+                  <span className="text-sm text-slate-700">
+                    {selectedTask.assigneeName ?? selectedTask.assignedToUserId ?? '—'}
+                  </span>
+                </DetailField>
+                <DetailField label="Due Date">
+                  <span className="text-sm text-slate-700">{formatDate(selectedTask.dueDate)}</span>
+                </DetailField>
+                <DetailField label="Completed">
+                  <span className="text-sm text-slate-700">{formatDate(selectedTask.completedAt)}</span>
+                </DetailField>
+                <DetailField label="Created">
+                  <span className="text-sm text-slate-700">{formatDate(selectedTask.createdAt)}</span>
+                </DetailField>
+                <DetailField label="Updated">
+                  <span className="text-sm text-slate-700">{formatDate(selectedTask.updatedAt)}</span>
+                </DetailField>
+                {selectedTask.description && (
+                  <div className="md:col-span-2">
+                    <DetailField label="Description">
+                      <p className="whitespace-pre-wrap text-sm text-slate-700">{selectedTask.description}</p>
+                    </DetailField>
+                  </div>
+                )}
+              </div>
+            </BottomFormDrawerBody>
+            <BottomFormDrawerFooter>
+              <div />
+              <Button variant="outline" onClick={() => setSelectedTask(null)}>
+                Close
+              </Button>
+            </BottomFormDrawerFooter>
+          </>
+        )}
+      </BottomFormDrawer>
     </div>
   );
 }

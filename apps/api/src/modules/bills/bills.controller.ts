@@ -13,6 +13,7 @@ export class BillsController {
     @Query('purchaseOrderId') purchaseOrderId?: string,
     @Query('vendorId') vendorId?: string,
     @Query('invoiceId') invoiceId?: string,
+    @Query('sort') sort?: string,
   ) {
     return this.billsService.findAll({
       page: page ? parseInt(page, 10) : 1,
@@ -21,6 +22,7 @@ export class BillsController {
       purchaseOrderId,
       vendorId,
       invoiceId,
+      sort,
     });
   }
 

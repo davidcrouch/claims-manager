@@ -50,10 +50,20 @@ export class CrunchworkPurchaseOrderMapper implements EntityMapper {
       (l) => l.internalEntityType === 'purchase_order',
     );
 
+    // Crunchwork sends parent refs as either nested object { id } or flat string field
+    const cwJobId =
+      ((payload.job as Record<string, unknown>)?.id as string) ??
+      (payload.jobId as string) ??
+      undefined;
+    const cwClaimId =
+      ((payload.claim as Record<string, unknown>)?.id as string) ??
+      (payload.claimId as string) ??
+      undefined;
+
     const jobId = await this.resolveFK({
       connectionId: params.connectionId,
       providerEntityType: 'job',
-      providerEntityId: (payload.job as Record<string, unknown>)?.id as string,
+      providerEntityId: cwJobId,
       internalEntityType: 'job',
       tx: params.tx,
     });
@@ -61,8 +71,7 @@ export class CrunchworkPurchaseOrderMapper implements EntityMapper {
     const claimId = await this.resolveFK({
       connectionId: params.connectionId,
       providerEntityType: 'claim',
-      providerEntityId: (payload.claim as Record<string, unknown>)
-        ?.id as string,
+      providerEntityId: cwClaimId,
       internalEntityType: 'claim',
       tx: params.tx,
     });
@@ -107,6 +116,13 @@ export class CrunchworkPurchaseOrderMapper implements EntityMapper {
     };
 
     let internalId: string;
+
+    if (!existingLink && !jobId && !claimId) {
+      this.logger.warn(
+        `CrunchworkPurchaseOrderMapper.map — PO ${payload.id} has no resolvable job or claim parent; skipping (chk_po_parent)`,
+      );
+      return { internalEntityId: '', internalEntityType: 'purchase_order', skipped: 'skipped_no_parent' } as any;
+    }
 
     if (existingLink) {
       await db
@@ -174,6 +190,29 @@ export class CrunchworkPurchaseOrderMapper implements EntityMapper {
         })
         .returning();
 
+      // Items directly on the group (flat structure from CW API)
+      const directItems = (group.items as Record<string, unknown>[]) ?? [];
+      for (let ii = 0; ii < directItems.length; ii++) {
+        const item = directItems[ii];
+        await db.insert(purchaseOrderItems).values({
+          tenantId: params.tenantId,
+          purchaseOrderGroupId: createdGroup.id,
+          purchaseOrderComboId: null,
+          name: (item.name as string) ?? undefined,
+          description: (item.description as string) ?? undefined,
+          category: (item.category as string) ?? undefined,
+          subCategory: (item.subCategory as string) ?? undefined,
+          itemType: (item.itemType as string) ?? undefined,
+          quantity: (item.quantity as string) ?? undefined,
+          tax: (item.tax as string) ?? undefined,
+          unitCost: (item.unitCost as string) ?? undefined,
+          buyCost: (item.buyCost as string) ?? undefined,
+          sortIndex: ii,
+          itemPayload: item,
+        });
+      }
+
+      // Items nested within combos (hierarchical structure)
       const combos = (group.combos as Record<string, unknown>[]) ?? [];
       for (let ci = 0; ci < combos.length; ci++) {
         const combo = combos[ci];

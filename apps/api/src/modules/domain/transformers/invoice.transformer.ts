@@ -27,7 +27,10 @@ export class InvoiceTransformer implements EntityTransformer {
     };
 
     // Parent: purchase_order (required for invoices)
-    const cwPoId = isPlainObject(payload.purchaseOrder) ? asString(payload.purchaseOrder.id) : undefined;
+    // Crunchwork sends either nested object { id } or flat string field
+    const cwPoId = isPlainObject(payload.purchaseOrder)
+      ? asString((payload.purchaseOrder as Record<string, unknown>).id)
+      : asString(payload.purchaseOrderId);
     if (cwPoId) parentRefs.push({ entityType: 'purchase_order', externalId: cwPoId, required: true });
 
     // Lookups

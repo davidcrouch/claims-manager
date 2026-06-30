@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { VendorsRepository } from '../../database/repositories';
+import { VendorSyncService } from '../domain/services/vendor-sync.service';
 import { ExternalObjectService } from './external-object.service';
 import { CrunchworkClaimMapper } from './mappers/crunchwork-claim.mapper';
 import type { DrizzleDbOrTx } from '../../database/drizzle.module';
@@ -9,7 +9,7 @@ export class NestedEntityExtractor {
   private readonly logger = new Logger('NestedEntityExtractor');
 
   constructor(
-    private readonly vendorsRepo: VendorsRepository,
+    private readonly vendorSync: VendorSyncService,
     private readonly externalObjectService: ExternalObjectService,
     private readonly claimMapper: CrunchworkClaimMapper,
   ) {}
@@ -38,10 +38,11 @@ export class NestedEntityExtractor {
     const cwVendor = params.jobPayload.vendor as
       | Record<string, unknown>
       | undefined;
-    if (cwVendor?.id) {
-      result.vendorId = await this.resolveOrCreateVendor({
+    if (cwVendor && (cwVendor.id || cwVendor.externalReference)) {
+      result.vendorId = await this.vendorSync.syncFromCrunchworkPayload({
         cwVendor,
         tenantId: params.tenantId,
+        tx: params.tx,
       });
     }
 
@@ -155,27 +156,5 @@ export class NestedEntityExtractor {
     });
 
     return mapped.internalEntityId;
-  }
-
-  private async resolveOrCreateVendor(params: {
-    cwVendor: Record<string, unknown>;
-    tenantId: string;
-  }): Promise<string | undefined> {
-    const extRef = params.cwVendor.id as string;
-
-    const existing = await this.vendorsRepo.findOne({
-      id: extRef,
-      tenantId: params.tenantId,
-    });
-
-    if (existing) {
-      return existing.id;
-    }
-
-    this.logger.debug(
-      `NestedEntityExtractor.resolveOrCreateVendor — vendor not found by id=${extRef}, skipping create (vendor may arrive via separate event)`,
-    );
-
-    return undefined;
   }
 }

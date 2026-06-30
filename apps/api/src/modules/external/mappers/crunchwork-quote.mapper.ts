@@ -55,10 +55,20 @@ export class CrunchworkQuoteMapper implements EntityMapper {
       (l) => l.internalEntityType === 'quote',
     );
 
+    // Crunchwork sends parent refs as either nested object { id } or flat string field
+    const cwJobId =
+      ((payload.job as Record<string, unknown>)?.id as string) ??
+      (payload.jobId as string) ??
+      undefined;
+    const cwClaimId =
+      ((payload.claim as Record<string, unknown>)?.id as string) ??
+      (payload.claimId as string) ??
+      undefined;
+
     const jobId = await this.resolveFK({
       connectionId: params.connectionId,
       providerEntityType: 'job',
-      providerEntityId: (payload.job as Record<string, unknown>)?.id as string,
+      providerEntityId: cwJobId,
       internalEntityType: 'job',
       tx,
     });
@@ -66,8 +76,7 @@ export class CrunchworkQuoteMapper implements EntityMapper {
     const claimId = await this.resolveFK({
       connectionId: params.connectionId,
       providerEntityType: 'claim',
-      providerEntityId: (payload.claim as Record<string, unknown>)
-        ?.id as string,
+      providerEntityId: cwClaimId,
       internalEntityType: 'claim',
       tx,
     });

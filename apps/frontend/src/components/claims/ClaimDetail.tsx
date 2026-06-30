@@ -641,7 +641,7 @@ function JobsTab({ claim }: { claim: Claim }) {
                         <td className="px-4 py-2 text-muted-foreground">{typeName}</td>
                         <td className="px-4 py-2 font-medium">
                           <Link href={`/jobs/${job.id}`} className="text-primary hover:underline">
-                            {job.externalReference ?? job.id}
+                            {job.externalJobId ?? job.externalReference ?? job.id}
                           </Link>
                         </td>
                         <td className="px-4 py-2 text-muted-foreground">—</td>
@@ -697,7 +697,7 @@ function JobsTab({ claim }: { claim: Claim }) {
                         <td className="px-4 py-2 text-muted-foreground">{typeName}</td>
                         <td className="px-4 py-2 font-medium">
                           <Link href={`/jobs/${job.id}`} className="text-primary hover:underline">
-                            {job.externalReference ?? job.id}
+                            {job.externalJobId ?? job.externalReference ?? job.id}
                           </Link>
                         </td>
                         <td className="px-4 py-2 text-muted-foreground">{vendorName}</td>

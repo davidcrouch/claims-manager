@@ -9,6 +9,7 @@ import {
   KeyRound,
   Activity,
   AlertTriangle,
+  ExternalLink,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -23,7 +24,9 @@ import {
 } from '@/components/shared/detail';
 import { ConnectionWebhookEventsTable } from './ConnectionWebhookEventsTable';
 import { ConnectionEditDrawer } from './ConnectionEditDrawer';
-import { fetchConnectionAction } from '@/app/(app)/connections/actions';
+import {
+  fetchConnectionAction,
+} from '@/app/(app)/connections/actions';
 import type { ConnectionDetail, ProviderConnection } from '@/types/api';
 
 function ConnectionPageHeader({
@@ -222,6 +225,15 @@ function DetailsTab({
             label="Auth token URL"
             value={<Mono value={connection.authUrl} />}
           />
+          <DefRow
+            label="API Documentation"
+            value={
+              <DocsUrlField
+                connectionId={connection.id}
+                docsUrl={connection.docsUrl}
+              />
+            }
+          />
         </SectionCard>
       </div>
 
@@ -279,6 +291,36 @@ function DetailsTab({
   );
 }
 
+function DocsUrlField({
+  connectionId,
+  docsUrl,
+}: {
+  connectionId: string;
+  docsUrl: string | null;
+}) {
+  if (!docsUrl) return <span className="text-muted-foreground">—</span>;
+
+  function handleOpen() {
+    window.open(`/api/connections/${connectionId}/docs`, '_blank', 'noopener,noreferrer');
+  }
+
+  return (
+    <span className="inline-flex items-center gap-2">
+      <span className="font-mono text-xs break-all text-foreground">
+        {docsUrl}
+      </span>
+      <button
+        type="button"
+        onClick={handleOpen}
+        title="Open API Documentation"
+        className="inline-flex items-center justify-center rounded-md border border-slate-200 bg-white p-1 text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-violet-600 disabled:opacity-50"
+      >
+        <ExternalLink className="h-3.5 w-3.5" />
+      </button>
+    </span>
+  );
+}
+
 function Mono({ value }: { value?: string | null }) {
   if (!value) return <span className="text-muted-foreground">—</span>;
   return (
@@ -301,6 +343,7 @@ function connectionDetailToProviderConnection(
     baseUrl: c.baseUrl,
     baseApi: c.baseApi,
     authUrl: c.authUrl,
+    docsUrl: c.docsUrl,
     clientIdentifier: c.clientIdentifier,
     providerTenantId: c.providerTenantId,
     credentials: c.credentials,

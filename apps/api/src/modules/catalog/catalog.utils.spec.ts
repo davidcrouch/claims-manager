@@ -28,7 +28,7 @@ describe('catalog.utils', () => {
       const totals = computeLineTotals({
         quantity: '2',
         unitCost: '50',
-        taxRate: '0.1',
+        taxRate: '10',
       });
       expect(totals.subTotal).toBe('100.0000');
       expect(totals.totalTax).toBe('10.0000');

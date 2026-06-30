@@ -6,6 +6,7 @@ import {
 import { IntegrationConnectionsRepository } from '../../database/repositories/integration-connections.repository';
 import { InboundWebhookEventsRepository } from '../../database/repositories/inbound-webhook-events.repository';
 import { CredentialsCipher } from '../../common/credentials-cipher';
+import { CrunchworkAuthService } from '../../crunchwork/crunchwork-auth.service';
 import {
   PROVIDER_REGISTRY,
   findProviderByCode,
@@ -41,6 +42,7 @@ export interface ConnectionListItem {
   baseUrl: string;
   baseApi: string | null;
   authUrl: string | null;
+  docsUrl: string | null;
   authType: string;
   createdAt: string;
   updatedAt: string;
@@ -64,6 +66,7 @@ export class ProvidersService {
     private readonly connectionsRepo: IntegrationConnectionsRepository,
     private readonly webhookEventsRepo: InboundWebhookEventsRepository,
     private readonly cipher: CredentialsCipher,
+    private readonly crunchworkAuth: CrunchworkAuthService,
   ) {}
 
   private encryptCredentials(
@@ -176,6 +179,7 @@ export class ProvidersService {
         baseUrl: params.dto.baseUrl,
         baseApi: params.dto.baseApi,
         authUrl: params.dto.authUrl,
+        docsUrl: params.dto.docsUrl,
         authType: params.dto.authType ?? 'client_credentials',
         clientIdentifier: params.dto.clientIdentifier,
         providerTenantId: params.dto.providerTenantId,
@@ -343,6 +347,7 @@ export class ProvidersService {
       baseUrl: conn.baseUrl,
       baseApi: conn.baseApi ?? null,
       authUrl: conn.authUrl ?? null,
+      docsUrl: conn.docsUrl ?? null,
       authType: conn.authType,
       createdAt: conn.createdAt.toISOString(),
       updatedAt: conn.updatedAt.toISOString(),
@@ -350,6 +355,34 @@ export class ProvidersService {
       recentErrorCount: errorCount,
       lastEventAt: lastEventAt?.toISOString() ?? null,
     };
+  }
+
+  async getDocsUrl(params: {
+    id: string;
+    tenantId: string;
+  }): Promise<{ docsUrl: string; accessToken: string }> {
+    this.logger.debug(`[ProvidersService.getDocsUrl] id=${params.id}`);
+    const conn = await this.connectionsRepo.findById({ id: params.id });
+    if (!conn || conn.tenantId !== params.tenantId) {
+      throw new NotFoundException(`Connection ${params.id} not found`);
+    }
+    if (!conn.docsUrl) {
+      throw new NotFoundException(
+        `Connection ${params.id} does not have a documentation URL configured`,
+      );
+    }
+
+    const creds = this.cipher.decryptJson(conn.credentials as string);
+    const accessToken = await this.crunchworkAuth.getAccessToken({
+      connectionId: conn.id,
+      credentials: {
+        clientId: creds.clientId ?? '',
+        clientSecret: creds.clientSecret ?? '',
+        authUrl: conn.authUrl ?? '',
+      },
+    });
+
+    return { docsUrl: conn.docsUrl, accessToken };
   }
 
   private requireProvider(code: string): ProviderRegistryEntry {

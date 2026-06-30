@@ -16,12 +16,14 @@ export class PurchaseOrdersController {
     @Query('limit') limit?: string,
     @Query('jobId') jobId?: string,
     @Query('vendorId') vendorId?: string,
+    @Query('sort') sort?: string,
   ) {
     return this.purchaseOrdersService.findAll({
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
       jobId,
       vendorId,
+      sort,
     });
   }
 
@@ -38,6 +40,11 @@ export class PurchaseOrdersController {
   @Get(':id')
   async findOne(@Param('id') id: string) {
     return this.purchaseOrdersService.findOne({ id });
+  }
+
+  @Get(':id/line-items')
+  getLineItems(@Param('id') id: string) {
+    return this.catalogSelectionService.getPurchaseOrderLineItems({ purchaseOrderId: id });
   }
 
   @Post(':id')

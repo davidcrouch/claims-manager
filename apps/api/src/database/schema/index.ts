@@ -225,6 +225,7 @@ export const jobs = pgTable(
     connectionId: uuid('connection_id').references(() => integrationConnections.id),
     parentJobId: uuid('parent_job_id').references((): AnyPgColumn => jobs.id),
     externalReference: text('external_reference'),
+    externalJobId: text('external_job_id'),
     jobTypeLookupId: uuid('job_type_lookup_id').notNull().references(() => lookupValues.id),
     statusLookupId: uuid('status_lookup_id').references(() => lookupValues.id),
     requestDate: date('request_date'),
@@ -935,6 +936,7 @@ export const integrationConnections = pgTable(
     baseUrl: text('base_url').notNull(),
     baseApi: text('base_api'),
     authUrl: text('auth_url'),
+    docsUrl: text('docs_url'),
     clientIdentifier: text('client_identifier'),
     providerTenantId: text('provider_tenant_id'),
     credentials: jsonb('credentials').notNull().default({}),
@@ -1143,7 +1145,6 @@ export const workOrders = pgTable(
       .notNull()
       .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     purchaseOrderId: uuid('purchase_order_id')
-      .notNull()
       .references(() => purchaseOrders.id),
     claimId: uuid('claim_id').references(() => claims.id, { onDelete: 'cascade' }),
     jobId: uuid('job_id').references(() => jobs.id, { onDelete: 'cascade' }),
@@ -1715,6 +1716,27 @@ export const outboundSyncQueue = pgTable(
 
 // ── Item Catalogue ─────────────────────────────────────────────
 
+export const catalogs = pgTable(
+  'catalogs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    name: text('name').notNull(),
+    description: text('description'),
+    type: text('type').notNull().default('internal'),
+    isActive: boolean('is_active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('UQ_catalogs_tenant_name').on(t.tenantId, t.name),
+    index('idx_catalogs_tenant').on(t.tenantId, t.isActive),
+    check('chk_catalogs_type', sql`type IN ('crunchwork', 'internal')`),
+  ],
+);
+
 export const catalogItemTypes = pgTable(
   'catalog_item_types',
   {
@@ -1770,6 +1792,8 @@ export const catalogItems = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    catalogId: uuid('catalog_id')
+      .references(() => catalogs.id, { onDelete: 'restrict' }),
     code: text('code').notNull(),
     name: text('name').notNull(),
     description: text('description'),
@@ -1799,14 +1823,15 @@ export const catalogItems = pgTable(
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (t) => [
-    uniqueIndex('UQ_catalog_items_tenant_code').on(t.tenantId, t.code),
-    uniqueIndex('UQ_catalog_items_tenant_extref')
-      .on(t.tenantId, t.externalReference)
+    uniqueIndex('UQ_catalog_items_catalog_code').on(t.tenantId, t.catalogId, t.code),
+    uniqueIndex('UQ_catalog_items_catalog_extref')
+      .on(t.tenantId, t.catalogId, t.externalReference)
       .where(sql`external_reference IS NOT NULL`),
     index('idx_catalog_items_tenant').on(t.tenantId, t.isActive, t.deletedAt),
     index('idx_catalog_items_type').on(t.tenantId, t.typeId),
     index('idx_catalog_items_category').on(t.tenantId, t.categoryId),
     index('idx_catalog_items_kind').on(t.tenantId, t.kind),
+    index('idx_catalog_items_catalog').on(t.tenantId, t.catalogId, t.isActive, t.deletedAt),
     check('chk_catalog_items_kind', sql`kind IN ('primitive', 'assembly')`),
     check(
       'chk_catalog_items_primitive_unit',
@@ -1992,6 +2017,31 @@ export const entityWorkflowState = pgTable(
     unique('UQ_workflow_state').on(t.tenantId, t.entityType, t.entityId, t.workflowName),
     index('idx_workflow_state_entity').on(t.tenantId, t.entityType, t.entityId),
     index('idx_workflow_state_step').on(t.tenantId, t.entityType, t.currentStep),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade', onUpdate: 'cascade' }),
+    entityType: text('entity_type').notNull(),
+    entityId: uuid('entity_id').notNull(),
+    eventType: text('event_type').notNull(),
+    title: text('title').notNull(),
+    metadata: jsonb('metadata').notNull().default({}),
+    isRead: boolean('is_read').notNull().default(false),
+    readAt: timestamp('read_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_notifications_tenant_unread').on(t.tenantId, t.isRead),
+    index('idx_notifications_entity').on(t.tenantId, t.entityType, t.entityId),
   ],
 );
 

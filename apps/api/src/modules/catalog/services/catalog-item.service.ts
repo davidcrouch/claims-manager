@@ -29,12 +29,14 @@ export class CatalogItemService {
   }
 
   async findMany(params: {
+    catalogId?: string;
     kind?: CatalogItemKind;
     typeId?: string;
     categoryId?: string;
     search?: string;
     page?: number;
     limit?: number;
+    sort?: string;
   }) {
     const tenantId = this.getTenantId();
     let categoryIds: string[] | undefined;
@@ -47,12 +49,14 @@ export class CatalogItemService {
 
     return this.itemsRepo.findMany({
       tenantId,
+      catalogId: params.catalogId,
       kind: params.kind,
       typeId: params.typeId,
       categoryIds,
       search: params.search,
       page: params.page,
       limit: params.limit,
+      sort: params.sort,
     });
   }
 
@@ -75,6 +79,7 @@ export class CatalogItemService {
     description?: string;
     kind: CatalogItemKind;
     typeId: string;
+    catalogId?: string;
     categoryId?: string;
     subCategoryId?: string;
     unitTypeLookupId?: string;
@@ -88,6 +93,7 @@ export class CatalogItemService {
     externalReference?: string;
     effectiveFrom?: string;
     effectiveTo?: string;
+    metadata?: Record<string, unknown>;
   }) {
     const tenantId = this.getTenantId();
     await this.validateTypeAndCategories(tenantId, params.typeId, params.categoryId, params.subCategoryId);
@@ -99,7 +105,11 @@ export class CatalogItemService {
       params.pricingMode = 'computed';
     }
 
-    const existing = await this.itemsRepo.findByCode({ tenantId, code: params.code });
+    const existing = await this.itemsRepo.findByCode({
+      tenantId,
+      code: params.code,
+      catalogId: params.catalogId,
+    });
     if (existing) throw new BadRequestException(`Catalog code already exists: ${params.code}`);
 
     const item = await this.itemsRepo.create({
@@ -110,6 +120,7 @@ export class CatalogItemService {
         description: params.description,
         kind: params.kind,
         typeId: params.typeId,
+        catalogId: params.catalogId,
         categoryId: params.categoryId,
         subCategoryId: params.subCategoryId,
         unitTypeLookupId: params.unitTypeLookupId,
@@ -123,6 +134,7 @@ export class CatalogItemService {
         externalReference: params.externalReference,
         effectiveFrom: params.effectiveFrom,
         effectiveTo: params.effectiveTo,
+        metadata: params.metadata ?? {},
         isActive: true,
       },
     });

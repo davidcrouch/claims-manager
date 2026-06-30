@@ -108,7 +108,11 @@ export function QuoteFormDrawer({
           estimatedStart: '',
           estimatedCompletion: '',
         });
-        router.refresh();
+        if (result.quote?.id) {
+          router.push(`/quotes/${result.quote.id}`);
+        } else {
+          router.refresh();
+        }
       } else {
         setError(result.error ?? 'Failed to create estimate');
       }

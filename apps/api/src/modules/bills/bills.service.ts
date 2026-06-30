@@ -16,6 +16,7 @@ export class BillsService {
     purchaseOrderId?: string;
     vendorId?: string;
     invoiceId?: string;
+    sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
     return this.billsRepo.findAll({
@@ -26,6 +27,7 @@ export class BillsService {
       purchaseOrderId: params.purchaseOrderId,
       vendorId: params.vendorId,
       invoiceId: params.invoiceId,
+      sort: params.sort,
     });
   }
 

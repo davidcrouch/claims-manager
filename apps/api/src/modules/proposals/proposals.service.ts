@@ -15,6 +15,7 @@ export class ProposalsService {
     jobId?: string;
     rfqId?: string;
     vendorId?: string;
+    sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
     return this.proposalsRepo.findAll({
@@ -24,6 +25,7 @@ export class ProposalsService {
       jobId: params.jobId,
       rfqId: params.rfqId,
       vendorId: params.vendorId,
+      sort: params.sort,
     });
   }
 

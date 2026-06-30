@@ -1,26 +1,29 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { FileInput, Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   type StatusOption,
-  compareDates,
-  compareValues,
   formatDate,
   isArchivedStatus,
   ValueFilterMenu,
   SortableColumnHeader,
 } from '@/components/shared/list-filters';
+import { TablePagination } from '@/components/shared/table-pagination';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import {
   ListPageHeader,
   computeStatusBreakdown,
 } from '@/components/layout/ListPageHeader';
 import { formatCurrency } from '@/components/shared/detail';
+import { fetchProposalsAction } from '@/app/(app)/proposals/actions';
 import type { Proposal, PaginatedResponse } from '@/types/api';
+
+const PAGE_SIZE = 20;
 
 type ListTab = 'active' | 'archived' | 'all';
 const VALID_TABS = new Set<ListTab>(['active', 'archived', 'all']);
@@ -77,15 +80,22 @@ export function ProposalsListClient({
 }: ProposalsListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [data] = useState(initialData);
+  const [data, setData] = useState(initialData);
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [tab, setTab] = useState<ListTab>(() => parseTab(searchParams.get('tab')));
+  const [page, setPage] = useState(() => {
+    const p = parseInt(searchParams.get('page') ?? '1', 10);
+    return Number.isFinite(p) && p > 0 ? p : 1;
+  });
   const [columnSort, setColumnSort] = useState<{ field: ProposalSortField; order: 'asc' | 'desc' }>({
     field: 'updated_at',
     order: 'desc',
   });
   const [vendorFilter, setVendorFilter] = useState<Set<string>>(new Set());
+  const lastFetchKeyRef = useRef<string | null>(null);
+
+  const sortParam = `${columnSort.field}_${columnSort.order}`;
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -93,13 +103,18 @@ export function ProposalsListClient({
   }, [search]);
 
   useEffect(() => {
+    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}`;
     const params = new URLSearchParams(searchParams.toString());
     params.set('search', debouncedSearch);
     params.set('tab', tab);
-    params.set('page', '1');
+    params.set('page', String(page));
+    params.set('sort', sortParam);
     router.replace(`/proposals?${params}`, { scroll: false });
+    if (lastFetchKeyRef.current === fetchKey) return;
+    lastFetchKeyRef.current = fetchKey;
+    fetchProposalsAction({ page, limit: PAGE_SIZE, sort: sortParam }).then((res) => res && setData(res));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop
-  }, [debouncedSearch, tab]);
+  }, [debouncedSearch, sortParam, tab, page]);
 
   const handleColumnSort = (field: ProposalSortField) => {
     setColumnSort((prev) => {
@@ -108,7 +123,12 @@ export function ProposalsListClient({
       }
       return { field, order: field === 'proposal_number' ? 'asc' : 'desc' };
     });
+    setPage(1);
   };
+
+  const handlePageChange = (newPage: number) => setPage(newPage);
+  const handleSearchChange = (value: string) => { setSearch(value); setPage(1); };
+  const handleTabChange = (val: string) => { setTab(val as ListTab); setPage(1); };
 
   const uniqueVendors = useMemo(() => {
     const names = new Set<string>();
@@ -155,15 +175,8 @@ export function ProposalsListClient({
       });
     }
 
-    const isDate = columnSort.field === 'received_date' || columnSort.field === 'updated_at';
-    return [...rows].sort((a, b) => {
-      const aVal = getProposalSortValue(a, columnSort.field);
-      const bVal = getProposalSortValue(b, columnSort.field);
-      return isDate
-        ? compareDates(aVal as string, bVal as string, columnSort.order)
-        : compareValues(aVal, bVal, columnSort.order);
-    });
-  }, [data.data, debouncedSearch, tab, vendorFilter, columnSort]);
+    return rows;
+  }, [data.data, debouncedSearch, tab, vendorFilter]);
 
   const breakdown = computeStatusBreakdown(
     visibleRows,
@@ -199,7 +212,7 @@ export function ProposalsListClient({
       </SetPageHeader>
       <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
-          <Tabs value={tab} onValueChange={(val) => setTab(val as ListTab)}>
+          <Tabs value={tab} onValueChange={handleTabChange}>
             <TabsList>
               <TabsTrigger value="active">Active</TabsTrigger>
               <TabsTrigger value="archived">Archived</TabsTrigger>
@@ -215,13 +228,13 @@ export function ProposalsListClient({
             <Input
               placeholder="Search proposals by number, name or vendor..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               className="h-10 w-full pl-9 pr-9"
             />
             {search && (
               <button
                 type="button"
-                onClick={() => setSearch('')}
+                onClick={() => handleSearchChange('')}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
               >
                 <X size={14} />
@@ -278,9 +291,7 @@ export function ProposalsListClient({
                         {num}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
-                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
-                          {statusName}
-                        </span>
+                        <StatusBadge status={statusName} />
                       </td>
                       <td className="px-4 py-3 text-slate-600">{vendor}</td>
                       <td className="px-4 py-3 text-slate-600">
@@ -300,6 +311,7 @@ export function ProposalsListClient({
                 })}
               </tbody>
             </table>
+            <TablePagination page={page} pageSize={PAGE_SIZE} total={data.total} onPageChange={handlePageChange} />
           </div>
         ) : (
           <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50">

@@ -1,7 +1,7 @@
 'use server';
 
 import { getSession, getAccessToken } from '@/lib/auth';
-import { createApiClient } from '@/lib/api-client';
+import { createApiClient, ApiError } from '@/lib/api-client';
 import type { Quote, Invoice, Report, Task, Contact, WorkOrder, Rfq, Proposal, Bill, PurchaseOrder } from '@/types/api';
 
 async function getApi() {
@@ -32,6 +32,11 @@ export async function publishQuoteAction(id: string): Promise<{ success: boolean
     return { success: true, quote };
   } catch (err) {
     console.error('[publishQuoteAction]', err);
+    if (err instanceof ApiError) {
+      const body = err.body as { message?: string; details?: string } | undefined;
+      const detail = body?.details ?? body?.message ?? err.message;
+      return { success: false, error: detail };
+    }
     return { success: false, error: err instanceof Error ? err.message : 'Failed to publish quote' };
   }
 }

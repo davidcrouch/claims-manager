@@ -18,6 +18,7 @@ interface FieldDef {
     | 'baseUrl'
     | 'baseApi'
     | 'authUrl'
+    | 'docsUrl'
     | 'clientIdentifier'
     | 'providerTenantId'
     | 'webhookSecret'
@@ -52,6 +53,15 @@ const CRUNCHWORK_FIELDS: FieldDef[] = [
     type: 'url',
     required: true,
     mapTo: 'authUrl',
+  },
+  {
+    key: 'docsUrl',
+    label: 'API Documentation',
+    placeholder: 'https://staging-iag.crunchwork.com/swagger-ui/index.html',
+    type: 'url',
+    required: false,
+    hint: 'URL for the provider API documentation portal.',
+    mapTo: 'docsUrl',
   },
   {
     key: 'clientIdentifier',

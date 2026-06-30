@@ -27,6 +27,7 @@ export class InvoicesService {
     limit?: number;
     purchaseOrderId?: string;
     statusId?: string;
+    sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
     return this.invoicesRepo.findAll({
@@ -35,6 +36,7 @@ export class InvoicesService {
       limit: params.limit,
       purchaseOrderId: params.purchaseOrderId,
       statusId: params.statusId,
+      sort: params.sort,
     });
   }
 

@@ -55,6 +55,8 @@ export class JobsService {
     page?: number;
     limit?: number;
     claimId?: string;
+    sort?: string;
+    search?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
     this.logger.debug(`JobsService.findAll — tenantId=${tenantId} claimId=${params.claimId ?? 'all'}`);
@@ -63,6 +65,8 @@ export class JobsService {
       page: params.page,
       limit: params.limit,
       claimId: params.claimId,
+      sort: params.sort,
+      search: params.search,
     });
     return { data: result.data.map(this.shapeJobResponse), total: result.total };
   }
@@ -75,9 +79,10 @@ export class JobsService {
   }
 
   private shapeJobResponse(row: JobViewRow) {
-    const { statusName, statusExternalReference, jobTypeName, jobTypeExternalReference, vendorName, vendorExternalReference, ...rest } = row;
+    const { statusName, statusExternalReference, jobTypeName, jobTypeExternalReference, vendorName, vendorExternalReference, connectionProviderCode, ...rest } = row;
     return {
       ...rest,
+      provider: connectionProviderCode ?? 'internal',
       status: row.statusLookupId
         ? { id: row.statusLookupId, name: statusName ?? undefined, externalReference: statusExternalReference ?? undefined }
         : undefined,
@@ -203,6 +208,7 @@ export class JobsService {
     if (body.jobInstructions !== undefined) data.jobInstructions = body.jobInstructions as string;
     if (body.jobTypeLookupId !== undefined) data.jobTypeLookupId = body.jobTypeLookupId as string;
     if (body.parentJobId !== undefined) data.parentJobId = body.parentJobId as string;
+    if (body.customData !== undefined) data.customData = body.customData as Record<string, unknown>;
     return data;
   }
 }

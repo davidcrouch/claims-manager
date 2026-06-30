@@ -42,6 +42,10 @@ describe('ProvidersService', () => {
       encryptJson: jest.fn().mockReturnValue('enc:json'),
       encrypt: jest.fn().mockReturnValue('enc:secret'),
       decrypt: jest.fn().mockReturnValue('plain'),
+      decryptJson: jest.fn().mockReturnValue({ clientId: 'id', clientSecret: 'secret' }),
+    };
+    const crunchworkAuth = {
+      getAccessToken: jest.fn().mockResolvedValue('mock-token'),
     };
 
     return {
@@ -49,6 +53,7 @@ describe('ProvidersService', () => {
         connectionsRepo as never,
         webhookEventsRepo as never,
         cipher as never,
+        crunchworkAuth as never,
       ),
       connectionsRepo,
       webhookEventsRepo,

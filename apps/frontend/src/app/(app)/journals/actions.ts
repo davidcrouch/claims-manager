@@ -2,7 +2,7 @@
 
 import { getSession, getAccessToken } from '@/lib/auth';
 import { createApiClient } from '@/lib/api-client';
-import type { Journal } from '@/types/api';
+import type { Journal, PaginatedResponse } from '@/types/api';
 
 async function getApi() {
   const session = await getSession();
@@ -26,6 +26,25 @@ export async function fetchJournalsListAction(): Promise<Journal[]> {
   if (!api) return [];
   const res = await api.getJournals({ limit: 100, status: 'active' });
   return res.data;
+}
+
+export async function fetchJournalsAction(params?: {
+  page?: number;
+  limit?: number;
+  status?: string;
+}): Promise<PaginatedResponse<Journal>> {
+  const api = await getApi();
+  if (!api) return { data: [], total: 0 };
+  try {
+    return await api.getJournals({
+      page: params?.page ?? 1,
+      limit: params?.limit ?? 20,
+      status: params?.status,
+    });
+  } catch (err) {
+    console.error('[journals/actions.fetchJournalsAction]', err);
+    return { data: [], total: 0 };
+  }
 }
 
 export async function createJournalAction(data: {

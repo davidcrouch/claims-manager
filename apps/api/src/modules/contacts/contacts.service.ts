@@ -16,6 +16,7 @@ export class ContactsService {
     page?: number;
     limit?: number;
     search?: string;
+    sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
     return this.contactsRepo.findAll({
@@ -23,6 +24,7 @@ export class ContactsService {
       page: params.page,
       limit: params.limit,
       search: params.search,
+      sort: params.sort,
     });
   }
 

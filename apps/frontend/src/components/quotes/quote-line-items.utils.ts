@@ -12,12 +12,12 @@ export function getPayloadGroups(quote: Quote): ApiGroup[] {
   return Array.isArray(groups) ? (groups as ApiGroup[]) : [];
 }
 
-export function groupLabel(group: ApiGroup, index: number): string {
+export function groupLabel(group: ApiGroup, index: number, fallbackPrefix = 'Group'): string {
   return (
     group.groupLabel?.name ??
     group.groupLabel?.externalReference ??
     group.description ??
-    `Group ${index + 1}`
+    `${fallbackPrefix} ${index + 1}`
   );
 }
 

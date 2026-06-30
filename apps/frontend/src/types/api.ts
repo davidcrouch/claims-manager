@@ -86,7 +86,9 @@ export interface Job {
   parentClaimId?: string | null;
   parentJobId?: string | null;
   vendorId?: string | null;
+  connectionId?: string | null;
   externalReference?: string | null;
+  externalJobId?: string | null;
   jobTypeLookupId: string;
   statusLookupId?: string | null;
   requestDate?: string | null;
@@ -99,6 +101,9 @@ export interface Job {
   addressState?: string | null;
   addressCountry?: string | null;
   jobInstructions?: string | null;
+
+  /** Provider that created this job: 'crunchwork' for webhook-originated, 'internal' for manual. */
+  provider?: 'crunchwork' | 'internal' | string;
 
   vendorSnapshot?: Record<string, unknown>;
   temporaryAccommodationDetails?: Record<string, unknown>;
@@ -573,6 +578,7 @@ export interface ProviderConnection {
   baseUrl: string;
   baseApi: string | null;
   authUrl: string | null;
+  docsUrl: string | null;
   clientIdentifier: string | null;
   providerTenantId: string | null;
   credentials: Record<string, unknown>;
@@ -603,6 +609,7 @@ export interface ConnectionSummary {
   baseUrl: string;
   baseApi: string | null;
   authUrl: string | null;
+  docsUrl: string | null;
   authType: string;
   createdAt: string;
   updatedAt: string;
@@ -647,6 +654,7 @@ export interface CreateConnectionPayload {
   baseUrl: string;
   baseApi?: string;
   authUrl?: string;
+  docsUrl?: string;
   authType?: string;
   clientIdentifier?: string;
   providerTenantId?: string;
@@ -661,6 +669,7 @@ export interface UpdateConnectionPayload {
   baseUrl?: string;
   baseApi?: string;
   authUrl?: string;
+  docsUrl?: string;
   authType?: string;
   clientIdentifier?: string;
   providerTenantId?: string;
@@ -719,6 +728,20 @@ export interface RecentActivity {
   description: string;
 }
 
+export type CatalogType = 'crunchwork' | 'internal';
+
+export interface Catalog {
+  id: string;
+  tenantId: string;
+  name: string;
+  description: string | null;
+  type: CatalogType;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  itemCount?: number;
+}
+
 export interface CatalogItemType {
   id: string;
   tenantId: string;
@@ -742,6 +765,7 @@ export interface CatalogCategory {
 export interface CatalogItem {
   id: string;
   tenantId: string;
+  catalogId: string | null;
   code: string;
   name: string;
   description: string | null;
@@ -819,6 +843,28 @@ export interface JournalPageAttachment {
   createdAt: string;
 }
 
+export type ScheduleEventType =
+  | 'appointment'
+  | 'task'
+  | 'work_order'
+  | 'purchase_order'
+  | 'rfq'
+  | 'bill'
+  | 'quote';
+
+export interface ScheduleEvent {
+  id: string;
+  tenantId: string;
+  eventType: ScheduleEventType;
+  title: string;
+  startsAt: string | null;
+  endsAt: string | null;
+  status: string | null;
+  priority: string | null;
+  jobId: string | null;
+  claimId: string | null;
+}
+
 export interface JournalPage {
   id: string;
   tenantId: string;
@@ -837,4 +883,17 @@ export interface JournalPage {
   updatedAt: string;
   deletedAt: string | null;
   attachments?: JournalPageAttachment[];
+}
+
+export interface AppNotification {
+  id: string;
+  tenantId: string;
+  entityType: string;
+  entityId: string;
+  eventType: string;
+  title: string;
+  metadata?: Record<string, unknown>;
+  isRead: boolean;
+  readAt?: string | null;
+  createdAt: string;
 }

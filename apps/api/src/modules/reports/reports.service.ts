@@ -28,6 +28,7 @@ export class ReportsService {
     jobId?: string;
     claimId?: string;
     reportTypeId?: string;
+    sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
     return this.reportsRepo.findAll({
@@ -37,6 +38,7 @@ export class ReportsService {
       jobId: params.jobId,
       claimId: params.claimId,
       reportTypeId: params.reportTypeId,
+      sort: params.sort,
     });
   }
 

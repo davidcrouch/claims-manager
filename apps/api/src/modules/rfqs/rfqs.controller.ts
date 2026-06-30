@@ -12,6 +12,7 @@ export class RfqsController {
     @Query('jobId') jobId?: string,
     @Query('quoteId') quoteId?: string,
     @Query('vendorId') vendorId?: string,
+    @Query('sort') sort?: string,
   ) {
     return this.rfqsService.findAll({
       page: page ? parseInt(page, 10) : 1,
@@ -19,6 +20,7 @@ export class RfqsController {
       jobId,
       quoteId,
       vendorId,
+      sort,
     });
   }
 
@@ -30,6 +32,11 @@ export class RfqsController {
   @Get('quote/:quoteId')
   async findByQuote(@Param('quoteId') quoteId: string) {
     return this.rfqsService.findByQuote({ quoteId });
+  }
+
+  @Get(':id/line-items')
+  async getLineItems(@Param('id') id: string) {
+    return this.rfqsService.getRfqLineItems({ rfqId: id });
   }
 
   @Get(':id')

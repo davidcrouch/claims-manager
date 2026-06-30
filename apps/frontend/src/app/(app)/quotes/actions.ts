@@ -2,8 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { getSession, getAccessToken } from '@/lib/auth';
-import { createApiClient } from '@/lib/api-client';
-import type { PaginatedResponse, Quote } from '@/types/api';
+import { createApiClient, ApiError } from '@/lib/api-client';
+import type { PaginatedResponse, Quote, Attachment } from '@/types/api';
 
 async function getApi() {
   const session = await getSession();
@@ -27,6 +27,7 @@ export async function fetchQuotesAction(params: {
   search?: string;
   jobId?: string;
   statusId?: string;
+  sort?: string;
 }): Promise<PaginatedResponse<Quote> | null> {
   const api = await getApi();
   if (!api) return null;
@@ -36,6 +37,7 @@ export async function fetchQuotesAction(params: {
     limit: params.limit ?? 20,
     jobId: params.jobId,
     statusId: params.statusId,
+    sort: params.sort,
   });
 }
 
@@ -336,7 +338,7 @@ export async function deleteQuoteComboAction(params: {
 
 export async function saveQuoteLineItemsAction(params: {
   quoteId: string;
-  items: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string; unitCost?: string; markupValue?: string; tax?: string }>;
+  items: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string; unitCost?: string; markupValue?: string; tax?: string; unitType?: string }>;
   combos: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string }>;
 }): Promise<{ success: boolean; updated?: number; error?: string }> {
   const api = await getApi();
@@ -374,6 +376,40 @@ export async function fetchGroupLabelLookupsAction(): Promise<{
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to load group labels',
+    };
+  }
+}
+
+export interface PhaseGatedResult<T> {
+  data: T[];
+  phaseUnavailable: boolean;
+  error?: string;
+}
+
+function isNotImplemented(err: unknown): boolean {
+  if (err instanceof ApiError) {
+    return err.status === 404 || err.status === 501;
+  }
+  return false;
+}
+
+export async function fetchQuoteAttachmentsAction(
+  quoteId: string,
+): Promise<PhaseGatedResult<Attachment>> {
+  const api = await getApi();
+  if (!api) return { data: [], phaseUnavailable: false, error: 'Not authenticated' };
+  try {
+    const data = await api.getQuoteAttachments(quoteId);
+    return { data: data ?? [], phaseUnavailable: false };
+  } catch (err) {
+    if (isNotImplemented(err)) {
+      return { data: [], phaseUnavailable: true };
+    }
+    console.error('[quotes/actions.fetchQuoteAttachmentsAction]', err);
+    return {
+      data: [],
+      phaseUnavailable: false,
+      error: err instanceof Error ? err.message : 'Failed to load attachments',
     };
   }
 }

@@ -28,6 +28,8 @@ import {
   type Dict,
 } from '@/components/shared/detail';
 import type { Rfq, Proposal } from '@/types/api';
+import type { ApiGroup, ApiItem } from '@/components/quotes/quote-line-items.types';
+import { fetchRfqLineItemsAction } from '@/app/(app)/rfqs/[id]/actions';
 
 // ---------- helpers ---------------------------------------------------------
 
@@ -242,20 +244,145 @@ function OverviewTab({ rfq }: { rfq: Rfq }) {
   );
 }
 
-function ScopeItemsTab() {
+function ScopeItemsTab({ rfqId }: { rfqId: string }) {
+  const [groups, setGroups] = useState<ApiGroup[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await fetchRfqLineItemsAction(rfqId);
+      if (result.success && result.groups) {
+        setGroups(result.groups as unknown as ApiGroup[]);
+      } else {
+        setError(result.error ?? 'Failed to load scope items');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load scope items');
+    } finally {
+      setLoading(false);
+    }
+  }, [rfqId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="py-8">
+          <p className="text-sm text-muted-foreground">Loading scope items...</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="py-8">
+          <p className="text-sm text-destructive">{error}</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (groups.length === 0) {
+    return (
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Scope Items</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            No scope items have been added to this RFQ.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Scope Items</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">
-          Line items selected from the parent estimate will appear here once the
-          scope items API is connected. Items include name, category, quantity,
-          unit type, unit cost (if pricing is included), and scope status.
+    <div className="space-y-3">
+      {groups.map((group) => (
+        <Card key={group.id ?? `group-${group.index}`}>
+          <CardHeader className="bg-slate-50 pb-2">
+            <CardTitle className="flex items-center justify-between text-sm">
+              <span className="flex items-center gap-2">
+                <Layers className="h-4 w-4 text-muted-foreground" />
+                {group.groupLabel?.name ?? group.description ?? `Group ${(group.index ?? 0) + 1}`}
+              </span>
+              {group.total != null && (
+                <span className="font-normal text-muted-foreground">
+                  {formatCurrency(group.total)}
+                </span>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-0 py-0">
+            <div className="divide-y divide-border/60">
+              {/* Direct items */}
+              {(group.items ?? []).map((item) => (
+                <ScopeItemRow key={item.id ?? `item-${item.index}`} item={item} />
+              ))}
+
+              {/* Assemblies */}
+              {(group.combos ?? []).map((combo) => (
+                <div key={combo.id ?? `combo-${combo.index}`}>
+                  <div className="flex items-center justify-between bg-blue-50/50 px-4 py-2">
+                    <div>
+                      <p className="text-sm font-medium text-blue-900">
+                        {combo.name ?? combo.description ?? `Assembly ${(combo.index ?? 0) + 1}`}
+                      </p>
+                      {combo.description && combo.name && (
+                        <p className="text-xs text-blue-700/70">{combo.description}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      {combo.quantity != null && <span>Qty: {combo.quantity}</span>}
+                      {combo.total != null && <span>{formatCurrency(combo.total)}</span>}
+                    </div>
+                  </div>
+                  {(combo.items ?? []).map((item) => (
+                    <ScopeItemRow
+                      key={item.id ?? `combo-item-${item.index}`}
+                      item={item}
+                      indent
+                    />
+                  ))}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+function ScopeItemRow({ item, indent }: { item: ApiItem; indent?: boolean }) {
+  return (
+    <div className={`flex items-center justify-between px-4 py-2 ${indent ? 'pl-8' : ''}`}>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm">
+          {item.name ?? item.component ?? item.description ?? 'Unnamed item'}
         </p>
-      </CardContent>
-    </Card>
+        {item.description && item.name && (
+          <p className="truncate text-xs text-muted-foreground">{item.description}</p>
+        )}
+      </div>
+      <div className="flex shrink-0 items-center gap-4 text-xs text-muted-foreground">
+        {item.quantity != null && <span>Qty: {item.quantity}</span>}
+        {item.unitType?.name && <span>{item.unitType.name}</span>}
+        {item.unitCost != null && <span>@ {formatCurrency(item.unitCost)}</span>}
+        {item.total != null && (
+          <span className="font-medium text-foreground">{formatCurrency(item.total)}</span>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -450,7 +577,7 @@ export function RfqDetail({
       </div>
       <div className="pt-4">
         {tab === 'overview' && <OverviewTab rfq={rfq} />}
-        {tab === 'scope-items' && <ScopeItemsTab />}
+        {tab === 'scope-items' && <ScopeItemsTab rfqId={rfq.id} />}
         {tab === 'proposals' && (
           <ProposalsTab rfqId={rfq.id} fetchProposals={fetchProposals} />
         )}

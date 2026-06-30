@@ -29,6 +29,7 @@ export class PurchaseOrdersService {
     limit?: number;
     jobId?: string;
     vendorId?: string;
+    sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
     return this.purchaseOrdersRepo.findAll({
@@ -37,6 +38,7 @@ export class PurchaseOrdersService {
       limit: params.limit,
       jobId: params.jobId,
       vendorId: params.vendorId,
+      sort: params.sort,
     });
   }
 

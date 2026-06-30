@@ -13,6 +13,7 @@ export type InProcessProjectionOutcome =
       status: 'completed';
       internalEntityType: string;
       internalEntityId: string;
+      metadata?: Record<string, unknown>;
     }
   | {
       status: 'skipped_no_mapper';
@@ -94,7 +95,7 @@ export class InProcessProjectionService {
     }
 
     return this.db.transaction(async (tx) => {
-      let result: { internalEntityId: string; internalEntityType: string; skipped?: string };
+      let result: { internalEntityId: string; internalEntityType: string; skipped?: string; metadata?: Record<string, unknown> };
 
       if (useCase) {
         const ucResult = await useCase.execute({
@@ -167,6 +168,7 @@ export class InProcessProjectionService {
         status: 'completed' as const,
         internalEntityType: result.internalEntityType,
         internalEntityId: result.internalEntityId,
+        metadata: result.metadata,
       };
     });
   }

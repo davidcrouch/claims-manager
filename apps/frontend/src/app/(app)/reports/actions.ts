@@ -10,6 +10,7 @@ export async function fetchReportsAction(params: {
   limit?: number;
   jobId?: string;
   claimId?: string;
+  sort?: string;
 }): Promise<PaginatedResponse<Report> | null> {
   const session = await getSession();
   if (!session.authenticated) return null;

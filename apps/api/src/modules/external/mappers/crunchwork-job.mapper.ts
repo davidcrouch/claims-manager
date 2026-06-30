@@ -51,6 +51,7 @@ export class CrunchworkJobMapper implements EntityMapper {
       await this.jobsRepo.update({
         id: existingLink.internalEntityId,
         data: {
+          connectionId: params.connectionId,
           apiPayload: payload,
           externalReference: (payload.externalReference as string) ?? (payload.id as string),
         },
@@ -101,6 +102,7 @@ export class CrunchworkJobMapper implements EntityMapper {
 
     const jobData: JobInsert = {
       tenantId: params.tenantId,
+      connectionId: params.connectionId,
       claimId: nested.claimId,
       externalReference: (payload.externalReference as string) ?? (payload.id as string),
       jobTypeLookupId,
@@ -133,6 +135,7 @@ export class CrunchworkJobMapper implements EntityMapper {
       await this.jobsRepo.update({
         id: raced.id,
         data: {
+          connectionId: params.connectionId,
           claimId: nested.claimId,
           jobTypeLookupId,
           apiPayload: payload,

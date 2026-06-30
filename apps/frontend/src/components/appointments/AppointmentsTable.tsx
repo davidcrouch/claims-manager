@@ -3,6 +3,7 @@
 import { Fragment, useState } from 'react';
 import { Users, User, ChevronDown, ChevronRight, Clock } from 'lucide-react';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { SortableColumnHeader } from '@/components/shared/list-filters';
 import { formatDateTime } from '@/components/shared/detail';
 import type { Appointment, AppointmentAttendee } from '@/types/api';
 
@@ -73,6 +74,9 @@ export interface AppointmentsTableProps {
   loading: boolean;
   onRowClick: (appointment: Appointment) => void;
   emptyLabel?: string;
+  sortField?: string;
+  sortOrder?: 'asc' | 'desc';
+  onSort?: (field: string) => void;
 }
 
 export function AppointmentsTable({
@@ -80,6 +84,9 @@ export function AppointmentsTable({
   loading,
   onRowClick,
   emptyLabel = 'No appointments found.',
+  sortField,
+  sortOrder = 'asc',
+  onSort,
 }: AppointmentsTableProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
@@ -107,16 +114,33 @@ export function AppointmentsTable({
         <thead className="bg-slate-50">
           <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <th scope="col" className="px-4 py-2.5 w-8" />
-            <th scope="col" className="px-4 py-2.5">Name</th>
-            <th scope="col" className="px-4 py-2.5">Type</th>
-            <th scope="col" className="px-4 py-2.5">Location</th>
-            <th scope="col" className="px-4 py-2.5">Start</th>
-            <th scope="col" className="px-4 py-2.5">
-              <Clock className="inline h-3 w-3 mr-1" />
-              Duration
-            </th>
-            <th scope="col" className="px-4 py-2.5">Status</th>
-            <th scope="col" className="px-4 py-2.5">Attendees</th>
+            {onSort ? (
+              <>
+                <SortableColumnHeader columnKey="name" label="Name" activeField={sortField ?? null} sortOrder={sortOrder} onSort={onSort} />
+                <th scope="col" className="px-4 py-2.5">Type</th>
+                <SortableColumnHeader columnKey="location" label="Location" activeField={sortField ?? null} sortOrder={sortOrder} onSort={onSort} />
+                <SortableColumnHeader columnKey="start_date" label="Start" activeField={sortField ?? null} sortOrder={sortOrder} onSort={onSort} />
+                <th scope="col" className="px-4 py-2.5">
+                  <Clock className="inline h-3 w-3 mr-1" />
+                  Duration
+                </th>
+                <SortableColumnHeader columnKey="status" label="Status" activeField={sortField ?? null} sortOrder={sortOrder} onSort={onSort} />
+                <th scope="col" className="px-4 py-2.5">Attendees</th>
+              </>
+            ) : (
+              <>
+                <th scope="col" className="px-4 py-2.5">Name</th>
+                <th scope="col" className="px-4 py-2.5">Type</th>
+                <th scope="col" className="px-4 py-2.5">Location</th>
+                <th scope="col" className="px-4 py-2.5">Start</th>
+                <th scope="col" className="px-4 py-2.5">
+                  <Clock className="inline h-3 w-3 mr-1" />
+                  Duration
+                </th>
+                <th scope="col" className="px-4 py-2.5">Status</th>
+                <th scope="col" className="px-4 py-2.5">Attendees</th>
+              </>
+            )}
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">

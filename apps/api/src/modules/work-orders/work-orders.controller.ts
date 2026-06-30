@@ -16,12 +16,14 @@ export class WorkOrdersController {
     @Query('limit') limit?: string,
     @Query('jobId') jobId?: string,
     @Query('purchaseOrderId') purchaseOrderId?: string,
+    @Query('sort') sort?: string,
   ) {
     return this.workOrdersService.findAll({
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
       jobId,
       purchaseOrderId,
+      sort,
     });
   }
 

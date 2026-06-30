@@ -8,6 +8,6 @@ import { CrunchworkService } from './crunchwork.service';
     HttpModule.register({ timeout: 30000 }),
   ],
   providers: [CrunchworkAuthService, CrunchworkService],
-  exports: [CrunchworkService],
+  exports: [CrunchworkService, CrunchworkAuthService],
 })
 export class CrunchworkModule {}

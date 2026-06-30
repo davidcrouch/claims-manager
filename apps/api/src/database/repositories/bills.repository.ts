@@ -1,11 +1,49 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, desc, asc, sql } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { bills } from '../schema';
 
 export type BillRow = typeof bills.$inferSelect;
 export type BillInsert = typeof bills.$inferInsert;
+
+function buildBillsOrderBy(sort?: string) {
+  switch (sort) {
+    case 'updated_at_asc':
+      return [asc(bills.updatedAt)];
+    case 'created_at_desc':
+      return [desc(bills.createdAt)];
+    case 'created_at_asc':
+      return [asc(bills.createdAt)];
+    case 'bill_number_asc':
+      return [asc(bills.billNumber)];
+    case 'bill_number_desc':
+      return [desc(bills.billNumber)];
+    case 'total_amount_asc':
+      return [asc(bills.totalAmount)];
+    case 'total_amount_desc':
+      return [desc(bills.totalAmount)];
+    case 'received_date_asc':
+      return [asc(bills.receivedDate)];
+    case 'received_date_desc':
+      return [desc(bills.receivedDate)];
+    case 'due_date_asc':
+      return [asc(bills.dueDate)];
+    case 'due_date_desc':
+      return [desc(bills.dueDate)];
+    case 'status_asc':
+      return [asc(bills.statusLookupId)];
+    case 'status_desc':
+      return [desc(bills.statusLookupId)];
+    case 'vendor_asc':
+      return [asc(bills.vendorId)];
+    case 'vendor_desc':
+      return [desc(bills.vendorId)];
+    case 'updated_at_desc':
+    default:
+      return [desc(bills.updatedAt)];
+  }
+}
 
 @Injectable()
 export class BillsRepository {
@@ -19,6 +57,7 @@ export class BillsRepository {
     purchaseOrderId?: string;
     vendorId?: string;
     invoiceId?: string;
+    sort?: string;
   }): Promise<{ data: BillRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
@@ -46,7 +85,7 @@ export class BillsRepository {
         .select()
         .from(bills)
         .where(whereClause)
-        .orderBy(desc(bills.updatedAt))
+        .orderBy(...buildBillsOrderBy(params.sort))
         .limit(limit)
         .offset(skip),
       this.db

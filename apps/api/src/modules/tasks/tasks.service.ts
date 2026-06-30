@@ -32,6 +32,7 @@ export class TasksService {
     entityType?: string;
     entityId?: string;
     assignedToUserId?: string;
+    sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
     return this.tasksRepo.findAll({
@@ -45,6 +46,7 @@ export class TasksService {
       entityType: params.entityType,
       entityId: params.entityId,
       assignedToUserId: params.assignedToUserId,
+      sort: params.sort,
     });
   }
 

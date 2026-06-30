@@ -52,8 +52,8 @@ export function computeLineTotals(params: {
   const qty = parseDecimal(params.quantity);
   const unit = parseDecimal(params.unitCost);
   const subTotal = qty * unit;
-  const taxRate = parseDecimal(params.taxRate);
-  const totalTax = subTotal * taxRate;
+  const taxPct = parseDecimal(params.taxRate);
+  const totalTax = subTotal * (taxPct / 100);
   const total = subTotal + totalTax;
   return {
     subTotal: formatDecimal(subTotal, 4),

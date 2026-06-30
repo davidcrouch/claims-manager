@@ -339,3 +339,13 @@
   Added **job-detail tabs** for work orders, RFQs, proposals, and bills, and enhanced existing tabs (invoices, tasks, reports, messages, parties, appointments, journals) with inline create actions and improved data loading.
   Extended the **claims page** to derive active vs. archived status from lookup values, so the tabs auto-filter without hard-coded status IDs.
   Added a **purchase-order create endpoint** on the API and expanded the frontend API client with new entity create and query methods.
+
+- `2026-06-30` `6dbb61a` **32 h**
+  `206 files | +10317 −1819 | Tier 2 standard / Tier 3 complex / Tier 4 integration | Heavy orchestration`
+  Lay summary: Staff can manage multiple price catalogues, receive in-app notifications, view a unified schedule, and work RFQs and quotes end-to-end with improved lists, attachments, and provider sync.
+  **Multi-catalog management, notifications, schedule, RFQ workflow, and Crunchwork integration sync.** Delivered **multi-catalog administration** — create and edit catalogues, import line items from spreadsheets, browse assemblies, and pick catalogue items from quotes and jobs.
+  Added an **in-app notifications** feature with database storage, API endpoints, and a header bell so staff see alerts without leaving the app.
+  Shipped a **unified schedule view** backed by a database events view, combining appointments and related activities in one calendar screen.
+  Expanded **RFQ workflows** with richer create/edit forms, vendor linking, line-item handling, and detail screens wired through new server actions.
+  Improved **list screens across the product** with shared table pagination, toast feedback, type badges, and consistent server-action patterns for bills, proposals, contacts, and work orders.
+  Strengthened **Crunchwork provider sync** — vendor sync service, job connection backfill, attachment downloads, connection documentation links, webhook handling, and mapper/transformer updates for jobs, quotes, purchase orders, and attachments.

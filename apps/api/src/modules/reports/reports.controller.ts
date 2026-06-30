@@ -12,6 +12,7 @@ export class ReportsController {
     @Query('jobId') jobId?: string,
     @Query('claimId') claimId?: string,
     @Query('reportTypeId') reportTypeId?: string,
+    @Query('sort') sort?: string,
   ) {
     return this.reportsService.findAll({
       page: page ? parseInt(page, 10) : 1,
@@ -19,6 +20,7 @@ export class ReportsController {
       jobId,
       claimId,
       reportTypeId,
+      sort,
     });
   }
 

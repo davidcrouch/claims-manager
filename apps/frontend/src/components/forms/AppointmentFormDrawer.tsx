@@ -119,6 +119,7 @@ export interface AppointmentFormDrawerProps {
   jobParties?: JobParty[];
   defaultAddress?: string;
   appointment?: Appointment;
+  onSuccess?: (startDate: string) => void;
 }
 
 function PersonSearchField({
@@ -298,6 +299,7 @@ export function AppointmentFormDrawer({
   jobParties = [],
   defaultAddress,
   appointment,
+  onSuccess,
 }: AppointmentFormDrawerProps) {
   const router = useRouter();
   const isEdit = !!appointment;
@@ -419,6 +421,7 @@ export function AppointmentFormDrawer({
         : await createAppointmentAction(payload);
 
       if (result.success) {
+        onSuccess?.(values.startDate);
         onOpenChange(false);
         router.refresh();
       } else {

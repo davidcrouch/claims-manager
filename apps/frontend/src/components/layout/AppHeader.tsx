@@ -1,12 +1,11 @@
 'use client';
 
-import { Bell } from 'lucide-react';
 import {
   SidebarTrigger,
   SidebarRail,
 } from '@/components/ui/sidebar';
 import { BreadcrumbConsumer } from './BreadcrumbProvider';
-import { Button } from '@/components/ui/button';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 
 export function AppHeader() {
   return (
@@ -19,9 +18,7 @@ export function AppHeader() {
       <div className="flex min-w-0 flex-1 items-center justify-between gap-4">
         <BreadcrumbConsumer />
         <div className="flex shrink-0 items-center gap-2 pl-5">
-          <Button variant="ghost" size="icon" aria-label="Notifications">
-            <Bell className="h-4 w-4" />
-          </Button>
+          <NotificationBell />
         </div>
       </div>
     </header>

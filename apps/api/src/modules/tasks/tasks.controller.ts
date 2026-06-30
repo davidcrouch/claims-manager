@@ -16,6 +16,7 @@ export class TasksController {
     @Query('entityType') entityType?: string,
     @Query('entityId') entityId?: string,
     @Query('assignedToUserId') assignedToUserId?: string,
+    @Query('sort') sort?: string,
   ) {
     return this.tasksService.findAll({
       page: page ? parseInt(page, 10) : 1,
@@ -27,6 +28,7 @@ export class TasksController {
       entityType,
       entityId,
       assignedToUserId,
+      sort,
     });
   }
 

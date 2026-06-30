@@ -278,10 +278,11 @@ export class CrunchworkClaimMapper implements EntityMapper {
       customData: customDataRaw,
       tx,
     });
+    const lineOfBusinessField = payload.lineOfBusiness ?? payload.LineOfBusiness;
     const lineOfBusinessLookupId = await this.resolveOrRaw({
       tenantId,
       domain: 'line_of_business',
-      field: payload.lineOfBusiness,
+      field: lineOfBusinessField,
       rawKey: 'lineOfBusinessRaw',
       customData: customDataRaw,
       tx,
@@ -295,7 +296,7 @@ export class CrunchworkClaimMapper implements EntityMapper {
     }
     const policyTypeName = nameFromLookup(payload.policyType);
     if (policyTypeName) policyDetails.policyTypeName = policyTypeName;
-    const lineOfBusinessName = nameFromLookup(payload.lineOfBusiness);
+    const lineOfBusinessName = nameFromLookup(lineOfBusinessField);
     if (lineOfBusinessName)
       policyDetails.lineOfBusinessName = lineOfBusinessName;
 
@@ -621,6 +622,7 @@ const KNOWN_PAYLOAD_KEYS = new Set<string>([
   'priority',
   'policyType',
   'lineOfBusiness',
+  'LineOfBusiness',
   'address',
   'policyInceptionDate',
   'buildingSumInsured',

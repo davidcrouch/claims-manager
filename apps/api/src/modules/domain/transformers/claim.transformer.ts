@@ -88,7 +88,8 @@ export class ClaimTransformer implements EntityTransformer<ClaimInsert> {
     }
     const policyTypeName = nameFromLookup(payload.policyType);
     if (policyTypeName) policyDetails.policyTypeName = policyTypeName;
-    const lineOfBusinessName = nameFromLookup(payload.lineOfBusiness);
+    const lineOfBusinessField = payload.lineOfBusiness ?? payload.LineOfBusiness;
+    const lineOfBusinessName = nameFromLookup(lineOfBusinessField);
     if (lineOfBusinessName) policyDetails.lineOfBusinessName = lineOfBusinessName;
     entity.policyDetails = policyDetails;
 
@@ -127,7 +128,7 @@ export class ClaimTransformer implements EntityTransformer<ClaimInsert> {
     this.declareOrRaw(lookups, customDataRaw, payload.claimDecision, 'claimDecisionLookupId', 'claim_decision', 'claimDecisionRaw');
     this.declareOrRaw(lookups, customDataRaw, payload.priority, 'priorityLookupId', 'priority', 'priorityRaw');
     this.declareOrRaw(lookups, customDataRaw, payload.policyType, 'policyTypeLookupId', 'policy_type', 'policyTypeRaw');
-    this.declareOrRaw(lookups, customDataRaw, payload.lineOfBusiness, 'lineOfBusinessLookupId', 'line_of_business', 'lineOfBusinessRaw');
+    this.declareOrRaw(lookups, customDataRaw, lineOfBusinessField, 'lineOfBusinessLookupId', 'line_of_business', 'lineOfBusinessRaw');
 
     // ── Custom data (unknown keys + explicit fields) ────────────────
     const customData: Record<string, unknown> = {
@@ -263,7 +264,7 @@ const KNOWN_PAYLOAD_KEYS = new Set<string>([
   'id', 'tenantId', 'externalReference', 'claimNumber', 'referenceNumber',
   'lodgementDate', 'dateOfLoss', 'updatedAtDate',
   'status', 'account', 'catCode', 'lossType', 'lossSubType',
-  'claimDecision', 'priority', 'policyType', 'lineOfBusiness',
+  'claimDecision', 'priority', 'policyType', 'lineOfBusiness', 'LineOfBusiness',
   'address', 'policyInceptionDate',
   'buildingSumInsured', 'contentsSumInsured', 'collectExcess', 'excess',
   'accommodationBenefitLimit',

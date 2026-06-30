@@ -7,6 +7,7 @@ import { WebhookRetryService } from './webhook-retry.service';
 import {
   ExternalProcessingLogRepository,
   InboundWebhookEventsRepository,
+  NotificationsRepository,
 } from '../../database/repositories';
 
 export type OrchestratorRoute = 'more0' | 'inproc' | 'none';
@@ -40,6 +41,7 @@ export class WebhookOrchestratorService {
     private readonly retryService: WebhookRetryService,
     private readonly processingLogRepo: ExternalProcessingLogRepository,
     private readonly webhookRepo: InboundWebhookEventsRepository,
+    private readonly notificationsRepo: NotificationsRepository,
   ) {}
 
   async finalize(params: {
@@ -191,6 +193,13 @@ export class WebhookOrchestratorService {
         this.logger.log(
           `${logPrefix} — eventId=${params.eventId} completed, ${outcome.internalEntityType}=${outcome.internalEntityId}`,
         );
+        this.createNotification({
+          tenantId: params.tenantId,
+          entityType: outcome.internalEntityType,
+          entityId: outcome.internalEntityId,
+          eventType: params.eventType,
+          metadata: outcome.metadata,
+        });
       } else if (outcome.status === 'skipped') {
         this.logger.warn(
           `${logPrefix} — eventId=${params.eventId} skipped (${outcome.reason})`,
@@ -293,5 +302,37 @@ export class WebhookOrchestratorService {
     const enabled = this.configService.get<boolean>('more0.enabled', false);
     const apiKey = this.configService.get<string>('more0.apiKey', '');
     return enabled && !!apiKey;
+  }
+
+  private createNotification(params: {
+    tenantId: string;
+    entityType: string;
+    entityId: string;
+    eventType: string;
+    metadata?: Record<string, unknown>;
+  }): void {
+    const label = params.entityType.replace(/_/g, ' ');
+    const title = params.eventType.startsWith('NEW_')
+      ? `New ${label} received`
+      : params.eventType.startsWith('UPDATE_')
+        ? `${label.charAt(0).toUpperCase() + label.slice(1)} updated`
+        : `${label.charAt(0).toUpperCase() + label.slice(1)} notification`;
+
+    this.notificationsRepo
+      .create({
+        data: {
+          tenantId: params.tenantId,
+          entityType: params.entityType,
+          entityId: params.entityId,
+          eventType: params.eventType,
+          title,
+          metadata: params.metadata ?? {},
+        },
+      })
+      .catch((err) => {
+        this.logger.warn(
+          `WebhookOrchestratorService.createNotification — failed to create notification for ${params.entityType}=${params.entityId}: ${(err as Error).message}`,
+        );
+      });
   }
 }

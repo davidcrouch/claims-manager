@@ -1,7 +1,7 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
-import { externalReferenceResolutionLog } from '../../../database/schema';
+import { catalogItems, catalogs, externalReferenceResolutionLog } from '../../../database/schema';
 import { CatalogItemsRepository } from '../../../database/repositories';
 import { TenantContext } from '../../../tenant/tenant-context';
 
@@ -19,7 +19,11 @@ export class CatalogResolutionService {
 
   /**
    * Resolve an external provider catalogue id to a local catalog_items row.
-   * Logs unknown ids for admin review — does not auto-create catalogue entries.
+   *
+   * The same external reference can exist across multiple catalogues of the
+   * same type (e.g. two Crunchwork catalogues imported months apart). Each
+   * newer catalogue is treated as a revision — the item from the most
+   * recently created catalogue wins.
    */
   async resolveExternalCatalogId(params: {
     tenantId: string;
@@ -29,11 +33,25 @@ export class CatalogResolutionService {
   }): Promise<string | null> {
     if (!params.externalReference?.trim()) return null;
 
-    const item = await this.itemsRepo.findByExternalReference({
-      tenantId: params.tenantId,
-      externalReference: params.externalReference,
-    });
-    if (item) return item.id;
+    const matches = await this.db
+      .select({
+        id: catalogItems.id,
+        catalogCreatedAt: catalogs.createdAt,
+      })
+      .from(catalogItems)
+      .leftJoin(catalogs, eq(catalogItems.catalogId, catalogs.id))
+      .where(
+        and(
+          eq(catalogItems.tenantId, params.tenantId),
+          eq(catalogItems.externalReference, params.externalReference),
+          isNull(catalogItems.deletedAt),
+        ),
+      )
+      .orderBy(desc(catalogs.createdAt));
+
+    if (matches.length > 0) {
+      return matches[0].id;
+    }
 
     await this.logUnknown({
       tenantId: params.tenantId,

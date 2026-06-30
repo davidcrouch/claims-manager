@@ -8,7 +8,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { QuoteFormDrawer } from '@/components/forms/QuoteFormDrawer';
 import { QuotesTable, getEstimateTypeName } from '@/components/quotes/QuotesTable';
 import type { QuoteSortField } from '@/components/quotes/QuotesTable';
-import { QuoteDetail } from '@/components/quotes/QuoteDetail';
+import { QuoteDetail, QuotePageHeader } from '@/components/quotes/QuoteDetail';
 import { fetchJobQuotesAction } from '@/app/(app)/jobs/[id]/actions';
 import { fetchQuoteAction } from '@/app/(app)/quotes/actions';
 import {
@@ -17,7 +17,7 @@ import {
   compareValues,
   ValueFilterMenu,
 } from '@/components/shared/list-filters';
-import type { Quote } from '@/types/api';
+import type { Quote, CatalogType } from '@/types/api';
 
 type ListTab = 'active' | 'archived' | 'all';
 
@@ -37,9 +37,11 @@ function getQuoteSortValue(q: Quote, field: QuoteSortField): string | null | und
 export function JobQuotesTab({
   jobId,
   claimId,
+  jobProvider,
 }: {
   jobId: string;
   claimId: string;
+  jobProvider?: CatalogType;
 }) {
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [loading, setLoading] = useState(true);
@@ -145,7 +147,12 @@ export function JobQuotesTab({
   }
 
   if (selectedQuote) {
-    return <QuoteDetail quote={selectedQuote} />;
+    return (
+      <div className="flex flex-col gap-4">
+        <QuotePageHeader quote={selectedQuote} />
+        <QuoteDetail quote={selectedQuote} jobProvider={jobProvider} />
+      </div>
+    );
   }
 
   return (

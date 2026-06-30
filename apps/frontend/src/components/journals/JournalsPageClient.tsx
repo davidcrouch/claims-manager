@@ -1,26 +1,25 @@
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { BookOpen, Plus, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  compareDates,
-  compareValues,
   formatDate,
   isArchivedStatus,
   ValueFilterMenu,
   SortableColumnHeader,
 } from '@/components/shared/list-filters';
+import { TablePagination } from '@/components/shared/table-pagination';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import {
   ListPageHeader,
   computeStatusBreakdown,
 } from '@/components/layout/ListPageHeader';
 import { JournalFormDrawer } from './JournalFormDrawer';
-import { createJournalAction } from '@/app/(app)/journals/actions';
+import { createJournalAction, fetchJournalsAction } from '@/app/(app)/journals/actions';
 import type { Journal, PaginatedResponse } from '@/types/api';
 
 type ListTab = 'active' | 'archived' | 'all';
@@ -66,29 +65,40 @@ export interface JournalsPageClientProps {
   initialData: PaginatedResponse<Journal> | { data: Journal[]; total: number };
 }
 
+const PAGE_SIZE = 20;
+
 export function JournalsPageClient({ initialData }: JournalsPageClientProps) {
   const router = useRouter();
-  const [journals, setJournals] = useState<Journal[]>(
-    'data' in initialData ? initialData.data : [],
+  const [data, setData] = useState<PaginatedResponse<Journal>>(
+    'data' in initialData ? initialData as PaginatedResponse<Journal> : { data: [], total: 0 },
   );
-  const total = 'total' in initialData ? initialData.total : journals.length;
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [tab, setTab] = useState<ListTab>('active');
+  const [page, setPage] = useState(1);
   const [columnSort, setColumnSort] = useState<{ field: JournalSortField; order: 'asc' | 'desc' }>({
     field: 'updated_at',
     order: 'desc',
   });
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
+  const lastFetchKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
   }, [search]);
 
+  useEffect(() => {
+    const fetchKey = `${debouncedSearch}|${tab}|${page}`;
+    if (lastFetchKeyRef.current === fetchKey) return;
+    lastFetchKeyRef.current = fetchKey;
+
+    fetchJournalsAction({ page, limit: PAGE_SIZE }).then((res) => setData(res));
+  }, [debouncedSearch, tab, page]);
+
   const handleCreated = (journal: Journal) => {
-    setJournals((prev) => [journal, ...prev]);
+    setData((prev) => ({ data: [journal, ...prev.data], total: prev.total + 1 }));
     setCreateDrawerOpen(false);
   };
 
@@ -99,16 +109,21 @@ export function JournalsPageClient({ initialData }: JournalsPageClientProps) {
       }
       return { field, order: field === 'name' ? 'asc' : 'desc' };
     });
+    setPage(1);
   };
+
+  const handleSearchChange = (value: string) => { setSearch(value); setPage(1); };
+  const handleTabChange = (val: string) => { setTab(val as ListTab); setPage(1); };
+  const handlePageChange = (newPage: number) => setPage(newPage);
 
   const uniqueStatuses = useMemo(() => {
     const names = new Set<string>();
-    for (const j of journals) {
+    for (const j of data.data) {
       const name = j.status?.trim();
       if (name) names.add(name);
     }
     return [...names].sort((a, b) => a.localeCompare(b));
-  }, [journals]);
+  }, [data.data]);
 
   const toggleStatus = (name: string) => {
     setStatusFilter((prev) => {
@@ -120,8 +135,7 @@ export function JournalsPageClient({ initialData }: JournalsPageClientProps) {
   };
 
   const visibleRows = useMemo(() => {
-    const query = debouncedSearch.trim().toLowerCase();
-    let rows = journals;
+    let rows = data.data;
 
     if (tab !== 'all') {
       rows = rows.filter((j) => {
@@ -137,24 +151,8 @@ export function JournalsPageClient({ initialData }: JournalsPageClientProps) {
       });
     }
 
-    if (query) {
-      rows = rows.filter((j) => {
-        const name = j.name.toLowerCase();
-        const desc = (j.description ?? '').toLowerCase();
-        const suburb = (j.addressSuburb ?? '').toLowerCase();
-        return name.includes(query) || desc.includes(query) || suburb.includes(query);
-      });
-    }
-
-    const isDate = columnSort.field === 'created_at' || columnSort.field === 'updated_at';
-    return [...rows].sort((a, b) => {
-      const aVal = getJournalSortValue(a, columnSort.field);
-      const bVal = getJournalSortValue(b, columnSort.field);
-      return isDate
-        ? compareDates(aVal as string, bVal as string, columnSort.order)
-        : compareValues(aVal, bVal, columnSort.order);
-    });
-  }, [journals, debouncedSearch, tab, statusFilter, columnSort]);
+    return rows;
+  }, [data.data, tab, statusFilter]);
 
   const breakdown = computeStatusBreakdown(visibleRows, (j) => j.status);
 
@@ -164,7 +162,7 @@ export function JournalsPageClient({ initialData }: JournalsPageClientProps) {
         <ListPageHeader
           icon={BookOpen}
           title="Journals"
-          total={total}
+          total={data.total}
           showing={visibleRows.length}
           search={debouncedSearch}
           breakdown={breakdown}
@@ -173,7 +171,7 @@ export function JournalsPageClient({ initialData }: JournalsPageClientProps) {
       </SetPageHeader>
       <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
-          <Tabs value={tab} onValueChange={(val) => setTab(val as ListTab)}>
+          <Tabs value={tab} onValueChange={handleTabChange}>
             <TabsList>
               <TabsTrigger value="active">Active</TabsTrigger>
               <TabsTrigger value="archived">Archived</TabsTrigger>
@@ -189,13 +187,13 @@ export function JournalsPageClient({ initialData }: JournalsPageClientProps) {
             <Input
               placeholder="Search journals by name, description or location..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               className="h-10 w-full pl-9 pr-9"
             />
             {search && (
               <button
                 type="button"
-                onClick={() => setSearch('')}
+                onClick={() => handleSearchChange('')}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
               >
                 <X size={14} />
@@ -276,6 +274,12 @@ export function JournalsPageClient({ initialData }: JournalsPageClientProps) {
                 ))}
               </tbody>
             </table>
+            <TablePagination
+              page={page}
+              pageSize={PAGE_SIZE}
+              total={data.total}
+              onPageChange={handlePageChange}
+            />
           </div>
         ) : (
           <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50">

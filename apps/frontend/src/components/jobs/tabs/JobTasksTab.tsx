@@ -1,13 +1,20 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { Plus, Search, X } from 'lucide-react';
+import { CheckSquare, Plus, Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { TypeBadge } from '@/components/ui/type-badge';
 import { fetchJobTasksAction } from '@/app/(app)/jobs/[id]/actions';
 import { PhaseUnavailable } from '@/components/shared/detail';
 import { TaskFormDrawer } from '@/components/forms/TaskFormDrawer';
+import {
+  BottomFormDrawer,
+  BottomFormDrawerBody,
+  BottomFormDrawerFooter,
+} from '@/components/forms/BottomFormDrawer';
 import {
   isArchivedStatus,
   compareDates,
@@ -32,17 +39,19 @@ type TaskSortField =
   | 'priority'
   | 'type'
   | 'assignee'
-  | 'due_date';
+  | 'due_date'
+  | 'updated_at';
 
 interface ColDef { key: TaskSortField; label: string }
 
 const TABLE_COLUMNS: ColDef[] = [
-  { key: 'name', label: 'Name' },
+  { key: 'name', label: 'Task' },
   { key: 'status', label: 'Status' },
   { key: 'priority', label: 'Priority' },
   { key: 'type', label: 'Type' },
-  { key: 'assignee', label: 'Assignee' },
+  { key: 'assignee', label: 'Assigned to' },
   { key: 'due_date', label: 'Due Date' },
+  { key: 'updated_at', label: 'Updated' },
 ];
 
 const PRIORITY_STYLES: Record<string, string> = {
@@ -52,6 +61,24 @@ const PRIORITY_STYLES: Record<string, string> = {
   urgent: 'bg-red-100 text-red-700',
 };
 
+function PriorityBadge({ priority }: { priority: string }) {
+  const cls = PRIORITY_STYLES[priority.toLowerCase()] ?? 'bg-muted text-muted-foreground';
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>
+      {priority}
+    </span>
+  );
+}
+
+function DetailField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <span className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</span>
+      <div>{children}</div>
+    </div>
+  );
+}
+
 function getSortValue(t: Task, field: TaskSortField): string | null | undefined {
   switch (field) {
     case 'name': return t.name;
@@ -60,6 +87,7 @@ function getSortValue(t: Task, field: TaskSortField): string | null | undefined 
     case 'type': return refName(t.taskType);
     case 'assignee': return t.assigneeName ?? t.assignedToUserId;
     case 'due_date': return t.dueDate;
+    case 'updated_at': return t.updatedAt;
     default: return null;
   }
 }
@@ -70,13 +98,14 @@ export function JobTasksTab({ jobId }: { jobId: string }) {
   const [phaseUnavailable, setPhaseUnavailable] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
   const [tab, setTab] = useState<ListTab>('active');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [priorityFilter, setPriorityFilter] = useState<Set<string>>(new Set());
   const [columnSort, setColumnSort] = useState<{ field: TaskSortField; order: 'asc' | 'desc' }>({
-    field: 'due_date',
+    field: 'updated_at',
     order: 'desc',
   });
 
@@ -149,7 +178,7 @@ export function JobTasksTab({ jobId }: { jobId: string }) {
       });
     }
 
-    const isDate = columnSort.field === 'due_date';
+    const isDate = columnSort.field === 'due_date' || columnSort.field === 'updated_at';
     return [...rows].sort((a, b) => {
       const aVal = getSortValue(a, columnSort.field);
       const bVal = getSortValue(b, columnSort.field);
@@ -243,24 +272,35 @@ export function JobTasksTab({ jobId }: { jobId: string }) {
             <tbody className="divide-y divide-slate-100">
               {visibleRows.map((t) => {
                 const statusName = refName(t.status);
-                const priorityName = refName(t.priority);
-                const priorityCls = PRIORITY_STYLES[priorityName.toLowerCase()] ?? 'bg-slate-100 text-slate-700';
+                const taskTypeName =
+                  typeof t.taskType === 'string'
+                    ? t.taskType
+                    : t.taskType?.name ?? t.taskType?.externalReference;
                 return (
-                  <tr key={t.id} className="transition-colors hover:bg-slate-50">
+                  <tr
+                    key={t.id}
+                    onClick={() => setSelectedTask(t)}
+                    className="cursor-pointer transition-colors hover:bg-slate-50"
+                  >
                     <td className="px-4 py-3 font-medium text-slate-900">{t.name}</td>
                     <td className="whitespace-nowrap px-4 py-3">
-                      <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
-                        {statusName}
-                      </span>
+                      <StatusBadge status={statusName} />
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${priorityCls}`}>
-                        {priorityName}
-                      </span>
+                      <PriorityBadge priority={refName(t.priority)} />
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{refName(t.taskType)}</td>
-                    <td className="px-4 py-3 text-slate-600">{t.assigneeName ?? t.assignedToUserId ?? '—'}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDate(t.dueDate)}</td>
+                    <td className="px-4 py-3">
+                      <TypeBadge type={taskTypeName} />
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {t.assigneeName ?? t.assignedToUserId ?? '—'}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      {formatDate(t.dueDate)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      {formatDate(t.updatedAt)}
+                    </td>
                   </tr>
                 );
               })}
@@ -277,6 +317,68 @@ export function JobTasksTab({ jobId }: { jobId: string }) {
         }}
         jobId={jobId}
       />
+
+      <BottomFormDrawer
+        open={!!selectedTask}
+        onOpenChange={(open) => { if (!open) setSelectedTask(null); }}
+        title={selectedTask?.name ?? 'Task Detail'}
+        description="View task details"
+        icon={<CheckSquare className="h-5 w-5" />}
+      >
+        {selectedTask && (
+          <>
+            <BottomFormDrawerBody>
+              <div className="grid grid-cols-1 gap-x-8 gap-y-5 md:grid-cols-2">
+                <DetailField label="Status">
+                  <StatusBadge status={refName(selectedTask.status)} />
+                </DetailField>
+                <DetailField label="Priority">
+                  <PriorityBadge priority={refName(selectedTask.priority)} />
+                </DetailField>
+                <DetailField label="Type">
+                  <TypeBadge
+                    type={
+                      typeof selectedTask.taskType === 'string'
+                        ? selectedTask.taskType
+                        : selectedTask.taskType?.name ?? selectedTask.taskType?.externalReference
+                    }
+                  />
+                </DetailField>
+                <DetailField label="Assigned to">
+                  <span className="text-sm text-slate-700">
+                    {selectedTask.assigneeName ?? selectedTask.assignedToUserId ?? '—'}
+                  </span>
+                </DetailField>
+                <DetailField label="Due Date">
+                  <span className="text-sm text-slate-700">{formatDate(selectedTask.dueDate)}</span>
+                </DetailField>
+                <DetailField label="Completed">
+                  <span className="text-sm text-slate-700">{formatDate(selectedTask.completedAt)}</span>
+                </DetailField>
+                <DetailField label="Created">
+                  <span className="text-sm text-slate-700">{formatDate(selectedTask.createdAt)}</span>
+                </DetailField>
+                <DetailField label="Updated">
+                  <span className="text-sm text-slate-700">{formatDate(selectedTask.updatedAt)}</span>
+                </DetailField>
+                {selectedTask.description && (
+                  <div className="md:col-span-2">
+                    <DetailField label="Description">
+                      <p className="whitespace-pre-wrap text-sm text-slate-700">{selectedTask.description}</p>
+                    </DetailField>
+                  </div>
+                )}
+              </div>
+            </BottomFormDrawerBody>
+            <BottomFormDrawerFooter>
+              <div />
+              <Button variant="outline" onClick={() => setSelectedTask(null)}>
+                Close
+              </Button>
+            </BottomFormDrawerFooter>
+          </>
+        )}
+      </BottomFormDrawer>
     </div>
   );
 }

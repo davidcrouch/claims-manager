@@ -14,6 +14,7 @@ export class WorkOrdersService {
     limit?: number;
     jobId?: string;
     purchaseOrderId?: string;
+    sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
     return this.workOrdersRepo.findAll({
@@ -22,6 +23,7 @@ export class WorkOrdersService {
       limit: params.limit,
       jobId: params.jobId,
       purchaseOrderId: params.purchaseOrderId,
+      sort: params.sort,
     });
   }
 

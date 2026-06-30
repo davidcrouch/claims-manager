@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, isNull, desc, sql, aliasedTable, getTableColumns } from 'drizzle-orm';
+import { eq, and, isNull, desc, asc, sql, aliasedTable, getTableColumns } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { quotes, lookupValues } from '../schema';
 
@@ -14,6 +14,36 @@ export interface QuoteViewRow extends QuoteRow {
   quoteTypeExternalReference: string | null;
 }
 
+function buildQuotesOrderBy(sort?: string) {
+  switch (sort) {
+    case 'updated_at_asc':
+      return [asc(quotes.updatedAt)];
+    case 'created_at_desc':
+      return [desc(quotes.createdAt)];
+    case 'created_at_asc':
+      return [asc(quotes.createdAt)];
+    case 'quote_number_asc':
+      return [asc(quotes.quoteNumber)];
+    case 'quote_number_desc':
+      return [desc(quotes.quoteNumber)];
+    case 'total_amount_asc':
+      return [asc(quotes.totalAmount)];
+    case 'total_amount_desc':
+      return [desc(quotes.totalAmount)];
+    case 'quote_date_asc':
+      return [asc(quotes.quoteDate)];
+    case 'quote_date_desc':
+      return [desc(quotes.quoteDate)];
+    case 'reference_asc':
+      return [asc(quotes.reference)];
+    case 'reference_desc':
+      return [desc(quotes.reference)];
+    case 'updated_at_desc':
+    default:
+      return [desc(quotes.updatedAt)];
+  }
+}
+
 @Injectable()
 export class QuotesRepository {
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
@@ -24,6 +54,7 @@ export class QuotesRepository {
     limit?: number;
     jobId?: string;
     statusId?: string;
+    sort?: string;
   }): Promise<{ data: QuoteViewRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
@@ -46,6 +77,24 @@ export class QuotesRepository {
       );
     }
 
+    let orderBy;
+    switch (params.sort) {
+      case 'status_asc':
+        orderBy = [asc(statusLookup.name)];
+        break;
+      case 'status_desc':
+        orderBy = [desc(statusLookup.name)];
+        break;
+      case 'estimate_type_asc':
+        orderBy = [asc(quoteTypeLookup.name)];
+        break;
+      case 'estimate_type_desc':
+        orderBy = [desc(quoteTypeLookup.name)];
+        break;
+      default:
+        orderBy = buildQuotesOrderBy(params.sort);
+    }
+
     const [data, countResult] = await Promise.all([
       this.db
         .select({
@@ -59,7 +108,7 @@ export class QuotesRepository {
         .leftJoin(statusLookup, eq(quotes.statusLookupId, statusLookup.id))
         .leftJoin(quoteTypeLookup, eq(quotes.quoteTypeLookupId, quoteTypeLookup.id))
         .where(whereClause)
-        .orderBy(desc(quotes.updatedAt))
+        .orderBy(...orderBy)
         .limit(limit)
         .offset(skip),
       this.db
