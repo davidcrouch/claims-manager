@@ -350,7 +350,7 @@
   Improved **list screens across the product** with shared table pagination, toast feedback, type badges, and consistent server-action patterns for bills, proposals, contacts, and work orders.
   Strengthened **Crunchwork provider sync** — vendor sync service, job connection backfill, attachment downloads, connection documentation links, webhook handling, and mapper/transformer updates for jobs, quotes, purchase orders, and attachments.
 
-- `2026-07-30` `pending` **24.5 h**
+- `2026-07-30` `1a6026f` **24.5 h**
   `116 files | +4940 −1213 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Jobs can be created without a claim, with internal job types and a clearer create form, and list screens across the app get stronger shared filters.
   **Direct (claim-optional) jobs, internal job types, and list-filter upgrades.** Allowed jobs to exist without a linked claim and added an optional job display name.
