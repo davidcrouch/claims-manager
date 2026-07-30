@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, desc, asc, lt, sql } from 'drizzle-orm';
+import { eq, and, desc, asc, lt, sql, inArray } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { tasks } from '../schema';
 
@@ -58,11 +58,13 @@ export class TasksRepository {
     if (params.claimId) {
       whereClause = and(whereClause, eq(tasks.claimId, params.claimId))!;
     }
-    if (params.status) {
-      whereClause = and(whereClause, eq(tasks.status, params.status))!;
+    const statuses = params.status?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
+    const priorities = params.priority?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
+    if (statuses.length > 0) {
+      whereClause = and(whereClause, inArray(tasks.status, statuses))!;
     }
-    if (params.priority) {
-      whereClause = and(whereClause, eq(tasks.priority, params.priority))!;
+    if (priorities.length > 0) {
+      whereClause = and(whereClause, inArray(tasks.priority, priorities))!;
     }
     if (params.entityType) {
       whereClause = and(whereClause, eq(tasks.relatedEntityType, params.entityType))!;

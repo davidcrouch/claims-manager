@@ -26,8 +26,9 @@ export class JournalsRepository {
       eq(journals.tenantId, params.tenantId),
       isNull(journals.deletedAt),
     );
-    if (params.status) {
-      whereClause = and(whereClause, eq(journals.status, params.status));
+    const statuses = params.status?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
+    if (statuses.length > 0) {
+      whereClause = and(whereClause, inArray(journals.status, statuses));
     }
 
     const [data, countResult] = await Promise.all([

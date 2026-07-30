@@ -22,7 +22,9 @@ export function buildClaimsListFetchKeyFromPageParams(params: {
   search?: string;
   sort?: string;
   status?: string;
+  account?: string;
   tab?: string;
+  page?: string;
 }): string {
   const sort = normalizeSortParam(params.sort ?? null);
   const tab = params.tab ?? 'active';
@@ -34,5 +36,14 @@ export function buildClaimsListFetchKeyFromPageParams(params: {
         .sort()
         .join(',')
     : '';
-  return `${params.search ?? ''}|${sort}|${tab}|${statusSorted}`;
+  const accountSorted = params.account
+    ? params.account
+        .split(',')
+        .map((x) => x.trim())
+        .filter(Boolean)
+        .sort()
+        .join(',')
+    : '';
+  const page = params.page ?? '1';
+  return `${params.search ?? ''}|${sort}|${tab}|${statusSorted}|${accountSorted}|${page}`;
 }

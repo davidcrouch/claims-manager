@@ -42,6 +42,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 
 function lookupDisplay(l?: { name?: string; externalReference?: string }): string {
   if (!l) return '—';
@@ -152,6 +153,9 @@ function ItemRow({
   isPrimaryEdit,
   isMultiSelected,
   isDirtyRow,
+  showSelect,
+  isPicked,
+  onTogglePick,
 }: {
   item: ApiItem;
   rowKey: string;
@@ -170,6 +174,9 @@ function ItemRow({
   isPrimaryEdit?: boolean;
   isMultiSelected?: boolean;
   isDirtyRow?: boolean;
+  showSelect?: boolean;
+  isPicked?: boolean;
+  onTogglePick?: () => void;
 }) {
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const mismatches = item.mismatches ?? [];
@@ -234,6 +241,7 @@ function ItemRow({
       data-item-row
       className={cn(
         'cursor-pointer transition-colors',
+        showSelect && !isPicked && 'opacity-40',
         isEditing
           ? isMultiSelected
             ? 'ring-2 ring-inset ring-blue-400 bg-blue-50/30'
@@ -242,8 +250,24 @@ function ItemRow({
             ? 'bg-emerald-100 hover:bg-emerald-200 hover:ring-2 hover:ring-inset hover:ring-emerald-400'
             : 'hover:bg-amber-50/40 hover:ring-2 hover:ring-inset hover:ring-amber-300',
       )}
-      onClick={(e) => onRowClick(e, rowKey, item)}
+      onClick={(e) => {
+        if (showSelect) {
+          e.preventDefault();
+          onTogglePick?.();
+          return;
+        }
+        onRowClick(e, rowKey, item);
+      }}
     >
+      {showSelect && (
+        <td className="w-10 px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={!!isPicked}
+            onCheckedChange={() => onTogglePick?.()}
+            aria-label={`Select ${item.name ?? item.component ?? 'item'}`}
+          />
+        </td>
+      )}
       {/* Name / Component / Description (editable as separate cells) */}
       <td data-col="name" className={cn(nameColTdCls, 'min-w-0')} onClick={cellClick('name')}>
         {isEditing && editInputs ? (
@@ -493,6 +517,9 @@ function AssemblyBlock({
   onCellKeyDown,
   onDeleteCombo,
   onDeleteItem,
+  showSelect,
+  selectedIds,
+  onToggleIds,
 }: {
   combo: ApiCombo;
   comboKey: string;
@@ -514,12 +541,29 @@ function AssemblyBlock({
   onCellKeyDown: (e: React.KeyboardEvent) => void;
   onDeleteCombo?: (comboId: string) => void;
   onDeleteItem?: (request: DeleteItemRequest) => void;
+  showSelect?: boolean;
+  selectedIds?: Set<string>;
+  onToggleIds?: (ids: string[]) => void;
 }) {
   const comboName = combo.name ?? 'Assembly';
   const comboCategory =
     [combo.category, combo.subCategory].filter(Boolean).join(' / ') || '—';
   const isEditing = editState?.rowKey === comboKey || (selectedRows.has(comboKey) && editState !== null);
   const comboInputs = editInputs[comboKey] ?? null;
+  const comboPickIds = [
+    ...(combo.id ? [combo.id] : []),
+    ...comboItems.map((i) => i.id!).filter(Boolean),
+  ];
+  const comboSelectedCount = comboPickIds.filter((id) => selectedIds?.has(id)).length;
+  const comboChecked =
+    comboPickIds.length === 0
+      ? false
+      : comboSelectedCount === 0
+        ? false
+        : comboSelectedCount === comboPickIds.length
+          ? true
+          : 'indeterminate';
+  const comboPicked = !showSelect || comboChecked === true || comboChecked === 'indeterminate';
 
   const comboTotal = useMemo(() => {
     let sum = 0;
@@ -577,6 +621,7 @@ function AssemblyBlock({
         data-item-row
         className={cn(
           'cursor-pointer transition-colors',
+          showSelect && !comboPicked && 'opacity-40',
           isEditing
             ? comboRing
             : dirtyRowKeys.has(comboKey)
@@ -584,6 +629,10 @@ function AssemblyBlock({
               : 'bg-slate-200 hover:bg-slate-300',
         )}
         onClick={(e) => {
+          if (showSelect) {
+            onToggleIds?.(comboPickIds);
+            return;
+          }
           if (isEditing) {
             onToggle();
             return;
@@ -598,6 +647,16 @@ function AssemblyBlock({
           }
         }}
       >
+        {showSelect && (
+          <td className="w-10 px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+            <Checkbox
+              checked={comboChecked === true}
+              indeterminate={comboChecked === 'indeterminate'}
+              onCheckedChange={() => onToggleIds?.(comboPickIds)}
+              aria-label={`Select assembly ${comboName}`}
+            />
+          </td>
+        )}
         <td
           className={cn(
             'p-0',
@@ -813,6 +872,9 @@ function AssemblyBlock({
               onInputChange={onInputChange}
               onCellKeyDown={onCellKeyDown}
               onDelete={onDeleteItem}
+              showSelect={showSelect}
+              isPicked={!showSelect || (!!item.id && !!selectedIds?.has(item.id))}
+              onTogglePick={() => item.id && onToggleIds?.([item.id])}
             />
           );
         })}
@@ -827,6 +889,11 @@ export interface DeleteItemRequest {
 }
 
 export type LineItemsMode = 'estimate' | 'catalog';
+
+export interface LineItemSelection {
+  selectedIds: Set<string>;
+  onChange: (ids: Set<string>) => void;
+}
 
 export interface QuoteLineItemsTableProps {
   groups: ApiGroup[];
@@ -846,6 +913,10 @@ export interface QuoteLineItemsTableProps {
   structurallyDirty?: boolean;
   readOnly?: boolean;
   mode?: LineItemsMode;
+  /** When set, rows become pickable (e.g. Create RFQ scope selection). Implies read-only editing. */
+  selection?: LineItemSelection;
+  /** Compact layout for drawers / embedded panels (no full-page min-height / sticky offset). */
+  compact?: boolean;
 }
 
 function modeLabels(mode: LineItemsMode) {
@@ -899,9 +970,13 @@ export function QuoteLineItemsTable({
   structurallyDirty,
   readOnly,
   mode = 'estimate',
+  selection,
+  compact,
 }: QuoteLineItemsTableProps) {
   const labels = modeLabels(mode);
   const showCategory = mode !== 'catalog';
+  const showSelect = !!selection;
+  const isReadOnly = !!readOnly || showSelect;
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [collapsedCombos, setCollapsedCombos] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
@@ -923,6 +998,28 @@ export function QuoteLineItemsTable({
     setEditState(null);
     setSelectedRows(new Set());
   }, [groups]);
+
+  function toggleSelectionIds(ids: string[]) {
+    if (!selection || ids.length === 0) return;
+    const next = new Set(selection.selectedIds);
+    const allSelected = ids.every((id) => next.has(id));
+    if (allSelected) {
+      ids.forEach((id) => next.delete(id));
+    } else {
+      ids.forEach((id) => next.add(id));
+    }
+    selection.onChange(next);
+  }
+
+  function groupPickState(group: ApiGroup): boolean | 'indeterminate' {
+    if (!selection) return false;
+    const ids = collectGroupSelectableIds(group);
+    if (ids.length === 0) return false;
+    const selectedCount = ids.filter((id) => selection.selectedIds.has(id)).length;
+    if (selectedCount === 0) return false;
+    if (selectedCount === ids.length) return true;
+    return 'indeterminate';
+  }
 
   const toggleCollapse = (groupId: string) => {
     setCollapsed((prev) => {
@@ -1081,6 +1178,7 @@ export function QuoteLineItemsTable({
   /* ---- Inline-edit handlers ---- */
 
   function handleItemClick(e: React.MouseEvent, rowKey: string, item: ApiItem) {
+    if (isReadOnly) return;
     const td = (e.target as HTMLElement).closest('td');
     const col = (td?.dataset.col as ColumnKey) ?? null;
     const field = col ? nearestEditableField(col, showMarkup, showGst) : 'name';
@@ -1111,6 +1209,7 @@ export function QuoteLineItemsTable({
   }
 
   function handleAssemblyClick(e: React.MouseEvent, rowKey: string, combo: ApiCombo) {
+    if (isReadOnly) return;
     const target = e.target as HTMLElement;
     const fieldEl = target.closest('[data-assembly-field]');
     const assemblyField = fieldEl?.getAttribute('data-assembly-field');
@@ -1142,7 +1241,7 @@ export function QuoteLineItemsTable({
   }
 
   function handleCellSelect(rowKey: string, field: EditableFieldKey) {
-    if (readOnly) return;
+    if (isReadOnly) return;
     setEditState({ rowKey, field });
   }
 
@@ -1289,26 +1388,35 @@ export function QuoteLineItemsTable({
     const term = searchTerm.trim().toLowerCase();
     if (!term) return result;
 
+    const matchesItem = (item: ApiItem) => {
+      const category = [item.category, item.subCategory].filter(Boolean).join(' / ');
+      return (
+        (item.name ?? '').toLowerCase().includes(term) ||
+        (item.component ?? '').toLowerCase().includes(term) ||
+        (item.type ?? '').toLowerCase().includes(term) ||
+        category.toLowerCase().includes(term)
+      );
+    };
+
+    const matchesCombo = (combo: ApiCombo) => {
+      const category = [combo.category, combo.subCategory].filter(Boolean).join(' / ');
+      return (
+        (combo.name ?? '').toLowerCase().includes(term) ||
+        (combo.component ?? '').toLowerCase().includes(term) ||
+        'assembly'.includes(term) ||
+        category.toLowerCase().includes(term)
+      );
+    };
+
     return result
       .map((group) => {
-        const filteredItems = (group.items ?? []).filter(
-          (item) =>
-            (item.name ?? '').toLowerCase().includes(term) ||
-            (item.component ?? '').toLowerCase().includes(term) ||
-            (item.description ?? '').toLowerCase().includes(term),
-        );
+        const filteredItems = (group.items ?? []).filter(matchesItem);
         const filteredCombos = (group.combos ?? [])
           .map((combo) => {
-            const comboNameMatch = (combo.name ?? '').toLowerCase().includes(term) ||
-              (combo.component ?? '').toLowerCase().includes(term);
-            const matchingItems = (combo.items ?? []).filter(
-              (item) =>
-                (item.name ?? '').toLowerCase().includes(term) ||
-                (item.component ?? '').toLowerCase().includes(term) ||
-                (item.description ?? '').toLowerCase().includes(term),
-            );
-            if (comboNameMatch || matchingItems.length > 0) {
-              return { ...combo, items: comboNameMatch ? combo.items : matchingItems };
+            const comboMatch = matchesCombo(combo);
+            const matchingItems = (combo.items ?? []).filter(matchesItem);
+            if (comboMatch || matchingItems.length > 0) {
+              return { ...combo, items: comboMatch ? combo.items : matchingItems };
             }
             return null;
           })
@@ -1343,7 +1451,7 @@ export function QuoteLineItemsTable({
     return rows;
   }, [filteredGroups]);
 
-  const tableDropProps = readOnly ? {} : {
+  const tableDropProps = isReadOnly ? {} : {
     onDragOver: (e: React.DragEvent) => {
       if (!hasGroupLabelDrag(e.dataTransfer)) return;
       e.preventDefault();
@@ -1413,7 +1521,8 @@ export function QuoteLineItemsTable({
   return (
     <div
       className={cn(
-        'min-h-[calc(100vh-12rem)] space-y-3 rounded-xl border-2 border-dashed p-1 transition-all',
+        'space-y-3 rounded-xl border-2 border-dashed p-1 transition-all',
+        !compact && 'min-h-[calc(100vh-12rem)]',
         activeDropKey === 'table-root'
           ? 'border-emerald-400 bg-emerald-50/30 ring-2 ring-emerald-500/30'
           : 'border-transparent',
@@ -1424,7 +1533,7 @@ export function QuoteLineItemsTable({
         data-slot="quote-line-items-toolbar"
         className={cn(
           'sticky z-[9] flex cursor-pointer items-center justify-between rounded-lg border-2 border-slate-400 bg-slate-100 px-5 py-4 shadow-md transition-colors hover:bg-slate-200',
-          mode === 'catalog' ? 'top-[100px]' : 'top-[105px]',
+          compact ? 'top-0' : mode === 'catalog' ? 'top-[100px]' : 'top-[105px]',
         )}
         onClick={toggleAll}
       >
@@ -1662,7 +1771,7 @@ export function QuoteLineItemsTable({
           standaloneItems.length +
           combos.reduce((cs, c) => cs + (c.items?.length ?? 0), 0);
 
-        const dropProps = readOnly ? {} : {
+        const dropProps = isReadOnly ? {} : {
           onDragOver: (e: React.DragEvent) => {
             if (hasGroupLabelDrag(e.dataTransfer)) return;
             e.preventDefault();
@@ -1705,6 +1814,16 @@ export function QuoteLineItemsTable({
                 toggleCollapse(gId);
               }}
             >
+              {showSelect && (
+                <span onClick={(e) => e.stopPropagation()}>
+                  <Checkbox
+                    checked={groupPickState(group) === true}
+                    indeterminate={groupPickState(group) === 'indeterminate'}
+                    onCheckedChange={() => toggleSelectionIds(collectGroupSelectableIds(group))}
+                    aria-label={`Select all items in ${label}`}
+                  />
+                </span>
+              )}
               <span className="flex items-center text-blue-600">
                 {isCollapsed ? (
                   <ChevronRight className="h-4 w-4" />
@@ -1791,6 +1910,7 @@ export function QuoteLineItemsTable({
                   <div className="overflow-x-auto">
                     <table className="w-full table-fixed divide-y divide-slate-100 text-sm">
                       <colgroup>
+                        {showSelect && <col className="w-10" />}
                         <col className={showCategory ? 'w-[28%]' : 'w-[38%]'} />
                         <col className="w-[10%]" />
                         {showCategory && <col className="w-[10%]" />}
@@ -1805,6 +1925,7 @@ export function QuoteLineItemsTable({
                       </colgroup>
                       <thead className="bg-slate-50/50">
                         <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-400">
+                          {showSelect && <th scope="col" className="w-10 px-3 py-2" />}
                           <th scope="col" className="px-4 py-2">Name</th>
                           <th scope="col" className="px-4 py-2">Type</th>
                           {showCategory && <th scope="col" className="px-4 py-2">Category</th>}
@@ -1822,7 +1943,7 @@ export function QuoteLineItemsTable({
                         {/* Standalone items */}
                         {standaloneItems.map((item, idx) => {
                           const itemKey = `${gId}-item-${item.id ?? idx}`;
-                          const itemEditing = editState?.rowKey === itemKey || (selectedRows.has(itemKey) && editState !== null);
+                          const itemEditing = !isReadOnly && (editState?.rowKey === itemKey || (selectedRows.has(itemKey) && editState !== null));
                           const itemPrimary = editState?.rowKey === itemKey;
                           return (
                             <ItemRow
@@ -1842,7 +1963,10 @@ export function QuoteLineItemsTable({
                               onCellSelect={handleCellSelect}
                               onInputChange={handleInputChange}
                               onCellKeyDown={handleCellKeyDown}
-                              onDelete={onDeleteItem}
+                              onDelete={isReadOnly ? undefined : onDeleteItem}
+                              showSelect={showSelect}
+                              isPicked={!showSelect || (!!item.id && selection!.selectedIds.has(item.id))}
+                              onTogglePick={() => item.id && toggleSelectionIds([item.id])}
                             />
                           );
                         })}
@@ -1866,7 +1990,7 @@ export function QuoteLineItemsTable({
                               showMarkup={showMarkup}
                               showGst={showGst}
                               showCategory={showCategory}
-                              editState={editState}
+                              editState={isReadOnly ? null : editState}
                               editInputs={editInputs}
                               selectedRows={selectedRows}
                               dirtyRowKeys={dirtyRowKeys}
@@ -1875,8 +1999,11 @@ export function QuoteLineItemsTable({
                               onCellSelect={handleCellSelect}
                               onInputChange={handleInputChange}
                               onCellKeyDown={handleCellKeyDown}
-                              onDeleteCombo={onDeleteCombo}
-                              onDeleteItem={onDeleteItem}
+                              onDeleteCombo={isReadOnly ? undefined : onDeleteCombo}
+                              onDeleteItem={isReadOnly ? undefined : onDeleteItem}
+                              showSelect={showSelect}
+                              selectedIds={selection?.selectedIds}
+                              onToggleIds={toggleSelectionIds}
                             />
                           );
                         })}
@@ -1895,4 +2022,18 @@ export function QuoteLineItemsTable({
       })}
     </div>
   );
+}
+
+function collectGroupSelectableIds(group: ApiGroup): string[] {
+  const ids: string[] = [];
+  for (const item of group.items ?? []) {
+    if (item.id) ids.push(item.id);
+  }
+  for (const combo of group.combos ?? []) {
+    if (combo.id) ids.push(combo.id);
+    for (const item of combo.items ?? []) {
+      if (item.id) ids.push(item.id);
+    }
+  }
+  return ids;
 }

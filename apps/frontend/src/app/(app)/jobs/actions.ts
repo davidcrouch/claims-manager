@@ -11,6 +11,8 @@ export async function fetchJobsAction(params: {
   search?: string;
   claimId?: string;
   sort?: string;
+  status?: string;
+  jobType?: string;
 }): Promise<PaginatedResponse<Job> | null> {
   const session = await getSession();
   if (!session.authenticated) return null;
@@ -25,5 +27,7 @@ export async function fetchJobsAction(params: {
     search: params.search,
     claimId: params.claimId,
     sort: params.sort,
+    status: params.status,
+    jobType: params.jobType,
   });
 }

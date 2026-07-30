@@ -9,6 +9,7 @@ export async function fetchInvoicesAction(params: {
   page?: number;
   limit?: number;
   purchaseOrderId?: string;
+  status?: string;
   sort?: string;
 }): Promise<PaginatedResponse<Invoice> | null> {
   const session = await getSession();
@@ -22,6 +23,7 @@ export async function fetchInvoicesAction(params: {
     page: params.page ?? 1,
     limit: params.limit ?? 20,
     purchaseOrderId: params.purchaseOrderId,
+    status: params.status,
     sort: params.sort,
   });
 }

@@ -32,7 +32,7 @@ function todayISO(): string {
 
 const quoteFormSchema = z.object({
   jobId: z.string().min(1, 'Job is required'),
-  claimId: z.string().min(1, 'Claim is required'),
+  claimId: z.string().optional(),
   quoteType: z.string().optional(),
   name: z.string().optional(),
   note: z.string().optional(),
@@ -44,11 +44,21 @@ const quoteFormSchema = z.object({
 
 type QuoteFormValues = z.infer<typeof quoteFormSchema>;
 
+const QUOTE_TYPES = [
+  'Validation',
+  'Variation',
+  'Tender Quote',
+  'Variation - PC/PS',
+  'Liability Quote',
+  'Scope Of Work',
+  'Quote',
+] as const;
+
 export interface QuoteFormDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   jobId: string;
-  claimId: string;
+  claimId?: string | null;
 }
 
 export function QuoteFormDrawer({
@@ -65,7 +75,7 @@ export function QuoteFormDrawer({
     resolver: standardSchemaResolver(quoteFormSchema),
     defaultValues: {
       jobId,
-      claimId,
+      claimId: claimId ?? undefined,
       quoteType: '',
       name: '',
       note: '',
@@ -77,7 +87,11 @@ export function QuoteFormDrawer({
   });
 
   useEffect(() => {
-    form.reset({ ...form.getValues(), jobId, claimId });
+    form.reset({
+      ...form.getValues(),
+      jobId,
+      claimId: claimId ?? undefined,
+    });
   }, [jobId, claimId, form]);
 
   async function onSubmit(values: QuoteFormValues) {
@@ -86,7 +100,7 @@ export function QuoteFormDrawer({
     try {
       const result = await createQuoteAction({
         jobId: values.jobId,
-        claimId: values.claimId,
+        ...(values.claimId ? { claimId: values.claimId } : {}),
         quoteType: values.quoteType || undefined,
         name: values.name || undefined,
         note: values.note || undefined,
@@ -99,7 +113,7 @@ export function QuoteFormDrawer({
         onOpenChange(false);
         form.reset({
           jobId,
-          claimId,
+          claimId: claimId ?? undefined,
           quoteType: '',
           name: '',
           note: '',
@@ -123,6 +137,9 @@ export function QuoteFormDrawer({
     }
   }
 
+  const quoteTypeItems = Object.fromEntries(QUOTE_TYPES.map((t) => [t, t]));
+  const quoteType = form.watch('quoteType');
+
   return (
     <BottomFormDrawer
       open={open}
@@ -132,32 +149,29 @@ export function QuoteFormDrawer({
       icon={<FileSignature className="h-5 w-5" />}
     >
       <form
-        onSubmit={form.handleSubmit(onSubmit)}
+        onSubmit={form.handleSubmit(onSubmit, () => {
+          setError('Please fill in the required fields.');
+        })}
         className="flex min-h-0 flex-1 flex-col"
       >
         <BottomFormDrawerBody>
-          <p className="mb-5 text-sm text-muted-foreground">
-            Creating estimate for job {jobId}
-          </p>
-
           <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="quoteType">Type (optional)</Label>
               <Select
-                value={form.watch('quoteType')}
+                value={quoteType || null}
                 onValueChange={(v) => form.setValue('quoteType', v ?? '')}
+                items={quoteTypeItems}
               >
-                <SelectTrigger id="quoteType">
+                <SelectTrigger id="quoteType" className="w-full">
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Validation">Validation</SelectItem>
-                  <SelectItem value="Variation">Variation</SelectItem>
-                  <SelectItem value="Tender Quote">Tender Quote</SelectItem>
-                  <SelectItem value="Variation - PC/PS">Variation - PC/PS</SelectItem>
-                  <SelectItem value="Liability Quote">Liability Quote</SelectItem>
-                  <SelectItem value="Scope Of Work">Scope Of Work</SelectItem>
-                  <SelectItem value="Quote">Quote</SelectItem>
+                  {QUOTE_TYPES.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {t}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -178,6 +192,11 @@ export function QuoteFormDrawer({
                 type="date"
                 {...form.register('estimateDate')}
               />
+              {form.formState.errors.estimateDate && (
+                <p className="text-sm text-destructive">
+                  {form.formState.errors.estimateDate.message}
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -189,6 +208,11 @@ export function QuoteFormDrawer({
                 {...form.register('expiresInDays')}
                 placeholder="e.g. 30"
               />
+              {form.formState.errors.expiresInDays && (
+                <p className="text-sm text-destructive">
+                  {form.formState.errors.expiresInDays.message}
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, isNull, desc, asc, sql } from 'drizzle-orm';
+import { eq, and, isNull, desc, asc, sql, inArray } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { reports } from '../schema';
 
@@ -35,6 +35,8 @@ export class ReportsRepository {
     limit?: number;
     jobId?: string;
     claimId?: string;
+    /** Comma-separated report status lookup IDs. */
+    status?: string;
     reportTypeId?: string;
     sort?: string;
   }): Promise<{ data: ReportRow[]; total: number }> {
@@ -52,10 +54,15 @@ export class ReportsRepository {
     if (params.claimId) {
       whereClause = and(whereClause, eq(reports.claimId, params.claimId));
     }
-    if (params.reportTypeId) {
+    const statusIds = params.status?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
+    const reportTypeIds = params.reportTypeId?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
+    if (statusIds.length > 0) {
+      whereClause = and(whereClause, inArray(reports.statusLookupId, statusIds));
+    }
+    if (reportTypeIds.length > 0) {
       whereClause = and(
         whereClause,
-        eq(reports.reportTypeLookupId, params.reportTypeId),
+        inArray(reports.reportTypeLookupId, reportTypeIds),
       );
     }
 

@@ -61,6 +61,7 @@ describe('ClaimsService', () => {
         search: undefined,
         sort: undefined,
         status: undefined,
+        account: undefined,
       });
     });
   });

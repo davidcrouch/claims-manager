@@ -138,7 +138,9 @@ export class QuotesService {
     page?: number;
     limit?: number;
     jobId?: string;
+    status?: string;
     statusId?: string;
+    quoteType?: string;
     sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
@@ -147,7 +149,9 @@ export class QuotesService {
       page: params.page,
       limit: params.limit,
       jobId: params.jobId,
+      status: params.status,
       statusId: params.statusId,
+      quoteType: params.quoteType,
       sort: params.sort,
     });
     return { data: result.data.map(this.shapeQuoteResponse), total: result.total };
@@ -182,7 +186,7 @@ export class QuotesService {
     const insertData: QuoteInsert = {
       tenantId,
       jobId: params.body.jobId as string,
-      claimId: params.body.claimId as string,
+      claimId: (params.body.claimId as string) || null,
       name: (params.body.name as string) || null,
       note: (params.body.note as string) || null,
       quoteDate: params.body.estimateDate

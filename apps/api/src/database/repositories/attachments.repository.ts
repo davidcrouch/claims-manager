@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, isNull, desc, asc, sql, ilike, or } from 'drizzle-orm';
+import { eq, and, isNull, desc, asc, sql, ilike, or, inArray } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { attachments } from '../schema';
 
@@ -57,8 +57,9 @@ export class AttachmentsRepository {
       eq(attachments.tenantId, params.tenantId),
       isNull(attachments.deletedAt),
     );
-    if (params.relatedRecordType) {
-      whereClause = and(whereClause, eq(attachments.relatedRecordType, params.relatedRecordType));
+    const relatedRecordTypes = params.relatedRecordType?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
+    if (relatedRecordTypes.length > 0) {
+      whereClause = and(whereClause, inArray(attachments.relatedRecordType, relatedRecordTypes));
     }
     if (params.search) {
       const pattern = `%${params.search}%`;

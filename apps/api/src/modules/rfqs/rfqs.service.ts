@@ -1,5 +1,5 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { BadRequestException, Injectable, Inject, Logger, NotFoundException } from '@nestjs/common';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { DRIZZLE } from '../../database/drizzle.module';
 import type { DrizzleDB } from '../../database/drizzle.module';
 import { RfqsRepository, LookupsRepository } from '../../database/repositories';
@@ -10,6 +10,10 @@ import {
   quoteGroups,
   quoteCombos,
   quoteItems,
+  proposals,
+  proposalGroups,
+  proposalCombos,
+  proposalItems,
 } from '../../database/schema';
 import { TenantContext } from '../../tenant/tenant-context';
 
@@ -41,6 +45,7 @@ export class RfqsService {
     limit?: number;
     jobId?: string;
     quoteId?: string;
+    status?: string;
     vendorId?: string;
     sort?: string;
   }) {
@@ -52,6 +57,7 @@ export class RfqsService {
       limit: params.limit,
       jobId: params.jobId,
       quoteId: params.quoteId,
+      status: params.status,
       vendorId: params.vendorId,
       sort: params.sort,
     });
@@ -101,6 +107,107 @@ export class RfqsService {
   async update(params: { id: string; body: Record<string, unknown> }) {
     this.logger.log(`api:RfqsService.update id=${params.id}`);
     return this.rfqsRepo.update({ id: params.id, data: params.body as any });
+  }
+
+  async replaceScopeItems(params: { rfqId: string; selectedItemIds: string[] }) {
+    const tenantId = this.tenantContext.getTenantId();
+    const { rfqId, selectedItemIds } = params;
+    this.logger.log(
+      `api:RfqsService.replaceScopeItems rfqId=${rfqId} selectedItems=${selectedItemIds.length}`,
+    );
+
+    if (selectedItemIds.length === 0) {
+      throw new BadRequestException('Select at least one scope item');
+    }
+
+    const rfq = await this.rfqsRepo.findOne({ id: rfqId, tenantId });
+    if (!rfq) throw new NotFoundException(`RFQ ${rfqId} not found`);
+    if (!rfq.quoteId) {
+      throw new BadRequestException('RFQ has no linked estimate to rebuild scope from');
+    }
+
+    const [proposalRow] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(proposals)
+      .where(and(eq(proposals.tenantId, tenantId), eq(proposals.rfqId, rfqId)));
+    if ((proposalRow?.count ?? 0) > 0) {
+      throw new BadRequestException(
+        'Cannot change RFQ scope after proposals have been created for this RFQ',
+      );
+    }
+
+    // Clear optional lineage FKs so cascade delete of RFQ groups cannot violate refs.
+    const existingGroups = await this.db
+      .select({ id: rfqGroups.id })
+      .from(rfqGroups)
+      .where(and(eq(rfqGroups.tenantId, tenantId), eq(rfqGroups.rfqId, rfqId)));
+    const existingGroupIds = existingGroups.map((g) => g.id);
+
+    if (existingGroupIds.length > 0) {
+      const existingCombos = await this.db
+        .select({ id: rfqCombos.id })
+        .from(rfqCombos)
+        .where(
+          and(
+            eq(rfqCombos.tenantId, tenantId),
+            inArray(rfqCombos.rfqGroupId, existingGroupIds),
+          ),
+        );
+      const existingComboIds = existingCombos.map((c) => c.id);
+
+      const groupItems = await this.db
+        .select({ id: rfqItems.id })
+        .from(rfqItems)
+        .where(
+          and(
+            eq(rfqItems.tenantId, tenantId),
+            inArray(rfqItems.rfqGroupId, existingGroupIds),
+          ),
+        );
+      const comboItems =
+        existingComboIds.length > 0
+          ? await this.db
+              .select({ id: rfqItems.id })
+              .from(rfqItems)
+              .where(
+                and(
+                  eq(rfqItems.tenantId, tenantId),
+                  inArray(rfqItems.rfqComboId, existingComboIds),
+                ),
+              )
+          : [];
+      const existingItemIds = [...groupItems, ...comboItems].map((i) => i.id);
+
+      if (existingItemIds.length > 0) {
+        await this.db
+          .update(proposalItems)
+          .set({ sourceRfqItemId: null })
+          .where(inArray(proposalItems.sourceRfqItemId, existingItemIds));
+      }
+      if (existingComboIds.length > 0) {
+        await this.db
+          .update(proposalCombos)
+          .set({ sourceRfqComboId: null })
+          .where(inArray(proposalCombos.sourceRfqComboId, existingComboIds));
+      }
+      await this.db
+        .update(proposalGroups)
+        .set({ sourceRfqGroupId: null })
+        .where(inArray(proposalGroups.sourceRfqGroupId, existingGroupIds));
+
+      await this.db
+        .delete(rfqGroups)
+        .where(and(eq(rfqGroups.tenantId, tenantId), eq(rfqGroups.rfqId, rfqId)));
+    }
+
+    await this.createScopeItemsFromQuote({
+      rfqId,
+      quoteId: rfq.quoteId,
+      tenantId,
+      selectedItemIds,
+    });
+
+    return this.getRfqLineItems({ rfqId });
   }
 
   async getRfqLineItems(params: { rfqId: string }) {
@@ -210,39 +317,41 @@ export class RfqsService {
           ? { name: group.description }
           : { name: `Group ${index + 1}` };
 
-      return {
-        id: group.id,
-        groupLabel: groupLabelObj,
-        description: group.description,
-        length: asNumber(dimensions.length),
-        width: asNumber(dimensions.width),
-        height: asNumber(dimensions.height),
-        index: group.sortIndex,
-        subTotal: asNumber(groupTotals.subTotal),
-        totalTax: asNumber(groupTotals.totalTax),
-        total: asNumber(groupTotals.total),
-        items: (directItemsByGroup.get(group.id) ?? []).map((item) =>
-          this.mapRfqItemRow(item, lookupMap),
-        ),
-        combos: groupCombos.map((combo) => {
-          const comboTotals = (combo.totals as Record<string, unknown>) ?? {};
-          return {
-            id: combo.id,
-            name: combo.name,
-            description: combo.description,
-            category: combo.category,
-            subCategory: combo.subCategory,
-            index: combo.sortIndex,
-            quantity: parseDecimal(combo.quantity),
-            subTotal: asNumber(comboTotals.subTotal),
-            totalTax: asNumber(comboTotals.totalTax),
-            total: asNumber(comboTotals.total),
-            items: (comboItemsByCombo.get(combo.id) ?? []).map((item) =>
-              this.mapRfqItemRow(item, lookupMap),
-            ),
-          };
-        }),
-      };
+    return {
+      id: group.id,
+      sourceQuoteGroupId: group.sourceQuoteGroupId ?? undefined,
+      groupLabel: groupLabelObj,
+      description: group.description,
+      length: asNumber(dimensions.length),
+      width: asNumber(dimensions.width),
+      height: asNumber(dimensions.height),
+      index: group.sortIndex,
+      subTotal: asNumber(groupTotals.subTotal),
+      totalTax: asNumber(groupTotals.totalTax),
+      total: asNumber(groupTotals.total),
+      items: (directItemsByGroup.get(group.id) ?? []).map((item) =>
+        this.mapRfqItemRow(item, lookupMap),
+      ),
+      combos: groupCombos.map((combo) => {
+        const comboTotals = (combo.totals as Record<string, unknown>) ?? {};
+        return {
+          id: combo.id,
+          sourceQuoteComboId: combo.sourceQuoteComboId ?? undefined,
+          name: combo.name,
+          description: combo.description,
+          category: combo.category,
+          subCategory: combo.subCategory,
+          index: combo.sortIndex,
+          quantity: parseDecimal(combo.quantity),
+          subTotal: asNumber(comboTotals.subTotal),
+          totalTax: asNumber(comboTotals.totalTax),
+          total: asNumber(comboTotals.total),
+          items: (comboItemsByCombo.get(combo.id) ?? []).map((item) =>
+            this.mapRfqItemRow(item, lookupMap),
+          ),
+        };
+      }),
+    };
     });
   }
 
@@ -257,6 +366,7 @@ export class RfqsService {
 
     return {
       id: item.id,
+      sourceQuoteItemId: item.sourceQuoteItemId ?? undefined,
       name: item.name,
       description: item.description,
       category: item.category,

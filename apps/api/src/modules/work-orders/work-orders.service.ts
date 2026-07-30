@@ -1,9 +1,14 @@
-import { Injectable } from '@nestjs/common';
-import { WorkOrdersRepository } from '../../database/repositories';
+import { Injectable, Logger } from '@nestjs/common';
+import {
+  WorkOrdersRepository,
+  type WorkOrderViewRow,
+} from '../../database/repositories';
 import { TenantContext } from '../../tenant/tenant-context';
 
 @Injectable()
 export class WorkOrdersService {
+  private readonly logger = new Logger(WorkOrdersService.name);
+
   constructor(
     private readonly workOrdersRepo: WorkOrdersRepository,
     private readonly tenantContext: TenantContext,
@@ -14,6 +19,8 @@ export class WorkOrdersService {
     limit?: number;
     jobId?: string;
     purchaseOrderId?: string;
+    status?: string;
+    workOrderType?: string;
     sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
@@ -23,6 +30,8 @@ export class WorkOrdersService {
       limit: params.limit,
       jobId: params.jobId,
       purchaseOrderId: params.purchaseOrderId,
+      status: params.status,
+      workOrderType: params.workOrderType,
       sort: params.sort,
     });
   }
@@ -34,7 +43,42 @@ export class WorkOrdersService {
 
   async findByJob(params: { jobId: string }) {
     const tenantId = this.tenantContext.getTenantId();
-    return this.workOrdersRepo.findByJob({ jobId: params.jobId, tenantId });
+    this.logger.debug(
+      `api:WorkOrdersService.findByJob jobId=${params.jobId} tenantId=${tenantId}`,
+    );
+    const rows = await this.workOrdersRepo.findByJob({
+      jobId: params.jobId,
+      tenantId,
+    });
+    return rows.map((row) => this.shapeWorkOrderListItem(row));
+  }
+
+  private shapeWorkOrderListItem(row: WorkOrderViewRow) {
+    const {
+      statusName,
+      statusExternalReference,
+      workOrderTypeName,
+      workOrderTypeExternalReference,
+      workOrderPayload: _payload,
+      ...rest
+    } = row;
+    return {
+      ...rest,
+      status: row.statusLookupId
+        ? {
+            id: row.statusLookupId,
+            name: statusName ?? undefined,
+            externalReference: statusExternalReference ?? undefined,
+          }
+        : undefined,
+      workOrderType: row.workOrderTypeLookupId
+        ? {
+            id: row.workOrderTypeLookupId,
+            name: workOrderTypeName ?? undefined,
+            externalReference: workOrderTypeExternalReference ?? undefined,
+          }
+        : undefined,
+    };
   }
 
   async findByPurchaseOrder(params: { purchaseOrderId: string }) {

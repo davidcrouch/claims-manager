@@ -14,6 +14,7 @@ export class ProposalsService {
     limit?: number;
     jobId?: string;
     rfqId?: string;
+    status?: string;
     vendorId?: string;
     sort?: string;
   }) {
@@ -24,6 +25,7 @@ export class ProposalsService {
       limit: params.limit,
       jobId: params.jobId,
       rfqId: params.rfqId,
+      status: params.status,
       vendorId: params.vendorId,
       sort: params.sort,
     });

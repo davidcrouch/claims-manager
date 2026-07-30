@@ -18,6 +18,8 @@ import {
 import {
   type StatusOption,
   isArchivedStatus,
+  commitColumnFilterSelection,
+  columnFilterToIdsParam,
   ValueFilterMenu,
 } from '@/components/shared/list-filters';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
@@ -39,6 +41,7 @@ function parseTab(param: string | null): ListTab {
 export interface QuotesListClientProps {
   initialData: PaginatedResponse<Quote>;
   statusOptions: StatusOption[];
+  quoteTypes: StatusOption[];
 }
 
 const PAGE_SIZE = 20;
@@ -46,6 +49,7 @@ const PAGE_SIZE = 20;
 export function QuotesListClient({
   initialData,
   statusOptions,
+  quoteTypes,
 }: QuotesListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -66,7 +70,18 @@ export function QuotesListClient({
     order: 'desc',
   });
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
+  const [typeFilterActive, setTypeFilterActive] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [statusFilterActive, setStatusFilterActive] = useState(false);
   const lastFetchKeyRef = useRef<string | null>(null);
+  const statusParam = useMemo(
+    () => columnFilterToIdsParam(statusFilterActive, statusFilter, statusOptions),
+    [statusFilterActive, statusFilter, statusOptions],
+  );
+  const quoteTypeParam = useMemo(
+    () => columnFilterToIdsParam(typeFilterActive, typeFilter, quoteTypes),
+    [typeFilterActive, typeFilter, quoteTypes],
+  );
 
   const sortParam = `${columnSort.field}_${columnSort.order}`;
 
@@ -76,18 +91,26 @@ export function QuotesListClient({
   }, [search]);
 
   useEffect(() => {
-    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}`;
+    const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
+    const typeKey = quoteTypeParam === null ? '__none__' : (quoteTypeParam ?? '');
+    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${typeKey}`;
     const params = new URLSearchParams(searchParams.toString());
     params.set('search', debouncedSearch);
     params.set('tab', tab);
     params.set('page', String(page));
     params.set('sort', sortParam);
+    if (statusParam) params.set('status', statusParam); else params.delete('status');
+    if (quoteTypeParam) params.set('quoteType', quoteTypeParam); else params.delete('quoteType');
     router.replace(`/quotes?${params}`, { scroll: false });
     if (lastFetchKeyRef.current === fetchKey) return;
     lastFetchKeyRef.current = fetchKey;
-    fetchQuotesAction({ page, limit: PAGE_SIZE, sort: sortParam }).then((res) => res && setData(res));
+    if (statusParam === null || quoteTypeParam === null) {
+      setData({ data: [], total: 0 });
+      return;
+    }
+    fetchQuotesAction({ page, limit: PAGE_SIZE, sort: sortParam, status: statusParam, quoteType: quoteTypeParam }).then((res) => res && setData(res));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop
-  }, [debouncedSearch, sortParam, tab, page]);
+  }, [debouncedSearch, sortParam, tab, page, statusParam, quoteTypeParam]);
 
   const handleColumnSort = (field: QuoteSortField) => {
     setColumnSort((prev) => {
@@ -97,28 +120,64 @@ export function QuotesListClient({
       return { field, order: field === 'quote_number' ? 'asc' : 'desc' };
     });
     setPage(1);
+    setPage(1);
   };
 
   const handlePageChange = (newPage: number) => setPage(newPage);
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => { setSearch(e.target.value); setPage(1); };
   const handleTabChange = (val: string) => { setTab(val as ListTab); setPage(1); };
 
-  const uniqueTypes = useMemo(() => {
+  const uniqueTypes = useMemo(
+    () => [...new Set(quoteTypes.map((type) => type.name.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+    [quoteTypes],
+  );
+
+  const uniqueStatuses = useMemo(() => {
+    const fromOptions = statusOptions
+      .map((s) => s.name?.trim())
+      .filter((n): n is string => !!n);
+    if (fromOptions.length > 0) {
+      return [...new Set(fromOptions)].sort((a, b) => a.localeCompare(b));
+    }
     const names = new Set<string>();
     for (const q of data.data) {
-      const name = getEstimateTypeName(q).trim();
+      const name = q.status?.name?.trim();
       if (name) names.add(name);
     }
     return [...names].sort((a, b) => a.localeCompare(b));
-  }, [data.data]);
+  }, [data.data, statusOptions]);
 
   const toggleType = (name: string) => {
-    setTypeFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
+    const working = typeFilterActive ? new Set(typeFilter) : new Set(uniqueTypes);
+    if (working.has(name)) working.delete(name);
+    else working.add(name);
+    const committed = commitColumnFilterSelection({
+      next: working,
+      optionCount: uniqueTypes.length,
     });
+    setTypeFilter(committed.selected);
+    setTypeFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const applyStatusFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueStatuses.length,
+    });
+    setStatusFilter(committed.selected);
+    setStatusFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const applyTypeFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueTypes.length,
+    });
+    setTypeFilter(committed.selected);
+    setTypeFilterActive(committed.active);
+    setPage(1);
   };
 
   const visibleRows = useMemo(() => {
@@ -132,13 +191,6 @@ export function QuotesListClient({
       });
     }
 
-    if (typeFilter.size > 0) {
-      rows = rows.filter((q) => {
-        const name = getEstimateTypeName(q).trim();
-        return name ? typeFilter.has(name) : false;
-      });
-    }
-
     if (query) {
       rows = rows.filter((q) => {
         const num = (q.quoteNumber ?? '').toLowerCase();
@@ -148,7 +200,7 @@ export function QuotesListClient({
     }
 
     return rows;
-  }, [data.data, debouncedSearch, tab, typeFilter]);
+  }, [data.data, debouncedSearch, tab]);
 
   const breakdown = computeStatusBreakdown(visibleRows, (q) => q.status?.name);
   const totalValue = useMemo(() => {
@@ -212,10 +264,18 @@ export function QuotesListClient({
 
           <ValueFilterMenu
             options={uniqueTypes}
-            selected={typeFilter}
+            selected={typeFilterActive ? typeFilter : new Set(uniqueTypes)}
             onToggle={toggleType}
-            onClearAll={() => setTypeFilter(new Set())}
-            onSelectAll={() => setTypeFilter(new Set(uniqueTypes))}
+            onClearAll={() => {
+              setTypeFilter(new Set());
+              setTypeFilterActive(false);
+              setPage(1);
+            }}
+            onSelectAll={() => {
+              setTypeFilter(new Set());
+              setTypeFilterActive(false);
+              setPage(1);
+            }}
             emptyLabel="All estimate types"
             menuTitle="Filter by estimate type"
             itemNoun={{ singular: 'type', plural: 'types' }}
@@ -238,6 +298,22 @@ export function QuotesListClient({
               sortField={columnSort.field}
               sortOrder={columnSort.order}
               onSort={handleColumnSort}
+              statusColumnFilter={{
+                options: uniqueStatuses,
+                selected: statusFilter,
+                active: statusFilterActive,
+                onApply: applyStatusFilter,
+                menuTitle: 'Filter by status',
+                itemNoun: { singular: 'status', plural: 'statuses' },
+              }}
+              estimateTypeColumnFilter={{
+                options: uniqueTypes,
+                selected: typeFilter,
+                active: typeFilterActive,
+                onApply: applyTypeFilter,
+                menuTitle: 'Filter by estimate type',
+                itemNoun: { singular: 'type', plural: 'types' },
+              }}
             />
             <TablePagination page={page} pageSize={PAGE_SIZE} total={data.total} onPageChange={handlePageChange} />
           </>

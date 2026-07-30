@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, isNull, desc, asc, sql } from 'drizzle-orm';
+import { eq, and, isNull, desc, asc, sql, inArray } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { purchaseOrders } from '../schema';
 
@@ -50,6 +50,8 @@ export class PurchaseOrdersRepository {
     page?: number;
     limit?: number;
     jobId?: string;
+    /** Comma-separated status lookup IDs. */
+    status?: string;
     vendorId?: string;
     sort?: string;
   }): Promise<{ data: PurchaseOrderRow[]; total: number }> {
@@ -64,8 +66,13 @@ export class PurchaseOrdersRepository {
     if (params.jobId) {
       whereClause = and(whereClause, eq(purchaseOrders.jobId, params.jobId));
     }
-    if (params.vendorId) {
-      whereClause = and(whereClause, eq(purchaseOrders.vendorId, params.vendorId));
+    const statusIds = params.status?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
+    const vendorIds = params.vendorId?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
+    if (statusIds.length > 0) {
+      whereClause = and(whereClause, inArray(purchaseOrders.statusLookupId, statusIds));
+    }
+    if (vendorIds.length > 0) {
+      whereClause = and(whereClause, inArray(purchaseOrders.vendorId, vendorIds));
     }
 
     const [data, countResult] = await Promise.all([

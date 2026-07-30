@@ -36,7 +36,11 @@ async function getApi() {
   if (!session.authenticated) return null;
   const token = await getAccessToken();
   if (!token) return null;
-  return createApiClient({ token });
+  const tenantId =
+    session.identity?.organization_id ??
+    process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID ??
+    undefined;
+  return createApiClient({ token, tenantId });
 }
 
 export async function fetchJobQuotesAction(jobId: string): Promise<Quote[] | null> {
@@ -97,7 +101,16 @@ export async function acknowledgeMessageAction(id: string): Promise<{ success: b
 export async function fetchJobWorkOrdersAction(jobId: string): Promise<WorkOrder[] | null> {
   const api = await getApi();
   if (!api) return null;
-  return api.getJobWorkOrders(jobId);
+  try {
+    const data = await api.getJobWorkOrders(jobId);
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    console.error(
+      '[jobs/[id]/actions fetchJobWorkOrdersAction]',
+      err instanceof Error ? err.message : err,
+    );
+    throw err;
+  }
 }
 
 export async function fetchJobRfqsAction(jobId: string): Promise<Rfq[] | null> {

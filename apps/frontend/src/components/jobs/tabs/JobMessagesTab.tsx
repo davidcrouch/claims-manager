@@ -13,6 +13,7 @@ import {
 import { formatDateTime } from '@/components/shared/detail';
 import {
   compareDates,
+  commitColumnFilterSelection,
   SortableColumnHeader,
 } from '@/components/shared/list-filters';
 import type { Message } from '@/types/api';
@@ -43,7 +44,7 @@ export function JobMessagesTab({
   claimId,
 }: {
   jobId: string;
-  claimId: string;
+  claimId?: string | null;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,6 +54,8 @@ export function JobMessagesTab({
   const [tab, setTab] = useState<ListTab>('all');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [statusFilterActive, setStatusFilterActive] = useState(false);
   const [columnSort, setColumnSort] = useState<{ field: MsgSortField; order: 'asc' | 'desc' }>({
     field: 'created_at',
     order: 'desc',
@@ -88,11 +91,33 @@ export function JobMessagesTab({
     if (result.success) load();
   }
 
+  const uniqueStatuses = useMemo(() => ['Acknowledged', 'Pending'], []);
+
+  const applyStatusFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueStatuses.length,
+    });
+    setStatusFilter(committed.selected);
+    setStatusFilterActive(committed.active);
+  };
+
   const visibleRows = useMemo(() => {
     let rows = messages;
 
     if (tab === 'pending') rows = rows.filter((m) => !m.acknowledgedAt);
     else if (tab === 'acknowledged') rows = rows.filter((m) => !!m.acknowledgedAt);
+
+    if (statusFilterActive) {
+      if (statusFilter.size === 0) {
+        rows = [];
+      } else {
+        rows = rows.filter((m) => {
+          const n = m.acknowledgedAt ? 'Acknowledged' : 'Pending';
+          return statusFilter.has(n);
+        });
+      }
+    }
 
     const query = debouncedSearch.trim().toLowerCase();
     if (query) {
@@ -111,7 +136,7 @@ export function JobMessagesTab({
         ? compareDates(aVal, bVal, columnSort.order)
         : (aVal ?? '').localeCompare(bVal ?? '') * (columnSort.order === 'asc' ? 1 : -1);
     });
-  }, [messages, tab, debouncedSearch, columnSort]);
+  }, [messages, tab, statusFilterActive, statusFilter, debouncedSearch, columnSort]);
 
   if (loading) {
     return <p className="text-sm text-slate-400">Loading...</p>;
@@ -185,6 +210,18 @@ export function JobMessagesTab({
                     activeField={columnSort.field}
                     sortOrder={columnSort.order}
                     onSort={handleColumnSort}
+                    filter={
+                      col.key === 'status'
+                        ? {
+                            options: uniqueStatuses,
+                            selected: statusFilter,
+                            active: statusFilterActive,
+                            onApply: applyStatusFilter,
+                            menuTitle: 'Filter by status',
+                            itemNoun: { singular: 'status', plural: 'statuses' },
+                          }
+                        : undefined
+                    }
                   />
                 ))}
                 <th scope="col" className="px-4 py-3 w-24">

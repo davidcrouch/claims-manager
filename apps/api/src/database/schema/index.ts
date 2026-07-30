@@ -219,11 +219,12 @@ export const jobs = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
-    claimId: uuid('claim_id').notNull().references(() => claims.id, { onDelete: 'cascade' }),
+    claimId: uuid('claim_id').references(() => claims.id, { onDelete: 'cascade' }),
     parentClaimId: uuid('parent_claim_id'),
     vendorId: uuid('vendor_id').references(() => vendors.id),
     connectionId: uuid('connection_id').references(() => integrationConnections.id),
     parentJobId: uuid('parent_job_id').references((): AnyPgColumn => jobs.id),
+    name: text('name'),
     externalReference: text('external_reference'),
     externalJobId: text('external_job_id'),
     jobTypeLookupId: uuid('job_type_lookup_id').notNull().references(() => lookupValues.id),
@@ -2060,7 +2061,10 @@ export const claimsRelations = relations(claims, ({ one, many }) => ({
 }));
 
 export const jobsRelations = relations(jobs, ({ one }) => ({
-  claim: one(claims),
+  claim: one(claims, {
+    fields: [jobs.claimId],
+    references: [claims.id],
+  }),
   vendor: one(vendors),
   jobTypeLookup: one(lookupValues, {
     fields: [jobs.jobTypeLookupId],

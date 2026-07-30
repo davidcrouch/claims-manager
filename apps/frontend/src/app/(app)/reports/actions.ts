@@ -10,6 +10,8 @@ export async function fetchReportsAction(params: {
   limit?: number;
   jobId?: string;
   claimId?: string;
+  status?: string;
+  reportTypeId?: string;
   sort?: string;
 }): Promise<PaginatedResponse<Report> | null> {
   const session = await getSession();
@@ -24,5 +26,8 @@ export async function fetchReportsAction(params: {
     limit: params.limit ?? 20,
     jobId: params.jobId,
     claimId: params.claimId,
+    status: params.status,
+    reportTypeId: params.reportTypeId,
+    sort: params.sort,
   });
 }

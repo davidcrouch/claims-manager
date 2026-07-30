@@ -14,6 +14,7 @@ export class BillsService {
     limit?: number;
     jobId?: string;
     purchaseOrderId?: string;
+    status?: string;
     vendorId?: string;
     invoiceId?: string;
     sort?: string;
@@ -25,6 +26,7 @@ export class BillsService {
       limit: params.limit,
       jobId: params.jobId,
       purchaseOrderId: params.purchaseOrderId,
+      status: params.status,
       vendorId: params.vendorId,
       invoiceId: params.invoiceId,
       sort: params.sort,

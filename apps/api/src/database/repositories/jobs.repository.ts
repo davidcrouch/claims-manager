@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, isNull, desc, asc, sql, gte, ilike, or, aliasedTable, getTableColumns } from 'drizzle-orm';
+import { eq, and, isNull, desc, asc, sql, gte, ilike, or, inArray, aliasedTable, getTableColumns } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { jobs, lookupValues, vendors, integrationConnections } from '../schema';
 
@@ -54,6 +54,10 @@ export class JobsRepository {
     claimId?: string;
     sort?: string;
     search?: string;
+    /** Comma-separated status lookup IDs */
+    status?: string;
+    /** Comma-separated job type lookup IDs */
+    jobType?: string;
   }): Promise<{ data: JobViewRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
@@ -61,6 +65,19 @@ export class JobsRepository {
 
     const statusLookup = aliasedTable(lookupValues, 'status_lookup');
     const jobTypeLookup = aliasedTable(lookupValues, 'job_type_lookup');
+
+    const statusIds = params.status
+      ? params.status
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
+    const jobTypeIds = params.jobType
+      ? params.jobType
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
 
     const whereParts = [
       eq(jobs.tenantId, params.tenantId),
@@ -75,10 +92,19 @@ export class JobsRepository {
       const term = `%${params.search}%`;
       whereParts.push(
         or(
+          ilike(jobs.name, term),
           ilike(jobs.externalReference, term),
           ilike(jobs.addressSuburb, term),
         )!,
       );
+    }
+
+    if (statusIds.length > 0) {
+      whereParts.push(inArray(jobs.statusLookupId, statusIds));
+    }
+
+    if (jobTypeIds.length > 0) {
+      whereParts.push(inArray(jobs.jobTypeLookupId, jobTypeIds));
     }
 
     const whereClause = and(...whereParts);

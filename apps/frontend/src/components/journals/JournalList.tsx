@@ -15,6 +15,7 @@ import {
   formatDate,
   ValueFilterMenu,
   SortableColumnHeader,
+  commitColumnFilterSelection,
 } from '@/components/shared/list-filters';
 import type { Journal } from '@/types/api';
 
@@ -37,11 +38,11 @@ type JournalSortField =
   | 'pages'
   | 'updated_at';
 
-interface ColDef { key: JournalSortField; label: string }
+interface ColDef { key: JournalSortField; label: string; filterable?: boolean }
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'name', label: 'Name' },
-  { key: 'status', label: 'Status' },
+  { key: 'status', label: 'Status', filterable: true },
   { key: 'suburb', label: 'Location' },
   { key: 'pages', label: 'Pages' },
   { key: 'updated_at', label: 'Updated' },
@@ -77,6 +78,7 @@ export function JournalList({
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [statusFilterActive, setStatusFilterActive] = useState(false);
   const [columnSort, setColumnSort] = useState<{ field: JournalSortField; order: 'asc' | 'desc' }>({
     field: 'updated_at',
     order: 'desc',
@@ -137,12 +139,26 @@ export function JournalList({
   }, [journals]);
 
   const toggleStatus = (name: string) => {
-    setStatusFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
+    const working = statusFilterActive
+      ? new Set(statusFilter)
+      : new Set(uniqueStatuses);
+    if (working.has(name)) working.delete(name);
+    else working.add(name);
+    const committed = commitColumnFilterSelection({
+      next: working,
+      optionCount: uniqueStatuses.length,
     });
+    setStatusFilter(committed.selected);
+    setStatusFilterActive(committed.active);
+  };
+
+  const applyStatusFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueStatuses.length,
+    });
+    setStatusFilter(committed.selected);
+    setStatusFilterActive(committed.active);
   };
 
   const visibleRows = useMemo(() => {
@@ -155,11 +171,15 @@ export function JournalList({
       });
     }
 
-    if (statusFilter.size > 0) {
-      rows = rows.filter((j) => {
-        const s = j.status?.trim();
-        return s ? statusFilter.has(s) : false;
-      });
+    if (statusFilterActive) {
+      if (statusFilter.size === 0) {
+        rows = [];
+      } else {
+        rows = rows.filter((j) => {
+          const s = j.status?.trim();
+          return s ? statusFilter.has(s) : false;
+        });
+      }
     }
 
     const query = debouncedSearch.trim().toLowerCase();
@@ -180,7 +200,7 @@ export function JournalList({
         ? compareDates(aVal as string, bVal as string, columnSort.order)
         : compareValues(aVal, bVal, columnSort.order);
     });
-  }, [journals, tab, statusFilter, debouncedSearch, columnSort]);
+  }, [journals, tab, statusFilterActive, statusFilter, debouncedSearch, columnSort]);
 
   if (loading) {
     return <p className="text-sm text-slate-400">Loading...</p>;
@@ -218,10 +238,16 @@ export function JournalList({
 
         <ValueFilterMenu
           options={uniqueStatuses}
-          selected={statusFilter}
+          selected={statusFilterActive ? statusFilter : new Set(uniqueStatuses)}
           onToggle={toggleStatus}
-          onClearAll={() => setStatusFilter(new Set())}
-          onSelectAll={() => setStatusFilter(new Set(uniqueStatuses))}
+          onClearAll={() => {
+            setStatusFilter(new Set());
+            setStatusFilterActive(false);
+          }}
+          onSelectAll={() => {
+            setStatusFilter(new Set());
+            setStatusFilterActive(false);
+          }}
           emptyLabel="All statuses"
           menuTitle="Filter by status"
           itemNoun={{ singular: 'status', plural: 'statuses' }}
@@ -261,6 +287,18 @@ export function JournalList({
                     activeField={columnSort.field}
                     sortOrder={columnSort.order}
                     onSort={handleColumnSort}
+                    filter={
+                      col.key === 'status'
+                        ? {
+                            options: uniqueStatuses,
+                            selected: statusFilter,
+                            active: statusFilterActive,
+                            onApply: applyStatusFilter,
+                            menuTitle: 'Filter by status',
+                            itemNoun: { singular: 'status', plural: 'statuses' },
+                          }
+                        : undefined
+                    }
                   />
                 ))}
                 <th scope="col" className="px-4 py-3 w-10">

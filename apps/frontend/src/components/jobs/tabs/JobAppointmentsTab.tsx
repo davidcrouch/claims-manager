@@ -9,7 +9,7 @@ import { AppointmentFormDrawer, type JobParty } from '@/components/forms/Appoint
 import { AppointmentsTable } from '@/components/appointments/AppointmentsTable';
 import { appointmentStatusLabel, appointmentTypeName } from '@/components/appointments/AppointmentsTable';
 import { fetchJobAppointmentsAction } from '@/app/(app)/jobs/[id]/actions';
-import { ValueFilterMenu } from '@/components/shared/list-filters';
+import { commitColumnFilterSelection, ValueFilterMenu } from '@/components/shared/list-filters';
 import type { Appointment, Job } from '@/types/api';
 
 type ListTab = 'all' | 'scheduled' | 'cancelled';
@@ -24,6 +24,9 @@ export function JobAppointmentsTab({ jobId, job }: { jobId: string; job: Job }) 
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
+  const [typeFilterActive, setTypeFilterActive] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [statusFilterActive, setStatusFilterActive] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -71,13 +74,43 @@ export function JobAppointmentsTab({ jobId, job }: { jobId: string; job: Job }) 
     return [...names].sort((a, b) => a.localeCompare(b));
   }, [appointments]);
 
+  const uniqueStatuses = useMemo(() => {
+    const names = new Set<string>();
+    for (const a of appointments) {
+      const n = appointmentStatusLabel(a).trim();
+      if (n) names.add(n);
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [appointments]);
+
   const toggleType = (name: string) => {
-    setTypeFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
+    const working = typeFilterActive ? new Set(typeFilter) : new Set(uniqueTypes);
+    if (working.has(name)) working.delete(name);
+    else working.add(name);
+    const committed = commitColumnFilterSelection({
+      next: working,
+      optionCount: uniqueTypes.length,
     });
+    setTypeFilter(committed.selected);
+    setTypeFilterActive(committed.active);
+  };
+
+  const applyStatusFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueStatuses.length,
+    });
+    setStatusFilter(committed.selected);
+    setStatusFilterActive(committed.active);
+  };
+
+  const applyTypeFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueTypes.length,
+    });
+    setTypeFilter(committed.selected);
+    setTypeFilterActive(committed.active);
   };
 
   const visibleRows = useMemo(() => {
@@ -86,11 +119,26 @@ export function JobAppointmentsTab({ jobId, job }: { jobId: string; job: Job }) 
     if (tab === 'scheduled') rows = rows.filter((a) => appointmentStatusLabel(a) !== 'Cancelled');
     else if (tab === 'cancelled') rows = rows.filter((a) => appointmentStatusLabel(a) === 'Cancelled');
 
-    if (typeFilter.size > 0) {
-      rows = rows.filter((a) => {
-        const n = appointmentTypeName(a).trim();
-        return n && n !== '—' ? typeFilter.has(n) : false;
-      });
+    if (statusFilterActive) {
+      if (statusFilter.size === 0) {
+        rows = [];
+      } else {
+        rows = rows.filter((a) => {
+          const n = appointmentStatusLabel(a).trim();
+          return n ? statusFilter.has(n) : false;
+        });
+      }
+    }
+
+    if (typeFilterActive) {
+      if (typeFilter.size === 0) {
+        rows = [];
+      } else {
+        rows = rows.filter((a) => {
+          const n = appointmentTypeName(a).trim();
+          return n && n !== '—' ? typeFilter.has(n) : false;
+        });
+      }
     }
 
     const query = debouncedSearch.trim().toLowerCase();
@@ -103,7 +151,7 @@ export function JobAppointmentsTab({ jobId, job }: { jobId: string; job: Job }) 
     }
 
     return rows;
-  }, [appointments, tab, typeFilter, debouncedSearch]);
+  }, [appointments, tab, statusFilterActive, statusFilter, typeFilterActive, typeFilter, debouncedSearch]);
 
   return (
     <div className="space-y-4">
@@ -137,10 +185,16 @@ export function JobAppointmentsTab({ jobId, job }: { jobId: string; job: Job }) 
 
         <ValueFilterMenu
           options={uniqueTypes}
-          selected={typeFilter}
+          selected={typeFilterActive ? typeFilter : new Set(uniqueTypes)}
           onToggle={toggleType}
-          onClearAll={() => setTypeFilter(new Set())}
-          onSelectAll={() => setTypeFilter(new Set(uniqueTypes))}
+          onClearAll={() => {
+            setTypeFilter(new Set());
+            setTypeFilterActive(false);
+          }}
+          onSelectAll={() => {
+            setTypeFilter(new Set());
+            setTypeFilterActive(false);
+          }}
           emptyLabel="All types"
           menuTitle="Filter by type"
           itemNoun={{ singular: 'type', plural: 'types' }}
@@ -165,6 +219,22 @@ export function JobAppointmentsTab({ jobId, job }: { jobId: string; job: Job }) 
         loading={loading}
         onRowClick={handleRowClick}
         emptyLabel="No appointments found."
+        typeColumnFilter={{
+          options: uniqueTypes,
+          selected: typeFilter,
+          active: typeFilterActive,
+          onApply: applyTypeFilter,
+          menuTitle: 'Filter by type',
+          itemNoun: { singular: 'type', plural: 'types' },
+        }}
+        statusColumnFilter={{
+          options: uniqueStatuses,
+          selected: statusFilter,
+          active: statusFilterActive,
+          onApply: applyStatusFilter,
+          menuTitle: 'Filter by status',
+          itemNoun: { singular: 'status', plural: 'statuses' },
+        }}
       />
     </div>
   );

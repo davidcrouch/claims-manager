@@ -18,14 +18,18 @@ export class QuotesController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('jobId') jobId?: string,
+    @Query('status') status?: string,
     @Query('statusId') statusId?: string,
+    @Query('quoteType') quoteType?: string,
     @Query('sort') sort?: string,
   ) {
     return this.quotesService.findAll({
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
       jobId,
+      status,
       statusId,
+      quoteType,
       sort,
     });
   }

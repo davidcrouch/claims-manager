@@ -8,19 +8,21 @@ export const metadata = { title: 'Work Orders — EnsureOS' };
 export default async function WorkOrdersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; sort?: string }>;
+  searchParams: Promise<{ page?: string; sort?: string; status?: string; workOrderType?: string }>;
 }) {
   const api = await getServerApiClient();
   if (!api) redirect('/api/auth/login');
 
   const params = await searchParams;
   const empty: PaginatedResponse<WorkOrder> = { data: [], total: 0 };
-  const [initialData, statusLookupsRes] = await Promise.all([
+  const [initialData, statusLookupsRes, typeLookupsRes] = await Promise.all([
     api
       .getWorkOrders({
         page: parseInt(params.page ?? '1', 10),
         limit: 20,
         sort: params.sort,
+        status: params.status,
+        workOrderType: params.workOrderType,
       })
       .catch((err: unknown) => {
         console.error(
@@ -30,6 +32,7 @@ export default async function WorkOrdersPage({
         return empty;
       }),
     api.getLookupsByDomain('work_order_status').catch(() => []),
+    api.getLookupsByDomain('work_order_type', { providerCode: 'direct' }).catch(() => []),
   ]);
 
   const statusOptions = (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map(
@@ -38,11 +41,16 @@ export default async function WorkOrdersPage({
       name: row.name?.trim() ? row.name : 'Unknown',
     }),
   );
+  const workOrderTypes = (Array.isArray(typeLookupsRes) ? typeLookupsRes : []).map((row) => ({
+    id: row.id,
+    name: row.name?.trim() ? row.name : 'Unknown',
+  }));
 
   return (
     <WorkOrdersListClient
       initialData={initialData}
       statusOptions={statusOptions}
+      workOrderTypes={workOrderTypes}
     />
   );
 }

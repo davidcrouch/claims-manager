@@ -42,6 +42,7 @@ export {
   WorkOrdersRepository,
   type WorkOrderRow,
   type WorkOrderInsert,
+  type WorkOrderViewRow,
 } from './work-orders.repository';
 export {
   TasksRepository,

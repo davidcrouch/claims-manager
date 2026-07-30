@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, isNull, desc, asc, sql } from 'drizzle-orm';
+import { eq, and, isNull, desc, asc, sql, inArray } from 'drizzle-orm';
 import { DRIZZLE } from '../drizzle.module';
 import type { DrizzleDB } from '../drizzle.module';
 import { rfqs } from '../schema';
@@ -51,6 +51,8 @@ export class RfqsRepository {
     limit?: number;
     jobId?: string;
     quoteId?: string;
+    /** Comma-separated status lookup IDs. */
+    status?: string;
     vendorId?: string;
     sort?: string;
   }): Promise<{ data: RfqRow[]; total: number }> {
@@ -68,8 +70,13 @@ export class RfqsRepository {
     if (params.quoteId) {
       whereClause = and(whereClause, eq(rfqs.quoteId, params.quoteId));
     }
-    if (params.vendorId) {
-      whereClause = and(whereClause, eq(rfqs.vendorId, params.vendorId));
+    const statusIds = params.status?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
+    const vendorIds = params.vendorId?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
+    if (statusIds.length > 0) {
+      whereClause = and(whereClause, inArray(rfqs.statusLookupId, statusIds));
+    }
+    if (vendorIds.length > 0) {
+      whereClause = and(whereClause, inArray(rfqs.vendorId, vendorIds));
     }
 
     const [data, countResult] = await Promise.all([

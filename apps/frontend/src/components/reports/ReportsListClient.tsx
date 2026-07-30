@@ -12,6 +12,8 @@ import {
   type StatusOption,
   formatDate,
   isArchivedStatus,
+  commitColumnFilterSelection,
+  columnFilterToIdsParam,
   ValueFilterMenu,
   SortableColumnHeader,
 } from '@/components/shared/list-filters';
@@ -39,12 +41,12 @@ type ReportSortField =
   | 'created_at'
   | 'updated_at';
 
-interface ColDef { key: ReportSortField; label: string }
+interface ColDef { key: ReportSortField; label: string; filterable?: boolean }
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'reference', label: 'Report #' },
-  { key: 'status', label: 'Status' },
-  { key: 'report_type', label: 'Type' },
+  { key: 'status', label: 'Status', filterable: true },
+  { key: 'report_type', label: 'Type', filterable: true },
   { key: 'job_ref', label: 'Job Ref' },
   { key: 'created_at', label: 'Created' },
   { key: 'updated_at', label: 'Updated' },
@@ -68,6 +70,7 @@ function getReportSortValue(
 export interface ReportsListClientProps {
   initialData: PaginatedResponse<Report>;
   statusOptions: StatusOption[];
+  reportTypes: StatusOption[];
 }
 
 const PAGE_SIZE = 20;
@@ -75,6 +78,7 @@ const PAGE_SIZE = 20;
 export function ReportsListClient({
   initialData,
   statusOptions,
+  reportTypes,
 }: ReportsListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -91,7 +95,18 @@ export function ReportsListClient({
     order: 'desc',
   });
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
+  const [typeFilterActive, setTypeFilterActive] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [statusFilterActive, setStatusFilterActive] = useState(false);
   const lastFetchKeyRef = useRef<string | null>(null);
+  const statusParam = useMemo(
+    () => columnFilterToIdsParam(statusFilterActive, statusFilter, statusOptions),
+    [statusFilterActive, statusFilter, statusOptions],
+  );
+  const reportTypeParam = useMemo(
+    () => columnFilterToIdsParam(typeFilterActive, typeFilter, reportTypes),
+    [typeFilterActive, typeFilter, reportTypes],
+  );
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -101,22 +116,31 @@ export function ReportsListClient({
   const sortParam = `${columnSort.field}_${columnSort.order}`;
 
   useEffect(() => {
-    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}`;
+    const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
+    const typeKey = reportTypeParam === null ? '__none__' : (reportTypeParam ?? '');
+    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${typeKey}`;
     const params = new URLSearchParams(searchParams.toString());
     params.set('search', debouncedSearch);
     params.set('tab', tab);
     params.set('page', String(page));
     params.set('sort', sortParam);
+    if (statusParam) params.set('status', statusParam); else params.delete('status');
+    if (reportTypeParam) params.set('reportTypeId', reportTypeParam); else params.delete('reportTypeId');
     router.replace(`/reports?${params}`, { scroll: false });
 
     if (lastFetchKeyRef.current === fetchKey) return;
     lastFetchKeyRef.current = fetchKey;
 
-    fetchReportsAction({ page, limit: PAGE_SIZE, sort: sortParam }).then(
+    if (statusParam === null || reportTypeParam === null) {
+      setData({ data: [], total: 0 });
+      return;
+    }
+
+    fetchReportsAction({ page, limit: PAGE_SIZE, sort: sortParam, status: statusParam, reportTypeId: reportTypeParam }).then(
       (res) => res && setData(res),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, sortParam, tab, page]);
+  }, [debouncedSearch, sortParam, tab, page, statusParam, reportTypeParam]);
 
   const handleColumnSort = (field: ReportSortField) => {
     setColumnSort((prev) => {
@@ -132,22 +156,72 @@ export function ReportsListClient({
   const handleSearchChange = (value: string) => { setSearch(value); setPage(1); };
   const handleTabChange = (val: string) => { setTab(val as ListTab); setPage(1); };
 
-  const uniqueTypes = useMemo(() => {
+  const uniqueTypes = useMemo(() => [...new Set(reportTypes.map((type) => type.name.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [reportTypes]);
+
+  const uniqueStatuses = useMemo(() => {
+    const fromOptions = statusOptions
+      .map((s) => s.name?.trim())
+      .filter((n): n is string => !!n);
+    if (fromOptions.length > 0) {
+      return [...new Set(fromOptions)].sort((a, b) => a.localeCompare(b));
+    }
     const names = new Set<string>();
     for (const r of data.data) {
-      const name = r.reportType?.name?.trim();
+      const name = r.status?.name?.trim();
       if (name) names.add(name);
     }
     return [...names].sort((a, b) => a.localeCompare(b));
-  }, [data.data]);
+  }, [data.data, statusOptions]);
 
   const toggleType = (name: string) => {
-    setTypeFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
+    const working = typeFilterActive ? new Set(typeFilter) : new Set(uniqueTypes);
+    if (working.has(name)) working.delete(name);
+    else working.add(name);
+    const committed = commitColumnFilterSelection({
+      next: working,
+      optionCount: uniqueTypes.length,
     });
+    setTypeFilter(committed.selected);
+    setTypeFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const applyStatusFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueStatuses.length,
+    });
+    setStatusFilter(committed.selected);
+    setStatusFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const applyTypeFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueTypes.length,
+    });
+    setTypeFilter(committed.selected);
+    setTypeFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const statusFilterProps = {
+    options: uniqueStatuses,
+    selected: statusFilter,
+    active: statusFilterActive,
+    onApply: applyStatusFilter,
+    menuTitle: 'Filter by status',
+    itemNoun: { singular: 'status', plural: 'statuses' },
+  };
+
+  const typeFilterProps = {
+    options: uniqueTypes,
+    selected: typeFilter,
+    active: typeFilterActive,
+    onApply: applyTypeFilter,
+    menuTitle: 'Filter by report type',
+    itemNoun: { singular: 'type', plural: 'types' },
   };
 
   const visibleRows = useMemo(() => {
@@ -160,15 +234,8 @@ export function ReportsListClient({
       });
     }
 
-    if (typeFilter.size > 0) {
-      rows = rows.filter((r) => {
-        const name = r.reportType?.name?.trim();
-        return name ? typeFilter.has(name) : false;
-      });
-    }
-
     return rows;
-  }, [data.data, tab, typeFilter]);
+  }, [data.data, tab]);
 
   const breakdown = computeStatusBreakdown(
     visibleRows,
@@ -222,10 +289,18 @@ export function ReportsListClient({
 
           <ValueFilterMenu
             options={uniqueTypes}
-            selected={typeFilter}
+            selected={typeFilterActive ? typeFilter : new Set(uniqueTypes)}
             onToggle={toggleType}
-            onClearAll={() => setTypeFilter(new Set())}
-            onSelectAll={() => setTypeFilter(new Set(uniqueTypes))}
+            onClearAll={() => {
+              setTypeFilter(new Set());
+              setTypeFilterActive(false);
+              setPage(1);
+            }}
+            onSelectAll={() => {
+              setTypeFilter(new Set());
+              setTypeFilterActive(false);
+              setPage(1);
+            }}
             emptyLabel="All report types"
             menuTitle="Filter by report type"
             itemNoun={{ singular: 'type', plural: 'types' }}
@@ -255,6 +330,13 @@ export function ReportsListClient({
                       activeField={columnSort.field}
                       sortOrder={columnSort.order}
                       onSort={handleColumnSort}
+                      filter={
+                        col.key === 'status'
+                          ? statusFilterProps
+                          : col.key === 'report_type'
+                            ? typeFilterProps
+                            : undefined
+                      }
                     />
                   ))}
                   <th scope="col" className="px-4 py-3 w-10">

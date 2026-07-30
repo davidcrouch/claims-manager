@@ -20,7 +20,7 @@ import { createReportAction } from '@/app/(app)/mutations';
 
 const reportFormSchema = z.object({
   jobId: z.string().min(1, 'Job is required'),
-  claimId: z.string().min(1, 'Claim is required'),
+  claimId: z.string().optional(),
   title: z.string().min(1, 'Title is required'),
   reportData: z.string().optional(),
 });
@@ -31,7 +31,7 @@ export interface ReportFormDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   jobId: string;
-  claimId: string;
+  claimId?: string | null;
 }
 
 export function ReportFormDrawer({
@@ -48,7 +48,7 @@ export function ReportFormDrawer({
     resolver: standardSchemaResolver(reportFormSchema),
     defaultValues: {
       jobId,
-      claimId,
+      claimId: claimId ?? undefined,
       title: '',
       reportData: '',
     },
@@ -56,7 +56,7 @@ export function ReportFormDrawer({
 
   useEffect(() => {
     if (open) {
-      form.reset({ jobId, claimId, title: '', reportData: '' });
+      form.reset({ jobId, claimId: claimId ?? undefined, title: '', reportData: '' });
     }
   }, [open, jobId, claimId, form]);
 
@@ -75,13 +75,13 @@ export function ReportFormDrawer({
         : {};
       const result = await createReportAction({
         jobId: values.jobId,
-        claimId: values.claimId,
+        ...(values.claimId ? { claimId: values.claimId } : {}),
         title: values.title,
         reportData,
       });
       if (result.success) {
         onOpenChange(false);
-        form.reset({ jobId, claimId, title: '', reportData: '' });
+        form.reset({ jobId, claimId: claimId ?? undefined, title: '', reportData: '' });
         router.refresh();
       } else {
         setError(result.error ?? 'Failed to create report');

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { CalendarCheck } from 'lucide-react';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { ListPageHeader } from '@/components/layout/ListPageHeader';
@@ -8,10 +8,14 @@ import {
   SortTabs,
   SearchInput,
   StatusFilterMenu,
+  commitColumnFilterSelection,
   type SortOption,
 } from '@/components/shared/list-filters';
 import { TablePagination } from '@/components/shared/table-pagination';
-import { AppointmentsTable } from '@/components/appointments/AppointmentsTable';
+import {
+  AppointmentsTable,
+  appointmentTypeName,
+} from '@/components/appointments/AppointmentsTable';
 import { AppointmentFormDrawer } from '@/components/forms/AppointmentFormDrawer';
 import { fetchAppointmentsAction } from '@/app/(app)/appointments/actions';
 import type { Appointment } from '@/types/api';
@@ -37,20 +41,27 @@ export function AppointmentsListClient() {
   const [sortField, setSortField] = useState('start_date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [statusNameFilter, setStatusNameFilter] = useState<Set<string>>(new Set());
+  const [statusNameFilterActive, setStatusNameFilterActive] = useState(false);
+  const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
+  const [typeFilterActive, setTypeFilterActive] = useState(false);
   const [page, setPage] = useState(1);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
   const limit = 20;
+  const statusParam = useMemo(
+    () => [...statusFilter].sort().join(',') || undefined,
+    [statusFilter],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const status = statusFilter.size === 1 ? [...statusFilter][0] : undefined;
       const res = await fetchAppointmentsAction({
         page,
         limit,
         search: search || undefined,
-        status,
+        status: statusParam,
         sort: sortField,
         order: sortOrder,
       });
@@ -59,7 +70,7 @@ export function AppointmentsListClient() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, sortField, sortOrder, statusFilter]);
+  }, [page, search, sortField, sortOrder, statusParam]);
 
   useEffect(() => {
     load();
@@ -67,7 +78,7 @@ export function AppointmentsListClient() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, sortField, sortOrder, statusFilter]);
+  }, [search, sortField, sortOrder, statusParam]);
 
   const handleSort = (field: string) => {
     if (sortField === field) {
@@ -90,6 +101,68 @@ export function AppointmentsListClient() {
       load();
     }
   }
+
+  const uniqueStatuses = useMemo(
+    () => STATUS_OPTIONS.map((o) => o.name).sort((a, b) => a.localeCompare(b)),
+    [],
+  );
+
+  const uniqueTypes = useMemo(() => {
+    const names = new Set<string>();
+    for (const a of appointments) {
+      const name = appointmentTypeName(a).trim();
+      if (name && name !== '—') names.add(name);
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [appointments]);
+
+  const applyStatusNameFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueStatuses.length,
+    });
+    setStatusNameFilter(committed.selected);
+    setStatusNameFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const applyTypeFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueTypes.length,
+    });
+    setTypeFilter(committed.selected);
+    setTypeFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const visibleAppointments = useMemo(() => {
+    let rows = appointments;
+
+    if (statusNameFilterActive) {
+      if (statusNameFilter.size === 0) {
+        rows = [];
+      } else {
+        rows = rows.filter((a) => {
+          const name = a.status?.trim();
+          return name ? statusNameFilter.has(name) : false;
+        });
+      }
+    }
+
+    if (typeFilterActive) {
+      if (typeFilter.size === 0) {
+        rows = [];
+      } else {
+        rows = rows.filter((a) => {
+          const name = appointmentTypeName(a).trim();
+          return name && name !== '—' ? typeFilter.has(name) : false;
+        });
+      }
+    }
+
+    return rows;
+  }, [appointments, statusNameFilterActive, statusNameFilter, typeFilterActive, typeFilter]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
@@ -125,21 +198,38 @@ export function AppointmentsListClient() {
                 else next.delete(id);
                 return next;
               });
+              setPage(1);
             }}
-            onClearAll={() => setStatusFilter(new Set())}
-            onSelectAll={() => setStatusFilter(new Set(STATUS_OPTIONS.map((o) => o.id)))}
+            onClearAll={() => { setStatusFilter(new Set()); setPage(1); }}
+            onSelectAll={() => { setStatusFilter(new Set(STATUS_OPTIONS.map((o) => o.id))); setPage(1); }}
           />
         </div>
       </div>
 
       <div className="flex-1 px-6 pb-6" style={{ minHeight: 0, overflow: 'auto' }}>
         <AppointmentsTable
-          appointments={appointments}
+          appointments={visibleAppointments}
           loading={loading}
           onRowClick={handleRowClick}
           sortField={sortField}
           sortOrder={sortOrder}
           onSort={handleSort}
+          statusColumnFilter={{
+            options: uniqueStatuses,
+            selected: statusNameFilter,
+            active: statusNameFilterActive,
+            onApply: applyStatusNameFilter,
+            menuTitle: 'Filter by status',
+            itemNoun: { singular: 'status', plural: 'statuses' },
+          }}
+          typeColumnFilter={{
+            options: uniqueTypes,
+            selected: typeFilter,
+            active: typeFilterActive,
+            onApply: applyTypeFilter,
+            menuTitle: 'Filter by type',
+            itemNoun: { singular: 'type', plural: 'types' },
+          }}
         />
 
         {!loading && (

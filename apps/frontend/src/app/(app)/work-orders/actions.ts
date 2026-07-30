@@ -9,6 +9,8 @@ export async function fetchWorkOrdersAction(params?: {
   limit?: number;
   jobId?: string;
   purchaseOrderId?: string;
+  status?: string;
+  workOrderType?: string;
   sort?: string;
 }): Promise<PaginatedResponse<WorkOrder>> {
   const session = await getSession();
@@ -24,6 +26,8 @@ export async function fetchWorkOrdersAction(params?: {
       limit: params?.limit ?? 20,
       jobId: params?.jobId,
       purchaseOrderId: params?.purchaseOrderId,
+      status: params?.status,
+      workOrderType: params?.workOrderType,
       sort: params?.sort,
     });
   } catch (err) {

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, desc, asc, sql } from 'drizzle-orm';
+import { eq, and, desc, asc, sql, inArray } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { bills } from '../schema';
 
@@ -55,6 +55,8 @@ export class BillsRepository {
     limit?: number;
     jobId?: string;
     purchaseOrderId?: string;
+    /** Comma-separated status lookup IDs. */
+    status?: string;
     vendorId?: string;
     invoiceId?: string;
     sort?: string;
@@ -73,8 +75,13 @@ export class BillsRepository {
     if (params.purchaseOrderId) {
       whereClause = and(whereClause, eq(bills.purchaseOrderId, params.purchaseOrderId));
     }
-    if (params.vendorId) {
-      whereClause = and(whereClause, eq(bills.vendorId, params.vendorId));
+    const statusIds = params.status?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
+    const vendorIds = params.vendorId?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
+    if (statusIds.length > 0) {
+      whereClause = and(whereClause, inArray(bills.statusLookupId, statusIds));
+    }
+    if (vendorIds.length > 0) {
+      whereClause = and(whereClause, inArray(bills.vendorId, vendorIds));
     }
     if (params.invoiceId) {
       whereClause = and(whereClause, eq(bills.invoiceId, params.invoiceId));

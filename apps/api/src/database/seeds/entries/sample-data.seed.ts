@@ -26,7 +26,7 @@
  *   integration_connections, external_objects/versions/links (provider sync),
  *   inbound_webhook_events, external_processing_log, external_event_attempts (ingestion).
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import type { Seed, SeedContext, SeedLogger, SeedResult } from '../lib/runner';
 import type { SeedDb } from '../lib/db';
 import * as schema from '../../schema';
@@ -68,12 +68,27 @@ interface LookupSpec {
   domain: string;
   name: string;
   ref: string;
+  providerCode?: string;
 }
 
 const LOOKUP_SPECS: readonly LookupSpec[] = [
   { domain: 'claim_status', name: 'Open', ref: 'claim-status-open' },
   { domain: 'claim_status', name: 'In Progress', ref: 'claim-status-inprogress' },
   { domain: 'claim_status', name: 'Closed', ref: 'claim-status-closed' },
+  // Internal (direct) job types — used by Create Job drawer
+  { domain: 'job_type', name: 'Builder Assessment', ref: 'job-type-builder-assessment', providerCode: 'direct' },
+  { domain: 'job_type', name: 'Builder Make Safe', ref: 'job-type-builder-make-safe', providerCode: 'direct' },
+  { domain: 'job_type', name: 'Builder - Scope of Works', ref: 'job-type-builder-scope', providerCode: 'direct' },
+  { domain: 'job_type', name: 'Contents', ref: 'job-type-contents', providerCode: 'direct' },
+  { domain: 'job_type', name: 'Temporary Accommodation', ref: 'job-type-temporary-accommodation', providerCode: 'direct' },
+  { domain: 'job_type', name: 'Specialist', ref: 'job-type-specialist', providerCode: 'direct' },
+  { domain: 'job_type', name: 'Rectification Assessment', ref: 'job-type-rectification-assessment', providerCode: 'direct' },
+  { domain: 'job_type', name: 'Builder Rectification Work', ref: 'job-type-builder-rectification', providerCode: 'direct' },
+  { domain: 'job_type', name: 'Internal Audit', ref: 'job-type-internal-audit', providerCode: 'direct' },
+  { domain: 'job_type', name: 'Inspection', ref: 'job-type-inspection', providerCode: 'direct' },
+  { domain: 'job_type', name: 'Repair', ref: 'job-type-repair', providerCode: 'direct' },
+  { domain: 'job_type', name: 'General', ref: 'job-type-general', providerCode: 'direct' },
+  // Legacy unscoped types kept for sample jobs that still reference them
   { domain: 'job_type', name: 'Inspection', ref: 'job-type-inspection' },
   { domain: 'job_type', name: 'Repair', ref: 'job-type-repair' },
   { domain: 'job_type', name: 'Make Safe', ref: 'job-type-makesafe' },
@@ -117,19 +132,26 @@ async function seedLookups(params: {
   const map: Record<string, string> = {};
   for (const spec of LOOKUP_SPECS) {
     const ref = `${PREFIX}${spec.ref}`;
+    const conditions = [
+      eq(schema.lookupValues.tenantId, params.tenantId),
+      eq(schema.lookupValues.domain, spec.domain),
+      eq(schema.lookupValues.externalReference, ref),
+    ];
+    if (spec.providerCode) {
+      conditions.push(eq(schema.lookupValues.providerCode, spec.providerCode));
+    } else {
+      conditions.push(isNull(schema.lookupValues.providerCode));
+    }
     const [existing] = await params.db
       .select({ id: schema.lookupValues.id })
       .from(schema.lookupValues)
-      .where(
-        and(
-          eq(schema.lookupValues.tenantId, params.tenantId),
-          eq(schema.lookupValues.domain, spec.domain),
-          eq(schema.lookupValues.externalReference, ref),
-        ),
-      )
+      .where(and(...conditions))
       .limit(1);
     if (existing) {
-      map[spec.ref] = existing.id;
+      // Prefer direct-scoped ids when the same ref key appears twice
+      if (spec.providerCode === 'direct' || !(spec.ref in map)) {
+        map[spec.ref] = existing.id;
+      }
       params.stats.skipped += 1;
       continue;
     }
@@ -140,9 +162,12 @@ async function seedLookups(params: {
         domain: spec.domain,
         name: spec.name,
         externalReference: ref,
+        providerCode: spec.providerCode ?? null,
       })
       .returning({ id: schema.lookupValues.id });
-    map[spec.ref] = row.id;
+    if (spec.providerCode === 'direct' || !(spec.ref in map)) {
+      map[spec.ref] = row.id;
+    }
     params.stats.inserted += 1;
   }
   return map;

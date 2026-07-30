@@ -3,7 +3,10 @@
 import { Fragment, useState } from 'react';
 import { Users, User, ChevronDown, ChevronRight, Clock } from 'lucide-react';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { SortableColumnHeader } from '@/components/shared/list-filters';
+import {
+  SortableColumnHeader,
+  type ColumnValueFilter,
+} from '@/components/shared/list-filters';
 import { formatDateTime } from '@/components/shared/detail';
 import type { Appointment, AppointmentAttendee } from '@/types/api';
 
@@ -77,6 +80,8 @@ export interface AppointmentsTableProps {
   sortField?: string;
   sortOrder?: 'asc' | 'desc';
   onSort?: (field: string) => void;
+  statusColumnFilter?: ColumnValueFilter;
+  typeColumnFilter?: ColumnValueFilter;
 }
 
 export function AppointmentsTable({
@@ -87,6 +92,8 @@ export function AppointmentsTable({
   sortField,
   sortOrder = 'asc',
   onSort,
+  statusColumnFilter,
+  typeColumnFilter,
 }: AppointmentsTableProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
@@ -108,23 +115,40 @@ export function AppointmentsTable({
     return <p className="px-4 py-8 text-center text-sm text-muted-foreground">{emptyLabel}</p>;
   }
 
+  const noopSort = () => {};
+  const useSortableHeaders = onSort || typeColumnFilter || statusColumnFilter;
+
   return (
     <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <table className="min-w-full divide-y divide-slate-200 text-sm">
         <thead className="bg-slate-50">
           <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <th scope="col" className="px-4 py-2.5 w-8" />
-            {onSort ? (
+            {useSortableHeaders ? (
               <>
-                <SortableColumnHeader columnKey="name" label="Name" activeField={sortField ?? null} sortOrder={sortOrder} onSort={onSort} />
-                <th scope="col" className="px-4 py-2.5">Type</th>
-                <SortableColumnHeader columnKey="location" label="Location" activeField={sortField ?? null} sortOrder={sortOrder} onSort={onSort} />
-                <SortableColumnHeader columnKey="start_date" label="Start" activeField={sortField ?? null} sortOrder={sortOrder} onSort={onSort} />
+                <SortableColumnHeader columnKey="name" label="Name" activeField={sortField ?? null} sortOrder={sortOrder} onSort={onSort ?? noopSort} />
+                <SortableColumnHeader
+                  columnKey="type"
+                  label="Type"
+                  activeField={sortField ?? null}
+                  sortOrder={sortOrder}
+                  onSort={onSort ?? noopSort}
+                  filter={typeColumnFilter}
+                />
+                <SortableColumnHeader columnKey="location" label="Location" activeField={sortField ?? null} sortOrder={sortOrder} onSort={onSort ?? noopSort} />
+                <SortableColumnHeader columnKey="start_date" label="Start" activeField={sortField ?? null} sortOrder={sortOrder} onSort={onSort ?? noopSort} />
                 <th scope="col" className="px-4 py-2.5">
                   <Clock className="inline h-3 w-3 mr-1" />
                   Duration
                 </th>
-                <SortableColumnHeader columnKey="status" label="Status" activeField={sortField ?? null} sortOrder={sortOrder} onSort={onSort} />
+                <SortableColumnHeader
+                  columnKey="status"
+                  label="Status"
+                  activeField={sortField ?? null}
+                  sortOrder={sortOrder}
+                  onSort={onSort ?? noopSort}
+                  filter={statusColumnFilter}
+                />
                 <th scope="col" className="px-4 py-2.5">Attendees</th>
               </>
             ) : (

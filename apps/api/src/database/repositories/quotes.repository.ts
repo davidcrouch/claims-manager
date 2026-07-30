@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, isNull, desc, asc, sql, aliasedTable, getTableColumns } from 'drizzle-orm';
+import { eq, and, isNull, desc, asc, sql, inArray, aliasedTable, getTableColumns } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { quotes, lookupValues } from '../schema';
 
@@ -53,6 +53,11 @@ export class QuotesRepository {
     page?: number;
     limit?: number;
     jobId?: string;
+    /** Comma-separated status lookup IDs. */
+    status?: string;
+    /** Comma-separated quote type lookup IDs. */
+    quoteType?: string;
+    /** @deprecated Use status. */
     statusId?: string;
     sort?: string;
   }): Promise<{ data: QuoteViewRow[]; total: number }> {
@@ -70,11 +75,16 @@ export class QuotesRepository {
     if (params.jobId) {
       whereClause = and(whereClause, eq(quotes.jobId, params.jobId));
     }
-    if (params.statusId) {
+    const statusIds = (params.status ?? params.statusId)?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
+    const quoteTypeIds = params.quoteType?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
+    if (statusIds.length > 0) {
       whereClause = and(
         whereClause,
-        eq(quotes.statusLookupId, params.statusId),
+        inArray(quotes.statusLookupId, statusIds),
       );
+    }
+    if (quoteTypeIds.length > 0) {
+      whereClause = and(whereClause, inArray(quotes.quoteTypeLookupId, quoteTypeIds));
     }
 
     let orderBy;

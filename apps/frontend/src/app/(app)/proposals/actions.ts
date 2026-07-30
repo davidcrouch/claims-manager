@@ -9,6 +9,7 @@ export async function fetchProposalsAction(params?: {
   limit?: number;
   jobId?: string;
   rfqId?: string;
+  status?: string;
   vendorId?: string;
   sort?: string;
 }): Promise<PaginatedResponse<Proposal>> {
@@ -25,6 +26,7 @@ export async function fetchProposalsAction(params?: {
       limit: params?.limit ?? 20,
       jobId: params?.jobId,
       rfqId: params?.rfqId,
+      status: params?.status,
       vendorId: params?.vendorId,
       sort: params?.sort,
     });

@@ -6,17 +6,18 @@ import { Plus, Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { fetchJobInvoicesAction, fetchJobPurchaseOrdersAction } from '@/app/(app)/jobs/[id]/actions';
+import { fetchJobInvoicesAction, fetchJobWorkOrdersAction } from '@/app/(app)/jobs/[id]/actions';
 import { InvoiceFormDrawer } from '@/components/forms/InvoiceFormDrawer';
 import { formatDate, formatCurrency, PhaseUnavailable } from '@/components/shared/detail';
 import {
   isArchivedStatus,
   compareDates,
   compareValues,
+  commitColumnFilterSelection,
   ValueFilterMenu,
   SortableColumnHeader,
 } from '@/components/shared/list-filters';
-import type { Invoice, PurchaseOrder } from '@/types/api';
+import type { Invoice, WorkOrder } from '@/types/api';
 
 type ListTab = 'active' | 'archived' | 'all';
 
@@ -54,33 +55,45 @@ function getSortValue(inv: Invoice, field: InvoiceSortField): string | number | 
   }
 }
 
-export function JobInvoicesTab({ jobId }: { jobId: string }) {
+export function JobInvoicesTab({
+  jobId,
+  jobName,
+}: {
+  jobId: string;
+  jobName?: string | null;
+}) {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [phaseUnavailable, setPhaseUnavailable] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+  const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
 
   const [tab, setTab] = useState<ListTab>('active');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [statusFilterActive, setStatusFilterActive] = useState(false);
   const [columnSort, setColumnSort] = useState<{ field: InvoiceSortField; order: 'asc' | 'desc' }>({
     field: 'issue_date',
     order: 'desc',
   });
 
+  const jobNameById = useMemo(() => {
+    const label = jobName?.trim();
+    return label ? { [jobId]: label } : {};
+  }, [jobId, jobName]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [invRes, pos] = await Promise.all([
+      const [invRes, wos] = await Promise.all([
         fetchJobInvoicesAction(jobId),
-        fetchJobPurchaseOrdersAction(jobId),
+        fetchJobWorkOrdersAction(jobId),
       ]);
       if (cancelled) return;
       setInvoices(invRes.data);
       setPhaseUnavailable(invRes.phaseUnavailable);
-      setPurchaseOrders(pos ?? []);
+      setWorkOrders(wos ?? []);
       setLoading(false);
     })();
     return () => { cancelled = true; };
@@ -108,12 +121,24 @@ export function JobInvoicesTab({ jobId }: { jobId: string }) {
   }, [invoices]);
 
   const toggleStatus = (name: string) => {
-    setStatusFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
+    const working = statusFilterActive ? new Set(statusFilter) : new Set(uniqueStatuses);
+    if (working.has(name)) working.delete(name);
+    else working.add(name);
+    const committed = commitColumnFilterSelection({
+      next: working,
+      optionCount: uniqueStatuses.length,
     });
+    setStatusFilter(committed.selected);
+    setStatusFilterActive(committed.active);
+  };
+
+  const applyStatusFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueStatuses.length,
+    });
+    setStatusFilter(committed.selected);
+    setStatusFilterActive(committed.active);
   };
 
   const visibleRows = useMemo(() => {
@@ -126,11 +151,15 @@ export function JobInvoicesTab({ jobId }: { jobId: string }) {
       });
     }
 
-    if (statusFilter.size > 0) {
-      rows = rows.filter((inv) => {
-        const n = inv.status?.name?.trim();
-        return n ? statusFilter.has(n) : false;
-      });
+    if (statusFilterActive) {
+      if (statusFilter.size === 0) {
+        rows = [];
+      } else {
+        rows = rows.filter((inv) => {
+          const n = inv.status?.name?.trim();
+          return n ? statusFilter.has(n) : false;
+        });
+      }
     }
 
     const query = debouncedSearch.trim().toLowerCase();
@@ -148,7 +177,7 @@ export function JobInvoicesTab({ jobId }: { jobId: string }) {
       if (isDate) return compareDates(aVal as string, bVal as string, columnSort.order);
       return compareValues(aVal, bVal, columnSort.order);
     });
-  }, [invoices, tab, statusFilter, debouncedSearch, columnSort]);
+  }, [invoices, tab, statusFilterActive, statusFilter, debouncedSearch, columnSort]);
 
   if (loading) {
     return <p className="text-sm text-slate-400">Loading...</p>;
@@ -190,10 +219,16 @@ export function JobInvoicesTab({ jobId }: { jobId: string }) {
 
         <ValueFilterMenu
           options={uniqueStatuses}
-          selected={statusFilter}
+          selected={statusFilterActive ? statusFilter : new Set(uniqueStatuses)}
           onToggle={toggleStatus}
-          onClearAll={() => setStatusFilter(new Set())}
-          onSelectAll={() => setStatusFilter(new Set(uniqueStatuses))}
+          onClearAll={() => {
+            setStatusFilter(new Set());
+            setStatusFilterActive(false);
+          }}
+          onSelectAll={() => {
+            setStatusFilter(new Set());
+            setStatusFilterActive(false);
+          }}
           emptyLabel="All statuses"
           menuTitle="Filter by status"
           itemNoun={{ singular: 'status', plural: 'statuses' }}
@@ -227,6 +262,18 @@ export function JobInvoicesTab({ jobId }: { jobId: string }) {
                     activeField={columnSort.field}
                     sortOrder={columnSort.order}
                     onSort={handleColumnSort}
+                    filter={
+                      col.key === 'status'
+                        ? {
+                            options: uniqueStatuses,
+                            selected: statusFilter,
+                            active: statusFilterActive,
+                            onApply: applyStatusFilter,
+                            menuTitle: 'Filter by status',
+                            itemNoun: { singular: 'status', plural: 'statuses' },
+                          }
+                        : undefined
+                    }
                   />
                 ))}
               </tr>
@@ -262,7 +309,8 @@ export function JobInvoicesTab({ jobId }: { jobId: string }) {
       <InvoiceFormDrawer
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
-        purchaseOrders={purchaseOrders}
+        workOrders={workOrders}
+        jobNameById={jobNameById}
       />
     </div>
   );

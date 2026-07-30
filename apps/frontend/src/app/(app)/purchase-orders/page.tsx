@@ -6,19 +6,21 @@ import type { PaginatedResponse, PurchaseOrder } from '@/types/api';
 export default async function PurchaseOrdersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; jobId?: string; sort?: string }>;
+  searchParams: Promise<{ page?: string; jobId?: string; status?: string; vendorId?: string; sort?: string }>;
 }) {
   const api = await getServerApiClient();
   if (!api) redirect('/api/auth/login');
 
   const params = await searchParams;
   const empty: PaginatedResponse<PurchaseOrder> = { data: [], total: 0 };
-  const [initialPOs, statusLookupsRes] = await Promise.all([
+  const [initialPOs, statusLookupsRes, vendorsRes] = await Promise.all([
     api
       .getPurchaseOrders({
         page: parseInt(params.page ?? '1', 10),
         limit: 20,
         jobId: params.jobId,
+        status: params.status,
+        vendorId: params.vendorId,
         sort: params.sort,
       })
       .catch((err: unknown) => {
@@ -29,6 +31,7 @@ export default async function PurchaseOrdersPage({
         return empty;
       }),
     api.getLookupsByDomain('po_status').catch(() => []),
+    api.getVendors({ limit: 100 }).catch(() => ({ data: [] })),
   ]);
 
   const statusOptions = (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map(
@@ -37,11 +40,16 @@ export default async function PurchaseOrdersPage({
       name: row.name?.trim() ? row.name : 'Unknown',
     }),
   );
+  const vendorOptions = (vendorsRes.data ?? []).map((vendor) => ({
+    id: vendor.id,
+    name: vendor.name?.trim() ? vendor.name : 'Unknown',
+  }));
 
   return (
     <PurchaseOrdersListClient
       initialData={initialPOs}
       statusOptions={statusOptions}
+      vendorOptions={vendorOptions}
     />
   );
 }

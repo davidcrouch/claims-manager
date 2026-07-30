@@ -7,18 +7,18 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   BottomFormDrawer,
   BottomFormDrawerBody,
   BottomFormDrawerError,
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
+import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
 import { createRfqAction } from '@/app/(app)/mutations';
 import { fetchJobQuotesAction } from '@/app/(app)/jobs/[id]/actions';
 import { getQuoteLineItemsAction } from '@/app/(app)/quotes/actions';
 import type { Quote } from '@/types/api';
-import type { ApiGroup, ApiCombo, ApiItem } from '@/components/quotes/quote-line-items.types';
+import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
 
 type WizardStep = 'details' | 'scope';
 
@@ -87,8 +87,7 @@ export function RfqFormDrawer({
       if (result.success && result.groups) {
         const parsed = result.groups as unknown as ApiGroup[];
         setGroups(parsed);
-        const allIds = collectAllItemIds(parsed);
-        setSelectedItemIds(allIds);
+        setSelectedItemIds(collectAllItemIds(parsed));
       } else {
         setError(result.error ?? 'Failed to load estimate line items');
         setGroups([]);
@@ -148,73 +147,22 @@ export function RfqFormDrawer({
     }
   }
 
-  // Checkbox helpers
-  function toggleItem(itemId: string) {
-    setSelectedItemIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(itemId)) next.delete(itemId);
-      else next.add(itemId);
-      return next;
-    });
-  }
-
-  function toggleCombo(combo: ApiCombo) {
-    const comboItemIds = (combo.items ?? []).map((i) => i.id!).filter(Boolean);
-    const allIds = combo.id ? [combo.id, ...comboItemIds] : comboItemIds;
-    setSelectedItemIds((prev) => {
-      const next = new Set(prev);
-      const allSelected = allIds.every((id) => next.has(id));
-      if (allSelected) {
-        allIds.forEach((id) => next.delete(id));
-      } else {
-        allIds.forEach((id) => next.add(id));
-      }
-      return next;
-    });
-  }
-
-  function toggleGroup(group: ApiGroup) {
-    const groupItemIds = collectGroupItemIds(group);
-    setSelectedItemIds((prev) => {
-      const next = new Set(prev);
-      const allSelected = groupItemIds.every((id) => next.has(id));
-      if (allSelected) {
-        groupItemIds.forEach((id) => next.delete(id));
-      } else {
-        groupItemIds.forEach((id) => next.add(id));
-      }
-      return next;
-    });
-  }
-
-  function isGroupChecked(group: ApiGroup): boolean | 'indeterminate' {
-    const ids = collectGroupItemIds(group);
-    if (ids.length === 0) return false;
-    const selectedCount = ids.filter((id) => selectedItemIds.has(id)).length;
-    if (selectedCount === 0) return false;
-    if (selectedCount === ids.length) return true;
-    return 'indeterminate';
-  }
-
-  function isComboChecked(combo: ApiCombo): boolean | 'indeterminate' {
-    const comboItemIds = (combo.items ?? []).map((i) => i.id!).filter(Boolean);
-    const allIds = combo.id ? [combo.id, ...comboItemIds] : comboItemIds;
-    if (allIds.length === 0) return false;
-    const selectedCount = allIds.filter((id) => selectedItemIds.has(id)).length;
-    if (selectedCount === 0) return false;
-    if (selectedCount === allIds.length) return true;
-    return 'indeterminate';
-  }
-
   const stepIndex = STEPS.indexOf(step);
   const selectedQuote = quotes.find((q) => q.id === selectedQuoteId);
+  const selectedEstimateLabel = selectedQuote
+    ? (selectedQuote.quoteNumber ?? selectedQuote.name ?? selectedQuote.id.slice(0, 8))
+    : null;
 
   return (
     <BottomFormDrawer
       open={open}
       onOpenChange={handleOpenChange}
       title="Create RFQ"
-      description={STEP_LABELS[step]}
+      description={
+        step === 'scope' && selectedEstimateLabel
+          ? `Estimate: ${selectedEstimateLabel}`
+          : STEP_LABELS[step]
+      }
       icon={<Send className="h-5 w-5" />}
     >
       {/* Step pills */}
@@ -325,16 +273,9 @@ export function RfqFormDrawer({
 
         {step === 'scope' && (
           <div className="space-y-4">
-            {selectedQuote && (
-              <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2">
-                <p className="text-sm font-medium">
-                  Estimate: {selectedQuote.quoteNumber ?? selectedQuote.name ?? selectedQuote.id.slice(0, 8)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Select the line items to include in this RFQ. Groups and assemblies can be toggled to select/deselect all children.
-                </p>
-              </div>
-            )}
+            <p className="text-sm text-muted-foreground">
+              Select the line items to include in this RFQ. Groups and assemblies can be toggled to select/deselect all children.
+            </p>
 
             {lineItemsLoading ? (
               <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
@@ -346,87 +287,14 @@ export function RfqFormDrawer({
                 This estimate has no line items. Add items to the estimate first.
               </p>
             ) : (
-              <div className="space-y-3">
-                {groups.map((group) => (
-                  <div key={group.id ?? `group-${group.index}`} className="rounded-lg border border-slate-200">
-                    {/* Group header */}
-                    <div className="flex items-center gap-3 border-b border-slate-100 bg-slate-50 px-4 py-2.5">
-                      <Checkbox
-                        checked={isGroupChecked(group) === true}
-                        indeterminate={isGroupChecked(group) === 'indeterminate'}
-                        onCheckedChange={() => toggleGroup(group)}
-                        aria-label={`Select all items in ${group.groupLabel?.name ?? 'group'}`}
-                      />
-                      <span className="text-sm font-semibold text-slate-700">
-                        {group.groupLabel?.name ?? group.description ?? `Group ${(group.index ?? 0) + 1}`}
-                      </span>
-                      {group.total != null && (
-                        <span className="ml-auto text-xs text-muted-foreground">
-                          ${group.total.toLocaleString()}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="divide-y divide-slate-50 px-4 py-1">
-                      {/* Direct items */}
-                      {(group.items ?? []).map((item) => (
-                        <LineItemRow
-                          key={item.id ?? `item-${item.index}`}
-                          item={item}
-                          checked={!!item.id && selectedItemIds.has(item.id)}
-                          onToggle={() => item.id && toggleItem(item.id)}
-                          indent={0}
-                        />
-                      ))}
-
-                      {/* Combos / assemblies */}
-                      {(group.combos ?? []).map((combo) => (
-                        <div key={combo.id ?? `combo-${combo.index}`} className="py-1">
-                          {/* Combo header */}
-                          <div className="flex items-center gap-3 rounded-md bg-blue-50/50 px-3 py-2">
-                            <Checkbox
-                              checked={isComboChecked(combo) === true}
-                              indeterminate={isComboChecked(combo) === 'indeterminate'}
-                              onCheckedChange={() => toggleCombo(combo)}
-                            />
-                            <div className="flex-1">
-                              <p className="text-sm font-medium text-blue-900">
-                                {combo.name ?? combo.component ?? `Assembly ${(combo.index ?? 0) + 1}`}
-                              </p>
-                              {combo.description && (
-                                <p className="text-xs text-blue-700/70">{combo.description}</p>
-                              )}
-                            </div>
-                            {combo.quantity != null && (
-                              <span className="text-xs text-muted-foreground">
-                                Qty: {combo.quantity}
-                              </span>
-                            )}
-                            {combo.total != null && (
-                              <span className="text-xs text-muted-foreground">
-                                ${combo.total.toLocaleString()}
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Combo child items */}
-                          <div className="ml-6">
-                            {(combo.items ?? []).map((item) => (
-                              <LineItemRow
-                                key={item.id ?? `combo-item-${item.index}`}
-                                item={item}
-                                checked={!!item.id && selectedItemIds.has(item.id)}
-                                onToggle={() => item.id && toggleItem(item.id)}
-                                indent={1}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <QuoteLineItemsTable
+                groups={groups}
+                compact
+                selection={{
+                  selectedIds: selectedItemIds,
+                  onChange: setSelectedItemIds,
+                }}
+              />
             )}
           </div>
         )}
@@ -467,50 +335,6 @@ export function RfqFormDrawer({
   );
 }
 
-// --- Helper components ---
-
-interface LineItemRowProps {
-  item: ApiItem;
-  checked: boolean;
-  onToggle: () => void;
-  indent: number;
-}
-
-function LineItemRow({ item, checked, onToggle, indent }: LineItemRowProps) {
-  return (
-    <div
-      className={`flex items-center gap-3 py-2 ${indent > 0 ? 'pl-2' : ''}`}
-    >
-      <Checkbox checked={checked} onCheckedChange={onToggle} />
-      <div className="flex-1 min-w-0">
-        <p className="truncate text-sm">
-          {item.name ?? item.component ?? item.description ?? 'Unnamed item'}
-        </p>
-        {item.description && item.name && (
-          <p className="truncate text-xs text-muted-foreground">{item.description}</p>
-        )}
-      </div>
-      {item.quantity != null && (
-        <span className="shrink-0 text-xs text-muted-foreground">
-          Qty: {item.quantity}
-        </span>
-      )}
-      {item.unitType?.name && (
-        <span className="shrink-0 text-xs text-muted-foreground">
-          {item.unitType.name}
-        </span>
-      )}
-      {item.total != null && (
-        <span className="shrink-0 text-xs font-medium tabular-nums">
-          ${item.total.toLocaleString()}
-        </span>
-      )}
-    </div>
-  );
-}
-
-// --- Utility functions ---
-
 function collectAllItemIds(groups: ApiGroup[]): Set<string> {
   const ids = new Set<string>();
   for (const group of groups) {
@@ -522,20 +346,6 @@ function collectAllItemIds(groups: ApiGroup[]): Set<string> {
       for (const item of combo.items ?? []) {
         if (item.id) ids.add(item.id);
       }
-    }
-  }
-  return ids;
-}
-
-function collectGroupItemIds(group: ApiGroup): string[] {
-  const ids: string[] = [];
-  for (const item of group.items ?? []) {
-    if (item.id) ids.push(item.id);
-  }
-  for (const combo of group.combos ?? []) {
-    if (combo.id) ids.push(combo.id);
-    for (const item of combo.items ?? []) {
-      if (item.id) ids.push(item.id);
     }
   }
   return ids;

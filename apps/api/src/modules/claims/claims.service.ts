@@ -28,6 +28,7 @@ export class ClaimsService {
     search?: string;
     sort?: string;
     status?: string;
+    account?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
     const result = await this.claimsRepo.findAll({
@@ -37,6 +38,7 @@ export class ClaimsService {
       search: params.search,
       sort: params.sort,
       status: params.status,
+      account: params.account,
     });
     return { data: result.data.map(this.shapeClaimResponse), total: result.total };
   }

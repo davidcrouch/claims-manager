@@ -141,6 +141,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
 
       <div className="grid gap-4 md:grid-cols-2">
         <SectionCard title="Core Details" icon={<FileSignature className="h-4 w-4 text-muted-foreground" />}>
+          <DefRow label="Name" value={job.name ?? '—'} />
           <DefRow label="External reference" value={job.externalReference ?? '—'} />
           {insurerRef && <DefRow label="Insurer reference" value={insurerRef} />}
           <DefRow label="Job type" value={<TypeBadge type={jobTypeName} />} />

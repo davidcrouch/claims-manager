@@ -19,6 +19,7 @@ export class ClaimsController {
     @Query('search') search?: string,
     @Query('sort') sort?: string,
     @Query('status') status?: string,
+    @Query('account') account?: string,
   ) {
     return this.claimsService.findAll({
       page: page ? parseInt(page, 10) : 1,
@@ -26,6 +27,7 @@ export class ClaimsController {
       search,
       sort,
       status,
+      account,
     });
   }
 

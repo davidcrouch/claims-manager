@@ -34,7 +34,7 @@ import {
 } from '@/components/shared/detail';
 import { updateWorkOrderStatusAction } from '@/app/(app)/mutations-status';
 import { InvoiceFormDrawer } from '@/components/forms/InvoiceFormDrawer';
-import type { WorkOrder, PurchaseOrder } from '@/types/api';
+import type { WorkOrder } from '@/types/api';
 import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
 import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
 
@@ -135,7 +135,7 @@ export function WorkOrderPageHeader({ wo }: { wo: WorkOrder }) {
         )}
         {wo.jobId && (
           <Link
-            href={`/jobs/${wo.jobId}`}
+            href={`/jobs/${wo.jobId}?tab=work-orders`}
             className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
           >
             View Job
@@ -275,7 +275,7 @@ function OverviewTab({ wo }: { wo: WorkOrder }) {
             value={
               wo.jobId ? (
                 <Link
-                  href={`/jobs/${wo.jobId}`}
+                  href={`/jobs/${wo.jobId}?tab=work-orders`}
                   className="inline-flex items-center gap-1 text-primary hover:underline"
                 >
                   {wo.jobId}
@@ -511,13 +511,20 @@ type WoTab =
   | 'timeline'
   | 'attachments';
 
-export function WorkOrderDetail({ wo }: { wo: WorkOrder }) {
+export function WorkOrderDetail({
+  wo,
+  jobName,
+}: {
+  wo: WorkOrder;
+  jobName?: string;
+}) {
   const [tab, setTab] = useState<WoTab>('overview');
   const [showInvoiceForm, setShowInvoiceForm] = useState(false);
 
-  const pos: PurchaseOrder[] = wo.purchaseOrderId
-    ? [{ id: wo.purchaseOrderId, purchaseOrderNumber: wo.workOrderNumber } as PurchaseOrder]
-    : [];
+  const jobNameById =
+    wo.jobId && jobName
+      ? { [wo.jobId]: jobName }
+      : undefined;
 
   const tabs: Array<{ id: WoTab; label: string; icon: typeof Calendar }> = [
     { id: 'overview', label: 'Overview', icon: Calendar },
@@ -572,7 +579,9 @@ export function WorkOrderDetail({ wo }: { wo: WorkOrder }) {
       <InvoiceFormDrawer
         open={showInvoiceForm}
         onOpenChange={setShowInvoiceForm}
-        purchaseOrders={pos}
+        workOrders={[wo]}
+        jobNameById={jobNameById}
+        defaultWorkOrderId={wo.id}
       />
     </div>
   );

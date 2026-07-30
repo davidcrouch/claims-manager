@@ -135,6 +135,7 @@ export function createApiClient(options?: ApiClientOptions) {
       search?: string;
       sort?: string;
       status?: string;
+      account?: string;
     }): Promise<PaginatedResponse<Claim>> {
       const sp = new URLSearchParams();
       if (params.page != null) sp.set('page', String(params.page));
@@ -142,6 +143,7 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params.search) sp.set('search', params.search);
       if (params.sort) sp.set('sort', params.sort);
       if (params.status) sp.set('status', params.status);
+      if (params.account) sp.set('account', params.account);
       return fetchApi<PaginatedResponse<Claim>>(`/claims?${sp}`);
     },
 
@@ -275,14 +277,18 @@ export function createApiClient(options?: ApiClientOptions) {
       page?: number;
       limit?: number;
       jobId?: string;
+      status?: string;
       statusId?: string;
+      quoteType?: string;
       sort?: string;
     }): Promise<PaginatedResponse<Quote>> {
       const sp = new URLSearchParams();
       if (params.page != null) sp.set('page', String(params.page));
       if (params.limit != null) sp.set('limit', String(params.limit));
       if (params.jobId) sp.set('jobId', params.jobId);
+      if (params.status) sp.set('status', params.status);
       if (params.statusId) sp.set('statusId', params.statusId);
+      if (params.quoteType) sp.set('quoteType', params.quoteType);
       if (params.sort) sp.set('sort', params.sort);
       return fetchApi<PaginatedResponse<Quote>>(`/quotes?${sp}`);
     },
@@ -295,6 +301,7 @@ export function createApiClient(options?: ApiClientOptions) {
       page?: number;
       limit?: number;
       jobId?: string;
+      status?: string;
       vendorId?: string;
       sort?: string;
     }): Promise<PaginatedResponse<PurchaseOrder>> {
@@ -302,6 +309,7 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params.page != null) sp.set('page', String(params.page));
       if (params.limit != null) sp.set('limit', String(params.limit));
       if (params.jobId) sp.set('jobId', params.jobId);
+      if (params.status) sp.set('status', params.status);
       if (params.vendorId) sp.set('vendorId', params.vendorId);
       if (params.sort) sp.set('sort', params.sort);
       return fetchApi<PaginatedResponse<PurchaseOrder>>(`/purchase-orders?${sp}`);
@@ -323,12 +331,14 @@ export function createApiClient(options?: ApiClientOptions) {
       page?: number;
       limit?: number;
       purchaseOrderId?: string;
+      status?: string;
       sort?: string;
     }): Promise<PaginatedResponse<Invoice>> {
       const sp = new URLSearchParams();
       if (params.page != null) sp.set('page', String(params.page));
       if (params.limit != null) sp.set('limit', String(params.limit));
       if (params.purchaseOrderId) sp.set('purchaseOrderId', params.purchaseOrderId);
+      if (params.status) sp.set('status', params.status);
       if (params.sort) sp.set('sort', params.sort);
       return fetchApi<PaginatedResponse<Invoice>>(`/invoices?${sp}`);
     },
@@ -342,12 +352,18 @@ export function createApiClient(options?: ApiClientOptions) {
       limit?: number;
       jobId?: string;
       claimId?: string;
+      status?: string;
+      reportTypeId?: string;
+      sort?: string;
     }): Promise<PaginatedResponse<Report>> {
       const sp = new URLSearchParams();
       if (params.page != null) sp.set('page', String(params.page));
       if (params.limit != null) sp.set('limit', String(params.limit));
       if (params.jobId) sp.set('jobId', params.jobId);
       if (params.claimId) sp.set('claimId', params.claimId);
+      if (params.status) sp.set('status', params.status);
+      if (params.reportTypeId) sp.set('reportTypeId', params.reportTypeId);
+      if (params.sort) sp.set('sort', params.sort);
       return fetchApi<PaginatedResponse<Report>>(`/reports?${sp}`);
     },
 
@@ -364,8 +380,17 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<RecentActivity[]>(`/dashboard/recent-activity${sp}`);
     },
 
-    getVendors(): Promise<PaginatedResponse<Vendor>> {
-      return fetchApi<PaginatedResponse<Vendor>>('/vendors');
+    getVendors(params?: {
+      page?: number;
+      limit?: number;
+      search?: string;
+    }): Promise<PaginatedResponse<Vendor>> {
+      const sp = new URLSearchParams();
+      if (params?.page != null) sp.set('page', String(params.page));
+      if (params?.limit != null) sp.set('limit', String(params.limit));
+      if (params?.search) sp.set('search', params.search);
+      const qs = sp.toString();
+      return fetchApi<PaginatedResponse<Vendor>>(qs ? `/vendors?${qs}` : '/vendors');
     },
 
     getVendor(id: string): Promise<Vendor | null> {
@@ -380,8 +405,13 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<unknown>('/lookups');
     },
 
-    getLookupsByDomain(domain: string): Promise<{ id: string; name?: string; externalReference?: string }[]> {
-      return fetchApi<{ id: string; name?: string; externalReference?: string }[]>(`/lookups?domain=${encodeURIComponent(domain)}`);
+    getLookupsByDomain(
+      domain: string,
+      options?: { providerCode?: string },
+    ): Promise<{ id: string; name?: string; externalReference?: string; providerCode?: string | null }[]> {
+      const sp = new URLSearchParams({ domain });
+      if (options?.providerCode) sp.set('providerCode', options.providerCode);
+      return fetchApi(`/lookups?${sp}`);
     },
 
     createJob(body: Record<string, unknown>, options?: { provider?: string }): Promise<Job> {
@@ -484,6 +514,8 @@ export function createApiClient(options?: ApiClientOptions) {
       limit?: number;
       jobId?: string;
       purchaseOrderId?: string;
+      status?: string;
+      workOrderType?: string;
       sort?: string;
     }): Promise<PaginatedResponse<WorkOrder>> {
       const sp = new URLSearchParams();
@@ -491,6 +523,8 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params?.limit != null) sp.set('limit', String(params.limit));
       if (params?.jobId) sp.set('jobId', params.jobId);
       if (params?.purchaseOrderId) sp.set('purchaseOrderId', params.purchaseOrderId);
+      if (params?.status) sp.set('status', params.status);
+      if (params?.workOrderType) sp.set('workOrderType', params.workOrderType);
       if (params?.sort) sp.set('sort', params.sort);
       return fetchApi<PaginatedResponse<WorkOrder>>(`/work-orders?${sp}`);
     },
@@ -517,6 +551,7 @@ export function createApiClient(options?: ApiClientOptions) {
       limit?: number;
       jobId?: string;
       quoteId?: string;
+      status?: string;
       vendorId?: string;
       sort?: string;
     }): Promise<PaginatedResponse<Rfq>> {
@@ -525,6 +560,7 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params?.limit != null) sp.set('limit', String(params.limit));
       if (params?.jobId) sp.set('jobId', params.jobId);
       if (params?.quoteId) sp.set('quoteId', params.quoteId);
+      if (params?.status) sp.set('status', params.status);
       if (params?.vendorId) sp.set('vendorId', params.vendorId);
       if (params?.sort) sp.set('sort', params.sort);
       return fetchApi<PaginatedResponse<Rfq>>(`/rfqs?${sp}`);
@@ -554,12 +590,23 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi(`/rfqs/${rfqId}/line-items`);
     },
 
+    replaceRfqLineItems(
+      rfqId: string,
+      body: { selectedItemIds: string[] },
+    ): Promise<Array<Record<string, unknown>>> {
+      return fetchApi(`/rfqs/${rfqId}/line-items`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+
     // Proposals
     getProposals(params?: {
       page?: number;
       limit?: number;
       jobId?: string;
       rfqId?: string;
+      status?: string;
       vendorId?: string;
       sort?: string;
     }): Promise<PaginatedResponse<Proposal>> {
@@ -568,6 +615,7 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params?.limit != null) sp.set('limit', String(params.limit));
       if (params?.jobId) sp.set('jobId', params.jobId);
       if (params?.rfqId) sp.set('rfqId', params.rfqId);
+      if (params?.status) sp.set('status', params.status);
       if (params?.vendorId) sp.set('vendorId', params.vendorId);
       if (params?.sort) sp.set('sort', params.sort);
       return fetchApi<PaginatedResponse<Proposal>>(`/proposals?${sp}`);
@@ -599,6 +647,7 @@ export function createApiClient(options?: ApiClientOptions) {
       limit?: number;
       jobId?: string;
       purchaseOrderId?: string;
+      status?: string;
       vendorId?: string;
       invoiceId?: string;
       sort?: string;
@@ -608,6 +657,7 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params?.limit != null) sp.set('limit', String(params.limit));
       if (params?.jobId) sp.set('jobId', params.jobId);
       if (params?.purchaseOrderId) sp.set('purchaseOrderId', params.purchaseOrderId);
+      if (params?.status) sp.set('status', params.status);
       if (params?.vendorId) sp.set('vendorId', params.vendorId);
       if (params?.invoiceId) sp.set('invoiceId', params.invoiceId);
       if (params?.sort) sp.set('sort', params.sort);

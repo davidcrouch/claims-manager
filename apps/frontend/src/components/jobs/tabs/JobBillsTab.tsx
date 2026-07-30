@@ -14,6 +14,7 @@ import {
   compareDates,
   compareValues,
   formatDate,
+  commitColumnFilterSelection,
   ValueFilterMenu,
   SortableColumnHeader,
 } from '@/components/shared/list-filters';
@@ -62,6 +63,7 @@ export function JobBillsTab({ jobId }: { jobId: string }) {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [statusFilterActive, setStatusFilterActive] = useState(false);
   const [columnSort, setColumnSort] = useState<{ field: BillSortField; order: 'asc' | 'desc' }>({
     field: 'updated_at',
     order: 'desc',
@@ -99,12 +101,24 @@ export function JobBillsTab({ jobId }: { jobId: string }) {
   }, [bills]);
 
   const toggleStatus = (name: string) => {
-    setStatusFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
+    const working = statusFilterActive ? new Set(statusFilter) : new Set(uniqueStatuses);
+    if (working.has(name)) working.delete(name);
+    else working.add(name);
+    const committed = commitColumnFilterSelection({
+      next: working,
+      optionCount: uniqueStatuses.length,
     });
+    setStatusFilter(committed.selected);
+    setStatusFilterActive(committed.active);
+  };
+
+  const applyStatusFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueStatuses.length,
+    });
+    setStatusFilter(committed.selected);
+    setStatusFilterActive(committed.active);
   };
 
   const visibleRows = useMemo(() => {
@@ -117,11 +131,15 @@ export function JobBillsTab({ jobId }: { jobId: string }) {
       });
     }
 
-    if (statusFilter.size > 0) {
-      rows = rows.filter((b) => {
-        const n = b.status?.name?.trim();
-        return n ? statusFilter.has(n) : false;
-      });
+    if (statusFilterActive) {
+      if (statusFilter.size === 0) {
+        rows = [];
+      } else {
+        rows = rows.filter((b) => {
+          const n = b.status?.name?.trim();
+          return n ? statusFilter.has(n) : false;
+        });
+      }
     }
 
     const query = debouncedSearch.trim().toLowerCase();
@@ -140,7 +158,7 @@ export function JobBillsTab({ jobId }: { jobId: string }) {
       if (isDate) return compareDates(aVal as string, bVal as string, columnSort.order);
       return compareValues(aVal, bVal, columnSort.order);
     });
-  }, [bills, tab, statusFilter, debouncedSearch, columnSort]);
+  }, [bills, tab, statusFilterActive, statusFilter, debouncedSearch, columnSort]);
 
   if (loading) {
     return <p className="text-sm text-slate-400">Loading...</p>;
@@ -178,10 +196,16 @@ export function JobBillsTab({ jobId }: { jobId: string }) {
 
         <ValueFilterMenu
           options={uniqueStatuses}
-          selected={statusFilter}
+          selected={statusFilterActive ? statusFilter : new Set(uniqueStatuses)}
           onToggle={toggleStatus}
-          onClearAll={() => setStatusFilter(new Set())}
-          onSelectAll={() => setStatusFilter(new Set(uniqueStatuses))}
+          onClearAll={() => {
+            setStatusFilter(new Set());
+            setStatusFilterActive(false);
+          }}
+          onSelectAll={() => {
+            setStatusFilter(new Set());
+            setStatusFilterActive(false);
+          }}
           emptyLabel="All statuses"
           menuTitle="Filter by status"
           itemNoun={{ singular: 'status', plural: 'statuses' }}
@@ -224,6 +248,18 @@ export function JobBillsTab({ jobId }: { jobId: string }) {
                     activeField={columnSort.field}
                     sortOrder={columnSort.order}
                     onSort={handleColumnSort}
+                    filter={
+                      col.key === 'status'
+                        ? {
+                            options: uniqueStatuses,
+                            selected: statusFilter,
+                            active: statusFilterActive,
+                            onApply: applyStatusFilter,
+                            menuTitle: 'Filter by status',
+                            itemNoun: { singular: 'status', plural: 'statuses' },
+                          }
+                        : undefined
+                    }
                   />
                 ))}
               </tr>

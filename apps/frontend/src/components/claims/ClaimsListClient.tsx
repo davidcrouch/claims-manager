@@ -23,6 +23,8 @@ import {
   compareDates,
   ValueFilterMenu,
   SortableColumnHeader,
+  commitColumnFilterSelection,
+  columnFilterToIdsParam,
 } from '@/components/shared/list-filters';
 import { TablePagination } from '@/components/shared/table-pagination';
 
@@ -75,6 +77,31 @@ function statusIdsForTab(
   return ids.sort().join(',');
 }
 
+/** Intersect column status selections with tab status IDs. */
+function resolveStatusParam(
+  tab: ClaimTab,
+  statusFilterActive: boolean,
+  statusFilter: Set<string>,
+  statusOptions: { id: string; name: string }[],
+): string | undefined | null {
+  const tabIds = statusIdsForTab(tab, statusOptions);
+  const columnParam = columnFilterToIdsParam(
+    statusFilterActive,
+    statusFilter,
+    statusOptions,
+  );
+  if (columnParam === null) return null;
+  if (!columnParam) return tabIds || undefined;
+  if (!tabIds) return columnParam;
+  const tabSet = new Set(tabIds.split(',').filter(Boolean));
+  const intersected = columnParam
+    .split(',')
+    .filter((id) => tabSet.has(id))
+    .sort();
+  // empty intersection after active filter → match nothing
+  return intersected.length > 0 ? intersected.join(',') : null;
+}
+
 type ColumnSortField =
   | 'claim_number'
   | 'status'
@@ -87,14 +114,15 @@ type ColumnSortField =
 interface ColumnDef {
   key: ColumnSortField;
   label: string;
+  filterable?: boolean;
 }
 
 const TABLE_COLUMNS: ColumnDef[] = [
   { key: 'claim_number', label: 'Claim #' },
-  { key: 'status', label: 'Status' },
+  { key: 'status', label: 'Status', filterable: true },
   { key: 'policy', label: 'Policy' },
   { key: 'address', label: 'Address' },
-  { key: 'account', label: 'Account' },
+  { key: 'account', label: 'Account', filterable: true },
   { key: 'lodgement_date', label: 'Lodged' },
   { key: 'updated_at', label: 'Updated' },
 ];
@@ -127,12 +155,14 @@ export interface ClaimsListClientProps {
   initialData: PaginatedResponse<Claim>;
   initialFetchKey: string;
   statusOptions: { id: string; name: string }[];
+  accountOptions: { id: string; name: string }[];
 }
 
 export function ClaimsListClient({
   initialData,
   initialFetchKey,
   statusOptions,
+  accountOptions,
 }: ClaimsListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -154,6 +184,9 @@ export function ClaimsListClient({
     order: 'asc' | 'desc';
   } | null>(null);
   const [accountFilter, setAccountFilter] = useState<Set<string>>(new Set());
+  const [accountFilterActive, setAccountFilterActive] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [statusFilterActive, setStatusFilterActive] = useState(false);
 
   const lastFetchKeyRef = useRef<string | null>(initialFetchKey);
 
@@ -162,23 +195,35 @@ export function ClaimsListClient({
     return () => clearTimeout(t);
   }, [search]);
 
-  const statusKey = useMemo(
-    () => statusIdsForTab(tab, statusOptions),
-    [tab, statusOptions],
+  const statusParam = useMemo(
+    () => resolveStatusParam(tab, statusFilterActive, statusFilter, statusOptions),
+    [tab, statusFilterActive, statusFilter, statusOptions],
+  );
+
+  const accountParam = useMemo(
+    () => columnFilterToIdsParam(accountFilterActive, accountFilter, accountOptions),
+    [accountFilterActive, accountFilter, accountOptions],
   );
 
   useEffect(() => {
-    const fetchKey = `${debouncedSearch}|${sort}|${tab}|${statusKey}|${page}`;
+    const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
+    const accountKey = accountParam === null ? '__none__' : (accountParam ?? '');
+    const fetchKey = `${debouncedSearch}|${sort}|${tab}|${statusKey}|${accountKey}|${page}`;
 
     const params = new URLSearchParams(searchParams.toString());
     params.set('search', debouncedSearch);
     params.set('sort', sort);
     params.set('page', String(page));
     params.set('tab', tab);
-    if (statusKey) {
-      params.set('status', statusKey);
+    if (statusParam) {
+      params.set('status', statusParam);
     } else {
       params.delete('status');
+    }
+    if (accountParam) {
+      params.set('account', accountParam);
+    } else {
+      params.delete('account');
     }
     router.replace(`/claims?${params}`, { scroll: false });
 
@@ -189,15 +234,21 @@ export function ClaimsListClient({
 
     setColumnSort(null);
 
+    if (statusParam === null || accountParam === null) {
+      setData({ data: [], total: 0 });
+      return;
+    }
+
     fetchClaimsAction({
       search: debouncedSearch || undefined,
       sort,
-      status: statusKey || undefined,
+      status: statusParam,
+      account: accountParam,
       page,
       limit: PAGE_SIZE,
     }).then((res) => res && setData(res));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, sort, tab, statusKey, page]);
+  }, [debouncedSearch, sort, tab, statusParam, accountParam, page]);
 
   const SERVER_SORT_FIELDS = new Set(['claim_number', 'updated_at', 'created_at']);
 
@@ -251,33 +302,64 @@ export function ClaimsListClient({
       : 'desc';
 
   const uniqueAccounts = useMemo(() => {
+    const fromOptions = accountOptions
+      .map((a) => a.name?.trim())
+      .filter((n): n is string => !!n);
+    if (fromOptions.length > 0) {
+      return [...new Set(fromOptions)].sort((a, b) => a.localeCompare(b));
+    }
     const names = new Set<string>();
     for (const claim of data.data) {
       const name = (claim.account as { name?: string })?.name?.trim();
       if (name) names.add(name);
     }
     return [...names].sort((a, b) => a.localeCompare(b));
-  }, [data.data]);
+  }, [data.data, accountOptions]);
+
+  const uniqueStatuses = useMemo(() => {
+    const fromOptions = statusOptions
+      .map((s) => s.name?.trim())
+      .filter((n): n is string => !!n);
+    return [...new Set(fromOptions)].sort((a, b) => a.localeCompare(b));
+  }, [statusOptions]);
 
   const toggleAccount = (name: string) => {
-    setAccountFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
+    const working = accountFilterActive
+      ? new Set(accountFilter)
+      : new Set(uniqueAccounts);
+    if (working.has(name)) working.delete(name);
+    else working.add(name);
+    const committed = commitColumnFilterSelection({
+      next: working,
+      optionCount: uniqueAccounts.length,
     });
+    setAccountFilter(committed.selected);
+    setAccountFilterActive(committed.active);
+    setPage(1);
   };
-  const clearAccounts = () => setAccountFilter(new Set());
-  const selectAllAccounts = () => setAccountFilter(new Set(uniqueAccounts));
+
+  const applyStatusFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueStatuses.length,
+    });
+    setStatusFilter(committed.selected);
+    setStatusFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const applyAccountFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueAccounts.length,
+    });
+    setAccountFilter(committed.selected);
+    setAccountFilterActive(committed.active);
+    setPage(1);
+  };
 
   const filteredAndSortedData = useMemo(() => {
-    let rows = data.data;
-    if (accountFilter.size > 0) {
-      rows = rows.filter((claim) => {
-        const name = (claim.account as { name?: string })?.name?.trim();
-        return name ? accountFilter.has(name) : false;
-      });
-    }
+    const rows = data.data;
     if (!columnSort) return rows;
     const isDate = columnSort.field === 'lodgement_date' || columnSort.field === 'updated_at';
     return [...rows].sort((a, b) => {
@@ -287,12 +369,30 @@ export function ClaimsListClient({
         ? compareDates(aVal, bVal, columnSort.order)
         : compareValues(aVal, bVal, columnSort.order);
     });
-  }, [data.data, columnSort, accountFilter]);
+  }, [data.data, columnSort]);
 
   const breakdown = computeStatusBreakdown(
     data.data,
     (c) => (c.status as { name?: string } | undefined)?.name,
   );
+
+  const statusFilterProps = {
+    options: uniqueStatuses,
+    selected: statusFilter,
+    active: statusFilterActive,
+    onApply: applyStatusFilter,
+    menuTitle: 'Filter by status',
+    itemNoun: { singular: 'status', plural: 'statuses' },
+  };
+
+  const accountFilterProps = {
+    options: uniqueAccounts,
+    selected: accountFilter,
+    active: accountFilterActive,
+    onApply: applyAccountFilter,
+    menuTitle: 'Filter by account',
+    itemNoun: { singular: 'account', plural: 'accounts' },
+  };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
@@ -344,10 +444,18 @@ export function ClaimsListClient({
 
           <ValueFilterMenu
             options={uniqueAccounts}
-            selected={accountFilter}
+            selected={accountFilterActive ? accountFilter : new Set(uniqueAccounts)}
             onToggle={toggleAccount}
-            onClearAll={clearAccounts}
-            onSelectAll={selectAllAccounts}
+            onClearAll={() => {
+              setAccountFilter(new Set());
+              setAccountFilterActive(false);
+              setPage(1);
+            }}
+            onSelectAll={() => {
+              setAccountFilter(new Set());
+              setAccountFilterActive(false);
+              setPage(1);
+            }}
             emptyLabel="All accounts"
             menuTitle="Filter by account"
             itemNoun={{ singular: 'account', plural: 'accounts' }}
@@ -372,6 +480,13 @@ export function ClaimsListClient({
                       activeField={activeColumnField}
                       sortOrder={activeColumnOrder}
                       onSort={handleColumnSort}
+                      filter={
+                        col.key === 'status'
+                          ? statusFilterProps
+                          : col.key === 'account'
+                            ? accountFilterProps
+                            : undefined
+                      }
                     />
                   ))}
                 </tr>

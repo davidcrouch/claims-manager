@@ -11,6 +11,8 @@ import {
   isArchivedStatus,
   ValueFilterMenu,
   SortableColumnHeader,
+  commitColumnFilterSelection,
+  columnFilterToValuesParam,
 } from '@/components/shared/list-filters';
 import { TablePagination } from '@/components/shared/table-pagination';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
@@ -33,11 +35,11 @@ type JournalSortField =
   | 'created_at'
   | 'updated_at';
 
-interface ColDef { key: JournalSortField; label: string }
+interface ColDef { key: JournalSortField; label: string; filterable?: boolean }
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'name', label: 'Name' },
-  { key: 'status', label: 'Status' },
+  { key: 'status', label: 'Status', filterable: true },
   { key: 'description', label: 'Description' },
   { key: 'location', label: 'Location' },
   { key: 'pages', label: 'Pages' },
@@ -81,8 +83,13 @@ export function JournalsPageClient({ initialData }: JournalsPageClientProps) {
     order: 'desc',
   });
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [statusFilterActive, setStatusFilterActive] = useState(false);
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
   const lastFetchKeyRef = useRef<string | null>(null);
+  const statusParam = useMemo(
+    () => columnFilterToValuesParam(statusFilterActive, statusFilter),
+    [statusFilterActive, statusFilter],
+  );
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -90,12 +97,18 @@ export function JournalsPageClient({ initialData }: JournalsPageClientProps) {
   }, [search]);
 
   useEffect(() => {
-    const fetchKey = `${debouncedSearch}|${tab}|${page}`;
+    const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
+    const fetchKey = `${debouncedSearch}|${tab}|${page}|${statusKey}`;
     if (lastFetchKeyRef.current === fetchKey) return;
     lastFetchKeyRef.current = fetchKey;
 
-    fetchJournalsAction({ page, limit: PAGE_SIZE }).then((res) => setData(res));
-  }, [debouncedSearch, tab, page]);
+    if (statusParam === null) {
+      setData({ data: [], total: 0 });
+      return;
+    }
+
+    fetchJournalsAction({ page, limit: PAGE_SIZE, status: statusParam }).then((res) => setData(res));
+  }, [debouncedSearch, tab, page, statusParam]);
 
   const handleCreated = (journal: Journal) => {
     setData((prev) => ({ data: [journal, ...prev.data], total: prev.total + 1 }));
@@ -110,28 +123,41 @@ export function JournalsPageClient({ initialData }: JournalsPageClientProps) {
       return { field, order: field === 'name' ? 'asc' : 'desc' };
     });
     setPage(1);
+    setPage(1);
   };
 
   const handleSearchChange = (value: string) => { setSearch(value); setPage(1); };
   const handleTabChange = (val: string) => { setTab(val as ListTab); setPage(1); };
   const handlePageChange = (newPage: number) => setPage(newPage);
 
-  const uniqueStatuses = useMemo(() => {
-    const names = new Set<string>();
-    for (const j of data.data) {
-      const name = j.status?.trim();
-      if (name) names.add(name);
-    }
-    return [...names].sort((a, b) => a.localeCompare(b));
-  }, [data.data]);
+  const uniqueStatuses = useMemo(
+    () => ['active', 'archived', 'deleted'],
+    [],
+  );
 
   const toggleStatus = (name: string) => {
-    setStatusFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
+    const working = statusFilterActive
+      ? new Set(statusFilter)
+      : new Set(uniqueStatuses);
+    if (working.has(name)) working.delete(name);
+    else working.add(name);
+    const committed = commitColumnFilterSelection({
+      next: working,
+      optionCount: uniqueStatuses.length,
     });
+    setStatusFilter(committed.selected);
+    setStatusFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const applyStatusFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueStatuses.length,
+    });
+    setStatusFilter(committed.selected);
+    setStatusFilterActive(committed.active);
+    setPage(1);
   };
 
   const visibleRows = useMemo(() => {
@@ -144,15 +170,8 @@ export function JournalsPageClient({ initialData }: JournalsPageClientProps) {
       });
     }
 
-    if (statusFilter.size > 0) {
-      rows = rows.filter((j) => {
-        const name = j.status?.trim();
-        return name ? statusFilter.has(name) : false;
-      });
-    }
-
     return rows;
-  }, [data.data, tab, statusFilter]);
+  }, [data.data, tab]);
 
   const breakdown = computeStatusBreakdown(visibleRows, (j) => j.status);
 
@@ -203,10 +222,18 @@ export function JournalsPageClient({ initialData }: JournalsPageClientProps) {
 
           <ValueFilterMenu
             options={uniqueStatuses}
-            selected={statusFilter}
+            selected={statusFilterActive ? statusFilter : new Set(uniqueStatuses)}
             onToggle={toggleStatus}
-            onClearAll={() => setStatusFilter(new Set())}
-            onSelectAll={() => setStatusFilter(new Set(uniqueStatuses))}
+            onClearAll={() => {
+              setStatusFilter(new Set());
+              setStatusFilterActive(false);
+              setPage(1);
+            }}
+            onSelectAll={() => {
+              setStatusFilter(new Set());
+              setStatusFilterActive(false);
+              setPage(1);
+            }}
             emptyLabel="All statuses"
             menuTitle="Filter by status"
             itemNoun={{ singular: 'status', plural: 'statuses' }}
@@ -236,6 +263,18 @@ export function JournalsPageClient({ initialData }: JournalsPageClientProps) {
                       activeField={columnSort.field}
                       sortOrder={columnSort.order}
                       onSort={handleColumnSort}
+                      filter={
+                        col.key === 'status'
+                          ? {
+                              options: uniqueStatuses,
+                              selected: statusFilter,
+                              active: statusFilterActive,
+                              onApply: applyStatusFilter,
+                              menuTitle: 'Filter by status',
+                              itemNoun: { singular: 'status', plural: 'statuses' },
+                            }
+                          : undefined
+                      }
                     />
                   ))}
                 </tr>

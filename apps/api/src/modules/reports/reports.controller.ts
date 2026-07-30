@@ -11,6 +11,7 @@ export class ReportsController {
     @Query('limit') limit?: string,
     @Query('jobId') jobId?: string,
     @Query('claimId') claimId?: string,
+    @Query('status') status?: string,
     @Query('reportTypeId') reportTypeId?: string,
     @Query('sort') sort?: string,
   ) {
@@ -19,6 +20,7 @@ export class ReportsController {
       limit: limit ? parseInt(limit, 10) : 20,
       jobId,
       claimId,
+      status,
       reportTypeId,
       sort,
     });

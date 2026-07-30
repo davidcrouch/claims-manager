@@ -29,7 +29,7 @@ export interface MessageFormDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   jobId: string;
-  claimId: string;
+  claimId?: string | null;
 }
 
 export function MessageFormDrawer({
@@ -56,8 +56,7 @@ export function MessageFormDrawer({
     try {
       const result = await createMessageAction({
         fromJobId: jobId,
-        fromClaimId: claimId,
-        toClaimId: claimId,
+        ...(claimId ? { fromClaimId: claimId, toClaimId: claimId } : {}),
         toJobId: jobId,
         subject: values.subject,
         body: values.body,

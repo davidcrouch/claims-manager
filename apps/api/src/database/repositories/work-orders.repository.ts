@@ -1,11 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, isNull, desc, asc, sql } from 'drizzle-orm';
+import { eq, and, isNull, desc, asc, sql, inArray, aliasedTable, getTableColumns } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
-import { workOrders } from '../schema';
+import { workOrders, lookupValues } from '../schema';
 
 export type WorkOrderRow = typeof workOrders.$inferSelect;
 export type WorkOrderInsert = typeof workOrders.$inferInsert;
+
+export interface WorkOrderViewRow extends WorkOrderRow {
+  statusName: string | null;
+  statusExternalReference: string | null;
+  workOrderTypeName: string | null;
+  workOrderTypeExternalReference: string | null;
+}
 
 function buildWorkOrdersOrderBy(sort?: string) {
   switch (sort) {
@@ -55,6 +62,10 @@ export class WorkOrdersRepository {
     limit?: number;
     jobId?: string;
     purchaseOrderId?: string;
+    /** Comma-separated status lookup IDs. */
+    status?: string;
+    /** Comma-separated work order type lookup IDs. */
+    workOrderType?: string;
     sort?: string;
   }): Promise<{ data: WorkOrderRow[]; total: number }> {
     const page = params.page ?? 1;
@@ -70,6 +81,14 @@ export class WorkOrdersRepository {
     }
     if (params.purchaseOrderId) {
       whereClause = and(whereClause, eq(workOrders.purchaseOrderId, params.purchaseOrderId));
+    }
+    const statusIds = params.status?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
+    const typeIds = params.workOrderType?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
+    if (statusIds.length > 0) {
+      whereClause = and(whereClause, inArray(workOrders.statusLookupId, statusIds));
+    }
+    if (typeIds.length > 0) {
+      whereClause = and(whereClause, inArray(workOrders.workOrderTypeLookupId, typeIds));
     }
 
     const [data, countResult] = await Promise.all([
@@ -99,12 +118,30 @@ export class WorkOrdersRepository {
     return row ?? null;
   }
 
-  async findByJob(params: { jobId: string; tenantId: string }): Promise<WorkOrderRow[]> {
-    return this.db
-      .select()
+  async findByJob(params: { jobId: string; tenantId: string }): Promise<WorkOrderViewRow[]> {
+    const statusLookup = aliasedTable(lookupValues, 'status_lookup');
+    const typeLookup = aliasedTable(lookupValues, 'wo_type_lookup');
+
+    const data = await this.db
+      .select({
+        ...getTableColumns(workOrders),
+        statusName: statusLookup.name,
+        statusExternalReference: statusLookup.externalReference,
+        workOrderTypeName: typeLookup.name,
+        workOrderTypeExternalReference: typeLookup.externalReference,
+      })
       .from(workOrders)
-      .where(and(eq(workOrders.jobId, params.jobId), eq(workOrders.tenantId, params.tenantId)))
+      .leftJoin(statusLookup, eq(workOrders.statusLookupId, statusLookup.id))
+      .leftJoin(typeLookup, eq(workOrders.workOrderTypeLookupId, typeLookup.id))
+      .where(
+        and(
+          eq(workOrders.jobId, params.jobId),
+          eq(workOrders.tenantId, params.tenantId),
+          isNull(workOrders.deletedAt),
+        ),
+      )
       .orderBy(desc(workOrders.updatedAt));
+    return data as WorkOrderViewRow[];
   }
 
   async findByPurchaseOrder(params: {

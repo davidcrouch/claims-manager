@@ -195,7 +195,7 @@ export class EntityRelationshipService {
           .from(jobs)
           .where(eq(jobs.id, entityId))
           .limit(1);
-        return row ? { claimId: row.claimId } : null;
+        return row ? { claimId: row.claimId ?? undefined } : null;
       }
       case 'quote': {
         const [row] = await db

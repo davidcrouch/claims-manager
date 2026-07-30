@@ -7,6 +7,7 @@ import {
   ValueFilterMenu,
   SortableColumnHeader,
   compareValues,
+  commitColumnFilterSelection,
 } from '@/components/shared/list-filters';
 import type { Job } from '@/types/api';
 
@@ -48,11 +49,11 @@ function preferredMethod(c: ContactRow): string {
 
 type ContactSortField = 'name' | 'type' | 'email' | 'preferred';
 
-interface ColDef { key: ContactSortField; label: string }
+interface ColDef { key: ContactSortField; label: string; filterable?: boolean }
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'name', label: 'Name' },
-  { key: 'type', label: 'Type' },
+  { key: 'type', label: 'Type', filterable: true },
   { key: 'email', label: 'Email' },
   { key: 'preferred', label: 'Preferred' },
 ];
@@ -74,6 +75,7 @@ export function JobPartiesTab({ job }: { job: Job }) {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
+  const [typeFilterActive, setTypeFilterActive] = useState(false);
   const [columnSort, setColumnSort] = useState<{ field: ContactSortField; order: 'asc' | 'desc' }>({
     field: 'name',
     order: 'asc',
@@ -101,22 +103,38 @@ export function JobPartiesTab({ job }: { job: Job }) {
   }, [contacts]);
 
   const toggleType = (name: string) => {
-    setTypeFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
+    const working = typeFilterActive ? new Set(typeFilter) : new Set(uniqueTypes);
+    if (working.has(name)) working.delete(name);
+    else working.add(name);
+    const committed = commitColumnFilterSelection({
+      next: working,
+      optionCount: uniqueTypes.length,
     });
+    setTypeFilter(committed.selected);
+    setTypeFilterActive(committed.active);
+  };
+
+  const applyTypeFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueTypes.length,
+    });
+    setTypeFilter(committed.selected);
+    setTypeFilterActive(committed.active);
   };
 
   const visibleRows = useMemo(() => {
     let rows = contacts;
 
-    if (typeFilter.size > 0) {
-      rows = rows.filter((c) => {
-        const t = contactType(c).trim();
-        return t && t !== '—' ? typeFilter.has(t) : false;
-      });
+    if (typeFilterActive) {
+      if (typeFilter.size === 0) {
+        rows = [];
+      } else {
+        rows = rows.filter((c) => {
+          const t = contactType(c).trim();
+          return t && t !== '—' ? typeFilter.has(t) : false;
+        });
+      }
     }
 
     const query = debouncedSearch.trim().toLowerCase();
@@ -133,7 +151,7 @@ export function JobPartiesTab({ job }: { job: Job }) {
       const bVal = getSortValue(b, columnSort.field);
       return compareValues(aVal, bVal, columnSort.order);
     });
-  }, [contacts, typeFilter, debouncedSearch, columnSort]);
+  }, [contacts, typeFilterActive, typeFilter, debouncedSearch, columnSort]);
 
   return (
     <div className="space-y-4">
@@ -159,10 +177,16 @@ export function JobPartiesTab({ job }: { job: Job }) {
 
         <ValueFilterMenu
           options={uniqueTypes}
-          selected={typeFilter}
+          selected={typeFilterActive ? typeFilter : new Set(uniqueTypes)}
           onToggle={toggleType}
-          onClearAll={() => setTypeFilter(new Set())}
-          onSelectAll={() => setTypeFilter(new Set(uniqueTypes))}
+          onClearAll={() => {
+            setTypeFilter(new Set());
+            setTypeFilterActive(false);
+          }}
+          onSelectAll={() => {
+            setTypeFilter(new Set());
+            setTypeFilterActive(false);
+          }}
           emptyLabel="All types"
           menuTitle="Filter by type"
           itemNoun={{ singular: 'type', plural: 'types' }}
@@ -191,6 +215,18 @@ export function JobPartiesTab({ job }: { job: Job }) {
                     activeField={columnSort.field}
                     sortOrder={columnSort.order}
                     onSort={handleColumnSort}
+                    filter={
+                      col.key === 'type'
+                        ? {
+                            options: uniqueTypes,
+                            selected: typeFilter,
+                            active: typeFilterActive,
+                            onApply: applyTypeFilter,
+                            menuTitle: 'Filter by type',
+                            itemNoun: { singular: 'type', plural: 'types' },
+                          }
+                        : undefined
+                    }
                   />
                 ))}
                 <th scope="col" className="px-4 py-3">Phones</th>

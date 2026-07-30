@@ -17,6 +17,8 @@ import {
   formatDate,
   ValueFilterMenu,
   SortableColumnHeader,
+  commitColumnFilterSelection,
+  columnFilterToValuesParam,
 } from '@/components/shared/list-filters';
 import { TaskFormDrawer } from '@/components/forms/TaskFormDrawer';
 import {
@@ -45,13 +47,13 @@ type TaskSortField =
   | 'due_date'
   | 'updated_at';
 
-interface ColDef { key: TaskSortField; label: string }
+interface ColDef { key: TaskSortField; label: string; filterable?: boolean }
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'name', label: 'Task' },
-  { key: 'status', label: 'Status' },
-  { key: 'priority', label: 'Priority' },
-  { key: 'task_type', label: 'Type' },
+  { key: 'status', label: 'Status', filterable: true },
+  { key: 'priority', label: 'Priority', filterable: true },
+  { key: 'task_type', label: 'Type', filterable: true },
   { key: 'assignee', label: 'Assigned to' },
   { key: 'due_date', label: 'Due Date' },
   { key: 'updated_at', label: 'Updated' },
@@ -108,9 +110,22 @@ export function TasksListClient() {
     order: 'desc',
   });
   const [priorityFilter, setPriorityFilter] = useState<Set<string>>(new Set());
+  const [priorityFilterActive, setPriorityFilterActive] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [statusFilterActive, setStatusFilterActive] = useState(false);
+  const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
+  const [typeFilterActive, setTypeFilterActive] = useState(false);
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const lastFetchKeyRef = useRef<string | null>(null);
+  const statusParam = useMemo(
+    () => columnFilterToValuesParam(statusFilterActive, statusFilter),
+    [statusFilterActive, statusFilter],
+  );
+  const priorityParam = useMemo(
+    () => columnFilterToValuesParam(priorityFilterActive, priorityFilter),
+    [priorityFilterActive, priorityFilter],
+  );
 
   const sortParam = `${columnSort.field}_${columnSort.order}`;
 
@@ -120,12 +135,20 @@ export function TasksListClient() {
   }, [search]);
 
   const load = useCallback(async () => {
+    if (statusParam === null || priorityParam === null) {
+      setTasks([]);
+      setTotal(0);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetchTasksAction({
         page,
         limit: PAGE_SIZE,
         search: debouncedSearch || undefined,
+        status: statusParam,
+        priority: priorityParam,
         sort: sortParam,
       });
       setTasks(res.data);
@@ -133,21 +156,25 @@ export function TasksListClient() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, page, sortParam]);
+  }, [debouncedSearch, page, sortParam, statusParam, priorityParam]);
 
   useEffect(() => {
-    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}`;
+    const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
+    const priorityKey = priorityParam === null ? '__none__' : (priorityParam ?? '');
+    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${priorityKey}`;
     const params = new URLSearchParams(searchParams.toString());
     params.set('search', debouncedSearch);
     params.set('tab', tab);
     params.set('page', String(page));
     params.set('sort', sortParam);
+    if (statusParam) params.set('status', statusParam); else params.delete('status');
+    if (priorityParam) params.set('priority', priorityParam); else params.delete('priority');
     router.replace(`/tasks?${params}`, { scroll: false });
     if (lastFetchKeyRef.current === fetchKey) return;
     lastFetchKeyRef.current = fetchKey;
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop
-  }, [debouncedSearch, sortParam, tab, page]);
+  }, [debouncedSearch, sortParam, tab, page, statusParam, priorityParam]);
 
   const handleColumnSort = (field: TaskSortField) => {
     setColumnSort((prev) => {
@@ -163,22 +190,68 @@ export function TasksListClient() {
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => { setSearch(e.target.value); setPage(1); };
   const handleTabChange = (val: string) => { setTab(val as ListTab); setPage(1); };
 
-  const uniquePriorities = useMemo(() => {
+  const uniquePriorities = useMemo(
+    () => ['Low', 'Medium', 'High', 'Critical'],
+    [],
+  );
+
+  const uniqueStatuses = useMemo(
+    () => ['Open', 'Completed', 'Failed'],
+    [],
+  );
+
+  const uniqueTypes = useMemo(() => {
     const names = new Set<string>();
     for (const task of tasks) {
-      const name = refName(task.priority)?.trim();
+      const name = refName(task.taskType)?.trim();
       if (name && name !== '—') names.add(name);
     }
     return [...names].sort((a, b) => a.localeCompare(b));
   }, [tasks]);
 
   const togglePriority = (name: string) => {
-    setPriorityFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
+    const working = priorityFilterActive
+      ? new Set(priorityFilter)
+      : new Set(uniquePriorities);
+    if (working.has(name)) working.delete(name);
+    else working.add(name);
+    const committed = commitColumnFilterSelection({
+      next: working,
+      optionCount: uniquePriorities.length,
     });
+    setPriorityFilter(committed.selected);
+    setPriorityFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const applyStatusFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueStatuses.length,
+    });
+    setStatusFilter(committed.selected);
+    setStatusFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const applyPriorityFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniquePriorities.length,
+    });
+    setPriorityFilter(committed.selected);
+    setPriorityFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const applyTypeFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueTypes.length,
+    });
+    setTypeFilter(committed.selected);
+    setTypeFilterActive(committed.active);
+    setPage(1);
   };
 
   const visibleRows = useMemo(() => {
@@ -191,11 +264,15 @@ export function TasksListClient() {
       });
     }
 
-    if (priorityFilter.size > 0) {
-      rows = rows.filter((task) => {
-        const name = refName(task.priority)?.trim();
-        return name ? priorityFilter.has(name) : false;
-      });
+    if (typeFilterActive) {
+      if (typeFilter.size === 0) {
+        rows = [];
+      } else {
+        rows = rows.filter((task) => {
+          const name = refName(task.taskType)?.trim();
+          return name ? typeFilter.has(name) : false;
+        });
+      }
     }
 
     const query = debouncedSearch.trim().toLowerCase();
@@ -209,7 +286,7 @@ export function TasksListClient() {
     }
 
     return rows;
-  }, [tasks, tab, priorityFilter, debouncedSearch]);
+  }, [tasks, tab, typeFilterActive, typeFilter, debouncedSearch]);
 
   const breakdown = computeStatusBreakdown(visibleRows, (t) => refName(t.status));
 
@@ -266,10 +343,18 @@ export function TasksListClient() {
 
           <ValueFilterMenu
             options={uniquePriorities}
-            selected={priorityFilter}
+            selected={priorityFilterActive ? priorityFilter : new Set(uniquePriorities)}
             onToggle={togglePriority}
-            onClearAll={() => setPriorityFilter(new Set())}
-            onSelectAll={() => setPriorityFilter(new Set(uniquePriorities))}
+            onClearAll={() => {
+              setPriorityFilter(new Set());
+              setPriorityFilterActive(false);
+              setPage(1);
+            }}
+            onSelectAll={() => {
+              setPriorityFilter(new Set());
+              setPriorityFilterActive(false);
+              setPage(1);
+            }}
             emptyLabel="All priorities"
             menuTitle="Filter by priority"
             itemNoun={{ singular: 'priority', plural: 'priorities' }}
@@ -299,6 +384,36 @@ export function TasksListClient() {
                       activeField={columnSort.field}
                       sortOrder={columnSort.order}
                       onSort={handleColumnSort}
+                      filter={
+                        col.key === 'status'
+                          ? {
+                              options: uniqueStatuses,
+                              selected: statusFilter,
+                              active: statusFilterActive,
+                              onApply: applyStatusFilter,
+                              menuTitle: 'Filter by status',
+                              itemNoun: { singular: 'status', plural: 'statuses' },
+                            }
+                          : col.key === 'priority'
+                            ? {
+                                options: uniquePriorities,
+                                selected: priorityFilter,
+                                active: priorityFilterActive,
+                                onApply: applyPriorityFilter,
+                                menuTitle: 'Filter by priority',
+                                itemNoun: { singular: 'priority', plural: 'priorities' },
+                              }
+                            : col.key === 'task_type'
+                              ? {
+                                  options: uniqueTypes,
+                                  selected: typeFilter,
+                                  active: typeFilterActive,
+                                  onApply: applyTypeFilter,
+                                  menuTitle: 'Filter by type',
+                                  itemNoun: { singular: 'type', plural: 'types' },
+                                }
+                              : undefined
+                      }
                     />
                   ))}
                 </tr>

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, isNull, desc, asc, sql } from 'drizzle-orm';
+import { eq, and, isNull, desc, asc, sql, inArray } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { proposals } from '../schema';
 
@@ -51,6 +51,8 @@ export class ProposalsRepository {
     limit?: number;
     jobId?: string;
     rfqId?: string;
+    /** Comma-separated status lookup IDs. */
+    status?: string;
     vendorId?: string;
     sort?: string;
   }): Promise<{ data: ProposalRow[]; total: number }> {
@@ -68,8 +70,13 @@ export class ProposalsRepository {
     if (params.rfqId) {
       whereClause = and(whereClause, eq(proposals.rfqId, params.rfqId));
     }
-    if (params.vendorId) {
-      whereClause = and(whereClause, eq(proposals.vendorId, params.vendorId));
+    const statusIds = params.status?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
+    const vendorIds = params.vendorId?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
+    if (statusIds.length > 0) {
+      whereClause = and(whereClause, inArray(proposals.statusLookupId, statusIds));
+    }
+    if (vendorIds.length > 0) {
+      whereClause = and(whereClause, inArray(proposals.vendorId, vendorIds));
     }
 
     const [data, countResult] = await Promise.all([

@@ -26,6 +26,7 @@ export class InvoicesService {
     page?: number;
     limit?: number;
     purchaseOrderId?: string;
+    status?: string;
     statusId?: string;
     sort?: string;
   }) {
@@ -35,6 +36,7 @@ export class InvoicesService {
       page: params.page,
       limit: params.limit,
       purchaseOrderId: params.purchaseOrderId,
+      status: params.status,
       statusId: params.statusId,
       sort: params.sort,
     });

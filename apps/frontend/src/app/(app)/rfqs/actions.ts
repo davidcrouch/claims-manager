@@ -9,6 +9,7 @@ export async function fetchRfqsAction(params?: {
   limit?: number;
   jobId?: string;
   quoteId?: string;
+  status?: string;
   vendorId?: string;
   sort?: string;
 }): Promise<PaginatedResponse<Rfq>> {
@@ -25,6 +26,7 @@ export async function fetchRfqsAction(params?: {
       limit: params?.limit ?? 20,
       jobId: params?.jobId,
       quoteId: params?.quoteId,
+      status: params?.status,
       vendorId: params?.vendorId,
       sort: params?.sort,
     });

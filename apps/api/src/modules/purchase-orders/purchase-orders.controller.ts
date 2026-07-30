@@ -15,6 +15,7 @@ export class PurchaseOrdersController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('jobId') jobId?: string,
+    @Query('status') status?: string,
     @Query('vendorId') vendorId?: string,
     @Query('sort') sort?: string,
   ) {
@@ -22,6 +23,7 @@ export class PurchaseOrdersController {
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
       jobId,
+      status,
       vendorId,
       sort,
     });

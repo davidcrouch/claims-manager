@@ -11,6 +11,8 @@ import {
   type StatusOption,
   formatDate,
   isArchivedStatus,
+  commitColumnFilterSelection,
+  columnFilterToIdsParam,
   ValueFilterMenu,
   SortableColumnHeader,
 } from '@/components/shared/list-filters';
@@ -53,12 +55,12 @@ type WOSortField =
   | 'start_date'
   | 'updated_at';
 
-interface ColDef { key: WOSortField; label: string }
+interface ColDef { key: WOSortField; label: string; filterable?: boolean }
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'work_order_number', label: 'WO #' },
-  { key: 'status', label: 'Status' },
-  { key: 'wo_type', label: 'Type' },
+  { key: 'status', label: 'Status', filterable: true },
+  { key: 'wo_type', label: 'Type', filterable: true },
   { key: 'source', label: 'From (upstream)' },
   { key: 'job_ref', label: 'Job Ref' },
   { key: 'total_amount', label: 'Total' },
@@ -69,11 +71,13 @@ const TABLE_COLUMNS: ColDef[] = [
 export interface WorkOrdersListClientProps {
   initialData: PaginatedResponse<WorkOrder>;
   statusOptions: StatusOption[];
+  workOrderTypes: StatusOption[];
 }
 
 export function WorkOrdersListClient({
   initialData,
   statusOptions,
+  workOrderTypes,
 }: WorkOrdersListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -90,8 +94,19 @@ export function WorkOrdersListClient({
     order: 'desc',
   });
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
+  const [typeFilterActive, setTypeFilterActive] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [statusFilterActive, setStatusFilterActive] = useState(false);
 
   const lastFetchKeyRef = useRef<string | null>(null);
+  const statusParam = useMemo(
+    () => columnFilterToIdsParam(statusFilterActive, statusFilter, statusOptions),
+    [statusFilterActive, statusFilter, statusOptions],
+  );
+  const workOrderTypeParam = useMemo(
+    () => columnFilterToIdsParam(typeFilterActive, typeFilter, workOrderTypes),
+    [typeFilterActive, typeFilter, workOrderTypes],
+  );
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -101,25 +116,36 @@ export function WorkOrdersListClient({
   const sortParam = `${columnSort.field}_${columnSort.order}`;
 
   useEffect(() => {
-    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}`;
+    const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
+    const typeKey = workOrderTypeParam === null ? '__none__' : (workOrderTypeParam ?? '');
+    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${typeKey}`;
 
     const params = new URLSearchParams(searchParams.toString());
     params.set('search', debouncedSearch);
     params.set('tab', tab);
     params.set('page', String(page));
     params.set('sort', sortParam);
+    if (statusParam) params.set('status', statusParam); else params.delete('status');
+    if (workOrderTypeParam) params.set('workOrderType', workOrderTypeParam); else params.delete('workOrderType');
     router.replace(`/work-orders?${params}`, { scroll: false });
 
     if (lastFetchKeyRef.current === fetchKey) return;
     lastFetchKeyRef.current = fetchKey;
 
+    if (statusParam === null || workOrderTypeParam === null) {
+      setData({ data: [], total: 0 });
+      return;
+    }
+
     fetchWorkOrdersAction({
       page,
       limit: PAGE_SIZE,
       sort: sortParam,
+      status: statusParam,
+      workOrderType: workOrderTypeParam,
     }).then((res) => res && setData(res));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, sortParam, tab, page]);
+  }, [debouncedSearch, sortParam, tab, page, statusParam, workOrderTypeParam]);
 
   const handleColumnSort = (field: WOSortField) => {
     setColumnSort((prev) => {
@@ -145,22 +171,75 @@ export function WorkOrdersListClient({
     setPage(1);
   };
 
-  const uniqueTypes = useMemo(() => {
+  const uniqueTypes = useMemo(
+    () => [...new Set(workOrderTypes.map((type) => type.name.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+    [workOrderTypes],
+  );
+
+  const uniqueStatuses = useMemo(() => {
+    const fromOptions = statusOptions
+      .map((s) => s.name?.trim())
+      .filter((n): n is string => !!n);
+    if (fromOptions.length > 0) {
+      return [...new Set(fromOptions)].sort((a, b) => a.localeCompare(b));
+    }
     const names = new Set<string>();
     for (const wo of data.data) {
-      const name = wo.workOrderType?.name?.trim();
+      const name = wo.status?.name?.trim();
       if (name) names.add(name);
     }
     return [...names].sort((a, b) => a.localeCompare(b));
-  }, [data.data]);
+  }, [data.data, statusOptions]);
 
   const toggleType = (name: string) => {
-    setTypeFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
+    const working = typeFilterActive ? new Set(typeFilter) : new Set(uniqueTypes);
+    if (working.has(name)) working.delete(name);
+    else working.add(name);
+    const committed = commitColumnFilterSelection({
+      next: working,
+      optionCount: uniqueTypes.length,
     });
+    setTypeFilter(committed.selected);
+    setTypeFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const applyStatusFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueStatuses.length,
+    });
+    setStatusFilter(committed.selected);
+    setStatusFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const applyTypeFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueTypes.length,
+    });
+    setTypeFilter(committed.selected);
+    setTypeFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const statusFilterProps = {
+    options: uniqueStatuses,
+    selected: statusFilter,
+    active: statusFilterActive,
+    onApply: applyStatusFilter,
+    menuTitle: 'Filter by status',
+    itemNoun: { singular: 'status', plural: 'statuses' },
+  };
+
+  const typeFilterProps = {
+    options: uniqueTypes,
+    selected: typeFilter,
+    active: typeFilterActive,
+    onApply: applyTypeFilter,
+    menuTitle: 'Filter by type',
+    itemNoun: { singular: 'type', plural: 'types' },
   };
 
   const visibleRows = useMemo(() => {
@@ -174,13 +253,6 @@ export function WorkOrdersListClient({
       });
     }
 
-    if (typeFilter.size > 0) {
-      rows = rows.filter((wo) => {
-        const name = wo.workOrderType?.name?.trim();
-        return name ? typeFilter.has(name) : false;
-      });
-    }
-
     if (query) {
       rows = rows.filter((wo) => {
         const num = (wo.workOrderNumber ?? '').toLowerCase();
@@ -191,7 +263,7 @@ export function WorkOrdersListClient({
     }
 
     return rows;
-  }, [data.data, tab, typeFilter, debouncedSearch]);
+  }, [data.data, tab, debouncedSearch]);
 
   const breakdown = computeStatusBreakdown(visibleRows, (wo) => wo.status?.name);
 
@@ -256,10 +328,18 @@ export function WorkOrdersListClient({
 
           <ValueFilterMenu
             options={uniqueTypes}
-            selected={typeFilter}
+            selected={typeFilterActive ? typeFilter : new Set(uniqueTypes)}
             onToggle={toggleType}
-            onClearAll={() => setTypeFilter(new Set())}
-            onSelectAll={() => setTypeFilter(new Set(uniqueTypes))}
+            onClearAll={() => {
+              setTypeFilter(new Set());
+              setTypeFilterActive(false);
+              setPage(1);
+            }}
+            onSelectAll={() => {
+              setTypeFilter(new Set());
+              setTypeFilterActive(false);
+              setPage(1);
+            }}
             emptyLabel="All types"
             menuTitle="Filter by type"
             itemNoun={{ singular: 'type', plural: 'types' }}
@@ -284,6 +364,13 @@ export function WorkOrdersListClient({
                       activeField={columnSort.field}
                       sortOrder={columnSort.order}
                       onSort={handleColumnSort}
+                      filter={
+                        col.key === 'status'
+                          ? statusFilterProps
+                          : col.key === 'wo_type'
+                            ? typeFilterProps
+                            : undefined
+                      }
                     />
                   ))}
                 </tr>

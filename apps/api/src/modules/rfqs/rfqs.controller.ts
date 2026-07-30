@@ -11,6 +11,7 @@ export class RfqsController {
     @Query('limit') limit?: string,
     @Query('jobId') jobId?: string,
     @Query('quoteId') quoteId?: string,
+    @Query('status') status?: string,
     @Query('vendorId') vendorId?: string,
     @Query('sort') sort?: string,
   ) {
@@ -19,6 +20,7 @@ export class RfqsController {
       limit: limit ? parseInt(limit, 10) : 20,
       jobId,
       quoteId,
+      status,
       vendorId,
       sort,
     });
@@ -37,6 +39,17 @@ export class RfqsController {
   @Get(':id/line-items')
   async getLineItems(@Param('id') id: string) {
     return this.rfqsService.getRfqLineItems({ rfqId: id });
+  }
+
+  @Post(':id/line-items')
+  async replaceLineItems(
+    @Param('id') id: string,
+    @Body() body: { selectedItemIds?: string[] },
+  ) {
+    return this.rfqsService.replaceScopeItems({
+      rfqId: id,
+      selectedItemIds: Array.isArray(body?.selectedItemIds) ? body.selectedItemIds : [],
+    });
   }
 
   @Get(':id')

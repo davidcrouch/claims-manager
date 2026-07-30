@@ -1,7 +1,7 @@
 'use client';
 
 import { Trash2 } from 'lucide-react';
-import { formatDate, SortableColumnHeader } from '@/components/shared/list-filters';
+import { formatDate, SortableColumnHeader, type ColumnValueFilter } from '@/components/shared/list-filters';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { TypeBadge } from '@/components/ui/type-badge';
 import type { Quote } from '@/types/api';
@@ -49,13 +49,13 @@ export type QuoteSortField =
   | 'quote_date'
   | 'updated_at';
 
-interface ColDef { key: QuoteSortField; label: string }
+interface ColDef { key: QuoteSortField; label: string; filterable?: boolean }
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'quote_number', label: 'Estimate #' },
   { key: 'reference', label: 'Reference' },
-  { key: 'status', label: 'Status' },
-  { key: 'estimate_type', label: 'Estimate Type' },
+  { key: 'status', label: 'Status', filterable: true },
+  { key: 'estimate_type', label: 'Estimate Type', filterable: true },
   { key: 'total_amount', label: 'Total' },
   { key: 'quote_date', label: 'Estimate Date' },
   { key: 'updated_at', label: 'Updated' },
@@ -70,6 +70,8 @@ export interface QuotesTableProps {
   sortField?: QuoteSortField;
   sortOrder?: 'asc' | 'desc';
   onSort?: (field: QuoteSortField) => void;
+  statusColumnFilter?: ColumnValueFilter;
+  estimateTypeColumnFilter?: ColumnValueFilter;
 }
 
 export function QuotesTable({
@@ -81,6 +83,8 @@ export function QuotesTable({
   sortField,
   sortOrder = 'desc',
   onSort,
+  statusColumnFilter,
+  estimateTypeColumnFilter,
 }: QuotesTableProps) {
   if (quotes.length === 0) return null;
 
@@ -89,7 +93,7 @@ export function QuotesTable({
       <table className="min-w-full divide-y divide-slate-200 text-sm">
         <thead className="bg-slate-50">
           <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-            {onSort
+            {onSort || statusColumnFilter || estimateTypeColumnFilter
               ? TABLE_COLUMNS.map((col) => (
                   <SortableColumnHeader
                     key={col.key}
@@ -97,7 +101,14 @@ export function QuotesTable({
                     label={col.label}
                     activeField={sortField ?? null}
                     sortOrder={sortOrder}
-                    onSort={onSort}
+                    onSort={onSort ?? (() => {})}
+                    filter={
+                      col.key === 'status'
+                        ? statusColumnFilter
+                        : col.key === 'estimate_type'
+                          ? estimateTypeColumnFilter
+                          : undefined
+                    }
                   />
                 ))
               : TABLE_COLUMNS.map((col) => (

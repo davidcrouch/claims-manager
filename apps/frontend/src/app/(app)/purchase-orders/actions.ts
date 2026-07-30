@@ -9,6 +9,7 @@ export async function fetchPurchaseOrdersAction(params: {
   page?: number;
   limit?: number;
   jobId?: string;
+  status?: string;
   vendorId?: string;
   sort?: string;
 }): Promise<PaginatedResponse<PurchaseOrder> | null> {
@@ -23,6 +24,7 @@ export async function fetchPurchaseOrdersAction(params: {
     page: params.page ?? 1,
     limit: params.limit ?? 20,
     jobId: params.jobId,
+    status: params.status,
     vendorId: params.vendorId,
     sort: params.sort,
   });

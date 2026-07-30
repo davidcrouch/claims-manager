@@ -15,6 +15,7 @@ import {
   isArchivedStatus,
   compareDates,
   compareValues,
+  commitColumnFilterSelection,
   ValueFilterMenu,
 } from '@/components/shared/list-filters';
 import type { Quote, CatalogType } from '@/types/api';
@@ -40,7 +41,7 @@ export function JobQuotesTab({
   jobProvider,
 }: {
   jobId: string;
-  claimId: string;
+  claimId?: string | null;
   jobProvider?: CatalogType;
 }) {
   const [quotes, setQuotes] = useState<Quote[]>([]);
@@ -53,6 +54,9 @@ export function JobQuotesTab({
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
+  const [typeFilterActive, setTypeFilterActive] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [statusFilterActive, setStatusFilterActive] = useState(false);
   const [columnSort, setColumnSort] = useState<{ field: QuoteSortField; order: 'asc' | 'desc' }>({
     field: 'updated_at',
     order: 'desc',
@@ -84,13 +88,43 @@ export function JobQuotesTab({
     return [...names].sort((a, b) => a.localeCompare(b));
   }, [quotes]);
 
+  const uniqueStatuses = useMemo(() => {
+    const names = new Set<string>();
+    for (const q of quotes) {
+      const n = q.status?.name?.trim();
+      if (n) names.add(n);
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [quotes]);
+
   const toggleType = (name: string) => {
-    setTypeFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
+    const working = typeFilterActive ? new Set(typeFilter) : new Set(uniqueTypes);
+    if (working.has(name)) working.delete(name);
+    else working.add(name);
+    const committed = commitColumnFilterSelection({
+      next: working,
+      optionCount: uniqueTypes.length,
     });
+    setTypeFilter(committed.selected);
+    setTypeFilterActive(committed.active);
+  };
+
+  const applyStatusFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueStatuses.length,
+    });
+    setStatusFilter(committed.selected);
+    setStatusFilterActive(committed.active);
+  };
+
+  const applyTypeFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueTypes.length,
+    });
+    setTypeFilter(committed.selected);
+    setTypeFilterActive(committed.active);
   };
 
   const handleColumnSort = (field: QuoteSortField) => {
@@ -110,11 +144,26 @@ export function JobQuotesTab({
       });
     }
 
-    if (typeFilter.size > 0) {
-      rows = rows.filter((q) => {
-        const n = getEstimateTypeName(q).trim();
-        return n ? typeFilter.has(n) : false;
-      });
+    if (statusFilterActive) {
+      if (statusFilter.size === 0) {
+        rows = [];
+      } else {
+        rows = rows.filter((q) => {
+          const n = q.status?.name?.trim();
+          return n ? statusFilter.has(n) : false;
+        });
+      }
+    }
+
+    if (typeFilterActive) {
+      if (typeFilter.size === 0) {
+        rows = [];
+      } else {
+        rows = rows.filter((q) => {
+          const n = getEstimateTypeName(q).trim();
+          return n ? typeFilter.has(n) : false;
+        });
+      }
     }
 
     const query = debouncedSearch.trim().toLowerCase();
@@ -134,7 +183,7 @@ export function JobQuotesTab({
         ? compareDates(aVal, bVal, columnSort.order)
         : compareValues(aVal, bVal, columnSort.order);
     });
-  }, [quotes, tab, typeFilter, debouncedSearch, columnSort]);
+  }, [quotes, tab, statusFilterActive, statusFilter, typeFilterActive, typeFilter, debouncedSearch, columnSort]);
 
   async function handleRowClick(q: Quote) {
     setDetailLoading(true);
@@ -187,10 +236,16 @@ export function JobQuotesTab({
 
         <ValueFilterMenu
           options={uniqueTypes}
-          selected={typeFilter}
+          selected={typeFilterActive ? typeFilter : new Set(uniqueTypes)}
           onToggle={toggleType}
-          onClearAll={() => setTypeFilter(new Set())}
-          onSelectAll={() => setTypeFilter(new Set(uniqueTypes))}
+          onClearAll={() => {
+            setTypeFilter(new Set());
+            setTypeFilterActive(false);
+          }}
+          onSelectAll={() => {
+            setTypeFilter(new Set());
+            setTypeFilterActive(false);
+          }}
           emptyLabel="All types"
           menuTitle="Filter by type"
           itemNoun={{ singular: 'type', plural: 'types' }}
@@ -220,6 +275,22 @@ export function JobQuotesTab({
           sortField={columnSort.field}
           sortOrder={columnSort.order}
           onSort={handleColumnSort}
+          statusColumnFilter={{
+            options: uniqueStatuses,
+            selected: statusFilter,
+            active: statusFilterActive,
+            onApply: applyStatusFilter,
+            menuTitle: 'Filter by status',
+            itemNoun: { singular: 'status', plural: 'statuses' },
+          }}
+          estimateTypeColumnFilter={{
+            options: uniqueTypes,
+            selected: typeFilter,
+            active: typeFilterActive,
+            onApply: applyTypeFilter,
+            menuTitle: 'Filter by type',
+            itemNoun: { singular: 'type', plural: 'types' },
+          }}
         />
       )}
 

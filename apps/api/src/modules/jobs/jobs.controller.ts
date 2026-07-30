@@ -20,6 +20,8 @@ export class JobsController {
     @Query('claimId') claimId?: string,
     @Query('sort') sort?: string,
     @Query('search') search?: string,
+    @Query('status') status?: string,
+    @Query('jobType') jobType?: string,
   ) {
     return this.jobsService.findAll({
       page: page ? parseInt(page, 10) : 1,
@@ -27,6 +29,8 @@ export class JobsController {
       claimId,
       sort,
       search,
+      status,
+      jobType,
     });
   }
 

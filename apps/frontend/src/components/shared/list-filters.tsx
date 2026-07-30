@@ -6,6 +6,7 @@
  * identical search/sort/status filter UX across the app.
  */
 
+import { useEffect, useState } from 'react';
 import {
   ArrowDown,
   ArrowUp,
@@ -69,6 +70,72 @@ export function buildSortString(field: string, order: 'asc' | 'desc'): string {
 
 export function statusIdsKey(ids: Set<string>): string {
   return [...ids].sort().join(',');
+}
+
+/**
+ * Map selected display names to lookup IDs (comma-separated), suitable for
+ * list API `status` / `jobType` query params. Empty selection → undefined (no filter).
+ */
+export function selectedNamesToIdsParam(
+  selectedNames: Set<string>,
+  options: { id: string; name: string }[],
+): string | undefined {
+  if (selectedNames.size === 0) return undefined;
+  const ids: string[] = [];
+  for (const opt of options) {
+    const name = opt.name?.trim();
+    if (name && selectedNames.has(name)) ids.push(opt.id);
+  }
+  if (ids.length === 0) return undefined;
+  return [...new Set(ids)].sort().join(',');
+}
+
+/**
+ * Commit draft checkbox selection from a column filter popup.
+ * - None checked → active filter that matches nothing
+ * - All checked → inactive (show all records)
+ * - Partial → active filter for those names
+ */
+export function commitColumnFilterSelection(params: {
+  next: Set<string>;
+  optionCount: number;
+}): { selected: Set<string>; active: boolean } {
+  if (params.next.size === 0) {
+    return { selected: new Set(), active: true };
+  }
+  if (params.optionCount > 0 && params.next.size >= params.optionCount) {
+    return { selected: new Set(), active: false };
+  }
+  return { selected: new Set(params.next), active: true };
+}
+
+/**
+ * Build API filter param from applied column filter state.
+ * - inactive → undefined (no query filter)
+ * - active + empty → null (match nothing; caller should short-circuit to empty results)
+ * - active + names → CSV ids
+ */
+export function columnFilterToIdsParam(
+  active: boolean,
+  selected: Set<string>,
+  options: { id: string; name: string }[],
+): string | undefined | null {
+  if (!active) return undefined;
+  if (selected.size === 0) return null;
+  return selectedNamesToIdsParam(selected, options) ?? null;
+}
+
+/**
+ * Build CSV string param for non-lookup filters (e.g. task status strings).
+ * Same active/empty semantics as columnFilterToIdsParam.
+ */
+export function columnFilterToValuesParam(
+  active: boolean,
+  selected: Set<string>,
+): string | undefined | null {
+  if (!active) return undefined;
+  if (selected.size === 0) return null;
+  return [...selected].sort().join(',');
 }
 
 export function parseStatusIdsFromSearchParam(
@@ -377,7 +444,7 @@ export function ValueFilterMenu(props: {
         <DropdownMenuSeparator />
         <div className="max-h-[280px] overflow-y-auto">
           {options.map((name) => {
-            const isVisible = !selected.size || selected.has(name);
+            const isChecked = selected.has(name);
             return (
               <DropdownMenuItem
                 key={name}
@@ -388,10 +455,10 @@ export function ValueFilterMenu(props: {
                 closeOnClick={false}
                 className="justify-between"
               >
-                <span className={cn('text-sm', !isVisible && 'text-slate-400')}>
+                <span className={cn('text-sm', !isChecked && 'text-slate-400')}>
                   {name}
                 </span>
-                {isVisible ? (
+                {isChecked ? (
                   <CheckSquare className="h-4 w-4 shrink-0 text-blue-600" />
                 ) : (
                   <Square className="h-4 w-4 shrink-0 text-slate-400" />
@@ -410,14 +477,167 @@ export function ValueFilterMenu(props: {
   );
 }
 
+export interface ColumnValueFilter {
+  options: string[];
+  /** Currently applied selection (empty when inactive or when matching nothing). */
+  selected: Set<string>;
+  /**
+   * When false (default if omitted and selected empty), filter is inactive — show all.
+   * When true, only checked values are included; empty selected means no matches.
+   */
+  active?: boolean;
+  /** Called only when the user clicks Apply — not on individual checkbox changes. */
+  onApply: (next: Set<string>) => void;
+  menuTitle?: string;
+  itemNoun?: { singular: string; plural: string };
+}
+
+function ColumnFilterButton(props: ColumnValueFilter) {
+  const {
+    options,
+    selected,
+    active = false,
+    onApply,
+    menuTitle = 'Filter',
+    itemNoun = { singular: 'item', plural: 'items' },
+  } = props;
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<Set<string>>(() => new Set(selected));
+
+  useEffect(() => {
+    if (!open) return;
+    // Inactive filter → open with all checked. Active → reflect applied selection.
+    if (!active) {
+      setDraft(new Set(options));
+    } else {
+      setDraft(new Set(selected));
+    }
+  }, [open, active, selected, options]);
+
+  const toggleDraft = (name: string) => {
+    setDraft((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
+
+  const handleApply = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onApply(new Set(draft));
+    setOpen(false);
+  };
+
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger
+        render={
+          <button
+            type="button"
+            aria-label={menuTitle}
+            className={cn(
+              'inline-flex shrink-0 items-center justify-center rounded p-0.5 transition-colors hover:bg-slate-200/80',
+              active ? 'text-amber-500' : 'text-slate-400 hover:text-slate-600',
+            )}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Filter size={12} />
+          </button>
+        }
+      />
+      <DropdownMenuContent
+        className="min-w-[220px]"
+        align="start"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-2 py-1.5">
+          <span className="text-xs font-medium text-muted-foreground">
+            {menuTitle}
+          </span>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setDraft(new Set(options));
+              }}
+              className="rounded px-1.5 py-0.5 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-50"
+            >
+              All
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setDraft(new Set());
+              }}
+              className="rounded px-1.5 py-0.5 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-50"
+            >
+              None
+            </button>
+          </div>
+        </div>
+        <DropdownMenuSeparator />
+        <div className="max-h-[280px] overflow-y-auto">
+          {options.map((name) => {
+            const isChecked = draft.has(name);
+            return (
+              <DropdownMenuItem
+                key={name}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  toggleDraft(name);
+                }}
+                closeOnClick={false}
+                className="justify-between"
+              >
+                <span className={cn('text-sm', !isChecked && 'text-slate-400')}>
+                  {name}
+                </span>
+                {isChecked ? (
+                  <CheckSquare className="h-4 w-4 shrink-0 text-blue-600" />
+                ) : (
+                  <Square className="h-4 w-4 shrink-0 text-slate-400" />
+                )}
+              </DropdownMenuItem>
+            );
+          })}
+          {options.length === 0 && (
+            <p className="px-2 py-1.5 text-xs text-slate-400">
+              No {itemNoun.singular} values
+            </p>
+          )}
+        </div>
+        <DropdownMenuSeparator />
+        <div className="px-2 py-1.5">
+          <button
+            type="button"
+            onClick={handleApply}
+            className="w-full rounded-md bg-blue-600 px-2 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-500"
+          >
+            Apply
+          </button>
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function SortableColumnHeader<K extends string>(props: {
   columnKey: K;
   label: string;
   activeField: K | null;
   sortOrder: 'asc' | 'desc';
   onSort: (field: K) => void;
+  /** When set, shows a filter icon left of the label with a checkbox value popup. */
+  filter?: ColumnValueFilter;
 }) {
-  const { columnKey, label, activeField, sortOrder, onSort } = props;
+  const { columnKey, label, activeField, sortOrder, onSort, filter } = props;
   const isActive = activeField === columnKey;
   return (
     <th
@@ -426,6 +646,7 @@ export function SortableColumnHeader<K extends string>(props: {
       onClick={() => onSort(columnKey)}
     >
       <span className="inline-flex items-center gap-1">
+        {filter ? <ColumnFilterButton {...filter} /> : null}
         {label}
         {isActive ? (
           sortOrder === 'asc' ? (

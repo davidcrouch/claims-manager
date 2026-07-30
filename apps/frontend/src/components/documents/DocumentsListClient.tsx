@@ -8,6 +8,8 @@ import { TypeBadge } from '@/components/ui/type-badge';
 import {
   SortableColumnHeader,
   ValueFilterMenu,
+  commitColumnFilterSelection,
+  columnFilterToValuesParam,
 } from '@/components/shared/list-filters';
 import { TablePagination } from '@/components/shared/table-pagination';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
@@ -23,12 +25,13 @@ type DocSortField = 'title' | 'type' | 'entity' | 'filename' | 'size' | 'created
 interface ColDef {
   key: DocSortField;
   label: string;
+  filterable?: boolean;
 }
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'title', label: 'Name' },
   { key: 'type', label: 'Type' },
-  { key: 'entity', label: 'Entity' },
+  { key: 'entity', label: 'Entity', filterable: true },
   { key: 'filename', label: 'Filename' },
   { key: 'size', label: 'Size' },
   { key: 'created_at', label: 'Uploaded' },
@@ -47,6 +50,7 @@ export function DocumentsListClient() {
     order: 'asc' | 'desc';
   }>({ field: 'created_at', order: 'desc' });
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
+  const [typeFilterActive, setTypeFilterActive] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -54,15 +58,28 @@ export function DocumentsListClient() {
   }, [search]);
 
   const sortParam = `${columnSort.field}_${columnSort.order}`;
+  const relatedRecordTypeParam = useMemo(
+    () => columnFilterToValuesParam(typeFilterActive, typeFilter),
+    [typeFilterActive, typeFilter],
+  );
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      if (relatedRecordTypeParam === null) {
+        if (!cancelled) {
+          setDocuments([]);
+          setTotal(0);
+          setLoading(false);
+        }
+        return;
+      }
       setLoading(true);
       const res = await fetchDocumentsAction({
         page,
         limit: PAGE_SIZE,
         search: debouncedSearch || undefined,
+        relatedRecordType: relatedRecordTypeParam,
         sort: sortParam,
       });
       if (cancelled) return;
@@ -73,7 +90,7 @@ export function DocumentsListClient() {
     return () => {
       cancelled = true;
     };
-  }, [debouncedSearch, page, sortParam]);
+  }, [debouncedSearch, page, sortParam, relatedRecordTypeParam]);
 
   const handleColumnSort = (field: DocSortField) => {
     setColumnSort((prev) => {
@@ -91,7 +108,21 @@ export function DocumentsListClient() {
   };
 
   const uniqueTypes = useMemo(() => {
-    const names = new Set<string>();
+    const names = new Set<string>([
+      'Claim',
+      'Job',
+      'Quote',
+      'Invoice',
+      'PurchaseOrder',
+      'WorkOrder',
+      'Report',
+      'Rfq',
+      'Proposal',
+      'Bill',
+      'Task',
+      'Appointment',
+      'Journal',
+    ]);
     for (const d of documents) {
       const t = d.relatedRecordType?.trim();
       if (t) names.add(t);
@@ -100,26 +131,42 @@ export function DocumentsListClient() {
   }, [documents]);
 
   const toggleType = (name: string) => {
-    setTypeFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
+    const working = typeFilterActive ? new Set(typeFilter) : new Set(uniqueTypes);
+    if (working.has(name)) working.delete(name);
+    else working.add(name);
+    const committed = commitColumnFilterSelection({
+      next: working,
+      optionCount: uniqueTypes.length,
     });
+    setTypeFilter(committed.selected);
+    setTypeFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const applyTypeFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueTypes.length,
+    });
+    setTypeFilter(committed.selected);
+    setTypeFilterActive(committed.active);
+    setPage(1);
   };
 
   const visibleRows = useMemo(() => {
     let rows = documents;
 
-    if (typeFilter.size > 0) {
-      rows = rows.filter((d) => {
-        const t = d.relatedRecordType?.trim();
-        return t ? typeFilter.has(t) : false;
-      });
-    }
-
     return rows;
-  }, [documents, typeFilter]);
+  }, [documents]);
+
+  const typeFilterProps = {
+    options: uniqueTypes,
+    selected: typeFilter,
+    active: typeFilterActive,
+    onApply: applyTypeFilter,
+    menuTitle: 'Filter by entity type',
+    itemNoun: { singular: 'type', plural: 'types' },
+  };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
@@ -160,10 +207,18 @@ export function DocumentsListClient() {
 
           <ValueFilterMenu
             options={uniqueTypes}
-            selected={typeFilter}
+            selected={typeFilterActive ? typeFilter : new Set(uniqueTypes)}
             onToggle={toggleType}
-            onClearAll={() => setTypeFilter(new Set())}
-            onSelectAll={() => setTypeFilter(new Set(uniqueTypes))}
+            onClearAll={() => {
+              setTypeFilter(new Set());
+              setTypeFilterActive(false);
+              setPage(1);
+            }}
+            onSelectAll={() => {
+              setTypeFilter(new Set());
+              setTypeFilterActive(false);
+              setPage(1);
+            }}
             emptyLabel="All entity types"
             menuTitle="Filter by entity type"
             itemNoun={{ singular: 'type', plural: 'types' }}
@@ -189,6 +244,7 @@ export function DocumentsListClient() {
                       activeField={columnSort.field}
                       sortOrder={columnSort.order}
                       onSort={handleColumnSort}
+                      filter={col.key === 'entity' ? typeFilterProps : undefined}
                     />
                   ))}
                   <th scope="col" className="px-4 py-3 w-10">

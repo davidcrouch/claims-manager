@@ -5,20 +5,20 @@ import { Button } from '@/components/ui/button';
 import { JobsListClient } from './JobsListClient';
 import { JobFormDrawer } from '@/components/forms/JobFormDrawer';
 import type { Job, PaginatedResponse } from '@/types/api';
-import type { Claim } from '@/types/api';
 
 export interface JobsPageClientProps {
   initialData: PaginatedResponse<Job>;
-  claims: Claim[];
   jobTypes: { id: string; name?: string }[];
+  /** All job_type lookups for list filtering (any provider). Falls back to jobTypes. */
+  jobTypeFilterOptions?: { id: string; name: string }[];
   statusOptions: { id: string; name: string }[];
   unreadJobIds?: string[];
 }
 
 export function JobsPageClient({
   initialData,
-  claims,
   jobTypes,
+  jobTypeFilterOptions,
   statusOptions,
   unreadJobIds,
 }: JobsPageClientProps) {
@@ -29,6 +29,7 @@ export function JobsPageClient({
       <JobsListClient
         initialData={initialData}
         statusOptions={statusOptions}
+        jobTypes={jobTypeFilterOptions ?? jobTypes}
         unreadJobIds={unreadJobIds}
         headerAction={
           <Button onClick={() => setDrawerOpen(true)}>Create Job</Button>
@@ -37,7 +38,6 @@ export function JobsPageClient({
       <JobFormDrawer
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
-        claims={claims}
         jobTypes={jobTypes}
       />
     </>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import {
   FileQuestion,
@@ -13,10 +13,13 @@ import {
   ClipboardList,
   Send,
   MessageSquare,
+  Loader2,
+  Save,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { BackButton } from '@/components/layout/BackButton';
+import { Button } from '@/components/ui/button';
 import {
   DefRow,
   SectionCard,
@@ -28,8 +31,13 @@ import {
   type Dict,
 } from '@/components/shared/detail';
 import type { Rfq, Proposal } from '@/types/api';
-import type { ApiGroup, ApiItem } from '@/components/quotes/quote-line-items.types';
-import { fetchRfqLineItemsAction } from '@/app/(app)/rfqs/[id]/actions';
+import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
+import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
+import {
+  fetchRfqLineItemsAction,
+  replaceRfqLineItemsAction,
+} from '@/app/(app)/rfqs/[id]/actions';
+import { getQuoteLineItemsAction } from '@/app/(app)/quotes/actions';
 
 // ---------- helpers ---------------------------------------------------------
 
@@ -244,10 +252,16 @@ function OverviewTab({ rfq }: { rfq: Rfq }) {
   );
 }
 
-function ScopeItemsTab({ rfqId }: { rfqId: string }) {
-  const [groups, setGroups] = useState<ApiGroup[]>([]);
+function ScopeItemsTab({ rfqId, quoteId }: { rfqId: string; quoteId: string | null }) {
+  const [rfqGroups, setRfqGroups] = useState<ApiGroup[] | null>(null);
+  const [estimateGroups, setEstimateGroups] = useState<ApiGroup[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [estimateLoading, setEstimateLoading] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -255,7 +269,7 @@ function ScopeItemsTab({ rfqId }: { rfqId: string }) {
     try {
       const result = await fetchRfqLineItemsAction(rfqId);
       if (result.success && result.groups) {
-        setGroups(result.groups as unknown as ApiGroup[]);
+        setRfqGroups(result.groups as unknown as ApiGroup[]);
       } else {
         setError(result.error ?? 'Failed to load scope items');
       }
@@ -267,14 +281,73 @@ function ScopeItemsTab({ rfqId }: { rfqId: string }) {
   }, [rfqId]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!editing || !quoteId || estimateGroups) return;
+    let cancelled = false;
+    setEstimateLoading(true);
+    getQuoteLineItemsAction(quoteId)
+      .then((result) => {
+        if (cancelled) return;
+        if (result.success && result.groups) {
+          setEstimateGroups(result.groups as unknown as ApiGroup[]);
+        }
+      })
+      .finally(() => { if (!cancelled) setEstimateLoading(false); });
+    return () => { cancelled = true; };
+  }, [editing, quoteId, estimateGroups]);
+
+  const rfqSourceIds = useMemo(() => {
+    if (!rfqGroups) return new Set<string>();
+    return collectSourceQuoteIds(rfqGroups);
+  }, [rfqGroups]);
+
+  useEffect(() => {
+    setSelectedIds(new Set(rfqSourceIds));
+  }, [rfqSourceIds]);
+
+  const displayGroups = useMemo(() => {
+    if (!estimateGroups) return rfqGroups;
+    if (editing) return estimateGroups;
+    return filterGroupsBySelectedIds(estimateGroups, selectedIds);
+  }, [editing, estimateGroups, rfqGroups, selectedIds]);
+
+  const selectionDirty = useMemo(() => {
+    if (selectedIds.size !== rfqSourceIds.size) return true;
+    for (const id of selectedIds) {
+      if (!rfqSourceIds.has(id)) return true;
+    }
+    return false;
+  }, [selectedIds, rfqSourceIds]);
+
+  async function handleSaveScope() {
+    if (selectedIds.size === 0) {
+      setSaveError('Select at least one scope item');
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const result = await replaceRfqLineItemsAction(rfqId, Array.from(selectedIds));
+      if (!result.success) {
+        setSaveError(result.error ?? 'Failed to update scope items');
+        return;
+      }
+      setRfqGroups((result.groups as unknown as ApiGroup[]) ?? []);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to update scope items');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   if (loading) {
     return (
       <Card>
-        <CardContent className="py-8">
-          <p className="text-sm text-muted-foreground">Loading scope items...</p>
+        <CardContent className="flex items-center justify-center py-12">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </CardContent>
       </Card>
     );
@@ -283,14 +356,17 @@ function ScopeItemsTab({ rfqId }: { rfqId: string }) {
   if (error) {
     return (
       <Card>
-        <CardContent className="py-8">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Scope Items</CardTitle>
+        </CardHeader>
+        <CardContent>
           <p className="text-sm text-destructive">{error}</p>
         </CardContent>
       </Card>
     );
   }
 
-  if (groups.length === 0) {
+  if (!rfqGroups || rfqGroups.length === 0) {
     return (
       <Card>
         <CardHeader className="pb-2">
@@ -307,83 +383,114 @@ function ScopeItemsTab({ rfqId }: { rfqId: string }) {
 
   return (
     <div className="space-y-3">
-      {groups.map((group) => (
-        <Card key={group.id ?? `group-${group.index}`}>
-          <CardHeader className="bg-slate-50 pb-2">
-            <CardTitle className="flex items-center justify-between text-sm">
-              <span className="flex items-center gap-2">
-                <Layers className="h-4 w-4 text-muted-foreground" />
-                {group.groupLabel?.name ?? group.description ?? `Group ${(group.index ?? 0) + 1}`}
-              </span>
-              {group.total != null && (
-                <span className="font-normal text-muted-foreground">
-                  {formatCurrency(group.total)}
-                </span>
+      {quoteId && (
+        <div className="flex items-center justify-end gap-3">
+          {saveError && (
+            <p className="mr-auto text-sm text-destructive">{saveError}</p>
+          )}
+          {editing && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!selectionDirty || saving || selectedIds.size === 0}
+              onClick={() => void handleSaveScope()}
+            >
+              {saving ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Save className="mr-1.5 h-3.5 w-3.5" />
               )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-0 py-0">
-            <div className="divide-y divide-border/60">
-              {/* Direct items */}
-              {(group.items ?? []).map((item) => (
-                <ScopeItemRow key={item.id ?? `item-${item.index}`} item={item} />
-              ))}
-
-              {/* Assemblies */}
-              {(group.combos ?? []).map((combo) => (
-                <div key={combo.id ?? `combo-${combo.index}`}>
-                  <div className="flex items-center justify-between bg-blue-50/50 px-4 py-2">
-                    <div>
-                      <p className="text-sm font-medium text-blue-900">
-                        {combo.name ?? combo.description ?? `Assembly ${(combo.index ?? 0) + 1}`}
-                      </p>
-                      {combo.description && combo.name && (
-                        <p className="text-xs text-blue-700/70">{combo.description}</p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      {combo.quantity != null && <span>Qty: {combo.quantity}</span>}
-                      {combo.total != null && <span>{formatCurrency(combo.total)}</span>}
-                    </div>
-                  </div>
-                  {(combo.items ?? []).map((item) => (
-                    <ScopeItemRow
-                      key={item.id ?? `combo-item-${item.index}`}
-                      item={item}
-                      indent
-                    />
-                  ))}
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+              Save Scope
+            </Button>
+          )}
+          <div className="flex items-center gap-2">
+            <label
+              htmlFor="edit-scope-toggle"
+              className="text-sm text-muted-foreground select-none cursor-pointer"
+            >
+              Edit
+            </label>
+            <button
+              id="edit-scope-toggle"
+              type="button"
+              role="switch"
+              aria-checked={editing}
+              onClick={() => setEditing((v) => !v)}
+              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 ${
+                editing ? 'bg-emerald-500' : 'bg-slate-200'
+              }`}
+            >
+              <span
+                className={`pointer-events-none block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                  editing ? 'translate-x-4' : 'translate-x-0'
+                }`}
+              />
+            </button>
+            {estimateLoading && (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+            )}
+          </div>
+        </div>
+      )}
+      <QuoteLineItemsTable
+        groups={displayGroups ?? []}
+        readOnly
+        selection={
+          editing && estimateGroups
+            ? { selectedIds, onChange: setSelectedIds }
+            : undefined
+        }
+      />
     </div>
   );
 }
 
-function ScopeItemRow({ item, indent }: { item: ApiItem; indent?: boolean }) {
-  return (
-    <div className={`flex items-center justify-between px-4 py-2 ${indent ? 'pl-8' : ''}`}>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm">
-          {item.name ?? item.component ?? item.description ?? 'Unnamed item'}
-        </p>
-        {item.description && item.name && (
-          <p className="truncate text-xs text-muted-foreground">{item.description}</p>
-        )}
-      </div>
-      <div className="flex shrink-0 items-center gap-4 text-xs text-muted-foreground">
-        {item.quantity != null && <span>Qty: {item.quantity}</span>}
-        {item.unitType?.name && <span>{item.unitType.name}</span>}
-        {item.unitCost != null && <span>@ {formatCurrency(item.unitCost)}</span>}
-        {item.total != null && (
-          <span className="font-medium text-foreground">{formatCurrency(item.total)}</span>
-        )}
-      </div>
-    </div>
-  );
+/**
+ * Collect source quote IDs from RFQ scope items.
+ * The API returns `sourceQuoteItemId` / `sourceQuoteComboId` on each RFQ item/combo
+ * which reference the original estimate item IDs.
+ */
+function collectSourceQuoteIds(groups: ApiGroup[]): Set<string> {
+  const ids = new Set<string>();
+  for (const group of groups) {
+    for (const item of group.items ?? []) {
+      const src = (item as Record<string, unknown>).sourceQuoteItemId;
+      if (typeof src === 'string') ids.add(src);
+      else if (item.id) ids.add(item.id);
+    }
+    for (const combo of group.combos ?? []) {
+      const comboSrc = (combo as Record<string, unknown>).sourceQuoteComboId;
+      if (typeof comboSrc === 'string') ids.add(comboSrc);
+      else if (combo.id) ids.add(combo.id);
+      for (const item of combo.items ?? []) {
+        const src = (item as Record<string, unknown>).sourceQuoteItemId;
+        if (typeof src === 'string') ids.add(src);
+        else if (item.id) ids.add(item.id);
+      }
+    }
+  }
+  return ids;
+}
+
+/** Keep only selected items/combos; drop empty groups. */
+function filterGroupsBySelectedIds(groups: ApiGroup[], selectedIds: Set<string>): ApiGroup[] {
+  return groups
+    .map((group) => {
+      const items = (group.items ?? []).filter((item) => item.id && selectedIds.has(item.id));
+      const combos = (group.combos ?? [])
+        .map((combo) => {
+          const childItems = (combo.items ?? []).filter(
+            (item) => item.id && selectedIds.has(item.id),
+          );
+          const comboSelected = !!combo.id && selectedIds.has(combo.id);
+          if (!comboSelected && childItems.length === 0) return null;
+          return { ...combo, items: childItems };
+        })
+        .filter(Boolean) as NonNullable<ApiGroup['combos']>;
+      if (items.length === 0 && combos.length === 0) return null;
+      return { ...group, items, combos };
+    })
+    .filter(Boolean) as ApiGroup[];
 }
 
 function ProposalsTab({
@@ -577,7 +684,7 @@ export function RfqDetail({
       </div>
       <div className="pt-4">
         {tab === 'overview' && <OverviewTab rfq={rfq} />}
-        {tab === 'scope-items' && <ScopeItemsTab rfqId={rfq.id} />}
+        {tab === 'scope-items' && <ScopeItemsTab rfqId={rfq.id} quoteId={rfq.quoteId ?? null} />}
         {tab === 'proposals' && (
           <ProposalsTab rfqId={rfq.id} fetchProposals={fetchProposals} />
         )}

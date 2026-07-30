@@ -11,6 +11,7 @@ export async function fetchClaimsAction(params: {
   search?: string;
   sort?: string;
   status?: string;
+  account?: string;
 }): Promise<PaginatedResponse<Claim> | null> {
   const session = await getSession();
   if (!session.authenticated) return null;
@@ -25,5 +26,6 @@ export async function fetchClaimsAction(params: {
     search: params.search,
     sort: params.sort,
     status: params.status,
+    account: params.account,
   });
 }

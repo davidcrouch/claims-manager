@@ -349,3 +349,13 @@
   Expanded **RFQ workflows** with richer create/edit forms, vendor linking, line-item handling, and detail screens wired through new server actions.
   Improved **list screens across the product** with shared table pagination, toast feedback, type badges, and consistent server-action patterns for bills, proposals, contacts, and work orders.
   Strengthened **Crunchwork provider sync** — vendor sync service, job connection backfill, attachment downloads, connection documentation links, webhook handling, and mapper/transformer updates for jobs, quotes, purchase orders, and attachments.
+
+- `2026-07-30` `pending` **24.5 h**
+  `116 files | +4940 −1213 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  Lay summary: Jobs can be created without a claim, with internal job types and a clearer create form, and list screens across the app get stronger shared filters.
+  **Direct (claim-optional) jobs, internal job types, and list-filter upgrades.** Allowed jobs to exist without a linked claim and added an optional job display name.
+  Seeded **internal job types** for create-job flows that are not tied to the external provider’s type list.
+  Rebuilt the **create/edit job form** so staff can pick claim (or none), job type, and related fields with clearer validation.
+  Extended **jobs and related APIs** so lists and creates work for claim-linked and standalone jobs alike.
+  Upgraded **shared list filters** and applied them across claims, jobs, invoices, quotes, RFQs, work orders, and other entity lists.
+  Improved **RFQ detail and job child tabs** so create/link flows stay consistent with the new job model.

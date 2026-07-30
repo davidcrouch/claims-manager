@@ -39,12 +39,24 @@ export default async function WorkOrderDetailPage({
   });
   if (!wo) notFound();
 
+  let jobName: string | undefined;
+  if (wo.jobId) {
+    const job = await api.getJob(wo.jobId).catch((err: unknown) => {
+      console.error(
+        'frontend:WorkOrderDetailPage - getJob failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return null;
+    });
+    jobName = job?.name?.trim() || job?.externalReference?.trim() || undefined;
+  }
+
   return (
     <>
       <SetPageHeader>
         <WorkOrderPageHeader wo={wo} />
       </SetPageHeader>
-      <WorkOrderDetail wo={wo} />
+      <WorkOrderDetail wo={wo} jobName={jobName} />
     </>
   );
 }

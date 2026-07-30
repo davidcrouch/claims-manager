@@ -18,6 +18,8 @@ import {
   type StatusOption,
   formatDate,
   isArchivedStatus,
+  commitColumnFilterSelection,
+  columnFilterToIdsParam,
   ValueFilterMenu,
   SortableColumnHeader,
 } from '@/components/shared/list-filters';
@@ -53,34 +55,36 @@ type JobSortField =
   | 'request_date'
   | 'updated_at';
 
-interface ColDef { key: JobSortField; label: string }
+interface ColDef { key: JobSortField; label: string; filterable?: boolean }
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'external_reference', label: 'Job Ref' },
-  { key: 'status', label: 'Status' },
-  { key: 'job_type', label: 'Type' },
+  { key: 'status', label: 'Status', filterable: true },
+  { key: 'job_type', label: 'Type', filterable: true },
   { key: 'address', label: 'Address' },
   { key: 'request_date', label: 'Requested' },
   { key: 'updated_at', label: 'Updated' },
 ];
 
 export interface JobsListClientProps {
- initialData: PaginatedResponse<Job>;
- statusOptions: StatusOption[];
- unreadJobIds?: string[];
- headerAction?: React.ReactNode;
+  initialData: PaginatedResponse<Job>;
+  statusOptions: StatusOption[];
+  jobTypes?: { id: string; name?: string }[];
+  unreadJobIds?: string[];
+  headerAction?: React.ReactNode;
 }
 
 export function JobsListClient({
- initialData,
- statusOptions,
- unreadJobIds,
- headerAction,
+  initialData,
+  statusOptions,
+  jobTypes = [],
+  unreadJobIds,
+  headerAction,
 }: JobsListClientProps) {
- const router = useRouter();
- const searchParams = useSearchParams();
- const [data, setData] = useState(initialData);
- const unreadSet = useMemo(() => new Set(unreadJobIds ?? []), [unreadJobIds]);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [data, setData] = useState(initialData);
+  const unreadSet = useMemo(() => new Set(unreadJobIds ?? []), [unreadJobIds]);
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [tab, setTab] = useState<ListTab>(() => parseTab(searchParams.get('tab')));
@@ -93,8 +97,66 @@ export function JobsListClient({
     order: 'desc',
   });
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
+  const [typeFilterActive, setTypeFilterActive] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [statusFilterActive, setStatusFilterActive] = useState(false);
 
   const lastFetchKeyRef = useRef<string | null>(null);
+
+  const typeOptions = useMemo(
+    () =>
+      jobTypes
+        .map((t) => ({
+          id: t.id,
+          name: t.name?.trim() ? t.name.trim() : 'Unknown',
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [jobTypes],
+  );
+
+  const statusNames = useMemo(() => {
+    const fromOptions = statusOptions
+      .map((s) => s.name?.trim())
+      .filter((n): n is string => !!n);
+    return [...new Set(fromOptions)].sort((a, b) => a.localeCompare(b));
+  }, [statusOptions]);
+
+  // Unique display names for the popup (optionCount must match Set size after All)
+  const typeNames = useMemo(
+    () => [...new Set(typeOptions.map((t) => t.name))].sort((a, b) => a.localeCompare(b)),
+    [typeOptions],
+  );
+
+  /** Status IDs implied by Active / Archived tab (undefined = All). */
+  const tabStatusIds = useMemo(() => {
+    if (tab === 'all') return undefined;
+    const ids = statusOptions
+      .filter((s) => {
+        const archived = isArchivedStatus(s.name);
+        return tab === 'archived' ? archived : !archived;
+      })
+      .map((s) => s.id);
+    return ids.length > 0 ? ids.sort().join(',') : undefined;
+  }, [tab, statusOptions]);
+
+  const statusParam = useMemo(() => {
+    const column = columnFilterToIdsParam(
+      statusFilterActive,
+      statusFilter,
+      statusOptions,
+    );
+    if (column === null) return null;
+    if (!tabStatusIds) return column;
+    if (!column) return tabStatusIds;
+    const tabSet = new Set(tabStatusIds.split(','));
+    const intersect = column.split(',').filter((id) => tabSet.has(id));
+    return intersect.length > 0 ? intersect.join(',') : null;
+  }, [statusFilterActive, statusFilter, statusOptions, tabStatusIds]);
+
+  const jobTypeParam = useMemo(
+    () => columnFilterToIdsParam(typeFilterActive, typeFilter, typeOptions),
+    [typeFilterActive, typeFilter, typeOptions],
+  );
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -104,26 +166,39 @@ export function JobsListClient({
   const sortParam = `${columnSort.field}_${columnSort.order}`;
 
   useEffect(() => {
-    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}`;
+    const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
+    const typeKey = jobTypeParam === null ? '__none__' : (jobTypeParam ?? '');
+    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${typeKey}`;
 
     const params = new URLSearchParams(searchParams.toString());
     params.set('search', debouncedSearch);
     params.set('tab', tab);
     params.set('page', String(page));
     params.set('sort', sortParam);
+    if (statusParam) params.set('status', statusParam);
+    else params.delete('status');
+    if (jobTypeParam) params.set('jobType', jobTypeParam);
+    else params.delete('jobType');
     router.replace(`/jobs?${params}`, { scroll: false });
 
     if (lastFetchKeyRef.current === fetchKey) return;
     lastFetchKeyRef.current = fetchKey;
+
+    if (statusParam === null || jobTypeParam === null) {
+      setData({ data: [], total: 0 });
+      return;
+    }
 
     fetchJobsAction({
       search: debouncedSearch || undefined,
       page,
       limit: PAGE_SIZE,
       sort: sortParam,
+      status: statusParam,
+      jobType: jobTypeParam,
     }).then((res) => res && setData(res));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, sortParam, tab, page]);
+  }, [debouncedSearch, sortParam, tab, page, statusParam, jobTypeParam]);
 
   const handleColumnSort = (field: JobSortField) => {
     setColumnSort((prev) => {
@@ -149,45 +224,60 @@ export function JobsListClient({
     setPage(1);
   };
 
-  const uniqueTypes = useMemo(() => {
-    const names = new Set<string>();
-    for (const job of data.data) {
-      const name = job.jobType?.name?.trim();
-      if (name) names.add(name);
-    }
-    return [...names].sort((a, b) => a.localeCompare(b));
-  }, [data.data]);
-
   const toggleType = (name: string) => {
-    setTypeFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
+    const working = typeFilterActive ? new Set(typeFilter) : new Set(typeNames);
+    if (working.has(name)) working.delete(name);
+    else working.add(name);
+    const committed = commitColumnFilterSelection({
+      next: working,
+      optionCount: typeNames.length,
     });
+    setTypeFilter(committed.selected);
+    setTypeFilterActive(committed.active);
+    setPage(1);
   };
 
-  const visibleRows = useMemo(() => {
-    let rows = data.data;
+  const applyStatusFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: statusNames.length,
+    });
+    setStatusFilter(committed.selected);
+    setStatusFilterActive(committed.active);
+    setPage(1);
+  };
 
-    if (tab !== 'all') {
-      rows = rows.filter((job) => {
-        const archived = isArchivedStatus(job.status?.name);
-        return tab === 'archived' ? archived : !archived;
-      });
-    }
+  const applyTypeFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: typeNames.length,
+    });
+    setTypeFilter(committed.selected);
+    setTypeFilterActive(committed.active);
+    setPage(1);
+  };
 
-    if (typeFilter.size > 0) {
-      rows = rows.filter((job) => {
-        const name = job.jobType?.name?.trim();
-        return name ? typeFilter.has(name) : false;
-      });
-    }
-
-    return rows;
-  }, [data.data, tab, typeFilter]);
+  const visibleRows = useMemo(() => data.data, [data.data]);
 
   const breakdown = computeStatusBreakdown(visibleRows, (j) => j.status?.name);
+
+  const statusFilterProps = {
+    options: statusNames,
+    selected: statusFilter,
+    active: statusFilterActive,
+    onApply: applyStatusFilter,
+    menuTitle: 'Filter by status',
+    itemNoun: { singular: 'status', plural: 'statuses' },
+  };
+
+  const typeFilterProps = {
+    options: typeNames.length > 0 ? typeNames : [],
+    selected: typeFilter,
+    active: typeFilterActive,
+    onApply: applyTypeFilter,
+    menuTitle: 'Filter by type',
+    itemNoun: { singular: 'type', plural: 'types' },
+  };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
@@ -235,11 +325,19 @@ export function JobsListClient({
           </div>
 
           <ValueFilterMenu
-            options={uniqueTypes}
-            selected={typeFilter}
+            options={typeNames}
+            selected={typeFilterActive ? typeFilter : new Set(typeNames)}
             onToggle={toggleType}
-            onClearAll={() => setTypeFilter(new Set())}
-            onSelectAll={() => setTypeFilter(new Set(uniqueTypes))}
+            onClearAll={() => {
+              setTypeFilter(new Set());
+              setTypeFilterActive(false);
+              setPage(1);
+            }}
+            onSelectAll={() => {
+              setTypeFilter(new Set());
+              setTypeFilterActive(false);
+              setPage(1);
+            }}
             emptyLabel="All types"
             menuTitle="Filter by type"
             itemNoun={{ singular: 'type', plural: 'types' }}
@@ -266,13 +364,20 @@ export function JobsListClient({
                       activeField={columnSort.field}
                       sortOrder={columnSort.order}
                       onSort={handleColumnSort}
+                      filter={
+                        col.key === 'status'
+                          ? statusFilterProps
+                          : col.key === 'job_type'
+                            ? typeFilterProps
+                            : undefined
+                      }
                     />
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {visibleRows.map((job) => {
-                  const ref = job.externalJobId ?? job.externalReference ?? job.id;
+                  const ref = job.name ?? job.externalJobId ?? job.externalReference ?? job.id;
                   const statusName = job.status?.name ?? 'Unknown';
                   const jobTypeName = job.jobType?.name ?? '';
                   const isUnread = unreadSet.has(job.id);

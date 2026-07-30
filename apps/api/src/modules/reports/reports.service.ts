@@ -27,6 +27,7 @@ export class ReportsService {
     limit?: number;
     jobId?: string;
     claimId?: string;
+    status?: string;
     reportTypeId?: string;
     sort?: string;
   }) {
@@ -37,6 +38,7 @@ export class ReportsService {
       limit: params.limit,
       jobId: params.jobId,
       claimId: params.claimId,
+      status: params.status,
       reportTypeId: params.reportTypeId,
       sort: params.sort,
     });

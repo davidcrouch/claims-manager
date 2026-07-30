@@ -4,17 +4,19 @@ import { useState } from 'react';
 import { InvoicesListClient } from './InvoicesListClient';
 import { InvoiceFormDrawer } from '@/components/forms/InvoiceFormDrawer';
 import { Button } from '@/components/ui/button';
-import type { Invoice, PaginatedResponse, PurchaseOrder } from '@/types/api';
+import type { Invoice, PaginatedResponse, WorkOrder } from '@/types/api';
 
 export interface InvoicesPageClientProps {
   initialData: PaginatedResponse<Invoice>;
-  purchaseOrders: PurchaseOrder[];
+  workOrders: WorkOrder[];
+  jobNameById: Record<string, string>;
   statusOptions: { id: string; name: string }[];
 }
 
 export function InvoicesPageClient({
   initialData,
-  purchaseOrders,
+  workOrders,
+  jobNameById,
   statusOptions,
 }: InvoicesPageClientProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -31,7 +33,8 @@ export function InvoicesPageClient({
       <InvoiceFormDrawer
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
-        purchaseOrders={purchaseOrders}
+        workOrders={workOrders}
+        jobNameById={jobNameById}
       />
     </>
   );

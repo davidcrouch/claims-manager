@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { GripVertical, Layers, Package, Pin, PinOff, Search, Tag, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useSidebar } from '@/components/ui/sidebar';
-import { searchCatalogItemsAction, fetchCatalogsAction } from '@/app/(app)/admin/catalog/actions';
+import { fetchCatalogItemsAction, fetchCatalogsAction } from '@/app/(app)/admin/catalog/actions';
 import { fetchGroupLabelLookupsAction } from '@/app/(app)/quotes/actions';
 import type { Catalog, CatalogItem, CatalogType } from '@/types/api';
 import {
@@ -22,6 +23,34 @@ export interface CatalogPickerDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   catalogType?: CatalogType;
+}
+
+/** Fetch every page of catalogue items matching the filters (API caps page size). */
+async function fetchAllCatalogItems(params: {
+  catalogId?: string;
+  q?: string;
+  kind?: 'primitive' | 'assembly';
+}): Promise<CatalogItem[]> {
+  const pageSize = params.q ? 500 : 100;
+  const all: CatalogItem[] = [];
+  let page = 1;
+
+  while (page <= 50) {
+    const result = await fetchCatalogItemsAction({
+      catalogId: params.catalogId,
+      q: params.q,
+      kind: params.kind,
+      page,
+      limit: pageSize,
+      sort: 'code_asc',
+    });
+    if (!result?.data.length) break;
+    all.push(...result.data);
+    if (all.length >= result.total) break;
+    page += 1;
+  }
+
+  return all;
 }
 
 function toDragPayload(item: CatalogItem): CatalogDragPayload {
@@ -88,16 +117,41 @@ function ItemsTab({ open, catalogType }: { open: boolean; catalogType?: CatalogT
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [items, setItems] = useState<CatalogItem[]>([]);
-  const [pending, startTransition] = useTransition();
+  const [loading, setLoading] = useState(false);
   const [catalogs, setCatalogs] = useState<Catalog[]>([]);
+  const [catalogsReady, setCatalogsReady] = useState(false);
   const [selectedCatalogId, setSelectedCatalogId] = useState<string>('');
+  const [showAssemblies, setShowAssemblies] = useState(true);
+  const [showPrimitives, setShowPrimitives] = useState(true);
+  const fetchGeneration = useRef(0);
 
   useEffect(() => {
     if (!open) return;
-    fetchCatalogsAction({ type: catalogType === 'internal' ? undefined : catalogType }).then((list) => {
+    setCatalogsReady(false);
+    void (async () => {
+      // Crunchwork jobs still need internal catalogues — assemblies live there.
+      const list =
+        catalogType === 'crunchwork'
+          ? (
+              await Promise.all([
+                fetchCatalogsAction({ type: 'crunchwork' }),
+                fetchCatalogsAction({ type: 'internal' }),
+              ])
+            ).flat()
+          : await fetchCatalogsAction({
+              type: catalogType === 'internal' ? undefined : catalogType,
+            });
+
       let sorted: Catalog[];
       if (catalogType === 'crunchwork') {
-        sorted = [...list].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        sorted = [...list].sort((a, b) => {
+          if (a.type === 'crunchwork' && b.type !== 'crunchwork') return -1;
+          if (a.type !== 'crunchwork' && b.type === 'crunchwork') return 1;
+          if (a.type === 'crunchwork' && b.type === 'crunchwork') {
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+          }
+          return a.name.localeCompare(b.name);
+        });
       } else if (catalogType === 'internal') {
         sorted = [...list].sort((a, b) => {
           if (a.type === 'internal' && b.type !== 'internal') return -1;
@@ -108,10 +162,11 @@ function ItemsTab({ open, catalogType }: { open: boolean; catalogType?: CatalogT
         sorted = list;
       }
       setCatalogs(sorted);
-      if (sorted.length === 1) {
-        setSelectedCatalogId(sorted[0].id);
-      }
-    });
+      // Default to all catalogues so assemblies in internal catalogues are visible
+      // alongside crunchwork primitives. Only auto-select when there is a single catalogue.
+      setSelectedCatalogId(sorted.length === 1 ? sorted[0].id : '');
+      setCatalogsReady(true);
+    })();
   }, [open, catalogType]);
 
   useEffect(() => {
@@ -121,34 +176,65 @@ function ItemsTab({ open, catalogType }: { open: boolean; catalogType?: CatalogT
   }, [open, query]);
 
   useEffect(() => {
-    if (!open) return;
-    startTransition(async () => {
-      const searchParams = {
+    if (!open || !catalogsReady) return;
+
+    const generation = ++fetchGeneration.current;
+    setLoading(true);
+
+    void (async () => {
+      const fetched = await fetchAllCatalogItems({
         catalogId: selectedCatalogId || undefined,
         q: debouncedQuery || undefined,
-        limit: debouncedQuery ? 200 : 40,
-      };
-      const [primitives, assemblies] = await Promise.all([
-        searchCatalogItemsAction({ ...searchParams, kind: 'primitive' }),
-        searchCatalogItemsAction({ ...searchParams, kind: 'assembly' }),
-      ]);
-      const merged = [...primitives, ...assemblies].sort((a, b) =>
-        a.code.localeCompare(b.code),
-      );
-      setItems(merged);
-    });
-  }, [open, debouncedQuery, selectedCatalogId]);
+      });
+      if (generation !== fetchGeneration.current) return;
+      setItems(fetched);
+      setLoading(false);
+    })();
+
+    return () => {
+      fetchGeneration.current += 1;
+    };
+  }, [open, catalogsReady, debouncedQuery, selectedCatalogId]);
 
   useEffect(() => {
     if (open) return;
     setQuery('');
     setDebouncedQuery('');
     setSelectedCatalogId('');
+    setShowAssemblies(true);
+    setShowPrimitives(true);
+    setItems([]);
+    setCatalogsReady(false);
+    setLoading(false);
   }, [open]);
+
+  const visibleItems = items.filter((item) => {
+    if (item.kind === 'assembly') return showAssemblies;
+    if (item.kind === 'primitive') return showPrimitives;
+    return false;
+  });
 
   return (
     <>
       <div className="space-y-2 border-b border-slate-100 px-5 py-3">
+        <div className="flex items-center gap-4">
+          <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
+            <Checkbox
+              checked={showAssemblies}
+              onCheckedChange={setShowAssemblies}
+              aria-label="Show assemblies"
+            />
+            Assemblies
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
+            <Checkbox
+              checked={showPrimitives}
+              onCheckedChange={setShowPrimitives}
+              aria-label="Show primitives"
+            />
+            Primitive
+          </label>
+        </div>
         {catalogs.length > 1 && (
           <select
             className="flex h-8 w-full rounded-md border border-input bg-transparent px-2 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -175,17 +261,19 @@ function ItemsTab({ open, catalogType }: { open: boolean; catalogType?: CatalogT
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-        {pending && items.length === 0 && (
+        {loading && visibleItems.length === 0 && (
           <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
         )}
-        {!pending && items.length === 0 && (
+        {!loading && visibleItems.length === 0 && (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            No catalogue items found
+            {!showAssemblies && !showPrimitives
+              ? 'Select Assemblies or Primitive to show items'
+              : 'No catalogue items found'}
           </p>
         )}
-        {items.length > 0 && (
+        {visibleItems.length > 0 && (
           <ul className="space-y-2">
-            {items.map((item) => (
+            {visibleItems.map((item) => (
               <CatalogRow key={item.id} item={item} />
             ))}
           </ul>

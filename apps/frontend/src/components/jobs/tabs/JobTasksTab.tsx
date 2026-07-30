@@ -20,6 +20,7 @@ import {
   compareDates,
   compareValues,
   formatDate,
+  commitColumnFilterSelection,
   ValueFilterMenu,
   SortableColumnHeader,
 } from '@/components/shared/list-filters';
@@ -104,6 +105,9 @@ export function JobTasksTab({ jobId }: { jobId: string }) {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [priorityFilter, setPriorityFilter] = useState<Set<string>>(new Set());
+  const [priorityFilterActive, setPriorityFilterActive] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [statusFilterActive, setStatusFilterActive] = useState(false);
   const [columnSort, setColumnSort] = useState<{ field: TaskSortField; order: 'asc' | 'desc' }>({
     field: 'updated_at',
     order: 'desc',
@@ -142,13 +146,43 @@ export function JobTasksTab({ jobId }: { jobId: string }) {
     return [...names].sort((a, b) => a.localeCompare(b));
   }, [tasks]);
 
+  const uniqueStatuses = useMemo(() => {
+    const names = new Set<string>();
+    for (const t of tasks) {
+      const n = refName(t.status).trim();
+      if (n && n !== '—') names.add(n);
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [tasks]);
+
   const togglePriority = (name: string) => {
-    setPriorityFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
+    const working = priorityFilterActive ? new Set(priorityFilter) : new Set(uniquePriorities);
+    if (working.has(name)) working.delete(name);
+    else working.add(name);
+    const committed = commitColumnFilterSelection({
+      next: working,
+      optionCount: uniquePriorities.length,
     });
+    setPriorityFilter(committed.selected);
+    setPriorityFilterActive(committed.active);
+  };
+
+  const applyStatusFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueStatuses.length,
+    });
+    setStatusFilter(committed.selected);
+    setStatusFilterActive(committed.active);
+  };
+
+  const applyPriorityFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniquePriorities.length,
+    });
+    setPriorityFilter(committed.selected);
+    setPriorityFilterActive(committed.active);
   };
 
   const visibleRows = useMemo(() => {
@@ -162,11 +196,26 @@ export function JobTasksTab({ jobId }: { jobId: string }) {
       });
     }
 
-    if (priorityFilter.size > 0) {
-      rows = rows.filter((t) => {
-        const n = refName(t.priority).trim();
-        return n && n !== '—' ? priorityFilter.has(n) : false;
-      });
+    if (statusFilterActive) {
+      if (statusFilter.size === 0) {
+        rows = [];
+      } else {
+        rows = rows.filter((t) => {
+          const n = refName(t.status).trim();
+          return n && n !== '—' ? statusFilter.has(n) : false;
+        });
+      }
+    }
+
+    if (priorityFilterActive) {
+      if (priorityFilter.size === 0) {
+        rows = [];
+      } else {
+        rows = rows.filter((t) => {
+          const n = refName(t.priority).trim();
+          return n && n !== '—' ? priorityFilter.has(n) : false;
+        });
+      }
     }
 
     const query = debouncedSearch.trim().toLowerCase();
@@ -186,7 +235,7 @@ export function JobTasksTab({ jobId }: { jobId: string }) {
         ? compareDates(aVal, bVal, columnSort.order)
         : compareValues(aVal, bVal, columnSort.order);
     });
-  }, [tasks, tab, priorityFilter, debouncedSearch, columnSort]);
+  }, [tasks, tab, statusFilterActive, statusFilter, priorityFilterActive, priorityFilter, debouncedSearch, columnSort]);
 
   if (loading) {
     return <p className="text-sm text-slate-400">Loading...</p>;
@@ -228,10 +277,16 @@ export function JobTasksTab({ jobId }: { jobId: string }) {
 
         <ValueFilterMenu
           options={uniquePriorities}
-          selected={priorityFilter}
+          selected={priorityFilterActive ? priorityFilter : new Set(uniquePriorities)}
           onToggle={togglePriority}
-          onClearAll={() => setPriorityFilter(new Set())}
-          onSelectAll={() => setPriorityFilter(new Set(uniquePriorities))}
+          onClearAll={() => {
+            setPriorityFilter(new Set());
+            setPriorityFilterActive(false);
+          }}
+          onSelectAll={() => {
+            setPriorityFilter(new Set());
+            setPriorityFilterActive(false);
+          }}
           emptyLabel="All priorities"
           menuTitle="Filter by priority"
           itemNoun={{ singular: 'priority', plural: 'priorities' }}
@@ -265,6 +320,27 @@ export function JobTasksTab({ jobId }: { jobId: string }) {
                     activeField={columnSort.field}
                     sortOrder={columnSort.order}
                     onSort={handleColumnSort}
+                    filter={
+                      col.key === 'status'
+                        ? {
+                            options: uniqueStatuses,
+                            selected: statusFilter,
+                            active: statusFilterActive,
+                            onApply: applyStatusFilter,
+                            menuTitle: 'Filter by status',
+                            itemNoun: { singular: 'status', plural: 'statuses' },
+                          }
+                        : col.key === 'priority'
+                          ? {
+                              options: uniquePriorities,
+                              selected: priorityFilter,
+                              active: priorityFilterActive,
+                              onApply: applyPriorityFilter,
+                              menuTitle: 'Filter by priority',
+                              itemNoun: { singular: 'priority', plural: 'priorities' },
+                            }
+                          : undefined
+                    }
                   />
                 ))}
               </tr>

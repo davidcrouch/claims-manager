@@ -10,6 +10,8 @@ import {
   type StatusOption,
   formatDate,
   isArchivedStatus,
+  commitColumnFilterSelection,
+  columnFilterToIdsParam,
   ValueFilterMenu,
   SortableColumnHeader,
 } from '@/components/shared/list-filters';
@@ -40,12 +42,12 @@ type RfqSortField =
   | 'due_date'
   | 'updated_at';
 
-interface ColDef { key: RfqSortField; label: string }
+interface ColDef { key: RfqSortField; label: string; filterable?: boolean }
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'rfq_number', label: 'RFQ #' },
-  { key: 'status', label: 'Status' },
-  { key: 'vendor', label: 'Vendor (sub)' },
+  { key: 'status', label: 'Status', filterable: true },
+  { key: 'vendor', label: 'Vendor (sub)', filterable: true },
   { key: 'job_ref', label: 'Job Ref' },
   { key: 'sent_date', label: 'Sent' },
   { key: 'due_date', label: 'Due' },
@@ -68,11 +70,13 @@ function getRfqSortValue(rfq: Rfq, field: RfqSortField): string | null | undefin
 export interface RfqsListClientProps {
   initialData: PaginatedResponse<Rfq>;
   statusOptions: StatusOption[];
+  vendorOptions: StatusOption[];
 }
 
 export function RfqsListClient({
   initialData,
   statusOptions,
+  vendorOptions,
 }: RfqsListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -89,7 +93,18 @@ export function RfqsListClient({
     order: 'desc',
   });
   const [vendorFilter, setVendorFilter] = useState<Set<string>>(new Set());
+  const [vendorFilterActive, setVendorFilterActive] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [statusFilterActive, setStatusFilterActive] = useState(false);
   const lastFetchKeyRef = useRef<string | null>(null);
+  const statusParam = useMemo(
+    () => columnFilterToIdsParam(statusFilterActive, statusFilter, statusOptions),
+    [statusFilterActive, statusFilter, statusOptions],
+  );
+  const vendorParam = useMemo(
+    () => columnFilterToIdsParam(vendorFilterActive, vendorFilter, vendorOptions),
+    [vendorFilterActive, vendorFilter, vendorOptions],
+  );
 
   const sortParam = `${columnSort.field}_${columnSort.order}`;
 
@@ -99,18 +114,26 @@ export function RfqsListClient({
   }, [search]);
 
   useEffect(() => {
-    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}`;
+    const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
+    const vendorKey = vendorParam === null ? '__none__' : (vendorParam ?? '');
+    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${vendorKey}`;
     const params = new URLSearchParams(searchParams.toString());
     params.set('search', debouncedSearch);
     params.set('tab', tab);
     params.set('page', String(page));
     params.set('sort', sortParam);
+    if (statusParam) params.set('status', statusParam); else params.delete('status');
+    if (vendorParam) params.set('vendorId', vendorParam); else params.delete('vendorId');
     router.replace(`/rfqs?${params}`, { scroll: false });
     if (lastFetchKeyRef.current === fetchKey) return;
     lastFetchKeyRef.current = fetchKey;
-    fetchRfqsAction({ page, limit: PAGE_SIZE, sort: sortParam }).then((res) => res && setData(res));
+    if (statusParam === null || vendorParam === null) {
+      setData({ data: [], total: 0 });
+      return;
+    }
+    fetchRfqsAction({ page, limit: PAGE_SIZE, sort: sortParam, status: statusParam, vendorId: vendorParam }).then((res) => res && setData(res));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop
-  }, [debouncedSearch, sortParam, tab, page]);
+  }, [debouncedSearch, sortParam, tab, page, statusParam, vendorParam]);
 
   const handleColumnSort = (field: RfqSortField) => {
     setColumnSort((prev) => {
@@ -126,22 +149,72 @@ export function RfqsListClient({
   const handleSearchChange = (value: string) => { setSearch(value); setPage(1); };
   const handleTabChange = (val: string) => { setTab(val as ListTab); setPage(1); };
 
-  const uniqueVendors = useMemo(() => {
+  const uniqueVendors = useMemo(() => [...new Set(vendorOptions.map((vendor) => vendor.name.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [vendorOptions]);
+
+  const uniqueStatuses = useMemo(() => {
+    const fromOptions = statusOptions
+      .map((s) => s.name?.trim())
+      .filter((n): n is string => !!n);
+    if (fromOptions.length > 0) {
+      return [...new Set(fromOptions)].sort((a, b) => a.localeCompare(b));
+    }
     const names = new Set<string>();
     for (const rfq of data.data) {
-      const name = rfq.rfqToName?.trim();
+      const name = rfq.status?.name?.trim();
       if (name) names.add(name);
     }
     return [...names].sort((a, b) => a.localeCompare(b));
-  }, [data.data]);
+  }, [data.data, statusOptions]);
 
   const toggleVendor = (name: string) => {
-    setVendorFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
+    const working = vendorFilterActive ? new Set(vendorFilter) : new Set(uniqueVendors);
+    if (working.has(name)) working.delete(name);
+    else working.add(name);
+    const committed = commitColumnFilterSelection({
+      next: working,
+      optionCount: uniqueVendors.length,
     });
+    setVendorFilter(committed.selected);
+    setVendorFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const applyStatusFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueStatuses.length,
+    });
+    setStatusFilter(committed.selected);
+    setStatusFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const applyVendorFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueVendors.length,
+    });
+    setVendorFilter(committed.selected);
+    setVendorFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const statusFilterProps = {
+    options: uniqueStatuses,
+    selected: statusFilter,
+    active: statusFilterActive,
+    onApply: applyStatusFilter,
+    menuTitle: 'Filter by status',
+    itemNoun: { singular: 'status', plural: 'statuses' },
+  };
+
+  const vendorFilterProps = {
+    options: uniqueVendors,
+    selected: vendorFilter,
+    active: vendorFilterActive,
+    onApply: applyVendorFilter,
+    menuTitle: 'Filter by vendor',
+    itemNoun: { singular: 'vendor', plural: 'vendors' },
   };
 
   const visibleRows = useMemo(() => {
@@ -155,13 +228,6 @@ export function RfqsListClient({
       });
     }
 
-    if (vendorFilter.size > 0) {
-      rows = rows.filter((rfq) => {
-        const name = rfq.rfqToName?.trim();
-        return name ? vendorFilter.has(name) : false;
-      });
-    }
-
     if (query) {
       rows = rows.filter((rfq) => {
         const num = (rfq.rfqNumber ?? '').toLowerCase();
@@ -172,7 +238,7 @@ export function RfqsListClient({
     }
 
     return rows;
-  }, [data.data, debouncedSearch, tab, vendorFilter]);
+  }, [data.data, debouncedSearch, tab]);
 
   const breakdown = computeStatusBreakdown(
     visibleRows,
@@ -226,10 +292,18 @@ export function RfqsListClient({
 
           <ValueFilterMenu
             options={uniqueVendors}
-            selected={vendorFilter}
+            selected={vendorFilterActive ? vendorFilter : new Set(uniqueVendors)}
             onToggle={toggleVendor}
-            onClearAll={() => setVendorFilter(new Set())}
-            onSelectAll={() => setVendorFilter(new Set(uniqueVendors))}
+            onClearAll={() => {
+              setVendorFilter(new Set());
+              setVendorFilterActive(false);
+              setPage(1);
+            }}
+            onSelectAll={() => {
+              setVendorFilter(new Set());
+              setVendorFilterActive(false);
+              setPage(1);
+            }}
             emptyLabel="All vendors"
             menuTitle="Filter by vendor"
             itemNoun={{ singular: 'vendor', plural: 'vendors' }}
@@ -254,6 +328,13 @@ export function RfqsListClient({
                       activeField={columnSort.field}
                       sortOrder={columnSort.order}
                       onSort={handleColumnSort}
+                      filter={
+                        col.key === 'status'
+                          ? statusFilterProps
+                          : col.key === 'vendor'
+                            ? vendorFilterProps
+                            : undefined
+                      }
                     />
                   ))}
                 </tr>

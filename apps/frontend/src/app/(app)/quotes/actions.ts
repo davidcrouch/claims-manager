@@ -26,7 +26,9 @@ export async function fetchQuotesAction(params: {
   limit?: number;
   search?: string;
   jobId?: string;
+  status?: string;
   statusId?: string;
+  quoteType?: string;
   sort?: string;
 }): Promise<PaginatedResponse<Quote> | null> {
   const api = await getApi();
@@ -36,7 +38,9 @@ export async function fetchQuotesAction(params: {
     page: params.page ?? 1,
     limit: params.limit ?? 20,
     jobId: params.jobId,
+    status: params.status,
     statusId: params.statusId,
+    quoteType: params.quoteType,
     sort: params.sort,
   });
 }

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, asc, desc, ilike, sql } from 'drizzle-orm';
+import { eq, and, asc, desc, ilike, sql, inArray } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { appointments } from '../schema';
 
@@ -28,8 +28,9 @@ export class AppointmentsRepository {
     if (params.search) {
       conditions.push(ilike(appointments.name, `%${params.search}%`));
     }
-    if (params.status) {
-      conditions.push(eq(appointments.status, params.status));
+    const statuses = params.status?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
+    if (statuses.length > 0) {
+      conditions.push(inArray(appointments.status, statuses));
     }
     const where = and(...conditions);
 

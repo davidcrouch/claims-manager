@@ -16,6 +16,8 @@ export class WorkOrdersController {
     @Query('limit') limit?: string,
     @Query('jobId') jobId?: string,
     @Query('purchaseOrderId') purchaseOrderId?: string,
+    @Query('status') status?: string,
+    @Query('workOrderType') workOrderType?: string,
     @Query('sort') sort?: string,
   ) {
     return this.workOrdersService.findAll({
@@ -23,6 +25,8 @@ export class WorkOrdersController {
       limit: limit ? parseInt(limit, 10) : 20,
       jobId,
       purchaseOrderId,
+      status,
+      workOrderType,
       sort,
     });
   }

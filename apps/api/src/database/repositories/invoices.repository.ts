@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, desc, asc, sql } from 'drizzle-orm';
+import { eq, and, desc, asc, sql, inArray } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { invoices } from '../schema';
 
@@ -46,6 +46,9 @@ export class InvoicesRepository {
     page?: number;
     limit?: number;
     purchaseOrderId?: string;
+    /** Comma-separated status lookup IDs. */
+    status?: string;
+    /** @deprecated Use status. */
     statusId?: string;
     sort?: string;
   }): Promise<{ data: InvoiceRow[]; total: number }> {
@@ -53,12 +56,16 @@ export class InvoicesRepository {
     const limit = Math.min(params.limit ?? 20, 100);
     const skip = (page - 1) * limit;
 
+    const statusIds = (params.status ?? params.statusId)
+      ?.split(',')
+      .map((value) => value.trim())
+      .filter(Boolean) ?? [];
     let whereClause = eq(invoices.tenantId, params.tenantId);
     if (params.purchaseOrderId) {
       whereClause = and(whereClause, eq(invoices.purchaseOrderId, params.purchaseOrderId))!;
     }
-    if (params.statusId) {
-      whereClause = and(whereClause, eq(invoices.statusLookupId, params.statusId))!;
+    if (statusIds.length > 0) {
+      whereClause = and(whereClause, inArray(invoices.statusLookupId, statusIds))!;
     }
 
     const [data, countResult] = await Promise.all([

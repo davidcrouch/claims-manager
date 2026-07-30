@@ -14,6 +14,7 @@ import {
   compareDates,
   compareValues,
   formatDate,
+  commitColumnFilterSelection,
   ValueFilterMenu,
   SortableColumnHeader,
 } from '@/components/shared/list-filters';
@@ -61,6 +62,9 @@ export function JobPurchaseOrdersTab({ jobId }: { jobId: string }) {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [vendorFilter, setVendorFilter] = useState<Set<string>>(new Set());
+  const [vendorFilterActive, setVendorFilterActive] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [statusFilterActive, setStatusFilterActive] = useState(false);
   const [columnSort, setColumnSort] = useState<{ field: POSortField; order: 'asc' | 'desc' }>({
     field: 'updated_at',
     order: 'desc',
@@ -96,13 +100,43 @@ export function JobPurchaseOrdersTab({ jobId }: { jobId: string }) {
     return [...names].sort((a, b) => a.localeCompare(b));
   }, [pos]);
 
+  const uniqueStatuses = useMemo(() => {
+    const names = new Set<string>();
+    for (const po of pos) {
+      const n = po.status?.name?.trim();
+      if (n) names.add(n);
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [pos]);
+
   const toggleVendor = (name: string) => {
-    setVendorFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
+    const working = vendorFilterActive ? new Set(vendorFilter) : new Set(uniqueVendors);
+    if (working.has(name)) working.delete(name);
+    else working.add(name);
+    const committed = commitColumnFilterSelection({
+      next: working,
+      optionCount: uniqueVendors.length,
     });
+    setVendorFilter(committed.selected);
+    setVendorFilterActive(committed.active);
+  };
+
+  const applyStatusFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueStatuses.length,
+    });
+    setStatusFilter(committed.selected);
+    setStatusFilterActive(committed.active);
+  };
+
+  const applyVendorFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueVendors.length,
+    });
+    setVendorFilter(committed.selected);
+    setVendorFilterActive(committed.active);
   };
 
   const visibleRows = useMemo(() => {
@@ -115,11 +149,26 @@ export function JobPurchaseOrdersTab({ jobId }: { jobId: string }) {
       });
     }
 
-    if (vendorFilter.size > 0) {
-      rows = rows.filter((po) => {
-        const n = po.vendor?.name?.trim();
-        return n ? vendorFilter.has(n) : false;
-      });
+    if (statusFilterActive) {
+      if (statusFilter.size === 0) {
+        rows = [];
+      } else {
+        rows = rows.filter((po) => {
+          const n = po.status?.name?.trim();
+          return n ? statusFilter.has(n) : false;
+        });
+      }
+    }
+
+    if (vendorFilterActive) {
+      if (vendorFilter.size === 0) {
+        rows = [];
+      } else {
+        rows = rows.filter((po) => {
+          const n = po.vendor?.name?.trim();
+          return n ? vendorFilter.has(n) : false;
+        });
+      }
     }
 
     const query = debouncedSearch.trim().toLowerCase();
@@ -138,7 +187,7 @@ export function JobPurchaseOrdersTab({ jobId }: { jobId: string }) {
       if (isDate) return compareDates(aVal as string, bVal as string, columnSort.order);
       return compareValues(aVal, bVal, columnSort.order);
     });
-  }, [pos, tab, vendorFilter, debouncedSearch, columnSort]);
+  }, [pos, tab, statusFilterActive, statusFilter, vendorFilterActive, vendorFilter, debouncedSearch, columnSort]);
 
   if (loading) {
     return <p className="text-sm text-slate-400">Loading...</p>;
@@ -176,10 +225,16 @@ export function JobPurchaseOrdersTab({ jobId }: { jobId: string }) {
 
         <ValueFilterMenu
           options={uniqueVendors}
-          selected={vendorFilter}
+          selected={vendorFilterActive ? vendorFilter : new Set(uniqueVendors)}
           onToggle={toggleVendor}
-          onClearAll={() => setVendorFilter(new Set())}
-          onSelectAll={() => setVendorFilter(new Set(uniqueVendors))}
+          onClearAll={() => {
+            setVendorFilter(new Set());
+            setVendorFilterActive(false);
+          }}
+          onSelectAll={() => {
+            setVendorFilter(new Set());
+            setVendorFilterActive(false);
+          }}
           emptyLabel="All vendors"
           menuTitle="Filter by vendor"
           itemNoun={{ singular: 'vendor', plural: 'vendors' }}
@@ -222,6 +277,27 @@ export function JobPurchaseOrdersTab({ jobId }: { jobId: string }) {
                     activeField={columnSort.field}
                     sortOrder={columnSort.order}
                     onSort={handleColumnSort}
+                    filter={
+                      col.key === 'status'
+                        ? {
+                            options: uniqueStatuses,
+                            selected: statusFilter,
+                            active: statusFilterActive,
+                            onApply: applyStatusFilter,
+                            menuTitle: 'Filter by status',
+                            itemNoun: { singular: 'status', plural: 'statuses' },
+                          }
+                        : col.key === 'vendor'
+                          ? {
+                              options: uniqueVendors,
+                              selected: vendorFilter,
+                              active: vendorFilterActive,
+                              onApply: applyVendorFilter,
+                              menuTitle: 'Filter by vendor',
+                              itemNoun: { singular: 'vendor', plural: 'vendors' },
+                            }
+                          : undefined
+                    }
                   />
                 ))}
               </tr>

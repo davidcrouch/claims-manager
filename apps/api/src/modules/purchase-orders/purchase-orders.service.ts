@@ -28,6 +28,7 @@ export class PurchaseOrdersService {
     page?: number;
     limit?: number;
     jobId?: string;
+    status?: string;
     vendorId?: string;
     sort?: string;
   }) {
@@ -37,6 +38,7 @@ export class PurchaseOrdersService {
       page: params.page,
       limit: params.limit,
       jobId: params.jobId,
+      status: params.status,
       vendorId: params.vendorId,
       sort: params.sort,
     });

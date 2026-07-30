@@ -9,6 +9,7 @@ export async function fetchBillsAction(params?: {
   limit?: number;
   jobId?: string;
   purchaseOrderId?: string;
+  status?: string;
   vendorId?: string;
   invoiceId?: string;
   sort?: string;
@@ -26,6 +27,7 @@ export async function fetchBillsAction(params?: {
       limit: params?.limit ?? 20,
       jobId: params?.jobId,
       purchaseOrderId: params?.purchaseOrderId,
+      status: params?.status,
       vendorId: params?.vendorId,
       invoiceId: params?.invoiceId,
       sort: params?.sort,

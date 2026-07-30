@@ -44,3 +44,28 @@ export async function fetchRfqLineItemsAction(rfqId: string): Promise<{
     return { success: false, error: err instanceof Error ? err.message : 'Failed to load scope items' };
   }
 }
+
+export async function replaceRfqLineItemsAction(
+  rfqId: string,
+  selectedItemIds: string[],
+): Promise<{
+  success: boolean;
+  groups?: Array<Record<string, unknown>>;
+  error?: string;
+}> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const groups = await api.replaceRfqLineItems(rfqId, { selectedItemIds });
+    return { success: true, groups };
+  } catch (err) {
+    console.error(
+      'frontend:replaceRfqLineItemsAction - replaceRfqLineItems failed:',
+      err instanceof Error ? err.message : err,
+    );
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to update scope items',
+    };
+  }
+}

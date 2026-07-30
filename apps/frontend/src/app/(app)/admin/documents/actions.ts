@@ -18,6 +18,7 @@ export async function fetchDocumentsAction(params: {
   page?: number;
   limit?: number;
   search?: string;
+  relatedRecordType?: string;
   sort?: string;
 }): Promise<PaginatedResponse<Attachment> | null> {
   const api = await getApi();
@@ -26,6 +27,7 @@ export async function fetchDocumentsAction(params: {
     page: params.page ?? 1,
     limit: params.limit ?? 20,
     search: params.search,
+    relatedRecordType: params.relatedRecordType,
     sort: params.sort,
   });
 }

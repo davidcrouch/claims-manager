@@ -109,7 +109,7 @@ export function JobDetail({
     }
   }, [job.id, router]);
 
-  const claimId = job.claimId ?? '';
+  const claimId = job.claimId ?? undefined;
 
   const overviewTabs: Array<{ id: TabValue; label: string; icon: typeof Calendar }> = [
     { id: 'overview', label: 'Overview', icon: Calendar },
@@ -181,7 +181,9 @@ export function JobDetail({
         {activeTab === 'purchase-orders' && (
           <JobPurchaseOrdersTab jobId={job.id} />
         )}
-        {activeTab === 'invoices' && <JobInvoicesTab jobId={job.id} />}
+        {activeTab === 'invoices' && (
+          <JobInvoicesTab jobId={job.id} jobName={job.name} />
+        )}
         {activeTab === 'rfqs' && <JobRfqsTab jobId={job.id} />}
         {activeTab === 'proposals' && <JobProposalsTab jobId={job.id} />}
         {activeTab === 'bills' && <JobBillsTab jobId={job.id} />}

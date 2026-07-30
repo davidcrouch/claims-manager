@@ -54,7 +54,10 @@ export class ClaimsRepository {
     limit?: number;
     search?: string;
     sort?: string;
+    /** Comma-separated status lookup IDs */
     status?: string;
+    /** Comma-separated account lookup IDs */
+    account?: string;
   }): Promise<{ data: ClaimViewRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
@@ -65,6 +68,12 @@ export class ClaimsRepository {
 
     const statusIds = params.status
       ? params.status
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
+    const accountIds = params.account
+      ? params.account
           .split(',')
           .map((s) => s.trim())
           .filter(Boolean)
@@ -83,12 +92,17 @@ export class ClaimsRepository {
       statusIds.length > 0
         ? inArray(claims.statusLookupId, statusIds)
         : undefined;
+    const accountClause =
+      accountIds.length > 0
+        ? inArray(claims.accountLookupId, accountIds)
+        : undefined;
 
     const whereParts = [
       eq(claims.tenantId, params.tenantId),
       isNull(claims.deletedAt),
       ...(searchClause ? [searchClause] : []),
       ...(statusClause ? [statusClause] : []),
+      ...(accountClause ? [accountClause] : []),
     ];
     const whereClause = and(...whereParts);
 

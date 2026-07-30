@@ -13,6 +13,7 @@ import {
   compareDates,
   compareValues,
   formatDate,
+  commitColumnFilterSelection,
   ValueFilterMenu,
   SortableColumnHeader,
 } from '@/components/shared/list-filters';
@@ -53,7 +54,7 @@ export function JobReportsTab({
   claimId,
 }: {
   jobId: string;
-  claimId: string;
+  claimId?: string | null;
 }) {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,6 +64,9 @@ export function JobReportsTab({
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
+  const [typeFilterActive, setTypeFilterActive] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [statusFilterActive, setStatusFilterActive] = useState(false);
   const [columnSort, setColumnSort] = useState<{ field: ReportSortField; order: 'asc' | 'desc' }>({
     field: 'updated_at',
     order: 'desc',
@@ -101,13 +105,43 @@ export function JobReportsTab({
     return [...names].sort((a, b) => a.localeCompare(b));
   }, [reports]);
 
+  const uniqueStatuses = useMemo(() => {
+    const names = new Set<string>();
+    for (const r of reports) {
+      const n = r.status?.name?.trim();
+      if (n) names.add(n);
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [reports]);
+
   const toggleType = (name: string) => {
-    setTypeFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
+    const working = typeFilterActive ? new Set(typeFilter) : new Set(uniqueTypes);
+    if (working.has(name)) working.delete(name);
+    else working.add(name);
+    const committed = commitColumnFilterSelection({
+      next: working,
+      optionCount: uniqueTypes.length,
     });
+    setTypeFilter(committed.selected);
+    setTypeFilterActive(committed.active);
+  };
+
+  const applyStatusFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueStatuses.length,
+    });
+    setStatusFilter(committed.selected);
+    setStatusFilterActive(committed.active);
+  };
+
+  const applyTypeFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueTypes.length,
+    });
+    setTypeFilter(committed.selected);
+    setTypeFilterActive(committed.active);
   };
 
   const visibleRows = useMemo(() => {
@@ -120,11 +154,26 @@ export function JobReportsTab({
       });
     }
 
-    if (typeFilter.size > 0) {
-      rows = rows.filter((r) => {
-        const n = r.reportType?.name?.trim();
-        return n ? typeFilter.has(n) : false;
-      });
+    if (statusFilterActive) {
+      if (statusFilter.size === 0) {
+        rows = [];
+      } else {
+        rows = rows.filter((r) => {
+          const n = r.status?.name?.trim();
+          return n ? statusFilter.has(n) : false;
+        });
+      }
+    }
+
+    if (typeFilterActive) {
+      if (typeFilter.size === 0) {
+        rows = [];
+      } else {
+        rows = rows.filter((r) => {
+          const n = r.reportType?.name?.trim();
+          return n ? typeFilter.has(n) : false;
+        });
+      }
     }
 
     const query = debouncedSearch.trim().toLowerCase();
@@ -144,7 +193,7 @@ export function JobReportsTab({
         ? compareDates(aVal, bVal, columnSort.order)
         : compareValues(aVal, bVal, columnSort.order);
     });
-  }, [reports, tab, typeFilter, debouncedSearch, columnSort]);
+  }, [reports, tab, statusFilterActive, statusFilter, typeFilterActive, typeFilter, debouncedSearch, columnSort]);
 
   if (loading) {
     return <p className="text-sm text-slate-400">Loading...</p>;
@@ -182,10 +231,16 @@ export function JobReportsTab({
 
         <ValueFilterMenu
           options={uniqueTypes}
-          selected={typeFilter}
+          selected={typeFilterActive ? typeFilter : new Set(uniqueTypes)}
           onToggle={toggleType}
-          onClearAll={() => setTypeFilter(new Set())}
-          onSelectAll={() => setTypeFilter(new Set(uniqueTypes))}
+          onClearAll={() => {
+            setTypeFilter(new Set());
+            setTypeFilterActive(false);
+          }}
+          onSelectAll={() => {
+            setTypeFilter(new Set());
+            setTypeFilterActive(false);
+          }}
           emptyLabel="All types"
           menuTitle="Filter by type"
           itemNoun={{ singular: 'type', plural: 'types' }}
@@ -229,6 +284,27 @@ export function JobReportsTab({
                     activeField={columnSort.field}
                     sortOrder={columnSort.order}
                     onSort={handleColumnSort}
+                    filter={
+                      col.key === 'status'
+                        ? {
+                            options: uniqueStatuses,
+                            selected: statusFilter,
+                            active: statusFilterActive,
+                            onApply: applyStatusFilter,
+                            menuTitle: 'Filter by status',
+                            itemNoun: { singular: 'status', plural: 'statuses' },
+                          }
+                        : col.key === 'type'
+                          ? {
+                              options: uniqueTypes,
+                              selected: typeFilter,
+                              active: typeFilterActive,
+                              onApply: applyTypeFilter,
+                              menuTitle: 'Filter by type',
+                              itemNoun: { singular: 'type', plural: 'types' },
+                            }
+                          : undefined
+                    }
                   />
                 ))}
               </tr>

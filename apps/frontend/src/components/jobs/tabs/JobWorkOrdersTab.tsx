@@ -14,6 +14,7 @@ import {
   compareDates,
   compareValues,
   formatDate,
+  commitColumnFilterSelection,
   ValueFilterMenu,
   SortableColumnHeader,
 } from '@/components/shared/list-filters';
@@ -29,12 +30,12 @@ type WOSortField =
   | 'total'
   | 'updated_at';
 
-interface ColDef { key: WOSortField; label: string }
+interface ColDef { key: WOSortField; label: string; filterable?: boolean }
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'wo_number', label: 'WO #' },
-  { key: 'status', label: 'Status' },
-  { key: 'type', label: 'Type' },
+  { key: 'status', label: 'Status', filterable: true },
+  { key: 'type', label: 'Type', filterable: true },
   { key: 'start_date', label: 'Start' },
   { key: 'total', label: 'Total' },
   { key: 'updated_at', label: 'Updated' },
@@ -56,12 +57,16 @@ export function JobWorkOrdersTab({ jobId }: { jobId: string }) {
   const router = useRouter();
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const [tab, setTab] = useState<ListTab>('active');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
+  const [typeFilterActive, setTypeFilterActive] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [statusFilterActive, setStatusFilterActive] = useState(false);
   const [columnSort, setColumnSort] = useState<{ field: WOSortField; order: 'asc' | 'desc' }>({
     field: 'updated_at',
     order: 'desc',
@@ -69,9 +74,17 @@ export function JobWorkOrdersTab({ jobId }: { jobId: string }) {
 
   const load = useCallback(() => {
     setLoading(true);
+    setLoadError(null);
     fetchJobWorkOrdersAction(jobId)
-      .then((data) => setWorkOrders(data ?? []))
-      .catch((err) => console.error('JobWorkOrdersTab:', err))
+      .then((data) => setWorkOrders(Array.isArray(data) ? data : []))
+      .catch((err) => {
+        console.error(
+          'frontend:JobWorkOrdersTab.load',
+          err instanceof Error ? err.message : err,
+        );
+        setWorkOrders([]);
+        setLoadError(err instanceof Error ? err.message : 'Failed to load work orders');
+      })
       .finally(() => setLoading(false));
   }, [jobId]);
 
@@ -98,13 +111,43 @@ export function JobWorkOrdersTab({ jobId }: { jobId: string }) {
     return [...names].sort((a, b) => a.localeCompare(b));
   }, [workOrders]);
 
+  const uniqueStatuses = useMemo(() => {
+    const names = new Set<string>();
+    for (const wo of workOrders) {
+      const n = wo.status?.name?.trim();
+      if (n) names.add(n);
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [workOrders]);
+
   const toggleType = (name: string) => {
-    setTypeFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
+    const working = typeFilterActive ? new Set(typeFilter) : new Set(uniqueTypes);
+    if (working.has(name)) working.delete(name);
+    else working.add(name);
+    const committed = commitColumnFilterSelection({
+      next: working,
+      optionCount: uniqueTypes.length,
     });
+    setTypeFilter(committed.selected);
+    setTypeFilterActive(committed.active);
+  };
+
+  const applyStatusFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueStatuses.length,
+    });
+    setStatusFilter(committed.selected);
+    setStatusFilterActive(committed.active);
+  };
+
+  const applyTypeFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueTypes.length,
+    });
+    setTypeFilter(committed.selected);
+    setTypeFilterActive(committed.active);
   };
 
   const visibleRows = useMemo(() => {
@@ -117,11 +160,26 @@ export function JobWorkOrdersTab({ jobId }: { jobId: string }) {
       });
     }
 
-    if (typeFilter.size > 0) {
-      rows = rows.filter((wo) => {
-        const n = wo.workOrderType?.name?.trim();
-        return n ? typeFilter.has(n) : false;
-      });
+    if (statusFilterActive) {
+      if (statusFilter.size === 0) {
+        rows = [];
+      } else {
+        rows = rows.filter((wo) => {
+          const n = wo.status?.name?.trim();
+          return n ? statusFilter.has(n) : false;
+        });
+      }
+    }
+
+    if (typeFilterActive) {
+      if (typeFilter.size === 0) {
+        rows = [];
+      } else {
+        rows = rows.filter((wo) => {
+          const n = wo.workOrderType?.name?.trim();
+          return n ? typeFilter.has(n) : false;
+        });
+      }
     }
 
     const query = debouncedSearch.trim().toLowerCase();
@@ -141,7 +199,7 @@ export function JobWorkOrdersTab({ jobId }: { jobId: string }) {
         ? compareDates(aVal as string, bVal as string, columnSort.order)
         : compareValues(aVal, bVal, columnSort.order);
     });
-  }, [workOrders, tab, typeFilter, debouncedSearch, columnSort]);
+  }, [workOrders, tab, statusFilterActive, statusFilter, typeFilterActive, typeFilter, debouncedSearch, columnSort]);
 
   if (loading) {
     return <p className="text-sm text-slate-400">Loading...</p>;
@@ -179,10 +237,16 @@ export function JobWorkOrdersTab({ jobId }: { jobId: string }) {
 
         <ValueFilterMenu
           options={uniqueTypes}
-          selected={typeFilter}
+          selected={typeFilterActive ? typeFilter : new Set(uniqueTypes)}
           onToggle={toggleType}
-          onClearAll={() => setTypeFilter(new Set())}
-          onSelectAll={() => setTypeFilter(new Set(uniqueTypes))}
+          onClearAll={() => {
+            setTypeFilter(new Set());
+            setTypeFilterActive(false);
+          }}
+          onSelectAll={() => {
+            setTypeFilter(new Set());
+            setTypeFilterActive(false);
+          }}
           emptyLabel="All types"
           menuTitle="Filter by type"
           itemNoun={{ singular: 'type', plural: 'types' }}
@@ -203,13 +267,27 @@ export function JobWorkOrdersTab({ jobId }: { jobId: string }) {
         jobId={jobId}
       />
 
-      {visibleRows.length === 0 ? (
+      {loadError ? (
+        <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-red-200 bg-red-50">
+          <div className="flex flex-col items-center gap-3 px-4 text-center">
+            <p className="text-sm text-red-600">Could not load work orders.</p>
+            <p className="text-xs text-red-500">{loadError}</p>
+            <Button variant="outline" size="sm" onClick={load}>
+              Retry
+            </Button>
+          </div>
+        </div>
+      ) : visibleRows.length === 0 ? (
         <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50">
           <div className="flex flex-col items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-100">
               <Search size={24} className="text-slate-400" />
             </div>
-            <p className="text-sm text-slate-400">No work orders found.</p>
+            <p className="text-sm text-slate-400">
+              {workOrders.length === 0
+                ? 'No work orders linked to this job.'
+                : 'No work orders match the current filters.'}
+            </p>
           </div>
         </div>
       ) : (
@@ -225,6 +303,27 @@ export function JobWorkOrdersTab({ jobId }: { jobId: string }) {
                     activeField={columnSort.field}
                     sortOrder={columnSort.order}
                     onSort={handleColumnSort}
+                    filter={
+                      col.key === 'status'
+                        ? {
+                            options: uniqueStatuses,
+                            selected: statusFilter,
+                            active: statusFilterActive,
+                            onApply: applyStatusFilter,
+                            menuTitle: 'Filter by status',
+                            itemNoun: { singular: 'status', plural: 'statuses' },
+                          }
+                        : col.key === 'type'
+                          ? {
+                              options: uniqueTypes,
+                              selected: typeFilter,
+                              active: typeFilterActive,
+                              onApply: applyTypeFilter,
+                              menuTitle: 'Filter by type',
+                              itemNoun: { singular: 'type', plural: 'types' },
+                            }
+                          : undefined
+                    }
                   />
                 ))}
               </tr>

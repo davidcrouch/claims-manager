@@ -82,11 +82,12 @@ export interface VendorRef {
 export interface Job {
   id: string;
   tenantId: string;
-  claimId: string;
+  claimId?: string | null;
   parentClaimId?: string | null;
   parentJobId?: string | null;
   vendorId?: string | null;
   connectionId?: string | null;
+  name?: string | null;
   externalReference?: string | null;
   externalJobId?: string | null;
   jobTypeLookupId: string;

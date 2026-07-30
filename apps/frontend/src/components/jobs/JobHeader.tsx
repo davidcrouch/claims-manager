@@ -50,7 +50,7 @@ export function JobPageHeader({
   job: Job;
   parentClaim?: Claim | null;
 }) {
-  const title = job.externalJobId ?? job.externalReference ?? job.id;
+  const title = job.name ?? job.externalJobId ?? job.externalReference ?? job.id;
   const api = getApi(job);
   const statusName =
     job.status?.name ??

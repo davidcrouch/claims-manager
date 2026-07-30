@@ -10,6 +10,8 @@ import {
   type StatusOption,
   formatDate,
   isArchivedStatus,
+  commitColumnFilterSelection,
+  columnFilterToIdsParam,
   ValueFilterMenu,
   SortableColumnHeader,
 } from '@/components/shared/list-filters';
@@ -40,11 +42,11 @@ type InvSortField =
   | 'created_at'
   | 'updated_at';
 
-interface ColDef { key: InvSortField; label: string }
+interface ColDef { key: InvSortField; label: string; filterable?: boolean }
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'invoice_number', label: 'Invoice #' },
-  { key: 'status', label: 'Status' },
+  { key: 'status', label: 'Status', filterable: true },
   { key: 'total_amount', label: 'Total' },
   { key: 'issue_date', label: 'Issue Date' },
   { key: 'created_at', label: 'Created' },
@@ -77,8 +79,13 @@ export function InvoicesListClient({
     order: 'desc',
   });
   const [statusNameFilter, setStatusNameFilter] = useState<Set<string>>(new Set());
+  const [statusFilterActive, setStatusFilterActive] = useState(false);
 
   const lastFetchKeyRef = useRef<string | null>(null);
+  const statusParam = useMemo(
+    () => columnFilterToIdsParam(statusFilterActive, statusNameFilter, statusOptions),
+    [statusFilterActive, statusNameFilter, statusOptions],
+  );
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -88,25 +95,34 @@ export function InvoicesListClient({
   const sortParam = `${columnSort.field}_${columnSort.order}`;
 
   useEffect(() => {
-    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}`;
+    const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
+    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}`;
 
     const params = new URLSearchParams(searchParams.toString());
     params.set('search', debouncedSearch);
     params.set('tab', tab);
     params.set('page', String(page));
     params.set('sort', sortParam);
+    if (statusParam) params.set('status', statusParam);
+    else params.delete('status');
     router.replace(`/invoices?${params}`, { scroll: false });
 
     if (lastFetchKeyRef.current === fetchKey) return;
     lastFetchKeyRef.current = fetchKey;
 
+    if (statusParam === null) {
+      setData({ data: [], total: 0 });
+      return;
+    }
+
     fetchInvoicesAction({
       page,
       limit: PAGE_SIZE,
       sort: sortParam,
+      status: statusParam,
     }).then((res) => res && setData(res));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, sortParam, tab, page]);
+  }, [debouncedSearch, sortParam, tab, page, statusParam]);
 
   const handleColumnSort = (field: InvSortField) => {
     setColumnSort((prev) => {
@@ -133,21 +149,43 @@ export function InvoicesListClient({
   };
 
   const uniqueStatuses = useMemo(() => {
+    const fromOptions = statusOptions
+      .map((s) => s.name?.trim())
+      .filter((n): n is string => !!n);
+    if (fromOptions.length > 0) {
+      return [...new Set(fromOptions)].sort((a, b) => a.localeCompare(b));
+    }
     const names = new Set<string>();
     for (const inv of data.data) {
       const name = inv.status?.name?.trim();
       if (name) names.add(name);
     }
     return [...names].sort((a, b) => a.localeCompare(b));
-  }, [data.data]);
+  }, [data.data, statusOptions]);
 
   const toggleStatusName = (name: string) => {
-    setStatusNameFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
+    const working = statusFilterActive
+      ? new Set(statusNameFilter)
+      : new Set(uniqueStatuses);
+    if (working.has(name)) working.delete(name);
+    else working.add(name);
+    const committed = commitColumnFilterSelection({
+      next: working,
+      optionCount: uniqueStatuses.length,
     });
+    setStatusNameFilter(committed.selected);
+    setStatusFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const applyStatusFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueStatuses.length,
+    });
+    setStatusNameFilter(committed.selected);
+    setStatusFilterActive(committed.active);
+    setPage(1);
   };
 
   const visibleRows = useMemo(() => {
@@ -161,13 +199,6 @@ export function InvoicesListClient({
       });
     }
 
-    if (statusNameFilter.size > 0) {
-      rows = rows.filter((inv) => {
-        const name = inv.status?.name?.trim();
-        return name ? statusNameFilter.has(name) : false;
-      });
-    }
-
     if (query) {
       rows = rows.filter((inv) =>
         (inv.invoiceNumber ?? '').toLowerCase().includes(query),
@@ -175,7 +206,7 @@ export function InvoicesListClient({
     }
 
     return rows;
-  }, [data.data, tab, statusNameFilter, debouncedSearch]);
+  }, [data.data, tab, debouncedSearch]);
 
   const breakdown = computeStatusBreakdown(visibleRows, (i) => i.status?.name);
   const totalValue = useMemo(() => {
@@ -239,10 +270,18 @@ export function InvoicesListClient({
 
           <ValueFilterMenu
             options={uniqueStatuses}
-            selected={statusNameFilter}
+            selected={statusFilterActive ? statusNameFilter : new Set(uniqueStatuses)}
             onToggle={toggleStatusName}
-            onClearAll={() => setStatusNameFilter(new Set())}
-            onSelectAll={() => setStatusNameFilter(new Set(uniqueStatuses))}
+            onClearAll={() => {
+              setStatusNameFilter(new Set());
+              setStatusFilterActive(false);
+              setPage(1);
+            }}
+            onSelectAll={() => {
+              setStatusNameFilter(new Set());
+              setStatusFilterActive(false);
+              setPage(1);
+            }}
             emptyLabel="All statuses"
             menuTitle="Filter by status"
             itemNoun={{ singular: 'status', plural: 'statuses' }}
@@ -269,6 +308,18 @@ export function InvoicesListClient({
                       activeField={columnSort.field}
                       sortOrder={columnSort.order}
                       onSort={handleColumnSort}
+                      filter={
+                        col.key === 'status'
+                          ? {
+                              options: uniqueStatuses,
+                              selected: statusNameFilter,
+                              active: statusFilterActive,
+                              onApply: applyStatusFilter,
+                              menuTitle: 'Filter by status',
+                              itemNoun: { singular: 'status', plural: 'statuses' },
+                            }
+                          : undefined
+                      }
                     />
                   ))}
                 </tr>

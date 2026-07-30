@@ -11,6 +11,7 @@ export class ProposalsController {
     @Query('limit') limit?: string,
     @Query('jobId') jobId?: string,
     @Query('rfqId') rfqId?: string,
+    @Query('status') status?: string,
     @Query('vendorId') vendorId?: string,
     @Query('sort') sort?: string,
   ) {
@@ -19,6 +20,7 @@ export class ProposalsController {
       limit: limit ? parseInt(limit, 10) : 20,
       jobId,
       rfqId,
+      status,
       vendorId,
       sort,
     });
