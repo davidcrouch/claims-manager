@@ -51,6 +51,7 @@ import type {
   CatalogType,
 } from '@/types/api';
 import { toast } from 'sonner';
+import { GenerateDocumentButton } from '@/components/shared/GenerateDocumentButton';
 import { QuoteLineItemsTab } from '@/components/quotes/QuoteLineItemsTab';
 import { JournalList } from '@/components/journals/JournalList';
 import {
@@ -233,6 +234,7 @@ export function QuotePageHeader({ quote }: { quote: Quote }) {
         )}
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1 text-xs">
+        <GenerateDocumentButton entityId={quote.id} documentType="quote" />
         {isDraft && (
           <Button
             size="sm"

@@ -140,6 +140,33 @@ export class GcsStorageService {
     }
   }
 
+  async uploadBuffer(params: {
+    objectPath: string;
+    buffer: Buffer;
+    contentType: string;
+  }): Promise<{ objectPath: string; bucket: string; uri: string }> {
+    const logPrefix = 'GcsStorageService.uploadBuffer';
+    const file = this.requireBucket(logPrefix).file(params.objectPath);
+
+    try {
+      await file.save(params.buffer, {
+        contentType: params.contentType,
+        resumable: false,
+      });
+      this.logger.debug(
+        `${logPrefix} — path=${params.objectPath} bytes=${params.buffer.length} contentType=${params.contentType}`,
+      );
+      return {
+        objectPath: params.objectPath,
+        bucket: this.bucketName,
+        uri: `gs://${this.bucketName}/${params.objectPath}`,
+      };
+    } catch (error: any) {
+      this.logger.error(`${logPrefix} — failed path=${params.objectPath}: ${error.message}`);
+      throw error;
+    }
+  }
+
   async deleteObject(objectPath: string): Promise<void> {
     const logPrefix = 'GcsStorageService.deleteObject';
     try {

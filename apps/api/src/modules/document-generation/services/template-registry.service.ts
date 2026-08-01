@@ -4,7 +4,6 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { S3Service } from '../../../common/s3/s3.service';
 import { GcsStorageService } from '../../../common/gcs/gcs-storage.service';
 import {
   DocumentTemplatesRepository,
@@ -76,7 +75,6 @@ export class TemplateRegistryService {
     private readonly templatesRepo: DocumentTemplatesRepository,
     private readonly documentsRepo: DocumentsRepository,
     private readonly gcsStorage: GcsStorageService,
-    private readonly s3Service: S3Service,
   ) {}
 
   async getSettings(params: { tenantId: string }): Promise<ScenarioTemplateSetting[]> {
@@ -199,31 +197,20 @@ export class TemplateRegistryService {
       );
     }
 
-    if (template.filesystemDocumentId) {
-      this.logger.debug(
-        `${logPrefix} — loading from filesystem document id=${template.filesystemDocumentId}`,
+    if (!template.filesystemDocumentId) {
+      throw new NotFoundException(
+        `No filesystem .docx linked for ${params.documentType} — configure it under Admin → Document Templates.`,
       );
-      const fileBuffer = await this.downloadFilesystemDocument({
-        tenantId: params.tenantId,
-        documentId: template.filesystemDocumentId,
-      });
-      return { template, fileBuffer };
     }
 
-    if (template.s3Key) {
-      this.logger.debug(`${logPrefix} — loading from legacy s3Key=${template.s3Key}`);
-      const url = await this.s3Service.getSignedDownloadUrl({ key: template.s3Key });
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Failed to download template from S3: ${response.statusText}`);
-      }
-      const fileBuffer = Buffer.from(await response.arrayBuffer());
-      return { template, fileBuffer };
-    }
-
-    throw new NotFoundException(
-      `No template file linked for ${params.documentType} — configure it under Admin → Document Templates.`,
+    this.logger.debug(
+      `${logPrefix} — loading from GCS via filesystem document id=${template.filesystemDocumentId}`,
     );
+    const fileBuffer = await this.downloadFilesystemDocument({
+      tenantId: params.tenantId,
+      documentId: template.filesystemDocumentId,
+    });
+    return { template, fileBuffer };
   }
 
   async findAll(params: {
@@ -240,41 +227,6 @@ export class TemplateRegistryService {
     return this.templatesRepo.findById({ id: params.id, tenantId: params.tenantId });
   }
 
-  /** @deprecated Prefer assignFilesystemDocument — kept for legacy multipart uploads */
-  async upload(params: {
-    tenantId: string;
-    documentType: DocumentType;
-    name: string;
-    fileBuffer: Buffer;
-    isDefault?: boolean;
-  }): Promise<DocumentTemplateRow> {
-    const logPrefix = 'TemplateRegistryService.upload';
-    const s3Key = this.buildS3Key({
-      tenantId: params.tenantId,
-      documentType: params.documentType,
-      name: params.name,
-    });
-
-    this.logger.log(`${logPrefix} — uploading template s3Key=${s3Key}`);
-
-    await this.s3Service.putJson({
-      key: s3Key,
-      body: params.fileBuffer,
-      contentType: DOCX_MIME,
-    });
-
-    return this.templatesRepo.upsertByType({
-      tenantId: params.tenantId,
-      documentType: params.documentType,
-      data: {
-        name: params.name,
-        filesystemDocumentId: null,
-        s3Key,
-        isDefault: params.isDefault ?? true,
-      },
-    });
-  }
-
   private async downloadFilesystemDocument(params: {
     tenantId: string;
     documentId: string;
@@ -288,17 +240,6 @@ export class TemplateRegistryService {
     }
     return this.gcsStorage.downloadBuffer(doc.gcsObjectPath);
   }
-
-  private buildS3Key(params: {
-    tenantId: string;
-    documentType: string;
-    name: string;
-  }): string {
-    const safeName = params.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 128);
-    return `templates/${params.tenantId}/${params.documentType}/${safeName}.docx`;
-  }
 }
 
 export { SCENARIO_META, DOCUMENT_TYPE_TO_ENTITY_TYPE };
-
-

@@ -31,6 +31,7 @@ import {
   type Dict,
 } from '@/components/shared/detail';
 import type { Rfq, Proposal } from '@/types/api';
+import { GenerateDocumentButton } from '@/components/shared/GenerateDocumentButton';
 import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
 import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
 import {
@@ -102,6 +103,7 @@ export function RfqPageHeader({ rfq }: { rfq: Rfq }) {
         )}
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1 text-xs">
+        <GenerateDocumentButton entityId={rfq.id} documentType="rfq" />
         <div className="flex items-baseline gap-1">
           <span className="text-muted-foreground">Sent:</span>
           <span className="font-medium">{formatDate(rfq.sentDate)}</span>

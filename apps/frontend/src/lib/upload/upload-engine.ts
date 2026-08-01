@@ -1,4 +1,5 @@
-import type { UploadTask, UploadStatus } from './types';
+import type { UploadTask } from './types';
+import { generateThumbnailBlob } from './thumbnail-generator';
 
 type UploadEventType = 'progress' | 'complete' | 'error' | 'queue-complete';
 
@@ -12,6 +13,7 @@ type UploadEventPayload = {
 type Listener<T extends UploadEventType> = (payload: UploadEventPayload[T]) => void;
 
 const MAX_CONCURRENT = 3;
+const LOG_PREFIX = 'UploadEngine';
 
 export class UploadEngine {
   private queue: UploadTask[] = [];
@@ -96,7 +98,7 @@ export class UploadEngine {
       if (xhr.status >= 200 && xhr.status < 300) {
         task.status = 'completing';
         task.progress = 100;
-        this.markComplete(task);
+        void this.finishUpload(task);
       } else {
         task.status = 'failed';
         task.error = `Upload failed with status ${xhr.status}`;
@@ -126,12 +128,60 @@ export class UploadEngine {
     xhr.send(task.file);
   }
 
-  private async markComplete(task: UploadTask) {
+  private async finishUpload(task: UploadTask) {
+    let thumbnailUploaded = false;
+
+    if (task.thumbnailUploadUrl) {
+      thumbnailUploaded = await this.uploadThumbnail(task);
+    }
+
+    await this.markComplete(task, thumbnailUploaded);
+  }
+
+  /** Best-effort thumbnail upload; failures do not fail the document upload. */
+  private async uploadThumbnail(task: UploadTask): Promise<boolean> {
+    if (!task.thumbnailUploadUrl) return false;
+
     try {
+      const blob = await generateThumbnailBlob(task.file);
+      if (!blob) return false;
+
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) resolve();
+          else reject(new Error(`Thumbnail upload status ${xhr.status}`));
+        });
+        xhr.addEventListener('error', () => reject(new Error('Thumbnail network error')));
+        xhr.open('PUT', task.thumbnailUploadUrl!);
+        xhr.setRequestHeader('Content-Type', 'image/png');
+        xhr.send(blob);
+      });
+
+      console.debug(`[${LOG_PREFIX}.uploadThumbnail] docId=${task.documentId} ok`);
+      return true;
+    } catch (err) {
+      console.warn(
+        `[${LOG_PREFIX}.uploadThumbnail] docId=${task.documentId} failed:`,
+        err instanceof Error ? err.message : err,
+      );
+      return false;
+    }
+  }
+
+  private async markComplete(task: UploadTask, thumbnailUploaded: boolean) {
+    try {
+      const body: { documentId: string; thumbnailObjectPath?: string } = {
+        documentId: task.documentId,
+      };
+      if (thumbnailUploaded && task.thumbnailObjectPath) {
+        body.thumbnailObjectPath = task.thumbnailObjectPath;
+      }
+
       const res = await fetch('/api/documents/upload-complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documentId: task.documentId }),
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) {

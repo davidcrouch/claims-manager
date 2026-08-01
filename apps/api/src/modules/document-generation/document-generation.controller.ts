@@ -5,9 +5,12 @@ import {
   Param,
   Body,
   Query,
+  Res,
   Logger,
+  StreamableFile,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { DocumentGenerationService } from './document-generation.service';
 import { GenerateDocumentDto } from './dto/generate-document.dto';
 
@@ -56,6 +59,24 @@ export class DocumentGenerationController {
     @Query('format') format?: 'pdf' | 'docx',
   ) {
     return this.documentGenService.getDownloadUrl({ id, format });
+  }
+
+  @Get(':id/stream')
+  @ApiOperation({ summary: 'Stream a generated document (ADC / local fallback)' })
+  async stream(
+    @Param('id') id: string,
+    @Query('format') format: 'pdf' | 'docx' | undefined,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { stream, fileName, mimeType } = await this.documentGenService.getDownloadStream({
+      id,
+      format,
+    });
+    res.set({
+      'Content-Type': mimeType,
+      'Content-Disposition': `attachment; filename="${encodeURIComponent(fileName)}"`,
+    });
+    return new StreamableFile(stream as any);
   }
 
   @Post(':id/regenerate')

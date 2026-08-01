@@ -58,12 +58,14 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { CommonModule } from './common/common.module';
 import { S3Module } from './common/s3/s3.module';
 import { GcsModule } from './common/gcs/gcs.module';
+import { OfficeModule } from './common/office/office.module';
 
 @Module({
   imports: [
     CommonModule,
     S3Module,
     GcsModule,
+    OfficeModule,
     ConfigModule.forRoot({
       isGlobal: true,
       load: [

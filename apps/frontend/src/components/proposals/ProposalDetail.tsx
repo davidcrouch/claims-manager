@@ -31,6 +31,7 @@ import {
 } from '@/components/shared/detail';
 import { updateProposalStatusAction } from '@/app/(app)/mutations-status';
 import type { Proposal } from '@/types/api';
+import { GenerateDocumentButton } from '@/components/shared/GenerateDocumentButton';
 
 // ---------- helpers ---------------------------------------------------------
 
@@ -109,6 +110,7 @@ export function ProposalPageHeader({ proposal }: { proposal: Proposal }) {
         )}
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1">
+        <GenerateDocumentButton entityId={proposal.id} documentType="proposal" />
         <div className="flex items-baseline gap-1 text-xs">
           <span className="text-muted-foreground">Total:</span>
           <span className="font-medium">{formatCurrency(proposal.totalAmount)}</span>

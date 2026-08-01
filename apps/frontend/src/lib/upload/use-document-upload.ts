@@ -17,6 +17,8 @@ export function useDocumentUpload(options?: UseDocumentUploadOptions) {
   const [tasks, setTasks] = useState<UploadTask[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const engineRef = useRef<UploadEngine | null>(null);
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
 
   useEffect(() => {
     const engine = new UploadEngine();
@@ -42,80 +44,91 @@ export function useDocumentUpload(options?: UseDocumentUploadOptions) {
 
     engine.on('queue-complete', () => {
       setIsUploading(false);
-      options?.onComplete?.();
+      optionsRef.current?.onComplete?.();
     });
 
     engineRef.current = engine;
   }, []);
 
-  const upload = useCallback(
-    async (files: File[]) => {
-      const validFiles: File[] = [];
+  const addFiles = useCallback(async (files: File[]) => {
+    const validFiles: File[] = [];
 
-      for (const file of files) {
-        const result = validateFile(file);
-        if (!result.valid) {
-          toast.error(`${file.name}: ${result.error}`);
-        } else {
-          validFiles.push(file);
-        }
+    for (const file of files) {
+      const result = validateFile(file);
+      if (!result.valid) {
+        toast.error(`${file.name}: ${result.error}`);
+      } else {
+        validFiles.push(file);
+      }
+    }
+
+    if (validFiles.length === 0) return;
+
+    setIsUploading(true);
+    const opts = optionsRef.current;
+
+    try {
+      const res = await fetch('/api/documents/upload-urls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          files: validFiles.map((f) => ({
+            fileName: f.name,
+            mimeType: f.type,
+            fileSizeBytes: f.size,
+            categoryId: opts?.categoryId ?? undefined,
+            relatedRecordType: opts?.relatedRecordType,
+            relatedRecordId: opts?.relatedRecordId,
+          })),
+        }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(
+          (body as { message?: string }).message || `Failed to get upload URLs (${res.status})`,
+        );
       }
 
-      if (validFiles.length === 0) return;
+      const { uploads } = (await res.json()) as { uploads: UploadUrlResponse[] };
 
-      setIsUploading(true);
+      const newTasks: UploadTask[] = validFiles.map((file, i) => ({
+        id: uploads[i].documentId,
+        file,
+        fileName: file.name,
+        mimeType: file.type,
+        fileSizeBytes: file.size,
+        uploadUrl: uploads[i].uploadUrl,
+        documentId: uploads[i].documentId,
+        storageKey: uploads[i].storageKey,
+        thumbnailUploadUrl: uploads[i].thumbnailUploadUrl,
+        thumbnailObjectPath: uploads[i].thumbnailObjectPath,
+        status: 'queued' as const,
+        progress: 0,
+        categoryId: opts?.categoryId,
+        relatedRecordType: opts?.relatedRecordType,
+        relatedRecordId: opts?.relatedRecordId,
+      }));
 
-      try {
-        const res = await fetch('/api/documents/upload-urls', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            files: validFiles.map((f) => ({
-              fileName: f.name,
-              mimeType: f.type,
-              fileSizeBytes: f.size,
-              categoryId: options?.categoryId ?? undefined,
-              relatedRecordType: options?.relatedRecordType,
-              relatedRecordId: options?.relatedRecordId,
-            })),
-          }),
-        });
+      setTasks((prev) => [...prev, ...newTasks]);
+      engineRef.current?.enqueue(newTasks);
+    } catch (err) {
+      setIsUploading(false);
+      const msg = err instanceof Error ? err.message : 'Upload failed';
+      toast.error(msg);
+      throw err;
+    }
+  }, []);
 
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          throw new Error((body as { message?: string }).message || `Failed to get upload URLs (${res.status})`);
-        }
-
-        const { uploads } = (await res.json()) as { uploads: UploadUrlResponse[] };
-
-        const newTasks: UploadTask[] = validFiles.map((file, i) => ({
-          id: `upload-${Date.now()}-${i}`,
-          file,
-          fileName: file.name,
-          mimeType: file.type,
-          fileSizeBytes: file.size,
-          uploadUrl: uploads[i].uploadUrl,
-          documentId: uploads[i].documentId,
-          storageKey: uploads[i].storageKey,
-          status: 'queued' as const,
-          progress: 0,
-          categoryId: options?.categoryId,
-          relatedRecordType: options?.relatedRecordType,
-          relatedRecordId: options?.relatedRecordId,
-        }));
-
-        setTasks((prev) => [...prev, ...newTasks]);
-        engineRef.current?.enqueue(newTasks);
-      } catch (err) {
-        setIsUploading(false);
-        const msg = err instanceof Error ? err.message : 'Upload failed';
-        toast.error(msg);
-      }
-    },
-    [options?.categoryId, options?.relatedRecordType, options?.relatedRecordId],
-  );
+  /** @deprecated Prefer addFiles — kept for callers that upload immediately. */
+  const upload = addFiles;
 
   const cancelTask = useCallback((taskId: string) => {
+    engineRef.current?.cancel(taskId);
+    setTasks((prev) => prev.filter((t) => t.id !== taskId));
+  }, []);
+
+  const removeTask = useCallback((taskId: string) => {
     engineRef.current?.cancel(taskId);
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
   }, []);
@@ -124,6 +137,18 @@ export function useDocumentUpload(options?: UseDocumentUploadOptions) {
     setTasks((prev) => prev.filter((t) => t.status !== 'completed' && t.status !== 'failed'));
   }, []);
 
+  const cancelAll = useCallback(() => {
+    for (const task of tasks) {
+      if (task.status === 'queued' || task.status === 'uploading') {
+        engineRef.current?.cancel(task.id);
+      }
+    }
+    setTasks((prev) =>
+      prev.filter((t) => t.status === 'completed' || t.status === 'failed'),
+    );
+    setIsUploading(false);
+  }, [tasks]);
+
   const overallProgress =
     tasks.length > 0
       ? Math.round(tasks.reduce((sum, t) => sum + t.progress, 0) / tasks.length)
@@ -131,10 +156,13 @@ export function useDocumentUpload(options?: UseDocumentUploadOptions) {
 
   return {
     upload,
+    addFiles,
     tasks,
     isUploading,
     progress: overallProgress,
     cancelTask,
+    removeTask,
     clearCompleted,
+    cancelAll,
   };
 }

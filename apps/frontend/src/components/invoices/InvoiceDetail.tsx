@@ -25,6 +25,7 @@ import {
   formatCurrency,
 } from '@/components/shared/detail';
 import type { Invoice } from '@/types/api';
+import { GenerateDocumentButton } from '@/components/shared/GenerateDocumentButton';
 import { JournalList } from '@/components/journals/JournalList';
 import {
   fetchJournalsByEntityAction,
@@ -69,6 +70,7 @@ export function InvoicePageHeader({ invoice }: { invoice: Invoice }) {
         )}
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1 text-xs">
+        <GenerateDocumentButton entityId={invoice.id} documentType="invoice" />
         <div className="flex items-baseline gap-1">
           <span className="text-muted-foreground">Amount:</span>
           <span className="font-medium">{formatCurrency(invoice.totalAmount)}</span>

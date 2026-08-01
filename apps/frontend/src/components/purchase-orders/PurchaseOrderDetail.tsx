@@ -46,6 +46,7 @@ import {
   type Dict,
 } from '@/components/shared/detail';
 import type { PurchaseOrder } from '@/types/api';
+import { GenerateDocumentButton } from '@/components/shared/GenerateDocumentButton';
 import { getPurchaseOrderLineItemsAction } from '@/app/(app)/purchase-orders/actions';
 import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
 import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
@@ -156,6 +157,7 @@ export function PurchaseOrderPageHeader({ po }: { po: PurchaseOrder }) {
         )}
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1 text-xs">
+        <GenerateDocumentButton entityId={po.id} documentType="purchase_order" />
         <div className="flex items-baseline gap-1">
           <span className="text-muted-foreground">Total:</span>
           <span className="font-medium">{total}</span>

@@ -32,6 +32,7 @@ import {
 } from '@/components/shared/detail';
 import { updateBillStatusAction } from '@/app/(app)/mutations-status';
 import type { Bill } from '@/types/api';
+import { GenerateDocumentButton } from '@/components/shared/GenerateDocumentButton';
 
 // ---------- helpers ---------------------------------------------------------
 
@@ -101,6 +102,7 @@ export function BillPageHeader({ bill }: { bill: Bill }) {
         )}
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1">
+        <GenerateDocumentButton entityId={bill.id} documentType="bill" />
         <div className="flex items-baseline gap-1 text-xs">
           <span className="text-muted-foreground">Amount:</span>
           <span className="font-medium">{formatCurrency(bill.totalAmount)}</span>

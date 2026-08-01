@@ -1,5 +1,20 @@
 export { UploadEngine } from './upload-engine';
 export { useDocumentUpload } from './use-document-upload';
-export { validateFile, ALLOWED_MIME_TYPES, MAX_FILE_SIZE } from './validation';
-export { generateThumbnail } from './thumbnail-generator';
-export type { UploadTask, UploadStatus, UploadUrlResponse, BatchUploadUrlResponse } from './types';
+export {
+  validateFile,
+  validateBatch,
+  formatBytes,
+  getFileCategory,
+  ALLOWED_MIME_TYPES,
+  MAX_FILE_SIZE,
+  MAX_BATCH_SIZE,
+} from './validation';
+export { generateThumbnail, generateThumbnailBlob } from './thumbnail-generator';
+export { useFileThumbnail } from './use-file-thumbnail';
+export type { FileCategory } from './validation';
+export type {
+  UploadTask,
+  UploadStatus,
+  UploadUrlResponse,
+  BatchUploadUrlResponse,
+} from './types';

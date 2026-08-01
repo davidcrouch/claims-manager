@@ -1,11 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import Docxtemplater from 'docxtemplater';
 import PizZip from 'pizzip';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const expressionParser = require('docxtemplater/expressions.js');
 import type { TemplateData } from '../types/document-types';
 
 @Injectable()
 export class TemplateEngineService {
   private readonly logger = new Logger('TemplateEngineService');
+
+  private readonly parser = expressionParser.configure({ csp: true });
 
   populate(params: {
     templateBuffer: Buffer;
@@ -18,7 +22,7 @@ export class TemplateEngineService {
     const doc = new Docxtemplater(zip, {
       paragraphLoop: true,
       linebreaks: true,
-      delimiters: { start: '{', end: '}' },
+      parser: this.parser,
     });
 
     doc.render(params.data);
@@ -38,7 +42,7 @@ export class TemplateEngineService {
     const doc = new Docxtemplater(zip, {
       paragraphLoop: true,
       linebreaks: true,
-      delimiters: { start: '{', end: '}' },
+      parser: this.parser,
     });
 
     const tags = doc.getFullText().match(/\{([^}]+)\}/g) ?? [];

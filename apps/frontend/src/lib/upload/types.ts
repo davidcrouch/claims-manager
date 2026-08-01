@@ -9,6 +9,8 @@ export interface UploadTask {
   uploadUrl: string;
   documentId: string;
   storageKey: string;
+  thumbnailUploadUrl?: string;
+  thumbnailObjectPath?: string;
   status: UploadStatus;
   progress: number;
   error?: string;
@@ -21,6 +23,8 @@ export interface UploadUrlResponse {
   documentId: string;
   uploadUrl: string;
   storageKey: string;
+  thumbnailUploadUrl?: string;
+  thumbnailObjectPath?: string;
 }
 
 export interface BatchUploadUrlResponse {

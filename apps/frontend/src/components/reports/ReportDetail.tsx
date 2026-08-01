@@ -23,6 +23,7 @@ import {
   type Dict,
 } from '@/components/shared/detail';
 import type { Report } from '@/types/api';
+import { GenerateDocumentButton } from '@/components/shared/GenerateDocumentButton';
 
 function getPayload(report: Report): Dict {
   return (report.reportData as Dict | undefined) ?? {};
@@ -57,6 +58,7 @@ export function ReportPageHeader({ report }: { report: Report }) {
         )}
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1 text-xs">
+        <GenerateDocumentButton entityId={report.id} documentType="report" />
         <div className="flex items-baseline gap-1">
           <span className="text-muted-foreground">Created:</span>
           <span className="font-medium">{formatDate(report.createdAt)}</span>

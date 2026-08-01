@@ -1,5 +1,5 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
-import { S3Service } from '../../common/s3/s3.service';
+import { GcsStorageService } from '../../common/gcs/gcs-storage.service';
 import { GeneratedDocumentsRepository } from '../../database/repositories';
 import { TenantContext } from '../../tenant/tenant-context';
 import { TemplateRegistryService } from './services/template-registry.service';
@@ -20,6 +20,9 @@ import {
   type GenerationTrigger,
 } from './types/document-types';
 
+const DOCX_MIME =
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
 @Injectable()
 export class DocumentGenerationService {
   private readonly logger = new Logger('DocumentGenerationService');
@@ -30,7 +33,7 @@ export class DocumentGenerationService {
     private readonly templateRegistry: TemplateRegistryService,
     private readonly templateEngine: TemplateEngineService,
     private readonly pdfConverter: PdfConverterService,
-    private readonly s3Service: S3Service,
+    private readonly gcsStorage: GcsStorageService,
     private readonly generatedDocsRepo: GeneratedDocumentsRepository,
     quoteMapper: QuoteMapper,
     invoiceMapper: InvoiceMapper,
@@ -93,7 +96,7 @@ export class DocumentGenerationService {
 
       const data = await mapper.aggregate({ tenantId, entityId: params.entityId });
 
-      const { template, fileBuffer: templateBuffer } = await this.templateRegistry.resolve({
+      const { fileBuffer: templateBuffer } = await this.templateRegistry.resolve({
         tenantId,
         documentType: params.documentType,
         templateId: params.templateId,
@@ -104,43 +107,33 @@ export class DocumentGenerationService {
         data,
       });
 
-      let pdfBuffer: Buffer;
-      try {
-        pdfBuffer = await this.pdfConverter.convertDocxToPdf({ docxBuffer: populatedDocx });
-      } catch {
-        this.logger.warn(
-          `${logPrefix} — PDF conversion unavailable, storing .docx only. Install LibreOffice for PDF support.`,
-        );
-        const docxKey = this.buildOutputKey({ tenantId, entityType, entityId: params.entityId, ext: 'docx' });
-        await this.s3Service.putJson({
-          key: docxKey,
-          body: populatedDocx,
-          contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        });
+      const pdfBuffer = await this.pdfConverter.convertDocxToPdf({
+        docxBuffer: populatedDocx,
+      });
 
-        const updated = await this.generatedDocsRepo.updateStatus({
-          id: record.id,
-          status: 'completed',
-          s3KeyPdf: docxKey,
-          s3KeyDocx: docxKey,
-        });
-
-        return updated;
-      }
-
-      const pdfKey = this.buildOutputKey({ tenantId, entityType, entityId: params.entityId, ext: 'pdf' });
-      const docxKey = this.buildOutputKey({ tenantId, entityType, entityId: params.entityId, ext: 'docx' });
+      const pdfKey = this.buildOutputKey({
+        tenantId,
+        entityType,
+        entityId: params.entityId,
+        ext: 'pdf',
+      });
+      const docxKey = this.buildOutputKey({
+        tenantId,
+        entityType,
+        entityId: params.entityId,
+        ext: 'docx',
+      });
 
       await Promise.all([
-        this.s3Service.putJson({
-          key: pdfKey,
-          body: pdfBuffer,
+        this.gcsStorage.uploadBuffer({
+          objectPath: pdfKey,
+          buffer: pdfBuffer,
           contentType: 'application/pdf',
         }),
-        this.s3Service.putJson({
-          key: docxKey,
-          body: populatedDocx,
-          contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        this.gcsStorage.uploadBuffer({
+          objectPath: docxKey,
+          buffer: populatedDocx,
+          contentType: DOCX_MIME,
         }),
       ]);
 
@@ -174,9 +167,50 @@ export class DocumentGenerationService {
     const key = params.format === 'docx' && doc.s3KeyDocx ? doc.s3KeyDocx : doc.s3KeyPdf;
     if (!key) throw new NotFoundException('Document file not available');
 
-    const url = await this.s3Service.getSignedDownloadUrl({ key });
-    this.logger.debug(`${logPrefix} — presigned URL for id=${params.id} format=${params.format ?? 'pdf'}`);
-    return { url, format: params.format ?? 'pdf' };
+    const format =
+      params.format ??
+      (key.endsWith('.docx') ? 'docx' : 'pdf');
+    const fileName = `${doc.entityType}-${doc.entityId}.${format}`;
+    const mimeType = format === 'docx' ? DOCX_MIME : 'application/pdf';
+
+    const url = await this.gcsStorage.getSignedDownloadUrl({ objectPath: key });
+    if (!url) {
+      this.logger.debug(`${logPrefix} — streamFallback for id=${params.id} format=${format}`);
+      return {
+        url: '',
+        format,
+        streamFallback: true,
+        fileName,
+        mimeType,
+      };
+    }
+
+    this.logger.debug(`${logPrefix} — signed URL for id=${params.id} format=${format}`);
+    return { url, format, streamFallback: false, fileName, mimeType };
+  }
+
+  async getDownloadStream(params: { id: string; format?: 'pdf' | 'docx' }) {
+    const logPrefix = 'DocumentGenerationService.getDownloadStream';
+    const tenantId = this.tenantContext.getTenantId();
+    const doc = await this.generatedDocsRepo.findById({ id: params.id, tenantId });
+    if (!doc) throw new NotFoundException('Generated document not found');
+
+    const key = params.format === 'docx' && doc.s3KeyDocx ? doc.s3KeyDocx : doc.s3KeyPdf;
+    if (!key) throw new NotFoundException('Document file not available');
+
+    const format =
+      params.format ??
+      (key.endsWith('.docx') ? 'docx' : 'pdf');
+    const fileName = `${doc.entityType}-${doc.entityId}.${format}`;
+    const mimeType = format === 'docx' ? DOCX_MIME : 'application/pdf';
+
+    this.logger.debug(`${logPrefix} — streaming id=${params.id} path=${key}`);
+    return {
+      stream: this.gcsStorage.getReadStream(key),
+      fileName,
+      mimeType,
+      format,
+    };
   }
 
   async findAll(params: { documentType?: string; page?: number; limit?: number }) {
@@ -212,6 +246,6 @@ export class DocumentGenerationService {
     ext: string;
   }): string {
     const ts = Date.now();
-    return `generated/${params.tenantId}/${params.entityType}/${params.entityId}/${ts}.${params.ext}`;
+    return `tenants/${params.tenantId}/generated/${params.entityType}/${params.entityId}/${ts}.${params.ext}`;
   }
 }

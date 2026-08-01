@@ -29,7 +29,7 @@ function GridSkeleton({ layout }: { layout: 'grid' | 'list' }) {
   return (
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
       {Array.from({ length: 10 }).map((_, i) => (
-        <Skeleton key={i} className="h-36 w-full rounded-lg" />
+        <Skeleton key={i} className="aspect-[210/297] w-full rounded-lg" />
       ))}
     </div>
   );

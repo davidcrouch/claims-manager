@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useState, type CSSProperties, type DragEvent } from 'react';
 import {
   FileText,
   FileImage,
@@ -71,13 +71,24 @@ function formatDate(dateStr: string): string {
   });
 }
 
+function hasPossibleThumbnail(doc: FSDocument): boolean {
+  if (doc.thumbnailUri) return true;
+  if (doc.mimeType?.startsWith('image/') && (doc.gcsBucket || doc.uri)) return true;
+  return false;
+}
+
 export function DocumentCard({ document: doc, categories, onAction, layout = 'grid' }: DocumentCardProps) {
   const Icon = getFileIcon(doc.mimeType);
   const iconColor = getFileIconColor(doc.mimeType);
   const category = categories?.find((c) => c.id === doc.filesystemCategoryId);
+  const showThumb = hasPossibleThumbnail(doc);
+  const [thumbFailed, setThumbFailed] = useState(false);
+  const [thumbAspectStyle, setThumbAspectStyle] = useState<CSSProperties>({
+    aspectRatio: '210 / 297',
+  });
 
   const handleDragStart = useCallback(
-    (e: React.DragEvent) => {
+    (e: DragEvent) => {
       e.dataTransfer.setData('application/x-document-id', doc.id);
       e.dataTransfer.effectAllowed = 'move';
     },
@@ -114,24 +125,54 @@ export function DocumentCard({ document: doc, categories, onAction, layout = 'gr
     <Card
       draggable
       onDragStart={handleDragStart}
-      className="group relative flex flex-col items-center gap-2 p-4 transition-all hover:shadow-md cursor-grab active:cursor-grabbing"
+      className="group relative flex flex-col overflow-hidden transition-all hover:shadow-md cursor-grab active:cursor-grabbing p-0 gap-0"
     >
-      <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="absolute right-2 top-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
         <ContextMenu doc={doc} onAction={onAction} />
       </div>
-      <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-100">
-        <Icon className={cn('h-6 w-6', iconColor)} />
-      </div>
-      <p className="w-full truncate text-center text-sm font-medium text-slate-900">
-        {doc.fileName}
-      </p>
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-slate-500">{formatFileSize(doc.fileSizeBytes)}</span>
-        {category && (
-          <Badge variant="secondary" className="text-xs">
-            {category.displayName}
-          </Badge>
+
+      <div
+        className="relative w-full overflow-hidden bg-slate-100"
+        style={thumbAspectStyle}
+      >
+        {showThumb && !thumbFailed ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={`/api/documents/${doc.id}/thumbnail`}
+            alt={doc.fileName ?? 'Document thumbnail'}
+            className="absolute inset-0 h-full w-full object-contain"
+            onLoad={(e) => {
+              const img = e.currentTarget;
+              if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+                setThumbAspectStyle({
+                  aspectRatio: `${img.naturalWidth} / ${img.naturalHeight}`,
+                });
+              }
+            }}
+            onError={() => setThumbFailed(true)}
+          />
+        ) : (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-slate-400">
+            <Icon className={cn('h-10 w-10', iconColor)} />
+            {showThumb && thumbFailed && (
+              <span className="text-[11px]">Thumbnail unavailable</span>
+            )}
+          </div>
         )}
+      </div>
+
+      <div className="flex flex-col gap-1 p-3">
+        <p className="w-full truncate text-sm font-medium text-slate-900" title={doc.fileName}>
+          {doc.fileName}
+        </p>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-500">{formatFileSize(doc.fileSizeBytes)}</span>
+          {category && (
+            <Badge variant="secondary" className="text-xs">
+              {category.displayName}
+            </Badge>
+          )}
+        </div>
       </div>
     </Card>
   );
@@ -147,7 +188,7 @@ function ContextMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-white/90 text-slate-500 shadow-sm hover:bg-white hover:text-slate-700"
       >
         <MoreVertical className="h-4 w-4" />
       </DropdownMenuTrigger>

@@ -22,3 +22,13 @@ output "secret_ids" {
   value       = module.secrets.secret_ids
   description = "Secret Manager secret IDs created in the dev project"
 }
+
+output "gcs_bucket_names" {
+  value       = module.gcs.bucket_names
+  description = "Legacy GCS bucket names (chat-attachments, shared)"
+}
+
+output "documents_bucket_name" {
+  value       = module.gcs.documents_bucket_name
+  description = "Documents/filesystem GCS bucket — set GCS_DOCUMENTS_BUCKET in local API .env"
+}

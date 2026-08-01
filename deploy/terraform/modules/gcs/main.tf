@@ -13,10 +13,8 @@ locals {
   name_prefix = coalesce(var.name_prefix, "claims-manager-${var.environment}")
 
   buckets = {
-    "workers-comp"     = { public = true }
     "chat-attachments" = { public = true }
     "shared"           = { public = false }
-    "pdf-test-gen"     = { public = true }
   }
 
   public_bucket_keys = var.allow_public_bucket_iam ? {

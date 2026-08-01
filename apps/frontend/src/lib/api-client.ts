@@ -1407,6 +1407,32 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<void>(`/documents/${documentId}`, { method: 'DELETE' });
     },
 
+    // -- Document generation --
+
+    generateDocument(params: {
+      documentType: string;
+      entityId: string;
+    }): Promise<GeneratedDocument> {
+      return fetchApi<GeneratedDocument>('/generated-documents/generate', {
+        method: 'POST',
+        body: JSON.stringify(params),
+      });
+    },
+
+    getGeneratedDocument(id: string): Promise<GeneratedDocument> {
+      return fetchApi<GeneratedDocument>(`/generated-documents/${id}`);
+    },
+
+    getGeneratedDocumentDownloadUrl(
+      id: string,
+      format?: 'pdf' | 'docx',
+    ): Promise<{ url: string; format: string }> {
+      const q = format ? `?format=${format}` : '';
+      return fetchApi<{ url: string; format: string }>(
+        `/generated-documents/${id}/download${q}`,
+      );
+    },
+
     // -- Document generation templates (scenario → filesystem .docx) --
 
     getDocumentTemplateSettings(): Promise<DocumentTemplateSetting[]> {
@@ -1521,6 +1547,22 @@ export interface DocumentTemplateSetting {
     mimeType: string;
     uploadStatus: string;
   } | null;
+}
+
+export interface GeneratedDocument {
+  id: string;
+  tenantId: string;
+  documentType: string;
+  entityId: string;
+  entityType: string;
+  templateId: string | null;
+  s3KeyPdf: string;
+  s3KeyDocx: string | null;
+  generatedBy: string | null;
+  trigger: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  errorMessage: string | null;
+  createdAt: string;
 }
 
 export interface DocumentListParams {

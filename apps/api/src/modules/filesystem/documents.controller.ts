@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Header, Param, ParseUUIDPipe, Patch, Post, Query, Res, StreamableFile } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, Res, StreamableFile } from '@nestjs/common';
 import type { Response } from 'express';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { DocumentsService } from './documents.service';
@@ -62,7 +62,7 @@ export class DocumentsController {
 
   @Post('upload-complete')
   async markUploadComplete(@Body() dto: UploadCompleteDto) {
-    return this.documentsService.markUploadComplete(dto.documentId);
+    return this.documentsService.markUploadComplete(dto.documentId, dto.thumbnailObjectPath);
   }
 
   @Post('upload-failed')
@@ -86,6 +86,24 @@ export class DocumentsController {
   @Get(':id/download-url')
   async getDownloadUrl(@Param('id', ParseUUIDPipe) id: string) {
     return this.documentsService.getDownloadUrl(id);
+  }
+
+  @Get(':id/thumbnail')
+  async getThumbnailUrl(@Param('id', ParseUUIDPipe) id: string) {
+    return this.documentsService.getThumbnailUrl(id);
+  }
+
+  @Get(':id/thumbnail/stream')
+  async streamThumbnail(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { stream, contentType } = await this.documentsService.getThumbnailStream(id);
+    res.set({
+      'Content-Type': contentType,
+      'Cache-Control': 'private, max-age=300',
+    });
+    return new StreamableFile(stream as any);
   }
 
   @Get(':id/stream')

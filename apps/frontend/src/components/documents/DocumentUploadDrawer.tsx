@@ -1,11 +1,22 @@
 'use client';
 
-import { useCallback, useRef } from 'react';
-import { Upload, X, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { Upload, Trash2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
-import { useDocumentUpload } from '@/lib/upload';
-import type { UploadTask } from '@/lib/upload';
+import {
+  BottomFormDrawer,
+  BottomFormDrawerBody,
+  BottomFormDrawerError,
+  BottomFormDrawerFooter,
+} from '@/components/forms/BottomFormDrawer';
+import { DropZone } from './DropZone';
+import { DocumentUploadTile, StagedFileTile } from './DocumentUploadTile';
+import { useDocumentUpload, validateFile, validateBatch, formatBytes } from '@/lib/upload';
+
+interface StagedFile {
+  id: string;
+  file: File;
+}
 
 interface DocumentUploadDrawerProps {
   open: boolean;
@@ -16,20 +27,6 @@ interface DocumentUploadDrawerProps {
   onComplete?: () => void;
 }
 
-function TaskStatusIcon({ status }: { status: UploadTask['status'] }) {
-  switch (status) {
-    case 'completed':
-      return <CheckCircle className="h-4 w-4 text-green-500" />;
-    case 'failed':
-      return <AlertCircle className="h-4 w-4 text-red-500" />;
-    case 'uploading':
-    case 'completing':
-      return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />;
-    default:
-      return <div className="h-4 w-4 rounded-full border-2 border-slate-300" />;
-  }
-}
-
 export function DocumentUploadDrawer({
   open,
   onOpenChange,
@@ -38,159 +35,264 @@ export function DocumentUploadDrawer({
   relatedRecordId,
   onComplete,
 }: DocumentUploadDrawerProps) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const {
+    tasks,
+    isUploading,
+    progress,
+    addFiles,
+    cancelTask,
+    cancelAll,
+    removeTask,
+    clearCompleted,
+  } = useDocumentUpload({
+    categoryId,
+    relatedRecordType,
+    relatedRecordId,
+  });
 
-  const { upload, tasks, isUploading, progress, cancelTask, clearCompleted } =
-    useDocumentUpload({
-      categoryId,
-      relatedRecordType,
-      relatedRecordId,
-      onComplete,
-    });
+  const [stagedFiles, setStagedFiles] = useState<StagedFile[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [isStartingUpload, setIsStartingUpload] = useState(false);
+  const seenCompletedTaskIdsRef = useRef<Set<string>>(new Set());
 
-  const handleFiles = useCallback(
-    (files: FileList | File[]) => {
-      upload(Array.from(files));
-    },
-    [upload],
-  );
+  const handleFilesSelected = useCallback((files: File[]) => {
+    setError(null);
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      if (e.dataTransfer.files.length > 0) {
-        handleFiles(e.dataTransfer.files);
+    const batchError = validateBatch(files);
+    if (batchError) {
+      setError(batchError);
+      return;
+    }
+
+    const valid: StagedFile[] = [];
+    const errors: string[] = [];
+    for (const file of files) {
+      const result = validateFile(file);
+      if (!result.valid) {
+        errors.push(result.error ?? file.name);
+      } else {
+        valid.push({ id: crypto.randomUUID(), file });
       }
+    }
+
+    if (errors.length > 0 && valid.length === 0) {
+      setError(errors.join('\n'));
+      return;
+    }
+    if (errors.length > 0) {
+      setError(`${errors.length} file(s) skipped: ${errors[0]}`);
+    }
+
+    setStagedFiles((prev) => [...prev, ...valid]);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ files: File[] }>).detail;
+      if (detail?.files?.length) {
+        handleFilesSelected(detail.files);
+      }
+    };
+
+    window.addEventListener('filesystem-upload-files', handler);
+    return () => window.removeEventListener('filesystem-upload-files', handler);
+  }, [open, handleFilesSelected]);
+
+  const handleRemoveStaged = useCallback((id: string) => {
+    setStagedFiles((prev) => prev.filter((sf) => sf.id !== id));
+  }, []);
+
+  const handleStartUpload = useCallback(async () => {
+    if (stagedFiles.length === 0 || isStartingUpload) return;
+    setError(null);
+    setIsStartingUpload(true);
+    const files = stagedFiles.map((sf) => sf.file);
+    try {
+      await addFiles(files);
+      setStagedFiles([]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start upload');
+    } finally {
+      setIsStartingUpload(false);
+    }
+  }, [stagedFiles, addFiles, isStartingUpload]);
+
+  const pendingCount = tasks.filter((t) => t.status === 'queued').length;
+  const uploadingCount = tasks.filter(
+    (t) => t.status === 'uploading' || t.status === 'completing',
+  ).length;
+  const completedCount = tasks.filter((t) => t.status === 'completed').length;
+  const taskCount = tasks.length;
+  const stagedTotalBytes = stagedFiles.reduce((sum, sf) => sum + sf.file.size, 0);
+
+  useEffect(() => {
+    if (!open) {
+      seenCompletedTaskIdsRef.current = new Set();
+      return;
+    }
+    seenCompletedTaskIdsRef.current = new Set(
+      tasks.filter((task) => task.status === 'completed').map((task) => task.id),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- snapshot only on drawer open
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    let hadNewCompletion = false;
+    for (const task of tasks) {
+      if (task.status === 'completed' && !seenCompletedTaskIdsRef.current.has(task.id)) {
+        seenCompletedTaskIdsRef.current.add(task.id);
+        hadNewCompletion = true;
+      }
+    }
+    if (hadNewCompletion) {
+      onComplete?.();
+    }
+  }, [open, tasks, onComplete]);
+
+  const handleDrawerOpenChange = useCallback(
+    (nextOpen: boolean) => {
+      if (!nextOpen) {
+        clearCompleted();
+        setStagedFiles([]);
+        setError(null);
+        seenCompletedTaskIdsRef.current = new Set();
+      }
+      onOpenChange(nextOpen);
     },
-    [handleFiles],
+    [onOpenChange, clearCompleted],
   );
-
-  if (!open) return null;
-
-  const hasCompleted = tasks.some((t) => t.status === 'completed' || t.status === 'failed');
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-lg animate-in slide-in-from-bottom-4">
-      <div className="mx-4 mb-4 rounded-xl border border-slate-200 bg-white shadow-xl">
-        <div
-          data-slot="drawer-header"
-          className="flex items-center justify-between border-b border-sidebar-border px-4 py-3"
-        >
-          <div className="flex items-center gap-2">
-            <Upload className="h-4 w-4 text-sidebar-foreground" />
-            <h3 className="text-sm font-semibold text-sidebar-foreground">Upload Documents</h3>
-            {isUploading && (
-              <span className="text-xs text-sidebar-foreground/65">{progress}%</span>
-            )}
-          </div>
-          <div className="flex items-center gap-1">
-            {hasCompleted && (
+    <BottomFormDrawer
+      open={open}
+      onOpenChange={handleDrawerOpenChange}
+      title="Upload Documents"
+      description="Drag and drop or browse. Supports PDF, Word, Excel, and images."
+      icon={<Upload className="h-5 w-5" />}
+      widthClassName="w-[50%]"
+    >
+      <BottomFormDrawerBody>
+        {taskCount > 0 && (
+          <div className="mb-5 flex items-center gap-3">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200">
+              <div
+                className="h-full rounded-full bg-primary transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <span className="text-xs font-medium text-sidebar-foreground/65">
+              {completedCount}/{taskCount} complete
+            </span>
+            {completedCount > 0 && (
               <Button
+                type="button"
                 variant="ghost"
                 size="sm"
                 onClick={clearCompleted}
-                className="text-xs text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                className="gap-1.5 text-xs text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
               >
+                <Trash2 className="h-3 w-3" />
                 Clear
               </Button>
             )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
-              onClick={() => onOpenChange(false)}
-            >
-              <X className="h-4 w-4" />
-            </Button>
           </div>
-        </div>
+        )}
 
-        <div
-          className="p-4"
-          onDragOver={(e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'copy';
-          }}
-          onDrop={handleDrop}
-        >
-          {tasks.length === 0 ? (
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="flex w-full flex-col items-center gap-2 rounded-lg border-2 border-dashed border-slate-200 p-6 text-center transition-colors hover:border-primary/50 hover:bg-primary/5"
-            >
-              <Upload className="h-8 w-8 text-slate-400" />
-              <div>
-                <p className="text-sm font-medium text-slate-700">
-                  Drop files here or click to browse
-                </p>
-                <p className="text-xs text-slate-400 mt-1">Max 50 MB per file</p>
-              </div>
-            </button>
-          ) : (
-            <div className="space-y-2 max-h-60 overflow-y-auto">
-              {tasks.map((task) => (
-                <div
-                  key={task.id}
-                  className="flex items-center gap-3 rounded-md border border-slate-100 px-3 py-2"
-                >
-                  <TaskStatusIcon status={task.status} />
-                  <div className="flex-1 min-w-0">
-                    <p className="truncate text-xs font-medium text-slate-700">
-                      {task.fileName}
-                    </p>
-                    {task.status === 'uploading' && (
-                      <div className="mt-1 h-1 w-full rounded-full bg-slate-100">
-                        <div
-                          className="h-full rounded-full bg-blue-500 transition-all"
-                          style={{ width: `${task.progress}%` }}
-                        />
-                      </div>
-                    )}
-                    {task.error && (
-                      <p className="text-xs text-red-500 mt-0.5">{task.error}</p>
-                    )}
-                  </div>
-                  {(task.status === 'queued' || task.status === 'uploading') && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 shrink-0"
-                      onClick={() => cancelTask(task.id)}
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  )}
-                </div>
+        <DropZone onFilesSelected={handleFilesSelected} />
+
+        <BottomFormDrawerError error={error} />
+
+        {stagedFiles.length > 0 && (
+          <div className="mt-6">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-medium text-sidebar-foreground">
+                Ready to Upload ({stagedFiles.length})
+              </h3>
+              <span className="text-xs text-sidebar-foreground/65">
+                {formatBytes(stagedTotalBytes)} total
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              {stagedFiles.map((sf) => (
+                <StagedFileTile
+                  key={sf.id}
+                  file={sf.file}
+                  onRemove={() => handleRemoveStaged(sf.id)}
+                />
               ))}
             </div>
-          )}
+          </div>
+        )}
 
-          {tasks.length > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-3 w-full"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              Add More Files
-            </Button>
+        {tasks.length > 0 && (
+          <div className="mt-6">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-medium text-sidebar-foreground">
+                Uploads ({taskCount})
+              </h3>
+              {isUploading && (
+                <span className="text-xs text-sidebar-foreground/65">
+                  Uploading {uploadingCount} of {uploadingCount + pendingCount} remaining…
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-3">
+              {tasks.map((task) => (
+                <DocumentUploadTile
+                  key={task.id}
+                  task={task}
+                  onRemove={removeTask}
+                  onCancel={cancelTask}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+      </BottomFormDrawerBody>
+
+      <BottomFormDrawerFooter>
+        <div>
+          {isUploading && (
+            <span className="text-[11px] text-sidebar-foreground/65">
+              Progress:{' '}
+              <strong className="font-semibold text-sidebar-foreground">{progress}%</strong>
+            </span>
           )}
         </div>
-
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          className="hidden"
-          onChange={(e) => {
-            if (e.target.files && e.target.files.length > 0) {
-              handleFiles(e.target.files);
-              e.target.value = '';
-            }
-          }}
-        />
-      </div>
-    </div>
+        <div className="flex items-center gap-2">
+          {isUploading && (
+            <Button type="button" variant="outline" onClick={cancelAll}>
+              Cancel All
+            </Button>
+          )}
+          {stagedFiles.length > 0 && (
+            <Button
+              type="button"
+              onClick={handleStartUpload}
+              disabled={isStartingUpload}
+              className="gap-1.5"
+            >
+              {isStartingUpload ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Preparing…
+                </>
+              ) : (
+                <>
+                  <Upload className="h-4 w-4" />
+                  Upload {stagedFiles.length} {stagedFiles.length === 1 ? 'File' : 'Files'}
+                </>
+              )}
+            </Button>
+          )}
+          <Button type="button" variant="outline" onClick={() => handleDrawerOpenChange(false)}>
+            Close
+          </Button>
+        </div>
+      </BottomFormDrawerFooter>
+    </BottomFormDrawer>
   );
 }
