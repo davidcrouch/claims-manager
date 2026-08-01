@@ -223,7 +223,7 @@ export async function acceptInvite(params: {
   await userIdentitiesService.createUserIdentity(systemContext, {
     userId,
     provider: 'password',
-    providerSubject: email,
+    providerUserId: email,
     displayName: null,
     avatarUrl: null,
     rawProfile: {

@@ -65,7 +65,7 @@ export async function tryAutoLinkInvitedUser(input: AutoLinkInput): Promise<Auto
   await userIdentitiesService.createUserIdentity(systemContext, {
     userId: user.id,
     provider,
-    providerSubject: providerUserId,
+    providerUserId,
     displayName: displayName || null,
     avatarUrl: avatarUrl || null,
     rawProfile: { provider, providerUserId, displayName, avatarUrl },

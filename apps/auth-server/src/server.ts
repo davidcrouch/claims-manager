@@ -239,19 +239,19 @@ async function createServer(): Promise<Application> {
       // ========================================================================
       // RATE LIMITING - ENDPOINT-SPECIFIC SECURITY
       // ========================================================================
-      app.use('/login/google', oauthRateLimit);
-      app.use('/login/microsoft', oauthRateLimit);
-      app.use('/login', authRateLimit);
-      app.use('/consent', authRateLimit);
-      app.use('/token', tokenRateLimit);
-      app.use('/api/auth/exchange', oauthRateLimit);
-      app.use('/interaction', authRateLimit);
-      app.use('/api/auth/signup', authRateLimit);
-      app.use('/api/auth/reset-password', authRateLimit);
-      app.use('/api/auth/accept-invite', authRateLimit);
-      app.use('/oauth/initial-access-token', authRateLimit);
-      app.use('/oauth/validate-iat', authRateLimit);
-      app.use('/admin', authRateLimit);
+      app.use('/login/google', oauthRateLimit as any);
+      app.use('/login/microsoft', oauthRateLimit as any);
+      app.use('/login', authRateLimit as any);
+      app.use('/consent', authRateLimit as any);
+      app.use('/token', tokenRateLimit as any);
+      app.use('/api/auth/exchange', oauthRateLimit as any);
+      app.use('/interaction', authRateLimit as any);
+      app.use('/api/auth/signup', authRateLimit as any);
+      app.use('/api/auth/reset-password', authRateLimit as any);
+      app.use('/api/auth/accept-invite', authRateLimit as any);
+      app.use('/oauth/initial-access-token', authRateLimit as any);
+      app.use('/oauth/validate-iat', authRateLimit as any);
+      app.use('/admin', authRateLimit as any);
 
       // ========================================================================
       // BODY PARSING MIDDLEWARE (must be BEFORE routes that need req.body)

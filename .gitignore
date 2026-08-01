@@ -55,3 +55,4 @@ yarn-error.log*
 crash.log
 *.tfplan
 tfplan
+apps/auth-server/tsx
