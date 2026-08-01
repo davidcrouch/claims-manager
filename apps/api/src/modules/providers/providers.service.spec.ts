@@ -77,19 +77,36 @@ describe('ProvidersService', () => {
 
       const result = await service.findAll(tenantId);
 
-      expect(result).toHaveLength(1);
-      expect(result[0]).toMatchObject({
-        id: 'crunchwork',
-        code: 'crunchwork',
-        name: 'Crunchwork',
-        connectionCount: 1,
-        totalWebhookEvents: 7,
-        recentErrorCount: 2,
-        lastEventAt: '2026-01-02T03:04:05.000Z',
-      });
+      expect(result).toHaveLength(2);
+      expect(result).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'crunchwork',
+            code: 'crunchwork',
+            name: 'Crunchwork',
+            connectionCount: 1,
+            totalWebhookEvents: 7,
+            recentErrorCount: 2,
+            lastEventAt: '2026-01-02T03:04:05.000Z',
+          }),
+          expect.objectContaining({
+            id: 'direct',
+            code: 'direct',
+            name: 'Direct',
+            connectionCount: 1,
+            totalWebhookEvents: 7,
+            recentErrorCount: 2,
+            lastEventAt: '2026-01-02T03:04:05.000Z',
+          }),
+        ]),
+      );
       expect(connectionsRepo.findByTenantAndProviderCode).toHaveBeenCalledWith({
         tenantId,
         providerCode: 'crunchwork',
+      });
+      expect(connectionsRepo.findByTenantAndProviderCode).toHaveBeenCalledWith({
+        tenantId,
+        providerCode: 'direct',
       });
       expect(webhookEventsRepo.countByProviderCode).toHaveBeenCalledWith({
         tenantId,
