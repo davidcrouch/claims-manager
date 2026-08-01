@@ -1,4 +1,5 @@
 import React from 'react';
+import { Wordmark } from './Wordmark.js';
 
 interface Scope {
   value: string;
@@ -15,6 +16,7 @@ interface ConsentPageProps {
   oidcScopes?: Scope[];
   resourceScopes?: Record<string, Scope[]>;
   error?: string | null;
+  nonce?: string;
 }
 
 export function ConsentPage({
@@ -24,6 +26,7 @@ export function ConsentPage({
   oidcScopes = [],
   resourceScopes = {},
   error,
+  nonce,
 }: ConsentPageProps) {
   const consentScript = `
     (function() {
@@ -68,7 +71,7 @@ export function ConsentPage({
       <head>
         <meta charSet="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Authorize application — EnsureOS</title>
+        <title>Authorize Application - EnsureOS</title>
         <link rel="icon" type="image/x-icon" href="/favicon.ico" />
         <link rel="stylesheet" href="/styles.css" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -78,7 +81,7 @@ export function ConsentPage({
       <body className="bg-white min-h-screen flex items-center justify-center p-5 font-sans">
         <div className="bg-white rounded-xl border border-gray-200 shadow-2xl w-full max-w-[600px] p-10">
           <div className="text-center mb-8">
-            <img src="/ensure_logo_text.png" alt="EnsureOS" className="w-[200px] h-[100px] object-contain mx-auto mb-5" />
+            <div className="mb-5 flex justify-center"><Wordmark tone="dark" /></div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Authorize Application</h1>
             <p className="text-base text-gray-500">Review and approve the requested permissions</p>
           </div>
@@ -169,7 +172,7 @@ export function ConsentPage({
             </div>
           </form>
         </div>
-        <script dangerouslySetInnerHTML={{ __html: consentScript }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: consentScript }} />
       </body>
     </html>
   );

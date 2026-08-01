@@ -76,6 +76,43 @@ export class OutboundSyncService {
     });
   }
 
+  async enqueuePubsub(params: {
+    tenantId: string;
+    entityType: string;
+    entityId: string;
+    action: string;
+    payload: Record<string, unknown>;
+    sourceEvent?: string;
+    idempotencyKey?: string;
+    tx: DrizzleDbOrTx;
+  }): Promise<string> {
+    const [row] = await params.tx
+      .insert(outboundSyncQueue)
+      .values({
+        tenantId: params.tenantId,
+        connectionId: null,
+        channel: 'pubsub',
+        entityType: params.entityType,
+        entityId: params.entityId,
+        action: params.action,
+        payload: params.payload,
+        sourceEvent: params.sourceEvent,
+        idempotencyKey: params.idempotencyKey,
+        priority: 0,
+        scheduledAt: new Date(),
+        status: 'pending',
+      })
+      .onConflictDoNothing()
+      .returning({ id: outboundSyncQueue.id });
+
+    if (row) {
+      this.logger.debug(
+        `OutboundSyncService.enqueuePubsub — queued ${params.entityType}:${params.entityId} action=${params.action} id=${row.id}`,
+      );
+    }
+    return row?.id ?? '';
+  }
+
   async cancelPending(params: {
     tenantId: string;
     entityType: string;

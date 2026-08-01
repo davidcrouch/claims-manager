@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { QuotesListClient } from '@/components/quotes/QuotesListClient';
-import type { PaginatedResponse, Quote } from '@/types/api';
+import { buildJobNameById } from '@/components/shared/job-label';
+import type { Job, PaginatedResponse, Quote } from '@/types/api';
 
 export default async function QuotesPage({
   searchParams,
@@ -13,7 +14,8 @@ export default async function QuotesPage({
 
   const params = await searchParams;
   const empty: PaginatedResponse<Quote> = { data: [], total: 0 };
-  const [initialQuotes, statusLookupsRes, typeLookupsRes] = await Promise.all([
+  const emptyJobs: PaginatedResponse<Job> = { data: [], total: 0 };
+  const [initialQuotes, statusLookupsRes, typeLookupsRes, jobsRes] = await Promise.all([
     api
       .getQuotes({
         page: parseInt(params.page ?? '1', 10),
@@ -32,6 +34,13 @@ export default async function QuotesPage({
       }),
     api.getLookupsByDomain('quote_status').catch(() => []),
     api.getLookupsByDomain('quote_type', { providerCode: 'direct' }).catch(() => []),
+    api.getJobs({ limit: 100 }).catch((err: unknown) => {
+      console.error(
+        'frontend:QuotesPage - getJobs failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return emptyJobs;
+    }),
   ]);
 
   const statusOptions = (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map(
@@ -44,8 +53,14 @@ export default async function QuotesPage({
     id: row.id,
     name: row.name?.trim() ? row.name : 'Unknown',
   }));
+  const jobNameById = buildJobNameById(jobsRes?.data ?? []);
 
   return (
-    <QuotesListClient initialData={initialQuotes} statusOptions={statusOptions} quoteTypes={quoteTypes} />
+    <QuotesListClient
+      initialData={initialQuotes}
+      statusOptions={statusOptions}
+      quoteTypes={quoteTypes}
+      jobNameById={jobNameById}
+    />
   );
 }

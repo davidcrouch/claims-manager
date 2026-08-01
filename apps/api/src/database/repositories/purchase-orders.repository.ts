@@ -53,6 +53,8 @@ export class PurchaseOrdersRepository {
     /** Comma-separated status lookup IDs. */
     status?: string;
     vendorId?: string;
+    ownershipStatus?: string;
+    captureMethod?: string;
     sort?: string;
   }): Promise<{ data: PurchaseOrderRow[]; total: number }> {
     const page = params.page ?? 1;
@@ -73,6 +75,12 @@ export class PurchaseOrdersRepository {
     }
     if (vendorIds.length > 0) {
       whereClause = and(whereClause, inArray(purchaseOrders.vendorId, vendorIds));
+    }
+    if (params.ownershipStatus) {
+      whereClause = and(whereClause, eq(purchaseOrders.ownershipStatus, params.ownershipStatus));
+    }
+    if (params.captureMethod) {
+      whereClause = and(whereClause, eq(purchaseOrders.captureMethod, params.captureMethod));
     }
 
     const [data, countResult] = await Promise.all([

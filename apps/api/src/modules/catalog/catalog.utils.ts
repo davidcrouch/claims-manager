@@ -106,6 +106,20 @@ export const DEFAULT_CATALOG_TYPES = [
   { code: 'other', name: 'Other', sortIndex: 4 },
 ] as const;
 
+/** Standard CW / catalogue unit types seeded per tenant. */
+export const DEFAULT_UNIT_TYPES = [
+  { name: 'Each', externalReference: 'EA' },
+  { name: 'Hour', externalReference: 'HR' },
+  { name: 'Square Metre', externalReference: 'M2' },
+  { name: 'Linear Metre', externalReference: 'LM' },
+  { name: 'Lot', externalReference: 'LOT' },
+  { name: 'Kilometre', externalReference: 'KM' },
+  { name: 'Cubic Metre', externalReference: 'M3' },
+  { name: 'Days', externalReference: 'DAYS' },
+  { name: 'Item', externalReference: 'ITEM' },
+  { name: 'Week', externalReference: 'WK' },
+] as const;
+
 export const DEFAULT_CATALOG_CATEGORIES = [
   {
     code: 'trades',

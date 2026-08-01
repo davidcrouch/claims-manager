@@ -71,6 +71,20 @@ export class DocumentIssuanceService {
     // 1. Load document + line items
     const { entity, lineItems } = await this.loadDocumentWithItems(documentType, documentId, tx);
 
+    // 1b. Stamp issuer/recipient org on PO if not already set (standard issuance path)
+    if (documentType === 'purchase_order') {
+      const needsIssuerStamp = !entity.issuerOrganisationId;
+      const needsRecipientStamp = !entity.recipientOrganisationId && params.recipientTenantId;
+      if (needsIssuerStamp || needsRecipientStamp) {
+        const updates: Record<string, unknown> = {};
+        if (needsIssuerStamp) updates.issuerOrganisationId = tenantId;
+        if (needsRecipientStamp) updates.recipientOrganisationId = params.recipientTenantId;
+        await tx.update(purchaseOrders).set(updates).where(eq(purchaseOrders.id, documentId));
+        if (needsIssuerStamp) entity.issuerOrganisationId = tenantId;
+        if (needsRecipientStamp) entity.recipientOrganisationId = params.recipientTenantId;
+      }
+    }
+
     // 2. Create version snapshot
     const { versionNumber } = await this.versioning.createSnapshot({
       tenantId,
@@ -222,6 +236,7 @@ export class DocumentIssuanceService {
       jobId: src.jobId as string | undefined,
       vendorId: src.vendorId as string | undefined,
       sourceTenantId: params.sourceTenantId,
+      sourceOrganisationId: (src.issuerOrganisationId as string) ?? params.sourceTenantId,
       sourceExternalReference: src.externalId as string | undefined,
       workOrderNumber: src.purchaseOrderNumber as string | undefined,
       name: src.name as string | undefined,

@@ -84,8 +84,8 @@
 }
 
 :root {
-  --font-sans: "Figtree", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Monaco, Consolas, monospace;
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Monaco, Consolas, monospace;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -111,16 +111,17 @@
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
-  /* Sidebar: unified dark navy (#02122d) — matches logo background, landing page & auth-server left panel */
-  --sidebar: #02122d;
+  /* Sidebar: bookkeeper brand gradient */
+  --sidebar: #0b1d3d;
   --sidebar-foreground: #ffffff;
-  --sidebar-primary: #3e86d4;
+  --sidebar-primary: #2a58a3;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #0e2447;
+  --sidebar-accent: rgba(255, 255, 255, 0.1);
   --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: rgba(255, 255, 255, 0.1);
-  --sidebar-ring: #3e86d4;
-  /* Button/UI tokens (workers-comp-ai-paralegal) */
+  --sidebar-border: rgba(255, 255, 255, 0.15);
+  --sidebar-ring: #2a58a3;
+  --bk-board-bg: linear-gradient(180deg, #0b1d3d 0%, #112a54 60%, #17356a 100%);
+  /* Button/UI tokens */
   --btn-primary: oklch(0.488 0.243 264.376);
   --btn-primary-hover: oklch(0.42 0.22 264);
   --btn-destructive: oklch(0.577 0.245 27.325);
@@ -153,18 +154,24 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  /* Sidebar: same tokens as :root (unified dark navy #02122d + white nav labels) */
-  --sidebar: #02122d;
+  --sidebar: #0b1d3d;
   --sidebar-foreground: #ffffff;
-  --sidebar-primary: #3e86d4;
+  --sidebar-primary: #2a58a3;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #0e2447;
+  --sidebar-accent: rgba(255, 255, 255, 0.1);
   --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: rgba(255, 255, 255, 0.1);
-  --sidebar-ring: #3e86d4;
+  --sidebar-border: rgba(255, 255, 255, 0.15);
+  --sidebar-ring: #2a58a3;
 }
 
-/* Custom scrollbar (workers-comp-ai-paralegal) */
+/* Sidebar / header chrome gradient */
+[data-sidebar="sidebar"],
+[data-slot='app-header'],
+[data-slot='drawer-header'] {
+  background: var(--bk-board-bg) !important;
+}
+
+/* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -198,6 +205,18 @@
   html {
     @apply font-sans;
   }
+}
+
+/* App header matches sidebar chrome; remap text tokens for contrast */
+[data-slot='app-header'] {
+  --foreground: var(--sidebar-foreground);
+  --muted-foreground: rgba(255, 255, 255, 0.65);
+  --muted: rgba(255, 255, 255, 0.12);
+  --accent: rgba(255, 255, 255, 0.1);
+  --accent-foreground: #ffffff;
+  --border: var(--sidebar-border);
+  --background: rgba(255, 255, 255, 0.08);
+  --primary: #93c5fd;
 }
 
 /* Pinned catalogue drawer: collapse chrome with animation */

@@ -8,9 +8,11 @@ import authConfig from './config/auth.config';
 import more0Config from './config/more0.config';
 import webhookConfig from './config/webhook.config';
 import s3Config from './config/s3.config';
+import gcsConfig from './config/gcs.config';
 import { validate } from './config/env.validation';
 import { AuthModule } from './auth/auth.module';
 import { HealthModule } from './health/health.module';
+import { HomeModule } from './home/home.module';
 import { TenantModule } from './tenant/tenant.module';
 import { CrunchworkModule } from './crunchwork/crunchwork.module';
 import { DatabaseModule } from './database/database.module';
@@ -46,16 +48,22 @@ import { CatalogModule } from './modules/catalog/catalog.module';
 import { JournalsModule } from './modules/journals/journals.module';
 import { ScheduleModule } from './modules/schedule/schedule.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { DocumentGenerationModule } from './modules/document-generation/document-generation.module';
+import { FilesystemModule } from './modules/filesystem/filesystem.module';
+import { OrganisationsModule } from './modules/organisations/organisations.module';
+import { PubSubModule } from './modules/pubsub/pubsub.module';
 import { TenantInterceptor } from './tenant/tenant.interceptor';
 import { AllExceptionsFilter, HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { CommonModule } from './common/common.module';
 import { S3Module } from './common/s3/s3.module';
+import { GcsModule } from './common/gcs/gcs.module';
 
 @Module({
   imports: [
     CommonModule,
     S3Module,
+    GcsModule,
     ConfigModule.forRoot({
       isGlobal: true,
       load: [
@@ -65,6 +73,7 @@ import { S3Module } from './common/s3/s3.module';
         more0Config,
         webhookConfig,
         s3Config,
+        gcsConfig,
       ],
       validate,
       envFilePath: ['.env'],
@@ -82,6 +91,7 @@ import { S3Module } from './common/s3/s3.module';
     More0Module,
     ExternalModule,
     WebhookToolsModule,
+    HomeModule,
     HealthModule,
     LookupsModule,
     ClaimsModule,
@@ -113,6 +123,10 @@ import { S3Module } from './common/s3/s3.module';
     JournalsModule,
     ScheduleModule,
     NotificationsModule,
+    FilesystemModule,
+    DocumentGenerationModule,
+    OrganisationsModule,
+    PubSubModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

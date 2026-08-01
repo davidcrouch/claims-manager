@@ -72,6 +72,8 @@ export interface JobsListClientProps {
   jobTypes?: { id: string; name?: string }[];
   unreadJobIds?: string[];
   headerAction?: React.ReactNode;
+  /** Bump to force a list refetch (e.g. after creating a job). */
+  refreshNonce?: number;
 }
 
 export function JobsListClient({
@@ -80,6 +82,7 @@ export function JobsListClient({
   jobTypes = [],
   unreadJobIds,
   headerAction,
+  refreshNonce = 0,
 }: JobsListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -163,12 +166,18 @@ export function JobsListClient({
     return () => clearTimeout(t);
   }, [search]);
 
+  // After create (or other external refresh), jump to page 1 so the new row is visible.
+  useEffect(() => {
+    if (refreshNonce === 0) return;
+    setPage(1);
+  }, [refreshNonce]);
+
   const sortParam = `${columnSort.field}_${columnSort.order}`;
 
   useEffect(() => {
     const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
     const typeKey = jobTypeParam === null ? '__none__' : (jobTypeParam ?? '');
-    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${typeKey}`;
+    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${typeKey}|${refreshNonce}`;
 
     const params = new URLSearchParams(searchParams.toString());
     params.set('search', debouncedSearch);
@@ -198,7 +207,7 @@ export function JobsListClient({
       jobType: jobTypeParam,
     }).then((res) => res && setData(res));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, sortParam, tab, page, statusParam, jobTypeParam]);
+  }, [debouncedSearch, sortParam, tab, page, statusParam, jobTypeParam, refreshNonce]);
 
   const handleColumnSort = (field: JobSortField) => {
     setColumnSort((prev) => {

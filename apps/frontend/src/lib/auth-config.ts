@@ -8,11 +8,11 @@ const OIDC_ISSUER = process.env.OIDC_ISSUER || AUTH_SERVER_URL;
 const OIDC_CLIENT_ID = process.env.OIDC_CLIENT_ID || 'claims-manager-ui';
 const OIDC_CLIENT_SECRET = process.env.OIDC_CLIENT_SECRET || '';
 const OIDC_REDIRECT_URI =
-  process.env.OIDC_REDIRECT_URI || 'http://localhost:5000/api/auth/callback';
+  process.env.OIDC_REDIRECT_URI || 'http://localhost:5002/api/auth/callback';
 const OIDC_POST_LOGIN_URI =
-  process.env.OIDC_POST_LOGIN_URI || 'http://localhost:5000/dashboard';
+  process.env.OIDC_POST_LOGIN_URI || 'http://localhost:5002/dashboard';
 const OIDC_POST_LOGOUT_URI =
-  process.env.OIDC_POST_LOGOUT_URI || 'http://localhost:5000';
+  process.env.OIDC_POST_LOGOUT_URI || 'http://localhost:5002';
 const OIDC_COOKIE_SECRET =
   process.env.OIDC_COOKIE_SECRET ||
   '0000000000000000000000000000000000000000000000000000000000000000';

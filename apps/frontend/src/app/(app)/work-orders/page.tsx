@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { WorkOrdersListClient } from '@/components/work-orders/WorkOrdersListClient';
-import type { PaginatedResponse, WorkOrder } from '@/types/api';
+import { buildJobNameById } from '@/components/shared/job-label';
+import type { Job, PaginatedResponse, WorkOrder } from '@/types/api';
 
 export const metadata = { title: 'Work Orders — EnsureOS' };
 
@@ -15,7 +16,8 @@ export default async function WorkOrdersPage({
 
   const params = await searchParams;
   const empty: PaginatedResponse<WorkOrder> = { data: [], total: 0 };
-  const [initialData, statusLookupsRes, typeLookupsRes] = await Promise.all([
+  const emptyJobs: PaginatedResponse<Job> = { data: [], total: 0 };
+  const [initialData, statusLookupsRes, typeLookupsRes, jobsRes] = await Promise.all([
     api
       .getWorkOrders({
         page: parseInt(params.page ?? '1', 10),
@@ -33,6 +35,13 @@ export default async function WorkOrdersPage({
       }),
     api.getLookupsByDomain('work_order_status').catch(() => []),
     api.getLookupsByDomain('work_order_type', { providerCode: 'direct' }).catch(() => []),
+    api.getJobs({ limit: 100 }).catch((err: unknown) => {
+      console.error(
+        'frontend:WorkOrdersPage - getJobs failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return emptyJobs;
+    }),
   ]);
 
   const statusOptions = (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map(
@@ -45,12 +54,14 @@ export default async function WorkOrdersPage({
     id: row.id,
     name: row.name?.trim() ? row.name : 'Unknown',
   }));
+  const jobNameById = buildJobNameById(jobsRes?.data ?? []);
 
   return (
     <WorkOrdersListClient
       initialData={initialData}
       statusOptions={statusOptions}
       workOrderTypes={workOrderTypes}
+      jobNameById={jobNameById}
     />
   );
 }

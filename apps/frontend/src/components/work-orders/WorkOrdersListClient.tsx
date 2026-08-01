@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ClipboardCheck, Search, X } from 'lucide-react';
+import { ClipboardCheck, PackagePlus, Search, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { TypeBadge } from '@/components/ui/type-badge';
@@ -16,11 +17,13 @@ import {
   ValueFilterMenu,
   SortableColumnHeader,
 } from '@/components/shared/list-filters';
+import { resolveJobName } from '@/components/shared/job-label';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import {
   ListPageHeader,
   computeStatusBreakdown,
 } from '@/components/layout/ListPageHeader';
+import { CapturePoDrawer } from '@/components/forms/CapturePoDrawer';
 import { fetchWorkOrdersAction } from '@/app/(app)/work-orders/actions';
 import { TablePagination } from '@/components/shared/table-pagination';
 import type { WorkOrder, PaginatedResponse } from '@/types/api';
@@ -47,10 +50,10 @@ function formatAmount(value?: string | null): string {
 
 type WOSortField =
   | 'work_order_number'
+  | 'job'
   | 'status'
   | 'wo_type'
   | 'source'
-  | 'job_ref'
   | 'total_amount'
   | 'start_date'
   | 'updated_at';
@@ -59,10 +62,10 @@ interface ColDef { key: WOSortField; label: string; filterable?: boolean }
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'work_order_number', label: 'WO #' },
+  { key: 'job', label: 'Job' },
   { key: 'status', label: 'Status', filterable: true },
   { key: 'wo_type', label: 'Type', filterable: true },
   { key: 'source', label: 'From (upstream)' },
-  { key: 'job_ref', label: 'Job Ref' },
   { key: 'total_amount', label: 'Total' },
   { key: 'start_date', label: 'Start' },
   { key: 'updated_at', label: 'Updated' },
@@ -72,12 +75,14 @@ export interface WorkOrdersListClientProps {
   initialData: PaginatedResponse<WorkOrder>;
   statusOptions: StatusOption[];
   workOrderTypes: StatusOption[];
+  jobNameById?: Record<string, string>;
 }
 
 export function WorkOrdersListClient({
   initialData,
   statusOptions,
   workOrderTypes,
+  jobNameById,
 }: WorkOrdersListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -97,6 +102,7 @@ export function WorkOrdersListClient({
   const [typeFilterActive, setTypeFilterActive] = useState(false);
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [statusFilterActive, setStatusFilterActive] = useState(false);
+  const [captureDrawerOpen, setCaptureDrawerOpen] = useState(false);
 
   const lastFetchKeyRef = useRef<string | null>(null);
   const statusParam = useMemo(
@@ -344,6 +350,16 @@ export function WorkOrdersListClient({
             menuTitle="Filter by type"
             itemNoun={{ singular: 'type', plural: 'types' }}
           />
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCaptureDrawerOpen(true)}
+            className="ml-auto shrink-0"
+          >
+            <PackagePlus className="mr-2 h-4 w-4" />
+            Capture External PO
+          </Button>
         </div>
       </div>
 
@@ -390,15 +406,24 @@ export function WorkOrdersListClient({
                       <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
                         {num}
                       </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {resolveJobName(wo.jobId, jobNameById)}
+                      </td>
                       <td className="whitespace-nowrap px-4 py-3">
                         <StatusBadge status={statusName} />
                       </td>
                       <td className="px-4 py-3">
                         <TypeBadge type={woType} />
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{source}</td>
                       <td className="px-4 py-3 text-slate-600">
-                        {wo.jobId ? wo.jobId.slice(0, 8) : ''}
+                        <span className="flex items-center gap-1.5">
+                          {source}
+                          {wo.sourceOrganisationId && (
+                            <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20">
+                              External
+                            </span>
+                          )}
+                        </span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                         {formatAmount(wo.totalAmount)}
@@ -432,6 +457,11 @@ export function WorkOrdersListClient({
           </div>
         )}
       </div>
+
+      <CapturePoDrawer
+        open={captureDrawerOpen}
+        onOpenChange={setCaptureDrawerOpen}
+      />
     </div>
   );
 }

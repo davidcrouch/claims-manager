@@ -2,13 +2,32 @@ import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { CatalogSelectionService } from '../catalog/services/catalog-selection.service';
 import { AddCatalogAssemblyDto, AddCatalogPrimitiveDto } from '../catalog/dto/catalog.dto';
 import { PurchaseOrdersService } from './purchase-orders.service';
+import { ManualCaptureService, type CapturePurchaseOrderDto } from '../domain/services/manual-capture.service';
+import { TenantContext } from '../../tenant/tenant-context';
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface';
 
 @Controller('purchase-orders')
 export class PurchaseOrdersController {
   constructor(
     private readonly purchaseOrdersService: PurchaseOrdersService,
+    private readonly manualCaptureService: ManualCaptureService,
     private readonly catalogSelectionService: CatalogSelectionService,
+    private readonly tenantContext: TenantContext,
   ) {}
+
+  @Post('capture')
+  async capture(
+    @Body() body: CapturePurchaseOrderDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const tenantId = this.tenantContext.getTenantId();
+    return this.manualCaptureService.capturePurchaseOrder({
+      tenantId,
+      userId: user.sub,
+      dto: body,
+    });
+  }
 
   @Get()
   async findAll(
@@ -17,6 +36,8 @@ export class PurchaseOrdersController {
     @Query('jobId') jobId?: string,
     @Query('status') status?: string,
     @Query('vendorId') vendorId?: string,
+    @Query('ownershipStatus') ownershipStatus?: string,
+    @Query('captureMethod') captureMethod?: string,
     @Query('sort') sort?: string,
   ) {
     return this.purchaseOrdersService.findAll({
@@ -25,6 +46,8 @@ export class PurchaseOrdersController {
       jobId,
       status,
       vendorId,
+      ownershipStatus,
+      captureMethod,
       sort,
     });
   }

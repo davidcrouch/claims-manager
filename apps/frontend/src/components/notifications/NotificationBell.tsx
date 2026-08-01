@@ -132,7 +132,7 @@ export function NotificationBell() {
         size="icon"
         aria-label="Notifications"
         onClick={handleToggle}
-        className="relative"
+        className="relative text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
       >
         <Bell className="h-4 w-4" />
         {count > 0 && (

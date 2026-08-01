@@ -284,6 +284,14 @@ export interface PurchaseOrder {
   createdByUserId?: string | null;
   updatedByUserId?: string | null;
 
+  // Cross-tenant / custody fields
+  issuerOrganisationId?: string | null;
+  recipientOrganisationId?: string | null;
+  custodianTenantId?: string | null;
+  captureMethod?: string | null;
+  ownershipStatus?: string | null;
+  scopeOfWork?: string | null;
+
   // audit
   createdAt?: string;
   updatedAt?: string;
@@ -320,6 +328,7 @@ export interface WorkOrder {
   claimId?: string | null;
   vendorId?: string | null;
   sourceTenantId?: string | null;
+  sourceOrganisationId?: string | null;
   sourceExternalReference?: string | null;
   externalId?: string | null;
   workOrderNumber?: string | null;
@@ -897,4 +906,31 @@ export interface AppNotification {
   isRead: boolean;
   readAt?: string | null;
   createdAt: string;
+}
+
+export interface GhostOrganisation {
+  id: string;
+  name: string;
+  slug: string;
+  abn?: string | null;
+  legalName?: string | null;
+  tradingName?: string | null;
+  primaryEmail?: string | null;
+  emailDomain?: string | null;
+  phone?: string | null;
+  subscriptionStatus: string;
+}
+
+export interface OrganisationClaim {
+  id: string;
+  ghostOrganisationId: string;
+  claimingTenantId: string;
+  status: string;
+  verificationMethod?: string | null;
+  evidence: Record<string, unknown>;
+  reviewedByUserId?: string | null;
+  reviewedAt?: string | null;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }

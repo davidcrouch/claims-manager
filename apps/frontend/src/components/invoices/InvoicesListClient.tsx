@@ -15,6 +15,7 @@ import {
   ValueFilterMenu,
   SortableColumnHeader,
 } from '@/components/shared/list-filters';
+import { resolveJobName } from '@/components/shared/job-label';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import {
   ListPageHeader,
@@ -36,6 +37,7 @@ function parseTab(param: string | null): ListTab {
 
 type InvSortField =
   | 'invoice_number'
+  | 'job'
   | 'status'
   | 'total_amount'
   | 'issue_date'
@@ -46,6 +48,7 @@ interface ColDef { key: InvSortField; label: string; filterable?: boolean }
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'invoice_number', label: 'Invoice #' },
+  { key: 'job', label: 'Job' },
   { key: 'status', label: 'Status', filterable: true },
   { key: 'total_amount', label: 'Total' },
   { key: 'issue_date', label: 'Issue Date' },
@@ -56,12 +59,14 @@ const TABLE_COLUMNS: ColDef[] = [
 export interface InvoicesListClientProps {
   initialData: PaginatedResponse<Invoice>;
   statusOptions: StatusOption[];
+  jobNameById?: Record<string, string>;
   headerAction?: React.ReactNode;
 }
 
 export function InvoicesListClient({
   initialData,
   statusOptions,
+  jobNameById,
   headerAction,
 }: InvoicesListClientProps) {
   const router = useRouter();
@@ -336,6 +341,9 @@ export function InvoicesListClient({
                     >
                       <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
                         {num}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {resolveJobName(inv.jobId, jobNameById)}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
                         <StatusBadge status={statusName} />

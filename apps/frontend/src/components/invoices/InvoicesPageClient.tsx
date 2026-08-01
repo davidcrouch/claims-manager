@@ -26,6 +26,7 @@ export function InvoicesPageClient({
       <InvoicesListClient
         initialData={initialData}
         statusOptions={statusOptions}
+        jobNameById={jobNameById}
         headerAction={
           <Button onClick={() => setDrawerOpen(true)}>Submit Invoice</Button>
         }

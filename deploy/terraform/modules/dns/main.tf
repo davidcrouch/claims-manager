@@ -10,17 +10,30 @@ terraform {
 }
 
 locals {
-  subdomains = ["api", "auth", "app"]
+  # Hyphenated env hosts: api-staging.branlamie.com / api-dev.branlamie.com
+  # Prod (production|prod): api.branlamie.com (no suffix)
+  is_prod = contains(["production", "prod"], var.environment)
+
+  host_labels = local.is_prod ? {
+    api  = "api"
+    auth = "auth"
+    app  = "app"
+    } : {
+    api  = "api-${var.environment}"
+    auth = "auth-${var.environment}"
+    app  = "app-${var.environment}"
+  }
 }
 
 resource "google_dns_managed_zone" "this" {
-  project  = var.project_id
-  name     = "claims-manager-${var.environment}"
-  dns_name = var.dns_name
+  project     = var.project_id
+  name        = "claims-manager-${var.environment}"
+  dns_name    = var.dns_name
+  description = "Claims Manager ${var.environment} public hosts"
 }
 
-resource "google_dns_record_set" "subdomains" {
-  for_each = var.create_subdomain_records ? toset(local.subdomains) : toset([])
+resource "google_dns_record_set" "hosts" {
+  for_each = var.create_subdomain_records ? local.host_labels : {}
 
   project      = var.project_id
   managed_zone = google_dns_managed_zone.this.name

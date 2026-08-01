@@ -2,6 +2,7 @@
 
 import { Trash2 } from 'lucide-react';
 import { formatDate, SortableColumnHeader, type ColumnValueFilter } from '@/components/shared/list-filters';
+import { resolveJobName } from '@/components/shared/job-label';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { TypeBadge } from '@/components/ui/type-badge';
 import type { Quote } from '@/types/api';
@@ -42,6 +43,7 @@ function formatAmount(value?: string | null): string {
 
 export type QuoteSortField =
   | 'quote_number'
+  | 'job'
   | 'status'
   | 'estimate_type'
   | 'reference'
@@ -53,6 +55,7 @@ interface ColDef { key: QuoteSortField; label: string; filterable?: boolean }
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'quote_number', label: 'Estimate #' },
+  { key: 'job', label: 'Job' },
   { key: 'reference', label: 'Reference' },
   { key: 'status', label: 'Status', filterable: true },
   { key: 'estimate_type', label: 'Estimate Type', filterable: true },
@@ -63,6 +66,7 @@ const TABLE_COLUMNS: ColDef[] = [
 
 export interface QuotesTableProps {
   quotes: Quote[];
+  jobNameById?: Record<string, string>;
   onRowClick?: (quote: Quote) => void;
   onDelete?: (quoteId: string) => void;
   deletingId?: string | null;
@@ -76,6 +80,7 @@ export interface QuotesTableProps {
 
 export function QuotesTable({
   quotes,
+  jobNameById,
   onRowClick,
   onDelete,
   deletingId,
@@ -136,6 +141,9 @@ export function QuotesTable({
               >
                 <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
                   {num}
+                </td>
+                <td className="px-4 py-3 text-slate-600">
+                  {resolveJobName(quote.jobId, jobNameById)}
                 </td>
                 <td className="px-4 py-3 text-slate-600">
                   {quote.name ?? ''}

@@ -17,6 +17,7 @@ RUN pnpm --filter api build
 FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+RUN apk add --no-cache libreoffice-writer font-noto
 # pnpm installs with isolated node_modules: apps/api/node_modules/<dep> is a
 # relative symlink into ../../../node_modules/.pnpm/<dep>@<ver>/.../<dep>.
 # The workspace layout (root node_modules + apps/api/node_modules) must be
@@ -28,6 +29,8 @@ COPY --from=builder /app/apps/api/package.json ./apps/api/package.json
 COPY --from=builder /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/src/database/migrations-drizzle ./apps/api/dist/database/migrations-drizzle
+COPY --from=builder /app/apps/api/views ./apps/api/views
+COPY --from=builder /app/apps/api/public ./apps/api/public
 
 WORKDIR /app/apps/api
 EXPOSE 3001

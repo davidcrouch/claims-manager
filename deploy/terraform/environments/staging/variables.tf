@@ -25,7 +25,7 @@ variable "cloudsql_tier" {
 
 variable "dns_name" {
   type        = string
-  description = "DNS zone name for this environment (e.g. staging.branlamie.com.)"
+  description = "Apex DNS zone with trailing dot (e.g. branlamie.com.). Records: api-staging / auth-staging / app-staging."
 }
 
 variable "staging_vm_zone" {

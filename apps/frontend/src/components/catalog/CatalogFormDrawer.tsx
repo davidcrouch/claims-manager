@@ -84,7 +84,7 @@ export function CatalogFormDrawer({ open, onOpenChange, catalog }: CatalogFormDr
       icon={<BookOpen className="h-5 w-5" />}
     >
       <form onSubmit={handleSubmit(onSubmit)}>
-        <BottomFormDrawerBody className="px-8">
+        <BottomFormDrawerBody>
           <div className="mx-auto max-w-lg space-y-5">
             <div>
               <Label htmlFor="catalog-name">Name</Label>

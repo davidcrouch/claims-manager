@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { InvoicesPageClient } from '@/components/invoices/InvoicesPageClient';
+import { buildJobNameById } from '@/components/shared/job-label';
 import type { Invoice, Job, PaginatedResponse, WorkOrder } from '@/types/api';
 
 export default async function InvoicesPage({
@@ -50,11 +51,7 @@ export default async function InvoicesPage({
   ]);
 
   const workOrders = workOrdersRes?.data ?? [];
-  const jobNameById: Record<string, string> = {};
-  for (const job of jobsRes?.data ?? []) {
-    const label = job.name?.trim() || job.externalReference?.trim() || job.id;
-    jobNameById[job.id] = label;
-  }
+  const jobNameById = buildJobNameById(jobsRes?.data ?? []);
 
   const statusOptions = (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map(
     (row) => ({

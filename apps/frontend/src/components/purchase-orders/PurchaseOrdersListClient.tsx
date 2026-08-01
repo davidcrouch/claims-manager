@@ -15,6 +15,7 @@ import {
   ValueFilterMenu,
   SortableColumnHeader,
 } from '@/components/shared/list-filters';
+import { resolveJobName } from '@/components/shared/job-label';
 import { TablePagination } from '@/components/shared/table-pagination';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import {
@@ -46,6 +47,7 @@ function formatAmount(value?: string | null): string {
 
 type POSortField =
   | 'purchase_order_number'
+  | 'job'
   | 'status'
   | 'vendor'
   | 'total_amount'
@@ -56,6 +58,7 @@ interface ColDef { key: POSortField; label: string; filterable?: boolean }
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'purchase_order_number', label: 'PO #' },
+  { key: 'job', label: 'Job' },
   { key: 'status', label: 'Status', filterable: true },
   { key: 'vendor', label: 'Vendor', filterable: true },
   { key: 'total_amount', label: 'Total' },
@@ -63,31 +66,18 @@ const TABLE_COLUMNS: ColDef[] = [
   { key: 'updated_at', label: 'Updated' },
 ];
 
-function getPOSortValue(
-  po: PurchaseOrder,
-  field: POSortField,
-): string | number | null | undefined {
-  switch (field) {
-    case 'purchase_order_number': return po.purchaseOrderNumber ?? po.externalId ?? po.id;
-    case 'status': return po.status?.name;
-    case 'vendor': return po.vendor?.name;
-    case 'total_amount': { const n = Number(po.totalAmount); return Number.isFinite(n) ? n : null; }
-    case 'external_id': return po.externalId;
-    case 'updated_at': return po.updatedAt;
-    default: return null;
-  }
-}
-
 export interface PurchaseOrdersListClientProps {
   initialData: PaginatedResponse<PurchaseOrder>;
   statusOptions: StatusOption[];
   vendorOptions: StatusOption[];
+  jobNameById?: Record<string, string>;
 }
 
 export function PurchaseOrdersListClient({
   initialData,
   statusOptions,
   vendorOptions,
+  jobNameById,
 }: PurchaseOrdersListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -377,6 +367,9 @@ export function PurchaseOrdersListClient({
                     >
                       <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
                         {num}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {resolveJobName(po.jobId, jobNameById)}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
                         <StatusBadge status={statusName} />

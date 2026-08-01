@@ -1,6 +1,6 @@
 # Crunchwork Webhook Proxy
 
-Cloudflare Worker that transparently proxies Crunchwork webhook requests from `ensure-test.more0.dev/api/webhook` to the EnsureOS staging API at `app-staging.branlamie.com/api/webhook`.
+Cloudflare Worker that transparently proxies Crunchwork webhook requests from `ensure-test.more0.dev/api/webhook` to the EnsureOS staging API at `api-staging.branlamie.com/api/webhook`.
 
 ## Architecture
 
@@ -21,7 +21,7 @@ Crunchwork SaaS
                    ▼
 ┌──────────────────────────────────────────────────┐
 │  EnsureOS Staging                                │
-│  https://app-staging.branlamie.com/api/webhook   │
+│  https://api-staging.branlamie.com/api/webhook   │
 └──────────────────────────────────────────────────┘
 ```
 

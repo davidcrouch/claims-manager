@@ -1504,15 +1504,23 @@ export function QuoteLineItemsTable({
         )}
         <div
           className={cn(
-            'flex min-h-[12rem] items-center justify-center rounded-lg border-2 border-dashed text-sm text-slate-500 transition-all',
+            'flex min-h-[12rem] flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed text-sm text-slate-500 transition-all',
             activeDropKey === 'table-root'
               ? 'border-emerald-400 bg-emerald-50/40'
               : 'border-slate-200',
           )}
         >
-          {activeDropKey === 'table-root'
-            ? labels.emptyDrop
-            : labels.emptyState}
+          <p>
+            {activeDropKey === 'table-root'
+              ? labels.emptyDrop
+              : labels.emptyState}
+          </p>
+          {onOpenCatalogDrawer && activeDropKey !== 'table-root' && (
+            <Button size="sm" variant="outline" onClick={onOpenCatalogDrawer}>
+              <Package className="mr-1.5 h-4 w-4" />
+              Open catalogue
+            </Button>
+          )}
         </div>
       </div>
     );

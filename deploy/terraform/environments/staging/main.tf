@@ -19,6 +19,13 @@ provider "google" {
   region  = var.region
 }
 
+locals {
+  labels = {
+    product = "claims-manager"
+    env     = var.environment
+  }
+}
+
 module "networking" {
   source = "../../modules/networking"
 
@@ -79,6 +86,8 @@ module "gcs" {
   environment                = var.environment
   hmac_service_account_email = module.iam.service_account_emails["frontend"]
   create_hmac_key            = false
+  create_documents_bucket    = true
+  documents_cors_origins     = ["https://app-staging.branlamie.com", "http://localhost:5002"]
 }
 
 data "google_project" "this" {
@@ -147,4 +156,15 @@ module "dns" {
   # Point A records at the staging VM's static IP so CI-free subdomain traffic
   # (api/auth/app) reaches Caddy immediately after terraform apply.
   gateway_ip = module.staging_vm.public_ip
+}
+
+# Domain Pub/Sub topics (+ DLQ). Push endpoints wired later when a stable
+# public URL for the API push handler is available.
+module "pubsub" {
+  source = "../../modules/pubsub-claims"
+
+  project_id     = var.project_id
+  project_number = data.google_project.this.number
+  env            = var.environment
+  labels         = local.labels
 }

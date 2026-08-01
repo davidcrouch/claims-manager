@@ -34,7 +34,8 @@ env:
   # /mnt/disks/data is writable AND exec, so both config.json and the
   # cli-plugins dir (populated by startup.sh) live here.
   DOCKER_CONFIG: /mnt/disks/data/docker
-  STAGING_DOMAIN: staging.branlamie.com
+  # Apex domain; hosts are api-staging / auth-staging / app-staging
+  STAGING_DOMAIN: branlamie.com
 
 jobs:
   deploy:
@@ -245,12 +246,12 @@ jobs:
         run: |
           set -e
           echo "api health"
-          curl -fsS --max-time 15 https://api.${STAGING_DOMAIN}/api/v1/health
+          curl -fsS --max-time 15 https://api-staging.${STAGING_DOMAIN}/api/v1/health
           echo
 
           echo "auth-server OIDC discovery"
-          curl -fsS --max-time 15 https://auth.${STAGING_DOMAIN}/.well-known/openid-configuration | head -c 200
+          curl -fsS --max-time 15 https://auth-staging.${STAGING_DOMAIN}/.well-known/openid-configuration | head -c 200
           echo
 
           echo "frontend reachable"
-          curl -fsS --max-time 15 -o /dev/null -w "%{http_code}\n" https://app.${STAGING_DOMAIN}/ | grep -E '^(200|301|302|401)$'
+          curl -fsS --max-time 15 -o /dev/null -w "%{http_code}\n" https://app-staging.${STAGING_DOMAIN}/ | grep -E '^(200|301|302|401)$'

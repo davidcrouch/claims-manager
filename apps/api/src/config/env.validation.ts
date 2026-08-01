@@ -71,6 +71,26 @@ export class EnvironmentVariables {
 
   @IsString()
   @IsOptional()
+  GCP_PROJECT_ID?: string;
+
+  @IsString()
+  @IsOptional()
+  GCS_DOCUMENTS_BUCKET?: string;
+
+  @IsString()
+  @IsOptional()
+  GCS_UPLOAD_CORS_ORIGIN?: string;
+
+  @IsString()
+  @IsOptional()
+  GCS_DOWNLOAD_URL_EXPIRY?: string;
+
+  @IsString()
+  @IsOptional()
+  PUBSUB_ENABLED?: string;
+
+  @IsString()
+  @IsOptional()
   INTERNAL_API_TOKEN?: string;
 
   @IsString()

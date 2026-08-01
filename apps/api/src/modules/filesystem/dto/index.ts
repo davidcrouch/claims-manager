@@ -1,0 +1,11 @@
+export { CreateFilesystemTemplateDto } from './create-filesystem-template.dto';
+export { UpdateFilesystemTemplateDto } from './update-filesystem-template.dto';
+export { SetupFilesystemDto } from './setup-filesystem.dto';
+export { UpdateCategoryDto } from './update-category.dto';
+export { CreateCategoryDto } from './create-category.dto';
+export { ReplaceCategoriesDto, ReplaceCategoryItem } from './replace-categories.dto';
+export { CreateDocumentUploadUrlDto } from './create-document-upload-url.dto';
+export { BatchUploadUrlsDto } from './batch-upload-urls.dto';
+export { UploadCompleteDto } from './upload-complete.dto';
+export { AssignCategoryDto } from './assign-category.dto';
+export { BulkAssignCategoryDto } from './bulk-assign-category.dto';

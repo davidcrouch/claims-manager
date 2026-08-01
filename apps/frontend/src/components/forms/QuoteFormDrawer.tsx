@@ -157,7 +157,16 @@ export function QuoteFormDrawer({
         <BottomFormDrawerBody>
           <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="quoteType">Type (optional)</Label>
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                {...form.register('name')}
+                placeholder="Estimate name"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="quoteType">Type</Label>
               <Select
                 value={quoteType || null}
                 onValueChange={(v) => form.setValue('quoteType', v ?? '')}
@@ -177,16 +186,9 @@ export function QuoteFormDrawer({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="name">Name (optional)</Label>
-              <Input
-                id="name"
-                {...form.register('name')}
-                placeholder="Estimate name"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="estimateDate">Estimate Date</Label>
+              <Label htmlFor="estimateDate">
+                Estimate Date <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="estimateDate"
                 type="date"
@@ -200,7 +202,9 @@ export function QuoteFormDrawer({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="expiresInDays">Expires In (days)</Label>
+              <Label htmlFor="expiresInDays">
+                Expires In (days) <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="expiresInDays"
                 type="number"
@@ -216,7 +220,7 @@ export function QuoteFormDrawer({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="estimatedStart">Estimated Start (optional)</Label>
+              <Label htmlFor="estimatedStart">Estimated Start</Label>
               <Input
                 id="estimatedStart"
                 type="date"
@@ -225,7 +229,7 @@ export function QuoteFormDrawer({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="estimatedCompletion">Estimated Completion (optional)</Label>
+              <Label htmlFor="estimatedCompletion">Estimated Completion</Label>
               <Input
                 id="estimatedCompletion"
                 type="date"
@@ -234,7 +238,7 @@ export function QuoteFormDrawer({
             </div>
 
             <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="note">Note (optional)</Label>
+              <Label htmlFor="note">Note</Label>
               <Textarea
                 id="note"
                 {...form.register('note')}

@@ -64,15 +64,15 @@ export function JournalLinkDrawer({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent>
-        <SheetHeader>
-          <SheetTitle>Link Existing Journal</SheetTitle>
-          <SheetDescription>
+      <SheetContent className="gap-0 p-0 [&>button]:text-sidebar-foreground [&>button]:hover:bg-sidebar-accent [&>button]:hover:text-sidebar-foreground">
+        <SheetHeader data-slot="drawer-header" className="border-b border-sidebar-border p-4 pr-12">
+          <SheetTitle className="text-sidebar-foreground">Link Existing Journal</SheetTitle>
+          <SheetDescription className="text-sidebar-foreground/65">
             Search and select a journal to link to this {entityType.toLowerCase()}.
           </SheetDescription>
         </SheetHeader>
 
-        <div className="mt-4 space-y-4">
+        <div className="space-y-4 px-8 py-6">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input

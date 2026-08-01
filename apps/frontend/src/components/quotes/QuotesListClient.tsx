@@ -42,6 +42,7 @@ export interface QuotesListClientProps {
   initialData: PaginatedResponse<Quote>;
   statusOptions: StatusOption[];
   quoteTypes: StatusOption[];
+  jobNameById?: Record<string, string>;
 }
 
 const PAGE_SIZE = 20;
@@ -50,6 +51,7 @@ export function QuotesListClient({
   initialData,
   statusOptions,
   quoteTypes,
+  jobNameById,
 }: QuotesListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -291,6 +293,7 @@ export function QuotesListClient({
           <>
             <QuotesTable
               quotes={visibleRows}
+              jobNameById={jobNameById}
               onRowClick={(q) => router.push(`/quotes/${q.id}`)}
               onDelete={(id) => setConfirmDeleteId(id)}
               deletingId={isPending ? deletingId : null}

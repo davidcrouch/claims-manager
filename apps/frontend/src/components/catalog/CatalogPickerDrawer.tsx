@@ -216,7 +216,7 @@ function ItemsTab({ open, catalogType }: { open: boolean; catalogType?: CatalogT
 
   return (
     <>
-      <div className="space-y-2 border-b border-slate-100 px-5 py-3">
+      <div className="space-y-2 border-b border-slate-100 px-8 py-3">
         <div className="flex items-center gap-4">
           <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
             <Checkbox
@@ -260,7 +260,7 @@ function ItemsTab({ open, catalogType }: { open: boolean; catalogType?: CatalogT
           />
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-8 py-4">
         {loading && visibleItems.length === 0 && (
           <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
         )}
@@ -321,7 +321,7 @@ function GroupLabelsTab({ open }: { open: boolean }) {
 
   return (
     <>
-      <div className="border-b border-slate-100 px-5 py-3">
+      <div className="border-b border-slate-100 px-8 py-3">
         <div className="relative">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
@@ -332,7 +332,7 @@ function GroupLabelsTab({ open }: { open: boolean }) {
           />
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-8 py-4">
         {loading && labels.length === 0 && (
           <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
         )}
@@ -483,7 +483,10 @@ export function CatalogPickerDrawer({ open, onOpenChange, catalogType }: Catalog
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 32, stiffness: 320 }}
           >
-            <div className="flex items-start justify-between gap-3 border-b border-slate-200 bg-linear-to-b from-slate-50 to-white px-5 py-4">
+            <div
+              data-slot="drawer-header"
+              className="flex items-start justify-between gap-3 border-b border-sidebar-border px-5 py-4"
+            >
               <div className="flex items-start gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700 ring-1 ring-amber-200/60">
                   <Package className="h-5 w-5" />
@@ -491,11 +494,11 @@ export function CatalogPickerDrawer({ open, onOpenChange, catalogType }: Catalog
                 <div>
                   <h2
                     id="catalog-picker-title"
-                    className="font-heading text-base font-semibold text-slate-900"
+                    className="font-heading text-base font-semibold text-sidebar-foreground"
                   >
                     Catalogue
                   </h2>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
+                  <p className="mt-0.5 text-xs text-sidebar-foreground/65">
                     Drag items onto the estimate to add them.
                   </p>
                 </div>
@@ -506,7 +509,7 @@ export function CatalogPickerDrawer({ open, onOpenChange, catalogType }: Catalog
                   onClick={handleTogglePin}
                   aria-label={pinned ? 'Unpin drawer' : 'Pin drawer'}
                   title={pinned ? 'Unpin (click outside to close)' : 'Pin open'}
-                  className={`rounded-md p-1.5 transition-colors ${pinned ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700'}`}
+                  className={`rounded-md p-1.5 transition-colors ${pinned ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'}`}
                 >
                   {pinned ? <Pin className="h-4 w-4" /> : <PinOff className="h-4 w-4" />}
                 </button>
@@ -514,7 +517,7 @@ export function CatalogPickerDrawer({ open, onOpenChange, catalogType }: Catalog
                   type="button"
                   onClick={() => onOpenChange(false)}
                   aria-label="Close catalogue drawer"
-                  className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                  className="rounded-md p-1.5 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
                 >
                   <X className="h-5 w-5" />
                 </button>
@@ -526,7 +529,7 @@ export function CatalogPickerDrawer({ open, onOpenChange, catalogType }: Catalog
               onValueChange={(val) => setActiveTab(val as string)}
               className="flex min-h-0 flex-1 flex-col"
             >
-              <div className="border-b border-slate-100 px-5 pt-2">
+              <div className="border-b border-slate-100 px-8 pt-2">
                 <TabsList variant="line" className="w-full">
                   <TabsTrigger value="items" className="flex-1 gap-1.5 text-xs">
                     <Package className="h-3.5 w-3.5" />

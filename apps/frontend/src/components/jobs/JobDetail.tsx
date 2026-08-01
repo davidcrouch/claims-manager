@@ -173,7 +173,12 @@ export function JobDetail({
         {activeTab === 'schedule' && <ScheduleClient jobId={job.id} />}
         {activeTab === 'appointments' && <JobAppointmentsTab jobId={job.id} job={job} />}
         {activeTab === 'quotes' && (
-          <JobQuotesTab jobId={job.id} claimId={claimId} jobProvider={job.provider === 'crunchwork' ? 'crunchwork' : 'internal'} />
+          <JobQuotesTab
+            jobId={job.id}
+            claimId={claimId}
+            jobName={job.name ?? job.externalJobId ?? job.externalReference}
+            jobProvider={job.provider === 'crunchwork' ? 'crunchwork' : 'internal'}
+          />
         )}
         {activeTab === 'work-orders' && (
           <JobWorkOrdersTab jobId={job.id} />

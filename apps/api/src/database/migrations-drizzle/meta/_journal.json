@@ -169,6 +169,48 @@
       "when": 1782975600000,
       "tag": "0023_direct_job_types",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1785411210343,
+      "tag": "0024_round_scream",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1785500000000,
+      "tag": "0025_document_generation",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1785415128245,
+      "tag": "0026_black_iron_patriot",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1785600000000,
+      "tag": "0027_document_template_filesystem_doc",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1785700000000,
+      "tag": "0028_cross_tenant_po_wo",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1785800000000,
+      "tag": "0029_pubsub_outbound_channel",
+      "breakpoints": true
     }
   ]
 }

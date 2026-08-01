@@ -15,6 +15,7 @@ import {
   ValueFilterMenu,
   SortableColumnHeader,
 } from '@/components/shared/list-filters';
+import { resolveJobName } from '@/components/shared/job-label';
 import { TablePagination } from '@/components/shared/table-pagination';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import {
@@ -35,9 +36,9 @@ function parseTab(param: string | null): ListTab {
 
 type RfqSortField =
   | 'rfq_number'
+  | 'job'
   | 'status'
   | 'vendor'
-  | 'job_ref'
   | 'sent_date'
   | 'due_date'
   | 'updated_at';
@@ -46,37 +47,26 @@ interface ColDef { key: RfqSortField; label: string; filterable?: boolean }
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'rfq_number', label: 'RFQ #' },
+  { key: 'job', label: 'Job' },
   { key: 'status', label: 'Status', filterable: true },
   { key: 'vendor', label: 'Vendor (sub)', filterable: true },
-  { key: 'job_ref', label: 'Job Ref' },
   { key: 'sent_date', label: 'Sent' },
   { key: 'due_date', label: 'Due' },
   { key: 'updated_at', label: 'Updated' },
 ];
 
-function getRfqSortValue(rfq: Rfq, field: RfqSortField): string | null | undefined {
-  switch (field) {
-    case 'rfq_number': return rfq.rfqNumber ?? rfq.name ?? rfq.id;
-    case 'status': return rfq.status?.name;
-    case 'vendor': return rfq.rfqToName;
-    case 'job_ref': return rfq.jobId ? rfq.jobId.slice(0, 8) : null;
-    case 'sent_date': return rfq.sentDate;
-    case 'due_date': return rfq.dueDate;
-    case 'updated_at': return rfq.updatedAt;
-    default: return null;
-  }
-}
-
 export interface RfqsListClientProps {
   initialData: PaginatedResponse<Rfq>;
   statusOptions: StatusOption[];
   vendorOptions: StatusOption[];
+  jobNameById?: Record<string, string>;
 }
 
 export function RfqsListClient({
   initialData,
   statusOptions,
   vendorOptions,
+  jobNameById,
 }: RfqsListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -353,13 +343,13 @@ export function RfqsListClient({
                       <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
                         {num}
                       </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {resolveJobName(rfq.jobId, jobNameById)}
+                      </td>
                       <td className="whitespace-nowrap px-4 py-3">
                         <StatusBadge status={statusName} />
                       </td>
                       <td className="px-4 py-3 text-slate-600">{vendor}</td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {rfq.jobId ? rfq.jobId.slice(0, 8) : ''}
-                      </td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                         {formatDate(rfq.sentDate)}
                       </td>

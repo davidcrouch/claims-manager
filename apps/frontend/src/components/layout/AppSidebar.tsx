@@ -32,6 +32,8 @@ import {
   Package,
   BookOpen,
   ArrowLeft,
+  Files,
+  Building2,
 } from 'lucide-react';
 import { Collapsible } from '@base-ui/react/collapsible';
 import {
@@ -169,7 +171,7 @@ const navGroups: NavGroup[] = [
       { title: 'Messages', href: '/messages', icon: MessageSquare },
       { title: 'Appointments', href: '/appointments', icon: CalendarCheck },
       { title: 'Contacts', href: '/contacts', icon: Users },
-      { title: 'Documents', href: '/admin/documents', icon: FolderOpen },
+      { title: 'Documents', href: '/documents', icon: FolderOpen },
     ],
   },
   {
@@ -185,6 +187,9 @@ const navGroups: NavGroup[] = [
     items: [
       { title: 'Connections', href: '/connections', icon: Unplug },
       { title: 'Catalogue', href: '/admin/catalog', icon: Package },
+      { title: 'Document Categories', href: '/admin/documents', icon: FolderOpen },
+      { title: 'Document Templates', href: '/admin/document-templates', icon: Files },
+      { title: 'Org Claims', href: '/admin/claims', icon: Building2 },
       { title: 'Users', href: '/admin/users', icon: UserCog },
       { title: 'Settings', href: '/admin/settings', icon: Settings },
     ],
@@ -273,8 +278,8 @@ export function AppSidebar({ user }: AppSidebarProps) {
             <SidebarGroupLabel
               className={
                 indent
-                  ? 'flex-1 pl-4 text-emerald-400/80 group-data-[collapsible=icon]:pl-0'
-                  : 'flex-1 text-yellow-400'
+                  ? 'flex-1 pl-4 text-white/50 group-data-[collapsible=icon]:pl-0'
+                  : 'flex-1 text-white/60'
               }
             >
               {group.label}
@@ -345,7 +350,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
                   </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
-              <SidebarGroupLabel className="font-semibold tracking-wider text-yellow-400">
+              <SidebarGroupLabel className="font-semibold tracking-wider text-white/60">
                 JOB DETAIL
               </SidebarGroupLabel>
               <SidebarGroupContent className="pl-3 group-data-[collapsible=icon]:pl-0">

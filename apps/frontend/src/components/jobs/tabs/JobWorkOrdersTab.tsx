@@ -2,11 +2,12 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, X, Plus } from 'lucide-react';
+import { Search, X, Plus, PackagePlus } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { WorkOrderFormDrawer } from '@/components/forms/WorkOrderFormDrawer';
+import { CapturePoDrawer } from '@/components/forms/CapturePoDrawer';
 import { fetchJobWorkOrdersAction } from '@/app/(app)/jobs/[id]/actions';
 import { formatCurrency } from '@/components/shared/detail';
 import {
@@ -59,6 +60,7 @@ export function JobWorkOrdersTab({ jobId }: { jobId: string }) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [captureDrawerOpen, setCaptureDrawerOpen] = useState(false);
 
   const [tab, setTab] = useState<ListTab>('active');
   const [search, setSearch] = useState('');
@@ -252,6 +254,10 @@ export function JobWorkOrdersTab({ jobId }: { jobId: string }) {
           itemNoun={{ singular: 'type', plural: 'types' }}
         />
 
+        <Button variant="outline" onClick={() => setCaptureDrawerOpen(true)} size="sm">
+          <PackagePlus className="h-4 w-4 mr-2" />
+          Capture External PO
+        </Button>
         <Button onClick={() => setDrawerOpen(true)} size="sm">
           <Plus className="h-4 w-4 mr-2" />
           Create Work Order
@@ -262,6 +268,15 @@ export function JobWorkOrdersTab({ jobId }: { jobId: string }) {
         open={drawerOpen}
         onOpenChange={(open) => {
           setDrawerOpen(open);
+          if (!open) load();
+        }}
+        jobId={jobId}
+      />
+
+      <CapturePoDrawer
+        open={captureDrawerOpen}
+        onOpenChange={(open) => {
+          setCaptureDrawerOpen(open);
           if (!open) load();
         }}
         jobId={jobId}

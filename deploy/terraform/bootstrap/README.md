@@ -4,6 +4,12 @@ One-time terraform modules that stand up the shared primitives the rest
 of `deploy/terraform/environments/*` assume already exist. Run these
 **locally as a human** before any CI workflow can succeed.
 
+For the hybrid **DEV** project (`claims-manager-dev-*`, branlamie account) —
+Pub/Sub + secrets + publisher SA only (no app GCS); app runtime local — see
+[`../environments/dev/README.md`](../environments/dev/README.md). That root
+is applied manually (CI only validates it). State lives at
+`gs://claims-manager-terraform-state/dev`.
+
 ## infra/
 
 Provisions in `claims-manager-infra-493807`:

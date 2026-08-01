@@ -166,7 +166,7 @@ export function RfqFormDrawer({
       icon={<Send className="h-5 w-5" />}
     >
       {/* Step pills */}
-      <div className="border-b border-slate-200 px-8 py-3">
+      <div className="border-b border-slate-200 px-12 py-3">
         <ol className="flex flex-wrap gap-2 text-xs">
           {STEPS.map((s, i) => (
             <li

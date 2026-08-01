@@ -10,7 +10,7 @@ import { TenantContext } from '../../../tenant/tenant-context';
 import { CatalogBootstrapService } from './catalog-bootstrap.service';
 import { CatalogPricingService } from './catalog-pricing.service';
 import type { CatalogItemKind, CatalogPricingMode } from '../catalog.utils';
-import { DEFAULT_CATALOG_CATEGORIES } from '../catalog.utils';
+import { DEFAULT_CATALOG_CATEGORIES, DEFAULT_UNIT_TYPES } from '../catalog.utils';
 import type { CatalogCategoryRow } from '../../../database/repositories';
 import type { CatalogType } from './catalogs.service';
 
@@ -41,6 +41,35 @@ function toTagArray(v: string): string[] {
     .filter(Boolean);
 }
 
+/** Map CW export Type labels → internal type codes. */
+const CW_TYPE_TO_CODE: Record<string, string> = {
+  material: 'material',
+  labour: 'labour',
+  hire: 'equipment',
+  equipment: 'equipment',
+  vendor: 'vendor',
+  other: 'other',
+};
+
+/** Map CW export Markup Type labels → internal markup codes. */
+const CW_MARKUP_TO_CODE: Record<string, string> = {
+  percentage: 'percent',
+  percent: 'percent',
+  absolute: 'fixed',
+  fixed: 'fixed',
+  none: 'none',
+};
+
+function normaliseImportTypeCode(raw: string): string {
+  const key = raw.trim().toLowerCase();
+  return CW_TYPE_TO_CODE[key] ?? key;
+}
+
+function normaliseImportMarkupType(raw: string): string {
+  const key = raw.trim().toLowerCase();
+  return CW_MARKUP_TO_CODE[key] ?? key;
+}
+
 const INTERNAL_PROFILE: ColumnMapping[] = [
   { csvHeader: 'code', target: 'column', field: 'code', required: true },
   { csvHeader: 'display_name', aliases: ['name'], target: 'column', field: 'name', required: true },
@@ -60,18 +89,22 @@ const INTERNAL_PROFILE: ColumnMapping[] = [
 ];
 
 const CRUNCHWORK_PROFILE: ColumnMapping[] = [
-  { csvHeader: 'id', target: 'column', field: 'externalReference', required: true },
-  { csvHeader: 'name', target: 'column', field: 'name', required: true },
-  { csvHeader: 'description', target: 'column', field: 'description' },
-  { csvHeader: 'type', target: 'column', field: 'type_code', required: true },
-  { csvHeader: 'category', target: 'column', field: 'category_code' },
-  { csvHeader: 'subcategory', target: 'column', field: 'sub_category_code' },
-  { csvHeader: 'unit', target: 'column', field: 'unit_type_ref' },
-  { csvHeader: 'markup type', target: 'column', field: 'markupType' },
-  { csvHeader: 'markup', target: 'column', field: 'markupValue' },
-  { csvHeader: 'buy cost', target: 'column', field: 'buyCost' },
-  { csvHeader: 'unit cost', target: 'column', field: 'unitCost' },
-  { csvHeader: 'tax %', target: 'column', field: 'taxRate' },
+  { csvHeader: 'id', aliases: ['external_reference'], target: 'column', field: 'externalReference' },
+  { csvHeader: 'code', target: 'column', field: 'code' },
+  { csvHeader: 'name', aliases: ['display_name'], target: 'column', field: 'name', required: true },
+  { csvHeader: 'description', aliases: ['line_item_description'], target: 'column', field: 'description' },
+  { csvHeader: 'kind', target: 'column', field: 'kind' },
+  { csvHeader: 'type', aliases: ['type_code'], target: 'column', field: 'type_code', required: true },
+  { csvHeader: 'category', aliases: ['category_code'], target: 'column', field: 'category_code' },
+  { csvHeader: 'subcategory', aliases: ['sub_category_code'], target: 'column', field: 'sub_category_code' },
+  { csvHeader: 'unit', aliases: ['unit_type_ref'], target: 'column', field: 'unit_type_ref' },
+  { csvHeader: 'markup type', aliases: ['markup_type'], target: 'column', field: 'markupType' },
+  { csvHeader: 'markup', aliases: ['markup_value'], target: 'column', field: 'markupValue' },
+  { csvHeader: 'buy cost', aliases: ['buy_cost'], target: 'column', field: 'buyCost' },
+  { csvHeader: 'unit cost', aliases: ['unit_cost'], target: 'column', field: 'unitCost' },
+  { csvHeader: 'tax %', aliases: ['tax_rate'], target: 'column', field: 'taxRate' },
+  { csvHeader: 'pricing_mode', target: 'column', field: 'pricingMode' },
+  { csvHeader: 'fixed_unit_cost', target: 'column', field: 'fixedUnitCost' },
   { csvHeader: 'enabled', target: 'column', field: 'isActive', transform: (v) => toBool(v) },
   { csvHeader: 'archived', target: 'column', field: 'archived', transform: (v) => toBool(v) },
   { csvHeader: 'default quantity', target: 'metadata', field: 'defaultQuantity', transform: toNumericOrNull },
@@ -98,6 +131,25 @@ const COLUMN_PROFILES: Record<string, ColumnMapping[]> = {
 
 function getProfile(catalogType: string): ColumnMapping[] {
   return COLUMN_PROFILES[catalogType] ?? INTERNAL_PROFILE;
+}
+
+/** Prefer CSV headers over catalogue type so CW exports import into any catalogue. */
+function detectImportFormat(header: string[], catalogType: CatalogType): 'internal' | 'crunchwork' {
+  const cols = new Set(header);
+  const looksCrunchwork =
+    cols.has('id') &&
+    (cols.has('name') || cols.has('type')) &&
+    !cols.has('code') &&
+    !cols.has('kind') &&
+    !cols.has('type_code') &&
+    !cols.has('display_name');
+  if (looksCrunchwork) return 'crunchwork';
+
+  const looksInternal =
+    cols.has('code') || cols.has('type_code') || cols.has('display_name') || cols.has('kind');
+  if (looksInternal) return 'internal';
+
+  return catalogType === 'crunchwork' ? 'crunchwork' : 'internal';
 }
 
 function buildTemplateFromProfile(profile: ColumnMapping[]): string {
@@ -136,6 +188,7 @@ export interface CatalogImportPreviewResult {
   willCreate: number;
   willUpdate: number;
   categoriesToCreate: string[];
+  unitsToCreate: string[];
   rows: CatalogImportPreviewRow[];
 }
 
@@ -143,6 +196,8 @@ interface ImportParseContext {
   tenantId: string;
   catalogId: string | undefined;
   catalogType: CatalogType;
+  /** Column profile in use — detected from CSV headers when possible. */
+  importFormat: 'internal' | 'crunchwork';
   profile: ColumnMapping[];
   header: string[];
   colIndex: Map<string, number>;
@@ -196,10 +251,11 @@ export class CatalogImportService {
   }): Promise<CatalogImportPreviewResult> {
     const ctx = await this.buildImportContext(params.csv, params.catalogId);
     const categoriesToCreate = new Set<string>();
+    const unitsToCreate = new Set<string>();
     const previewRows: CatalogImportPreviewRow[] = [];
 
     for (let i = 1; i < ctx.rows.length; i++) {
-      const preview = await this.previewRow(ctx, i, categoriesToCreate);
+      const preview = await this.previewRow(ctx, i, categoriesToCreate, unitsToCreate);
       previewRows.push(preview);
     }
 
@@ -217,6 +273,7 @@ export class CatalogImportService {
       willCreate: previewRows.filter((r) => r.action === 'create').length,
       willUpdate: previewRows.filter((r) => r.action === 'update').length,
       categoriesToCreate: [...categoriesToCreate],
+      unitsToCreate: [...unitsToCreate],
       rows: previewRows,
     };
   }
@@ -306,13 +363,14 @@ export class CatalogImportService {
       catalogType = catalog.type as CatalogType;
     }
 
-    const profile = getProfile(catalogType);
     const rows = parseCsv(csv);
     if (rows.length < 2) {
       throw new BadRequestException('CSV must include a header row and at least one data row');
     }
 
-    const header = rows[0].map((h) => h.trim().toLowerCase());
+    const header = rows[0].map((h) => h.replace(/^\uFEFF/, '').trim().toLowerCase());
+    const importFormat = detectImportFormat(header, catalogType);
+    const profile = getProfile(importFormat);
     const colIndex = new Map<string, number>();
     for (const mapping of profile) {
       const allNames = [mapping.csvHeader, ...(mapping.aliases ?? [])];
@@ -328,8 +386,20 @@ export class CatalogImportService {
     const requiredFields = profile.filter((m) => m.required);
     for (const req of requiredFields) {
       if (!colIndex.has(req.field)) {
+        const alternatives = req.aliases?.length
+          ? ` (or ${req.aliases.join(', ')})`
+          : '';
         throw new BadRequestException(
-          `CSV missing required column: ${req.csvHeader}`,
+          `CSV missing required column: ${req.csvHeader}${alternatives}`,
+        );
+      }
+    }
+
+    // Crunchwork CSVs identify rows by id (external ref) or code
+    if (importFormat === 'crunchwork') {
+      if (!colIndex.has('externalReference') && !colIndex.has('code')) {
+        throw new BadRequestException(
+          'CSV missing required column: id (or code)',
         );
       }
     }
@@ -338,40 +408,55 @@ export class CatalogImportService {
     const categories = await this.categoriesRepo.findAll({ tenantId, activeOnly: false });
     const units = await this.lookupsRepo.findByDomain({ tenantId, domain: 'unit_type' });
 
+    const unitByRef = new Map<string, { id: string }>();
+    for (const u of units) {
+      if (u.externalReference) unitByRef.set(u.externalReference.toLowerCase(), u);
+      if (u.name) unitByRef.set(u.name.toLowerCase(), u);
+    }
+
+    this.logger.log(
+      `CatalogImportService.buildImportContext — catalogType=${catalogType} importFormat=${importFormat} rows=${rows.length - 1} units=${units.length}`,
+    );
+
     return {
       tenantId,
       catalogId,
       catalogType,
+      importFormat,
       profile,
       header,
       colIndex,
       typeByCode: new Map(types.map((t) => [t.code.toLowerCase(), t])),
       categoryByCode: new Map(categories.map((c) => [c.code.toLowerCase(), c])),
-      unitByRef: new Map(
-        units.map((u) => [(u.externalReference ?? u.name ?? '').toLowerCase(), u]),
-      ),
+      unitByRef,
       rows,
     };
   }
 
   private resolveCode(ctx: ImportParseContext, cells: string[]): string {
-    if (ctx.catalogType === 'crunchwork') {
-      const nameIdx = ctx.colIndex.get('name');
-      const name = nameIdx !== undefined ? cellValue(cells, nameIdx) : '';
+    if (ctx.importFormat === 'crunchwork') {
+      const explicitCode = cellByField(ctx, cells, 'code');
+      if (explicitCode) return explicitCode;
+
+      // Prefer CW id as stable code when present
+      const extRef = cellByField(ctx, cells, 'externalReference');
+      if (extRef) return extRef;
+
+      const name = cellByField(ctx, cells, 'name');
       return name
         .toUpperCase()
         .replace(/[^A-Z0-9]+/g, '-')
         .replace(/^-|-$/g, '')
         .slice(0, 80) || '';
     }
-    const codeIdx = ctx.colIndex.get('code');
-    return codeIdx !== undefined ? cellValue(cells, codeIdx) : '';
+    return cellByField(ctx, cells, 'code');
   }
 
   private async previewRow(
     ctx: ImportParseContext,
     rowIndex: number,
     categoriesToCreate: Set<string>,
+    unitsToCreate: Set<string>,
   ): Promise<CatalogImportPreviewRow> {
     const cells = ctx.rows[rowIndex];
     const rowNum = rowIndex + 1;
@@ -379,11 +464,17 @@ export class CatalogImportService {
     const code = this.resolveCode(ctx, cells);
     const displayName = cellByField(ctx, cells, 'name');
     const description = cellByField(ctx, cells, 'description') || null;
-    const typeCode = cellByField(ctx, cells, 'type_code');
+    const typeCode = normaliseImportTypeCode(cellByField(ctx, cells, 'type_code'));
     const categoryCode = cellByField(ctx, cells, 'category_code') || null;
     const unitTypeRef = cellByField(ctx, cells, 'unit_type_ref') || null;
 
-    const kind = ctx.catalogType === 'crunchwork' ? 'primitive' : cellByField(ctx, cells, 'kind');
+    const kindRaw = cellByField(ctx, cells, 'kind');
+    const kind =
+      kindRaw === 'primitive' || kindRaw === 'assembly'
+        ? kindRaw
+        : ctx.importFormat === 'crunchwork'
+          ? 'primitive'
+          : kindRaw;
 
     const base = {
       row: rowNum,
@@ -426,7 +517,8 @@ export class CatalogImportService {
       if (!unitTypeRef) {
         issues.push('Primitive requires a unit type');
       } else if (!ctx.unitByRef.has(unitTypeRef.toLowerCase())) {
-        issues.push(`Unknown unit type: ${unitTypeRef}`);
+        unitsToCreate.add(unitTypeRef);
+        warnings.push(`Unit type "${unitTypeRef}" will be created on import`);
       }
     }
 
@@ -455,15 +547,18 @@ export class CatalogImportService {
   ) {
     const cells = ctx.rows[rowIndex];
 
+    const kindRaw = cellByField(ctx, cells, 'kind');
     const kind: CatalogItemKind =
-      ctx.catalogType === 'crunchwork'
-        ? 'primitive'
-        : (cellByField(ctx, cells, 'kind') as CatalogItemKind);
+      kindRaw === 'primitive' || kindRaw === 'assembly'
+        ? kindRaw
+        : ctx.importFormat === 'crunchwork'
+          ? 'primitive'
+          : (kindRaw as CatalogItemKind);
     if (kind !== 'primitive' && kind !== 'assembly') {
       throw new Error(`Invalid kind: ${kind}`);
     }
 
-    const typeCode = cellByField(ctx, cells, 'type_code').toLowerCase();
+    const typeCode = normaliseImportTypeCode(cellByField(ctx, cells, 'type_code'));
     const type = ctx.typeByCode.get(typeCode);
     if (!type) throw new Error(`Unknown type_code: ${typeCode}`);
 
@@ -486,7 +581,13 @@ export class CatalogImportService {
       : undefined;
 
     const unitRef = cellByField(ctx, cells, 'unit_type_ref');
-    const unit = unitRef ? ctx.unitByRef.get(unitRef.toLowerCase()) : undefined;
+    const unit = unitRef
+      ? await this.resolveOrCreateUnit({
+          tenantId: ctx.tenantId,
+          unitRef,
+          unitByRef: ctx.unitByRef,
+        })
+      : undefined;
     if (kind === 'primitive' && !unit) {
       throw new Error(`Primitive requires valid unit type: ${unitRef || '(missing)'}`);
     }
@@ -510,7 +611,10 @@ export class CatalogImportService {
       unitTypeLookupId: unit?.id,
       unitCost: cellByField(ctx, cells, 'unitCost') || undefined,
       buyCost: cellByField(ctx, cells, 'buyCost') || undefined,
-      markupType: cellByField(ctx, cells, 'markupType') || undefined,
+      markupType: (() => {
+        const raw = cellByField(ctx, cells, 'markupType');
+        return raw ? normaliseImportMarkupType(raw) : undefined;
+      })(),
       markupValue: cellByField(ctx, cells, 'markupValue') || undefined,
       taxRate: cellByField(ctx, cells, 'taxRate') || undefined,
       pricingMode: (cellByField(ctx, cells, 'pricingMode') ||
@@ -591,6 +695,48 @@ export class CatalogImportService {
     );
     return created;
   }
+
+  private async resolveOrCreateUnit(params: {
+    tenantId: string;
+    unitRef: string;
+    unitByRef: Map<string, { id: string }>;
+  }): Promise<{ id: string } | undefined> {
+    const trimmed = params.unitRef.trim();
+    if (!trimmed) return undefined;
+
+    const key = trimmed.toLowerCase();
+    const existing = params.unitByRef.get(key);
+    if (existing) return existing;
+
+    const known = DEFAULT_UNIT_TYPES.find(
+      (u) =>
+        u.externalReference.toLowerCase() === key || u.name.toLowerCase() === key,
+    );
+
+    const created = await this.lookupsRepo.create({
+      tenantId: params.tenantId,
+      data: {
+        domain: 'unit_type',
+        providerCode: 'crunchwork',
+        name: known?.name ?? trimmed,
+        externalReference: known?.externalReference ?? trimmed.toUpperCase(),
+        isActive: true,
+      },
+    });
+
+    params.unitByRef.set(key, created);
+    if (created.externalReference) {
+      params.unitByRef.set(created.externalReference.toLowerCase(), created);
+    }
+    if (created.name) {
+      params.unitByRef.set(created.name.toLowerCase(), created);
+    }
+
+    this.logger.log(
+      `CatalogImportService.resolveOrCreateUnit — auto-created unit_type ref=${trimmed}`,
+    );
+    return created;
+  }
 }
 
 // ── Column profile helpers ────────────────────────────────────
@@ -650,7 +796,9 @@ function humanizeCategoryCode(code: string): string {
 }
 
 function parseCsv(text: string): string[][] {
-  return text
+  // Strip UTF-8 BOM (common in Excel / CW exports) so the first header matches
+  const normalized = text.replace(/^\uFEFF/, '');
+  return normalized
     .trim()
     .split(/\r?\n/)
     .filter((line) => line.trim().length > 0)

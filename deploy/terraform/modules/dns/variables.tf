@@ -7,7 +7,8 @@ variable "environment" {
 }
 
 variable "dns_name" {
-  type = string
+  type        = string
+  description = "Apex DNS zone with trailing dot (e.g. branlamie.com.). Host records are api[-env].<zone>."
 }
 
 variable "gateway_ip" {

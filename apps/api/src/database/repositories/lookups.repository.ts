@@ -58,4 +58,30 @@ export class LookupsRepository {
     }
     return map;
   }
+
+  async create(params: {
+    tenantId: string;
+    data: {
+      domain: string;
+      name: string;
+      externalReference?: string;
+      providerCode?: string | null;
+      isActive?: boolean;
+      metadata?: Record<string, unknown>;
+    };
+  }): Promise<LookupValueRow> {
+    const [row] = await this.db
+      .insert(lookupValues)
+      .values({
+        tenantId: params.tenantId,
+        domain: params.data.domain,
+        name: params.data.name,
+        externalReference: params.data.externalReference ?? null,
+        providerCode: params.data.providerCode ?? null,
+        isActive: params.data.isActive ?? true,
+        metadata: params.data.metadata ?? {},
+      })
+      .returning();
+    return row;
+  }
 }

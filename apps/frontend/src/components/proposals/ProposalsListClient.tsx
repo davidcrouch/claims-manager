@@ -15,6 +15,7 @@ import {
   ValueFilterMenu,
   SortableColumnHeader,
 } from '@/components/shared/list-filters';
+import { resolveJobName } from '@/components/shared/job-label';
 import { TablePagination } from '@/components/shared/table-pagination';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import {
@@ -36,6 +37,7 @@ function parseTab(param: string | null): ListTab {
 
 type ProposalSortField =
   | 'proposal_number'
+  | 'job'
   | 'status'
   | 'vendor'
   | 'rfq_ref'
@@ -47,6 +49,7 @@ interface ColDef { key: ProposalSortField; label: string; filterable?: boolean }
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'proposal_number', label: 'Proposal #' },
+  { key: 'job', label: 'Job' },
   { key: 'status', label: 'Status', filterable: true },
   { key: 'vendor', label: 'Vendor (sub)', filterable: true },
   { key: 'rfq_ref', label: 'RFQ #' },
@@ -55,32 +58,18 @@ const TABLE_COLUMNS: ColDef[] = [
   { key: 'updated_at', label: 'Updated' },
 ];
 
-function getProposalSortValue(
-  p: Proposal,
-  field: ProposalSortField,
-): string | number | null | undefined {
-  switch (field) {
-    case 'proposal_number': return p.proposalNumber ?? p.reference ?? p.name ?? p.id;
-    case 'status': return p.status?.name;
-    case 'vendor': return p.proposalFromName;
-    case 'rfq_ref': return p.rfqId ? p.rfqId.slice(0, 8) : null;
-    case 'total_amount': { const n = Number(p.totalAmount); return Number.isFinite(n) ? n : null; }
-    case 'received_date': return p.receivedDate ?? p.proposalDate;
-    case 'updated_at': return p.updatedAt;
-    default: return null;
-  }
-}
-
 export interface ProposalsListClientProps {
   initialData: PaginatedResponse<Proposal>;
   statusOptions: StatusOption[];
   vendorOptions: StatusOption[];
+  jobNameById?: Record<string, string>;
 }
 
 export function ProposalsListClient({
   initialData,
   statusOptions,
   vendorOptions,
+  jobNameById,
 }: ProposalsListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -370,6 +359,9 @@ export function ProposalsListClient({
                     >
                       <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
                         {num}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {resolveJobName(p.jobId, jobNameById)}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
                         <StatusBadge status={statusName} />

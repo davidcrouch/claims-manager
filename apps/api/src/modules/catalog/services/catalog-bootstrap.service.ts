@@ -3,9 +3,14 @@ import {
   CatalogsRepository,
   CatalogCategoriesRepository,
   CatalogItemTypesRepository,
+  LookupsRepository,
   type CatalogRow,
 } from '../../../database/repositories';
-import { DEFAULT_CATALOG_CATEGORIES, DEFAULT_CATALOG_TYPES } from '../catalog.utils';
+import {
+  DEFAULT_CATALOG_CATEGORIES,
+  DEFAULT_CATALOG_TYPES,
+  DEFAULT_UNIT_TYPES,
+} from '../catalog.utils';
 
 export const DEFAULT_CATALOG_NAME = 'Default';
 
@@ -17,12 +22,14 @@ export class CatalogBootstrapService {
     private readonly catalogsRepo: CatalogsRepository,
     private readonly typesRepo: CatalogItemTypesRepository,
     private readonly categoriesRepo: CatalogCategoriesRepository,
+    private readonly lookupsRepo: LookupsRepository,
   ) {}
 
   async ensureDefaults(params: { tenantId: string }): Promise<void> {
     await this.ensureDefaultCatalog(params.tenantId);
     await this.ensureTypes(params.tenantId);
     await this.ensureCategories(params.tenantId);
+    await this.ensureUnitTypes(params.tenantId);
   }
 
   async ensureDefaultCatalog(tenantId: string): Promise<CatalogRow> {
@@ -97,5 +104,36 @@ export class CatalogBootstrapService {
     this.logger.log(
       `CatalogBootstrapService.ensureCategories — seeded defaults for tenant=${tenantId}`,
     );
+  }
+
+  private async ensureUnitTypes(tenantId: string): Promise<void> {
+    const existing = await this.lookupsRepo.findByDomain({ tenantId, domain: 'unit_type' });
+    const byRef = new Set(
+      existing
+        .map((u) => (u.externalReference ?? '').toLowerCase())
+        .filter(Boolean),
+    );
+
+    let created = 0;
+    for (const unit of DEFAULT_UNIT_TYPES) {
+      if (byRef.has(unit.externalReference.toLowerCase())) continue;
+      await this.lookupsRepo.create({
+        tenantId,
+        data: {
+          domain: 'unit_type',
+          providerCode: 'crunchwork',
+          name: unit.name,
+          externalReference: unit.externalReference,
+          isActive: true,
+        },
+      });
+      created++;
+    }
+
+    if (created > 0) {
+      this.logger.log(
+        `CatalogBootstrapService.ensureUnitTypes — seeded ${created} unit types for tenant=${tenantId}`,
+      );
+    }
   }
 }

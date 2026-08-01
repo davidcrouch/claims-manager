@@ -13,12 +13,33 @@ permissions:
   id-token: write
 
 jobs:
+  # Hybrid local DEV project (topics/secrets/GCS only) — validate only.
+  # Apply is manual: deploy/terraform/environments/dev/README.md
+  # (same pattern as data_cloud: no auto-apply to the DEV GCP project).
+  validate-dev:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7"
+
+      - name: Terraform Init (no backend)
+        run: terraform init -backend=false
+        working-directory: deploy/terraform/environments/dev
+
+      - name: Terraform Validate
+        run: terraform validate
+        working-directory: deploy/terraform/environments/dev
+
   plan:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     strategy:
       # Production is intentionally excluded until the production GCP project
       # is bootstrapped. Add "production" back to the matrix when ready.
+      # Dev is validate-only (see validate-dev); not auto-planned via WIF yet.
       matrix:
         environment: [staging]
     steps:

@@ -176,3 +176,43 @@ export {
   type NotificationRow,
   type NotificationInsert,
 } from './notifications.repository';
+export {
+  DocumentTemplatesRepository,
+  type DocumentTemplateRow,
+  type DocumentTemplateInsert,
+} from './document-templates.repository';
+export {
+  GeneratedDocumentsRepository,
+  type GeneratedDocumentRow,
+  type GeneratedDocumentInsert,
+} from './generated-documents.repository';
+export {
+  FilesystemTemplatesRepository,
+  type FilesystemTemplateRow,
+  type FilesystemTemplateInsert,
+  type FilesystemTemplateCategoryRow,
+  type FilesystemTemplateCategoryInsert,
+} from './filesystem-templates.repository';
+export {
+  FilesystemsRepository,
+  type FilesystemRow,
+  type FilesystemInsert,
+  type FilesystemCategoryRow,
+  type FilesystemCategoryInsert,
+} from './filesystems.repository';
+export {
+  DocumentsRepository,
+  type DocumentRow,
+  type DocumentInsert,
+  type DocumentFilters,
+} from './documents.repository';
+export {
+  OrganisationClaimsRepository,
+  type OrganisationClaimRow,
+  type OrganisationClaimInsert,
+} from './organisation-claims.repository';
+export {
+  PoCustodyTransfersRepository,
+  type PoCustodyTransferRow,
+  type PoCustodyTransferInsert,
+} from './po-custody-transfers.repository';

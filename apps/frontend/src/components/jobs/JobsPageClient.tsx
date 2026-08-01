@@ -8,7 +8,7 @@ import type { Job, PaginatedResponse } from '@/types/api';
 
 export interface JobsPageClientProps {
   initialData: PaginatedResponse<Job>;
-  jobTypes: { id: string; name?: string }[];
+  jobTypes: { id: string; name?: string; providerCode?: string | null }[];
   /** All job_type lookups for list filtering (any provider). Falls back to jobTypes. */
   jobTypeFilterOptions?: { id: string; name: string }[];
   statusOptions: { id: string; name: string }[];
@@ -23,6 +23,7 @@ export function JobsPageClient({
   unreadJobIds,
 }: JobsPageClientProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [refreshNonce, setRefreshNonce] = useState(0);
 
   return (
     <>
@@ -31,6 +32,7 @@ export function JobsPageClient({
         statusOptions={statusOptions}
         jobTypes={jobTypeFilterOptions ?? jobTypes}
         unreadJobIds={unreadJobIds}
+        refreshNonce={refreshNonce}
         headerAction={
           <Button onClick={() => setDrawerOpen(true)}>Create Job</Button>
         }
@@ -39,6 +41,7 @@ export function JobsPageClient({
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
         jobTypes={jobTypes}
+        onSuccess={() => setRefreshNonce((n) => n + 1)}
       />
     </>
   );

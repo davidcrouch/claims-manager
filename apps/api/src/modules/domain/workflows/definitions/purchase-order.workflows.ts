@@ -25,14 +25,14 @@ export const purchaseOrderStandard: WorkflowDefinition = {
       id: 'approved',
       label: 'Approved',
       transitions: [
-        { to: 'issued', action: 'issue', onEnter: ['issueDocument'] },
+        { to: 'issued', action: 'issue', onEnter: ['issueDocument', 'publishCrossTenantEvent'] },
       ],
     },
     {
       id: 'issued',
       label: 'Issued',
       transitions: [
-        { to: 'acknowledged', action: 'acknowledge' },
+        { to: 'acknowledged', action: 'acknowledge', onEnter: ['publishCrossTenantEvent'] },
         { to: 'draft', action: 'revise' },
       ],
     },
@@ -40,7 +40,7 @@ export const purchaseOrderStandard: WorkflowDefinition = {
       id: 'acknowledged',
       label: 'Acknowledged',
       transitions: [
-        { to: 'closed', action: 'close' },
+        { to: 'closed', action: 'close', onEnter: ['publishCrossTenantEvent'] },
         { to: 'draft', action: 'revise' },
       ],
     },

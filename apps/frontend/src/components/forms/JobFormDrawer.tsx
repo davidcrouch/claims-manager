@@ -33,6 +33,7 @@ import {
 } from '@/components/forms/BottomFormDrawer';
 import { createJobAction } from '@/app/(app)/jobs/mutations';
 import { searchContactsAction } from '@/app/(app)/mutations';
+import type { Job } from '@/types/api';
 
 type WizardStep = 'details' | 'contacts';
 
@@ -42,7 +43,15 @@ const STEP_LABELS: Record<WizardStep, string> = {
   contacts: 'Contacts',
 };
 
+type JobProvider = 'internal' | 'crunchwork';
+
+const JOB_PROVIDERS: { value: JobProvider; label: string; apiCode: string }[] = [
+  { value: 'internal', label: 'Internal', apiCode: 'direct' },
+  { value: 'crunchwork', label: 'Crunchwork', apiCode: 'crunchwork' },
+];
+
 const detailsSchema = z.object({
+  provider: z.enum(['internal', 'crunchwork']),
   name: z.string().min(1, 'Name is required'),
   jobTypeId: z.string().min(1, 'Job type is required'),
   jobInstructions: z.string().optional(),
@@ -80,13 +89,16 @@ const AU_STATES = ['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA'] as const
 export interface JobFormDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  jobTypes: { id: string; name?: string }[];
+  jobTypes: { id: string; name?: string; providerCode?: string | null }[];
+  /** Called after a job is created so the parent list can refetch. */
+  onSuccess?: (job: Job) => void;
 }
 
 export function JobFormDrawer({
   open,
   onOpenChange,
   jobTypes,
+  onSuccess,
 }: JobFormDrawerProps) {
   const router = useRouter();
   const [step, setStep] = useState<WizardStep>('details');
@@ -102,6 +114,7 @@ export function JobFormDrawer({
   const form = useForm<DetailsValues>({
     resolver: standardSchemaResolver(detailsSchema),
     defaultValues: {
+      provider: 'internal',
       name: '',
       jobTypeId: '',
       jobInstructions: '',
@@ -117,15 +130,36 @@ export function JobFormDrawer({
     },
   });
 
+  const provider = form.watch('provider');
   const jobTypeId = form.watch('jobTypeId');
   const stateValue = form.watch('state');
+
+  const providerApiCode =
+    JOB_PROVIDERS.find((p) => p.value === provider)?.apiCode ?? 'direct';
+
+  const filteredJobTypes = useMemo(
+    () =>
+      jobTypes.filter(
+        (jt) => !jt.providerCode || jt.providerCode === providerApiCode,
+      ),
+    [jobTypes, providerApiCode],
+  );
 
   const jobTypeItems = useMemo(
     () =>
       Object.fromEntries(
-        jobTypes.map((jt) => [jt.id, jt.name ?? jt.id]),
+        filteredJobTypes.map((jt) => [jt.id, jt.name ?? jt.id]),
       ) as Record<string, string>,
-    [jobTypes],
+    [filteredJobTypes],
+  );
+
+  const providerItems = useMemo(
+    () =>
+      Object.fromEntries(JOB_PROVIDERS.map((p) => [p.value, p.label])) as Record<
+        string,
+        string
+      >,
+    [],
   );
 
   const stateItems = useMemo(
@@ -213,6 +247,8 @@ export function JobFormDrawer({
     }
 
     const values = form.getValues();
+    const apiProvider =
+      JOB_PROVIDERS.find((p) => p.value === values.provider)?.apiCode ?? 'direct';
     setSubmitting(true);
     setError(null);
 
@@ -247,10 +283,11 @@ export function JobFormDrawer({
                 },
           ),
         },
-        { provider: 'direct' },
+        { provider: apiProvider },
       );
       if (result.success) {
         handleOpenChange(false);
+        if (result.job) onSuccess?.(result.job);
         router.refresh();
       } else {
         setError(result.error ?? 'Failed to create job');
@@ -269,10 +306,10 @@ export function JobFormDrawer({
       open={open}
       onOpenChange={handleOpenChange}
       title="Create Job"
-      description="Create an internal job. Add site details first, then optionally attach contacts."
+      description="Add site details first, then optionally attach contacts."
       icon={<Briefcase className="h-5 w-5" />}
     >
-      <div className="border-b border-slate-200 px-8 py-3">
+      <div className="border-b border-slate-200 px-12 py-3">
         <ol className="flex flex-wrap gap-2 text-xs">
           {STEPS.map((s, i) => (
             <li
@@ -294,6 +331,36 @@ export function JobFormDrawer({
       <BottomFormDrawerBody>
         {step === 'details' && (
           <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="provider">Provider</Label>
+              <Select
+                value={provider}
+                onValueChange={(v) => {
+                  form.setValue('provider', (v as JobProvider) ?? 'internal', {
+                    shouldValidate: true,
+                  });
+                  form.setValue('jobTypeId', '', { shouldValidate: false });
+                }}
+                items={providerItems}
+              >
+                <SelectTrigger id="provider" className="w-full">
+                  <SelectValue placeholder="Select provider" />
+                </SelectTrigger>
+                <SelectContent>
+                  {JOB_PROVIDERS.map((p) => (
+                    <SelectItem key={p.value} value={p.value}>
+                      {p.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {form.formState.errors.provider && (
+                <p className="text-sm text-destructive">
+                  {form.formState.errors.provider.message}
+                </p>
+              )}
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="job-name">Name</Label>
               <Input
@@ -321,7 +388,7 @@ export function JobFormDrawer({
                   <SelectValue placeholder="Select job type" />
                 </SelectTrigger>
                 <SelectContent>
-                  {jobTypes.map((jt) => (
+                  {filteredJobTypes.map((jt) => (
                     <SelectItem key={jt.id} value={jt.id}>
                       {jt.name ?? jt.id}
                     </SelectItem>
@@ -333,9 +400,9 @@ export function JobFormDrawer({
                   {form.formState.errors.jobTypeId.message}
                 </p>
               )}
-              {jobTypes.length === 0 && (
+              {filteredJobTypes.length === 0 && (
                 <p className="text-sm text-amber-700">
-                  No internal job types found. Run migrations to seed direct job types.
+                  No job types found for this provider.
                 </p>
               )}
             </div>

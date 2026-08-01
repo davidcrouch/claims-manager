@@ -17,6 +17,8 @@ export interface BottomFormDrawerProps {
   description?: string;
   icon: ReactNode;
   children: ReactNode;
+  /** Tailwind width class for the panel. Defaults to 70% viewport width. */
+  widthClassName?: string;
 }
 
 export function BottomFormDrawer({
@@ -26,6 +28,7 @@ export function BottomFormDrawer({
   description,
   icon,
   children,
+  widthClassName = 'w-[70%]',
 }: BottomFormDrawerProps) {
   const [mounted, setMounted] = useState(false);
   const reactId = useId();
@@ -56,7 +59,7 @@ export function BottomFormDrawer({
     <AnimatePresence>
       {open && (
         <motion.div
-          key="bottom-form-drawer-root"
+          key="form-drawer-root"
           className="fixed inset-0 z-50"
           initial="closed"
           animate="open"
@@ -74,11 +77,14 @@ export function BottomFormDrawer({
             aria-modal="true"
             aria-labelledby={titleId}
             aria-describedby={description ? descriptionId : undefined}
-            className="absolute bottom-0 left-[15%] right-[15%] flex h-[90vh] flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-background shadow-2xl"
-            variants={{ closed: { y: '100%' }, open: { y: 0 } }}
+            className={`absolute inset-y-0 right-0 flex h-full ${widthClassName} flex-col overflow-hidden border-l border-slate-200 bg-background shadow-2xl`}
+            variants={{ closed: { x: '100%' }, open: { x: 0 } }}
             transition={{ type: 'spring', damping: 30, stiffness: 280, mass: 0.9 }}
           >
-            <div className="flex items-start justify-between gap-4 border-b border-slate-200 bg-linear-to-b from-slate-50 to-white px-8 py-5">
+            <div
+              data-slot="drawer-header"
+              className="flex items-start justify-between gap-4 border-b border-sidebar-border px-8 py-5"
+            >
               <div className="flex items-start gap-4">
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 shadow-sm ring-1 ring-emerald-200/50">
                   {icon}
@@ -86,14 +92,14 @@ export function BottomFormDrawer({
                 <div className="flex flex-col">
                   <h2
                     id={titleId}
-                    className="font-heading text-lg font-semibold leading-6 text-slate-900"
+                    className="font-heading text-lg font-semibold leading-6 text-sidebar-foreground"
                   >
                     {title}
                   </h2>
                   {description && (
                     <p
                       id={descriptionId}
-                      className="mt-1 text-sm text-slate-500"
+                      className="mt-1 text-sm text-sidebar-foreground/65"
                     >
                       {description}
                     </p>
@@ -104,7 +110,7 @@ export function BottomFormDrawer({
                 type="button"
                 onClick={() => onOpenChange(false)}
                 aria-label="Close"
-                className="mt-0.5 rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+                className="mt-0.5 rounded-md p-1.5 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -131,7 +137,7 @@ export function BottomFormDrawerBody({
   return (
     <div
       className={
-        'min-h-0 flex-1 overflow-y-auto px-8 py-6' +
+        'min-h-0 flex-1 overflow-y-auto px-12 py-6' +
         (className ? ` ${className}` : '')
       }
     >
@@ -152,7 +158,7 @@ export function BottomFormDrawerFooter({
   return (
     <div
       className={
-        'flex shrink-0 items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/70 px-8 py-4' +
+        'flex shrink-0 items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/70 px-12 py-4' +
         (className ? ` ${className}` : '')
       }
     >

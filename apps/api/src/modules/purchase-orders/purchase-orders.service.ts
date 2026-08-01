@@ -30,6 +30,8 @@ export class PurchaseOrdersService {
     jobId?: string;
     status?: string;
     vendorId?: string;
+    ownershipStatus?: string;
+    captureMethod?: string;
     sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
@@ -40,6 +42,8 @@ export class PurchaseOrdersService {
       jobId: params.jobId,
       status: params.status,
       vendorId: params.vendorId,
+      ownershipStatus: params.ownershipStatus,
+      captureMethod: params.captureMethod,
       sort: params.sort,
     });
   }

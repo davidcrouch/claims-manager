@@ -4,10 +4,12 @@ set -euo pipefail
 usage() {
   echo "Usage: $0 <environment> [plan|apply|destroy]"
   echo ""
-  echo "Environments: staging, production"
+  echo "Environments: dev, staging, production"
   echo "Actions: plan (default), apply, destroy"
   echo ""
   echo "Examples:"
+  echo "  $0 dev plan"
+  echo "  $0 dev apply"
   echo "  $0 staging plan"
   echo "  $0 staging apply"
   echo "  $0 production plan"
@@ -25,6 +27,14 @@ if [[ ! -d "$TF_DIR" ]]; then
   exit 1
 fi
 
+case "$ENVIRONMENT" in
+  dev|staging|production) ;;
+  *)
+    echo "[apply-terraform.sh] ERROR: Unknown environment '${ENVIRONMENT}'" >&2
+    usage
+    ;;
+esac
+
 echo "[apply-terraform.sh] Running terraform ${ACTION} for ${ENVIRONMENT}"
 
 cd "$TF_DIR"
@@ -39,11 +49,11 @@ case "$ACTION" in
     ;;
   apply)
     if [[ -f tfplan ]]; then
-      terraform apply tfplan
+      terraform apply -auto-approve tfplan
       rm -f tfplan
     else
       echo "[apply-terraform.sh] No saved plan found. Running plan + apply..."
-      terraform apply
+      terraform apply -auto-approve
     fi
     ;;
   destroy)
@@ -55,7 +65,10 @@ case "$ACTION" in
         exit 1
       fi
     fi
-    terraform destroy
+    if [[ "$ENVIRONMENT" == "dev" ]]; then
+      echo "[apply-terraform.sh] WARNING: Destroying DEV hybrid project resources (topics/secrets/GCS)."
+    fi
+    terraform destroy -auto-approve
     ;;
   *)
     usage

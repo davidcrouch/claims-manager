@@ -9,6 +9,7 @@ import { JobContactsRepository } from '../../database/repositories/job-contacts.
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../../database/drizzle.module';
 import { TenantContext } from '../../tenant/tenant-context';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
+import { LookupResolver } from '../external/lookup-resolver.service';
 import { OutboundSyncService } from '../domain/outbound/outbound-sync.service';
 
 type ContactInput = {
@@ -32,6 +33,7 @@ export class JobsService {
     private readonly jobContactsRepo: JobContactsRepository,
     private readonly tenantContext: TenantContext,
     private readonly outboundSync: OutboundSyncService,
+    private readonly lookupResolver: LookupResolver,
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
     @Optional() private readonly connectionResolver?: ConnectionResolverService,
   ) {}
@@ -137,6 +139,30 @@ export class JobsService {
       `JobsService.create — tenantId=${tenantId} provider=${providerCode} connectionId=${connectionId} needsSync=${needsSync} contacts=${contactsInput.length}`,
     );
 
+    const body = { ...params.body };
+    if (!body.statusLookupId && !(body.status as { id?: string } | undefined)?.id) {
+      const pendingStatusId =
+        (await this.lookupResolver.resolveByName({
+          tenantId,
+          domain: 'job_status',
+          name: 'Pending',
+        })) ??
+        (await this.lookupResolver.resolve({
+          tenantId,
+          domain: 'job_status',
+          externalReference: 'seed-job-status-pending',
+          name: 'Pending',
+          autoCreate: true,
+        }));
+      if (pendingStatusId) {
+        body.statusLookupId = pendingStatusId;
+      } else {
+        this.logger.warn(
+          `JobsService.create — no Pending job_status lookup for tenantId=${tenantId}; job will have null status`,
+        );
+      }
+    }
+
     const job = await this.db.transaction(async (tx) => {
       const resolvedContacts = await this.resolveContacts({
         tenantId,
@@ -150,13 +176,12 @@ export class JobsService {
           connectionId: connectionId !== tenantId ? connectionId : undefined,
           syncStatus: needsSync ? 'pending' : null,
           ...this.buildInsertFromBody(
-            params.body,
+            body,
             resolvedContacts.map((c) => c.snapshot),
           ),
         },
         tx,
       });
-
       for (let i = 0; i < resolvedContacts.length; i++) {
         const contact = resolvedContacts[i];
         await this.jobContactsRepo.upsert({
@@ -178,7 +203,7 @@ export class JobsService {
           entityType: 'job',
           entityId: inserted.id,
           action: 'create',
-          payload: params.body,
+          payload: body,
           idempotencyKey: `create:job:${inserted.id}`,
           tx,
         });

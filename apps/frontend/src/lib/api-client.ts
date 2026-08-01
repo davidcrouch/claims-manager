@@ -323,6 +323,36 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<PurchaseOrder>('/purchase-orders', { method: 'POST', body: JSON.stringify(body) });
     },
 
+    capturePurchaseOrder(body: CapturePoRequest): Promise<CapturePoResponse> {
+      return fetchApi<CapturePoResponse>('/purchase-orders/capture', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+
+    getGhostOrganisations(): Promise<GhostOrganisation[]> {
+      return fetchApi<GhostOrganisation[]>('/organisations/ghosts');
+    },
+
+    claimGhostOrganisation(ghostOrgId: string): Promise<unknown> {
+      return fetchApi<unknown>(`/organisations/ghosts/${ghostOrgId}/claim`, { method: 'POST' });
+    },
+
+    getOrganisationClaims(): Promise<OrganisationClaim[]> {
+      return fetchApi<OrganisationClaim[]>('/organisation-claims');
+    },
+
+    approveOrganisationClaim(claimId: string): Promise<unknown> {
+      return fetchApi<unknown>(`/organisation-claims/${claimId}/approve`, { method: 'POST' });
+    },
+
+    rejectOrganisationClaim(claimId: string, notes?: string): Promise<unknown> {
+      return fetchApi<unknown>(`/organisation-claims/${claimId}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ notes }),
+      });
+    },
+
     getPurchaseOrderLineItems(poId: string): Promise<Array<Record<string, unknown>>> {
       return fetchApi<Array<Record<string, unknown>>>(`/purchase-orders/${poId}/line-items`);
     },
@@ -1258,7 +1288,325 @@ export function createApiClient(options?: ApiClientOptions) {
         method: 'PATCH',
       });
     },
+
+    // -- Filesystem --
+
+    getFilesystem(): Promise<FilesystemResponse> {
+      return fetchApi<FilesystemResponse>('/filesystems');
+    },
+
+    setupFilesystem(templateId: string): Promise<FilesystemResponse> {
+      return fetchApi<FilesystemResponse>('/filesystems/setup', {
+        method: 'POST',
+        body: JSON.stringify({ templateId }),
+      });
+    },
+
+    getFilesystemTemplates(): Promise<{ data: FilesystemTemplate[] }> {
+      return fetchApi<{ data: FilesystemTemplate[] }>('/filesystem-templates');
+    },
+
+    createFilesystemTemplate(data: { name: string; description?: string }): Promise<FilesystemTemplate> {
+      return fetchApi<FilesystemTemplate>('/filesystem-templates', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    updateCategory(
+      filesystemId: string,
+      categoryId: string,
+      data: Partial<FilesystemCategory>,
+    ): Promise<FilesystemCategory> {
+      return fetchApi<FilesystemCategory>(`/filesystems/${filesystemId}/categories/${categoryId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      });
+    },
+
+    addCategory(
+      filesystemId: string,
+      data: { displayName: string; slug: string; parentCategoryId?: string; sortOrder?: number },
+    ): Promise<FilesystemCategory> {
+      return fetchApi<FilesystemCategory>(`/filesystems/${filesystemId}/categories`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    deleteCategory(filesystemId: string, categoryId: string): Promise<void> {
+      return fetchApi<void>(`/filesystems/${filesystemId}/categories/${categoryId}`, {
+        method: 'DELETE',
+      });
+    },
+
+    // -- Documents --
+
+    getDocuments(params?: DocumentListParams): Promise<{ data: FSDocument[]; total: number }> {
+      const sp = new URLSearchParams();
+      if (params?.page != null) sp.set('page', String(params.page));
+      if (params?.limit != null) sp.set('limit', String(params.limit));
+      if (params?.search) sp.set('search', params.search);
+      if (params?.categoryId) sp.set('categoryId', params.categoryId);
+      if (params?.uncategorised) sp.set('uncategorised', 'true');
+      if (params?.relatedRecordType) sp.set('relatedRecordType', params.relatedRecordType);
+      if (params?.relatedRecordId) sp.set('relatedRecordId', params.relatedRecordId);
+      if (params?.uploadStatus) sp.set('uploadStatus', params.uploadStatus);
+      if (params?.sort) sp.set('sort', params.sort);
+      return fetchApi<{ data: FSDocument[]; total: number }>(`/documents?${sp}`);
+    },
+
+    getDocument(id: string): Promise<FSDocument> {
+      return fetchApi<FSDocument>(`/documents/${id}`);
+    },
+
+    getDocumentUploadUrl(data: UploadUrlRequest): Promise<UploadUrlApiResponse> {
+      return fetchApi<UploadUrlApiResponse>('/documents/upload-url', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    getDocumentUploadUrls(data: { files: UploadUrlRequest[] }): Promise<{ uploads: UploadUrlApiResponse[] }> {
+      return fetchApi<{ uploads: UploadUrlApiResponse[] }>('/documents/upload-urls', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    markUploadComplete(documentId: string): Promise<FSDocument> {
+      return fetchApi<FSDocument>('/documents/upload-complete', {
+        method: 'POST',
+        body: JSON.stringify({ documentId }),
+      });
+    },
+
+    assignDocumentCategory(documentId: string, categoryId: string | null): Promise<FSDocument> {
+      return fetchApi<FSDocument>(`/documents/${documentId}/category`, {
+        method: 'PATCH',
+        body: JSON.stringify({ categoryId }),
+      });
+    },
+
+    bulkAssignCategory(documentIds: string[], categoryId: string | null): Promise<void> {
+      return fetchApi<void>('/documents/bulk-category', {
+        method: 'POST',
+        body: JSON.stringify({ documentIds, categoryId }),
+      });
+    },
+
+    getDocumentDownloadUrl(documentId: string): Promise<{ downloadUrl: string }> {
+      return fetchApi<{ downloadUrl: string }>(`/documents/${documentId}/download-url`);
+    },
+
+    archiveDocument(documentId: string): Promise<void> {
+      return fetchApi<void>(`/documents/${documentId}/archive`, { method: 'POST' });
+    },
+
+    deleteDocument(documentId: string): Promise<void> {
+      return fetchApi<void>(`/documents/${documentId}`, { method: 'DELETE' });
+    },
+
+    // -- Document generation templates (scenario → filesystem .docx) --
+
+    getDocumentTemplateSettings(): Promise<DocumentTemplateSetting[]> {
+      return fetchApi<DocumentTemplateSetting[]>('/document-templates');
+    },
+
+    assignDocumentTemplate(
+      documentType: string,
+      filesystemDocumentId: string,
+    ): Promise<DocumentTemplateRow> {
+      return fetchApi<DocumentTemplateRow>(`/document-templates/${documentType}`, {
+        method: 'PUT',
+        body: JSON.stringify({ filesystemDocumentId }),
+      });
+    },
+
+    clearDocumentTemplate(documentType: string): Promise<{ cleared: boolean }> {
+      return fetchApi<{ cleared: boolean }>(`/document-templates/${documentType}`, {
+        method: 'DELETE',
+      });
+    },
   };
+}
+
+// -- Filesystem types --
+
+export interface FilesystemCategory {
+  id: string;
+  filesystemId: string;
+  parentCategoryId: string | null;
+  displayName: string;
+  slug: string;
+  config: Record<string, unknown>;
+  sortOrder: number;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FilesystemResponse {
+  id: string;
+  tenantId: string;
+  name: string;
+  sourceTemplateId: string | null;
+  categories: FilesystemCategory[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FilesystemTemplate {
+  id: string;
+  name: string;
+  description: string | null;
+  isDefault: boolean;
+  categories?: FilesystemTemplateCategory[];
+  createdAt: string;
+}
+
+export interface FilesystemTemplateCategory {
+  id: string;
+  templateId: string;
+  parentCategoryId: string | null;
+  displayName: string;
+  slug: string;
+  config: Record<string, unknown>;
+  sortOrder: number;
+}
+
+export interface FSDocument {
+  id: string;
+  tenantId: string;
+  filesystemCategoryId: string | null;
+  relatedRecordType: string | null;
+  relatedRecordId: string | null;
+  fileName: string;
+  mimeType: string;
+  fileSizeBytes: number | null;
+  gcsBucket: string;
+  gcsObjectPath: string;
+  uri: string | null;
+  thumbnailUri: string | null;
+  uploadStatus: string;
+  sourceSystem: string;
+  uploadedByUserId: string | null;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DocumentTemplateRow {
+  id: string;
+  tenantId: string;
+  documentType: string;
+  name: string;
+  s3Key: string | null;
+  filesystemDocumentId: string | null;
+  version: number;
+  isDefault: boolean;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DocumentTemplateSetting {
+  documentType: string;
+  label: string;
+  description: string;
+  template: DocumentTemplateRow | null;
+  filesystemDocument: {
+    id: string;
+    fileName: string;
+    mimeType: string;
+    uploadStatus: string;
+  } | null;
+}
+
+export interface DocumentListParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  categoryId?: string;
+  uncategorised?: boolean;
+  relatedRecordType?: string;
+  relatedRecordId?: string;
+  uploadStatus?: string;
+  sort?: string;
+}
+
+export interface UploadUrlRequest {
+  fileName: string;
+  mimeType: string;
+  fileSizeBytes?: number;
+  relatedRecordType?: string;
+  relatedRecordId?: string;
+  categoryId?: string;
+}
+
+export interface UploadUrlApiResponse {
+  documentId: string;
+  uploadUrl: string;
+  storageKey: string;
+}
+
+// -- Cross-tenant PO/WO types --
+
+export interface CapturePoIssuer {
+  abn?: string;
+  legalName?: string;
+  tradingName?: string;
+  email?: string;
+  phone?: string;
+  organisationId?: string;
+}
+
+export interface CapturePoRequest {
+  issuer: CapturePoIssuer;
+  purchaseOrderNumber: string;
+  name?: string;
+  startDate?: string;
+  endDate?: string;
+  note?: string;
+  scopeOfWork?: string;
+  totalAmount?: number;
+  jobId?: string;
+  claimId?: string;
+  sourceDocumentId?: string;
+}
+
+export interface CapturePoResponse {
+  purchaseOrderId: string;
+  workOrderId: string;
+  issuerOrganisationId: string;
+  issuerCreated: boolean;
+}
+
+export interface GhostOrganisation {
+  id: string;
+  name: string;
+  slug: string;
+  abn?: string | null;
+  legalName?: string | null;
+  tradingName?: string | null;
+  primaryEmail?: string | null;
+  emailDomain?: string | null;
+  phone?: string | null;
+  subscriptionStatus: string;
+}
+
+export interface OrganisationClaim {
+  id: string;
+  ghostOrganisationId: string;
+  claimingTenantId: string;
+  status: string;
+  verificationMethod?: string | null;
+  evidence: Record<string, unknown>;
+  reviewedByUserId?: string | null;
+  reviewedAt?: string | null;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export type ApiClient = ReturnType<typeof createApiClient>;

@@ -1,9 +1,9 @@
 # Staging bootstrap runbook
 
-End-to-end sequence to bring the `staging.branlamie.com` environment up
-from empty GCP projects. Follow top-to-bottom exactly once; subsequent
-deploys go through GitHub Actions (`.github/workflows/ci.yaml` +
-`cd-staging.yaml`).
+End-to-end sequence to bring staging (`api-staging` / `auth-staging` /
+`app-staging.branlamie.com`) up from empty GCP projects. Follow
+top-to-bottom exactly once; subsequent deploys go through GitHub Actions
+(`.github/workflows/ci.yaml` + `cd-staging.yaml`).
 
 Assumptions going in:
 
@@ -105,10 +105,11 @@ terraform output -raw staging_vm_public_ip
 terraform output -json cloudsql_database_names
 ```
 
-## Step 5 - Delegate the `staging.branlamie.com` DNS zone
+## Step 5 - Point `branlamie.com` NS at Cloud DNS
 
-Terraform created the managed zone but only Google Cloud DNS knows about
-it until you delegate at the parent registrar.
+Terraform manages the **apex** zone `branlamie.com.` (hosts:
+`api-staging` / `auth-staging` / `app-staging`). Cloud DNS only answers
+after the registrar delegates the apex to Google’s name servers.
 
 ```powershell
 gcloud dns managed-zones describe claims-manager-staging \
@@ -116,14 +117,27 @@ gcloud dns managed-zones describe claims-manager-staging \
   --format='value(nameServers)'
 ```
 
-Take the four `ns-cloud-*.googledomains.com` entries and create an `NS`
-record for `staging.branlamie.com` at your `branlamie.com` registrar
-pointing to them. Propagation is typically < 15 min.
+**If `branlamie.com` already uses Cloudflare (or another DNS host):** keep
+those NS servers and create three A records there instead of moving the
+apex to Cloud DNS:
+
+| Name | Type | Value |
+|------|------|-------|
+| `api-staging` | A | staging VM public IP (`terraform output -raw staging_vm_public_ip`) |
+| `auth-staging` | A | same |
+| `app-staging` | A | same |
+
+The Cloud DNS zone still holds matching records for a future cutover, but
+it is not authoritative while Cloudflare NS remain in place.
+
+**If you want Cloud DNS to own the apex:** at the registrar, set NS to
+the four `ns-cloud-*.googledomains.com` values from the describe command
+above (this replaces Cloudflare/registrar DNS for the whole domain).
 
 Verify:
 
 ```powershell
-nslookup -type=ns staging.branlamie.com
+nslookup app-staging.branlamie.com
 ```
 
 ## Step 6 - Seed Secret Manager
@@ -215,12 +229,12 @@ The call is fire-and-forget; a seed failure never fails signup.
 ## Step 8 - Verify
 
 ```powershell
-curl https://api.staging.branlamie.com/api/v1/health
-curl https://auth.staging.branlamie.com/.well-known/openid-configuration
-Start-Process https://app.staging.branlamie.com/
+curl https://api-staging.branlamie.com/api/v1/health
+curl https://auth-staging.branlamie.com/.well-known/openid-configuration
+Start-Process https://app-staging.branlamie.com/
 ```
 
-All three subdomains should return 200/301. Caddy auto-issues ACME
+All three hosts should return 200/301. Caddy auto-issues ACME
 certificates on first request; give it ~30s if the first curl 503s.
 
 ## Troubleshooting

@@ -222,6 +222,7 @@ resource "google_compute_instance_template" "staging" {
     secrets-project-id        = var.project_id
     artifact-registry-host    = "${var.region}-docker.pkg.dev"
     staging-domain            = var.domain
+    environment               = var.environment
     caddy-admin-email         = var.caddy_admin_email
   }
 

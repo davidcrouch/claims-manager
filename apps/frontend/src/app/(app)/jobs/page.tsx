@@ -37,15 +37,22 @@ export default async function JobsPage({
         );
         return emptyJobs;
       }),
-    // Form create drawer: direct provider types only
-    api.getLookupsByDomain('job_type', { providerCode: 'direct' }).catch(() => []),
+    // Form create drawer: job types for Internal (direct) and Crunchwork
+    Promise.all([
+      api.getLookupsByDomain('job_type', { providerCode: 'direct' }).catch(() => []),
+      api.getLookupsByDomain('job_type', { providerCode: 'crunchwork' }).catch(() => []),
+    ]).then(([direct, crunchwork]) => [...direct, ...crunchwork]),
     // List column filter: all providers so IDs match jobs from any source
     api.getLookupsByDomain('job_type').catch(() => []),
     api.getLookupsByDomain('job_status').catch(() => []),
     api.getUnreadEntityIds('job').catch(() => [] as string[]),
   ]);
 
-  const jobTypes = Array.isArray(jobTypesRes) ? jobTypesRes : [];
+  const jobTypes = (Array.isArray(jobTypesRes) ? jobTypesRes : []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    providerCode: row.providerCode ?? null,
+  }));
   const jobTypeFilterOptions = (Array.isArray(jobTypesAllRes) ? jobTypesAllRes : []).map(
     (row) => ({
       id: row.id,

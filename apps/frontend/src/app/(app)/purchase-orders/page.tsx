@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { PurchaseOrdersListClient } from '@/components/purchase-orders/PurchaseOrdersListClient';
-import type { PaginatedResponse, PurchaseOrder } from '@/types/api';
+import { buildJobNameById } from '@/components/shared/job-label';
+import type { Job, PaginatedResponse, PurchaseOrder } from '@/types/api';
 
 export default async function PurchaseOrdersPage({
   searchParams,
@@ -13,7 +14,8 @@ export default async function PurchaseOrdersPage({
 
   const params = await searchParams;
   const empty: PaginatedResponse<PurchaseOrder> = { data: [], total: 0 };
-  const [initialPOs, statusLookupsRes, vendorsRes] = await Promise.all([
+  const emptyJobs: PaginatedResponse<Job> = { data: [], total: 0 };
+  const [initialPOs, statusLookupsRes, vendorsRes, jobsRes] = await Promise.all([
     api
       .getPurchaseOrders({
         page: parseInt(params.page ?? '1', 10),
@@ -32,6 +34,13 @@ export default async function PurchaseOrdersPage({
       }),
     api.getLookupsByDomain('po_status').catch(() => []),
     api.getVendors({ limit: 100 }).catch(() => ({ data: [] })),
+    api.getJobs({ limit: 100 }).catch((err: unknown) => {
+      console.error(
+        'frontend:PurchaseOrdersPage - getJobs failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return emptyJobs;
+    }),
   ]);
 
   const statusOptions = (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map(
@@ -44,12 +53,14 @@ export default async function PurchaseOrdersPage({
     id: vendor.id,
     name: vendor.name?.trim() ? vendor.name : 'Unknown',
   }));
+  const jobNameById = buildJobNameById(jobsRes?.data ?? []);
 
   return (
     <PurchaseOrdersListClient
       initialData={initialPOs}
       statusOptions={statusOptions}
       vendorOptions={vendorOptions}
+      jobNameById={jobNameById}
     />
   );
 }

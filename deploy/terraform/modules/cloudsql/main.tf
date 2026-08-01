@@ -41,6 +41,10 @@ resource "google_sql_database_instance" "this" {
   database_version    = "POSTGRES_17"
   deletion_protection = true
 
+  lifecycle {
+    prevent_destroy = true
+  }
+
   settings {
     edition           = "ENTERPRISE"
     tier              = var.tier

@@ -64,15 +64,15 @@ export function JournalFormDrawer({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent>
-        <SheetHeader>
-          <SheetTitle>New Journal</SheetTitle>
-          <SheetDescription>
+      <SheetContent className="gap-0 p-0 [&>button]:text-sidebar-foreground [&>button]:hover:bg-sidebar-accent [&>button]:hover:text-sidebar-foreground">
+        <SheetHeader data-slot="drawer-header" className="border-b border-sidebar-border p-4 pr-12">
+          <SheetTitle className="text-sidebar-foreground">New Journal</SheetTitle>
+          <SheetDescription className="text-sidebar-foreground/65">
             Create a new journal{entityType ? ` and link it to this ${entityType.toLowerCase()}` : ''}.
           </SheetDescription>
         </SheetHeader>
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 px-8 py-6">
           <div className="space-y-2">
             <label htmlFor="journal-name" className="text-sm font-medium">
               Name
@@ -99,7 +99,7 @@ export function JournalFormDrawer({
             />
           </div>
 
-          <SheetFooter className="mt-6">
+          <SheetFooter className="mt-2 px-0">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>

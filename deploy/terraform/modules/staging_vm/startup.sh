@@ -23,8 +23,20 @@ md() { curl -fsS "${MD_HDR[@]}" "${METADATA}/$1"; }
 DATA_DEVICE=$(md "instance/attributes/data-disk-device" || echo "data")
 SECRETS_PROJECT=$(md "instance/attributes/secrets-project-id")
 ARTIFACT_HOST=$(md "instance/attributes/artifact-registry-host")
-STAGING_DOMAIN=$(md "instance/attributes/staging-domain" || echo "staging.branlamie.com")
+BASE_DOMAIN=$(md "instance/attributes/staging-domain" || echo "branlamie.com")
+APP_ENVIRONMENT=$(md "instance/attributes/environment" || echo "staging")
 CADDY_ADMIN_EMAIL=$(md "instance/attributes/caddy-admin-email" || echo "ops@branlamie.com")
+
+# Hostnames: api-staging.branlamie.com (non-prod) or api.branlamie.com (prod)
+if [[ "${APP_ENVIRONMENT}" == "production" || "${APP_ENVIRONMENT}" == "prod" ]]; then
+  API_HOST="api.${BASE_DOMAIN}"
+  AUTH_HOST="auth.${BASE_DOMAIN}"
+  APP_HOST="app.${BASE_DOMAIN}"
+else
+  API_HOST="api-${APP_ENVIRONMENT}.${BASE_DOMAIN}"
+  AUTH_HOST="auth-${APP_ENVIRONMENT}.${BASE_DOMAIN}"
+  APP_HOST="app-${APP_ENVIRONMENT}.${BASE_DOMAIN}"
+fi
 
 # ── 1. Mount data disk ──────────────────────────────────────────────
 DATA_DEV_PATH="/dev/disk/by-id/google-${DATA_DEVICE}"
@@ -74,9 +86,9 @@ render_env() {
     echo "LOG_LEVEL=info"
 
     # Public hostnames (Caddy routes, OIDC redirect builders).
-    echo "API_HOST=api.${STAGING_DOMAIN}"
-    echo "AUTH_HOST=auth.${STAGING_DOMAIN}"
-    echo "APP_HOST=app.${STAGING_DOMAIN}"
+    echo "API_HOST=${API_HOST}"
+    echo "AUTH_HOST=${AUTH_HOST}"
+    echo "APP_HOST=${APP_HOST}"
     echo "CADDY_ADMIN_EMAIL=${CADDY_ADMIN_EMAIL}"
 
     # CloudSQL (private IP) + Memorystore (private IP) connections.

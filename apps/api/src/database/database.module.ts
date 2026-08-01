@@ -38,6 +38,10 @@ import {
   JournalPagesRepository,
   JournalPageAttachmentsRepository,
   NotificationsRepository,
+  DocumentTemplatesRepository,
+  GeneratedDocumentsRepository,
+  OrganisationClaimsRepository,
+  PoCustodyTransfersRepository,
 } from './repositories';
 
 const repositories = [
@@ -78,6 +82,10 @@ const repositories = [
   JournalPagesRepository,
   JournalPageAttachmentsRepository,
   NotificationsRepository,
+  DocumentTemplatesRepository,
+  GeneratedDocumentsRepository,
+  OrganisationClaimsRepository,
+  PoCustodyTransfersRepository,
 ];
 
 @Global()

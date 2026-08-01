@@ -1,34 +1,25 @@
 import React from 'react';
 
-/** Dark product column (left side of the auth card) — matches ensure_logo_text_dark.png background */
-const PRODUCT_COLUMN_BG = '#02122d';
-
 const LOGO_TEXT = '/ensure_logo_text_dark.png';
 const LOGO_ICON = '/ensure_logo_text_dark.png';
 
 interface AuthLeftPanelProps {
-  /** Login/register: full logo with text. Logout: icon-only mark. */
   variant?: 'full' | 'icon';
 }
 
-/**
- * Left column inside the auth card (50% width with sibling). Dark blue;
- * full EnsureOS lockup for login/register, icon-only for logout.
- */
 export function AuthLeftPanel({ variant = 'full' }: AuthLeftPanelProps) {
   const isFull = variant === 'full';
 
   return (
     <div
-      className="relative flex min-h-[200px] w-full flex-1 basis-0 flex-col items-center justify-center overflow-hidden px-5 py-8 sm:px-6 md:min-h-0"
-      style={{ backgroundColor: PRODUCT_COLUMN_BG }}
+      className="relative flex min-h-[200px] w-full flex-1 basis-0 flex-col items-center justify-center overflow-hidden bg-brand-950 px-5 py-8 sm:px-6 md:min-h-0"
     >
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 opacity-40"
         style={{
           background:
-            'radial-gradient(ellipse 80% 60% at 20% 20%, rgba(62,134,212,0.25), transparent 55%), radial-gradient(ellipse 70% 50% at 80% 80%, rgba(62,134,212,0.12), transparent 50%)',
+            'radial-gradient(ellipse 80% 60% at 20% 20%, rgba(42,88,163,0.25), transparent 55%), radial-gradient(ellipse 70% 50% at 80% 80%, rgba(42,88,163,0.12), transparent 50%)',
         }}
       />
 

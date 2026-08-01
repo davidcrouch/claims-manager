@@ -433,6 +433,12 @@ export const purchaseOrders = pgTable(
     jobId: uuid('job_id').references(() => jobs.id, { onDelete: 'cascade' }),
     vendorId: uuid('vendor_id').references(() => vendors.id),
     quoteId: uuid('quote_id').references(() => quotes.id),
+    issuerOrganisationId: uuid('issuer_organisation_id').references(() => organizations.id),
+    recipientOrganisationId: uuid('recipient_organisation_id').references(() => organizations.id),
+    custodianTenantId: uuid('custodian_tenant_id').references(() => organizations.id),
+    captureMethod: text('capture_method'),
+    ownershipStatus: text('ownership_status').notNull().default('owned'),
+    scopeOfWork: text('scope_of_work'),
     externalId: text('external_id'),
     purchaseOrderNumber: text('purchase_order_number'),
     name: text('name'),
@@ -469,12 +475,17 @@ export const purchaseOrders = pgTable(
     index('idx_po_job').on(t.tenantId, t.jobId),
     index('idx_po_claim').on(t.tenantId, t.claimId),
     index('idx_po_vendor').on(t.tenantId, t.vendorId),
+    index('idx_po_issuer_org').on(t.issuerOrganisationId),
+    index('idx_po_ownership').on(t.ownershipStatus),
     uniqueIndex('UQ_purchase_orders_tenant_external_id')
       .on(t.tenantId, t.externalId)
       .where(sql`external_id IS NOT NULL`),
     uniqueIndex('UQ_purchase_orders_tenant_po_number')
       .on(t.tenantId, t.purchaseOrderNumber)
       .where(sql`purchase_order_number IS NOT NULL`),
+    uniqueIndex('UQ_po_issuer_org_number')
+      .on(t.issuerOrganisationId, t.purchaseOrderNumber)
+      .where(sql`issuer_organisation_id IS NOT NULL AND purchase_order_number IS NOT NULL AND deleted_at IS NULL`),
   ],
 );
 
@@ -880,20 +891,35 @@ export const userIdentities = pgTable(
 );
 
 // Organizations (auth: tenant/org registry)
-export const organizations = pgTable('organizations', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  name: text('name').notNull(),
-  slug: text('slug').notNull(),
-  description: text('description'),
-  status: text('status').notNull(),
-  object: text('object').notNull(),
-  created: timestamp('created', { withTimezone: true, mode: 'string' }).notNull(),
-  modified: timestamp('modified', { withTimezone: true, mode: 'string' }).notNull(),
-  createdBy: uuid('created_by').notNull(),
-  modifiedBy: uuid('modified_by').notNull(),
-  orgCode: text('org_code').notNull(),
-  config: jsonb('config'),
-});
+export const organizations = pgTable(
+  'organizations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    slug: text('slug').notNull(),
+    description: text('description'),
+    status: text('status').notNull(),
+    object: text('object').notNull(),
+    created: timestamp('created', { withTimezone: true, mode: 'string' }).notNull(),
+    modified: timestamp('modified', { withTimezone: true, mode: 'string' }).notNull(),
+    createdBy: uuid('created_by').notNull(),
+    modifiedBy: uuid('modified_by').notNull(),
+    orgCode: text('org_code').notNull(),
+    config: jsonb('config'),
+    abn: text('abn'),
+    legalName: text('legal_name'),
+    tradingName: text('trading_name'),
+    primaryEmail: text('primary_email'),
+    emailDomain: text('email_domain'),
+    phone: text('phone'),
+    subscriptionStatus: text('subscription_status').notNull().default('active'),
+  },
+  (t) => [
+    uniqueIndex('UQ_organizations_abn')
+      .on(t.abn)
+      .where(sql`abn IS NOT NULL`),
+  ],
+);
 
 // Organization users (auth: maps users to organizations)
 export const organizationUsers = pgTable(
@@ -1151,6 +1177,7 @@ export const workOrders = pgTable(
     jobId: uuid('job_id').references(() => jobs.id, { onDelete: 'cascade' }),
     vendorId: uuid('vendor_id').references(() => vendors.id),
     sourceTenantId: uuid('source_tenant_id'),
+    sourceOrganisationId: uuid('source_organisation_id').references(() => organizations.id),
     sourceExternalReference: text('source_external_reference'),
     externalId: text('external_id'),
     workOrderNumber: text('work_order_number'),
@@ -1683,8 +1710,9 @@ export const outboundSyncQueue = pgTable(
       .notNull()
       .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     connectionId: uuid('connection_id')
-      .notNull()
       .references(() => integrationConnections.id, { onDelete: 'cascade' }),
+
+    channel: text('channel').notNull().default('integration'),
 
     entityType: text('entity_type').notNull(),
     entityId: uuid('entity_id').notNull(),
@@ -1709,9 +1737,11 @@ export const outboundSyncQueue = pgTable(
   },
   (t) => [
     check('chk_outbound_status', sql`status IN ('pending', 'processing', 'sent', 'failed', 'cancelled')`),
+    check('chk_outbound_channel', sql`channel IN ('integration', 'pubsub')`),
     index('idx_outbound_poll').on(t.status, t.scheduledAt, t.priority),
     index('idx_outbound_entity').on(t.tenantId, t.entityType, t.entityId),
     index('idx_outbound_connection').on(t.connectionId, t.status),
+    index('idx_outbound_channel_poll').on(t.channel, t.status, t.scheduledAt),
   ],
 );
 
@@ -2043,6 +2073,239 @@ export const notifications = pgTable(
   (t) => [
     index('idx_notifications_tenant_unread').on(t.tenantId, t.isRead),
     index('idx_notifications_entity').on(t.tenantId, t.entityType, t.entityId),
+  ],
+);
+
+// ── Filesystem Module ──────────────────────────────────────────
+
+export const filesystemTemplates = pgTable(
+  'filesystem_template',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    name: text('name').notNull(),
+    description: text('description'),
+    isDefault: boolean('is_default').notNull().default(false),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_filesystem_template_tenant').on(t.tenantId),
+  ],
+);
+
+export const filesystemTemplateCategories = pgTable(
+  'filesystem_template_category',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    templateId: uuid('template_id')
+      .notNull()
+      .references(() => filesystemTemplates.id, { onDelete: 'cascade' }),
+    parentCategoryId: uuid('parent_category_id').references((): AnyPgColumn => filesystemTemplateCategories.id, { onDelete: 'cascade' }),
+    displayName: text('display_name').notNull(),
+    slug: text('slug').notNull(),
+    config: jsonb('config').notNull().default({}),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_fs_template_category_template').on(t.templateId),
+  ],
+);
+
+export const filesystems = pgTable(
+  'filesystem',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .unique()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    name: text('name').notNull().default('Documents'),
+    sourceTemplateId: uuid('source_template_id').references(() => filesystemTemplates.id),
+    copiedAt: timestamp('copied_at', { withTimezone: true }),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_filesystem_tenant').on(t.tenantId),
+  ],
+);
+
+export const filesystemCategories = pgTable(
+  'filesystem_category',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    filesystemId: uuid('filesystem_id')
+      .notNull()
+      .references(() => filesystems.id, { onDelete: 'cascade' }),
+    parentCategoryId: uuid('parent_category_id').references((): AnyPgColumn => filesystemCategories.id, { onDelete: 'cascade' }),
+    displayName: text('display_name').notNull(),
+    slug: text('slug').notNull(),
+    config: jsonb('config').notNull().default({}),
+    sortOrder: integer('sort_order').notNull().default(0),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_fs_category_filesystem').on(t.filesystemId),
+    index('idx_fs_category_parent').on(t.parentCategoryId),
+  ],
+);
+
+export const documents = pgTable(
+  'document',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    filesystemCategoryId: uuid('filesystem_category_id').references(() => filesystemCategories.id, { onDelete: 'set null' }),
+    relatedRecordType: text('related_record_type'),
+    relatedRecordId: uuid('related_record_id'),
+    fileName: text('file_name').notNull(),
+    mimeType: text('mime_type').notNull(),
+    fileSizeBytes: bigint('file_size_bytes', { mode: 'number' }),
+    gcsBucket: text('gcs_bucket').notNull(),
+    gcsObjectPath: text('gcs_object_path').notNull(),
+    uri: text('uri'),
+    thumbnailUri: text('thumbnail_uri'),
+    uploadStatus: text('upload_status').notNull().default('pending'),
+    sourceSystem: text('source_system').notNull().default('claims-manager'),
+    uploadedByUserId: text('uploaded_by_user_id'),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_document_tenant').on(t.tenantId),
+    index('idx_document_category').on(t.filesystemCategoryId),
+    index('idx_document_related').on(t.tenantId, t.relatedRecordType, t.relatedRecordId),
+    index('idx_document_status').on(t.tenantId, t.uploadStatus),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Document Templates (per-tenant scenario → filesystem .docx mapping)
+// ---------------------------------------------------------------------------
+export const documentTemplates = pgTable(
+  'document_templates',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    documentType: text('document_type').notNull(),
+    name: text('name').notNull(),
+    s3Key: text('s3_key'),
+    filesystemDocumentId: uuid('filesystem_document_id').references(() => documents.id, {
+      onDelete: 'set null',
+    }),
+    version: integer('version').notNull().default(1),
+    isDefault: boolean('is_default').notNull().default(true),
+    metadata: jsonb('metadata'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check(
+      'chk_doc_template_type',
+      sql`document_type IN ('quote','invoice','purchase_order','work_order','proposal','report','bill','rfq')`,
+    ),
+    unique('UQ_doc_template_tenant_type').on(t.tenantId, t.documentType),
+    index('idx_doc_templates_tenant_type').on(t.tenantId, t.documentType),
+    index('idx_doc_templates_filesystem_doc').on(t.filesystemDocumentId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Generated Documents (audit log of every generated PDF/DOCX)
+// ---------------------------------------------------------------------------
+export const generatedDocuments = pgTable(
+  'generated_documents',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    documentType: text('document_type').notNull(),
+    entityId: uuid('entity_id').notNull(),
+    entityType: text('entity_type').notNull(),
+    templateId: uuid('template_id').references(() => documentTemplates.id, { onDelete: 'set null' }),
+    s3KeyPdf: text('s3_key_pdf').notNull(),
+    s3KeyDocx: text('s3_key_docx'),
+    generatedBy: uuid('generated_by'),
+    trigger: text('trigger').notNull(),
+    status: text('status').notNull().default('pending'),
+    errorMessage: text('error_message'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check(
+      'chk_gen_doc_type',
+      sql`document_type IN ('quote','invoice','purchase_order','work_order','proposal','report','bill','rfq')`,
+    ),
+    check('chk_gen_doc_trigger', sql`trigger IN ('manual','workflow')`),
+    check('chk_gen_doc_status', sql`status IN ('pending','processing','completed','failed')`),
+    index('idx_gen_docs_tenant_entity').on(t.tenantId, t.entityType, t.entityId),
+    index('idx_gen_docs_tenant_type').on(t.tenantId, t.documentType),
+    index('idx_gen_docs_template').on(t.templateId),
+  ],
+);
+
+// ── Organisation Claims (ghost org claiming & verification) ────
+export const organisationClaims = pgTable(
+  'organisation_claims',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ghostOrganisationId: uuid('ghost_organisation_id')
+      .notNull()
+      .references(() => organizations.id),
+    claimingTenantId: uuid('claiming_tenant_id')
+      .notNull()
+      .references(() => organizations.id),
+    status: text('status').notNull().default('pending'),
+    verificationMethod: text('verification_method'),
+    evidence: jsonb('evidence').notNull().default({}),
+    reviewedByUserId: text('reviewed_by_user_id'),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    notes: text('notes'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('UQ_org_claim_ghost_tenant').on(t.ghostOrganisationId, t.claimingTenantId),
+    index('idx_org_claims_ghost').on(t.ghostOrganisationId),
+    index('idx_org_claims_tenant').on(t.claimingTenantId),
+  ],
+);
+
+// ── PO Custody Transfers (audit log) ──────────────────────────
+export const poCustodyTransfers = pgTable(
+  'po_custody_transfers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    purchaseOrderId: uuid('purchase_order_id')
+      .notNull()
+      .references(() => purchaseOrders.id),
+    fromTenantId: uuid('from_tenant_id')
+      .notNull()
+      .references(() => organizations.id),
+    toTenantId: uuid('to_tenant_id')
+      .notNull()
+      .references(() => organizations.id),
+    organisationClaimId: uuid('organisation_claim_id').references(() => organisationClaims.id),
+    transferredByUserId: text('transferred_by_user_id'),
+    transferredAt: timestamp('transferred_at', { withTimezone: true }).notNull().defaultNow(),
+    metadata: jsonb('metadata').notNull().default({}),
+  },
+  (t) => [
+    index('idx_custody_transfer_po').on(t.purchaseOrderId),
   ],
 );
 

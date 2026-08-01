@@ -3,15 +3,10 @@ import { AuthLeftPanel } from './AuthLeftPanel.js';
 
 interface LogoutPageProps {
   form: string;
+  nonce?: string;
 }
 
-const NAVY = '#152a52';
-const BLUE = '#3e86d4';
-const LIGHT_GREY = '#d6dde4';
-const INPUT_TEXT = '#0f172a';
-const MUTED = '#64748b';
-
-export function LogoutPage({ form }: LogoutPageProps) {
+export function LogoutPage({ form, nonce }: LogoutPageProps) {
   const logoutScript = `
     setTimeout(function() {
       var form = document.getElementById('op.logoutForm');
@@ -46,16 +41,15 @@ export function LogoutPage({ form }: LogoutPageProps) {
         />
       </head>
       <body
-        className="relative min-h-screen bg-white font-sans"
-        style={{ color: INPUT_TEXT }}
+        className="relative min-h-screen bg-white font-sans text-slate-900"
       >
         <div
           aria-hidden="true"
           className="fixed inset-0 z-0"
           style={{
             backgroundImage: `
-              linear-gradient(to right, ${NAVY} 1px, transparent 1px),
-              linear-gradient(to bottom, ${NAVY} 1px, transparent 1px)
+              linear-gradient(to right, var(--color-brand-900) 1px, transparent 1px),
+              linear-gradient(to bottom, var(--color-brand-900) 1px, transparent 1px)
             `,
             backgroundSize: '48px 48px',
             opacity: 0.18,
@@ -67,10 +61,7 @@ export function LogoutPage({ form }: LogoutPageProps) {
         />
 
         <div className="relative z-10 flex min-h-screen items-center justify-center px-4 py-10">
-          <div
-            className="flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl border bg-white shadow-2xl md:flex-row md:items-stretch"
-            style={{ borderColor: LIGHT_GREY }}
-          >
+          <div className="flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-brand-200 bg-white shadow-2xl md:flex-row md:items-stretch">
             <AuthLeftPanel variant="icon" />
 
             <div className="flex min-w-0 flex-1 basis-0 flex-col justify-center px-8 py-12 text-center sm:px-10 sm:py-14">
@@ -83,35 +74,29 @@ export function LogoutPage({ form }: LogoutPageProps) {
                   className="size-9 object-contain"
                   decoding="async"
                 />
-                <span className="text-base font-semibold tracking-tight" style={{ color: INPUT_TEXT }}>
+                <span className="text-base font-semibold tracking-tight text-slate-900">
                   EnsureOS
                 </span>
               </div>
 
               <div className="mb-3 flex items-center justify-center gap-3">
-                <span className="h-px w-8 shrink-0" style={{ backgroundColor: BLUE }} />
-                <span
-                  className="text-[11px] font-semibold uppercase tracking-[0.2em]"
-                  style={{ color: BLUE }}
-                >
+                <span className="h-px w-8 shrink-0 bg-brand-500" />
+                <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-500">
                   Signing out
                 </span>
-                <span className="h-px w-8 shrink-0" style={{ backgroundColor: BLUE }} />
+                <span className="h-px w-8 shrink-0 bg-brand-500" />
               </div>
 
-              <h1
-                className="text-2xl font-bold tracking-tight md:text-3xl"
-                style={{ color: INPUT_TEXT }}
-              >
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
                 Logging you out
               </h1>
-              <p className="mt-2 text-sm" style={{ color: MUTED }}>
+              <p className="mt-2 text-sm text-slate-500">
                 Please wait while we end your session.
               </p>
 
               <div className="mt-8 flex flex-col items-center justify-center">
-                <div className="mb-4 inline-block h-10 w-10 animate-spin rounded-full border-2 border-slate-200 border-t-[#3e86d4]" />
-                <p className="text-sm font-medium" style={{ color: MUTED }}>
+                <div className="mb-4 inline-block h-10 w-10 animate-spin rounded-full border-2 border-slate-200 border-t-brand-500" />
+                <p className="text-sm font-medium text-slate-500">
                   Ending your session
                 </p>
               </div>
@@ -121,7 +106,7 @@ export function LogoutPage({ form }: LogoutPageProps) {
           </div>
         </div>
 
-        <script dangerouslySetInnerHTML={{ __html: logoutScript }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: logoutScript }} />
       </body>
     </html>
   );

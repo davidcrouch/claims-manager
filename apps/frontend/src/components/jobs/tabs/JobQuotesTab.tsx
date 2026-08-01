@@ -25,6 +25,7 @@ type ListTab = 'active' | 'archived' | 'all';
 function getQuoteSortValue(q: Quote, field: QuoteSortField): string | null | undefined {
   switch (field) {
     case 'quote_number': return q.quoteNumber ?? q.name ?? q.id;
+    case 'job': return q.jobId;
     case 'status': return q.status?.name;
     case 'estimate_type': return getEstimateTypeName(q) || null;
     case 'reference': return q.name;
@@ -38,10 +39,12 @@ function getQuoteSortValue(q: Quote, field: QuoteSortField): string | null | und
 export function JobQuotesTab({
   jobId,
   claimId,
+  jobName,
   jobProvider,
 }: {
   jobId: string;
   claimId?: string | null;
+  jobName?: string | null;
   jobProvider?: CatalogType;
 }) {
   const [quotes, setQuotes] = useState<Quote[]>([]);
@@ -271,6 +274,7 @@ export function JobQuotesTab({
       ) : (
         <QuotesTable
           quotes={visibleRows}
+          jobNameById={jobName?.trim() ? { [jobId]: jobName.trim() } : undefined}
           onRowClick={handleRowClick}
           sortField={columnSort.field}
           sortOrder={columnSort.order}

@@ -7,3 +7,4 @@ export { ConsentPage } from './ConsentPage.js';
 export { LogoutPage } from './LogoutPage.js';
 export { ResetPasswordPage } from './ResetPasswordPage.js';
 export { OnboardCompanyPage } from './OnboardCompanyPage.js';
+export { Wordmark } from './Wordmark.js';

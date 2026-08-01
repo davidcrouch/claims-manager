@@ -24,14 +24,14 @@ export function Breadcrumbs({ items, className }: BreadcrumbsProps) {
         return (
           <span key={item.href} className="flex items-center gap-1">
             {i > 0 && (
-              <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden />
+              <ChevronRight className="h-4 w-4 text-sidebar-foreground/65" aria-hidden />
             )}
             {isLast ? (
-              <span className="font-medium text-foreground">{item.title}</span>
+              <span className="font-medium text-sidebar-foreground">{item.title}</span>
             ) : (
               <Link
                 href={item.href}
-                className="text-muted-foreground hover:text-foreground transition-colors"
+                className="text-sidebar-foreground/65 transition-colors hover:text-sidebar-foreground"
               >
                 {item.title}
               </Link>

@@ -55,6 +55,7 @@ interface PreviewSummary {
   willCreate: number;
   willUpdate: number;
   categoriesToCreate: string[];
+  unitsToCreate?: string[];
   rows: PreviewRow[];
 }
 
@@ -507,6 +508,11 @@ export function CatalogImportDialog({
                   Categories to create: {preview.categoriesToCreate.join(', ')}
                 </p>
               )}
+              {(preview.unitsToCreate?.length ?? 0) > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Unit types to create: {preview.unitsToCreate!.join(', ')}
+                </p>
+              )}
               <div className="max-h-[50vh] overflow-auto rounded-lg border border-slate-200">
                 <table className="min-w-full text-xs">
                   <thead className="sticky top-0 bg-slate-50">
@@ -584,6 +590,12 @@ export function CatalogImportDialog({
                   <li>
                     {preview.categoriesToCreate.length} categor
                     {preview.categoriesToCreate.length === 1 ? 'y' : 'ies'} will be created
+                  </li>
+                )}
+                {(preview.unitsToCreate?.length ?? 0) > 0 && (
+                  <li>
+                    {preview.unitsToCreate!.length} unit type
+                    {preview.unitsToCreate!.length === 1 ? '' : 's'} will be created
                   </li>
                 )}
               </ul>

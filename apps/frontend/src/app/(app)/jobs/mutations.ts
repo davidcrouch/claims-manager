@@ -1,5 +1,6 @@
 'use server';
 
+import { revalidatePath } from 'next/navigation';
 import { getSession, getAccessToken } from '@/lib/auth';
 import { createApiClient } from '@/lib/api-client';
 import type { Job } from '@/types/api';
@@ -17,9 +18,10 @@ export async function createJobAction(
   try {
     const api = createApiClient({ token });
     const job = await api.createJob(body, options);
+    revalidatePath('/jobs');
     return { success: true, job };
   } catch (err) {
-    console.error('[createJobAction]', err);
+    console.error('[jobs:createJobAction]', err);
     return { success: false, error: err instanceof Error ? err.message : 'Failed to create job' };
   }
 }

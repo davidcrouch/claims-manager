@@ -1,4 +1,4 @@
-const PRIMARY_URL = "https://api.staging.branlamie.com/api/webhook";
+const PRIMARY_URL = "https://api-staging.branlamie.com/api/webhook";
 const SECONDARY_URLS = ["https://api-dev.branlamie.com/api/webhook"];
 
 export default {

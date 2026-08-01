@@ -15,6 +15,7 @@ import {
   ValueFilterMenu,
   SortableColumnHeader,
 } from '@/components/shared/list-filters';
+import { resolveJobName } from '@/components/shared/job-label';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import {
   ListPageHeader,
@@ -34,6 +35,7 @@ function parseTab(param: string | null): ListTab {
 
 type BillSortField =
   | 'bill_number'
+  | 'job'
   | 'status'
   | 'vendor'
   | 'po_ref'
@@ -46,6 +48,7 @@ interface ColDef { key: BillSortField; label: string; filterable?: boolean }
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'bill_number', label: 'Bill #' },
+  { key: 'job', label: 'Job' },
   { key: 'status', label: 'Status', filterable: true },
   { key: 'vendor', label: 'Vendor (sub)', filterable: true },
   { key: 'po_ref', label: 'PO #' },
@@ -59,6 +62,7 @@ export interface BillsListClientProps {
   initialData: PaginatedResponse<Bill>;
   statusOptions: StatusOption[];
   vendorOptions: StatusOption[];
+  jobNameById?: Record<string, string>;
 }
 
 const PAGE_SIZE = 20;
@@ -67,6 +71,7 @@ export function BillsListClient({
   initialData,
   statusOptions,
   vendorOptions,
+  jobNameById,
 }: BillsListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -354,6 +359,9 @@ export function BillsListClient({
                     >
                       <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
                         {num}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {resolveJobName(bill.jobId, jobNameById)}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
                         <StatusBadge status={statusName} />

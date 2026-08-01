@@ -15,8 +15,9 @@ variable "zone" {
 }
 
 variable "environment" {
-  type    = string
-  default = "staging"
+  type        = string
+  default     = "staging"
+  description = "Environment slug used in hyphenated hostnames (api-{environment}.domain); production omits the suffix"
 }
 
 variable "vpc_self_link" {
@@ -59,8 +60,8 @@ variable "snapshot_retention_days" {
 
 variable "domain" {
   type        = string
-  description = "Public staging domain — used to stamp the HOST vars (api/auth/app) rendered by startup.sh"
-  default     = "staging.branlamie.com"
+  description = "Apex public domain (e.g. branlamie.com). Hosts are api-staging.<domain> unless environment is production."
+  default     = "branlamie.com"
 }
 
 variable "caddy_admin_email" {

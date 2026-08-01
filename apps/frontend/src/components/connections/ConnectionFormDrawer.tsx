@@ -68,33 +68,33 @@ export function ConnectionFormDrawer({
       }}
     >
       <SheetContent
-        side="bottom"
+        side="right"
         showCloseButton={false}
-        className="mx-auto w-[65%]! h-[90vh]! flex flex-col overflow-hidden rounded-t-xl border-x border-t p-0 data-starting-style:translate-y-full! data-ending-style:translate-y-full! transition-transform! duration-300! ease-out!"
+        className="flex h-full w-[70%]! max-w-none! flex-col overflow-hidden border-l p-0 sm:max-w-none!"
       >
-        <div className="border-b border-slate-100 bg-slate-50/50 px-12 py-6">
+        <div data-slot="drawer-header" className="border-b border-sidebar-border px-12 py-6">
           <div className="mb-2 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-100">
                 <Unplug className="h-5 w-5 text-violet-600" />
               </div>
-              <h2 className="text-2xl font-semibold text-slate-900">
+              <h2 className="text-2xl font-semibold text-sidebar-foreground">
                 Add Connection
               </h2>
             </div>
             <button
               onClick={close}
-              className="rounded-full p-1 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-600 outline-none focus:ring-2 focus:ring-slate-900"
+              className="rounded-full p-1 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground outline-none focus:ring-2 focus:ring-sidebar-ring"
             >
               <X size={20} />
             </button>
           </div>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-sidebar-foreground/65">
             Select a provider and configure connection credentials.
           </p>
         </div>
 
-        <div className="flex-1 overflow-y-auto bg-white px-16 py-8">
+        <div className="flex-1 overflow-y-auto bg-white px-20 py-8">
           <div className="space-y-6">
             <div className="grid grid-cols-3 gap-x-4">
               <div className="space-y-1.5">

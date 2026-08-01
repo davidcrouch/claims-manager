@@ -8,71 +8,52 @@
   --font-inter: 'Inter', sans-serif;
   --font-nacelle: 'Inter', sans-serif;
 
-  --animate-gradient: gradient 6s linear infinite;
+  --color-brand-50: #eef3fb;
+  --color-brand-100: #d6e1f3;
+  --color-brand-200: #aec2e6;
+  --color-brand-300: #7d9ed2;
+  --color-brand-400: #4e79bd;
+  --color-brand-500: #2a58a3;
+  --color-brand-600: #1f4585;
+  --color-brand-700: #17356a;
+  --color-brand-800: #112a54;
+  --color-brand-900: #0b1d3d;
+  --color-brand-950: #06122a;
 
-  @keyframes gradient {
-    to {
-      background-position: 200% center;
-    }
-  }
-}
-
-@layer base {
-  *,
-  ::after,
-  ::before,
-  ::backdrop,
-  ::file-selector-button {
-    border-color: var(--color-gray-200, currentColor);
-  }
+  --color-accent-50: #e7faf5;
+  --color-accent-100: #c4f2e6;
+  --color-accent-200: #8ce3cc;
+  --color-accent-300: #52ceae;
+  --color-accent-400: #23b794;
+  --color-accent-500: #0fa085;
+  --color-accent-600: #07806c;
+  --color-accent-700: #066557;
+  --color-accent-800: #064f46;
+  --color-accent-900: #043a35;
 }
 
 @layer base {
   :root {
-    --background: 0 0% 0%;
-    --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9% / 0.8;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5% / 0.5;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
-
-    --radius: 0.5rem;
+    --bk-surface: #f4f6fb;
+    --bk-board-bg: linear-gradient(180deg, #0b1d3d 0%, #112a54 60%, #17356a 100%);
   }
 
   * {
-    border-color: hsl(var(--border));
+    border-color: var(--color-brand-200, currentColor);
   }
 
   body {
-    color: hsl(var(--foreground));
-    background: hsl(var(--background));
+    color: var(--color-brand-900);
+    background: var(--bk-surface);
     min-height: 100vh;
     font-family: 'Inter', sans-serif;
   }
+
+  .bk-board {
+    background: var(--bk-board-bg);
+  }
 }
 
-/* Custom component classes matching app-site */
 @layer components {
   .btn,
   .btn-sm {
@@ -93,19 +74,19 @@
   .form-select,
   .form-checkbox,
   .form-radio {
-    @apply border border-gray-700 bg-gray-900/50 focus:border-gray-600 focus:ring-0 focus:ring-offset-0;
+    @apply border border-slate-300 bg-white focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:ring-offset-0;
   }
 
   .form-input,
   .form-textarea,
   .form-multiselect,
   .form-select {
-    @apply rounded-lg px-4 py-2.5 text-sm text-gray-200;
+    @apply rounded-lg px-4 py-2.5 text-sm text-slate-900;
   }
 
   .form-input,
   .form-textarea {
-    @apply placeholder-gray-600;
+    @apply placeholder-slate-400;
   }
 
   .form-select {
@@ -114,7 +95,7 @@
 
   .form-checkbox,
   .form-radio {
-    @apply text-blue-500;
+    @apply text-brand-600;
   }
 
   .form-checkbox {
