@@ -173,6 +173,8 @@ resource "google_service_account_iam_member" "ci_deployer_self_token_creator" {
 #   iap.tunnelResourceAccessor          - `gcloud compute ssh --tunnel-through-iap`
 #   compute.osAdminLogin                - mint SSH keys as OS Login admin
 #   secretmanager.admin                 - seed-staging-secrets.ps1 writes versions
+#   pubsub.admin                        - topic IAM (getIamPolicy/setIamPolicy);
+#                                         roles/editor does not include these
 #
 # roles/editor is intentionally broad here because this single SA stands up
 # the entire stack. If you ever split CI and CD into separate SAs, tighten this.
@@ -184,6 +186,7 @@ locals {
     "roles/iap.tunnelResourceAccessor",
     "roles/compute.osAdminLogin",
     "roles/secretmanager.admin",
+    "roles/pubsub.admin",
   ])
 }
 

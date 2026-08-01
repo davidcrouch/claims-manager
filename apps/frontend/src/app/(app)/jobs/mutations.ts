@@ -1,6 +1,6 @@
 'use server';
 
-import { revalidatePath } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
 import { getSession, getAccessToken } from '@/lib/auth';
 import { createApiClient } from '@/lib/api-client';
 import type { Job } from '@/types/api';
