@@ -1,6 +1,7 @@
 export { AuthLayout } from './AuthLayout.js';
 export { AuthLeftPanel } from './AuthLeftPanel.js';
 export { LoginPage } from './LoginPage.js';
+export { LinkAccountPage } from './LinkAccountPage.js';
 export { RegisterPage } from './RegisterPage.js';
 export { OrganizationSelectorPage } from './OrganizationSelectorPage.js';
 export { ConsentPage } from './ConsentPage.js';

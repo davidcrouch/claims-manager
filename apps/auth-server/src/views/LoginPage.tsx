@@ -7,6 +7,7 @@ interface LoginPageProps {
   error?: string | null;
   registered?: boolean;
   googleAuthUrl: string;
+  microsoftAuthUrl?: string;
   loginActionUrl: string;
   registerUrl: string;
   resetPasswordUrl: string;
@@ -20,6 +21,7 @@ export function LoginPage({
   error,
   registered,
   googleAuthUrl,
+  microsoftAuthUrl,
   loginActionUrl,
   registerUrl,
   resetPasswordUrl,
@@ -217,6 +219,21 @@ export function LoginPage({
                   </svg>
                   Sign in with Google
                 </a>
+
+                {microsoftAuthUrl && (
+                  <a
+                    href={microsoftAuthUrl}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-700 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:bg-slate-50 hover:shadow-md"
+                  >
+                    <svg className="h-5 w-5" viewBox="0 0 21 21" aria-hidden="true">
+                      <rect x="1" y="1" width="9" height="9" fill="#F25022" />
+                      <rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
+                      <rect x="1" y="11" width="9" height="9" fill="#00A4EF" />
+                      <rect x="11" y="11" width="9" height="9" fill="#FFB900" />
+                    </svg>
+                    Sign in with Microsoft
+                  </a>
+                )}
               </div>
             </form>
 

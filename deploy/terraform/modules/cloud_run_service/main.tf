@@ -13,13 +13,18 @@ locals {
   secret_env = {
     for s in var.secret_env_vars : s.name => s
   }
+  # Cloud Run v2 Direct VPC Egress expects "projects/{p}/global/networks/{n}"
+  # but VPC self_link is "https://...compute/v1/projects/{p}/global/networks/{n}".
+  vpc_network_short = var.vpc_network != null ? regex("projects/.+$", var.vpc_network) : null
+  vpc_subnet_short  = var.vpc_subnet != null ? regex("projects/.+$", var.vpc_subnet) : null
 }
 
 resource "google_cloud_run_v2_service" "this" {
-  project  = var.project_id
-  name     = var.name
-  location = var.region
-  ingress  = var.ingress
+  project             = var.project_id
+  name                = var.name
+  location            = var.region
+  ingress             = var.ingress
+  deletion_protection = false
 
   # CD owns image tags (main-<sha>). Terraform provisions shape (SA, VPC,
   # secrets, ingress); ignore image drift after the first apply.
@@ -46,8 +51,8 @@ resource "google_cloud_run_v2_service" "this" {
       content {
         egress = var.vpc_egress
         network_interfaces {
-          network    = var.vpc_network
-          subnetwork = var.vpc_subnet
+          network    = local.vpc_network_short
+          subnetwork = local.vpc_subnet_short
         }
       }
     }

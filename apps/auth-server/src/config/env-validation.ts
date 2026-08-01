@@ -741,3 +741,69 @@ export function getOidcCookieKeys(): string[] {
     throw new Error(`Failed to parse OIDC_COOKIES_KEYS: ${error.message}. Expected JSON array format: ["key1", "key2"]`);
   }
 }
+
+/**
+ * Get JWT expected audience for token validation.
+ * In production, this MUST be set (fail closed).
+ */
+export function getJwtExpectedAudience(): string | undefined {
+  const audience = getEnvVar('JWT_EXPECTED_AUDIENCE');
+  if (!audience && process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_EXPECTED_AUDIENCE is required in production (audience enforcement must be enabled)');
+  }
+  return audience;
+}
+
+/**
+ * Get Microsoft OAuth configuration
+ */
+export function getMicrosoftOAuthConfig() {
+   const clientId = getEnvVar('MICROSOFT_CLIENT_ID');
+   const clientSecret = getEnvVar('MICROSOFT_CLIENT_SECRET');
+
+   if (!clientId && !clientSecret) {
+      return null;
+   }
+
+   if (!clientId) {
+      throw new Error('MICROSOFT_CLIENT_ID is required when Microsoft OAuth is configured');
+   }
+
+   if (!clientSecret) {
+      throw new Error('MICROSOFT_CLIENT_SECRET is required when Microsoft OAuth is configured');
+   }
+
+   const tenantId = getEnvVarWithDefault('MICROSOFT_TENANT_ID', 'common');
+
+   return {
+      clientId,
+      clientSecret,
+      tenantId,
+      redirectUri: `${getOidcIssuer()}/login/microsoft/callback`
+   };
+}
+
+/**
+ * Get email configuration
+ */
+export type EmailProviderName = 'console' | 'smtp' | 'resend';
+
+export function getEmailConfig() {
+  const provider = (getEnvVarWithDefault('EMAIL_PROVIDER', 'console') as EmailProviderName);
+  const from = getEnvVarWithDefault('EMAIL_FROM', 'noreply@ensureos.com');
+  const replyTo = getEnvVar('EMAIL_REPLY_TO');
+
+  return {
+    provider,
+    from,
+    replyTo,
+    resendApiKey: getEnvVar('RESEND_API_KEY'),
+    smtp: {
+      host: getEnvVarWithDefault('SMTP_HOST', 'localhost'),
+      port: parseInt(getEnvVarWithDefault('SMTP_PORT', '1025'), 10),
+      secure: getEnvVarWithDefault('SMTP_SECURE', 'false') === 'true',
+      user: getEnvVar('SMTP_USER'),
+      pass: getEnvVar('SMTP_PASS'),
+    },
+  };
+}

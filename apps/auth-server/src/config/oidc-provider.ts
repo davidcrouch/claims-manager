@@ -895,6 +895,37 @@ export async function createOidcProvider(): Promise<Provider> {
                   ...(user?.email && { email: user.email }),
                };
 
+               // Resolve RBAC roles, permissions, and features
+               try {
+                  const { createRoleAssignmentService } = await import('../services/role-assignment-service.js');
+                  const { resolveFeatures } = await import('../services/feature-resolution-service.js');
+
+                  const roleService = createRoleAssignmentService();
+                  const orgRoles = await roleService.getActiveRolesForUser(sessionAccountId, authResult.organizationId);
+                  const resolvedPermissions = await roleService.resolvePermissionsForRoles(orgRoles);
+                  const resolvedFeatures = await resolveFeatures({
+                     organizationId: authResult.organizationId,
+                     userId: sessionAccountId,
+                  });
+
+                  claims.org_roles = orgRoles;
+                  claims.permissions = resolvedPermissions;
+                  claims.features = resolvedFeatures.features;
+
+                  log.info({
+                     userId: sessionAccountId,
+                     organization_id: authResult.organizationId,
+                     rolesCount: orgRoles.length,
+                     permissionsCount: resolvedPermissions.length,
+                     featuresCount: resolvedFeatures.features.length,
+                  }, 'auth-server:oidc-provider:extraTokenClaims - Added RBAC claims');
+               } catch (rbacErr: any) {
+                  log.warn({
+                     error: rbacErr.message,
+                     userId: sessionAccountId,
+                  }, 'auth-server:oidc-provider:extraTokenClaims - RBAC resolution failed, continuing without RBAC claims');
+               }
+
                log.info({
                   userId: sessionAccountId,
                   organization_id: authResult.organizationId,
@@ -924,9 +955,12 @@ export async function createOidcProvider(): Promise<Provider> {
 
             if (organizationId) {
                const allowedApps = normalizeAllowedAppsFromMetadata(clientMetadata as Record<string, unknown>);
+               const metaObj = clientMetadata as Record<string, unknown> | undefined;
                return {
                   organization_id: organizationId,
                   ...(allowedApps.length > 0 ? { allowed_apps: allowedApps } : {}),
+                  ...(Array.isArray(metaObj?.roles) ? { roles: metaObj.roles } : {}),
+                  ...(Array.isArray(metaObj?.features) ? { features: metaObj.features } : {}),
                };
             }
          }

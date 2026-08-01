@@ -107,14 +107,15 @@ module "cloud_run_provider" {
   health_path           = var.cloud_run_use_bootstrap_image ? "/" : "/api/v1/health"
   enable_probes         = !var.cloud_run_use_bootstrap_image
   ingress               = "INGRESS_TRAFFIC_ALL"
-  allow_unauthenticated = true
+  # Org policy iam.allowedPolicyMemberDomains blocks allUsers binding.
+  # Public invocation handled via org constraint exemption post-apply.
+  allow_unauthenticated = false
   vpc_network           = module.networking.vpc_self_link
   vpc_subnet            = module.networking.subnet_self_link
   domain                = var.dns_edge == "cloudrun" ? local.cloud_run_hosts.providers : null
 
   env_vars = {
     NODE_ENV                = "production"
-    PORT                    = "8080"
     WEBHOOK_PROCESSING_MODE = "more0"
     MORE0_ENABLED           = "true"
     MORE0_GATEWAY_URL       = var.more0_gateway_url
@@ -165,7 +166,6 @@ module "cloud_run_api" {
 
   env_vars = {
     NODE_ENV = "production"
-    PORT     = "3001"
   }
 
   secret_env_vars = [
@@ -199,14 +199,13 @@ module "cloud_run_auth" {
   health_path           = var.cloud_run_use_bootstrap_image ? "/" : "/health"
   enable_probes         = !var.cloud_run_use_bootstrap_image
   ingress               = "INGRESS_TRAFFIC_ALL"
-  allow_unauthenticated = true
+  allow_unauthenticated = false
   vpc_network           = module.networking.vpc_self_link
   vpc_subnet            = module.networking.subnet_self_link
   domain                = var.dns_edge == "cloudrun" ? local.cloud_run_hosts.auth : null
 
   env_vars = {
     NODE_ENV = "production"
-    PORT     = "4000"
   }
 
   secret_env_vars = [
@@ -238,14 +237,13 @@ module "cloud_run_frontend" {
   health_path           = "/"
   enable_probes         = !var.cloud_run_use_bootstrap_image
   ingress               = "INGRESS_TRAFFIC_ALL"
-  allow_unauthenticated = true
+  allow_unauthenticated = false
   vpc_network           = module.networking.vpc_self_link
   vpc_subnet            = module.networking.subnet_self_link
   domain                = var.dns_edge == "cloudrun" ? local.cloud_run_hosts.app : null
 
   env_vars = {
     NODE_ENV = "production"
-    PORT     = "3000"
     # Server-side BFF calls private api via run URI + identity (set at deploy).
     NEXT_PUBLIC_API_URL = var.dns_edge == "cloudrun" ? "https://${local.cloud_run_hosts.api}" : ""
     AUTH_SERVER_URL     = var.dns_edge == "cloudrun" ? "https://${local.cloud_run_hosts.auth}" : ""
@@ -277,8 +275,8 @@ resource "google_cloud_run_v2_job" "migrate_api" {
       vpc_access {
         egress = "PRIVATE_RANGES_ONLY"
         network_interfaces {
-          network    = module.networking.vpc_self_link
-          subnetwork = module.networking.subnet_self_link
+          network    = regex("projects/.+$", module.networking.vpc_self_link)
+          subnetwork = regex("projects/.+$", module.networking.subnet_self_link)
         }
       }
 

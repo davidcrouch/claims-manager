@@ -27,6 +27,7 @@ import createOAuthDiscoveryRoutes from './routes/oauth-discovery.js';
 import createIatRoutes from './routes/iat-routes.js';
 import createTokenExchangeRoutes from './routes/token-exchange-routes.js';
 import createGoogleRoutes from './routes/google-routes.js';
+import createMicrosoftRoutes from './routes/microsoft-routes.js';
 import createSignupRoutes from './routes/signup-routes.js';
 import createClientRoutes from './routes/client-routes.js';
 
@@ -308,6 +309,11 @@ async function mountRoutes(app: Application, provider: any): Promise<void> {
       createGoogleRoutes(app, provider);
 
       // ========================================================================
+      // MICROSOFT OAUTH ROUTES (Microsoft Entra ID authentication)
+      // ========================================================================
+      createMicrosoftRoutes(app, provider);
+
+      // ========================================================================
       // SIGNUP ROUTES (Application signup - forwards to api-server with subdomain context)
       // ========================================================================
       createSignupRoutes(app);
@@ -345,6 +351,21 @@ async function mountRoutes(app: Application, provider: any): Promise<void> {
       // TOKEN EXCHANGE ROUTES (OAuth 2.0 Token Exchange - RFC 8693)
       // ========================================================================
       createTokenExchangeRoutes(app, provider);
+
+      // ========================================================================
+      // ADMIN ROUTES (RBAC, Features, User management)
+      // ========================================================================
+      const { default: createAdminUserRoutes } = await import('./routes/admin-user-routes.js');
+      createAdminUserRoutes(app);
+
+      const { default: createAdminRoleRoutes } = await import('./routes/admin-role-routes.js');
+      createAdminRoleRoutes(app);
+
+      const { default: createAdminPermissionRoutes } = await import('./routes/admin-permission-routes.js');
+      createAdminPermissionRoutes(app);
+
+      const { default: createAdminFeatureRoutes } = await import('./routes/admin-feature-routes.js');
+      createAdminFeatureRoutes(app);
 
       span.setAttributes({ 'server.routes_mounted': true });
       span.setStatus({ code: SpanStatusCode.OK });

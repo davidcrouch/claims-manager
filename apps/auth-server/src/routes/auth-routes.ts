@@ -36,7 +36,7 @@ import { inspect } from 'node:util';
 import isEmpty from 'lodash/isEmpty.js';
 import { storeAuthResult, deleteStoredAuthResult, CLAIMS_MANAGER_UI_CLIENT_ID } from '../config/oidc-provider.js';
 import { getStaticClients } from '../config/static-clients.js';
-import { getClientId, getApiUrl, getBaseUrl, getPostLogoutRedirectUrl, getEnvVarWithDefault, getTokenTtlConfig } from '../config/env-validation.js';
+import { getClientId, getApiUrl, getBaseUrl, getPostLogoutRedirectUrl, getEnvVarWithDefault, getTokenTtlConfig, getMicrosoftOAuthConfig } from '../config/env-validation.js';
 import { GlobalCacheManager, type IUnifiedRedisClient } from '../lib/cache/global-cache-manager.js';
 // Local db services for user operations
 import { createUsersService, createUserIdentitiesService } from '../db/services/index.js';
@@ -72,7 +72,9 @@ import { OrganizationSelectorPage } from '../views/OrganizationSelectorPage.js';
 import { ConsentPage } from '../views/ConsentPage.js';
 import { ResetPasswordPage } from '../views/ResetPasswordPage.js';
 import { OnboardCompanyPage } from '../views/OnboardCompanyPage.js';
+import { AcceptInvitePage } from '../views/AcceptInvitePage.js';
 import { requestPasswordReset, confirmPasswordReset } from '../services/password-reset-service.js';
+import { getInviteTokenPreview, acceptInvite } from '../services/invitation-service.js';
 
 
 // Type for MCP server resourceInfo (matches RFC 9728 and McpServerResourceInfo schema - snake_case per RFC 9728)
@@ -351,6 +353,8 @@ export default function createAuthRoutes(
             const baseUrl = getRequestBaseUrl(req);
             const registered = req.query.registered === '1';
             const googleAuthUrl = `${baseUrl}/login/google/start?interaction=${encodeURIComponent(uid)}`;
+            const microsoftConfig = getMicrosoftOAuthConfig();
+            const microsoftAuthUrl = microsoftConfig ? `${baseUrl}/login/microsoft/start?interaction=${encodeURIComponent(uid)}` : undefined;
             const loginActionUrl = `${baseUrl}/interaction/${uid}/login`;
             const registerUrl = `${baseUrl}/register?interaction=${uid}`;
             const resetPasswordUrl = `${baseUrl}/reset-password`;
@@ -363,6 +367,7 @@ export default function createAuthRoutes(
                   error: error ? decodeURIComponent(error as string) : null,
                   registered,
                   googleAuthUrl,
+                  microsoftAuthUrl,
                   loginActionUrl,
                   registerUrl,
                   resetPasswordUrl,
@@ -2778,6 +2783,69 @@ export default function createAuthRoutes(
 
 
    // =============================================================================
+   // INVITATION ACCEPTANCE ROUTES
+   // =============================================================================
+
+   app.get('/accept-invite', async (req: Request, res: Response) => {
+      const token = req.query.token as string;
+      if (!token) {
+         return res.status(400).send('Missing invitation token');
+      }
+
+      try {
+         const preview = await getInviteTokenPreview(token);
+         if (!preview.valid) {
+            return res.status(400).send(preview.error || 'Invalid or expired invitation');
+         }
+
+         const html = renderPage(
+            React.createElement(AcceptInvitePage, {
+               token,
+               email: preview.email || '',
+            }),
+            { title: 'EnsureOS — Accept Invitation' },
+         );
+         res.send(html);
+      } catch (error: any) {
+         log.error(
+            { error: error.message },
+            'auth-server:auth-routes:getAcceptInvite - Failed to render invite page',
+         );
+         res.status(500).send('Something went wrong. Please try again.');
+      }
+   });
+
+   app.post('/accept-invite', async (req: Request, res: Response) => {
+      const { token, password } = req.body;
+      if (!token || !password) {
+         return res.status(400).json({ error: 'Token and password required' });
+      }
+
+      try {
+         const result = await acceptInvite({ token, password });
+         if (!result.success) {
+            const html = renderPage(
+               React.createElement(AcceptInvitePage, {
+                  token,
+                  email: result.email || '',
+                  error: result.error,
+               }),
+               { title: 'EnsureOS — Accept Invitation' },
+            );
+            return res.status(400).send(html);
+         }
+
+         res.redirect('/login?invited=true');
+      } catch (error: any) {
+         log.error(
+            { error: error.message },
+            'auth-server:auth-routes:postAcceptInvite - Failed to accept invite',
+         );
+         res.status(500).json({ error: 'Failed to accept invitation. Please try again.' });
+      }
+   });
+
+   // =============================================================================
    // ERROR HANDLING MIDDLEWARE
    // =============================================================================
 
@@ -2805,6 +2873,7 @@ export default function createAuthRoutes(
                uid: uid || '',
                error: 'Your session has expired. Please sign in again.',
                googleAuthUrl: `${baseUrl}/login/google/start?interaction=expired`,
+               microsoftAuthUrl: getMicrosoftOAuthConfig() ? `${baseUrl}/login/microsoft/start?interaction=expired` : undefined,
                loginActionUrl: `${baseUrl}/interaction/expired/login`,
                registerUrl: `${baseUrl}/register`,
                resetPasswordUrl: `${baseUrl}/reset-password`,

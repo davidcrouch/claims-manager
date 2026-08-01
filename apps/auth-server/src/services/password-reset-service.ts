@@ -5,6 +5,7 @@ import { createLogger, LoggerType } from '../lib/logger.js';
 import { createTelemetryLogger } from '@morezero/telemetry';
 import { getUserByEmail, addPasswordIdentityToUser } from './identity-registration-service.js';
 import { getBaseUrl } from '../config/env-validation.js';
+import { sendPasswordResetEmail as sendResetEmail } from './email/index.js';
 
 const baseLogger = createLogger('auth-server:password-reset', LoggerType.NODEJS);
 const log = createTelemetryLogger(baseLogger, 'password-reset', 'PasswordReset', 'auth-server');
@@ -99,8 +100,16 @@ export async function confirmPasswordReset(params: { token: string; password: st
 
 async function sendPasswordResetEmail(params: { email: string; resetUrl: string }): Promise<void> {
   const { email, resetUrl } = params;
-  log.warn(
-    { email, resetUrl },
-    'auth-server:password-reset:sendPasswordResetEmail - EMAIL SERVICE NOT CONFIGURED. Reset URL logged for development. Integrate an email provider (e.g., Resend, SendGrid) to send real emails.'
-  );
+  try {
+    await sendResetEmail({ to: email, resetUrl });
+    log.info(
+      { email },
+      'auth-server:password-reset:sendPasswordResetEmail - Password reset email sent',
+    );
+  } catch (error: any) {
+    log.error(
+      { email, error: error.message },
+      'auth-server:password-reset:sendPasswordResetEmail - Failed to send reset email',
+    );
+  }
 }
