@@ -205,7 +205,8 @@ module "cloud_run_auth" {
   domain                = var.dns_edge == "cloudrun" ? local.cloud_run_hosts.auth : null
 
   env_vars = {
-    NODE_ENV = "production"
+    NODE_ENV     = "production"
+    SERVICE_NAME = "auth-server"
   }
 
   secret_env_vars = [
