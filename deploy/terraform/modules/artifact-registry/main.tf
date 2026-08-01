@@ -1,9 +1,9 @@
 resource "google_artifact_registry_repository" "this" {
-  project         = var.project_id
-  location        = var.location
-  repository_id   = "claims-manager"
-  description     = "Claims Manager Docker images"
-  format          = "DOCKER"
+  project       = var.project_id
+  location      = var.location
+  repository_id = "claims-manager"
+  description   = "Claims Manager Docker images"
+  format        = "DOCKER"
 }
 
 resource "google_artifact_registry_repository_iam_member" "reader" {

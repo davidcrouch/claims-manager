@@ -8,6 +8,10 @@ interface RawBodyRequest extends Request {
   rawBody?: Buffer;
 }
 
+/**
+ * @deprecated Prefer apps/provider (provider-server) for public webhook ingest.
+ * Kept for Compose VM / transition until dns_edge=cloudrun cutover.
+ */
 @Controller('webhooks')
 export class WebhooksController {
   private readonly logger = new Logger('WebhooksController');

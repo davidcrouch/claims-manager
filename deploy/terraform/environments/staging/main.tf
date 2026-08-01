@@ -56,13 +56,14 @@ module "staging_vm" {
 module "cloudsql" {
   source = "../../modules/cloudsql"
 
-  project_id            = var.project_id
-  region                = var.region
-  environment           = var.environment
-  tier                  = var.cloudsql_tier
-  availability_type     = "ZONAL"
-  backup_retention_days = 7
-  private_network       = module.networking.vpc_self_link
+  project_id               = var.project_id
+  region                   = var.region
+  environment              = var.environment
+  tier                     = var.cloudsql_tier
+  availability_type        = "ZONAL"
+  backup_retention_days    = 7
+  private_network          = module.networking.vpc_self_link
+  create_provider_app_user = true
 }
 
 # Minimum Memorystore capacity (M1). Staging stays on BASIC to save spend;
@@ -153,9 +154,10 @@ module "dns" {
   project_id  = var.project_id
   environment = var.environment
   dns_name    = var.dns_name
-  # Point A records at the staging VM's static IP so CI-free subdomain traffic
-  # (api/auth/app) reaches Caddy immediately after terraform apply.
-  gateway_ip = module.staging_vm.public_ip
+  # VM edge: A records → Caddy. Cloud Run edge: CNAME → ghs.googlehosted.com.
+  # See cloud_run.tf / deploy/CLOUD_RUN.md for cutover.
+  gateway_ip   = var.dns_edge == "vm" ? module.staging_vm.public_ip : null
+  host_records = var.dns_edge == "cloudrun" ? local.cloud_run_dns_records : null
 }
 
 # Domain Pub/Sub topics (+ DLQ). Push endpoints wired later when a stable

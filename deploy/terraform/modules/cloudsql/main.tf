@@ -87,3 +87,20 @@ resource "google_sql_user" "admin" {
   instance = google_sql_database_instance.this.name
   password = random_password.sql_admin.result
 }
+
+# Least-privilege app user for provider-server (webhook ingest). Grants are
+# applied out-of-band / via migrate Job SQL; terraform only creates the login.
+resource "random_password" "provider_app" {
+  count            = var.create_provider_app_user ? 1 : 0
+  length           = 32
+  special          = true
+  override_special = "-_"
+}
+
+resource "google_sql_user" "provider_app" {
+  count    = var.create_provider_app_user ? 1 : 0
+  project  = var.project_id
+  name     = "provider_app"
+  instance = google_sql_database_instance.this.name
+  password = random_password.provider_app[0].result
+}

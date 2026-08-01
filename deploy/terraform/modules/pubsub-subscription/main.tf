@@ -25,7 +25,7 @@ resource "google_pubsub_subscription" "this" {
   dynamic "dead_letter_policy" {
     for_each = var.dead_letter_topic_id == null ? [] : [var.dead_letter_topic_id]
     content {
-      dead_letter_topic   = dead_letter_policy.value
+      dead_letter_topic     = dead_letter_policy.value
       max_delivery_attempts = var.dlq_max_attempts
     }
   }

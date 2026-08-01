@@ -13,6 +13,7 @@ locals {
   secret_names = [
     "database-url-api",
     "database-url-auth",
+    "database-url-provider",
     "redis-url",
     "nats-url",
     "credentials-encryption-key",

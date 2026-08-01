@@ -16,7 +16,7 @@ import { createLogger, LoggerType } from './lib/logger.js';
 import { startTelemetry, createTelemetryLogger } from '@morezero/telemetry';
 import { trace, context, SpanStatusCode, propagation } from '@opentelemetry/api';
 import { GlobalCacheManager } from './lib/cache/global-cache-manager.js';
-import { validateAuthServerEnvironment, getServerConfig, getCorsOrigins, getServiceName, getServiceVersion, getRedisConfig } from './config/env-validation.js';
+import { validateAuthServerEnvironment, getServerConfig, getCorsOrigins, getServiceName, getServiceVersion, getRedisConfig, getOidcCookieKeys } from './config/env-validation.js';
 import { createOidcProvider } from './config/oidc-provider.js';
 
 // ============================================================================
@@ -34,6 +34,7 @@ import createClientRoutes from './routes/client-routes.js';
 // INTERNAL IMPORTS - MIDDLEWARE
 // ============================================================================
 import { securityHeaders, helmetMiddleware } from './middleware/security.js';
+import { httpTracingMiddleware } from './middleware/http-tracing.js';
 import { generalRateLimit, authRateLimit, oauthRateLimit, tokenRateLimit } from './middleware/rate-limiting.js';
 import { auditLogging } from './middleware/audit-logging.js';
 import { errorHandler, notFoundHandler } from './middleware/error-handling.js';
@@ -173,7 +174,7 @@ async function createServer(): Promise<Application> {
       // ========================================================================
       // COOKIE MIDDLEWARE (Cookie parser needed for OIDC provider)
       // ========================================================================
-      app.use(cookieParser());
+      app.use(cookieParser(getOidcCookieKeys()));
 
       // Note: Express sessions removed - OIDC provider manages its own sessions via Redis
 
@@ -183,6 +184,11 @@ async function createServer(): Promise<Application> {
       //       upstream body parsing on provider endpoints (e.g., /token)
       // ========================================================================
 
+
+      // ========================================================================
+      // HTTP TRACING MIDDLEWARE
+      // ========================================================================
+      app.use(httpTracingMiddleware());
 
       // ========================================================================
       // AUDIT LOGGING & STATIC FILES
@@ -230,20 +236,27 @@ async function createServer(): Promise<Application> {
       });
 
       // ========================================================================
-      // RATE LIMITING - TOKEN EXCHANGE SECURITY
+      // RATE LIMITING - ENDPOINT-SPECIFIC SECURITY
       // ========================================================================
-      // Apply specific rate limiting to auth endpoints
-      //  app.use('/login/google', oauthRateLimit); // More lenient for OAuth flows
-      //  app.use('/login', authRateLimit);
-      //  app.use('/consent', authRateLimit);
-      //  app.use('/token', tokenRateLimit);
-      //  app.use('/api/auth/exchange', oauthRateLimit); // More lenient for token exchange
+      app.use('/login/google', oauthRateLimit);
+      app.use('/login/microsoft', oauthRateLimit);
+      app.use('/login', authRateLimit);
+      app.use('/consent', authRateLimit);
+      app.use('/token', tokenRateLimit);
+      app.use('/api/auth/exchange', oauthRateLimit);
+      app.use('/interaction', authRateLimit);
+      app.use('/api/auth/signup', authRateLimit);
+      app.use('/api/auth/reset-password', authRateLimit);
+      app.use('/api/auth/accept-invite', authRateLimit);
+      app.use('/oauth/initial-access-token', authRateLimit);
+      app.use('/oauth/validate-iat', authRateLimit);
+      app.use('/admin', authRateLimit);
 
       // ========================================================================
       // BODY PARSING MIDDLEWARE (must be BEFORE routes that need req.body)
       // ========================================================================
-      app.use(express.json({ limit: '10mb' }));
-      app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+      app.use(express.json({ limit: '256kb' }));
+      app.use(express.urlencoded({ extended: true, limit: '256kb' }));
 
       // ========================================================================
       // ROUTE MOUNTING

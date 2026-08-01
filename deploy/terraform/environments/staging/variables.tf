@@ -62,3 +62,44 @@ variable "ci_deployer_infra_email" {
   description = "Email of the ci-deployer SA in claims-manager-infra-493807 that GitHub Actions impersonates"
   default     = "ci-deployer@claims-manager-infra-493807.iam.gserviceaccount.com"
 }
+
+variable "enable_cloud_run" {
+  type        = bool
+  default     = true
+  description = "Provision Cloud Run services (api, auth, frontend, provider) + migrate Job"
+}
+
+variable "dns_edge" {
+  type        = string
+  default     = "vm"
+  description = "Where public DNS points: vm (Caddy on staging MIG) or cloudrun (domain mappings). Keep vm until cutover."
+
+  validation {
+    condition     = contains(["vm", "cloudrun"], var.dns_edge)
+    error_message = "dns_edge must be \"vm\" or \"cloudrun\"."
+  }
+}
+
+variable "cloud_run_image_tag" {
+  type        = string
+  default     = "latest"
+  description = "Image tag used by terraform-managed Cloud Run services (CD also deploys newer tags)"
+}
+
+variable "cloud_run_use_bootstrap_image" {
+  type        = bool
+  default     = true
+  description = "Use public hello image for first apply (before AR images exist). CD replaces images; set false after first successful deploy if desired."
+}
+
+variable "cloud_run_api_min_instances" {
+  type        = number
+  default     = 0
+  description = "min-instances for api-server (set 1 if LibreOffice cold starts hurt)"
+}
+
+variable "more0_gateway_url" {
+  type        = string
+  default     = "http://localhost:3205"
+  description = "More0 HTTP gateway URL for provider-server dispatch (override in tfvars when available)"
+}

@@ -9,7 +9,7 @@
 # Secrets split into 3 buckets:
 #
 #   1. Derived from terraform output
-#      database-url-api, database-url-auth, redis-url, gcs-hmac-*
+#      database-url-api, database-url-auth, database-url-provider, redis-url, gcs-hmac-*
 #   2. Randomly generated
 #      credentials-encryption-key, auth-jwt-secret, auth-oidc-client-secret,
 #      auth-dcr-secret, auth-dcr-iat-key, auth-oidc-cookies-keys,
@@ -74,17 +74,26 @@ $cloudsqlPassword = TfOut 'cloudsql_admin_password'
 $redisHost        = TfOut 'redis_host'
 $redisPort        = TfOut 'redis_port'
 $frontendSa       = TfOut 'frontend_sa_email'
+$providerUser     = TfOut 'cloudsql_provider_app_user'
+$providerPassword = TfOut 'cloudsql_provider_app_password'
 
 # The API and auth-server both live in the same "claims_manager" database.
 # apps/auth-server/src/db/client.ts hard-asserts the expected db name and
 # refuses to start if it sees anything else. The legacy "auth" and "chat"
 # databases in deploy/terraform/modules/cloudsql/main.tf are unused - see
 # .github/workflows/cd-staging.yaml which only migrates "claims_manager".
+# provider-server uses the least-privilege provider_app user when present.
 $apiDbName  = 'claims_manager'
 $authDbName = 'claims_manager'
 
 $databaseUrlApi  = "postgresql://${cloudsqlUser}:${cloudsqlPassword}@${cloudsqlIp}:5432/${apiDbName}"
 $databaseUrlAuth = "postgresql://${cloudsqlUser}:${cloudsqlPassword}@${cloudsqlIp}:5432/${authDbName}"
+if ($providerUser -and $providerPassword) {
+   $databaseUrlProvider = "postgresql://${providerUser}:${providerPassword}@${cloudsqlIp}:5432/${apiDbName}"
+} else {
+   # Fallback until terraform create_provider_app_user has been applied.
+   $databaseUrlProvider = $databaseUrlApi
+}
 $redisUrl        = "redis://${redisHost}:${redisPort}/0"
 
 # ── Random + JWKS generation helpers ────────────────────────────────
@@ -163,9 +172,10 @@ $script:Skipped  = @()
 $script:Manual   = @()
 
 # ── 1. Derived from terraform outputs ──────────────────────────────
-Set-SecretValue -Name 'database-url-api'  -Value $databaseUrlApi  -Label '(derived)'
-Set-SecretValue -Name 'database-url-auth' -Value $databaseUrlAuth -Label '(derived)'
-Set-SecretValue -Name 'redis-url'         -Value $redisUrl        -Label '(derived)'
+Set-SecretValue -Name 'database-url-api'      -Value $databaseUrlApi      -Label '(derived)'
+Set-SecretValue -Name 'database-url-auth'     -Value $databaseUrlAuth     -Label '(derived)'
+Set-SecretValue -Name 'database-url-provider' -Value $databaseUrlProvider -Label '(derived, provider_app)'
+Set-SecretValue -Name 'redis-url'             -Value $redisUrl            -Label '(derived)'
 
 # ── 2. Randomly generated ──────────────────────────────────────────
 Set-SecretValue -Name 'credentials-encryption-key'  -Value (New-Random-Hex    32) -Label '(random 32B hex)'

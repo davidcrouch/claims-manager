@@ -282,14 +282,20 @@ browser. That means:
   logs.
 - Same applies to `AUTH_SERVER_URL` - server-side only.
 
+## Cloud Run path (recommended)
+
+Staging is moving from the Compose VM to **Cloud Run per process**
+(`provider-server`, private `api-server`, `auth-server`, `frontend`).
+See [`deploy/CLOUD_RUN.md`](CLOUD_RUN.md).
+
+- Terraform: `enable_cloud_run=true`, keep `dns_edge=vm` until cutover.
+- CI matrix builds include `provider-server`.
+- CD: `.github/workflows/cd-cloudrun-staging.yaml` updates Cloud Run images.
+- Legacy Compose CD (`.github/workflows/cd-staging.yaml`) remains until DNS flip.
+
 ## Production migration note
 
-Production still deploys via GKE (`deploy/terraform/environments/production/main.tf`
-+ `.github/workflows/cd-production.yaml`). When it moves to the same VM
-pattern, plan on:
-
-- Adding a `production_vm` module mirroring `staging_vm`.
-- Expanding the bootstrap module to grant ci-deployer the same cross-
-  project roles in `claims-manager-production`.
-- Adjusting `compose.yaml` env so `NEXT_PUBLIC_API_URL` /
-  `AUTH_SERVER_URL` point at the production hostnames.
+Production GKE (`deploy/terraform/environments/production` +
+`cd-production.yaml`) is **dormant**. Prefer Cloud Run for production as
+well (same modules as staging). Do not bootstrap GKE unless requirements
+change.

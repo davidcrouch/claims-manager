@@ -501,6 +501,70 @@ importers:
         specifier: ^5
         version: 5.9.3
 
+  apps/provider:
+    dependencies:
+      '@nestjs/common':
+        specifier: ^11.1.17
+        version: 11.1.17(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.1)
+      '@nestjs/config':
+        specifier: ^4.0.3
+        version: 4.0.3(@nestjs/common@11.1.17(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.1))(rxjs@7.8.1)
+      '@nestjs/core':
+        specifier: ^11.1.17
+        version: 11.1.17(@nestjs/common@11.1.17(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.1))(@nestjs/platform-express@11.1.17)(reflect-metadata@0.2.2)(rxjs@7.8.1)
+      '@nestjs/platform-express':
+        specifier: ^11.1.17
+        version: 11.1.17(@nestjs/common@11.1.17(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.1))(@nestjs/core@11.1.17)
+      class-transformer:
+        specifier: ^0.5.1
+        version: 0.5.1
+      class-validator:
+        specifier: ^0.15.1
+        version: 0.15.1
+      dotenv:
+        specifier: ^17.3.1
+        version: 17.3.1
+      drizzle-orm:
+        specifier: ^0.38.3
+        version: 0.38.4(@opentelemetry/api@1.9.1)(@types/pg@8.18.0)(@types/react@19.2.14)(pg@8.20.0)(postgres@3.4.8)(react@19.2.4)
+      express:
+        specifier: 5.2.1
+        version: 5.2.1
+      helmet:
+        specifier: ^8.1.0
+        version: 8.1.0
+      pg:
+        specifier: ^8.20.0
+        version: 8.20.0
+      reflect-metadata:
+        specifier: ^0.2.2
+        version: 0.2.2
+      rxjs:
+        specifier: ^7.8.1
+        version: 7.8.1
+      uuid:
+        specifier: ^13.0.0
+        version: 13.0.0
+    devDependencies:
+      '@nestjs/cli':
+        specifier: ^11.0.0
+        version: 11.0.16(@types/node@22.19.15)
+      '@nestjs/schematics':
+        specifier: ^11.0.0
+        version: 11.0.9(chokidar@4.0.3)(typescript@5.9.3)
+      '@types/express':
+        specifier: ^5.0.0
+        version: 5.0.6
+      '@types/node':
+        specifier: ^22.10.7
+        version: 22.19.15
+      '@types/pg':
+        specifier: ^8.18.0
+        version: 8.18.0
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+
   packages/telemetry:
     dependencies:
       '@opentelemetry/api':
@@ -12381,7 +12445,7 @@ snapshots:
 
   '@types/connect-redis@0.0.23':
     dependencies:
-      '@types/express': 4.17.25
+      '@types/express': 5.0.6
       '@types/express-session': 1.18.2
       '@types/node': 22.19.15
       '@types/redis': 2.8.32
@@ -12433,7 +12497,7 @@ snapshots:
 
   '@types/express-session@1.18.2':
     dependencies:
-      '@types/express': 4.17.25
+      '@types/express': 5.0.6
 
   '@types/express@4.17.25':
     dependencies:
@@ -12524,13 +12588,13 @@ snapshots:
 
   '@types/passport-google-oauth20@2.0.17':
     dependencies:
-      '@types/express': 4.17.25
+      '@types/express': 5.0.6
       '@types/passport': 1.0.17
       '@types/passport-oauth2': 1.8.0
 
   '@types/passport-jwt@3.0.13':
     dependencies:
-      '@types/express': 4.17.25
+      '@types/express': 5.0.6
       '@types/jsonwebtoken': 9.0.10
       '@types/passport-strategy': 0.2.38
 
@@ -12541,7 +12605,7 @@ snapshots:
 
   '@types/passport-local@1.0.38':
     dependencies:
-      '@types/express': 4.17.25
+      '@types/express': 5.0.6
       '@types/passport': 1.0.17
       '@types/passport-strategy': 0.2.38
 
@@ -12558,7 +12622,7 @@ snapshots:
 
   '@types/passport@1.0.17':
     dependencies:
-      '@types/express': 4.17.25
+      '@types/express': 5.0.6
 
   '@types/pg-pool@2.0.6':
     dependencies:

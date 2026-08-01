@@ -13,6 +13,7 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  REGISTRY: australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -35,23 +36,26 @@ jobs:
       - run: pnpm -r build
       - run: pnpm --filter api test
 
-  docker-build:
+  prepare-docker:
     runs-on: ubuntu-latest
     needs: [node-ci]
     if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
       id-token: write
+    outputs:
+      image_tag: ${{ steps.tag.outputs.image_tag }}
+      api-server: ${{ steps.decide.outputs.api-server }}
+      auth-server: ${{ steps.decide.outputs.auth-server }}
+      frontend: ${{ steps.decide.outputs.frontend }}
+      provider-server: ${{ steps.decide.outputs.provider-server }}
     steps:
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache
-          docker system prune -af
-          df -h /
-
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - id: tag
+        run: echo "image_tag=main-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       - id: changes
         uses: dorny/paths-filter@v3
@@ -65,6 +69,67 @@ jobs:
               - 'packages/telemetry/**'
             frontend:
               - 'apps/frontend/**'
+            provider-server:
+              - 'apps/provider/**'
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ci-deployer@claims-manager-infra-493807.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - id: decide
+        name: Decide which images to build
+        run: |
+          for image in api-server auth-server frontend provider-server; do
+            case "$image" in
+              api-server) changed="${{ steps.changes.outputs.api-server }}" ;;
+              auth-server) changed="${{ steps.changes.outputs.auth-server }}" ;;
+              frontend) changed="${{ steps.changes.outputs.frontend }}" ;;
+              provider-server) changed="${{ steps.changes.outputs.provider-server }}" ;;
+            esac
+            if gcloud artifacts docker images describe "${{ env.REGISTRY }}/${image}:latest" > /dev/null 2>&1; then
+              existed=true
+            else
+              existed=false
+            fi
+            if [ "${{ inputs.force_build_all }}" = "true" ] || [ "$changed" = "true" ] || [ "$existed" = "false" ]; then
+              echo "${image}=true" >> "$GITHUB_OUTPUT"
+              echo "Will BUILD ${image} (changed=${changed} existed=${existed} force=${{ inputs.force_build_all }})"
+            else
+              echo "${image}=false" >> "$GITHUB_OUTPUT"
+              echo "Will RETAG ${image}"
+            fi
+          done
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: [prepare-docker]
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: api-server
+            dockerfile: apps/api/Dockerfile
+          - service: auth-server
+            dockerfile: apps/auth-server/Dockerfile
+          - service: frontend
+            dockerfile: apps/frontend/Dockerfile
+          - service: provider-server
+            dockerfile: apps/provider/Dockerfile
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache
+          docker system prune -af
+          df -h /
+
+      - uses: actions/checkout@v4
 
       - uses: google-github-actions/auth@v2
         with:
@@ -75,111 +140,76 @@ jobs:
 
       - run: gcloud auth configure-docker australia-southeast1-docker.pkg.dev
 
-      - name: Set image tag
-        run: echo "IMAGE_TAG=main-${GITHUB_SHA::7}" >> $GITHUB_ENV
-
-      # First-build bootstrap: if :latest doesn't exist for a service yet,
-      # the later re-tag step can't clone it to the commit tag. Detect
-      # missing images here so the build step below can force them.
-      - id: existing
-        name: Detect existing images
+      - name: Build & push ${{ matrix.service }}
+        env:
+          IMAGE_TAG: ${{ needs.prepare-docker.outputs.image_tag }}
+          BUILD_API: ${{ needs.prepare-docker.outputs.api-server }}
+          BUILD_AUTH: ${{ needs.prepare-docker.outputs.auth-server }}
+          BUILD_FRONTEND: ${{ needs.prepare-docker.outputs.frontend }}
+          BUILD_PROVIDER: ${{ needs.prepare-docker.outputs.provider-server }}
         run: |
-          REGISTRY="australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager"
-          check() {
-            local image=$1
-            if gcloud artifacts docker images describe "${REGISTRY}/${image}:latest" > /dev/null 2>&1; then
-              echo "${image}: latest exists"
-              echo "${image}=true" >> $GITHUB_OUTPUT
-            else
-              echo "${image}: latest missing (will force build)"
-              echo "${image}=false" >> $GITHUB_OUTPUT
-            fi
-          }
-          check api-server
-          check auth-server
-          check frontend
-
-      - name: Build & push api-server
-        if: steps.changes.outputs.api-server == 'true' || inputs.force_build_all || steps.existing.outputs.api-server == 'false'
-        run: |
-          docker build -f apps/api/Dockerfile \
-            -t australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager/api-server:${{ env.IMAGE_TAG }} \
-            -t australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager/api-server:latest \
-            .
-          docker push --all-tags australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager/api-server
-          docker system prune -af
-
-      - name: Build & push auth-server
-        if: steps.changes.outputs.auth-server == 'true' || inputs.force_build_all || steps.existing.outputs.auth-server == 'false'
-        run: |
-          docker build -f apps/auth-server/Dockerfile \
-            -t australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager/auth-server:${{ env.IMAGE_TAG }} \
-            -t australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager/auth-server:latest \
-            .
-          docker push --all-tags australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager/auth-server
-          docker system prune -af
-
-      # Frontend is a BFF: every call to createApiClient runs on the
-      # Next.js server (server components + `use server` actions), so
-      # NEXT_PUBLIC_API_URL is read from process.env at runtime and does
-      # NOT need to be baked in. compose.yaml sets it per-environment.
-      - name: Build & push frontend
-        if: steps.changes.outputs.frontend == 'true' || inputs.force_build_all || steps.existing.outputs.frontend == 'false'
-        run: |
-          docker build -f apps/frontend/Dockerfile \
-            -t australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager/frontend:${{ env.IMAGE_TAG }} \
-            -t australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager/frontend:latest \
-            .
-          docker push --all-tags australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager/frontend
-          docker system prune -af
-
-      - name: Re-tag unchanged images
-        run: |
-          REGISTRY="australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager"
-          FAILED=0
-          retag() {
-            local image=$1
-            echo "Re-tagging ${image}:latest → ${image}:${{ env.IMAGE_TAG }}"
-            if ! gcloud artifacts docker tags add \
-              "${REGISTRY}/${image}:latest" \
-              "${REGISTRY}/${image}:${{ env.IMAGE_TAG }}" 2>&1; then
-              echo "::error::Failed to re-tag ${image}:latest → ${{ env.IMAGE_TAG }}. Image may not exist in registry."
-              FAILED=1
-            fi
-          }
-          # Skip retag when the service was (re)built in this run — either
-          # because code changed, force_build_all was set, or :latest was
-          # missing and we just bootstrapped it.
-          needs_retag() {
-            local image=$1
-            local changed=$2
-            local existed=$3
-            [ "$changed" != "true" ] \
-              && [ "${{ inputs.force_build_all }}" != "true" ] \
-              && [ "$existed" = "true" ]
-          }
-          needs_retag api-server  "${{ steps.changes.outputs.api-server }}"  "${{ steps.existing.outputs.api-server }}"  && retag api-server
-          needs_retag auth-server "${{ steps.changes.outputs.auth-server }}" "${{ steps.existing.outputs.auth-server }}" && retag auth-server
-          needs_retag frontend    "${{ steps.changes.outputs.frontend }}"    "${{ steps.existing.outputs.frontend }}"    && retag frontend
-          if [ "$FAILED" -ne 0 ]; then
-            echo "::error::One or more image re-tags failed. Run workflow_dispatch with force_build_all=true to rebuild all images."
-            exit 1
+          case "${{ matrix.service }}" in
+            api-server) SHOULD_BUILD="$BUILD_API" ;;
+            auth-server) SHOULD_BUILD="$BUILD_AUTH" ;;
+            frontend) SHOULD_BUILD="$BUILD_FRONTEND" ;;
+            provider-server) SHOULD_BUILD="$BUILD_PROVIDER" ;;
+          esac
+          if [ "$SHOULD_BUILD" != "true" ]; then
+            echo "Skipping build for ${{ matrix.service }} (will be re-tagged in ensure-tags)"
+            exit 0
           fi
-          echo "All image tags ensured for ${{ env.IMAGE_TAG }}"
+          docker build -f ${{ matrix.dockerfile }} \
+            -t ${{ env.REGISTRY }}/${{ matrix.service }}:${IMAGE_TAG} \
+            -t ${{ env.REGISTRY }}/${{ matrix.service }}:latest \
+            .
+          docker push --all-tags ${{ env.REGISTRY }}/${{ matrix.service }}
+          docker system prune -af
 
-      - name: Verify all images exist
+  ensure-tags:
+    runs-on: ubuntu-latest
+    needs: [prepare-docker, docker-build]
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ci-deployer@claims-manager-infra-493807.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Re-tag unchanged images + verify
+        env:
+          IMAGE_TAG: ${{ needs.prepare-docker.outputs.image_tag }}
         run: |
-          REGISTRY="australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager"
-          MISSING=0
-          for image in api-server auth-server frontend; do
-            if ! gcloud artifacts docker images describe "${REGISTRY}/${image}:${{ env.IMAGE_TAG }}" > /dev/null 2>&1; then
-              echo "::error::Image ${image}:${{ env.IMAGE_TAG }} not found in Artifact Registry"
-              MISSING=1
+          FAILED=0
+          for image in api-server auth-server frontend provider-server; do
+            case "$image" in
+              api-server) built="${{ needs.prepare-docker.outputs.api-server }}" ;;
+              auth-server) built="${{ needs.prepare-docker.outputs.auth-server }}" ;;
+              frontend) built="${{ needs.prepare-docker.outputs.frontend }}" ;;
+              provider-server) built="${{ needs.prepare-docker.outputs.provider-server }}" ;;
+            esac
+            if [ "$built" != "true" ]; then
+              echo "Re-tagging ${image}:latest → ${image}:${IMAGE_TAG}"
+              if ! gcloud artifacts docker tags add \
+                "${{ env.REGISTRY }}/${image}:latest" \
+                "${{ env.REGISTRY }}/${image}:${IMAGE_TAG}" 2>&1; then
+                echo "::error::Failed to re-tag ${image}"
+                FAILED=1
+              fi
+            fi
+            if ! gcloud artifacts docker images describe \
+              "${{ env.REGISTRY }}/${image}:${IMAGE_TAG}" > /dev/null 2>&1; then
+              echo "::error::Image ${image}:${IMAGE_TAG} not found"
+              FAILED=1
             else
-              echo "✓ ${image}:${{ env.IMAGE_TAG }}"
+              echo "✓ ${image}:${IMAGE_TAG}"
             fi
           done
-          if [ "$MISSING" -ne 0 ]; then
-            echo "::error::Missing images detected. Run workflow_dispatch with force_build_all=true."
+          if [ "$FAILED" -ne 0 ]; then
+            echo "::error::Missing images. Run workflow_dispatch with force_build_all=true."
             exit 1
           fi

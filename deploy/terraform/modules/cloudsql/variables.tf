@@ -25,9 +25,15 @@ variable "backup_retention_days" {
 }
 
 variable "private_network" {
-  type = string
+  type        = string
   description = <<-EOT
 VPC network self link for private IP. Private Service Access (servicenetworking) peering must exist on this VPC.
 Extensions vector (pgvector) and uuid-ossp are enabled per database with SQL after the instance is available; Cloud SQL provides no Terraform flags for them.
 EOT
+}
+
+variable "create_provider_app_user" {
+  type        = bool
+  default     = true
+  description = "Create least-privilege provider_app SQL user for provider-server Cloud Run"
 }
