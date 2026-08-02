@@ -26,7 +26,7 @@ interface ProvisioningStatus {
 }
 
 export function ProvisioningScreen() {
-  const router = useRouter();
+  const router = useRouter(); // used for Skip / failed-path navigation
   const [status, setStatus] = useState<ProvisioningStatus | null>(null);
   const [started, setStarted] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,7 +67,12 @@ export function ProvisioningScreen() {
   useEffect(() => {
     if (!status) return;
     if (status.provisioningStatus === 'complete') {
-      const timeout = setTimeout(() => router.push('/dashboard'), 1200);
+      // App layout is a server component that chose ProvisioningScreen based
+      // on status at render time. Soft push alone can reuse that RSC payload
+      // and leave us stuck here — force a full navigation so layout re-checks.
+      const timeout = setTimeout(() => {
+        window.location.assign('/dashboard');
+      }, 800);
       return () => clearTimeout(timeout);
     }
     if (
@@ -77,7 +82,7 @@ export function ProvisioningScreen() {
       const interval = setInterval(fetchStatus, 2500);
       return () => clearInterval(interval);
     }
-  }, [status, router, fetchStatus]);
+  }, [status, fetchStatus]);
 
   function getStepIcon(stepStatus: ProvisioningStep['status']) {
     switch (stepStatus) {
