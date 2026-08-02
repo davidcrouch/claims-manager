@@ -66,8 +66,8 @@ variable "cloud_run_use_bootstrap_image" {
 
 variable "cloud_run_api_min_instances" {
   type        = number
-  default     = 1
-  description = "min-instances for api-server"
+  default     = 0
+  description = "min-instances for api-server (same default as staging)"
 }
 
 variable "more0_gateway_url" {

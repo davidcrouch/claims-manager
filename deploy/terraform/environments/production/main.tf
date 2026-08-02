@@ -27,7 +27,7 @@ locals {
 }
 
 # Same shape as staging: Cloud Run + Cloud SQL + Memorystore + GCS.
-# Production uses larger SQL / Redis / Cloud Run CPU+memory (see cloud_run.tf).
+# Cloud Run sizing matches staging except frontend (2 vCPU). SQL/Redis are larger.
 module "networking" {
   source = "../../modules/networking"
 

@@ -2,13 +2,13 @@
 
 Claims Manager runs **Cloud Run only** (staging and production). No GKE, no Compose VM.
 
-| Service | Exposure | Staging size | Production size |
-|---------|----------|--------------|-----------------|
-| `provider-server` | Public | 1 vCPU / 512Mi | 2 vCPU / 1Gi |
-| `api-server` | Private (`INTERNAL_ONLY`) | 2 vCPU / 2Gi | 4 vCPU / 4Gi |
-| `auth-server` | Public | 1 vCPU / 768Mi | 2 vCPU / 1Gi |
-| `frontend` | Public | 1 vCPU / 768Mi | 2 vCPU / 1Gi |
-| `migrate-api` | Job | 1 vCPU / 1Gi | 2 vCPU / 2Gi |
+| Service | Exposure | Staging | Production |
+|---------|----------|---------|------------|
+| `provider-server` | Public | 1 vCPU / 512Mi | same |
+| `api-server` | Private (`INTERNAL_ONLY`) | 2 vCPU / 2Gi | same |
+| `auth-server` | Public | 1 vCPU / 768Mi | same |
+| `frontend` | Public | 1 vCPU / 768Mi | **2 vCPU** / 768Mi |
+| `migrate-api` | Job | 1 vCPU / 1Gi | same |
 
 **Data plane:** Cloud SQL Postgres + Memorystore Redis + GCS + Pub/Sub.
 

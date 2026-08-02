@@ -1,4 +1,4 @@
-# Cloud Run compute path — same services as staging, larger CPU/memory.
+# Cloud Run compute path — same sizing as staging except frontend (2 vCPU).
 # Custom hostnames via Cloudflare → *.run.app (no domain mappings in this region).
 
 locals {
@@ -77,11 +77,11 @@ module "cloud_run_provider" {
   image                 = var.cloud_run_use_bootstrap_image ? local.bootstrap_image : "${local.artifact_host}/provider-server:${local.image_tag}"
   service_account_email = module.iam.service_account_emails["provider-server"]
   container_port        = 8080
-  cpu                   = "2"
-  memory                = "1Gi"
+  cpu                   = "1"
+  memory                = "512Mi"
   min_instances         = 0
-  max_instances         = 3
-  container_concurrency = 80
+  max_instances         = 1
+  container_concurrency = 40
   health_path           = var.cloud_run_use_bootstrap_image ? "/" : "/api/v1/health"
   enable_probes         = !var.cloud_run_use_bootstrap_image
   ingress               = "INGRESS_TRAFFIC_ALL"
@@ -118,11 +118,11 @@ module "cloud_run_api" {
   image                 = var.cloud_run_use_bootstrap_image ? local.bootstrap_image : "${local.artifact_host}/api-server:${local.image_tag}"
   service_account_email = module.iam.service_account_emails["api-server"]
   container_port        = 3001
-  cpu                   = "4"
-  memory                = "4Gi"
+  cpu                   = "2"
+  memory                = "2Gi"
   min_instances         = var.cloud_run_api_min_instances
-  max_instances         = 6
-  container_concurrency = 40
+  max_instances         = 2
+  container_concurrency = 20
   timeout               = "900s"
   health_path           = var.cloud_run_use_bootstrap_image ? "/" : "/api/v1/health"
   enable_probes         = !var.cloud_run_use_bootstrap_image
@@ -165,10 +165,10 @@ module "cloud_run_auth" {
   image                 = var.cloud_run_use_bootstrap_image ? local.bootstrap_image : "${local.artifact_host}/auth-server:${local.image_tag}"
   service_account_email = module.iam.service_account_emails["auth-server"]
   container_port        = 4000
-  cpu                   = "2"
-  memory                = "1Gi"
-  min_instances         = 1
-  max_instances         = 3
+  cpu                   = "1"
+  memory                = "768Mi"
+  min_instances         = 0
+  max_instances         = 1
   health_path           = var.cloud_run_use_bootstrap_image ? "/" : "/health"
   enable_probes         = !var.cloud_run_use_bootstrap_image
   ingress               = "INGRESS_TRAFFIC_ALL"
@@ -231,9 +231,9 @@ module "cloud_run_frontend" {
   service_account_email = module.iam.service_account_emails["frontend"]
   container_port        = 3000
   cpu                   = "2"
-  memory                = "1Gi"
-  min_instances         = 1
-  max_instances         = 4
+  memory                = "768Mi"
+  min_instances         = 0
+  max_instances         = 1
   health_path           = "/"
   enable_probes         = !var.cloud_run_use_bootstrap_image
   ingress               = "INGRESS_TRAFFIC_ALL"
@@ -302,8 +302,8 @@ resource "google_cloud_run_v2_job" "migrate_api" {
 
         resources {
           limits = {
-            cpu    = "2"
-            memory = "2Gi"
+            cpu    = "1"
+            memory = "1Gi"
           }
         }
 
