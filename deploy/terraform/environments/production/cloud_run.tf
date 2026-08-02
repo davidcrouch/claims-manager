@@ -259,6 +259,7 @@ module "cloud_run_frontend" {
     # Wire to public hostnames (Cloudflare) or direct *.run.app URLs.
     AUTH_SERVER_URL = var.use_public_hostnames ? "https://${local.cloud_run_hosts.auth}" : local.auth_run_url
     OIDC_ISSUER     = var.use_public_hostnames ? "https://${local.cloud_run_hosts.auth}" : local.auth_run_url
+    OIDC_CLIENT_ID  = "claims-manager-ui"
     OIDC_REDIRECT_URI = (
       var.use_public_hostnames
       ? "https://${local.cloud_run_hosts.app}/api/auth/callback"
@@ -280,6 +281,8 @@ module "cloud_run_frontend" {
 
   secret_env_vars = [
     { name = "OIDC_COOKIE_SECRET", secret = "frontend-oidc-cookie-secret" },
+    # Same confidential-client secret as auth-server (Basic auth on /token).
+    { name = "OIDC_CLIENT_SECRET", secret = "auth-oidc-client-secret" },
   ]
 
   depends_on = [

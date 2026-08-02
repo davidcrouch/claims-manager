@@ -30,10 +30,25 @@ function setCookie(
   });
 }
 
+function isIpHost(host: string): boolean {
+  const bare = host.replace(/^\[|\]$/g, '');
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(bare)) return true;
+  // IPv6 contains colons; host:port for IPv4 is handled by stripping port first.
+  return bare.includes(':');
+}
+
 function resolveRedirectUri(req: NextRequest): string {
-  const host =
+  // Production callbacks must match the registered client redirect_uri.
+  // GCP HTTPS LB / health probes can present the LB IP as Host — that must
+  // not become the OIDC redirect_uri or authorize/token exchange fails.
+  if (process.env.NODE_ENV === 'production') {
+    return authConfig.oidcRedirectUri;
+  }
+
+  const hostHeader =
     req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? '';
-  if (!host) return authConfig.oidcRedirectUri;
+  const host = hostHeader.split(',')[0]?.trim().split(':')[0] ?? '';
+  if (!host || isIpHost(host)) return authConfig.oidcRedirectUri;
   const scheme =
     req.headers.get('x-forwarded-proto') ??
     (req.url.startsWith('https') ? 'https' : 'http');
