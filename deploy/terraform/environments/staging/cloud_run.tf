@@ -1,6 +1,7 @@
 # Cloud Run compute path (see deploy/CLOUD_RUN.md).
-# Custom hostnames are via Cloudflare → *.run.app (domain mappings are not
-# supported in australia-southeast1 and are not provisioned here).
+# Custom hostnames are via GCP HTTPS Load Balancer with serverless NEGs.
+# The LB terminates TLS on custom domains and routes to Cloud Run services
+# with the correct Host header — no code changes or Workers needed.
 
 locals {
   artifact_host = "${var.region}-docker.pkg.dev/${var.infra_project_id}/claims-manager"

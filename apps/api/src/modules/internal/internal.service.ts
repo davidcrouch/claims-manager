@@ -5,9 +5,9 @@
  * separate from the controller so both the HTTP path and any future
  * callers (e.g. an event consumer) can reuse it.
  *
- * Primary responsibility: demand-seed sample data for a newly-provisioned
- * tenant. Wraps `seedSampleDataForTenant` from the seed framework and
- * guards it with tenant-existence + feature-flag checks.
+ * Primary responsibility: demand-seed a newly-provisioned tenant.
+ * Runs catalog-dev (DB-only); sample-data gated by SEED_SAMPLE_DATA.
+ * Document template uploads are handled by first-login provisioning (ProvisioningService).
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -16,6 +16,7 @@ import { DRIZZLE, type DrizzleDB } from '../../database/drizzle.module';
 import { organizations } from '../../database/schema';
 import type { SeedResult } from '../../database/seeds/lib/runner';
 import { seedSampleDataForTenant } from '../../database/seeds/entries/sample-data.seed';
+import { seedCatalogDevForTenant } from '../../database/seeds/entries/catalog-dev.seed';
 
 const LOG = 'InternalService';
 
@@ -45,6 +46,14 @@ export class InternalService {
     return raw.trim().toLowerCase() === 'true';
   }
 
+  isSampleDataEnabled(): boolean {
+    const raw =
+      this.config.get<string>('SEED_SAMPLE_DATA') ??
+      process.env.SEED_SAMPLE_DATA ??
+      '';
+    return raw.trim().toLowerCase() === 'true';
+  }
+
   async seedTenant(params: { tenantId: string }): Promise<SeedTenantOutcome> {
     const { tenantId } = params;
     const fn = 'seedTenant';
@@ -67,20 +76,43 @@ export class InternalService {
       return { status: 'not-found', tenantId };
     }
 
+    const includeSample = this.isSampleDataEnabled();
     this.logger.log(
-      `[${LOG}.${fn}] starting seed tenantId=${tenantId} name="${org.name}"`,
+      `[${LOG}.${fn}] starting seed tenantId=${tenantId} name="${org.name}" sampleData=${includeSample}`,
     );
 
+    const logger = {
+      info: (msg: string) => this.logger.log(`[${LOG}.${fn}] ${msg}`),
+      warn: (msg: string) => this.logger.warn(`[${LOG}.${fn}] ${msg}`),
+      error: (msg: string) => this.logger.error(`[${LOG}.${fn}] ${msg}`),
+    };
+
     try {
-      const result = await seedSampleDataForTenant({
+      const catalogResult = await seedCatalogDevForTenant({
         db: this.db,
         tenantId,
-        logger: {
-          info: (msg: string) => this.logger.log(`[${LOG}.${fn}] ${msg}`),
-          warn: (msg: string) => this.logger.warn(`[${LOG}.${fn}] ${msg}`),
-          error: (msg: string) => this.logger.error(`[${LOG}.${fn}] ${msg}`),
-        },
+        logger,
       });
+
+      let sampleResult: SeedResult | undefined;
+      if (includeSample) {
+        sampleResult = await seedSampleDataForTenant({
+          db: this.db,
+          tenantId,
+          logger,
+        });
+      } else {
+        this.logger.log(
+          `[${LOG}.${fn}] SEED_SAMPLE_DATA is not enabled — skipping sample-data tenantId=${tenantId}`,
+        );
+      }
+
+      const result: SeedResult = {
+        inserted: catalogResult.inserted + (sampleResult?.inserted ?? 0),
+        updated: catalogResult.updated + (sampleResult?.updated ?? 0),
+        skipped: catalogResult.skipped + (sampleResult?.skipped ?? 0),
+        notes: `tenant=${tenantId}; catalog;${includeSample ? ' sample-data' : ' no-sample'}`,
+      };
 
       this.logger.log(
         `[${LOG}.${fn}] done tenantId=${tenantId} inserted=${result.inserted} skipped=${result.skipped}`,

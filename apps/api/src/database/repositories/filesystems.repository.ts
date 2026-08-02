@@ -1,7 +1,7 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, isNull, sql } from 'drizzle-orm';
+import { eq, and, isNull } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../drizzle.module';
-import { filesystems, filesystemCategories } from '../schema';
+import { filesystems, filesystemCategories, documents } from '../schema';
 
 export type FilesystemRow = typeof filesystems.$inferSelect;
 export type FilesystemInsert = typeof filesystems.$inferInsert;
@@ -51,7 +51,27 @@ export class FilesystemsRepository {
     return inserted;
   }
 
-  async updateCategory(id: string, data: Partial<FilesystemCategoryInsert>): Promise<FilesystemCategoryRow | null> {
+  async findCategory(
+    categoryId: string,
+    filesystemId: string,
+  ): Promise<FilesystemCategoryRow | null> {
+    const [row] = await this.db
+      .select()
+      .from(filesystemCategories)
+      .where(
+        and(
+          eq(filesystemCategories.id, categoryId),
+          eq(filesystemCategories.filesystemId, filesystemId),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
+  async updateCategory(
+    id: string,
+    data: Partial<FilesystemCategoryInsert>,
+  ): Promise<FilesystemCategoryRow | null> {
     const [updated] = await this.db
       .update(filesystemCategories)
       .set({ ...data, updatedAt: new Date() })
@@ -67,6 +87,49 @@ export class FilesystemsRepository {
       .where(eq(filesystemCategories.id, id));
   }
 
+  /**
+   * Soft-archive a category after re-parenting children and reassigning documents.
+   */
+  async archiveCategoryWithReparent(params: {
+    filesystemId: string;
+    categoryId: string;
+    parentCategoryId: string | null;
+    tenantId: string;
+  }): Promise<void> {
+    const { filesystemId, categoryId, parentCategoryId, tenantId } = params;
+
+    await this.db
+      .update(filesystemCategories)
+      .set({
+        parentCategoryId,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(filesystemCategories.parentCategoryId, categoryId),
+          eq(filesystemCategories.filesystemId, filesystemId),
+        ),
+      );
+
+    await this.db
+      .update(documents)
+      .set({
+        filesystemCategoryId: parentCategoryId,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(documents.filesystemCategoryId, categoryId),
+          eq(documents.tenantId, tenantId),
+        ),
+      );
+
+    await this.db
+      .update(filesystemCategories)
+      .set({ archivedAt: new Date(), updatedAt: new Date() })
+      .where(eq(filesystemCategories.id, categoryId));
+  }
+
   async getCategoryTree(filesystemId: string): Promise<FilesystemCategoryRow[]> {
     return this.db
       .select()
@@ -80,7 +143,10 @@ export class FilesystemsRepository {
       .orderBy(filesystemCategories.sortOrder);
   }
 
-  async replaceCategories(filesystemId: string, categories: FilesystemCategoryInsert[]): Promise<FilesystemCategoryRow[]> {
+  async replaceCategories(
+    filesystemId: string,
+    categories: FilesystemCategoryInsert[],
+  ): Promise<FilesystemCategoryRow[]> {
     await this.db
       .delete(filesystemCategories)
       .where(eq(filesystemCategories.filesystemId, filesystemId));

@@ -123,3 +123,34 @@ module "pubsub" {
   env            = var.environment
   labels         = local.labels
 }
+
+module "https_lb" {
+  source = "../../modules/https_lb"
+
+  project_id  = var.project_id
+  region      = var.region
+  environment = var.environment
+
+  domains = [
+    local.cloud_run_hosts.app,
+    local.cloud_run_hosts.auth,
+    local.cloud_run_hosts.providers,
+  ]
+
+  services = {
+    frontend = {
+      cloud_run_service_name = "frontend"
+      hostnames              = [local.cloud_run_hosts.app]
+    }
+    auth = {
+      cloud_run_service_name = "auth-server"
+      hostnames              = [local.cloud_run_hosts.auth]
+    }
+    provider = {
+      cloud_run_service_name = "provider-server"
+      hostnames              = [local.cloud_run_hosts.providers]
+    }
+  }
+
+  default_service = "frontend"
+}

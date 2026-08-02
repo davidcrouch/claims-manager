@@ -4,3 +4,4 @@ region           = "australia-southeast1"
 environment      = "staging"
 cloudsql_tier    = "db-custom-1-3840"
 dns_name         = "branlamie.com."
+use_public_hostnames = true

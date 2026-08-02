@@ -1,0 +1,20 @@
+{
+  "name": "cloudrun-hostname-proxy",
+  "account_id": "d1d4fab7d68e78805c2fc13c1a14c4ae",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-14",
+  "routes": [
+    {
+      "pattern": "app-staging.branlamie.com/*",
+      "zone_name": "branlamie.com"
+    },
+    {
+      "pattern": "auth-staging.branlamie.com/*",
+      "zone_name": "branlamie.com"
+    },
+    {
+      "pattern": "providers-staging.branlamie.com/*",
+      "zone_name": "branlamie.com"
+    }
+  ]
+}

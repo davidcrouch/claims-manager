@@ -35,6 +35,6 @@ import { DocumentsRepository } from '../../database/repositories/documents.repos
     BillMapper,
     RfqMapper,
   ],
-  exports: [DocumentGenerationService],
+  exports: [DocumentGenerationService, TemplateRegistryService],
 })
 export class DocumentGenerationModule {}

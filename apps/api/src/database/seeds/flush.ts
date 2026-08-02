@@ -22,9 +22,21 @@ import { sql } from 'drizzle-orm';
 import { openDb, getDbHost } from './lib/db';
 import { runSeeds } from './lib/runner';
 import type { Seed } from './lib/runner';
+import filesystemDefaultSeed from './entries/filesystem-default.seed';
 import sampleDataSeed from './entries/sample-data.seed';
+import catalogDevSeed from './entries/catalog-dev.seed';
 
-const SEEDS: Seed[] = [sampleDataSeed];
+function isSampleDataEnabled(): boolean {
+  return (process.env.SEED_SAMPLE_DATA ?? '').trim().toLowerCase() === 'true';
+}
+
+function buildSeeds(): Seed[] {
+  const seeds: Seed[] = [filesystemDefaultSeed, catalogDevSeed];
+  if (isSampleDataEnabled()) {
+    seeds.push(sampleDataSeed);
+  }
+  return seeds;
+}
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 
@@ -114,7 +126,7 @@ async function main(): Promise<void> {
 
   const seedHandle = openDb();
   try {
-    await runSeeds({ db: seedHandle.db, seeds: SEEDS });
+    await runSeeds({ db: seedHandle.db, seeds: buildSeeds() });
   } finally {
     await seedHandle.pool.end();
   }

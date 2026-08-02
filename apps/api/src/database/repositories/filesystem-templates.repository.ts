@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, isNull, desc, sql } from 'drizzle-orm';
+import { eq, and, or, isNull, desc } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../drizzle.module';
 import { filesystemTemplates, filesystemTemplateCategories } from '../schema';
 
@@ -12,19 +12,43 @@ export type FilesystemTemplateCategoryInsert = typeof filesystemTemplateCategori
 export class FilesystemTemplatesRepository {
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
 
+  /** Tenant-owned templates plus platform templates (tenant_id IS NULL). */
   async findAll(tenantId: string): Promise<FilesystemTemplateRow[]> {
     return this.db
       .select()
       .from(filesystemTemplates)
       .where(
         and(
-          eq(filesystemTemplates.tenantId, tenantId),
+          or(
+            eq(filesystemTemplates.tenantId, tenantId),
+            isNull(filesystemTemplates.tenantId),
+          ),
           isNull(filesystemTemplates.archivedAt),
         ),
       )
-      .orderBy(desc(filesystemTemplates.updatedAt));
+      .orderBy(desc(filesystemTemplates.isDefault), desc(filesystemTemplates.updatedAt));
   }
 
+  /** Resolve a template owned by the tenant or a platform template. */
+  async findAccessible(id: string, tenantId: string): Promise<FilesystemTemplateRow | null> {
+    const [row] = await this.db
+      .select()
+      .from(filesystemTemplates)
+      .where(
+        and(
+          eq(filesystemTemplates.id, id),
+          or(
+            eq(filesystemTemplates.tenantId, tenantId),
+            isNull(filesystemTemplates.tenantId),
+          ),
+          isNull(filesystemTemplates.archivedAt),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
+  /** Tenant-owned template only (mutations). */
   async findOne(id: string, tenantId: string): Promise<FilesystemTemplateRow | null> {
     const [row] = await this.db
       .select()
@@ -33,6 +57,21 @@ export class FilesystemTemplatesRepository {
         and(
           eq(filesystemTemplates.id, id),
           eq(filesystemTemplates.tenantId, tenantId),
+          isNull(filesystemTemplates.archivedAt),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
+  async findPlatformDefault(): Promise<FilesystemTemplateRow | null> {
+    const [row] = await this.db
+      .select()
+      .from(filesystemTemplates)
+      .where(
+        and(
+          isNull(filesystemTemplates.tenantId),
+          eq(filesystemTemplates.isDefault, true),
           isNull(filesystemTemplates.archivedAt),
         ),
       )

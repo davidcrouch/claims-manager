@@ -1291,8 +1291,8 @@ export function createApiClient(options?: ApiClientOptions) {
 
     // -- Filesystem --
 
-    getFilesystem(): Promise<FilesystemResponse> {
-      return fetchApi<FilesystemResponse>('/filesystems');
+    getFilesystem(): Promise<FilesystemResponse | null> {
+      return fetchApi<FilesystemResponse | null>('/filesystems');
     },
 
     setupFilesystem(templateId: string): Promise<FilesystemResponse> {
@@ -1302,15 +1302,148 @@ export function createApiClient(options?: ApiClientOptions) {
       });
     },
 
+    setupFilesystemDefault(): Promise<FilesystemResponse> {
+      return fetchApi<FilesystemResponse>('/filesystems/setup-default', {
+        method: 'POST',
+      });
+    },
+
     getFilesystemTemplates(): Promise<{ data: FilesystemTemplate[] }> {
       return fetchApi<{ data: FilesystemTemplate[] }>('/filesystem-templates');
     },
 
-    createFilesystemTemplate(data: { name: string; description?: string }): Promise<FilesystemTemplate> {
+    getFilesystemTemplate(id: string): Promise<FilesystemTemplate> {
+      return fetchApi<FilesystemTemplate>(`/filesystem-templates/${id}`);
+    },
+
+    createFilesystemTemplate(data: {
+      name: string;
+      description?: string;
+      kind?: FilesystemTemplateKind;
+    }): Promise<FilesystemTemplate> {
       return fetchApi<FilesystemTemplate>('/filesystem-templates', {
         method: 'POST',
         body: JSON.stringify(data),
       });
+    },
+
+    updateFilesystemTemplate(
+      id: string,
+      data: { name?: string; description?: string },
+    ): Promise<FilesystemTemplate> {
+      return fetchApi<FilesystemTemplate>(`/filesystem-templates/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+    },
+
+    archiveFilesystemTemplate(id: string): Promise<{ archived: boolean }> {
+      return fetchApi<{ archived: boolean }>(`/filesystem-templates/${id}`, {
+        method: 'DELETE',
+      });
+    },
+
+    bulkUpsertTemplateCategories(
+      templateId: string,
+      categories: FlatCategoryUpsert[],
+    ): Promise<FilesystemTemplateCategory[]> {
+      return fetchApi<FilesystemTemplateCategory[]>(`/filesystem-templates/${templateId}/categories`, {
+        method: 'PUT',
+        body: JSON.stringify({ categories }),
+      });
+    },
+
+    bulkUpsertFilesystemCategories(
+      filesystemId: string,
+      categories: FlatCategoryUpsert[],
+    ): Promise<FilesystemCategory[]> {
+      return fetchApi<FilesystemCategory[]>(`/filesystems/${filesystemId}/categories`, {
+        method: 'PUT',
+        body: JSON.stringify({ categories }),
+      });
+    },
+
+    generateCategoryDescription(data: {
+      categoryName: string;
+      siblingCategories: Array<{ name: string; description?: string | null }>;
+    }): Promise<{ description: string }> {
+      return fetchApi<{ description: string }>('/filesystems/generate-category-description', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    getArtifactExportSettings(): Promise<ArtifactExportSettings> {
+      return fetchApi<ArtifactExportSettings>('/filesystems/artifact-export');
+    },
+
+    updateArtifactExportSettings(
+      data: ArtifactExportSettings,
+    ): Promise<ArtifactExportSettings> {
+      return fetchApi<ArtifactExportSettings>('/filesystems/artifact-export', {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      });
+    },
+
+    // -- Document pipelines --
+
+    listPipelines(filesystemId: string): Promise<PipelineResponse[]> {
+      return fetchApi<PipelineResponse[]>(`/pipelines/filesystem/${filesystemId}`);
+    },
+
+    getPipeline(id: string): Promise<PipelineResponse & { steps: PipelineStepResponse[] }> {
+      return fetchApi<PipelineResponse & { steps: PipelineStepResponse[] }>(`/pipelines/${id}`);
+    },
+
+    createPipeline(data: {
+      filesystemId?: string | null;
+      categoryId?: string | null;
+      name: string;
+      description?: string | null;
+      isActive?: boolean;
+      triggerOn?: string;
+      sortOrder?: number;
+    }): Promise<PipelineResponse> {
+      return fetchApi<PipelineResponse>('/pipelines', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    updatePipeline(
+      id: string,
+      data: {
+        name?: string;
+        description?: string | null;
+        isActive?: boolean;
+        triggerOn?: string;
+        sortOrder?: number;
+        categoryId?: string | null;
+      },
+    ): Promise<PipelineResponse> {
+      return fetchApi<PipelineResponse>(`/pipelines/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+    },
+
+    deletePipeline(id: string): Promise<{ deleted: boolean }> {
+      return fetchApi<{ deleted: boolean }>(`/pipelines/${id}`, { method: 'DELETE' });
+    },
+
+    savePipelineSteps(
+      id: string,
+      steps: PipelineStepInput[],
+    ): Promise<PipelineStepResponse[]> {
+      return fetchApi<PipelineStepResponse[]>(`/pipelines/${id}/steps`, {
+        method: 'PUT',
+        body: JSON.stringify({ steps }),
+      });
+    },
+
+    listPipelineRuns(documentId: string): Promise<PipelineRunResponse[]> {
+      return fetchApi<PipelineRunResponse[]>(`/pipelines/document/${documentId}/runs`);
     },
 
     updateCategory(
@@ -1459,13 +1592,21 @@ export function createApiClient(options?: ApiClientOptions) {
 
 // -- Filesystem types --
 
+/** Per-category display/behaviour settings stored in the `config` jsonb column. */
+export interface CategoryConfig {
+  color?: string | null;
+  retentionDays?: number | null;
+  [key: string]: unknown;
+}
+
 export interface FilesystemCategory {
   id: string;
   filesystemId: string;
   parentCategoryId: string | null;
   displayName: string;
+  description: string | null;
   slug: string;
-  config: Record<string, unknown>;
+  config: CategoryConfig;
   sortOrder: number;
   archivedAt: string | null;
   createdAt: string;
@@ -1482,10 +1623,15 @@ export interface FilesystemResponse {
   updatedAt: string;
 }
 
+export type FilesystemTemplateKind = 'company' | 'project';
+
 export interface FilesystemTemplate {
   id: string;
+  tenantId?: string | null;
   name: string;
   description: string | null;
+  /** company = org filesystem; project = per-job filesystem */
+  kind?: FilesystemTemplateKind;
   isDefault: boolean;
   categories?: FilesystemTemplateCategory[];
   createdAt: string;
@@ -1496,9 +1642,103 @@ export interface FilesystemTemplateCategory {
   templateId: string;
   parentCategoryId: string | null;
   displayName: string;
+  description: string | null;
   slug: string;
-  config: Record<string, unknown>;
+  config: CategoryConfig;
   sortOrder: number;
+}
+
+/**
+ * Client-side nested representation of a category tree, built from the flat
+ * `FilesystemCategory[]` / `FilesystemTemplateCategory[]` arrays returned by the API.
+ * Used by CategoryTreeEditor / FilesystemEditorPanel for editing, then flattened
+ * back to a flat list before saving via bulkUpsert*Categories.
+ */
+export interface FilesystemCategoryNode {
+  id?: string;
+  parentCategoryId?: string | null;
+  displayName: string;
+  description?: string | null;
+  slug: string;
+  config?: CategoryConfig;
+  sortOrder: number;
+  children?: FilesystemCategoryNode[];
+}
+
+/** Flat category payload sent to the bulk-upsert (PUT .../categories) endpoints. */
+export interface FlatCategoryUpsert {
+  id?: string;
+  parentCategoryId?: string | null;
+  displayName: string;
+  description?: string | null;
+  slug: string;
+  config?: CategoryConfig;
+  sortOrder: number;
+}
+
+// -- Artifact export defaults --
+
+export type ArtifactContentType = 'markdown' | 'code' | 'json' | 'html' | 'image';
+
+export interface ArtifactExportSettings {
+  defaultCategoryId?: string | null;
+  categoryByContentType?: Partial<Record<ArtifactContentType, string>>;
+  fileNameTemplate?: string;
+}
+
+// -- Document pipelines --
+
+export interface PipelineStepInput {
+  agentId: string;
+  stepOrder: number;
+  config?: Record<string, unknown>;
+}
+
+export interface PipelineStepResponse extends PipelineStepInput {
+  id: string;
+  pipelineId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PipelineResponse {
+  id: string;
+  tenantId: string;
+  filesystemId: string | null;
+  categoryId: string | null;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  triggerOn: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PipelineRunStepResponse {
+  id: string;
+  runId: string;
+  stepId: string | null;
+  agentId: string;
+  stepOrder: number;
+  status: string;
+  error: string | null;
+  durationMs: number | null;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface PipelineRunResponse {
+  id: string;
+  pipelineId: string;
+  documentId: string;
+  tenantId: string;
+  status: string;
+  error: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  steps?: PipelineRunStepResponse[];
 }
 
 export interface FSDocument {
@@ -1515,6 +1755,8 @@ export interface FSDocument {
   uri: string | null;
   thumbnailUri: string | null;
   uploadStatus: string;
+  pipelineStatus?: string | null;
+  pipelineError?: string | null;
   sourceSystem: string;
   uploadedByUserId: string | null;
   archivedAt: string | null;

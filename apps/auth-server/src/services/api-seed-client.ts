@@ -13,6 +13,9 @@
  * Env contract:
  *   - SEED_NEW_TENANTS     "true" to enable (default off). Also enforced
  *                          on the api-server side for defence in depth.
+ *                          When enabled, api-server always seeds catalog-dev;
+ *                          sample-data is controlled by api-server's
+ *                          SEED_SAMPLE_DATA flag (not this client).
  *   - API_INTERNAL_URL     Base URL of the api-server as reachable from
  *                          the auth-server container (e.g.
  *                          http://api-server:3001 inside compose, or

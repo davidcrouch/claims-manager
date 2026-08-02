@@ -1,4 +1,4 @@
-import { IsString, IsOptional } from 'class-validator';
+import { IsString, IsOptional, IsIn } from 'class-validator';
 
 export class CreateFilesystemTemplateDto {
   @IsString()
@@ -7,4 +7,9 @@ export class CreateFilesystemTemplateDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  /** company = org filesystem; project = per-job filesystem. */
+  @IsOptional()
+  @IsIn(['company', 'project'])
+  kind?: 'company' | 'project';
 }

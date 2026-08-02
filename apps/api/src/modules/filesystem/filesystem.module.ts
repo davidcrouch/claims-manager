@@ -1,5 +1,7 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TenantModule } from '../../tenant/tenant.module';
+import { SystemAgentsModule } from '../system-agents/system-agents.module';
+import { PipelineModule } from '../pipelines/pipeline.module';
 import { FilesystemTemplatesController } from './filesystem-templates.controller';
 import { FilesystemTemplatesService } from './filesystem-templates.service';
 import { FilesystemController } from './filesystem.controller';
@@ -11,7 +13,7 @@ import { FilesystemsRepository } from '../../database/repositories/filesystems.r
 import { DocumentsRepository } from '../../database/repositories/documents.repository';
 
 @Module({
-  imports: [TenantModule],
+  imports: [TenantModule, SystemAgentsModule, forwardRef(() => PipelineModule)],
   controllers: [FilesystemTemplatesController, FilesystemController, DocumentsController],
   providers: [
     FilesystemTemplatesService,

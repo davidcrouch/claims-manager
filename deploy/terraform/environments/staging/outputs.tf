@@ -68,3 +68,8 @@ output "subnet_name" {
   value       = module.networking.subnet_name
   description = "Active private subnet name"
 }
+
+output "lb_ip" {
+  value       = module.https_lb.lb_ip
+  description = "Global anycast IP for the HTTPS load balancer (point DNS A records here)"
+}

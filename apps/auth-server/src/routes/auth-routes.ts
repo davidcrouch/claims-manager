@@ -373,6 +373,7 @@ export default function createAuthRoutes(
                   resetPasswordUrl,
                   appSlug,
                   startOverUrl,
+                  nonce: res.locals.cspNonce as string | undefined,
                }),
                { title: 'EnsureOS — Sign in', description: 'Sign in to your EnsureOS account' }
             );
@@ -455,6 +456,7 @@ export default function createAuthRoutes(
                   registerActionUrl,
                   loginUrl,
                   startOverUrl,
+                  nonce: res.locals.cspNonce as string | undefined,
                }),
                { title: 'EnsureOS — Sign up', description: 'Create your EnsureOS account' }
             );
@@ -1173,6 +1175,7 @@ export default function createAuthRoutes(
                         oidcScopes,
                         resourceScopes,
                         error: null,
+                        nonce: res.locals.cspNonce as string | undefined,
                      }),
                      { title: 'EnsureOS — Authorize application' }
                   );
@@ -1929,14 +1932,46 @@ export default function createAuthRoutes(
             return res.redirect(`/register?interaction=${uid}&error=${encodeURIComponent('Invalid session state. Please try again.')}`);
          }
 
-         // Extract registration data from request body
-         const { name: userName, email, password, confirmPassword, company } = req.body;
+         // Extract registration data from request body.
+         // `name` is a hidden field filled client-side from first/last; also
+         // accept firstName/lastName directly so registration works if the
+         // name-compose script is blocked (e.g. missing CSP nonce).
+         const {
+            name: rawName,
+            email,
+            password,
+            confirmPassword,
+            company,
+            firstName,
+            lastName,
+         } = req.body;
+         const userName = String(
+            rawName ||
+               [firstName, lastName]
+                  .map((v: unknown) => (typeof v === 'string' ? v.trim() : ''))
+                  .filter(Boolean)
+                  .join(' '),
+         ).trim();
          log.info({ functionName: 'register-submit', email, company }, 'Processing registration request');
 
          // Validate required fields
          if (!userName || !email || !password || !confirmPassword) {
-            log.warn({ functionName: 'register-submit', email }, 'Missing required registration fields');
-            return res.redirect(`/register?interaction=${uid}&error=${encodeURIComponent('All fields are required.')}`);
+            log.warn(
+               {
+                  functionName: 'register-submit',
+                  email,
+                  hasName: !!userName,
+                  hasEmail: !!email,
+                  hasPassword: !!password,
+                  hasConfirm: !!confirmPassword,
+               },
+               'auth-server:auth-routes:register-submit - Missing required registration fields',
+            );
+            return res.redirect(
+               `/register?interaction=${uid}&error=${encodeURIComponent(
+                  'Please complete all required fields (name, email, and password).',
+               )}`,
+            );
          }
 
          // Validate password match
@@ -2664,6 +2699,7 @@ export default function createAuthRoutes(
                   oidcScopes,
                   resourceScopes,
                   error: err.message || 'An error occurred processing your consent',
+                  nonce: res.locals.cspNonce as string | undefined,
                }),
                { title: 'EnsureOS — Authorize application' }
             );
@@ -2878,6 +2914,7 @@ export default function createAuthRoutes(
                registerUrl: `${baseUrl}/register`,
                resetPasswordUrl: `${baseUrl}/reset-password`,
                startOverUrl,
+               nonce: res.locals.cspNonce as string | undefined,
             }),
             { title: 'EnsureOS — Session expired' }
          );

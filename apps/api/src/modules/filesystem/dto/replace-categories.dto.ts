@@ -13,6 +13,10 @@ export class ReplaceCategoryItem {
   @IsString()
   displayName!: string;
 
+  @IsOptional()
+  @IsString()
+  description?: string | null;
+
   @IsString()
   slug!: string;
 

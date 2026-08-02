@@ -4,6 +4,7 @@ import {
   BadRequestException,
   ServiceUnavailableException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { DocumentsRepository } from '../../database/repositories/documents.repository';
 import { TenantContext } from '../../tenant/tenant-context';
@@ -11,6 +12,9 @@ import { GcsStorageService } from '../../common/gcs/gcs-storage.service';
 import { OfficeConverterService } from '../../common/office/office-converter.service';
 import { CreateDocumentUploadUrlDto } from './dto/create-document-upload-url.dto';
 import { BatchUploadUrlsDto } from './dto/batch-upload-urls.dto';
+import { PipelineService } from '../pipelines/pipeline.service';
+
+const ADC_REAUTH_REQUIRED_RE = /invalid_grant|invalid_rapt|reauth related error|credentials expired/i;
 
 const ALLOWED_MIME_PREFIXES = [
   'image/',
@@ -59,6 +63,7 @@ export class DocumentsService {
     private readonly gcsStorage: GcsStorageService,
     private readonly officeConverter: OfficeConverterService,
     private readonly tenantContext: TenantContext,
+    @Optional() private readonly pipelineService?: PipelineService,
   ) {}
 
   async findAll(params: {
@@ -160,9 +165,13 @@ export class DocumentsService {
       };
     } catch (error: any) {
       await this.documentsRepo.update(documentId, tenantId, { uploadStatus: 'failed' });
-      if (error?.code === 401 || error?.message?.includes('credentials expired')) {
+      const message = error?.message ?? String(error);
+      if (error?.code === 401 || ADC_REAUTH_REQUIRED_RE.test(message)) {
+        this.logger.error(
+          '[DocumentsService.generateUploadUrl] Google ADC requires re-authentication before creating upload URLs',
+        );
         throw new ServiceUnavailableException(
-          'GCP credentials expired. Run "gcloud auth application-default login" and restart.',
+          'Google Cloud ADC requires re-authentication. Run "gcloud auth application-default login" and restart.',
         );
       }
       throw error;
@@ -221,6 +230,15 @@ export class DocumentsService {
     this.logger.debug(
       `${logPrefix} — docId=${documentId} verified=${!!metadata} thumbnail=${!!thumbnailUri}`,
     );
+
+    void this.pipelineService
+      ?.triggerUploadPipelines(documentId, tenantId)
+      .catch((err) => {
+        this.logger.warn(
+          `${logPrefix} — pipeline trigger failed: ${err instanceof Error ? err.message : err}`,
+        );
+      });
+
     return updated;
   }
 
@@ -277,9 +295,21 @@ export class DocumentsService {
     const doc = await this.documentsRepo.findOne(documentId, tenantId);
     if (!doc) throw new NotFoundException('Document not found');
 
-    return this.documentsRepo.update(documentId, tenantId, {
+    const updated = await this.documentsRepo.update(documentId, tenantId, {
       filesystemCategoryId: categoryId,
     });
+
+    if (categoryId) {
+      void this.pipelineService
+        ?.triggerCategoryPipelines(documentId, categoryId, tenantId)
+        .catch((err) => {
+          this.logger.warn(
+            `[DocumentsService.assignCategory] pipeline trigger failed: ${err instanceof Error ? err.message : err}`,
+          );
+        });
+    }
+
+    return updated;
   }
 
   async bulkAssignCategory(documentIds: string[], categoryId: string | null) {
@@ -291,6 +321,15 @@ export class DocumentsService {
         this.documentsRepo.update(id, tenantId, { filesystemCategoryId: categoryId }),
       ),
     );
+
+    if (categoryId) {
+      for (const id of documentIds) {
+        void this.pipelineService
+          ?.triggerCategoryPipelines(id, categoryId, tenantId)
+          .catch(() => undefined);
+      }
+    }
+
     return { updated: results.filter(Boolean).length };
   }
 

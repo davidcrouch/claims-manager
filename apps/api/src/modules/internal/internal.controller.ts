@@ -34,8 +34,11 @@ export class InternalController {
   constructor(private readonly internalService: InternalService) {}
 
   /**
-   * Seed sample data for a tenant. Intended to be called by auth-server
-   * immediately after a new organization is provisioned on signup.
+   * Seed a newly provisioned tenant. Intended to be called by auth-server
+   * immediately after a new organization is created on signup.
+   *
+   * Always runs catalog-dev when enabled. Also runs sample-data when
+   * `SEED_SAMPLE_DATA=true`.
    *
    * Fire-and-forget semantics: returns 202 as soon as the work is
    * dispatched. Failures are logged server-side, not returned to the

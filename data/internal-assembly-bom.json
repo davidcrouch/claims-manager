@@ -1,0 +1,3262 @@
+[
+  {
+    "code": "ASM-WET-BATH-REL",
+    "name": "Bathroom relining",
+    "description": "Assembly allowance for bathroom relining including waterproofing wall linings and fit-off",
+    "typeCode": "other",
+    "categoryCode": "plumbing",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-PLUM-BACKFLOW-19",
+        "quantity": 12,
+        "wasteFactor": 1.07
+      },
+      {
+        "code": "LAB-PLU-09",
+        "quantity": 2,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-PUMP-SUB",
+        "quantity": 2,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-TEMP-BATH",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-PLUM-DISHWASHER-VALVE-15",
+        "quantity": 19,
+        "wasteFactor": 1.07
+      },
+      {
+        "code": "MAT-PLUM-GAS-COOKTOP-17",
+        "quantity": 12,
+        "wasteFactor": 1.14
+      },
+      {
+        "code": "EQ-CCTV",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-PLM-PERM",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-WET-SHOWER-REL",
+    "name": "Shower recess reline",
+    "description": "Assembly allowance to reline shower recess including waterproof membrane and tiles",
+    "typeCode": "other",
+    "categoryCode": "plumbing",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-PLUM-PIPE-COP-15-09",
+        "quantity": 16,
+        "wasteFactor": 1.07
+      },
+      {
+        "code": "LAB-PLU-08",
+        "quantity": 6,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-PLM-PERM",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "VND-SPRINKLER",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-PUMP-SUB",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "VND-HYDRO",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-TEMP-BATH",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-WET-LAUNDRY",
+    "name": "Laundry restoration",
+    "description": "Assembly allowance to restore laundry including tub plumbing and splash lining",
+    "typeCode": "other",
+    "categoryCode": "plumbing",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-PLUM-BACKFLOW-19",
+        "quantity": 16,
+        "wasteFactor": 1.1
+      },
+      {
+        "code": "LAB-PLU-06",
+        "quantity": 10,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-PLU-08",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-PUMP-SUB",
+        "quantity": 3,
+        "wasteFactor": 1
+      },
+      {
+        "code": "VND-SPRINKLER",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-PLU-07",
+        "quantity": 16,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-TEMP-BATH",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-KIT-BENCH-REP",
+    "name": "Kitchen bench replace",
+    "description": "Assembly allowance to replace kitchen benchtop splashback and reconnect plumbing",
+    "typeCode": "other",
+    "categoryCode": "carpentry",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-CARP-BENCH-TOP-17",
+        "quantity": 4,
+        "wasteFactor": 1.09
+      },
+      {
+        "code": "LAB-CAR-06",
+        "quantity": 13,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-SECURITY-BOARD",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-CARP-PLY-17-05",
+        "quantity": 18,
+        "wasteFactor": 1.06
+      },
+      {
+        "code": "VND-STONE-BENCH",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-KIT-CAB-REF",
+    "name": "Kitchen cabinet refit",
+    "description": "Assembly allowance to refit kitchen cabinets replace doors and hardware",
+    "typeCode": "other",
+    "categoryCode": "carpentry",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-CARP-LOCKSET-12",
+        "quantity": 17,
+        "wasteFactor": 1.09
+      },
+      {
+        "code": "LAB-CAR-08",
+        "quantity": 5,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-CAR-05",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-CARP-DOOR-SOL-11",
+        "quantity": 13,
+        "wasteFactor": 1.08
+      },
+      {
+        "code": "VND-STONE-BENCH",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-CARP-PLY-12-04",
+        "quantity": 10,
+        "wasteFactor": 1.09
+      }
+    ]
+  },
+  {
+    "code": "ASM-KIT-SPLASH",
+    "name": "Kitchen splashback",
+    "description": "Assembly allowance for tiled or glass kitchen splashback supply and install",
+    "typeCode": "other",
+    "categoryCode": "carpentry",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-CARP-DOOR-SOL-11",
+        "quantity": 12,
+        "wasteFactor": 1.1
+      },
+      {
+        "code": "LAB-CAR-01",
+        "quantity": 7,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-SECURITY-BOARD",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-FLR-CARP-BED",
+    "name": "Bedroom carpet replace",
+    "description": "Assembly allowance to replace bedroom carpet including underlay and trim",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-FIRST-AID-43",
+        "quantity": 15,
+        "wasteFactor": 1.1
+      },
+      {
+        "code": "LAB-GEN-01",
+        "quantity": 4,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-GENE-ROOF-TILE-16",
+        "quantity": 11,
+        "wasteFactor": 1.06
+      },
+      {
+        "code": "MAT-GENE-MOULD-TRT-33",
+        "quantity": 18,
+        "wasteFactor": 1.12
+      },
+      {
+        "code": "EQ-CONCRETE-CUT",
+        "quantity": 3,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-BLD-PERM",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-PS-ITEM",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-FLR-CARP-LIV",
+    "name": "Living carpet replace",
+    "description": "Assembly allowance to replace living area carpet including underlay and trim",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-SKIP-4M-36",
+        "quantity": 5,
+        "wasteFactor": 1.12
+      },
+      {
+        "code": "LAB-GEN-01",
+        "quantity": 11,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-GENE-GATE-SGL-24",
+        "quantity": 8,
+        "wasteFactor": 1.1
+      },
+      {
+        "code": "MAT-GENE-HEPA-FILTER-34",
+        "quantity": 7,
+        "wasteFactor": 1.05
+      },
+      {
+        "code": "MAT-GENE-MEMBRANE-30",
+        "quantity": 15,
+        "wasteFactor": 1.07
+      },
+      {
+        "code": "MAT-GENE-PAINT-EXT-02",
+        "quantity": 15,
+        "wasteFactor": 1.14
+      },
+      {
+        "code": "MAT-GENE-ASB-TEST-35",
+        "quantity": 5,
+        "wasteFactor": 1.13
+      },
+      {
+        "code": "OTH-CONTENTS-IN",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-FLR-VINYL-WET",
+    "name": "Wet area vinyl",
+    "description": "Assembly allowance for wet area vinyl plank floor replacement",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-MEMBRANE-30",
+        "quantity": 12,
+        "wasteFactor": 1.14
+      },
+      {
+        "code": "LAB-GEN-12",
+        "quantity": 9,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-GEN-11",
+        "quantity": 15,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-FAN",
+        "quantity": 3,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-GENE-TILE-CER-09",
+        "quantity": 14,
+        "wasteFactor": 1.11
+      },
+      {
+        "code": "VND-PIER-REP",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-FLR-TILE-BATH",
+    "name": "Bathroom floor tiles",
+    "description": "Assembly allowance for bathroom floor tile replacement including prep",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-ROOF-TILE-16",
+        "quantity": 7,
+        "wasteFactor": 1.11
+      },
+      {
+        "code": "LAB-GEN-14",
+        "quantity": 4,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-PS-ITEM",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-CONCRETE-CUT",
+        "quantity": 3,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-CEIL-SET-DOWN",
+    "name": "Ceiling set down",
+    "description": "Assembly allowance for ceiling set down after water damage including insulation",
+    "typeCode": "other",
+    "categoryCode": "plastering",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-PLAS-STOP-BEAD-06",
+        "quantity": 2,
+        "wasteFactor": 1.13
+      },
+      {
+        "code": "LAB-PLS-09",
+        "quantity": 12,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-PLAS-TIMBER-BAT-15",
+        "quantity": 17,
+        "wasteFactor": 1.12
+      },
+      {
+        "code": "EQ-PLASTER-BOOM",
+        "quantity": 3,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-WALL-LINING-REP",
+    "name": "Wall lining repair",
+    "description": "Assembly allowance to replace wall linings in single room including paint",
+    "typeCode": "other",
+    "categoryCode": "plastering",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-PLAS-RENDER-BAG-13",
+        "quantity": 15,
+        "wasteFactor": 1.14
+      },
+      {
+        "code": "LAB-PLS-03",
+        "quantity": 14,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-QUOTE-VISIT",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-TARP-ROOF",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-PLAS-GYP-MR-03",
+        "quantity": 4,
+        "wasteFactor": 1.1
+      },
+      {
+        "code": "MAT-PLAS-INSULATION-BAT-09",
+        "quantity": 13,
+        "wasteFactor": 1.11
+      }
+    ]
+  },
+  {
+    "code": "ASM-FIRE-SMOKE-ROOM",
+    "name": "Smoke damage room",
+    "description": "Assembly allowance for smoke damaged room clean seal and repaint",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-UNDERLAY-15",
+        "quantity": 19,
+        "wasteFactor": 1.11
+      },
+      {
+        "code": "LAB-GEN-16",
+        "quantity": 13,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-WASTE-TIP",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "VND-FLOOD-REST",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-FIRE-KITCH",
+    "name": "Kitchen fire damage",
+    "description": "Assembly allowance for kitchen fire damage strip out and reinstatement",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-MOULD-TRT-33",
+        "quantity": 15,
+        "wasteFactor": 1.08
+      },
+      {
+        "code": "LAB-GEN-05",
+        "quantity": 10,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-BLD-PERM",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-ENV-FEE",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-GEN-16",
+        "quantity": 11,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-GENE-HEPA-FILTER-34",
+        "quantity": 18,
+        "wasteFactor": 1.1
+      },
+      {
+        "code": "EQ-TILE-CUT",
+        "quantity": 2,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-FLOOD-ROOM",
+    "name": "Flood damage room",
+    "description": "Assembly allowance for single room flood strip dry out and reinstate linings",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-TEMP-TOIL-41",
+        "quantity": 2,
+        "wasteFactor": 1.11
+      },
+      {
+        "code": "LAB-GEN-12",
+        "quantity": 2,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-LADDER",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-GENE-ASB-TEST-35",
+        "quantity": 3,
+        "wasteFactor": 1.09
+      },
+      {
+        "code": "OTH-PC-ITEM",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-FLOOD-WHOLE-L1",
+    "name": "Ground floor flood",
+    "description": "Assembly allowance for whole ground floor flood restoration excluding contents",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-MEMBRANE-30",
+        "quantity": 10,
+        "wasteFactor": 1.08
+      },
+      {
+        "code": "LAB-GEN-07",
+        "quantity": 14,
+        "wasteFactor": 1
+      },
+      {
+        "code": "VND-MOULD-CERT",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-GEN-03",
+        "quantity": 6,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-BLD-PERM",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-MOULD-ROOM",
+    "name": "Mould remediation room",
+    "description": "Assembly allowance for mould remediation in single room with clearance test",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-HVAC-FILTER-31",
+        "quantity": 4,
+        "wasteFactor": 1.14
+      },
+      {
+        "code": "LAB-GEN-06",
+        "quantity": 16,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-GEN-07",
+        "quantity": 8,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-CONTENTS-IN",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-MOULD-WET",
+    "name": "Wet area mould treat",
+    "description": "Assembly allowance for wet area mould treatment and membrane renewal",
+    "typeCode": "other",
+    "categoryCode": "plumbing",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-PLUM-PIPE-COP-20-10",
+        "quantity": 19,
+        "wasteFactor": 1.08
+      },
+      {
+        "code": "LAB-PLU-01",
+        "quantity": 16,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-PLU-02",
+        "quantity": 13,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-PLUM-TMV-20",
+        "quantity": 17,
+        "wasteFactor": 1.09
+      },
+      {
+        "code": "MAT-PLUM-SINK-BL-14",
+        "quantity": 20,
+        "wasteFactor": 1.12
+      },
+      {
+        "code": "MAT-PLUM-CISTERN-04",
+        "quantity": 15,
+        "wasteFactor": 1.14
+      }
+    ]
+  },
+  {
+    "code": "ASM-STORM-ROOF-PATCH",
+    "name": "Storm roof patch",
+    "description": "Assembly allowance to patch storm damaged roof section and restore flashings",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-TEMP-TOIL-41",
+        "quantity": 14,
+        "wasteFactor": 1.15
+      },
+      {
+        "code": "LAB-GEN-14",
+        "quantity": 3,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-GEN-01",
+        "quantity": 15,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-STORM-FENCE",
+    "name": "Storm fence rebuild",
+    "description": "Assembly allowance to rebuild storm damaged fence section per 10 metres",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-CLEAN-SOL-32",
+        "quantity": 10,
+        "wasteFactor": 1.09
+      },
+      {
+        "code": "LAB-GEN-12",
+        "quantity": 13,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-MOIST-MTR",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-ENV-FEE",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "VND-POOL-FENCE",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-GENE-HEPA-FILTER-34",
+        "quantity": 3,
+        "wasteFactor": 1.08
+      }
+    ]
+  },
+  {
+    "code": "ASM-STORM-GUTTER",
+    "name": "Gutter replacement",
+    "description": "Assembly allowance to replace damaged gutter and downpipe run",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-HVAC-FILTER-31",
+        "quantity": 12,
+        "wasteFactor": 1.09
+      },
+      {
+        "code": "LAB-GEN-05",
+        "quantity": 6,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-CONTENTS-MOVE",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-WASTE-TIP",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-GENE-REO-MESH-26",
+        "quantity": 17,
+        "wasteFactor": 1.13
+      },
+      {
+        "code": "LAB-GEN-01",
+        "quantity": 9,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-ELE-REWIRE-CCT",
+    "name": "Circuit rewire",
+    "description": "Assembly allowance to rewire single damaged circuit including fittings",
+    "typeCode": "other",
+    "categoryCode": "electrical",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-ELEC-RCD-06",
+        "quantity": 17,
+        "wasteFactor": 1.15
+      },
+      {
+        "code": "LAB-ELE-02",
+        "quantity": 5,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-GEN-2",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-ELE-BOARD-UPG",
+    "name": "Switchboard upgrade",
+    "description": "Assembly allowance for switchboard upgrade with safety switches",
+    "typeCode": "other",
+    "categoryCode": "electrical",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-ELEC-HWS-ELE-12",
+        "quantity": 4,
+        "wasteFactor": 1.07
+      },
+      {
+        "code": "LAB-ELE-04",
+        "quantity": 16,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-ELE-02",
+        "quantity": 12,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-ELE-01",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "VND-SECURITY",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-ELE-COC",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-ELE-SMOKE-UPG",
+    "name": "Smoke alarm upgrade",
+    "description": "Assembly allowance to upgrade smoke alarms to interconnected system",
+    "typeCode": "other",
+    "categoryCode": "electrical",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-ELEC-RCD-06",
+        "quantity": 7,
+        "wasteFactor": 1.13
+      },
+      {
+        "code": "LAB-ELE-01",
+        "quantity": 11,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-ELEC-HWS-ELE-12",
+        "quantity": 1,
+        "wasteFactor": 1.11
+      },
+      {
+        "code": "VND-ALARM-MON",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-ELE-03",
+        "quantity": 14,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-ELEC-LED-DOWN-04",
+        "quantity": 9,
+        "wasteFactor": 1.14
+      }
+    ]
+  },
+  {
+    "code": "ASM-PLU-HWS-REP",
+    "name": "Hot water replace",
+    "description": "Assembly allowance to replace hot water service including valves and compliance",
+    "typeCode": "other",
+    "categoryCode": "plumbing",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-PLUM-PIPE-COP-20-10",
+        "quantity": 19,
+        "wasteFactor": 1.12
+      },
+      {
+        "code": "LAB-PLU-02",
+        "quantity": 3,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-PLUM-BACKFLOW-19",
+        "quantity": 19,
+        "wasteFactor": 1.08
+      },
+      {
+        "code": "MAT-PLUM-SHOWER-HEAD-05",
+        "quantity": 3,
+        "wasteFactor": 1.1
+      },
+      {
+        "code": "OTH-TEMP-BATH",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-PLUM-CISTERN-04",
+        "quantity": 3,
+        "wasteFactor": 1.09
+      },
+      {
+        "code": "EQ-DRAIN-JET",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "VND-HYDRO",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-PLU-DRAIN-REP",
+    "name": "Underground drain repair",
+    "description": "Assembly allowance to excavate and repair underground sewer junction",
+    "typeCode": "other",
+    "categoryCode": "plumbing",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-PLUM-SHOWER-HEAD-05",
+        "quantity": 18,
+        "wasteFactor": 1.08
+      },
+      {
+        "code": "LAB-PLU-04",
+        "quantity": 10,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-PLUM-HWS-UNIT-16",
+        "quantity": 9,
+        "wasteFactor": 1.08
+      }
+    ]
+  },
+  {
+    "code": "ASM-PLU-BURST-PIPE",
+    "name": "Burst pipe make safe",
+    "description": "Assembly allowance for burst pipe isolation repair and make safe",
+    "typeCode": "other",
+    "categoryCode": "plumbing",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-PLUM-SHOWER-HEAD-05",
+        "quantity": 2,
+        "wasteFactor": 1.14
+      },
+      {
+        "code": "LAB-PLU-05",
+        "quantity": 6,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-PLUM-FLOOR-WASTE-13",
+        "quantity": 10,
+        "wasteFactor": 1.12
+      },
+      {
+        "code": "EQ-DRAIN-JET",
+        "quantity": 2,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-PLUM-WATER-HAMMER-18",
+        "quantity": 11,
+        "wasteFactor": 1.11
+      },
+      {
+        "code": "EQ-CCTV",
+        "quantity": 3,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-CAR-INT-DOOR",
+    "name": "Internal door replace",
+    "description": "Assembly allowance to replace internal door jamb architrave and hardware",
+    "typeCode": "other",
+    "categoryCode": "carpentry",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-CARP-SKIR-MDF-06",
+        "quantity": 6,
+        "wasteFactor": 1.11
+      },
+      {
+        "code": "LAB-CAR-07",
+        "quantity": 15,
+        "wasteFactor": 1
+      },
+      {
+        "code": "VND-GLAZ-2",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-CARP-LOCKSET-12",
+        "quantity": 4,
+        "wasteFactor": 1.14
+      }
+    ]
+  },
+  {
+    "code": "ASM-CAR-WIN-LINING",
+    "name": "Window lining replace",
+    "description": "Assembly allowance to replace internal window lining and sill",
+    "typeCode": "other",
+    "categoryCode": "carpentry",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-CARP-TIMBER-70-02",
+        "quantity": 17,
+        "wasteFactor": 1.11
+      },
+      {
+        "code": "LAB-CAR-08",
+        "quantity": 11,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-SECURITY-BOARD",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-CARP-TIMBER-140-03",
+        "quantity": 17,
+        "wasteFactor": 1.13
+      },
+      {
+        "code": "MAT-CARP-BENCH-TOP-17",
+        "quantity": 18,
+        "wasteFactor": 1.14
+      },
+      {
+        "code": "LAB-CAR-01",
+        "quantity": 11,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-CARP-LOCKSET-12",
+        "quantity": 8,
+        "wasteFactor": 1.14
+      }
+    ]
+  },
+  {
+    "code": "ASM-CAR-FLOOR-JOIST",
+    "name": "Floor joist repair",
+    "description": "Assembly allowance to repair rotted floor joists and replace flooring",
+    "typeCode": "other",
+    "categoryCode": "carpentry",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-CARP-CAB-SHELF-15",
+        "quantity": 11,
+        "wasteFactor": 1.13
+      },
+      {
+        "code": "LAB-CAR-08",
+        "quantity": 6,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-SECURITY-BOARD",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-NAIL-GUN",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "VND-STONE-BENCH",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-CAR-09",
+        "quantity": 9,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-CAR-DECK-SEC",
+    "name": "Deck board replace",
+    "description": "Assembly allowance to replace damaged deck boards and oil finish",
+    "typeCode": "other",
+    "categoryCode": "carpentry",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-CARP-SKIR-TIM-07",
+        "quantity": 4,
+        "wasteFactor": 1.08
+      },
+      {
+        "code": "LAB-CAR-04",
+        "quantity": 6,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-SECURITY-BOARD",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "VND-KITCH-FAB",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-CARP-PLY-17-05",
+        "quantity": 5,
+        "wasteFactor": 1.07
+      },
+      {
+        "code": "MAT-CARP-DOOR-SOL-11",
+        "quantity": 15,
+        "wasteFactor": 1.06
+      }
+    ]
+  },
+  {
+    "code": "ASM-EXT-DRIVE-PATCH",
+    "name": "Driveway patch",
+    "description": "Assembly allowance to cut out and patch damaged driveway section",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-TILE-CER-09",
+        "quantity": 10,
+        "wasteFactor": 1.14
+      },
+      {
+        "code": "LAB-GEN-10",
+        "quantity": 9,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-TARP-ROOF",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-ROOF-HAR",
+        "quantity": 2,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-GEN-06",
+        "quantity": 11,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-AFTER-HRS",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-GENE-SKIP-6M-37",
+        "quantity": 14,
+        "wasteFactor": 1.15
+      }
+    ]
+  },
+  {
+    "code": "ASM-EXT-PATH-REP",
+    "name": "Path reinstatement",
+    "description": "Assembly allowance to reinstate concrete path after service trench",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-TILE-CER-09",
+        "quantity": 7,
+        "wasteFactor": 1.05
+      },
+      {
+        "code": "LAB-GEN-14",
+        "quantity": 4,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-GENE-PAINT-EXT-02",
+        "quantity": 15,
+        "wasteFactor": 1.12
+      },
+      {
+        "code": "VND-PIER-REP",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-GENE-ROOF-PTG-18",
+        "quantity": 6,
+        "wasteFactor": 1.11
+      },
+      {
+        "code": "MAT-GENE-SAND-PAPER-06",
+        "quantity": 20,
+        "wasteFactor": 1.09
+      },
+      {
+        "code": "MAT-GENE-MEMBRANE-30",
+        "quantity": 7,
+        "wasteFactor": 1.07
+      },
+      {
+        "code": "LAB-GEN-15",
+        "quantity": 14,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-EXT-LANDSCAPE",
+    "name": "Landscape restoration",
+    "description": "Assembly allowance to restore landscaping disturbed by repair excavation",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-SKIP-6M-37",
+        "quantity": 7,
+        "wasteFactor": 1.05
+      },
+      {
+        "code": "LAB-GEN-16",
+        "quantity": 14,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-INS-EXCESS",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-GENE-TILE-CER-09",
+        "quantity": 6,
+        "wasteFactor": 1.06
+      },
+      {
+        "code": "MAT-GENE-PAINT-INT-01",
+        "quantity": 9,
+        "wasteFactor": 1.09
+      },
+      {
+        "code": "LAB-GEN-04",
+        "quantity": 15,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-MAKE-SAFE",
+    "name": "Emergency make safe",
+    "description": "Assembly allowance for emergency make safe attendance and temporary weatherproofing",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-CLEAN-SOL-32",
+        "quantity": 19,
+        "wasteFactor": 1.09
+      },
+      {
+        "code": "LAB-GEN-12",
+        "quantity": 13,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-GEN-04",
+        "quantity": 13,
+        "wasteFactor": 1
+      },
+      {
+        "code": "VND-PIER-REP",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-TEMP-FENCE",
+    "name": "Temp fence package",
+    "description": "Assembly allowance for temporary fencing around work area for four weeks",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-TAPE-ZONE-39",
+        "quantity": 8,
+        "wasteFactor": 1.14
+      },
+      {
+        "code": "LAB-GEN-01",
+        "quantity": 3,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-GENE-SKIP-6M-37",
+        "quantity": 18,
+        "wasteFactor": 1.12
+      },
+      {
+        "code": "LAB-GEN-15",
+        "quantity": 8,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-CONTAINMENT",
+    "name": "Containment setup",
+    "description": "Assembly allowance to establish dust containment for occupied dwelling works",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-TEMP-FENCE-40",
+        "quantity": 5,
+        "wasteFactor": 1.11
+      },
+      {
+        "code": "LAB-GEN-03",
+        "quantity": 8,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-DEHUM",
+        "quantity": 3,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-GENE-HEPA-FILTER-34",
+        "quantity": 17,
+        "wasteFactor": 1.08
+      },
+      {
+        "code": "EQ-HEPA-VAC",
+        "quantity": 3,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-GENE-SITE-SIGN-42",
+        "quantity": 13,
+        "wasteFactor": 1.06
+      },
+      {
+        "code": "EQ-LIFT-1",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-GENE-FASCIA-21",
+        "quantity": 4,
+        "wasteFactor": 1.07
+      }
+    ]
+  },
+  {
+    "code": "ASM-PAINT-INT-ROOM",
+    "name": "Interior room repaint",
+    "description": "Assembly allowance to prep and repaint single standard bedroom",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-ROOF-PTG-18",
+        "quantity": 10,
+        "wasteFactor": 1.06
+      },
+      {
+        "code": "LAB-GEN-13",
+        "quantity": 8,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-HEPA-VAC",
+        "quantity": 2,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-AFTER-HRS",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-DEHUM",
+        "quantity": 3,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-PAINT-INT-HOUSE",
+    "name": "Whole house repaint",
+    "description": "Assembly allowance to prep and repaint whole house interior three coat system",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-TEMP-TOIL-41",
+        "quantity": 3,
+        "wasteFactor": 1.12
+      },
+      {
+        "code": "LAB-GEN-08",
+        "quantity": 9,
+        "wasteFactor": 1
+      },
+      {
+        "code": "VND-FENC-COLOR",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "VND-SURVEY",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-PAINT-EXT-FACADE",
+    "name": "Exterior facade repaint",
+    "description": "Assembly allowance to wash prep and repaint exterior facade elevation",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-PAINT-EXT-02",
+        "quantity": 9,
+        "wasteFactor": 1.14
+      },
+      {
+        "code": "LAB-GEN-05",
+        "quantity": 15,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-GENE-FASCIA-21",
+        "quantity": 7,
+        "wasteFactor": 1.1
+      }
+    ]
+  },
+  {
+    "code": "ASM-INSULATION-CEIL",
+    "name": "Ceiling insulation upgrade",
+    "description": "Assembly allowance to upgrade ceiling insulation throughout dwelling",
+    "typeCode": "other",
+    "categoryCode": "plastering",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-PLAS-JOINT-CMP-07",
+        "quantity": 4,
+        "wasteFactor": 1.14
+      },
+      {
+        "code": "LAB-PLS-09",
+        "quantity": 6,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-PLAS-STOP-BEAD-06",
+        "quantity": 9,
+        "wasteFactor": 1.08
+      },
+      {
+        "code": "MAT-PLAS-INSULATION-WALL-10",
+        "quantity": 10,
+        "wasteFactor": 1.12
+      },
+      {
+        "code": "EQ-PLASTER-BOOM",
+        "quantity": 3,
+        "wasteFactor": 1
+      },
+      {
+        "code": "VND-INSULATION-BLOW",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-INSULATION-WALL",
+    "name": "Wall insulation retrofit",
+    "description": "Assembly allowance to retrofit wall insulation from internal lining removal",
+    "typeCode": "other",
+    "categoryCode": "plastering",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-PLAS-GYP-10-01",
+        "quantity": 1,
+        "wasteFactor": 1.09
+      },
+      {
+        "code": "LAB-PLS-07",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-PLASTER-BOOM",
+        "quantity": 3,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-PLAS-TIMBER-BAT-15",
+        "quantity": 6,
+        "wasteFactor": 1.08
+      },
+      {
+        "code": "MAT-PLAS-CEIL-TILE-12",
+        "quantity": 16,
+        "wasteFactor": 1.08
+      },
+      {
+        "code": "MAT-PLAS-INSULATION-WALL-10",
+        "quantity": 13,
+        "wasteFactor": 1.14
+      },
+      {
+        "code": "MAT-PLAS-GYP-MR-03",
+        "quantity": 6,
+        "wasteFactor": 1.14
+      }
+    ]
+  },
+  {
+    "code": "ASM-ROOF-SARKING",
+    "name": "Roof sarking replace",
+    "description": "Assembly allowance to replace damaged roof sarking and restore tiles",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-MORTAR-BAG-28",
+        "quantity": 2,
+        "wasteFactor": 1.07
+      },
+      {
+        "code": "LAB-GEN-15",
+        "quantity": 13,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-GEN-09",
+        "quantity": 16,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-GEN-06",
+        "quantity": 16,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-GENE-BARGE-22",
+        "quantity": 5,
+        "wasteFactor": 1.13
+      }
+    ]
+  },
+  {
+    "code": "ASM-ROOF-FLASH",
+    "name": "Roof flashing replace",
+    "description": "Assembly allowance to replace roof flashings at wall and chimney junctions",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-VINYL-PLK-13",
+        "quantity": 3,
+        "wasteFactor": 1.13
+      },
+      {
+        "code": "LAB-GEN-04",
+        "quantity": 5,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-GENE-CONCRETE-M3-25",
+        "quantity": 20,
+        "wasteFactor": 1.07
+      },
+      {
+        "code": "VND-ROOF-METAL",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-BALUSTRADE",
+    "name": "Balustrade replace",
+    "description": "Assembly allowance to replace damaged timber or metal balustrade section",
+    "typeCode": "other",
+    "categoryCode": "carpentry",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-CARP-TIMBER-90-01",
+        "quantity": 17,
+        "wasteFactor": 1.14
+      },
+      {
+        "code": "LAB-CAR-10",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "VND-STEEL-FAB",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-GARAGE-DOOR",
+    "name": "Garage door replace",
+    "description": "Assembly allowance to supply and install sectional garage door",
+    "typeCode": "other",
+    "categoryCode": "carpentry",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-CARP-TIMBER-90-01",
+        "quantity": 14,
+        "wasteFactor": 1.05
+      },
+      {
+        "code": "LAB-CAR-07",
+        "quantity": 11,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-CARP-DOOR-SOL-11",
+        "quantity": 19,
+        "wasteFactor": 1.1
+      },
+      {
+        "code": "VND-STEEL-FAB",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-CARP-TIMBER-140-03",
+        "quantity": 16,
+        "wasteFactor": 1.06
+      },
+      {
+        "code": "VND-GLAZ-2",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-SECURITY-DOOR",
+    "name": "Security screen door",
+    "description": "Assembly allowance to supply and install security screen door",
+    "typeCode": "other",
+    "categoryCode": "carpentry",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-CARP-DRAW-RUNNER-19",
+        "quantity": 15,
+        "wasteFactor": 1.07
+      },
+      {
+        "code": "LAB-CAR-08",
+        "quantity": 11,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-SECURITY-BOARD",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-EVACUATE-SERVICE",
+    "name": "Evacuation service",
+    "description": "Assembly allowance for tenant evacuation coordination during major works",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-REO-MESH-26",
+        "quantity": 4,
+        "wasteFactor": 1.13
+      },
+      {
+        "code": "LAB-GEN-14",
+        "quantity": 15,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-GENE-PAINT-INT-01",
+        "quantity": 5,
+        "wasteFactor": 1.12
+      },
+      {
+        "code": "EQ-SCAFF-1",
+        "quantity": 3,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-GEN-07",
+        "quantity": 15,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-GEN-06",
+        "quantity": 9,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-TARP-ROOF",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-INS-EXCESS",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-ACCESS-EQ",
+    "name": "Access equipment pack",
+    "description": "Assembly allowance for scaffold and access equipment on two storey repair",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-FASCIA-21",
+        "quantity": 19,
+        "wasteFactor": 1.08
+      },
+      {
+        "code": "LAB-GEN-15",
+        "quantity": 10,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-INS-EXCESS",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-CORE-DRILL",
+        "quantity": 3,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-MOIST-MTR",
+        "quantity": 3,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-BLD-PERM",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-GEN-09",
+        "quantity": 15,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-QA-HANDOVER",
+    "name": "QA handover pack",
+    "description": "Assembly allowance for final QA inspection and insurer handover documentation",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-TEMP-TOIL-41",
+        "quantity": 8,
+        "wasteFactor": 1.07
+      },
+      {
+        "code": "LAB-GEN-04",
+        "quantity": 6,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-FAN",
+        "quantity": 3,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-GENE-ASB-TEST-35",
+        "quantity": 2,
+        "wasteFactor": 1.12
+      },
+      {
+        "code": "OTH-QUOTE-VISIT",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-WET-ENSUITE-REL",
+    "name": "Ensuite relining",
+    "description": "Assembly allowance for ensuite relining including waterproofing and tiling to wet zone",
+    "typeCode": "other",
+    "categoryCode": "plumbing",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-PLUM-WATER-HAMMER-18",
+        "quantity": 6,
+        "wasteFactor": 1.13
+      },
+      {
+        "code": "LAB-PLU-03",
+        "quantity": 15,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-PLUM-PIPE-PVC-100-12",
+        "quantity": 19,
+        "wasteFactor": 1.15
+      }
+    ]
+  },
+  {
+    "code": "ASM-WET-POWDER-ROOM",
+    "name": "Powder room refit",
+    "description": "Assembly allowance to refit powder room vanity toilet and wall lining",
+    "typeCode": "other",
+    "categoryCode": "plumbing",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-PLUM-PIPE-COP-20-10",
+        "quantity": 3,
+        "wasteFactor": 1.13
+      },
+      {
+        "code": "LAB-PLU-09",
+        "quantity": 2,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-PLUM-PTR-VALVE-08",
+        "quantity": 6,
+        "wasteFactor": 1.06
+      },
+      {
+        "code": "EQ-PUMP-SUB",
+        "quantity": 2,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-WET-BATH-REGROUT",
+    "name": "Bathroom regrout",
+    "description": "Assembly allowance to strip and regrout bathroom wall and floor tiles",
+    "typeCode": "other",
+    "categoryCode": "plumbing",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-PLUM-TMV-20",
+        "quantity": 15,
+        "wasteFactor": 1.06
+      },
+      {
+        "code": "LAB-PLU-04",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-PLUM-CISTERN-04",
+        "quantity": 5,
+        "wasteFactor": 1.06
+      },
+      {
+        "code": "OTH-PLM-PERM",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-TEMP-BATH",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-WET-SHOWER-SCREEN",
+    "name": "Shower screen replace",
+    "description": "Assembly allowance to replace shower screen and reseal recess perimeter",
+    "typeCode": "other",
+    "categoryCode": "plumbing",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-PLUM-PIPE-COP-20-10",
+        "quantity": 7,
+        "wasteFactor": 1.06
+      },
+      {
+        "code": "LAB-PLU-09",
+        "quantity": 8,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-DRAIN-JET",
+        "quantity": 2,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-CCTV",
+        "quantity": 3,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-PLM-PERM",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-TEMP-BATH",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "VND-HYDRO",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-WET-TAPWARE-UPG",
+    "name": "Tapware upgrade",
+    "description": "Assembly allowance to upgrade bathroom tapware and fittings throughout wet area",
+    "typeCode": "other",
+    "categoryCode": "plumbing",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-PLUM-PIPE-COP-20-10",
+        "quantity": 11,
+        "wasteFactor": 1.15
+      },
+      {
+        "code": "LAB-PLU-01",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-PLU-09",
+        "quantity": 3,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-DRAIN-JET",
+        "quantity": 2,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-PLUM-HWS-UNIT-16",
+        "quantity": 20,
+        "wasteFactor": 1.12
+      },
+      {
+        "code": "MAT-PLUM-SHOWER-SCREEN-06",
+        "quantity": 6,
+        "wasteFactor": 1.07
+      }
+    ]
+  },
+  {
+    "code": "ASM-KIT-APPLIANCE-RECONNECT",
+    "name": "Kitchen appliance reconnect",
+    "description": "Assembly allowance to reconnect kitchen appliances after fire or flood repair",
+    "typeCode": "other",
+    "categoryCode": "plumbing",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-PLUM-TOILET-SUITE-03",
+        "quantity": 14,
+        "wasteFactor": 1.08
+      },
+      {
+        "code": "LAB-PLU-03",
+        "quantity": 10,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-PLUM-PIPE-PVC-50-11",
+        "quantity": 2,
+        "wasteFactor": 1.12
+      },
+      {
+        "code": "EQ-PUMP-SUB",
+        "quantity": 3,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-PLUM-PIPE-COP-20-10",
+        "quantity": 15,
+        "wasteFactor": 1.14
+      },
+      {
+        "code": "MAT-PLUM-FLEX-HOSE-07",
+        "quantity": 10,
+        "wasteFactor": 1.11
+      },
+      {
+        "code": "EQ-CCTV",
+        "quantity": 2,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-KIT-PANTRY-REBUILD",
+    "name": "Pantry rebuild",
+    "description": "Assembly allowance to rebuild pantry shelving and lining after damage",
+    "typeCode": "other",
+    "categoryCode": "carpentry",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-CARP-LOCKSET-12",
+        "quantity": 2,
+        "wasteFactor": 1.14
+      },
+      {
+        "code": "LAB-CAR-03",
+        "quantity": 4,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-CARP-SKIR-TIM-07",
+        "quantity": 16,
+        "wasteFactor": 1.12
+      },
+      {
+        "code": "VND-KITCH-FAB",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-SECURITY-BOARD",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-CAR-02",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "VND-STONE-BENCH",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-KIT-ISLAND-BENCH",
+    "name": "Kitchen island bench",
+    "description": "Assembly allowance to replace kitchen island bench structure and benchtop",
+    "typeCode": "other",
+    "categoryCode": "carpentry",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-CARP-HET-PASS-13",
+        "quantity": 11,
+        "wasteFactor": 1.09
+      },
+      {
+        "code": "LAB-CAR-05",
+        "quantity": 16,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-CARP-CAB-SHELF-15",
+        "quantity": 3,
+        "wasteFactor": 1.06
+      },
+      {
+        "code": "VND-GLAZ-2",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "VND-GLAZ-1",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-CAR-06",
+        "quantity": 14,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-SECURITY-BOARD",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-KIT-SPLASH-GLASS",
+    "name": "Glass splashback",
+    "description": "Assembly allowance for toughened glass kitchen splashback supply and install",
+    "typeCode": "other",
+    "categoryCode": "carpentry",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-CARP-HET-PASS-13",
+        "quantity": 20,
+        "wasteFactor": 1.14
+      },
+      {
+        "code": "LAB-CAR-07",
+        "quantity": 8,
+        "wasteFactor": 1
+      },
+      {
+        "code": "VND-STEEL-FAB",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-FLOOD-SUBFLOOR",
+    "name": "Subfloor flood dry-out",
+    "description": "Assembly allowance for subfloor timber flood dry-out and mould treatment",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-ROOF-BED-17",
+        "quantity": 2,
+        "wasteFactor": 1.12
+      },
+      {
+        "code": "LAB-GEN-05",
+        "quantity": 11,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-PS-ITEM",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "VND-PEST-TREAT",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-FLOOD-GARAGE",
+    "name": "Garage flood restore",
+    "description": "Assembly allowance for garage flood strip clean and reinstate linings",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-SKIP-6M-37",
+        "quantity": 6,
+        "wasteFactor": 1.12
+      },
+      {
+        "code": "LAB-GEN-08",
+        "quantity": 14,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-GENE-TEMP-TOIL-41",
+        "quantity": 12,
+        "wasteFactor": 1.09
+      },
+      {
+        "code": "MAT-GENE-ROOF-TILE-16",
+        "quantity": 14,
+        "wasteFactor": 1.14
+      }
+    ]
+  },
+  {
+    "code": "ASM-FLOOD-CONTENTS-DRY",
+    "name": "Contents drying service",
+    "description": "Assembly allowance for contents drying and dehumidification service on-site",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-FIRST-AID-43",
+        "quantity": 5,
+        "wasteFactor": 1.09
+      },
+      {
+        "code": "LAB-GEN-15",
+        "quantity": 4,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-GENE-MASQ-TAPE-08",
+        "quantity": 10,
+        "wasteFactor": 1.11
+      },
+      {
+        "code": "OTH-STORE-HIRE",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-TEMP-KITCH",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-FIRE-CEILING",
+    "name": "Fire damaged ceiling",
+    "description": "Assembly allowance to remove and replace fire damaged ceiling lining",
+    "typeCode": "other",
+    "categoryCode": "plastering",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-PLAS-JOINT-CMP-07",
+        "quantity": 20,
+        "wasteFactor": 1.11
+      },
+      {
+        "code": "LAB-PLS-03",
+        "quantity": 7,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-PLAS-TIMBER-BAT-15",
+        "quantity": 14,
+        "wasteFactor": 1.06
+      },
+      {
+        "code": "EQ-PLASTER-BOOM",
+        "quantity": 2,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-PLS-02",
+        "quantity": 15,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-PLAS-INSULATION-BAT-09",
+        "quantity": 13,
+        "wasteFactor": 1.12
+      },
+      {
+        "code": "OTH-TEMP-KITCH",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-WEEKEND",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-FIRE-ELECTRICAL-RESTORE",
+    "name": "Fire electrical restore",
+    "description": "Assembly allowance to restore electrical circuits damaged by fire",
+    "typeCode": "other",
+    "categoryCode": "electrical",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-ELEC-HWS-ELE-12",
+        "quantity": 14,
+        "wasteFactor": 1.13
+      },
+      {
+        "code": "LAB-ELE-10",
+        "quantity": 14,
+        "wasteFactor": 1
+      },
+      {
+        "code": "VND-SECURITY",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-ELEC-SMK-ALARM-05",
+        "quantity": 5,
+        "wasteFactor": 1.1
+      },
+      {
+        "code": "MAT-ELEC-FLOOD-LGT-15",
+        "quantity": 3,
+        "wasteFactor": 1.14
+      },
+      {
+        "code": "EQ-GEN-2",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-ELEC-METER-BOX-10",
+        "quantity": 7,
+        "wasteFactor": 1.13
+      }
+    ]
+  },
+  {
+    "code": "ASM-FIRE-STRUCTURAL-CLEAN",
+    "name": "Fire structural clean",
+    "description": "Assembly allowance for structural timber soot clean and seal after fire",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-REO-MESH-26",
+        "quantity": 20,
+        "wasteFactor": 1.08
+      },
+      {
+        "code": "LAB-GEN-10",
+        "quantity": 13,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-COMPRESSOR",
+        "quantity": 2,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-GEN-01",
+        "quantity": 9,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-TILE-CUT",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-GENE-VINYL-PLK-13",
+        "quantity": 2,
+        "wasteFactor": 1.1
+      }
+    ]
+  },
+  {
+    "code": "ASM-STORM-WINDOW-BOARDUP",
+    "name": "Storm window board-up",
+    "description": "Assembly allowance to board up and later replace storm damaged windows",
+    "typeCode": "other",
+    "categoryCode": "carpentry",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-CARP-TIMBER-140-03",
+        "quantity": 18,
+        "wasteFactor": 1.14
+      },
+      {
+        "code": "LAB-CAR-03",
+        "quantity": 12,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-CARP-PLY-12-04",
+        "quantity": 19,
+        "wasteFactor": 1.06
+      },
+      {
+        "code": "VND-GLAZ-2",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-FLOOR-SAND",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-STORM-TREE-DAMAGE",
+    "name": "Storm tree damage repair",
+    "description": "Assembly allowance to remove fallen tree and repair structural damage",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-POLY-SHEET-38",
+        "quantity": 16,
+        "wasteFactor": 1.12
+      },
+      {
+        "code": "LAB-GEN-09",
+        "quantity": 2,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-GEN-10",
+        "quantity": 3,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-GENE-MOULD-TRT-33",
+        "quantity": 4,
+        "wasteFactor": 1.1
+      },
+      {
+        "code": "EQ-LIGHT-TOWER",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-STORM-CARPORT",
+    "name": "Carport storm repair",
+    "description": "Assembly allowance to repair storm damaged carport roof and posts",
+    "typeCode": "other",
+    "categoryCode": "carpentry",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-CARP-TIMBER-70-02",
+        "quantity": 13,
+        "wasteFactor": 1.12
+      },
+      {
+        "code": "LAB-CAR-01",
+        "quantity": 11,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-CAR-02",
+        "quantity": 12,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-CARP-TIMBER-90-01",
+        "quantity": 13,
+        "wasteFactor": 1.08
+      }
+    ]
+  },
+  {
+    "code": "ASM-ELE-DOWNLIGHT-UPG",
+    "name": "Downlight upgrade",
+    "description": "Assembly allowance to upgrade downlights throughout dwelling to LED",
+    "typeCode": "other",
+    "categoryCode": "electrical",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-ELEC-DATA-PT-13",
+        "quantity": 1,
+        "wasteFactor": 1.11
+      },
+      {
+        "code": "LAB-ELE-06",
+        "quantity": 13,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-ELE-05",
+        "quantity": 11,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-ELE-SOLAR-RECONNECT",
+    "name": "Solar reconnect",
+    "description": "Assembly allowance to isolate and reconnect rooftop solar after roof repair",
+    "typeCode": "other",
+    "categoryCode": "electrical",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-ELEC-CEILING-FAN-14",
+        "quantity": 2,
+        "wasteFactor": 1.08
+      },
+      {
+        "code": "LAB-ELE-07",
+        "quantity": 11,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-GEN-1",
+        "quantity": 3,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-ELEC-HWS-ELE-12",
+        "quantity": 3,
+        "wasteFactor": 1.11
+      },
+      {
+        "code": "MAT-ELEC-RCD-06",
+        "quantity": 4,
+        "wasteFactor": 1.15
+      }
+    ]
+  },
+  {
+    "code": "ASM-ELE-DATA-REWIRE",
+    "name": "Data network rewire",
+    "description": "Assembly allowance to rewire data and network points throughout dwelling",
+    "typeCode": "other",
+    "categoryCode": "electrical",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-ELEC-METER-BOX-10",
+        "quantity": 14,
+        "wasteFactor": 1.14
+      },
+      {
+        "code": "LAB-ELE-05",
+        "quantity": 11,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-ELE-COC",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-ELE-03",
+        "quantity": 13,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-ELE-01",
+        "quantity": 4,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-PLU-GAS-RECONNECT",
+    "name": "Gas reconnect",
+    "description": "Assembly allowance to make safe and reconnect gas appliances after repair",
+    "typeCode": "other",
+    "categoryCode": "plumbing",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-PLUM-PIPE-COP-15-09",
+        "quantity": 17,
+        "wasteFactor": 1.06
+      },
+      {
+        "code": "LAB-PLU-04",
+        "quantity": 10,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-CCTV",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-PLUM-HWS-UNIT-16",
+        "quantity": 17,
+        "wasteFactor": 1.12
+      },
+      {
+        "code": "EQ-DRAIN-JET",
+        "quantity": 2,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-PLUM-TAP-SINK-02",
+        "quantity": 4,
+        "wasteFactor": 1.09
+      },
+      {
+        "code": "VND-SPRINKLER",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-PLU-STORMWATER-REP",
+    "name": "Stormwater repair",
+    "description": "Assembly allowance to excavate and repair damaged stormwater line",
+    "typeCode": "other",
+    "categoryCode": "plumbing",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-PLUM-DISHWASHER-VALVE-15",
+        "quantity": 7,
+        "wasteFactor": 1.11
+      },
+      {
+        "code": "LAB-PLU-08",
+        "quantity": 8,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-PLM-PERM",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-PLU-06",
+        "quantity": 6,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-PLU-01",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-PUMP-SUB",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-PLU-TAPWARE-REP",
+    "name": "Tapware replace pack",
+    "description": "Assembly allowance to replace all tapware in kitchen and bathrooms",
+    "typeCode": "other",
+    "categoryCode": "plumbing",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-PLUM-WATER-HAMMER-18",
+        "quantity": 16,
+        "wasteFactor": 1.1
+      },
+      {
+        "code": "LAB-PLU-06",
+        "quantity": 15,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-PLUM-FLEX-HOSE-07",
+        "quantity": 2,
+        "wasteFactor": 1.15
+      },
+      {
+        "code": "OTH-PLM-PERM",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-PLS-CORNICE-FULL",
+    "name": "Full cornice replace",
+    "description": "Assembly allowance to strip and replace cornice throughout single level",
+    "typeCode": "other",
+    "categoryCode": "plastering",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-PLAS-STOP-BEAD-06",
+        "quantity": 11,
+        "wasteFactor": 1.12
+      },
+      {
+        "code": "LAB-PLS-06",
+        "quantity": 11,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-PHOTO-DOC",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-PLS-09",
+        "quantity": 7,
+        "wasteFactor": 1
+      },
+      {
+        "code": "VND-INSULATION-BLOW",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-QUOTE-VISIT",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-PLAS-CORNER-BEAD-05",
+        "quantity": 3,
+        "wasteFactor": 1.08
+      }
+    ]
+  },
+  {
+    "code": "ASM-PLS-BULKHEAD-BUILD",
+    "name": "Bulkhead construction",
+    "description": "Assembly allowance to construct plasterboard bulkhead for services concealment",
+    "typeCode": "other",
+    "categoryCode": "plastering",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-PLAS-GYP-13-02",
+        "quantity": 10,
+        "wasteFactor": 1.13
+      },
+      {
+        "code": "LAB-PLS-06",
+        "quantity": 4,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-REMOTE",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-PLAS-PAPER-TAPE-08",
+        "quantity": 5,
+        "wasteFactor": 1.14
+      },
+      {
+        "code": "EQ-PLASTER-BOOM",
+        "quantity": 2,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-PLS-01",
+        "quantity": 5,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-PLS-CEILING-PATCH",
+    "name": "Ceiling patch repair",
+    "description": "Assembly allowance to patch and texture match damaged ceiling section",
+    "typeCode": "other",
+    "categoryCode": "plastering",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-PLAS-GYP-MR-03",
+        "quantity": 17,
+        "wasteFactor": 1.14
+      },
+      {
+        "code": "LAB-PLS-08",
+        "quantity": 12,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-PLS-04",
+        "quantity": 8,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-PLASTER-BOOM",
+        "quantity": 3,
+        "wasteFactor": 1
+      },
+      {
+        "code": "VND-INSULATION-BLOW",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-CONTENTS-MOVE",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-CAR-PERGOLA-REPAIR",
+    "name": "Pergola repair",
+    "description": "Assembly allowance to repair storm or fire damaged pergola structure",
+    "typeCode": "other",
+    "categoryCode": "carpentry",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-CARP-ARCHITRAVE-08",
+        "quantity": 18,
+        "wasteFactor": 1.05
+      },
+      {
+        "code": "LAB-CAR-05",
+        "quantity": 10,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-FLOOR-SAND",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-CAR-STAIR-REBUILD",
+    "name": "Staircase rebuild",
+    "description": "Assembly allowance to rebuild internal timber staircase and balustrade",
+    "typeCode": "other",
+    "categoryCode": "carpentry",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-CARP-KICK-BOARD-16",
+        "quantity": 1,
+        "wasteFactor": 1.08
+      },
+      {
+        "code": "LAB-CAR-02",
+        "quantity": 16,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-SECURITY-BOARD",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-CAR-10",
+        "quantity": 5,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-CAR-WARDROBE-FITOUT",
+    "name": "Wardrobe fit-out",
+    "description": "Assembly allowance to replace built-in wardrobe fit-out after water damage",
+    "typeCode": "other",
+    "categoryCode": "carpentry",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-CARP-ARCHITRAVE-08",
+        "quantity": 9,
+        "wasteFactor": 1.09
+      },
+      {
+        "code": "LAB-CAR-03",
+        "quantity": 16,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-CARP-PLY-17-05",
+        "quantity": 13,
+        "wasteFactor": 1.05
+      }
+    ]
+  },
+  {
+    "code": "ASM-PAINT-CEILING-ONLY",
+    "name": "Ceiling repaint only",
+    "description": "Assembly allowance to prep and repaint ceilings only throughout single level",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-TILE-POR-10",
+        "quantity": 11,
+        "wasteFactor": 1.14
+      },
+      {
+        "code": "LAB-GEN-13",
+        "quantity": 13,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-FAN",
+        "quantity": 2,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-GEN-06",
+        "quantity": 13,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-GENE-CONCRETE-M3-25",
+        "quantity": 13,
+        "wasteFactor": 1.11
+      },
+      {
+        "code": "EQ-SCAFF-2",
+        "quantity": 3,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-GENE-ROOF-PTG-18",
+        "quantity": 9,
+        "wasteFactor": 1.13
+      }
+    ]
+  },
+  {
+    "code": "ASM-PAINT-TRIM-DOORS",
+    "name": "Trim and doors repaint",
+    "description": "Assembly allowance to prep and repaint skirting architraves and doors",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-FASCIA-21",
+        "quantity": 9,
+        "wasteFactor": 1.08
+      },
+      {
+        "code": "LAB-GEN-11",
+        "quantity": 3,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-WASTE-TIP",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-FAN",
+        "quantity": 3,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-PAINT-GARAGE-FLOOR",
+    "name": "Garage floor coating",
+    "description": "Assembly allowance to prep and apply epoxy coating to garage floor",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-BRICK-STD-27",
+        "quantity": 19,
+        "wasteFactor": 1.06
+      },
+      {
+        "code": "LAB-GEN-09",
+        "quantity": 14,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-GENE-GATE-SGL-24",
+        "quantity": 19,
+        "wasteFactor": 1.07
+      },
+      {
+        "code": "MAT-GENE-MORTAR-BAG-28",
+        "quantity": 15,
+        "wasteFactor": 1.13
+      },
+      {
+        "code": "LAB-GEN-14",
+        "quantity": 15,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-SCAFF-1",
+        "quantity": 3,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-GEN-11",
+        "quantity": 11,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-FLR-TIMBER-SAND-POLISH",
+    "name": "Timber floor sand & polish",
+    "description": "Assembly allowance to sand and polish existing timber floor after damage",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-DROP-SHEET-07",
+        "quantity": 8,
+        "wasteFactor": 1.11
+      },
+      {
+        "code": "LAB-GEN-10",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-PC-ITEM",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "VND-POOL-FENCE",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-FLR-LAMINATE-LIVING",
+    "name": "Laminate flooring living",
+    "description": "Assembly allowance to install laminate flooring in living areas",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-PAINT-EXT-02",
+        "quantity": 16,
+        "wasteFactor": 1.07
+      },
+      {
+        "code": "LAB-GEN-11",
+        "quantity": 5,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-TEMP-KITCH",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-FLR-TILE-ENTRY",
+    "name": "Entry tile replace",
+    "description": "Assembly allowance to replace entry and hallway floor tiles",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-TAPE-ZONE-39",
+        "quantity": 14,
+        "wasteFactor": 1.14
+      },
+      {
+        "code": "LAB-GEN-11",
+        "quantity": 7,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-AFTER-HRS",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-MAKE-SAFE-ROOF-TARP",
+    "name": "Emergency roof tarping",
+    "description": "Assembly allowance for emergency tarping of storm or fire damaged roof",
+    "typeCode": "other",
+    "categoryCode": "general",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-GENE-CONCRETE-M3-25",
+        "quantity": 19,
+        "wasteFactor": 1.12
+      },
+      {
+        "code": "LAB-GEN-01",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-GENE-FIRST-AID-43",
+        "quantity": 19,
+        "wasteFactor": 1.07
+      },
+      {
+        "code": "OTH-STORE-HIRE",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-GENE-HEPA-FILTER-34",
+        "quantity": 9,
+        "wasteFactor": 1.14
+      },
+      {
+        "code": "OTH-BLD-PERM",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-MAKE-SAFE-BOARDUP",
+    "name": "Emergency board-up",
+    "description": "Assembly allowance for emergency board-up of damaged openings and access points",
+    "typeCode": "other",
+    "categoryCode": "carpentry",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-CARP-PLY-12-04",
+        "quantity": 13,
+        "wasteFactor": 1.13
+      },
+      {
+        "code": "LAB-CAR-02",
+        "quantity": 9,
+        "wasteFactor": 1
+      },
+      {
+        "code": "LAB-CAR-06",
+        "quantity": 12,
+        "wasteFactor": 1
+      },
+      {
+        "code": "EQ-FLOOR-SAND",
+        "quantity": 3,
+        "wasteFactor": 1
+      },
+      {
+        "code": "OTH-SECURITY-BOARD",
+        "quantity": 1,
+        "wasteFactor": 1
+      }
+    ]
+  },
+  {
+    "code": "ASM-MAKE-SAFE-POWER-ISOLATE",
+    "name": "Emergency power isolation",
+    "description": "Assembly allowance for emergency electrical isolation and temporary supply",
+    "typeCode": "other",
+    "categoryCode": "electrical",
+    "pricingMode": "computed",
+    "components": [
+      {
+        "code": "MAT-ELEC-CABLE-1.5-08",
+        "quantity": 2,
+        "wasteFactor": 1.13
+      },
+      {
+        "code": "LAB-ELE-03",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "VND-SECURITY",
+        "quantity": 1,
+        "wasteFactor": 1
+      },
+      {
+        "code": "MAT-ELEC-FLOOD-LGT-15",
+        "quantity": 20,
+        "wasteFactor": 1.05
+      }
+    ]
+  }
+]

@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Put } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Put,
+} from '@nestjs/common';
 import { FilesystemService } from './filesystem.service';
 import {
   SetupFilesystemDto,
@@ -6,6 +16,8 @@ import {
   UpdateCategoryDto,
   ReplaceCategoriesDto,
 } from './dto';
+import { GenerateCategoryDescriptionDto } from './dto/generate-category-description.dto';
+import type { ArtifactExportSettings } from './artifact-export.types';
 
 @Controller('filesystems')
 export class FilesystemController {
@@ -13,12 +25,32 @@ export class FilesystemController {
 
   @Get()
   async getFilesystem() {
-    return this.filesystemService.getOrCreateFilesystem();
+    return this.filesystemService.getFilesystem();
   }
 
   @Post('setup')
   async setupFromTemplate(@Body() dto: SetupFilesystemDto) {
     return this.filesystemService.setupFromTemplate(dto);
+  }
+
+  @Post('setup-default')
+  async setupFromDefault() {
+    return this.filesystemService.setupFromDefault();
+  }
+
+  @Post('generate-category-description')
+  async generateCategoryDescription(@Body() dto: GenerateCategoryDescriptionDto) {
+    return this.filesystemService.generateCategoryDescription(dto);
+  }
+
+  @Get('artifact-export')
+  async getArtifactExport() {
+    return this.filesystemService.getArtifactExportSettings();
+  }
+
+  @Patch('artifact-export')
+  async updateArtifactExport(@Body() body: ArtifactExportSettings) {
+    return this.filesystemService.updateArtifactExportSettings(body);
   }
 
   @Put(':id')

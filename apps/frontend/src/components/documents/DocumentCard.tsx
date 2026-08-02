@@ -13,6 +13,7 @@ import {
   Archive,
   Trash2,
   MoreVertical,
+  Workflow,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -26,7 +27,7 @@ import {
 import { cn } from '@/lib/utils';
 import type { FSDocument, FilesystemCategory } from '@/lib/api-client';
 
-export type DocumentAction = 'download' | 'move' | 'archive' | 'delete';
+export type DocumentAction = 'download' | 'move' | 'archive' | 'delete' | 'pipeline-history';
 
 interface DocumentCardProps {
   document: FSDocument;
@@ -200,6 +201,10 @@ function ContextMenu({
         <DropdownMenuItem onClick={() => onAction('move', doc.id)}>
           <FolderInput className="mr-2 h-4 w-4" />
           Move to Category
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onAction('pipeline-history', doc.id)}>
+          <Workflow className="mr-2 h-4 w-4" />
+          Pipeline History
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => onAction('archive', doc.id)}>

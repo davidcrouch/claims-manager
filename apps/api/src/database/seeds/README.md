@@ -10,25 +10,39 @@ and staging.
 
 ## Registered seeds
 
-| Name | What it does |
-|---|---|
-| `sample-data` | Populates the first organization in the DB with ~8 rows per core business table (contacts, vendors, claims, jobs, quotes + groups/combos/items, purchase_orders + groups/combos/items, work_orders + groups/combos/items, rfqs + groups/combos/items, proposals + groups/combos/items, bills, invoices, tasks, messages, appointments + attendees, reports, attachments, lookup_values, claim_contacts, claim_assignees, job_contacts). All rows tagged with `external_reference` (or name/reference) prefixed `seed-*`, so re-running is a no-op. |
+| Name | Scope | What it does |
+|---|---|---|
+| `filesystem-default` | **Platform** (`tenant_id = NULL`) | Creates Company + Project filesystem templates (`Company` is `is_default=true`). Available to all tenants at FS setup. |
+| `catalog-dev` | **Tenant** | Catalogue types, categories, unit types, Crunchwork v1 + Building Repairs catalogues for the first org (CLI) or a given tenant (signup). |
+| `sample-data` | **Tenant** (optional) | ~8 rows per core business table for the first org / given tenant. Gated by `SEED_SAMPLE_DATA=true`. |
+
+> **Document templates** — uploading `.docx` files from `data/templates/` and assigning
+> Admin → Document Templates is handled by the **first-login provisioning flow**
+> (`ProvisioningService`), not seeds. This ensures uploads go through the real API
+> pipeline (thumbnails, pipelines, etc.). Platform templates are synced to GCS by CI/CD.
 
 ### Seeding a specific tenant on demand
 
-`sample-data.seed.ts` also exports a reusable `seedSampleDataForTenant({ db, tenantId, logger? })`
-function. This is the same code path the CLI runs, but parameterised on
-`tenantId` instead of picking the first organization. Callers:
+`catalog-dev.seed.ts` exports `seedCatalogDevForTenant({ db, tenantId, logger? })`.
+`sample-data.seed.ts` exports `seedSampleDataForTenant({ db, tenantId, logger? })`.
 
 | Caller | How | When |
 |---|---|---|
-| CLI (`pnpm --filter api run db:seed`) | Picks first org, calls `seedSampleDataForTenant` | Manual / bootstrap |
-| `POST /api/v1/internal/seed-tenant` | Body `{ tenantId }`, validates org exists, dispatches in the background | Invoked by `auth-server` after a new tenant signs up |
+| CLI (`pnpm --filter api run db:seed`) | Platform seed + first-org catalog-dev; sample-data if `SEED_SAMPLE_DATA=true` | Manual / bootstrap |
+| `POST /api/v1/internal/seed-tenant` | Always catalog-dev; sample-data if `SEED_SAMPLE_DATA=true` | Invoked by `auth-server` after a new tenant signs up |
+| **First-login provisioning** | `ProvisioningService` → filesystem + template uploads + doc template settings + catalog | Triggered on user's first authenticated request |
 
 The `/internal/seed-tenant` route is guarded by `x-internal-token` (shared
 secret) and gated by `SEED_NEW_TENANTS=true`. See
 `apps/api/src/modules/internal/` and
 `apps/auth-server/src/services/api-seed-client.ts`.
+
+### Env flags
+
+| Var | Effect |
+|---|---|
+| `SEED_NEW_TENANTS=true` | Enables signup → `/internal/seed-tenant` (catalog-dev always runs when enabled) |
+| `SEED_SAMPLE_DATA=true` | Also run `sample-data` (CLI and signup path) |
 
 ### Seeding a remote environment (e.g. staging)
 
@@ -39,15 +53,16 @@ To seed `app.staging.branlamie.com`:
 # From repo root. Point DATABASE_URL at the staging DB (e.g. via the
 # CloudSQL Auth Proxy running on localhost:5432).
 $env:DATABASE_URL = "postgresql://<user>:<password>@localhost:5432/<dbname>"
+$env:SEED_SAMPLE_DATA = "true"   # optional
 pnpm --filter api run db:seed
 ```
 
 Alternatively, run it from inside the staging VM / a job container where
 `DATABASE_URL` is already exported; no other config is required.
 
-Because every inserted row is tagged `seed-*` and idempotency is keyed on
-unique columns (`external_reference`, `invoice_number`, etc.), running
-the seed multiple times against the same DB is safe.
+Because every inserted row is tagged `seed-*` (sample-data) or keyed on
+unique codes (catalog / filesystem), running the seed multiple times against
+the same DB is safe.
 
 ## Commands
 
@@ -75,7 +90,7 @@ seeds/
   lib/
     db.ts       # pg.Pool + drizzle connection helper
     runner.ts   # Seed type + runSeeds() orchestrator
-  entries/      # (currently empty)
+  entries/      # seed modules
   index.ts      # seed-only entry point (registers + runs)
   flush.ts      # flush entry point (drop -> migrate -> seed)
 ```
@@ -102,12 +117,7 @@ seeds/
    export default seed;
    ```
 
-2. Register it in `index.ts` **and** `flush.ts`:
-
-   ```ts
-   import mySeed from './entries/<name>.seed';
-   const SEEDS: Seed[] = [mySeed];
-   ```
+2. Register it in `index.ts` **and** `flush.ts` `buildSeeds()`.
 
 3. Run `pnpm --filter api run db:seed` to apply.
 
@@ -119,12 +129,15 @@ seeds/
 
 ## What is (and isn't) seeded
 
-| Table | Seeded? | Why |
+| Table / concern | Seeded? | Why |
 |---|---|---|
+| `filesystem_template` (platform) | Yes — `filesystem-default` | Template for tenant FS setup |
+| Catalogue types/items | Yes — `catalog-dev` | Per-tenant starter catalogue |
+| Word templates + `document_templates` | No — handled by `ProvisioningService` on first login | Uses real API pipeline for thumbnails |
+| Sample claims/jobs/… | Optional — `sample-data` | Demo data; env-gated |
 | `integration_connections` | No — per-tenant config; created via the UI/API | |
 | `organizations`, `users`, `user_identities`, `organization_users` | No — written by `apps/auth-server` on signup/login | |
-| `lookup_values` | No — auto-created on first webhook ingestion from `external_reference` values | |
-| All other tables | No — operational data | |
+| Provider catalogue | No — hardcoded in `provider-registry.ts` | |
 
 > The former `integration_providers` table has been removed. Provider
 > metadata now lives in `apps/api/src/modules/providers/provider-registry.ts`.

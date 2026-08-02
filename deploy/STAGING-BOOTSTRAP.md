@@ -34,9 +34,11 @@ psql "$DATABASE_URL_ADMIN" -f deploy/scripts/grant-provider-app.sql
 
 ## Cloudflare
 
-Point hostnames at Cloud Run URLs from `terraform output cloud_run_uris` (or the project-number form `https://SERVICE-PROJECTNUM.REGION.run.app`).
+DNS A records (grey-cloud / DNS-only) for `app-staging` / `auth-staging` / `providers-staging` point to the GCP HTTPS Load Balancer IP (from `terraform output lb_ip`).
 
-Then set `use_public_hostnames=true` and re-apply so OIDC issuer/callbacks match.
+The LB terminates TLS with a Google-managed cert and routes to Cloud Run via serverless NEGs. No Workers, Origin Rules, or code changes needed.
+
+Set `use_public_hostnames=true` in staging `terraform.tfvars` (already done) so OIDC issuer/callbacks match.
 
 ## Orphan networking note
 

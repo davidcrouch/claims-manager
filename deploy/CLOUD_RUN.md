@@ -14,7 +14,7 @@ Claims Manager runs **Cloud Run only** (staging and production). No GKE, no Comp
 
 **Same database:** `provider-server` and `api-server` share `claims_manager`. Prefer SQL user `provider_app` ([`scripts/grant-provider-app.sql`](scripts/grant-provider-app.sql)).
 
-**Hostnames:** Cloudflare → `*.run.app` service URLs. Cloud Run domain mappings are not used (unsupported in `australia-southeast1`).
+**Hostnames:** GCP HTTPS Load Balancer with serverless NEGs terminates TLS (Google-managed cert) and routes by hostname to Cloud Run. Cloudflare DNS is grey-cloud A records to the LB IP. No Workers or Origin Rules needed.
 
 **Networking:** Active subnet is `claims-manager-private-<env>`. An orphan `claims-manager-gke-staging` subnet may remain until GCP releases stuck serverless address reservations — it is unused.
 

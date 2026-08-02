@@ -913,6 +913,9 @@ export const organizations = pgTable(
     emailDomain: text('email_domain'),
     phone: text('phone'),
     subscriptionStatus: text('subscription_status').notNull().default('active'),
+    provisioningStatus: text('provisioning_status').notNull().default('pending'),
+    provisioningStartedAt: timestamp('provisioning_started_at', { withTimezone: true }),
+    provisioningCompletedAt: timestamp('provisioning_completed_at', { withTimezone: true }),
   },
   (t) => [
     uniqueIndex('UQ_organizations_abn')
@@ -2078,15 +2081,22 @@ export const notifications = pgTable(
 
 // ── Filesystem Module ──────────────────────────────────────────
 
+/** company = org-wide document tree; project = per-job (project) document tree. */
+export type FilesystemTemplateKind = 'company' | 'project';
+
 export const filesystemTemplates = pgTable(
   'filesystem_template',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    tenantId: uuid('tenant_id')
-      .notNull()
-      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    /** NULL = platform-scoped template available to all tenants. */
+    tenantId: uuid('tenant_id').references(() => organizations.id, {
+      onDelete: 'restrict',
+      onUpdate: 'cascade',
+    }),
     name: text('name').notNull(),
     description: text('description'),
+    /** company | project — drives which setup flows offer the template. */
+    kind: text('kind').$type<FilesystemTemplateKind>().notNull().default('company'),
     isDefault: boolean('is_default').notNull().default(false),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -2094,8 +2104,25 @@ export const filesystemTemplates = pgTable(
   },
   (t) => [
     index('idx_filesystem_template_tenant').on(t.tenantId),
+    index('idx_filesystem_template_kind').on(t.kind),
+    check('chk_filesystem_template_kind', sql`kind IN ('company', 'project')`),
   ],
 );
+
+export interface CategoryConfig {
+  color?: string | null;
+  icon?: string | null;
+  retentionDays?: number | null;
+  allowedMimeTypes?: string[] | null;
+  [key: string]: unknown;
+}
+
+export interface PipelineStepConfig {
+  prompt?: string;
+  confidenceThreshold?: number;
+  toolFilter?: string[];
+  [key: string]: unknown;
+}
 
 export const filesystemTemplateCategories = pgTable(
   'filesystem_template_category',
@@ -2106,8 +2133,9 @@ export const filesystemTemplateCategories = pgTable(
       .references(() => filesystemTemplates.id, { onDelete: 'cascade' }),
     parentCategoryId: uuid('parent_category_id').references((): AnyPgColumn => filesystemTemplateCategories.id, { onDelete: 'cascade' }),
     displayName: text('display_name').notNull(),
+    description: text('description'),
     slug: text('slug').notNull(),
-    config: jsonb('config').notNull().default({}),
+    config: jsonb('config').$type<CategoryConfig>().notNull().default({}),
     sortOrder: integer('sort_order').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -2145,8 +2173,9 @@ export const filesystemCategories = pgTable(
       .references(() => filesystems.id, { onDelete: 'cascade' }),
     parentCategoryId: uuid('parent_category_id').references((): AnyPgColumn => filesystemCategories.id, { onDelete: 'cascade' }),
     displayName: text('display_name').notNull(),
+    description: text('description'),
     slug: text('slug').notNull(),
-    config: jsonb('config').notNull().default({}),
+    config: jsonb('config').$type<CategoryConfig>().notNull().default({}),
     sortOrder: integer('sort_order').notNull().default(0),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -2178,6 +2207,8 @@ export const documents = pgTable(
     uploadStatus: text('upload_status').notNull().default('pending'),
     sourceSystem: text('source_system').notNull().default('claims-manager'),
     uploadedByUserId: text('uploaded_by_user_id'),
+    pipelineStatus: text('pipeline_status'),
+    pipelineError: text('pipeline_error'),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -2187,6 +2218,143 @@ export const documents = pgTable(
     index('idx_document_category').on(t.filesystemCategoryId),
     index('idx_document_related').on(t.tenantId, t.relatedRecordType, t.relatedRecordId),
     index('idx_document_status').on(t.tenantId, t.uploadStatus),
+  ],
+);
+
+// ── Document Pipelines ─────────────────────────────────────────
+
+export const documentPipelines = pgTable(
+  'document_pipeline',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    filesystemId: uuid('filesystem_id').references(() => filesystems.id, { onDelete: 'cascade' }),
+    categoryId: uuid('category_id').references(() => filesystemCategories.id, {
+      onDelete: 'cascade',
+    }),
+    name: text('name').notNull(),
+    description: text('description'),
+    isActive: boolean('is_active').notNull().default(true),
+    triggerOn: text('trigger_on').notNull().default('upload_complete'),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('document_pipeline_tenant_idx').on(t.tenantId),
+    index('document_pipeline_filesystem_idx').on(t.filesystemId),
+    index('document_pipeline_category_idx').on(t.categoryId),
+  ],
+);
+
+export const documentPipelineSteps = pgTable(
+  'document_pipeline_step',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    pipelineId: uuid('pipeline_id')
+      .notNull()
+      .references(() => documentPipelines.id, { onDelete: 'cascade' }),
+    agentId: text('agent_id').notNull(),
+    stepOrder: integer('step_order').notNull().default(0),
+    config: jsonb('config').$type<PipelineStepConfig>().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('document_pipeline_step_pipeline_idx').on(t.pipelineId),
+    uniqueIndex('document_pipeline_step_order_unique').on(t.pipelineId, t.stepOrder),
+  ],
+);
+
+export const documentPipelineRuns = pgTable(
+  'document_pipeline_run',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    pipelineId: uuid('pipeline_id')
+      .notNull()
+      .references(() => documentPipelines.id, { onDelete: 'cascade' }),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    status: text('status').notNull().default('pending'),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    error: text('error'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('document_pipeline_run_document_idx').on(t.documentId),
+    index('document_pipeline_run_tenant_status_idx').on(t.tenantId, t.status),
+  ],
+);
+
+export const documentPipelineRunSteps = pgTable(
+  'document_pipeline_run_step',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => documentPipelineRuns.id, { onDelete: 'cascade' }),
+    stepId: uuid('step_id').references(() => documentPipelineSteps.id, { onDelete: 'set null' }),
+    agentId: text('agent_id').notNull(),
+    stepOrder: integer('step_order').notNull(),
+    status: text('status').notNull().default('pending'),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    inputContext: jsonb('input_context').default({}),
+    outputResult: jsonb('output_result').default({}),
+    error: text('error'),
+    durationMs: integer('duration_ms'),
+  },
+  (t) => [index('document_pipeline_run_step_run_idx').on(t.runId)],
+);
+
+export const filesystemTemplatePipelines = pgTable(
+  'filesystem_template_pipeline',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    templateId: uuid('template_id')
+      .notNull()
+      .references(() => filesystemTemplates.id, { onDelete: 'cascade' }),
+    templateCategoryId: uuid('template_category_id').references(
+      () => filesystemTemplateCategories.id,
+      { onDelete: 'cascade' },
+    ),
+    name: text('name').notNull(),
+    description: text('description'),
+    isActive: boolean('is_active').notNull().default(true),
+    triggerOn: text('trigger_on').notNull().default('upload_complete'),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('filesystem_template_pipeline_template_idx').on(t.templateId),
+    index('filesystem_template_pipeline_category_idx').on(t.templateCategoryId),
+  ],
+);
+
+export const filesystemTemplatePipelineSteps = pgTable(
+  'filesystem_template_pipeline_step',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    pipelineId: uuid('pipeline_id')
+      .notNull()
+      .references(() => filesystemTemplatePipelines.id, { onDelete: 'cascade' }),
+    agentId: text('agent_id').notNull(),
+    stepOrder: integer('step_order').notNull().default(0),
+    config: jsonb('config').$type<PipelineStepConfig>().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('filesystem_template_pipeline_step_pipeline_idx').on(t.pipelineId),
+    uniqueIndex('filesystem_template_pipeline_step_order_unique').on(t.pipelineId, t.stepOrder),
   ],
 );
 

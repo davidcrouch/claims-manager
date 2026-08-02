@@ -1,6 +1,17 @@
 #!/usr/bin/env node
 /**
- * Generates data/building-repairs-catalog.csv — 500+ insurance building repair items.
+ * Generates two related seed catalogues for residential insurance building repairs:
+ *
+ * 1. data/building-repairs-catalog.csv — flat primitive + fixed-price assembly catalogue
+ *    (Crunchwork-style import format used by CatalogBootstrapService).
+ * 2. data/internal-assembly-bom.json — internal "computed" pricing companion: for every
+ *    assembly, the bill of materials (component primitive codes + quantity + waste factor)
+ *    used to derive the assembly's cost from its underlying primitives.
+ *
+ * All in-memory item objects are built first ({ kind, code, display, desc, type, category,
+ * unit, buy, unitCost, fixed, ... }) and CSV rows are only serialized at the very end, so the
+ * BOM generator can reference primitive codes reliably (and validate every reference exists).
+ *
  * Run: node data/generate-building-repairs-catalog.mjs
  */
 import { writeFileSync } from 'node:fs';
@@ -8,7 +19,10 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const OUT = join(__dirname, 'building-repairs-catalog.csv');
+const CSV_OUT = join(__dirname, 'building-repairs-catalog.csv');
+const BOM_OUT = join(__dirname, 'internal-assembly-bom.json');
+
+const TARGET_PRIMITIVES = 520;
 
 const HEADER = [
   'code',
@@ -26,7 +40,7 @@ const HEADER = [
   'pricing_mode',
   'fixed_unit_cost',
   'external_reference',
-].join(',');
+];
 
 function esc(value) {
   if (value == null || value === '') return '';
@@ -35,55 +49,120 @@ function esc(value) {
   return s;
 }
 
-function row(fields) {
+function csvRow(fields) {
   return fields.map(esc).join(',');
 }
 
-/** @param {object} p */
-function primitive(p) {
+// ── In-memory catalogue objects ──────────────────────────────────────────────
+// Every item is a plain object; CSV rows are derived from these at the end so
+// the BOM builder can look items up by `code` without re-parsing CSV text.
+
+const primitives = [];
+const assemblyDefs = [];
+
+// Lookup pools used by the BOM generator, keyed by category, populated as
+// primitives are created below.
+const pools = {
+  material: {},
+  labour: {},
+  equipment: {},
+  vendor: {},
+  other: {},
+};
+
+function poolFor(type, category) {
+  const byCategory = pools[type];
+  if (!byCategory[category]) byCategory[category] = [];
+  return byCategory[category];
+}
+
+/**
+ * @param {object} p
+ * `named` distinguishes curated, realistic catalogue entries (materialSets,
+ * labourTrades, equipment, vendors, other) from bulk filler/padding entries
+ * (variants, extraLabour) used only to reach volume targets. The BOM builder
+ * biases toward `named` primitives so generated bills of materials read as
+ * realistic trade scope rather than generic filler codes.
+ */
+function addPrimitive(p) {
   const buy = p.buy ?? p.unitCost * 0.75;
-  const unit = p.unitCost ?? Math.round(buy * 1.2 * 100) / 100;
-  return row([
-    p.code,
-    p.display,
-    p.desc,
-    'primitive',
-    p.type,
-    p.category,
-    p.unit,
-    unit.toFixed(2),
-    buy.toFixed(2),
-    p.markupType ?? 'percent',
-    p.markup ?? 20,
-    p.tax ?? '0.10',
-    '',
-    '',
-    p.ext ?? '',
-  ]);
+  const unitCost = p.unitCost ?? Math.round(buy * 1.2 * 100) / 100;
+  const item = {
+    kind: 'primitive',
+    code: p.code,
+    display: p.display,
+    desc: p.desc,
+    type: p.type,
+    category: p.category,
+    unit: p.unit,
+    buy: Number(buy.toFixed(2)),
+    unitCost: Number(unitCost.toFixed(2)),
+    markupType: p.markupType ?? 'percent',
+    markup: p.markup ?? 20,
+    tax: p.tax ?? '0.10',
+    ext: p.ext ?? '',
+    named: p.named ?? true,
+  };
+  primitives.push(item);
+  poolFor(p.type, p.category).push(item);
+  return item;
 }
 
 /** @param {object} p */
-function assembly(p) {
-  return row([
-    p.code,
-    p.display,
-    p.desc,
-    'assembly',
-    p.type,
-    p.category,
-    '',
-    '',
-    '',
-    '',
-    '',
-    p.tax ?? '0.10',
-    'fixed',
-    (p.fixed ?? 0).toFixed(2),
-    p.ext ?? '',
-  ]);
+function addAssembly(p) {
+  const item = {
+    kind: 'assembly',
+    code: p.code,
+    display: p.display,
+    desc: p.desc,
+    type: p.type,
+    category: p.category,
+    fixed: Number((p.fixed ?? 0).toFixed(2)),
+    tax: p.tax ?? '0.10',
+    ext: p.ext ?? '',
+  };
+  assemblyDefs.push(item);
+  return item;
 }
 
-const items = [];
+function toCsvRow(item) {
+  if (item.kind === 'primitive') {
+    return csvRow([
+      item.code,
+      item.display,
+      item.desc,
+      'primitive',
+      item.type,
+      item.category,
+      item.unit,
+      item.unitCost.toFixed(2),
+      item.buy.toFixed(2),
+      item.markupType,
+      item.markup,
+      item.tax,
+      '',
+      '',
+      item.ext,
+    ]);
+  }
+  return csvRow([
+    item.code,
+    item.display,
+    item.desc,
+    'assembly',
+    item.type,
+    item.category,
+    '',
+    '',
+    '',
+    '',
+    '',
+    item.tax,
+    'fixed',
+    item.fixed.toFixed(2),
+    item.ext,
+  ]);
+}
 
 // ── Materials by trade (programmatic expansion) ─────────────────────────────
 
@@ -217,17 +296,15 @@ for (const [category, defs] of Object.entries(materialSets)) {
   for (let i = 0; i < defs.length; i++) {
     const [suffix, display, desc] = defs[i];
     const buy = 8 + (i % 17) * 3.5 + category.length;
-    items.push(
-      primitive({
-        code: `MAT-${category.toUpperCase().slice(0, 4)}-${suffix}-${String(i + 1).padStart(2, '0')}`,
-        display,
-        desc,
-        type: 'material',
-        category,
-        unit: 'ea',
-        buy,
-      }),
-    );
+    addPrimitive({
+      code: `MAT-${category.toUpperCase().slice(0, 4)}-${suffix}-${String(i + 1).padStart(2, '0')}`,
+      display,
+      desc,
+      type: 'material',
+      category,
+      unit: 'ea',
+      buy,
+    });
   }
 }
 
@@ -304,19 +381,17 @@ const labourTrades = {
 
 for (const [category, trade] of Object.entries(labourTrades)) {
   for (let i = 0; i < trade.tasks.length; i++) {
-    const [short, display, desc] = trade.tasks[i];
+    const [, display, desc] = trade.tasks[i];
     const buy = trade.rate + (i % 5) * 2;
-    items.push(
-      primitive({
-        code: `${trade.prefix}-${String(i + 1).padStart(2, '0')}`,
-        display: `${display} (per hr)`,
-        desc,
-        type: 'labour',
-        category,
-        unit: 'hr',
-        buy,
-      }),
-    );
+    addPrimitive({
+      code: `${trade.prefix}-${String(i + 1).padStart(2, '0')}`,
+      display: `${display} (per hr)`,
+      desc,
+      type: 'labour',
+      category,
+      unit: 'hr',
+      buy,
+    });
   }
 }
 
@@ -351,7 +426,7 @@ const equipment = [
 ];
 
 for (const [code, display, desc, category, buy] of equipment) {
-  items.push(primitive({ code, display, desc, type: 'equipment', category, unit: 'ea', buy }));
+  addPrimitive({ code, display, desc, type: 'equipment', category, unit: 'ea', buy });
 }
 
 // ── Vendor / subcontract lump sums ──────────────────────────────────────────
@@ -390,7 +465,7 @@ const vendors = [
 ];
 
 for (const [code, display, desc, category, buy] of vendors) {
-  items.push(primitive({ code, display, desc, type: 'vendor', category, unit: 'ea', buy }));
+  addPrimitive({ code, display, desc, type: 'vendor', category, unit: 'ea', buy });
 }
 
 // ── Other (permits, fees, allowances) ───────────────────────────────────────
@@ -418,44 +493,79 @@ const other = [
   ['OTH-TARP-ROOF', 'Emergency roof tarp', 'Supply and secure heavy duty tarpaulin over damaged roof area', 'general', 380],
 ];
 
-for (const [code, display, desc, , buy] of other) {
-  items.push(primitive({ code, display, desc, type: 'other', category: 'general', unit: 'ea', buy: buy || 50 }));
+for (const [code, display, desc, category, buy] of other) {
+  addPrimitive({ code, display, desc, type: 'other', category, unit: 'ea', buy: buy || 50 });
 }
 
-// ── Expanded material variants (bulk generation for volume) ───────────────────
+// ── Expanded material variants (bulk generation for volume) ────────────────
 
 const variants = [
-  ['electrical', 'material', 'GPO', 'Power outlet variant', 'Supply and install power outlet variant to match existing wiring'],
-  ['electrical', 'material', 'Cable', 'Cable run variant', 'Supply additional cable and conduit for circuit extension'],
-  ['plumbing', 'material', 'Fitting', 'Pipe fitting variant', 'Supply brass or PVC fitting for pipe repair junction'],
-  ['plumbing', 'material', 'Sealant', 'Plumbing sealant', 'Supply plumbing grade sealant and thread tape for joint completion'],
-  ['plastering', 'material', 'Bead', 'Plaster bead variant', 'Supply plaster bead or trim for junction detail'],
-  ['plastering', 'material', 'Adhesive', 'Construction adhesive', 'Supply construction adhesive for sheet or trim bonding'],
-  ['carpentry', 'material', 'Fixings', 'Fixings pack', 'Supply nails screws and anchors pack for carpentry repair'],
-  ['carpentry', 'material', 'Adhesive', 'Timber adhesive', 'Supply polyurethane timber adhesive for splice joint'],
-  ['general', 'material', 'Consumable', 'Consumable allowance', 'Supply consumable allowance for blades bits and sundries on repair job'],
-  ['general', 'material', 'Seal', 'Silicone sealant', 'Supply neutral cure silicone for wet area perimeter seal'],
+  ['electrical', 'GPO', 'Power outlet variant', 'Supply and install power outlet variant to match existing wiring'],
+  ['electrical', 'Cable', 'Cable run variant', 'Supply additional cable and conduit for circuit extension'],
+  ['plumbing', 'Fitting', 'Pipe fitting variant', 'Supply brass or PVC fitting for pipe repair junction'],
+  ['plumbing', 'Sealant', 'Plumbing sealant', 'Supply plumbing grade sealant and thread tape for joint completion'],
+  ['plastering', 'Bead', 'Plaster bead variant', 'Supply plaster bead or trim for junction detail'],
+  ['plastering', 'Adhesive', 'Construction adhesive', 'Supply construction adhesive for sheet or trim bonding'],
+  ['carpentry', 'Fixings', 'Fixings pack', 'Supply nails screws and anchors pack for carpentry repair'],
+  ['carpentry', 'Adhesive', 'Timber adhesive', 'Supply polyurethane timber adhesive for splice joint'],
+  ['general', 'Consumable', 'Consumable allowance', 'Supply consumable allowance for blades bits and sundries on repair job'],
+  ['general', 'Seal', 'Silicone sealant', 'Supply neutral cure silicone for wet area perimeter seal'],
 ];
 
 let variantIdx = 0;
-while (items.filter((r) => r.includes(',primitive,material,')).length < 280) {
-  const [cat, , prefix, displayBase, descBase] = variants[variantIdx % variants.length];
+while (primitives.filter((r) => r.type === 'material').length < 280) {
+  const [cat, prefix, displayBase, descBase] = variants[variantIdx % variants.length];
   variantIdx++;
   const n = variantIdx;
-  items.push(
-    primitive({
-      code: `MAT-VAR-${prefix.toUpperCase()}-${String(n).padStart(3, '0')}`,
-      display: `${displayBase} ${n}`,
-      desc: `${descBase} — item ${n} for insurance repair scope scheduling`,
-      type: 'material',
-      category: cat,
-      unit: 'ea',
-      buy: 12 + (n % 40) * 2.2,
-    }),
-  );
+  addPrimitive({
+    code: `MAT-VAR-${prefix.toUpperCase()}-${String(n).padStart(3, '0')}`,
+    display: `${displayBase} ${n}`,
+    desc: `${descBase} — item ${n} for insurance repair scope scheduling`,
+    type: 'material',
+    category: cat,
+    unit: 'ea',
+    buy: 12 + (n % 40) * 2.2,
+    named: false,
+  });
 }
 
-// ── Assemblies (scope packages) ─────────────────────────────────────────────
+// ── More labour variants to pad primitives up to TARGET_PRIMITIVES ─────────
+
+const extraLabour = [
+  ['electrical', 'Data and comms work', 'Labour for data comms or TV outlet installation'],
+  ['electrical', 'Appliance connect', 'Labour to connect and test single domestic appliance'],
+  ['plumbing', 'Appliance install', 'Labour to install dishwasher or washing machine'],
+  ['plumbing', 'Gas leak make safe', 'Labour to isolate gas leak and make safe appliance'],
+  ['plastering', 'Cornice repair', 'Labour to repair damaged cornice section'],
+  ['plastering', 'Bulkhead build', 'Labour to construct plasterboard bulkhead'],
+  ['carpentry', 'Stair balustrade', 'Labour to replace stair balustrade section'],
+  ['carpentry', 'Wardrobe fit out', 'Labour to install wardrobe fit out kit'],
+  ['general', 'Tile waterproof', 'Labour to apply liquid waterproof membrane'],
+  ['general', 'Epoxy floor coat', 'Labour to apply epoxy coating to garage floor'],
+  ['general', 'Pressure wash', 'Labour to pressure wash external surfaces'],
+  ['general', 'Insulation removal', 'Labour to remove contaminated insulation'],
+  ['general', 'Hoarding erect', 'Labour to erect temporary hoarding'],
+  ['general', 'Traffic control', 'Labour for pedestrian traffic control during works'],
+  ['general', 'Dust barrier', 'Labour to install zip wall dust barrier'],
+];
+
+let labExtra = 0;
+while (primitives.length < TARGET_PRIMITIVES) {
+  const [cat, display, desc] = extraLabour[labExtra % extraLabour.length];
+  labExtra++;
+  addPrimitive({
+    code: `LAB-EXT-${String(labExtra).padStart(3, '0')}`,
+    display: `${display} (per hr)`,
+    desc: `${desc} for insurance building repair scope item ${labExtra}`,
+    type: 'labour',
+    category: cat,
+    unit: 'hr',
+    buy: 70 + (labExtra % 25) * 2,
+    named: false,
+  });
+}
+
+// ── Assemblies (scope packages, fixed pricing_mode) ─────────────────────────
 
 const assemblies = [
   ['ASM-WET-BATH-REL', 'Bathroom relining', 'Assembly allowance for bathroom relining including waterproofing wall linings and fit-off', 'other', 'plumbing', 8500],
@@ -508,56 +618,187 @@ const assemblies = [
   ['ASM-EVACUATE-SERVICE', 'Evacuation service', 'Assembly allowance for tenant evacuation coordination during major works', 'other', 'general', 650],
   ['ASM-ACCESS-EQ', 'Access equipment pack', 'Assembly allowance for scaffold and access equipment on two storey repair', 'other', 'general', 1800],
   ['ASM-QA-HANDOVER', 'QA handover pack', 'Assembly allowance for final QA inspection and insurer handover documentation', 'other', 'general', 420],
+  // Additional wet area assemblies
+  ['ASM-WET-ENSUITE-REL', 'Ensuite relining', 'Assembly allowance for ensuite relining including waterproofing and tiling to wet zone', 'other', 'plumbing', 6800],
+  ['ASM-WET-POWDER-ROOM', 'Powder room refit', 'Assembly allowance to refit powder room vanity toilet and wall lining', 'other', 'plumbing', 2600],
+  ['ASM-WET-BATH-REGROUT', 'Bathroom regrout', 'Assembly allowance to strip and regrout bathroom wall and floor tiles', 'other', 'plumbing', 1350],
+  ['ASM-WET-SHOWER-SCREEN', 'Shower screen replace', 'Assembly allowance to replace shower screen and reseal recess perimeter', 'other', 'plumbing', 980],
+  ['ASM-WET-TAPWARE-UPG', 'Tapware upgrade', 'Assembly allowance to upgrade bathroom tapware and fittings throughout wet area', 'other', 'plumbing', 1650],
+  // Additional kitchen assemblies
+  ['ASM-KIT-APPLIANCE-RECONNECT', 'Kitchen appliance reconnect', 'Assembly allowance to reconnect kitchen appliances after fire or flood repair', 'other', 'plumbing', 780],
+  ['ASM-KIT-PANTRY-REBUILD', 'Pantry rebuild', 'Assembly allowance to rebuild pantry shelving and lining after damage', 'other', 'carpentry', 2100],
+  ['ASM-KIT-ISLAND-BENCH', 'Kitchen island bench', 'Assembly allowance to replace kitchen island bench structure and benchtop', 'other', 'carpentry', 5400],
+  ['ASM-KIT-SPLASH-GLASS', 'Glass splashback', 'Assembly allowance for toughened glass kitchen splashback supply and install', 'other', 'carpentry', 1950],
+  // Additional flood assemblies
+  ['ASM-FLOOD-SUBFLOOR', 'Subfloor flood dry-out', 'Assembly allowance for subfloor timber flood dry-out and mould treatment', 'other', 'general', 3600],
+  ['ASM-FLOOD-GARAGE', 'Garage flood restore', 'Assembly allowance for garage flood strip clean and reinstate linings', 'other', 'general', 3900],
+  ['ASM-FLOOD-CONTENTS-DRY', 'Contents drying service', 'Assembly allowance for contents drying and dehumidification service on-site', 'other', 'general', 1450],
+  // Additional fire assemblies
+  ['ASM-FIRE-CEILING', 'Fire damaged ceiling', 'Assembly allowance to remove and replace fire damaged ceiling lining', 'other', 'plastering', 4600],
+  ['ASM-FIRE-ELECTRICAL-RESTORE', 'Fire electrical restore', 'Assembly allowance to restore electrical circuits damaged by fire', 'other', 'electrical', 3100],
+  ['ASM-FIRE-STRUCTURAL-CLEAN', 'Fire structural clean', 'Assembly allowance for structural timber soot clean and seal after fire', 'other', 'general', 2750],
+  // Additional storm assemblies
+  ['ASM-STORM-WINDOW-BOARDUP', 'Storm window board-up', 'Assembly allowance to board up and later replace storm damaged windows', 'other', 'carpentry', 1200],
+  ['ASM-STORM-TREE-DAMAGE', 'Storm tree damage repair', 'Assembly allowance to remove fallen tree and repair structural damage', 'other', 'general', 6200],
+  ['ASM-STORM-CARPORT', 'Carport storm repair', 'Assembly allowance to repair storm damaged carport roof and posts', 'other', 'carpentry', 3400],
+  // Additional electrical assemblies
+  ['ASM-ELE-DOWNLIGHT-UPG', 'Downlight upgrade', 'Assembly allowance to upgrade downlights throughout dwelling to LED', 'other', 'electrical', 1900],
+  ['ASM-ELE-SOLAR-RECONNECT', 'Solar reconnect', 'Assembly allowance to isolate and reconnect rooftop solar after roof repair', 'other', 'electrical', 1100],
+  ['ASM-ELE-DATA-REWIRE', 'Data network rewire', 'Assembly allowance to rewire data and network points throughout dwelling', 'other', 'electrical', 1400],
+  // Additional plumbing assemblies
+  ['ASM-PLU-GAS-RECONNECT', 'Gas reconnect', 'Assembly allowance to make safe and reconnect gas appliances after repair', 'other', 'plumbing', 890],
+  ['ASM-PLU-STORMWATER-REP', 'Stormwater repair', 'Assembly allowance to excavate and repair damaged stormwater line', 'other', 'plumbing', 2600],
+  ['ASM-PLU-TAPWARE-REP', 'Tapware replace pack', 'Assembly allowance to replace all tapware in kitchen and bathrooms', 'other', 'plumbing', 1750],
+  // Additional plastering assemblies
+  ['ASM-PLS-CORNICE-FULL', 'Full cornice replace', 'Assembly allowance to strip and replace cornice throughout single level', 'other', 'plastering', 2900],
+  ['ASM-PLS-BULKHEAD-BUILD', 'Bulkhead construction', 'Assembly allowance to construct plasterboard bulkhead for services concealment', 'other', 'plastering', 1650],
+  ['ASM-PLS-CEILING-PATCH', 'Ceiling patch repair', 'Assembly allowance to patch and texture match damaged ceiling section', 'other', 'plastering', 980],
+  // Additional carpentry assemblies
+  ['ASM-CAR-PERGOLA-REPAIR', 'Pergola repair', 'Assembly allowance to repair storm or fire damaged pergola structure', 'other', 'carpentry', 2400],
+  ['ASM-CAR-STAIR-REBUILD', 'Staircase rebuild', 'Assembly allowance to rebuild internal timber staircase and balustrade', 'other', 'carpentry', 6800],
+  ['ASM-CAR-WARDROBE-FITOUT', 'Wardrobe fit-out', 'Assembly allowance to replace built-in wardrobe fit-out after water damage', 'other', 'carpentry', 2200],
+  // Additional painting assemblies
+  ['ASM-PAINT-CEILING-ONLY', 'Ceiling repaint only', 'Assembly allowance to prep and repaint ceilings only throughout single level', 'other', 'general', 2600],
+  ['ASM-PAINT-TRIM-DOORS', 'Trim and doors repaint', 'Assembly allowance to prep and repaint skirting architraves and doors', 'other', 'general', 1800],
+  ['ASM-PAINT-GARAGE-FLOOR', 'Garage floor coating', 'Assembly allowance to prep and apply epoxy coating to garage floor', 'other', 'general', 1500],
+  // Additional flooring assemblies
+  ['ASM-FLR-TIMBER-SAND-POLISH', 'Timber floor sand & polish', 'Assembly allowance to sand and polish existing timber floor after damage', 'other', 'general', 3800],
+  ['ASM-FLR-LAMINATE-LIVING', 'Laminate flooring living', 'Assembly allowance to install laminate flooring in living areas', 'other', 'general', 2900],
+  ['ASM-FLR-TILE-ENTRY', 'Entry tile replace', 'Assembly allowance to replace entry and hallway floor tiles', 'other', 'general', 2100],
+  // Additional make-safe assemblies
+  ['ASM-MAKE-SAFE-ROOF-TARP', 'Emergency roof tarping', 'Assembly allowance for emergency tarping of storm or fire damaged roof', 'other', 'general', 950],
+  ['ASM-MAKE-SAFE-BOARDUP', 'Emergency board-up', 'Assembly allowance for emergency board-up of damaged openings and access points', 'other', 'carpentry', 850],
+  ['ASM-MAKE-SAFE-POWER-ISOLATE', 'Emergency power isolation', 'Assembly allowance for emergency electrical isolation and temporary supply', 'other', 'electrical', 620],
 ];
 
 for (const [code, display, desc, type, category, fixed] of assemblies) {
-  items.push(assembly({ code, display, desc, type, category, fixed }));
+  addAssembly({ code, display, desc, type, category, fixed });
 }
 
-// ── More labour variants to reach 500+ ──────────────────────────────────────
+// ── Internal computed-pricing BOM ────────────────────────────────────────────
+// For each assembly, derive a deterministic bill of materials referencing real
+// primitive codes so downstream "computed" pricing can roll up assembly cost
+// from its components. Selection is seeded per assembly code for reproducible
+// output across regenerations.
 
-const extraLabour = [
-  ['electrical', 'Data and comms work', 'Labour for data comms or TV outlet installation'],
-  ['electrical', 'Appliance connect', 'Labour to connect and test single domestic appliance'],
-  ['plumbing', 'Appliance install', 'Labour to install dishwasher or washing machine'],
-  ['plumbing', 'Gas leak make safe', 'Labour to isolate gas leak and make safe appliance'],
-  ['plastering', 'Cornice repair', 'Labour to repair damaged cornice section'],
-  ['plastering', 'Bulkhead build', 'Labour to construct plasterboard bulkhead'],
-  ['carpentry', 'Stair balustrade', 'Labour to replace stair balustrade section'],
-  ['carpentry', 'Wardrobe fit out', 'Labour to install wardrobe fit out kit'],
-  ['general', 'Tile waterproof', 'Labour to apply liquid waterproof membrane'],
-  ['general', 'Epoxy floor coat', 'Labour to apply epoxy coating to garage floor'],
-  ['general', 'Pressure wash', 'Labour to pressure wash external surfaces'],
-  ['general', 'Insulation removal', 'Labour to remove contaminated insulation'],
-  ['general', 'Hoarding erect', 'Labour to erect temporary hoarding'],
-  ['general', 'Traffic control', 'Labour for pedestrian traffic control during works'],
-  ['general', 'Dust barrier', 'Labour to install zip wall dust barrier'],
-];
+function hashCode(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
+  return h >>> 0;
+}
 
-let labExtra = 0;
-while (items.length < 520) {
-  const [cat, display, desc] = extraLabour[labExtra % extraLabour.length];
-  labExtra++;
-  items.push(
-    primitive({
-      code: `LAB-EXT-${String(labExtra).padStart(3, '0')}`,
-      display: `${display} (per hr)`,
-      desc: `${desc} for insurance building repair scope item ${labExtra}`,
-      type: 'labour',
-      category: cat,
-      unit: 'hr',
-      buy: 70 + (labExtra % 25) * 2,
-    }),
+function seededRng(seed) {
+  let s = seed >>> 0;
+  return function next() {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= (t + Math.imul(t ^ (t >>> 7), t | 61)) >>> 0;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function poolItemsFor(type, category) {
+  const byCategory = pools[type];
+  return byCategory[category] ?? byCategory.general ?? [];
+}
+
+/** Prefer curated `named` primitives; only fall back to filler codes if a
+ * category/type pool has no curated entries. */
+function namedPoolItemsFor(type, category) {
+  const all = poolItemsFor(type, category);
+  const named = all.filter((item) => item.named);
+  return named.length ? named : all;
+}
+
+function buildComponents(asm, rng) {
+  const category = asm.category;
+  const materialPool = namedPoolItemsFor('material', category);
+  const labourPool = namedPoolItemsFor('labour', category);
+  const equipmentPool = namedPoolItemsFor('equipment', category);
+  const vendorPool = namedPoolItemsFor('vendor', category);
+  const otherPool = namedPoolItemsFor('other', category);
+
+  const pick = (pool) => pool[Math.floor(rng() * pool.length)];
+
+  const componentCount = 3 + Math.floor(rng() * 6); // 3..8
+  const chosen = new Map();
+
+  const addComponent = (item) => {
+    if (!item || chosen.has(item.code)) return false;
+    let quantity;
+    let wasteFactor = 1;
+    if (item.type === 'material') {
+      quantity = 1 + Math.floor(rng() * 20);
+      wasteFactor = Number((1.05 + rng() * 0.1).toFixed(2));
+    } else if (item.type === 'labour') {
+      quantity = 1 + Math.floor(rng() * 16);
+    } else if (item.type === 'equipment') {
+      quantity = 1 + Math.floor(rng() * 3);
+    } else {
+      quantity = 1;
+    }
+    chosen.set(item.code, { code: item.code, quantity, wasteFactor });
+    return true;
+  };
+
+  if (materialPool.length) addComponent(pick(materialPool));
+  if (labourPool.length) addComponent(pick(labourPool));
+
+  const combinedPools = [materialPool, materialPool, labourPool, equipmentPool, vendorPool, otherPool].filter(
+    (pool) => pool.length,
   );
+
+  let guard = 0;
+  while (chosen.size < componentCount && guard < 200) {
+    guard++;
+    const pool = combinedPools[Math.floor(rng() * combinedPools.length)];
+    if (!pool) continue;
+    addComponent(pick(pool));
+  }
+
+  return Array.from(chosen.values());
 }
 
-// ── Write output ────────────────────────────────────────────────────────────
+const bom = assemblyDefs.map((asm) => {
+  const rng = seededRng(hashCode(asm.code));
+  return {
+    code: asm.code,
+    name: asm.display,
+    description: asm.desc,
+    typeCode: asm.type,
+    categoryCode: asm.category,
+    pricingMode: 'computed',
+    components: buildComponents(asm, rng),
+  };
+});
 
-const lines = [HEADER, ...items];
-writeFileSync(OUT, lines.join('\n') + '\n', 'utf8');
+// ── Validate BOM references ─────────────────────────────────────────────────
 
-const primitives = items.filter((r) => r.includes(',primitive,')).length;
-const assembliesCount = items.filter((r) => r.includes(',assembly,')).length;
-console.log(`Wrote ${items.length} items to ${OUT}`);
-console.log(`  Primitives: ${primitives}`);
-console.log(`  Assemblies: ${assembliesCount}`);
+const primitiveCodes = new Set(primitives.map((p) => p.code));
+const missing = [];
+for (const entry of bom) {
+  for (const component of entry.components) {
+    if (!primitiveCodes.has(component.code)) missing.push(`${entry.code} -> ${component.code}`);
+  }
+}
+if (missing.length) {
+  throw new Error(`BOM references unknown primitive codes:\n${missing.join('\n')}`);
+}
+
+// ── Write CSV output ─────────────────────────────────────────────────────────
+
+const allItems = [...primitives, ...assemblyDefs];
+const csvLines = [HEADER.join(','), ...allItems.map(toCsvRow)];
+writeFileSync(CSV_OUT, csvLines.join('\n') + '\n', 'utf8');
+
+// ── Write BOM output ─────────────────────────────────────────────────────────
+
+writeFileSync(BOM_OUT, JSON.stringify(bom, null, 2) + '\n', 'utf8');
+
+// ── Summary ──────────────────────────────────────────────────────────────────
+
+console.log(`Wrote ${allItems.length} items to ${CSV_OUT}`);
+console.log(`  Primitives: ${primitives.length}`);
+console.log(`  Assemblies: ${assemblyDefs.length}`);
+console.log(`Wrote ${bom.length} BOM entries to ${BOM_OUT}`);

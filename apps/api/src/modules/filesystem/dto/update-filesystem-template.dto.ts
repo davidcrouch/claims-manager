@@ -1,4 +1,4 @@
-import { IsString, IsOptional } from 'class-validator';
+import { IsString, IsOptional, IsIn } from 'class-validator';
 
 export class UpdateFilesystemTemplateDto {
   @IsOptional()
@@ -8,4 +8,8 @@ export class UpdateFilesystemTemplateDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @IsOptional()
+  @IsIn(['company', 'project'])
+  kind?: 'company' | 'project';
 }

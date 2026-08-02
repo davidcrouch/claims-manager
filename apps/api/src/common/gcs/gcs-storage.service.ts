@@ -2,6 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Storage, Bucket } from '@google-cloud/storage';
 
+/** Matches expired / reauth-required ADC user credentials (local/dev). */
+const ADC_REAUTH_REQUIRED_RE = /invalid_grant|invalid_rapt|reauth related error|credentials expired/i;
+
 export interface GcsUploadUrlResult {
   uploadUrl: string;
   objectPath: string;
@@ -38,11 +41,13 @@ export class GcsStorageService {
       return;
     }
 
+    // Uses Application Default Credentials (ADC) — same as data_cloud/mortgage-api.
+    // Local/dev: `gcloud auth application-default login`. Prod: Workload Identity.
     this.storage = new Storage({ projectId });
     this.bucket = this.storage.bucket(bucketName);
 
     this.logger.log(
-      `GcsStorageService.ctor — projectId=${projectId} bucket=${bucketName} corsOrigin=${this.corsOrigin ?? 'none'}`,
+      `GcsStorageService.ctor — projectId=${projectId} bucket=${bucketName} corsOrigin=${this.corsOrigin ?? 'none'} auth=ADC`,
     );
   }
 
@@ -85,12 +90,13 @@ export class GcsStorageService {
         uri: `gs://${this.bucketName}/${params.objectPath}`,
       };
     } catch (error: any) {
-      if (error?.code === 401 || error?.message?.includes('credentials expired')) {
+      const message = error?.message ?? String(error);
+      if (error?.code === 401 || ADC_REAUTH_REQUIRED_RE.test(message)) {
         this.logger.error(
-          `${logPrefix} — GCP credentials expired. Run "gcloud auth application-default login" and restart.`,
+          `${logPrefix} — Google ADC requires re-authentication. Run "gcloud auth application-default login" and restart.`,
         );
       }
-      this.logger.error(`${logPrefix} — failed path=${params.objectPath}: ${error.message}`);
+      this.logger.error(`${logPrefix} — failed path=${params.objectPath}: ${message}`);
       throw error;
     }
   }

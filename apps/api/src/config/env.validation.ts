@@ -96,6 +96,24 @@ export class EnvironmentVariables {
   @IsString()
   @IsOptional()
   SEED_NEW_TENANTS?: string;
+
+  /** When true, /internal/seed-tenant also runs sample-data for the tenant. */
+  @IsString()
+  @IsOptional()
+  SEED_SAMPLE_DATA?: string;
+
+  /** Optional Pub/Sub topic for async pipeline dispatch; sync in-process when unset. */
+  @IsString()
+  @IsOptional()
+  PIPELINE_TOPIC_NAME?: string;
+
+  @IsString()
+  @IsOptional()
+  VERTEX_LOCATION?: string;
+
+  @IsString()
+  @IsOptional()
+  VERTEX_GEMINI_MODEL?: string;
 }
 
 export function validate(config: Record<string, unknown>) {

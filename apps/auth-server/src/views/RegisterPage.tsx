@@ -159,6 +159,8 @@ export function RegisterPage({
                       type="text"
                       className="form-input w-full"
                       placeholder="First name"
+                      required
+                      autoComplete="given-name"
                     />
                   </div>
                   <div>
@@ -171,6 +173,8 @@ export function RegisterPage({
                       type="text"
                       className="form-input w-full"
                       placeholder="Last name"
+                      required
+                      autoComplete="family-name"
                     />
                   </div>
                 </div>

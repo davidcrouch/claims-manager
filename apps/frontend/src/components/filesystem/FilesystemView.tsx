@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import { FolderOpen } from 'lucide-react';
 import { FilesystemBrowser } from './FilesystemBrowser';
+import { PipelineRunHistoryDrawer } from './PipelineRunHistoryDrawer';
 import { DocumentsToolbar } from '@/components/documents/DocumentsToolbar';
 import { DocumentsGrid } from '@/components/documents/DocumentsGrid';
 import { DocumentUploadDrawer } from '@/components/documents/DocumentUploadDrawer';
@@ -42,6 +43,7 @@ export function FilesystemView({
   const [layout, setLayout] = useState<'grid' | 'list'>('grid');
   const [page, setPage] = useState(1);
   const [uploadDrawerOpen, setUploadDrawerOpen] = useState(false);
+  const [pipelineDoc, setPipelineDoc] = useState<FSDocument | null>(null);
   const fetchRef = useRef(0);
 
   useEffect(() => {
@@ -120,6 +122,11 @@ export function FilesystemView({
         case 'move':
           toast.info('Drag the document to a category in the sidebar to move it');
           break;
+        case 'pipeline-history': {
+          const doc = documents.find((d) => d.id === documentId) ?? null;
+          setPipelineDoc(doc);
+          break;
+        }
         case 'archive':
           try {
             await archiveDocumentAction(documentId);
@@ -142,7 +149,7 @@ export function FilesystemView({
           break;
       }
     },
-    [fetchDocuments],
+    [fetchDocuments, documents],
   );
 
   const handleFilesDropped = useCallback(
@@ -229,6 +236,17 @@ export function FilesystemView({
         categoryId={selectedCategoryId !== '__uncategorised' ? selectedCategoryId : null}
         onComplete={handleUploadComplete}
       />
+
+      {pipelineDoc && (
+        <PipelineRunHistoryDrawer
+          documentId={pipelineDoc.id}
+          documentName={pipelineDoc.fileName}
+          open={!!pipelineDoc}
+          onOpenChange={(open) => {
+            if (!open) setPipelineDoc(null);
+          }}
+        />
+      )}
     </DocumentDropZone>
   );
 }

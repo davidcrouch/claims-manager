@@ -50,8 +50,11 @@ import { ScheduleModule } from './modules/schedule/schedule.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { DocumentGenerationModule } from './modules/document-generation/document-generation.module';
 import { FilesystemModule } from './modules/filesystem/filesystem.module';
+import { PipelineModule } from './modules/pipelines/pipeline.module';
+import { SystemAgentsModule } from './modules/system-agents/system-agents.module';
 import { OrganisationsModule } from './modules/organisations/organisations.module';
 import { PubSubModule } from './modules/pubsub/pubsub.module';
+import { ProvisioningModule } from './modules/provisioning/provisioning.module';
 import { TenantInterceptor } from './tenant/tenant.interceptor';
 import { AllExceptionsFilter, HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -125,10 +128,13 @@ import { OfficeModule } from './common/office/office.module';
     JournalsModule,
     ScheduleModule,
     NotificationsModule,
+    SystemAgentsModule,
+    PipelineModule,
     FilesystemModule,
     DocumentGenerationModule,
     OrganisationsModule,
     PubSubModule,
+    ProvisioningModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

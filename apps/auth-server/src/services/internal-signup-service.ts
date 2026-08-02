@@ -131,9 +131,10 @@ class InternalSignupService {
          }, 'auth-server:internal-signup:signup - Signup completed successfully');
 
          // Fire-and-forget: when a brand-new organization was just created,
-         // ask api-server to populate sample data for it. Gated by
-         // SEED_NEW_TENANTS on both sides; any failure is logged but
-         // never surfaced back to the signup caller.
+         // ask api-server to seed it (catalog-dev always; sample-data when
+         // SEED_SAMPLE_DATA=true on api-server). Gated by SEED_NEW_TENANTS
+         // on both sides; any failure is logged but never surfaced back
+         // to the signup caller.
          //
          // Both scenarios below mean "a new org was just provisioned":
          //   - new_user_new_organization:        brand new user + brand new org (e.g. OAuth first-signup)
@@ -149,7 +150,7 @@ class InternalSignupService {
                functionName,
                organizationId: result.organizationId,
                scenario: result.scenario,
-            }, 'auth-server:internal-signup:signup - dispatching sample-data seed for new tenant');
+            }, 'auth-server:internal-signup:signup - dispatching tenant seed for new org');
             try {
                triggerSeedTenant({ tenantId: result.organizationId });
             } catch (seedErr: unknown) {

@@ -34,6 +34,7 @@ import {
   ArrowLeft,
   Files,
   Building2,
+  ListTree,
 } from 'lucide-react';
 import { Collapsible } from '@base-ui/react/collapsible';
 import {
@@ -189,6 +190,7 @@ const navGroups: NavGroup[] = [
       { title: 'Catalogue', href: '/admin/catalog', icon: Package },
       { title: 'Document Categories', href: '/admin/documents', icon: FolderOpen },
       { title: 'Document Templates', href: '/admin/document-templates', icon: Files },
+      { title: 'Filesystem Templates', href: '/admin/filesystem-templates', icon: ListTree },
       { title: 'Org Claims', href: '/admin/claims', icon: Building2 },
       { title: 'Users', href: '/admin/users', icon: UserCog },
       { title: 'Settings', href: '/admin/settings', icon: Settings },
