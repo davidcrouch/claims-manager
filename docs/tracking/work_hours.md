@@ -564,7 +564,7 @@
   Delivered the matching **website chat drawer, admin screens, and connection management** so day-to-day use and oversight stay in one product.
   Outcome: a production-ready assistant foundation that combines chat, tools, skills, and access control for claims operations.
 
-- `2026-08-02` `pending` **5.5 h**
+- `2026-08-02` `d12a41f` **5.5 h**
   `50 files | +1075 −267 | Tier 2 standard | Moderate orchestration`
   Lay summary: Create buttons now sit in the top header across main work screens, and forms make it clearer which job a new record belongs to.
   **Header create actions and shared job selection across operational screens.** Moved primary create actions into the app header across bills, quotes, RFQs, purchase orders, work orders, proposals, appointments, and related lists.
