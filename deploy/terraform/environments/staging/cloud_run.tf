@@ -107,9 +107,7 @@ module "cloud_run_provider" {
   health_path           = var.cloud_run_use_bootstrap_image ? "/" : "/api/v1/health"
   enable_probes         = !var.cloud_run_use_bootstrap_image
   ingress               = "INGRESS_TRAFFIC_ALL"
-  # Org policy iam.allowedPolicyMemberDomains blocks allUsers binding.
-  # Public invocation handled via org constraint exemption post-apply.
-  allow_unauthenticated = false
+  allow_unauthenticated = true
   vpc_network           = module.networking.vpc_self_link
   vpc_subnet            = module.networking.subnet_self_link
   domain                = var.dns_edge == "cloudrun" ? local.cloud_run_hosts.providers : null
@@ -199,7 +197,7 @@ module "cloud_run_auth" {
   health_path           = var.cloud_run_use_bootstrap_image ? "/" : "/health"
   enable_probes         = !var.cloud_run_use_bootstrap_image
   ingress               = "INGRESS_TRAFFIC_ALL"
-  allow_unauthenticated = false
+  allow_unauthenticated = true
   vpc_network           = module.networking.vpc_self_link
   vpc_subnet            = module.networking.subnet_self_link
   domain                = var.dns_edge == "cloudrun" ? local.cloud_run_hosts.auth : null
@@ -238,7 +236,7 @@ module "cloud_run_frontend" {
   health_path           = "/"
   enable_probes         = !var.cloud_run_use_bootstrap_image
   ingress               = "INGRESS_TRAFFIC_ALL"
-  allow_unauthenticated = false
+  allow_unauthenticated = true
   vpc_network           = module.networking.vpc_self_link
   vpc_subnet            = module.networking.subnet_self_link
   domain                = var.dns_edge == "cloudrun" ? local.cloud_run_hosts.app : null
