@@ -17,7 +17,7 @@ COPY apps/claims-mcp/ apps/claims-mcp/
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm install --frozen-lockfile --offline
 RUN pnpm --filter claims-mcp run build
-RUN pnpm --filter claims-mcp --prod deploy /deploy
+RUN pnpm --filter claims-mcp --prod deploy --legacy /deploy
 
 FROM node:20-alpine AS runner
 ENV NODE_ENV=production

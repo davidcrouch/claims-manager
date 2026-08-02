@@ -17,7 +17,7 @@ COPY apps/ms-graph-mcp/ apps/ms-graph-mcp/
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm install --frozen-lockfile --offline
 RUN pnpm --filter ms-graph-mcp run build
-RUN pnpm --filter ms-graph-mcp --prod deploy /deploy
+RUN pnpm --filter ms-graph-mcp --prod deploy --legacy /deploy
 
 FROM node:22-alpine AS runner
 RUN addgroup -g 1001 -S appgroup && adduser -S appuser -u 1001 -G appgroup
