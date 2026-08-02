@@ -10,6 +10,11 @@ locals {
   # images exist. CD replaces with real service images; module ignores image drift.
   bootstrap_image = "us-docker.pkg.dev/cloudrun/container/hello"
 
+  # Stable Cloud Run URL suffix (derived from project number + region).
+  run_url_suffix = "htnjf6bb7a-ts.a.run.app"
+  auth_run_url     = "https://auth-server-${local.run_url_suffix}"
+  frontend_run_url = "https://frontend-${local.run_url_suffix}"
+
   cloud_run_domain_suffix = trimsuffix(var.dns_name, ".")
   cloud_run_hosts = {
     api       = "api-${var.environment}.${local.cloud_run_domain_suffix}"
@@ -203,14 +208,41 @@ module "cloud_run_auth" {
   domain                = var.dns_edge == "cloudrun" ? local.cloud_run_hosts.auth : null
 
   env_vars = {
-    NODE_ENV     = "production"
-    SERVICE_NAME = "auth-server"
+    NODE_ENV             = "production"
+    SERVICE_NAME         = "auth-server"
+    SERVICE_VERSION      = "0.3.1"
+    OIDC_ISSUER          = var.dns_edge == "cloudrun" ? "https://${local.cloud_run_hosts.auth}" : local.auth_run_url
+    BASE_URL             = var.dns_edge == "cloudrun" ? "https://${local.cloud_run_hosts.auth}" : local.auth_run_url
+    OIDC_CLIENT_ID       = "claims-manager-ui"
+    OIDC_CLIENT_CALLBACK_URI = var.dns_edge == "cloudrun" ? "https://${local.cloud_run_hosts.app}/api/auth/callback" : "${local.frontend_run_url}/api/auth/callback"
+    OIDC_POST_LOGIN_URI  = var.dns_edge == "cloudrun" ? "https://${local.cloud_run_hosts.app}/dashboard" : "${local.frontend_run_url}/dashboard"
+    OIDC_POST_LOGOUT_URI = var.dns_edge == "cloudrun" ? "https://${local.cloud_run_hosts.app}" : local.frontend_run_url
+    CORS_ORIGINS         = var.dns_edge == "cloudrun" ? "https://${local.cloud_run_hosts.app}" : local.frontend_run_url
+    JWT_EXPECTED_AUDIENCE = "claims-manager-ui"
+    JWT_PUBLIC_KEY_E     = "AQAB"
+    REDIS_PROVIDER       = "self-hosted"
+    REDIS_HOST           = module.memorystore.host
+    REDIS_PORT           = tostring(module.memorystore.port)
   }
 
   secret_env_vars = [
     { name = "DATABASE_URL", secret = "database-url-auth" },
-    { name = "REDIS_URL", secret = "redis-url" },
     { name = "INTERNAL_API_TOKEN", secret = "internal-api-token" },
+    { name = "JWT_SECRET", secret = "auth-jwt-secret" },
+    { name = "OIDC_CLIENT_SECRET", secret = "auth-oidc-client-secret" },
+    { name = "OIDC_COOKIES_KEYS", secret = "auth-oidc-cookies-keys" },
+    { name = "DYNAMIC_REGISTRATION_SECRET", secret = "auth-dcr-secret" },
+    { name = "DCR_IAT_SIGNING_KEY", secret = "auth-dcr-iat-key" },
+    { name = "JWT_PUBLIC_KEY_N", secret = "auth-jwks-rsa-n" },
+    { name = "JWT_PRIVATE_KEY_D", secret = "auth-jwks-rsa-d" },
+    { name = "JWT_PRIVATE_KEY_P", secret = "auth-jwks-rsa-p" },
+    { name = "JWT_PRIVATE_KEY_Q", secret = "auth-jwks-rsa-q" },
+    { name = "JWT_PRIVATE_KEY_DP", secret = "auth-jwks-rsa-dp" },
+    { name = "JWT_PRIVATE_KEY_DQ", secret = "auth-jwks-rsa-dq" },
+    { name = "JWT_PRIVATE_KEY_QI", secret = "auth-jwks-rsa-qi" },
+    { name = "JWT_EC_PRIVATE_KEY_D", secret = "auth-jwks-ec-d" },
+    { name = "JWT_EC_PUBLIC_KEY_X", secret = "auth-jwks-ec-x" },
+    { name = "JWT_EC_PUBLIC_KEY_Y", secret = "auth-jwks-ec-y" },
   ]
 
   depends_on = [
