@@ -275,9 +275,27 @@ module "cloud_run_frontend" {
 
   env_vars = {
     NODE_ENV = "production"
-    # Server-side BFF calls private api via run URI + identity (set at deploy).
-    NEXT_PUBLIC_API_URL = var.dns_edge == "cloudrun" ? "https://${local.cloud_run_hosts.api}" : ""
-    AUTH_SERVER_URL     = var.dns_edge == "cloudrun" ? "https://${local.cloud_run_hosts.auth}" : ""
+    # Always wire Cloud Run frontend to Cloud Run auth/API URIs (not localhost).
+    # Custom hostnames apply only after dns_edge=cloudrun cutover.
+    AUTH_SERVER_URL = var.dns_edge == "cloudrun" ? "https://${local.cloud_run_hosts.auth}" : local.auth_run_url
+    OIDC_ISSUER     = var.dns_edge == "cloudrun" ? "https://${local.cloud_run_hosts.auth}" : local.auth_run_url
+    OIDC_REDIRECT_URI = (
+      var.dns_edge == "cloudrun"
+      ? "https://${local.cloud_run_hosts.app}/api/auth/callback"
+      : "${local.frontend_run_url}/api/auth/callback"
+    )
+    OIDC_POST_LOGIN_URI = (
+      var.dns_edge == "cloudrun"
+      ? "https://${local.cloud_run_hosts.app}/dashboard"
+      : "${local.frontend_run_url}/dashboard"
+    )
+    OIDC_POST_LOGOUT_URI = (
+      var.dns_edge == "cloudrun"
+      ? "https://${local.cloud_run_hosts.app}"
+      : local.frontend_run_url
+    )
+    # Private api: use run URI; identity required when calling from Cloud Run.
+    NEXT_PUBLIC_API_URL = var.dns_edge == "cloudrun" ? "https://${local.cloud_run_hosts.api}" : "https://api-server-${local.run_url_suffix}"
   }
 
   secret_env_vars = [

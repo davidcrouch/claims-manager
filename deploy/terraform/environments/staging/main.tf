@@ -34,11 +34,9 @@ module "networking" {
   environment = var.environment
 }
 
-# ── Staging runs on a single e2-standard-2 VM via docker compose.
-# Postgres / Redis are managed (CloudSQL + Memorystore) so the VM only
-# hosts the application containers and Caddy for TLS. See
-# modules/staging_vm for the MIG + disk + snapshot + firewall topology.
+# Optional Compose/Caddy VM. Disabled by default — Cloud Run is the staging edge.
 module "staging_vm" {
+  count  = var.enable_staging_vm ? 1 : 0
   source = "../../modules/staging_vm"
 
   project_id        = var.project_id
@@ -100,10 +98,10 @@ module "artifact_registry" {
 
   project_id = var.infra_project_id
   location   = var.region
-  reader_members = [
+  reader_members = compact([
     "serviceAccount:${data.google_project.this.number}-compute@developer.gserviceaccount.com",
-    "serviceAccount:${module.staging_vm.service_account_email}",
-  ]
+    var.enable_staging_vm ? "serviceAccount:${module.staging_vm[0].service_account_email}" : null,
+  ])
 }
 
 module "iam" {
@@ -136,7 +134,9 @@ module "iam" {
 # point at an orphan SA in the staging project that the CI workflows do
 # not use.
 resource "google_service_account_iam_member" "ci_deployer_actas_vm" {
-  service_account_id = "projects/${var.project_id}/serviceAccounts/${module.staging_vm.service_account_email}"
+  count = var.enable_staging_vm ? 1 : 0
+
+  service_account_id = "projects/${var.project_id}/serviceAccounts/${module.staging_vm[0].service_account_email}"
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:${var.ci_deployer_infra_email}"
 }
@@ -156,7 +156,7 @@ module "dns" {
   dns_name    = var.dns_name
   # VM edge: A records → Caddy. Cloud Run edge: CNAME → ghs.googlehosted.com.
   # See cloud_run.tf / deploy/CLOUD_RUN.md for cutover.
-  gateway_ip   = var.dns_edge == "vm" ? module.staging_vm.public_ip : null
+  gateway_ip   = var.dns_edge == "vm" && var.enable_staging_vm ? module.staging_vm[0].public_ip : null
   host_records = var.dns_edge == "cloudrun" ? local.cloud_run_dns_records : null
 }
 

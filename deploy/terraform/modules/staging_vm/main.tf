@@ -52,7 +52,7 @@ resource "google_compute_disk" "data" {
   }
 
   lifecycle {
-    prevent_destroy = true
+    prevent_destroy = false
   }
 }
 

@@ -28,6 +28,12 @@ variable "dns_name" {
   description = "Apex DNS zone with trailing dot (e.g. branlamie.com.). Records: api-staging / auth-staging / app-staging."
 }
 
+variable "enable_staging_vm" {
+  type        = bool
+  default     = false
+  description = "Provision the Compose/Caddy staging VM MIG. Off once Cloud Run is the edge."
+}
+
 variable "staging_vm_zone" {
   type        = string
   description = "Zone that the staging VM MIG and data disk live in"
@@ -71,8 +77,8 @@ variable "enable_cloud_run" {
 
 variable "dns_edge" {
   type        = string
-  default     = "vm"
-  description = "Where public DNS points: vm (Caddy on staging MIG) or cloudrun (domain mappings). Keep vm until cutover."
+  default     = "cloudrun"
+  description = "Where public DNS points: vm (Caddy on staging MIG) or cloudrun (domain mappings)."
 
   validation {
     condition     = contains(["vm", "cloudrun"], var.dns_edge)

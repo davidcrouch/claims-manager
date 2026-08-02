@@ -40,8 +40,8 @@ output "frontend_sa_email" {
 }
 
 output "staging_vm_public_ip" {
-  value       = module.staging_vm.public_ip
-  description = "Static external IP fronting Caddy - used to verify DNS delegation"
+  value       = var.enable_staging_vm ? module.staging_vm[0].public_ip : null
+  description = "Static external IP fronting Caddy (null when enable_staging_vm=false)"
 }
 
 output "pubsub_topic_names" {
