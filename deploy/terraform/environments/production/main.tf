@@ -25,6 +25,13 @@ module "networking" {
   project_id  = var.project_id
   region      = var.region
   environment = var.environment
+  # Keep legacy GCP names/CIDRs so dormant production networking is not replaced.
+  subnet_name            = "claims-manager-gke-production"
+  subnet_ip_cidr_range   = "10.0.0.0/20"
+  secondary_range_a_name = "claims-manager-pods-production"
+  secondary_range_b_name = "claims-manager-services-production"
+  secondary_ip_cidr_a    = "10.16.0.0/16"
+  secondary_ip_cidr_b    = "10.1.0.0/22"
 }
 
 module "gke" {

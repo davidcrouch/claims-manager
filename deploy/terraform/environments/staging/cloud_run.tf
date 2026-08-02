@@ -1,7 +1,6 @@
 # Cloud Run compute path (see deploy/CLOUD_RUN.md).
-# When enable_cloud_run=true, services are provisioned against the existing
-# VPC / Cloud SQL / Memorystore / secrets. DNS cutover is controlled separately
-# by dns_edge so the Compose VM can keep serving until you flip the switch.
+# Custom hostnames are via Cloudflare → *.run.app (domain mappings are not
+# supported in australia-southeast1 and are not provisioned here).
 
 locals {
   artifact_host = "${var.region}-docker.pkg.dev/${var.infra_project_id}/claims-manager"
@@ -11,40 +10,18 @@ locals {
   bootstrap_image = "us-docker.pkg.dev/cloudrun/container/hello"
 
   # Stable Cloud Run URL suffix (derived from project number + region).
-  run_url_suffix = "htnjf6bb7a-ts.a.run.app"
+  run_url_suffix   = "htnjf6bb7a-ts.a.run.app"
   auth_run_url     = "https://auth-server-${local.run_url_suffix}"
   frontend_run_url = "https://frontend-${local.run_url_suffix}"
 
+  # Public hostnames (Cloudflare). Used for OIDC issuer/callback env when
+  # public_hostname_edge=true; otherwise services use *.run.app URLs.
   cloud_run_domain_suffix = trimsuffix(var.dns_name, ".")
   cloud_run_hosts = {
     api       = "api-${var.environment}.${local.cloud_run_domain_suffix}"
     auth      = "auth-${var.environment}.${local.cloud_run_domain_suffix}"
     app       = "app-${var.environment}.${local.cloud_run_domain_suffix}"
     providers = "providers-${var.environment}.${local.cloud_run_domain_suffix}"
-  }
-
-  # CNAME targets for Cloud Run domain mappings.
-  cloud_run_dns_records = {
-    api = {
-      name    = "api-${var.environment}"
-      type    = "CNAME"
-      rrdatas = ["ghs.googlehosted.com."]
-    }
-    auth = {
-      name    = "auth-${var.environment}"
-      type    = "CNAME"
-      rrdatas = ["ghs.googlehosted.com."]
-    }
-    app = {
-      name    = "app-${var.environment}"
-      type    = "CNAME"
-      rrdatas = ["ghs.googlehosted.com."]
-    }
-    providers = {
-      name    = "providers-${var.environment}"
-      type    = "CNAME"
-      rrdatas = ["ghs.googlehosted.com."]
-    }
   }
 }
 
@@ -113,9 +90,8 @@ module "cloud_run_provider" {
   enable_probes         = !var.cloud_run_use_bootstrap_image
   ingress               = "INGRESS_TRAFFIC_ALL"
   allow_unauthenticated = true
-  vpc_network           = module.networking.vpc_self_link
-  vpc_subnet            = module.networking.subnet_self_link
-  domain                = var.dns_edge == "cloudrun" ? local.cloud_run_hosts.providers : null
+  vpc_network = module.networking.vpc_self_link
+  vpc_subnet  = module.networking.subnet_self_link
 
   env_vars = {
     NODE_ENV                = "production"
@@ -164,8 +140,6 @@ module "cloud_run_api" {
   ]
   vpc_network = module.networking.vpc_self_link
   vpc_subnet  = module.networking.subnet_self_link
-  # Domain mapping only makes sense with allUsers or LB; keep null while private.
-  domain = null
 
   env_vars = {
     NODE_ENV = "production"
@@ -203,21 +177,20 @@ module "cloud_run_auth" {
   enable_probes         = !var.cloud_run_use_bootstrap_image
   ingress               = "INGRESS_TRAFFIC_ALL"
   allow_unauthenticated = true
-  vpc_network           = module.networking.vpc_self_link
-  vpc_subnet            = module.networking.subnet_self_link
-  domain                = var.dns_edge == "cloudrun" ? local.cloud_run_hosts.auth : null
+  vpc_network = module.networking.vpc_self_link
+  vpc_subnet  = module.networking.subnet_self_link
 
   env_vars = {
     NODE_ENV             = "production"
     SERVICE_NAME         = "auth-server"
     SERVICE_VERSION      = "0.3.1"
-    OIDC_ISSUER          = var.dns_edge == "cloudrun" ? "https://${local.cloud_run_hosts.auth}" : local.auth_run_url
-    BASE_URL             = var.dns_edge == "cloudrun" ? "https://${local.cloud_run_hosts.auth}" : local.auth_run_url
+    OIDC_ISSUER          = var.use_public_hostnames ? "https://${local.cloud_run_hosts.auth}" : local.auth_run_url
+    BASE_URL             = var.use_public_hostnames ? "https://${local.cloud_run_hosts.auth}" : local.auth_run_url
     OIDC_CLIENT_ID       = "claims-manager-ui"
-    OIDC_CLIENT_CALLBACK_URI = var.dns_edge == "cloudrun" ? "https://${local.cloud_run_hosts.app}/api/auth/callback" : "${local.frontend_run_url}/api/auth/callback"
-    OIDC_POST_LOGIN_URI  = var.dns_edge == "cloudrun" ? "https://${local.cloud_run_hosts.app}/dashboard" : "${local.frontend_run_url}/dashboard"
-    OIDC_POST_LOGOUT_URI = var.dns_edge == "cloudrun" ? "https://${local.cloud_run_hosts.app}" : local.frontend_run_url
-    CORS_ORIGINS         = var.dns_edge == "cloudrun" ? "https://${local.cloud_run_hosts.app}" : local.frontend_run_url
+    OIDC_CLIENT_CALLBACK_URI = var.use_public_hostnames ? "https://${local.cloud_run_hosts.app}/api/auth/callback" : "${local.frontend_run_url}/api/auth/callback"
+    OIDC_POST_LOGIN_URI  = var.use_public_hostnames ? "https://${local.cloud_run_hosts.app}/dashboard" : "${local.frontend_run_url}/dashboard"
+    OIDC_POST_LOGOUT_URI = var.use_public_hostnames ? "https://${local.cloud_run_hosts.app}" : local.frontend_run_url
+    CORS_ORIGINS         = var.use_public_hostnames ? "https://${local.cloud_run_hosts.app}" : local.frontend_run_url
     JWT_EXPECTED_AUDIENCE = "claims-manager-ui"
     JWT_PUBLIC_KEY_E     = "AQAB"
     REDIS_PROVIDER       = "self-hosted"
@@ -269,33 +242,31 @@ module "cloud_run_frontend" {
   enable_probes         = !var.cloud_run_use_bootstrap_image
   ingress               = "INGRESS_TRAFFIC_ALL"
   allow_unauthenticated = true
-  vpc_network           = module.networking.vpc_self_link
-  vpc_subnet            = module.networking.subnet_self_link
-  domain                = var.dns_edge == "cloudrun" ? local.cloud_run_hosts.app : null
+  vpc_network = module.networking.vpc_self_link
+  vpc_subnet  = module.networking.subnet_self_link
 
   env_vars = {
     NODE_ENV = "production"
-    # Always wire Cloud Run frontend to Cloud Run auth/API URIs (not localhost).
-    # Custom hostnames apply only after dns_edge=cloudrun cutover.
-    AUTH_SERVER_URL = var.dns_edge == "cloudrun" ? "https://${local.cloud_run_hosts.auth}" : local.auth_run_url
-    OIDC_ISSUER     = var.dns_edge == "cloudrun" ? "https://${local.cloud_run_hosts.auth}" : local.auth_run_url
+    # Wire to public hostnames (Cloudflare) or direct *.run.app URLs.
+    AUTH_SERVER_URL = var.use_public_hostnames ? "https://${local.cloud_run_hosts.auth}" : local.auth_run_url
+    OIDC_ISSUER     = var.use_public_hostnames ? "https://${local.cloud_run_hosts.auth}" : local.auth_run_url
     OIDC_REDIRECT_URI = (
-      var.dns_edge == "cloudrun"
+      var.use_public_hostnames
       ? "https://${local.cloud_run_hosts.app}/api/auth/callback"
       : "${local.frontend_run_url}/api/auth/callback"
     )
     OIDC_POST_LOGIN_URI = (
-      var.dns_edge == "cloudrun"
+      var.use_public_hostnames
       ? "https://${local.cloud_run_hosts.app}/dashboard"
       : "${local.frontend_run_url}/dashboard"
     )
     OIDC_POST_LOGOUT_URI = (
-      var.dns_edge == "cloudrun"
+      var.use_public_hostnames
       ? "https://${local.cloud_run_hosts.app}"
       : local.frontend_run_url
     )
-    # Private api: use run URI; identity required when calling from Cloud Run.
-    NEXT_PUBLIC_API_URL = var.dns_edge == "cloudrun" ? "https://${local.cloud_run_hosts.api}" : "https://api-server-${local.run_url_suffix}"
+    # Private api stays on run URI (internal ingress); public api hostname is optional.
+    NEXT_PUBLIC_API_URL = "https://api-server-${local.run_url_suffix}"
   }
 
   secret_env_vars = [

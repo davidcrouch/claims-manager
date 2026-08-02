@@ -32,6 +32,11 @@ module "networking" {
   project_id  = var.project_id
   region      = var.region
   environment = var.environment
+  # New private subnet (10.2.0.0/20). Legacy claims-manager-gke-staging may remain
+  # until GCP releases stuck serverless address reservations on that subnet.
+  subnet_ip_cidr_range = "10.2.0.0/20"
+  secondary_ip_cidr_a  = "10.18.0.0/16"
+  secondary_ip_cidr_b  = "10.19.0.0/22"
 }
 
 # Optional Compose/Caddy VM. Disabled by default — Cloud Run is the staging edge.
@@ -110,20 +115,14 @@ module "iam" {
   project_id  = var.project_id
   environment = var.environment
 
-  # Roles required by the cd-staging workflow (gcloud compute ssh --tunnel-through-iap).
-  # Scoped to staging because production still deploys via GKE and does not need them.
+  # Optional Compose-VM CD roles (only used if enable_staging_vm=true).
   extra_ci_deployer_roles = [
     "roles/iap.tunnelResourceAccessor",
     "roles/compute.instanceAdmin.v1",
     "roles/compute.osAdminLogin",
   ]
 
-  # Staging runs on a VM + docker compose, not GKE, so the
-  # <project>.svc.id.goog identity pool does not exist. Skip the
-  # K8s-SA -> Google-SA bindings. The Google SAs (api-server-sa,
-  # auth-server-sa, frontend-sa, external-secrets-sa) are still
-  # created so they can be referenced by other modules (e.g. GCS HMAC
-  # key for frontend-sa), they just don't bind to any K8s SAs.
+  # Cloud Run path: no GKE Workload Identity pool in this project.
   enable_gke_workload_identity = false
 }
 
@@ -154,10 +153,10 @@ module "dns" {
   project_id  = var.project_id
   environment = var.environment
   dns_name    = var.dns_name
-  # VM edge: A records → Caddy. Cloud Run edge: CNAME → ghs.googlehosted.com.
-  # See cloud_run.tf / deploy/CLOUD_RUN.md for cutover.
-  gateway_ip   = var.dns_edge == "vm" && var.enable_staging_vm ? module.staging_vm[0].public_ip : null
-  host_records = var.dns_edge == "cloudrun" ? local.cloud_run_dns_records : null
+  # Public hostnames are owned by Cloudflare → *.run.app. No Cloud Run domain
+  # mappings in this region. Optional VM A records only if enable_staging_vm.
+  gateway_ip   = var.enable_staging_vm ? module.staging_vm[0].public_ip : null
+  host_records = null
 }
 
 # Domain Pub/Sub topics (+ DLQ). Push endpoints wired later when a stable

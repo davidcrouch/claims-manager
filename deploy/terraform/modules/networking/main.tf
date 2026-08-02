@@ -21,8 +21,12 @@ resource "google_project_service" "networking_apis" {
 }
 
 locals {
-  pod_range_name     = "claims-manager-pods-${var.environment}"
-  service_range_name = "claims-manager-services-${var.environment}"
+  subnet_name       = coalesce(var.subnet_name, "claims-manager-private-${var.environment}")
+  subnet_cidr       = coalesce(var.subnet_ip_cidr_range, "10.0.0.0/20")
+  secondary_range_a = coalesce(var.secondary_range_a_name, "claims-manager-sec-a-${var.environment}")
+  secondary_range_b = coalesce(var.secondary_range_b_name, "claims-manager-sec-b-${var.environment}")
+  secondary_cidr_a  = coalesce(var.secondary_ip_cidr_a, "10.16.0.0/16")
+  secondary_cidr_b  = coalesce(var.secondary_ip_cidr_b, "10.1.0.0/22")
 }
 
 resource "google_compute_network" "vpc" {
@@ -33,22 +37,25 @@ resource "google_compute_network" "vpc" {
   depends_on = [google_project_service.networking_apis]
 }
 
-resource "google_compute_subnetwork" "gke" {
-  name                     = "claims-manager-gke-${var.environment}"
+# Primary private subnet for Cloud Run Direct VPC / VMs.
+# Name defaults to claims-manager-private-<env> (not GKE-specific).
+resource "google_compute_subnetwork" "private" {
+  name                     = local.subnet_name
   project                  = var.project_id
   region                   = var.region
   network                  = google_compute_network.vpc.id
-  ip_cidr_range            = "10.0.0.0/20"
+  ip_cidr_range            = local.subnet_cidr
   private_ip_google_access = true
+  description              = "Private workload subnet for Cloud Run / app services"
 
   secondary_ip_range {
-    range_name    = local.pod_range_name
-    ip_cidr_range = "10.16.0.0/16"
+    range_name    = local.secondary_range_a
+    ip_cidr_range = local.secondary_cidr_a
   }
 
   secondary_ip_range {
-    range_name    = local.service_range_name
-    ip_cidr_range = "10.1.0.0/22"
+    range_name    = local.secondary_range_b
+    ip_cidr_range = local.secondary_cidr_b
   }
 }
 

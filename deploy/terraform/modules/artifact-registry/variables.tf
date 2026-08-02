@@ -9,6 +9,6 @@ variable "location" {
 
 variable "reader_members" {
   type        = list(string)
-  description = "IAM members granted artifactregistry.reader on the repository (e.g. GKE node SAs from other projects)"
+  description = "IAM members granted artifactregistry.reader on the repository (e.g. Cloud Run / compute SAs)"
   default     = []
 }

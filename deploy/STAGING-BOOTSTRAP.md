@@ -288,10 +288,10 @@ Staging is moving from the Compose VM to **Cloud Run per process**
 (`provider-server`, private `api-server`, `auth-server`, `frontend`).
 See [`deploy/CLOUD_RUN.md`](CLOUD_RUN.md).
 
-- Terraform: `enable_cloud_run=true`, keep `dns_edge=vm` until cutover.
+- Terraform: `enable_cloud_run=true`, `enable_staging_vm=false`.
+- Custom hostnames: Cloudflare → `*.run.app` (no Cloud Run domain mappings in this region).
 - CI matrix builds include `provider-server`.
 - CD: `.github/workflows/cd-cloudrun-staging.yaml` updates Cloud Run images.
-- Legacy Compose CD (`.github/workflows/cd-staging.yaml`) remains until DNS flip.
 
 ## Production migration note
 

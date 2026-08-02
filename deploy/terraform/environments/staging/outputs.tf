@@ -69,7 +69,7 @@ output "cloudsql_provider_app_password" {
   sensitive = true
 }
 
-output "dns_edge" {
-  value       = var.dns_edge
-  description = "Current DNS edge mode (vm | cloudrun)"
+output "use_public_hostnames" {
+  value       = var.use_public_hostnames
+  description = "Whether OIDC env uses Cloudflare public hostnames vs *.run.app"
 }

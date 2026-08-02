@@ -30,5 +30,5 @@ variable "host_records" {
     rrdatas = list(string)
   }))
   default     = null
-  description = "Explicit DNS records. When set, gateway_ip defaults are ignored. Use CNAME to ghs.googlehosted.com for Cloud Run domain mappings."
+  description = "Explicit DNS records. When set, gateway_ip defaults are ignored."
 }

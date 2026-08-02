@@ -75,15 +75,10 @@ variable "enable_cloud_run" {
   description = "Provision Cloud Run services (api, auth, frontend, provider) + migrate Job"
 }
 
-variable "dns_edge" {
-  type        = string
-  default     = "cloudrun"
-  description = "Where public DNS points: vm (Caddy on staging MIG) or cloudrun (domain mappings)."
-
-  validation {
-    condition     = contains(["vm", "cloudrun"], var.dns_edge)
-    error_message = "dns_edge must be \"vm\" or \"cloudrun\"."
-  }
+variable "use_public_hostnames" {
+  type        = bool
+  default     = false
+  description = "When true, auth/frontend OIDC env uses app-staging./auth-staging. hostnames (Cloudflare → *.run.app). When false, uses *.run.app URLs directly."
 }
 
 variable "cloud_run_image_tag" {

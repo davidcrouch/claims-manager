@@ -14,13 +14,15 @@ Target architecture for Claims Manager (low throughput, multi-process):
 
 **Same database:** `provider-server` and `api-server` share `claims_manager`. Prefer SQL user `provider_app` (see [`scripts/grant-provider-app.sql`](scripts/grant-provider-app.sql)).
 
-GKE (`deploy/k8s/**`) is dormant for this product. The staging Compose VM remains until DNS cutover.
+Compute is **Cloud Run only**. `deploy/k8s/**` and the production GKE terraform module are dormant. Staging Compose VM is removed (`enable_staging_vm=false`). The VPC subnet is named `claims-manager-private-<env>` (not `…-gke-…`).
+
+**No Cloud Run domain mappings** — unsupported in `australia-southeast1` and deleted from terraform. Point Cloudflare at the `*.run.app` service URLs.
 
 ## Terraform (staging)
 
 Files:
 
-- [`terraform/modules/cloud_run_service`](terraform/modules/cloud_run_service) — reusable service + optional domain mapping
+- [`terraform/modules/cloud_run_service`](terraform/modules/cloud_run_service) — reusable service (no domain mapping)
 - [`terraform/environments/staging/cloud_run.tf`](terraform/environments/staging/cloud_run.tf) — api / auth / frontend / provider + migrate Job
 
 Variables:
@@ -28,14 +30,14 @@ Variables:
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `enable_cloud_run` | `true` | Provision Cloud Run services |
-| `dns_edge` | `vm` | `vm` = DNS A→Caddy MIG; `cloudrun` = CNAME→`ghs.googlehosted.com` |
+| `enable_staging_vm` | `false` | Compose/Caddy VM (off) |
+| `use_public_hostnames` | `false` | OIDC env uses Cloudflare hostnames vs `*.run.app` |
 | `cloud_run_image_tag` | `latest` | Initial image tag in terraform |
 
 ### Apply (first time)
 
 ```bash
 cd deploy/terraform/environments/staging
-# Defaults: enable_cloud_run=true, dns_edge=vm, cloud_run_use_bootstrap_image=true
 terraform apply
 ```
 
@@ -57,9 +59,8 @@ Then:
 
 1. Confirm Cloud Run health on `*.run.app` URIs (`terraform output cloud_run_uris`).
 2. Point CF Worker / Crunchwork at `provider-server` URI (or `providers-staging` after DNS flip).
-3. Set `dns_edge = "cloudrun"` and `terraform apply`.
-4. Update frontend server-side env so BFF calls the **private** api URI with identity (not a public API hostname).
-5. When stable, power down / destroy `module.staging_vm` (data disk has `prevent_destroy` — plan carefully).
+3. Point Cloudflare CNAMEs at the `*.run.app` URLs; set `use_public_hostnames=true` and re-apply so OIDC issuer/callbacks match.
+4. Frontend BFF should call the **private** api URI with identity (not a public API hostname).
 
 ## CI / CD
 

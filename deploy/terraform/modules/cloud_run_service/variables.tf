@@ -123,9 +123,3 @@ variable "vpc_egress" {
   type    = string
   default = "PRIVATE_RANGES_ONLY"
 }
-
-variable "domain" {
-  type        = string
-  default     = null
-  description = "Optional custom domain to map (e.g. providers-staging.branlamie.com)"
-}
