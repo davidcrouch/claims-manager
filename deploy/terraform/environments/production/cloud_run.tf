@@ -288,7 +288,9 @@ module "cloud_run_frontend" {
       ? "https://${local.cloud_run_hosts.app}"
       : local.frontend_run_url
     )
-    # Private api stays on run URI (internal ingress); public api hostname is optional.
+    # Server-only (not inlined by Next). Prefer this over NEXT_PUBLIC_API_URL.
+    API_URL             = local.api_run_url
+    # Kept for any client-side reads; may be empty if built without build-arg.
     NEXT_PUBLIC_API_URL = local.api_run_url
   }
 

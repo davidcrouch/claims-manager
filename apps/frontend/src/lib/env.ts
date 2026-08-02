@@ -1,24 +1,33 @@
 /**
  * Environment configuration for the frontend.
- * Validates required env vars at build/runtime.
  *
- * NEXT_PUBLIC_* vars must be accessed as literal `process.env.NEXT_PUBLIC_X`
- * so Next.js can inline them into the client bundle at compile time.
+ * Server-side API calls MUST use `API_URL` (non-NEXT_PUBLIC). Next.js replaces
+ * `process.env.NEXT_PUBLIC_*` (including dynamic lookups) with a static object
+ * baked at build time. The Docker build ARG defaults to "", which produces
+ * relative URLs like `/api/v1/...` and breaks Cloud Run proxies.
  */
 
+function readEnv(name: string): string | undefined {
+  // Avoid literal `process.env.NEXT_PUBLIC_*` so Next cannot inline empties.
+  const value = (process.env as Record<string, string | undefined>)[name];
+  if (value == null) return undefined;
+  const trimmed = value.trim();
+  return trimmed === '' ? undefined : trimmed;
+}
+
 /**
- * Returns the full API base URL: ${NEXT_PUBLIC_API_URL}${NEXT_PUBLIC_API_PREFIX}
+ * Returns the full API base URL: ${API_URL|NEXT_PUBLIC_API_URL}${prefix}
  * e.g. http://localhost:5001/api/v1
- *
- * Uses dynamic key access to read from the runtime environment so that
- * webpack DefinePlugin (which inlines NEXT_PUBLIC_* at build time) does not
- * bake in the build-time value for server-side route handlers.
  */
 export function getApiBaseUrl(): string {
-  const urlKey = 'NEXT_PUBLIC_API_URL';
-  const prefixKey = 'NEXT_PUBLIC_API_PREFIX';
-  const url = process.env[urlKey] ?? 'http://localhost:5001';
-  const prefix = process.env[prefixKey] ?? '/api/v1';
+  const url =
+    readEnv('API_URL') ??
+    readEnv('NEXT_PUBLIC_API_URL') ??
+    'http://localhost:5001';
+  const prefix =
+    readEnv('API_PREFIX') ??
+    readEnv('NEXT_PUBLIC_API_PREFIX') ??
+    '/api/v1';
   return `${url.replace(/\/$/, '')}${prefix.startsWith('/') ? prefix : `/${prefix}`}`;
 }
 
@@ -27,6 +36,6 @@ export const env = {
     return getApiBaseUrl();
   },
   get authServerUrl() {
-    return process.env.AUTH_SERVER_URL ?? 'http://localhost:3280';
+    return readEnv('AUTH_SERVER_URL') ?? 'http://localhost:3280';
   },
 };

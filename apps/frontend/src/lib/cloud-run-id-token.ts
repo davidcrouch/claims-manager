@@ -42,9 +42,12 @@ export async function fetchCloudRunIdToken(
   }
 }
 
-/** Audience for api-server is the origin of NEXT_PUBLIC_API_URL (no path). */
+/** Audience for api-server is the origin of API_URL / NEXT_PUBLIC_API_URL. */
 export function resolveApiAudience(): string {
-  const key = 'NEXT_PUBLIC_API_URL';
-  const url = process.env[key] ?? 'http://localhost:5001';
+  const env = process.env as Record<string, string | undefined>;
+  const url =
+    env.API_URL?.trim() ||
+    env.NEXT_PUBLIC_API_URL?.trim() ||
+    'http://localhost:5001';
   return url.replace(/\/+$/, '');
 }

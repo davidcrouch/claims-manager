@@ -13,8 +13,10 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/frontend/node_modules ./apps/frontend/node_modules
 COPY . .
-ARG NEXT_PUBLIC_API_URL=""
-ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+# Do NOT bake NEXT_PUBLIC_API_URL="" here — Next inlines it into the server
+# bundle and Cloud Run runtime env cannot override an empty compile-time value.
+# Server routes use API_URL (set on Cloud Run). Client code uses relative
+# same-origin /api/* proxies.
 RUN pnpm --filter frontend build
 
 FROM base AS runner
