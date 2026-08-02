@@ -66,6 +66,7 @@ jobs:
             api-server:
               - 'apps/api/**'
               - 'packages/**'
+              - 'data/**'
             auth-server:
               - 'apps/auth-server/**'
               - 'packages/telemetry/**'

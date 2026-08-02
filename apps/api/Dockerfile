@@ -31,6 +31,10 @@ COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/src/database/migrations-drizzle ./apps/api/dist/database/migrations-drizzle
 COPY --from=builder /app/apps/api/views ./apps/api/views
 COPY --from=builder /app/apps/api/public ./apps/api/public
+# Seed / provisioning assets (cwd is /app/apps/api → resolves via ../../data)
+COPY --from=builder /app/data/building-repairs-catalog.csv ./data/building-repairs-catalog.csv
+COPY --from=builder /app/data/internal-assembly-bom.json ./data/internal-assembly-bom.json
+COPY --from=builder /app/data/templates ./data/templates
 
 WORKDIR /app/apps/api
 EXPOSE 3001
