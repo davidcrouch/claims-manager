@@ -392,6 +392,7 @@ export function JobTasksTab({ jobId }: { jobId: string }) {
           if (!open) setRefreshKey((k) => k + 1);
         }}
         jobId={jobId}
+        aiAssistEnabled
       />
 
       <BottomFormDrawer

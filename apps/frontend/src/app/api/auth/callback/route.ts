@@ -126,10 +126,17 @@ export async function GET(req: NextRequest) {
 
   const postLoginRedirect =
     req.cookies.get(POST_LOGIN_REDIRECT_COOKIE)?.value?.trim() || '';
-  const redirectTo =
-    postLoginRedirect.startsWith('/') && !postLoginRedirect.startsWith('//')
-      ? new URL(postLoginRedirect, authConfig.oidcPostLoginUri).href
-      : authConfig.oidcPostLoginUri;
+  // Ignore auth entrypoints / loops (e.g. stale returnTo=/login from older redirects).
+  const safePostLoginRedirect =
+    postLoginRedirect.startsWith('/') &&
+    !postLoginRedirect.startsWith('//') &&
+    postLoginRedirect !== '/login' &&
+    !postLoginRedirect.startsWith('/api/auth')
+      ? postLoginRedirect
+      : null;
+  const redirectTo = safePostLoginRedirect
+    ? new URL(safePostLoginRedirect, authConfig.oidcPostLoginUri).href
+    : authConfig.oidcPostLoginUri;
 
   const res = NextResponse.redirect(redirectTo);
   res.cookies.set(authConfig.cookieNames.authToken, accessToken, {

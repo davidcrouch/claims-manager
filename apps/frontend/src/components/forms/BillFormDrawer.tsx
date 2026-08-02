@@ -30,7 +30,7 @@ import type { Invoice } from '@/types/api';
 const schema = z.object({
   invoiceId: z.string().min(1, 'Invoice is required'),
   billNumber: z.string().optional(),
-  totalAmount: z.coerce.number().optional(),
+  totalAmount: z.number().optional(),
   issueDate: z.string().optional(),
   receivedDate: z.string().optional(),
   dueDate: z.string().optional(),
@@ -146,7 +146,19 @@ export function BillFormDrawer({
 
             <div className="space-y-2">
               <Label htmlFor="bill-totalAmount">Total Amount (optional)</Label>
-              <Input id="bill-totalAmount" type="number" step="0.01" min="0" {...form.register('totalAmount')} placeholder="0.00" />
+              <Input
+                id="bill-totalAmount"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                {...form.register('totalAmount', {
+                  setValueAs: (v) =>
+                    v === '' || v == null || Number.isNaN(Number(v))
+                      ? undefined
+                      : Number(v),
+                })}
+              />
             </div>
 
             <div className="space-y-2">

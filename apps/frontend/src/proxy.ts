@@ -23,6 +23,15 @@ export function proxy(req: NextRequest) {
   if (pathname === '/' || pathname.startsWith('/.well-known'))
     return NextResponse.next();
 
+  // Legacy / mistaken /login links (auth-server used to send users here).
+  if (pathname === '/login') {
+    const loginUrl = new URL('/api/auth/login', req.url);
+    req.nextUrl.searchParams.forEach((value, key) => {
+      loginUrl.searchParams.set(key, value);
+    });
+    return NextResponse.redirect(loginUrl);
+  }
+
   if (!hasAuthCookie) {
     const loginUrl = new URL('/api/auth/login', req.url);
     loginUrl.searchParams.set('returnTo', pathname);

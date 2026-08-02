@@ -79,7 +79,14 @@ export async function tryAutoLinkInvitedUser(input: AutoLinkInput): Promise<Auto
   const usersRepo = createUsersRepository(() => getDb(), undefined);
   await usersRepo.update(systemContext, user.id, { status: 'Active' } as any);
 
-  await invalidateInviteTokensForEmail(email);
+  try {
+    await invalidateInviteTokensForEmail(email);
+  } catch (err: any) {
+    log.warn(
+      { email, userId: user.id, error: err?.message },
+      'auth-server:auto-link:tryAutoLinkInvitedUser - Failed to invalidate invite tokens (user still activated)',
+    );
+  }
 
   log.info(
     { email, userId: user.id, provider },

@@ -1,29 +1,82 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Settings,
   Plug,
   Bell,
   CreditCard,
+  ToggleLeft,
+  Bot,
+  Sparkles,
+  Server,
+  Cable,
+  BarChart3,
+  ArrowRight,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { ListPageHeader } from '@/components/layout/ListPageHeader';
 import { cn } from '@/lib/utils';
+import { FeaturesSettingsPanel } from './FeaturesSettingsPanel';
+import type { FeatureDef } from '@/app/(app)/admin/settings/features-actions';
 
 const TABS = [
   { id: 'general', label: 'General', icon: Settings },
+  { id: 'features', label: 'Features', icon: ToggleLeft },
+  { id: 'ai', label: 'AI & Integrations', icon: Bot },
   { id: 'connections', label: 'Connections', icon: Plug },
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'billing', label: 'Billing', icon: CreditCard },
 ] as const;
 
+const AI_LINKS = [
+  {
+    title: 'Agents',
+    description: 'Configure AI personas, models, tools, and skills',
+    href: '/admin/agents',
+    icon: Bot,
+  },
+  {
+    title: 'Skills',
+    description: 'Reusable instruction sets with semantic matching',
+    href: '/admin/skills',
+    icon: Sparkles,
+  },
+  {
+    title: 'MCP Servers',
+    description: 'Manage MCP integrations and discovery',
+    href: '/admin/mcp-servers',
+    icon: Server,
+  },
+  {
+    title: 'MCP Connections',
+    description: 'User and org credentials for MCP tools',
+    href: '/mcp-connections',
+    icon: Cable,
+  },
+  {
+    title: 'AI Audit',
+    description: 'Token usage, models, and message audits',
+    href: '/admin/ai-audit',
+    icon: BarChart3,
+  },
+] as const;
+
 interface Props {
   initialTab: string;
+  features: FeatureDef[];
+  featuresError?: string | null;
+  canManageFeatures: boolean;
 }
 
-export function SettingsPageClient({ initialTab }: Props) {
+export function SettingsPageClient({
+  initialTab,
+  features,
+  featuresError,
+  canManageFeatures,
+}: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const activeTab = searchParams.get('tab') ?? initialTab;
@@ -44,7 +97,7 @@ export function SettingsPageClient({ initialTab }: Props) {
       </SetPageHeader>
 
       <div className="px-6 pt-1">
-        <div className="flex gap-0 border-b border-slate-200">
+        <div className="flex flex-wrap gap-0 border-b border-slate-200">
           {TABS.map((tab) => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
@@ -106,6 +159,38 @@ export function SettingsPageClient({ initialTab }: Props) {
           </div>
         )}
 
+        {activeTab === 'features' && (
+          <FeaturesSettingsPanel
+            initialFeatures={features}
+            initialError={featuresError}
+            canManage={canManageFeatures}
+          />
+        )}
+
+        {activeTab === 'ai' && (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {AI_LINKS.map((item) => {
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="group rounded-lg border border-slate-200 bg-white p-4 transition hover:border-blue-300 hover:shadow-sm"
+                >
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <ArrowRight className="h-4 w-4 text-slate-300 transition group-hover:text-blue-500" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-slate-800">{item.title}</h3>
+                  <p className="mt-1 text-xs text-slate-500">{item.description}</p>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+
         {activeTab === 'connections' && (
           <div className="space-y-4">
             <Card>
@@ -143,16 +228,6 @@ export function SettingsPageClient({ initialTab }: Props) {
                 </p>
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Webhook Notifications</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Configure webhook endpoints to receive real-time event notifications from the platform.
-                </p>
-              </CardContent>
-            </Card>
           </div>
         )}
 
@@ -163,31 +238,8 @@ export function SettingsPageClient({ initialTab }: Props) {
                 <CardTitle className="text-sm">Current Plan</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">Plan information unavailable</p>
-                    <p className="text-xs text-muted-foreground">Subscription details will appear here once billing is configured.</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Payment Method</CardTitle>
-              </CardHeader>
-              <CardContent>
                 <p className="text-sm text-muted-foreground">
-                  No payment method on file. Payment configuration will be available once billing is set up.
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Billing History</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  No billing history available yet.
+                  Subscription details will appear here once billing is configured.
                 </p>
               </CardContent>
             </Card>

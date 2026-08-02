@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
@@ -16,6 +16,8 @@ import {
   BottomFormDrawerError,
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
+import { ChatDrawer } from '@/components/chat/ChatDrawer';
+import { buildAIContext, type AIContextPayload } from '@/lib/ai/use-ai-context';
 import { createContactAction } from '@/app/(app)/mutations';
 
 const contactFormSchema = z.object({
@@ -33,15 +35,28 @@ type ContactFormValues = z.infer<typeof contactFormSchema>;
 export interface ContactFormDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  renderMode?: 'drawer' | 'canvas';
+  aiAssistEnabled?: boolean;
+  /** When set, forces companion layout for an already-open chat drawer. */
+  companionChatOpen?: boolean;
 }
 
 export function ContactFormDrawer({
   open,
   onOpenChange,
+  renderMode = 'drawer',
+  aiAssistEnabled = false,
+  companionChatOpen: companionChatOpenProp,
 }: ContactFormDrawerProps) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [aiContext, setAiContext] = useState<AIContextPayload | undefined>();
+
+  useEffect(() => {
+    if (!open) setChatOpen(false);
+  }, [open]);
 
   const form = useForm<ContactFormValues>({
     resolver: standardSchemaResolver(contactFormSchema),
@@ -83,18 +98,27 @@ export function ContactFormDrawer({
     }
   }
 
-  return (
-    <BottomFormDrawer
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Create Contact"
-      description="Add a new contact to your organisation."
-      icon={<Users className="h-5 w-5" />}
+  function handleAIAssist() {
+    setAiContext(
+      buildAIContext(
+        'ContactFormDrawer',
+        {},
+        {
+          entityType: 'contact',
+          formState: form.getValues(),
+          summary:
+            'The user is creating a new contact. Help suggest values or answer questions about this form.',
+        },
+      ),
+    );
+    setChatOpen(true);
+  }
+
+  const formContent = (
+    <form
+      onSubmit={form.handleSubmit(onSubmit)}
+      className="flex min-h-0 flex-1 flex-col"
     >
-      <form
-        onSubmit={form.handleSubmit(onSubmit)}
-        className="flex min-h-0 flex-1 flex-col"
-      >
         <BottomFormDrawerBody>
           <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
             <div className="space-y-2">
@@ -192,6 +216,35 @@ export function ContactFormDrawer({
           </Button>
         </BottomFormDrawerFooter>
       </form>
-    </BottomFormDrawer>
+  );
+
+  if (renderMode === 'canvas') {
+    return formContent;
+  }
+
+  return (
+    <>
+      <BottomFormDrawer
+        open={open}
+        onOpenChange={onOpenChange}
+        title="Create Contact"
+        description="Add a new contact to your organisation."
+        icon={<Users className="h-5 w-5" />}
+        aiAssistEnabled={aiAssistEnabled}
+        onAIAssist={handleAIAssist}
+        companionChatOpen={companionChatOpenProp ?? chatOpen}
+      >
+        {formContent}
+      </BottomFormDrawer>
+      {aiAssistEnabled && companionChatOpenProp === undefined && (
+        <ChatDrawer
+          open={chatOpen}
+          onOpenChange={setChatOpen}
+          initialContext={aiContext}
+          relatedEntityType="contact"
+          besideCanvas
+        />
+      )}
+    </>
   );
 }

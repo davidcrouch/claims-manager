@@ -54,7 +54,9 @@ export async function GET(req: NextRequest) {
       returnTo &&
       returnTo.startsWith('/') &&
       !returnTo.startsWith('//') &&
-      !returnTo.startsWith('/.well-known')
+      !returnTo.startsWith('/.well-known') &&
+      returnTo !== '/login' &&
+      !returnTo.startsWith('/api/auth')
         ? returnTo
         : null;
 

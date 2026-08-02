@@ -359,3 +359,196 @@
   Extended **jobs and related APIs** so lists and creates work for claim-linked and standalone jobs alike.
   Upgraded **shared list filters** and applied them across claims, jobs, invoices, quotes, RFQs, work orders, and other entity lists.
   Improved **RFQ detail and job child tabs** so create/link flows stay consistent with the new job model.
+
+- `2026-08-01` `a1c3eb8` **40 h**
+  `264 files | +47823 −607 | Tier 2 standard / Tier 3 complex / Tier 4 deep integration | Heavy orchestration`
+  Lay summary: Staff can store and generate job documents from templates, with automatic handoffs between organisations for purchase orders and work orders.
+  **Document filesystem, template generation, messaging workflows, and cross-organisation purchase and work orders.** Delivered a **cloud-backed document library** so each organisation can organise files by category and attach them to day-to-day claims work.
+  Built **document generation from Word templates** for quotes, invoices, purchase orders, work orders, bills, proposals, reports, and related records.
+  Added **background messaging** so document and order events can move reliably between services without blocking the user.
+  Enabled **cross-organisation purchase-order and work-order** flows so partner tenants can receive and process work on shared jobs.
+  Updated the **sign-in experience branding** and supporting configuration for the new document services.
+  Provisioned **staging and development hosting** for storage and messaging so the feature can run in shared environments.
+  Captured **implementation specifications** covering the document platform and related workflows.
+
+- `2026-08-01` `f92bd46` **0.5 h**
+  `2 files | +4 −1 | Tier 1 mechanical / Tier 3 complex | Light orchestration`
+  Lay summary: Fixed a small website build issue and gave the deployment account permission to manage background messaging.
+  **CI build fix and Pub/Sub deployer permissions.** Corrected an import used when refreshing job screens after edits so continuous integration builds succeed again.
+  Granted the **deployment service account** authority to administer messaging topics needed by the new document workflows.
+  Confirmed the change is limited to build tooling and infrastructure access, with no change to end-user screens beyond restoring a clean deploy path.
+  Keeps staging releases unblocked after the document-platform introduction.
+  **No product behaviour change** for staff beyond reliable deployment of the related services.
+
+- `2026-08-01` `7e162e2` **0.5 h**
+  `1 file | +27 −10 | Tier 2 standard | Light orchestration`
+  Lay summary: Adjusted an automated check so partner-provider registration matches the simplified service layout.
+  **Providers unit-test alignment for direct registry entry.** Updated the providers service test to match the streamlined provider registration path used at runtime.
+  Removed expectations tied to the older nested registry shape so the suite reflects current behaviour.
+  Keeps continuous integration green after the provider packaging changes.
+  Confirms partner integration lookup still resolves through the intended registration entry.
+  **No change** to live provider configuration screens or inbound webhook handling.
+
+- `2026-08-01` `a9801e4` **0.5 h**
+  `2 files | +4 −0 | Tier 1 mechanical | Light orchestration`
+  Lay summary: Made sure the main business service starts correctly in its cloud container by declaring a required runtime library.
+  **Express dependency for API Docker runtime.** Added Express as a direct dependency of the API package so container builds include the library the service needs at startup.
+  Refreshed the lockfile to record the resolved version for reproducible installs.
+  Prevents runtime failures when the API image is built without relying on transitive dependency quirks.
+  Supports reliable Cloud Run and local container starts after recent packaging changes.
+  **No change** to API business endpoints or data models.
+
+- `2026-08-02` `dd4589c` **16 h**
+  `46 files | +1983 −2131 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  Lay summary: Document creation is smoother—staff can upload files with previews, generate Word documents from templates, and convert Office files when needed.
+  **Document generation UI, uploads, and Office conversion.** Delivered richer **template-driven document generation** in the product UI so staff can produce client-ready Word documents from live records.
+  Improved the **upload experience** with drag-and-drop, clearer progress, and thumbnail previews for common file types.
+  Added **Office and LibreOffice conversion** support so generated or uploaded documents can be turned into shareable formats in the workflow.
+  Extended **cloud storage and hosting configuration** so templates and generated files land in the correct buckets.
+  Tidied related **sign-in service packaging** to keep the document stack deployable alongside the API and website.
+  Validated upload, generate, and convert paths against the new document library screens.
+  Outcome: staff can produce and attach professional documents without leaving the claims workspace.
+
+- `2026-08-02` `0b10477` **28 h**
+  `65 files | +2890 −196 | Tier 3 complex / Tier 4 deep integration | Heavy orchestration`
+  Lay summary: Staging now runs as separate cloud services for the website, sign-in, business API, and partner webhooks, sharing the same database and cache.
+  **Cloud Run deployment model with extracted partner webhook service.** Introduced a **per-process Cloud Run layout** so the public partner webhook service, private business API, sign-in service, and website each scale independently.
+  Extracted a slim **provider webhook service** that verifies partner signatures, stores inbound events, and hands work to the automation layer.
+  Added **Terraform modules and staging wiring** for Cloud Run services against shared managed database and cache.
+  Rebuilt **continuous integration** into parallel image builds and a staging Cloud Run deploy workflow.
+  Created a least-privilege **database user for the webhook service** and documented the cutover runbook for operators.
+  Supported a **zero-downtime edge switch** so DNS can move from the previous VM path to Cloud Run when ready.
+  Delivered operator documentation covering staging bootstrap and Cloud Run operations.
+
+- `2026-08-02` `c48cdab` **30 h**
+  `37 files | +3816 −20 | Tier 3 complex / Tier 4 deep integration | Heavy orchestration`
+  Lay summary: Sign-in now supports richer roles, invitations, and admin controls, and the cloud staging services were corrected so they start cleanly.
+  **Auth-server role and invitation upgrade with Cloud Run startup fixes.** Extended the **sign-in service** with role definitions, feature flags, permission administration, and invitation flows aligned to the organisation’s parity target.
+  Added **email-based invitations and password-reset messaging** with templated messages staff and admins can rely on during onboarding.
+  Delivered **admin APIs and screens support** for managing users, roles, permissions, and features without manual database edits.
+  Fixed **Cloud Run environment wiring** — removed a reserved port setting and corrected private-network attachment so staging services start without platform errors.
+  Documented the **auth-server parity upgrade** for operators and implementers.
+  Adjusted staging service protection and IAM settings to match organisation policy constraints during bring-up.
+  Validated invitation, role assignment, and staging service startup paths after the combined auth and infrastructure changes.
+
+- `2026-08-02` `49eeca5` **0.5 h**
+  `2 files | +2 −0 | Tier 1 mechanical | Light orchestration`
+  Lay summary: Removed accidental temporary deployment files from the repository so the project history stays clean.
+  **Remove accidentally committed plan and tooling artefacts.** Deleted a local Terraform plan binary that should not be stored in version control.
+  Removed an empty tooling stub from the sign-in service package tree.
+  Updated ignore rules so future plan files are less likely to be committed by mistake.
+  Keeps reviews focused on intentional source and configuration changes.
+  **No change** to product behaviour or deployed environments.
+
+- `2026-08-02` `5fd5eb6` **0.5 h**
+  `1 file | +156 −3 | Tier 1 mechanical | Light orchestration`
+  Lay summary: Refreshed the shared dependency lockfile so the sign-in service installs match the new libraries it needs.
+  **Lockfile update for auth-server dependencies.** Recorded resolved versions for new sign-in service libraries so installs are reproducible across developer machines and CI.
+  Aligns the workspace lockfile with the packages introduced in the role and invitation upgrade.
+  Prevents install drift between local and pipeline environments.
+  Supports clean builds of the sign-in service after the parity work.
+  **No functional product change** beyond dependency resolution consistency.
+
+- `2026-08-02` `c83063c` **0.5 h**
+  `4 files | +16 −15 | Tier 2 standard / Tier 3 complex | Light orchestration`
+  Lay summary: Cleared TypeScript build errors in the sign-in service so cloud images compile cleanly.
+  **Auth-server TypeScript fixes for rate-limit and identity types.** Corrected type mismatches in rate-limiting and identity-related paths that blocked production builds.
+  Adjusted invitation auto-link typing so the compiler accepts the current service contracts.
+  Updated ignore rules for local artefacts uncovered during the fix.
+  Restores a green TypeScript build for the sign-in service on Cloud Run image builds.
+  **No intentional change** to login or invitation behaviour beyond compile correctness.
+
+- `2026-08-02` `c08fc25` **0.5 h**
+  `1 file | +2 −1 | Tier 3 complex | Light orchestration`
+  Lay summary: Gave the sign-in cloud service the service name it expects at startup.
+  **SERVICE_NAME environment for auth-server on Cloud Run.** Added the required service-name environment variable to the staging auth Cloud Run definition.
+  Ensures startup configuration matches what the sign-in process reads when identifying itself.
+  Unblocks healthy revisions after the Cloud Run cutover work.
+  Keeps staging auth aligned with the shared Cloud Run module conventions.
+  **No change** to login screens or token issuance logic.
+
+- `2026-08-02` `b676b82` **0.5 h**
+  `1 file | +3 −5 | Tier 3 complex | Light orchestration`
+  Lay summary: Allowed the staging cloud services to accept traffic again after the organisation’s access policy was updated.
+  **Re-enable unauthenticated Cloud Run access after org policy resolution.** Restored the staging setting that lets the platform edge reach Cloud Run services once the organisation policy allowed it.
+  Removed temporary workarounds that blocked public invoke while the policy was restrictive.
+  Lets the website, sign-in, and webhook entry points receive traffic through the intended edge path.
+  Confirmed the change is limited to staging Cloud Run IAM/invoke configuration.
+  **No change** to application business rules.
+
+- `2026-08-02` `187b34a` **1 h**
+  `1 file | +35 −3 | Tier 3 complex | Moderate orchestration`
+  Lay summary: Finished wiring the sign-in cloud service with the secrets and identity settings it needs to issue secure sessions.
+  **Complete auth-server Cloud Run environment with OIDC and JWKS secrets.** Added the remaining staging environment variables so the sign-in service can load OpenID and key-set secrets at runtime.
+  Connected secret references required for token signing and discovery endpoints on Cloud Run.
+  Aligns staging auth configuration with the Shore-parity identity model introduced earlier.
+  Reduces bring-up guesswork for operators deploying auth revisions.
+  Supports end-to-end login against the Cloud Run-hosted sign-in service.
+
+- `2026-08-02` `4ecff44` **1 h**
+  `2 files | +35 −7 | Tier 3 complex | Moderate orchestration`
+  Lay summary: Logout pages now meet the site’s security script rules, so signed-out users are redirected without browser warnings.
+  **CSP nonce support on logout auto-submit scripts.** Updated logout rendering so automatic redirect scripts carry the content-security nonce required by the hardened policy.
+  Adjusted OpenID provider view helpers to pass the nonce through consistently on logout responses.
+  Prevents browsers from blocking the post-logout redirect under strict script rules.
+  Keeps sign-out behaviour smooth for staff using the Cloud Run-hosted auth service.
+  Confirmed logout still completes session cleanup before returning the user to the application.
+
+- `2026-08-02` `d875fa9` **1.5 h**
+  `5 files | +41 −17 | Tier 3 complex | Moderate orchestration`
+  Lay summary: Staging now defaults to the cloud-service edge instead of the older virtual-machine and container-compose path.
+  **Staging edge defaulted to Cloud Run; Compose VM path retired.** Switched staging Terraform defaults so public hostnames target Cloud Run rather than the Compose VM.
+  Updated staging outputs and variables to match the Cloud Run-first edge mode.
+  Reduced reliance on the temporary VM path while cutover continues.
+  Keeps staging networking and service wiring consistent with the new deployment model.
+  Documented the default so operators no longer need to opt into Cloud Run for routine staging work.
+
+- `2026-08-02` `2e9e0df` **3 h**
+  `15 files | +133 −132 | Tier 3 complex | Moderate orchestration`
+  Lay summary: Simplified staging networking by dropping old hostname mappings and clarifying the private network layout.
+  **Remove Cloud Run domain mappings and rename staging subnet to private.** Deleted Cloud Run domain-mapping resources now that hostname routing is handled at the edge.
+  Renamed and clarified the **private subnet** wiring so staging network outputs match the Cloud Run-only model.
+  Updated production and staging Terraform callers to use the revised networking module interface.
+  Refreshed operator docs to describe the simpler hostname and network arrangement.
+  Reduces duplicate hostname configuration that conflicted with the load-balancer direction of travel.
+  Validated module inputs/outputs still compose for staging and production environments.
+
+- `2026-08-02` `038dff4` **10.5 h**
+  `47 files | +704 −3335 | Tier 1 mechanical / Tier 3 complex | Moderate orchestration`
+  Lay summary: Hosting is now Cloud Run only—old virtual-machine, Compose, and Kubernetes paths were removed so there is one supported way to run staging and production.
+  **Cloud Run-only deployment; remove VM, Compose, and GKE paths.** Deleted the staging Compose VM module, Kubernetes overlays, and GKE Terraform so the repository has a single supported hosting model.
+  Removed legacy continuous-delivery workflows tied to the old paths.
+  Aligned **production and staging** on Cloud Run sizing and variables, with production using larger CPU and memory.
+  Updated bootstrap and Cloud Run runbooks to describe Cloudflare hostnames pointing at Cloud Run services.
+  Cleared obsolete scripts and documentation that instructed operators to use the retired VM route.
+  Leaves a cleaner infrastructure tree for ongoing Cloud Run and load-balancer work.
+  Outcome: staging and production share one supported hosting path for future releases.
+
+- `2026-08-02` `0f2856a` **1 h**
+  `4 files | +28 −28 | Tier 3 complex | Light orchestration`
+  Lay summary: Production cloud services were sized to match the staging pattern, with a stronger website service allocation.
+  **Production Cloud Run sizes aligned; frontend capacity increased.** Updated production Terraform so service CPU and memory follow the staging Cloud Run pattern.
+  Raised the **website service** to two virtual CPUs for better interactive performance.
+  Refreshed Cloud Run documentation to match the new production sizing.
+  Keeps production capacity decisions explicit in Terraform rather than ad-hoc console edits.
+  Supports smoother production bring-up after the Cloud Run-only refactor.
+
+- `2026-08-02` `55d15fd` **0.5 h**
+  `2 files | +2 −2 | Tier 1 mechanical / Tier 3 complex | Light orchestration`
+  Lay summary: Set the production website cloud service to two CPUs and one gigabyte of memory.
+  **Production frontend Cloud Run 2 vCPU / 1Gi.** Adjusted production website service resources to two virtual CPUs and one gibibyte of memory.
+  Updated the Cloud Run guide to state the same allocation.
+  Keeps production frontend capacity consistent with the intended performance target.
+  Avoids under-provisioned website revisions after the sizing pass.
+  **No application code change.**
+
+- `2026-08-02` `296e7e9` **34 h**
+  `107 files | +14860 −1030 | Tier 2 standard / Tier 3 complex / Tier 4 deep integration | Heavy orchestration`
+  Lay summary: Staging custom hostnames now use a proper Google HTTPS load balancer, and the product gained filing templates, automation pipelines, and early AI document helpers.
+  **GCP HTTPS load balancer for staging domains, filesystem templates, pipelines, and system agents.** Delivered a **Google HTTPS load balancer** with managed certificates and serverless backends so staging custom hostnames reach Cloud Run without an application-level proxy.
+  Updated DNS and operator documentation for grey-cloud address records pointing at the load balancer.
+  Added **filesystem template administration** so organisations can define filing structures and export artefacts from the admin workspace.
+  Introduced **automation pipelines** and **system agent** foundations for document classification and related assisted workflows.
+  Extended seeds and catalogue sample data so filing defaults and document templates are available in fresh environments.
+  Shipped supporting API and website surfaces for template setup, category management, and pipeline editing.
+  Captured an implementation specification for the broader agentic platform direction while landing the staging edge and filing foundations.

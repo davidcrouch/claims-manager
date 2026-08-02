@@ -1587,6 +1587,292 @@ export function createApiClient(options?: ApiClientOptions) {
         method: 'DELETE',
       });
     },
+
+    // ── MCP Integrations ──
+
+    listMcpIntegrations(): Promise<import('@/types/api').McpIntegration[]> {
+      return fetchApi('/mcp-integrations');
+    },
+
+    createMcpIntegration(body: Record<string, unknown>): Promise<import('@/types/api').McpIntegration> {
+      return fetchApi('/mcp-integrations', { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    getMcpIntegration(id: string): Promise<import('@/types/api').McpIntegration> {
+      return fetchApi(`/mcp-integrations/${id}`);
+    },
+
+    updateMcpIntegration(id: string, body: Record<string, unknown>): Promise<import('@/types/api').McpIntegration> {
+      return fetchApi(`/mcp-integrations/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+    },
+
+    deleteMcpIntegration(id: string): Promise<{ ok: boolean }> {
+      return fetchApi(`/mcp-integrations/${id}`, { method: 'DELETE' });
+    },
+
+    discoverMcpServer(body: { url: string }): Promise<Record<string, unknown>> {
+      return fetchApi('/mcp-integrations/discover', { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    testMcpConnectionStateless(body: Record<string, unknown>): Promise<{ ok: boolean; toolCount?: number; error?: string }> {
+      return fetchApi('/mcp-integrations/test-connection', { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    listMcpConnections(): Promise<import('@/types/api').McpConnection[]> {
+      return fetchApi('/mcp-connections');
+    },
+
+    createMcpConnection(body: Record<string, unknown>): Promise<import('@/types/api').McpConnection> {
+      return fetchApi('/mcp-connections', { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    testMcpConnection(id: string): Promise<{ ok: boolean; toolCount?: number; error?: string }> {
+      return fetchApi(`/mcp-connections/${id}/test`, { method: 'POST' });
+    },
+
+    disconnectMcpConnection(id: string): Promise<{ ok: boolean }> {
+      return fetchApi(`/mcp-connections/${id}/disconnect`, { method: 'POST' });
+    },
+
+    initiateMcpOAuth(body: { integrationId: string; redirectUri: string }): Promise<{ authorizeUrl: string; stateId: string }> {
+      return fetchApi('/mcp-connections/initiate-oauth', { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    listMcpTools(): Promise<import('@/lib/ai/types').McpToolGroupResponse[]> {
+      return fetchApi('/mcp-tools');
+    },
+
+    refreshMcpTools(body: { connectionId: string }): Promise<{ ok: boolean; toolCount?: number; error?: string }> {
+      return fetchApi('/mcp-tools/refresh', { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    // ── AI Chat & Conversations ──
+
+    listConversations(search?: string): Promise<import('@/types/api').ChatConversationSummary[]> {
+      const qs = search ? `?search=${encodeURIComponent(search)}` : '';
+      return fetchApi(`/conversations${qs}`);
+    },
+
+    getConversation(id: string): Promise<import('@/types/api').ChatConversationDetail> {
+      return fetchApi(`/conversations/${id}`);
+    },
+
+    createConversation(body?: {
+      title?: string;
+      id?: string;
+      agentId?: string;
+      relatedEntityType?: string;
+      relatedEntityId?: string;
+    }): Promise<{ id: string }> {
+      return fetchApi('/conversations', { method: 'POST', body: JSON.stringify(body ?? {}) });
+    },
+
+    updateConversation(
+      id: string,
+      body: {
+        title?: string;
+        messages?: unknown[];
+        pinned?: boolean;
+        relatedEntityType?: string;
+        relatedEntityId?: string;
+      },
+    ): Promise<import('@/types/api').ChatConversationDetail> {
+      return fetchApi(`/conversations/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+    },
+
+    deleteConversation(id: string): Promise<{ deleted: boolean }> {
+      return fetchApi(`/conversations/${id}`, { method: 'DELETE' });
+    },
+
+    shareConversation(id: string, expiresInDays?: number): Promise<{ token: string; expiresAt: string | null }> {
+      return fetchApi(`/conversations/${id}/share`, {
+        method: 'POST',
+        body: JSON.stringify({ expiresInDays }),
+      });
+    },
+
+    getSharedConversation(token: string): Promise<import('@/types/api').ChatConversationDetail | null> {
+      return fetchApi(`/conversations/shared/${token}`);
+    },
+
+    // ── AI Chat Feedback ──
+
+    submitChatFeedback(body: {
+      conversationId: string;
+      messageId: string;
+      rating: 'positive' | 'negative';
+      categories?: string[];
+      comment?: string;
+    }): Promise<unknown> {
+      return fetchApi('/ai-chat/feedback', { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    listChatFeedback(conversationId: string): Promise<unknown[]> {
+      return fetchApi(`/ai-chat/feedback/${conversationId}`);
+    },
+
+    // ── Canvas Artifacts ──
+
+    createCanvasArtifact(body: {
+      conversationId: string;
+      title: string;
+      contentType?: string;
+      content: string;
+      language?: string;
+      componentName?: string;
+      componentProps?: Record<string, unknown>;
+    }): Promise<{ id: string }> {
+      return fetchApi('/ai-chat/canvas', { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    getCanvasArtifact(id: string): Promise<unknown> {
+      return fetchApi(`/ai-chat/canvas/${id}`);
+    },
+
+    updateCanvasArtifact(id: string, content: string): Promise<unknown> {
+      return fetchApi(`/ai-chat/canvas/${id}`, { method: 'PUT', body: JSON.stringify({ content }) });
+    },
+
+    deleteCanvasArtifact(id: string): Promise<{ deleted: boolean }> {
+      return fetchApi(`/ai-chat/canvas/${id}`, { method: 'DELETE' });
+    },
+
+    listCanvasArtifacts(conversationId: string): Promise<unknown[]> {
+      return fetchApi(`/ai-chat/canvas/conversation/${conversationId}`);
+    },
+
+    getAiChatModels(): Promise<Record<string, Array<{ id: string; label: string }>>> {
+      return fetchApi('/ai-chat/models');
+    },
+
+    // ── Agents ──
+
+    listAgents(params?: { type?: string; chatEnabled?: boolean }): Promise<import('@/lib/ai/types').Agent[]> {
+      const sp = new URLSearchParams();
+      if (params?.type) sp.set('type', params.type);
+      if (params?.chatEnabled !== undefined) sp.set('chatEnabled', String(params.chatEnabled));
+      const qs = sp.toString();
+      return fetchApi(`/agents${qs ? `?${qs}` : ''}`);
+    },
+
+    getAgent(id: string): Promise<import('@/lib/ai/types').Agent> {
+      return fetchApi(`/agents/${id}`);
+    },
+
+    createAgent(body: import('@/types/api').CreateAgentPayload): Promise<import('@/lib/ai/types').Agent> {
+      return fetchApi('/agents', { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    updateAgent(id: string, body: Record<string, unknown>): Promise<import('@/lib/ai/types').Agent> {
+      return fetchApi(`/agents/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+    },
+
+    deleteAgent(id: string): Promise<{ ok: boolean }> {
+      return fetchApi(`/agents/${id}`, { method: 'DELETE' });
+    },
+
+    // ── Skills ──
+
+    listSkills(): Promise<import('@/lib/ai/types').Skill[]> {
+      return fetchApi('/skills');
+    },
+
+    getSkill(id: string): Promise<import('@/lib/ai/types').Skill> {
+      return fetchApi(`/skills/${id}`);
+    },
+
+    createSkill(body: import('@/types/api').CreateSkillPayload): Promise<import('@/lib/ai/types').Skill> {
+      return fetchApi('/skills', { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    updateSkill(id: string, body: Record<string, unknown>): Promise<import('@/lib/ai/types').Skill> {
+      return fetchApi(`/skills/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+    },
+
+    deleteSkill(id: string): Promise<{ success: boolean }> {
+      return fetchApi(`/skills/${id}`, { method: 'DELETE' });
+    },
+
+    testSkillMatch(body: { message: string; agentId?: string; topK?: number }): Promise<{
+      matches: Array<{ skill: import('@/lib/ai/types').Skill; similarity: number; source: string }>;
+      embeddingTimeMs: number;
+      searchTimeMs: number;
+    }> {
+      return fetchApi('/skills/test-match', { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    // ── AI Audit ──
+
+    getAiAuditLog(params?: {
+      userId?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      model?: string;
+      status?: string;
+      page?: number;
+      limit?: number;
+    }): Promise<{ rows: import('@/lib/ai/types').AiAuditRecord[]; total: number }> {
+      const sp = new URLSearchParams();
+      if (params?.userId) sp.set('userId', params.userId);
+      if (params?.dateFrom) sp.set('dateFrom', params.dateFrom);
+      if (params?.dateTo) sp.set('dateTo', params.dateTo);
+      if (params?.model) sp.set('model', params.model);
+      if (params?.status) sp.set('status', params.status);
+      if (params?.page != null) sp.set('page', String(params.page));
+      if (params?.limit != null) sp.set('limit', String(params.limit));
+      return fetchApi(`/ai-chat/audit?${sp}`);
+    },
+
+    getAiAuditDetail(id: string): Promise<import('@/lib/ai/types').AiAuditRecord> {
+      return fetchApi(`/ai-chat/audit/${id}`);
+    },
+
+    getConversationAudit(conversationId: string): Promise<import('@/lib/ai/types').AiAuditRecord[]> {
+      return fetchApi(`/ai-chat/audit/conversation/${conversationId}`);
+    },
+
+    // ── Admin users ──
+
+    listOrgUsers(): Promise<import('@/types/api').OrgMember[]> {
+      return fetchApi('/admin/users');
+    },
+
+    listOrgRoles(): Promise<import('@/types/api').AvailableRole[]> {
+      return fetchApi('/admin/users/roles');
+    },
+
+    inviteOrgUser(
+      body: import('@/types/api').InviteUserPayload,
+    ): Promise<import('@/types/api').OrgMember> {
+      return fetchApi('/admin/users/invite', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+
+    updateOrgUserRoles(
+      userId: string,
+      roles: string[],
+    ): Promise<import('@/types/api').OrgMember> {
+      return fetchApi(`/admin/users/${userId}/roles`, {
+        method: 'PATCH',
+        body: JSON.stringify({ roles }),
+      });
+    },
+
+    updateOrgUserStatus(
+      userId: string,
+      status: 'Active' | 'Disabled',
+    ): Promise<import('@/types/api').OrgMember> {
+      return fetchApi(`/admin/users/${userId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      });
+    },
+
+    removeOrgUser(userId: string): Promise<{ ok: boolean }> {
+      return fetchApi(`/admin/users/${userId}`, { method: 'DELETE' });
+    },
   };
 }
 

@@ -1,14 +1,29 @@
-import { Application } from 'express';
+import { Application, Request, Response } from 'express';
 import { createLogger, LoggerType } from '../lib/logger.js';
 import { createTelemetryLogger } from '@morezero/telemetry';
-import { jwtAuthForIAT } from '../middleware/jwt-auth.js';
+import { requireAuth, permissionsFromClaims, claimHasPermission } from '../middleware/jwt-auth.js';
 import { inviteUser } from '../services/invitation-service.js';
 
 const baseLogger = createLogger('auth-server:admin-user-routes', LoggerType.NODEJS);
 const log = createTelemetryLogger(baseLogger, 'admin-user-routes', 'AdminUserRoutes', 'auth-server');
 
+function checkPermission(req: Request, res: Response, ...required: string[]): boolean {
+  const perms = permissionsFromClaims(req.authClaims);
+  const hasAny = required.some((p) => claimHasPermission(perms, p));
+  if (!hasAny) {
+    log.warn(
+      { functionName: 'checkPermission', path: req.path, required },
+      'auth-server:admin-user-routes:checkPermission - Insufficient permissions',
+    );
+    res.status(403).json({ error: 'forbidden', error_description: 'Insufficient permissions' });
+  }
+  return hasAny;
+}
+
 export default function createAdminUserRoutes(app: Application): void {
-  app.post('/admin/users/invite', jwtAuthForIAT, async (req, res) => {
+  app.post('/admin/users/invite', requireAuth(), async (req, res) => {
+    if (!checkPermission(req, res, 'org.users.manage')) return;
+
     const userId = req.userId;
     const organizationId = req.organizationId;
 

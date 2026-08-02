@@ -116,6 +116,15 @@ const PERMISSIONS: PermissionDef[] = [
   { permissionName: 'invoices.read', label: 'Read Invoices', description: 'View invoices', category: 'domain', scope: 'org' },
   { permissionName: 'invoices.approve', label: 'Approve Invoices', description: 'Approve/reject invoices', category: 'domain', scope: 'org' },
   { permissionName: 'reports.read', label: 'Read Reports', description: 'View reports and dashboards', category: 'domain', scope: 'org' },
+
+  // AI permissions
+  { permissionName: 'ai.read', label: 'Read AI', description: 'View AI chat and agents', category: 'ai', scope: 'org' },
+  { permissionName: 'ai.manage', label: 'Manage AI', description: 'Use AI chat and configure personal agents', category: 'ai', scope: 'org' },
+  { permissionName: 'ai.admin', label: 'Administer AI', description: 'Manage org-wide AI settings and agents', category: 'ai', scope: 'org' },
+
+  // Integration permissions
+  { permissionName: 'integrations.read', label: 'Read Integrations', description: 'View MCP integrations and connections', category: 'integrations', scope: 'org' },
+  { permissionName: 'integrations.manage', label: 'Manage Integrations', description: 'Configure MCP integrations and connections', category: 'integrations', scope: 'org' },
 ];
 
 const ROLE_PERMISSIONS: Record<string, string[]> = {
@@ -126,22 +135,44 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'claims.create', 'claims.read', 'claims.update', 'claims.delete',
     'jobs.create', 'jobs.read', 'jobs.update', 'jobs.assign',
     'invoices.create', 'invoices.read', 'invoices.approve', 'reports.read',
+    'ai.read', 'ai.manage', 'ai.admin',
+    'integrations.read', 'integrations.manage',
   ],
   manager: [
     'org.users.read', 'org.roles.read',
     'claims.create', 'claims.read', 'claims.update',
     'jobs.create', 'jobs.read', 'jobs.update', 'jobs.assign',
     'invoices.create', 'invoices.read', 'invoices.approve', 'reports.read',
+    'ai.read', 'ai.manage',
+    'integrations.read', 'integrations.manage',
   ],
   member: [
     'claims.create', 'claims.read', 'claims.update',
     'jobs.read', 'jobs.update',
     'invoices.read', 'reports.read',
+    'ai.read', 'ai.manage',
+    'integrations.read',
   ],
   viewer: [
     'claims.read', 'jobs.read', 'invoices.read', 'reports.read',
+    'ai.read',
+    'integrations.read',
   ],
 };
+
+interface FeatureDef {
+  featureKey: string;
+  label: string;
+  description: string;
+  defaultEnabled: boolean;
+}
+
+const FEATURES: FeatureDef[] = [
+  { featureKey: 'ai.chat', label: 'AI Chat', description: 'Conversational AI assistant for claims', defaultEnabled: true },
+  { featureKey: 'ai.agents', label: 'AI Agents', description: 'Custom AI agents and configurations', defaultEnabled: true },
+  { featureKey: 'ai.skills', label: 'AI Skills', description: 'Reusable AI skill definitions', defaultEnabled: true },
+  { featureKey: 'ai.connections', label: 'AI Connections', description: 'MCP integrations and tool connections', defaultEnabled: true },
+];
 
 async function seed() {
   console.log('Seeding RBAC tables...');
@@ -205,6 +236,20 @@ async function seed() {
       `;
     }
     console.log(`  Role ${roleName}: ${permissionNames.length} permissions assigned`);
+  }
+
+  // Seed features
+  for (const feature of FEATURES) {
+    await sql`
+      INSERT INTO features (feature_key, label, description, default_enabled)
+      VALUES (${feature.featureKey}, ${feature.label}, ${feature.description}, ${feature.defaultEnabled})
+      ON CONFLICT (feature_key) DO UPDATE SET
+        label = EXCLUDED.label,
+        description = EXCLUDED.description,
+        default_enabled = EXCLUDED.default_enabled,
+        updated_at = NOW()
+    `;
+    console.log(`  Feature: ${feature.featureKey}`);
   }
 
   console.log('RBAC seed complete.');

@@ -61,6 +61,7 @@ resource "google_project_service" "required" {
     "serviceusage.googleapis.com",
     "storage.googleapis.com",
     "storage-api.googleapis.com",
+    "aiplatform.googleapis.com",
   ])
 
   project            = var.project_id

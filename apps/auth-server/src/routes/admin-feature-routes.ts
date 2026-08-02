@@ -18,7 +18,16 @@ import {
   setGrant,
   removeGrant,
 } from '../db/services/feature-definitions.service.js';
-import { resolveFeatures } from '../services/feature-resolution-service.js';
+import { clearFeatureCatalogueCache, resolveFeatures } from '../services/feature-resolution-service.js';
+
+function normalizeFeatureBody(body: Record<string, unknown>) {
+  return {
+    featureKey: (body.featureKey ?? body.feature_key) as string | undefined,
+    defaultEnabled: (body.defaultEnabled ?? body.default_enabled) as boolean | undefined,
+    label: (body.label as string | undefined) ?? undefined,
+    description: (body.description as string | undefined) ?? undefined,
+  };
+}
 
 const baseLogger = createLogger('auth-server:admin-feature-routes', LoggerType.NODEJS);
 const log = createTelemetryLogger(baseLogger, 'admin-feature-routes', 'AdminFeatureRoutes', 'auth-server');
@@ -58,7 +67,18 @@ export default function createAdminFeatureRoutes(app: Application): void {
     try {
       if (!checkPermission(req, res, 'features.manage')) return;
       const db = getDb();
-      const row = await createFeature(db, req.body);
+      const normalized = normalizeFeatureBody(req.body ?? {});
+      if (!normalized.featureKey) {
+        res.status(400).json({ error: 'bad_request', error_description: 'featureKey is required' });
+        return;
+      }
+      const row = await createFeature(db, {
+        featureKey: normalized.featureKey,
+        defaultEnabled: normalized.defaultEnabled,
+        label: normalized.label,
+        description: normalized.description,
+      });
+      clearFeatureCatalogueCache();
       log.info({ functionName: 'POST /admin/features', id: row.id }, 'auth-server:admin-feature-routes:createFeature - Created feature');
       res.status(201).json({ data: row });
     } catch (err: any) {
@@ -71,11 +91,18 @@ export default function createAdminFeatureRoutes(app: Application): void {
     try {
       if (!checkPermission(req, res, 'features.manage')) return;
       const db = getDb();
-      const row = await updateFeature(db, req.params.featureId, req.body);
+      const normalized = normalizeFeatureBody(req.body ?? {});
+      const row = await updateFeature(db, req.params.featureId, {
+        ...(normalized.featureKey !== undefined ? { featureKey: normalized.featureKey } : {}),
+        ...(normalized.defaultEnabled !== undefined ? { defaultEnabled: normalized.defaultEnabled } : {}),
+        ...(normalized.label !== undefined ? { label: normalized.label } : {}),
+        ...(normalized.description !== undefined ? { description: normalized.description } : {}),
+      });
       if (!row) {
         res.status(404).json({ error: 'not_found', error_description: 'Feature not found' });
         return;
       }
+      clearFeatureCatalogueCache();
       log.info({ functionName: 'PATCH /admin/features/:id', id: row.id }, 'auth-server:admin-feature-routes:updateFeature - Updated feature');
       res.json({ data: row });
     } catch (err: any) {
@@ -93,6 +120,7 @@ export default function createAdminFeatureRoutes(app: Application): void {
         res.status(404).json({ error: 'not_found', error_description: 'Feature not found' });
         return;
       }
+      clearFeatureCatalogueCache();
       log.info({ functionName: 'DELETE /admin/features/:id', id: req.params.featureId }, 'auth-server:admin-feature-routes:deleteFeature - Deleted feature');
       res.status(204).end();
     } catch (err: any) {

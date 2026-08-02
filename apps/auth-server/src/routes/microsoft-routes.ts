@@ -18,8 +18,10 @@ import {
 import {
    registerIdentity,
    identityExists,
+   getUserByEmail,
    type IdentityRegistrationInput
 } from '../services/identity-registration-service.js';
+import { tryAutoLinkInvitedUser } from '../services/invited-user-auto-link.js';
 
 const baseLogger = createLogger('auth-server:microsoft-routes', LoggerType.NODEJS);
 const log = createTelemetryLogger(baseLogger, 'microsoft-routes', 'MicrosoftRoutes', 'auth-server');
@@ -323,7 +325,7 @@ export default function createMicrosoftRoutes(app: Application, provider: any): 
                   const callbackUri = getClientCallbackUrl();
                   const appBaseUrl = new URL(callbackUri).origin;
                   const serviceUrl = process.env.MOREZERO_SERVICE ? "/" + process.env.MOREZERO_SERVICE : "";
-                  return res.redirect(`${appBaseUrl}${serviceUrl}/login?error=${encodeURIComponent('Please login through the application.')}`);
+                  return res.redirect(`${appBaseUrl}${serviceUrl}/api/auth/login?error=${encodeURIComponent('Please login through the application.')}`);
                }
 
                const result = {
@@ -347,8 +349,105 @@ export default function createMicrosoftRoutes(app: Application, provider: any): 
                return;
             }
 
-            // For USER_NOT_FOUND, automatically register the new user
+            // For USER_NOT_FOUND, try invite auto-link first, then auto-register
             if (organizationResult.errorCode === 'USER_NOT_FOUND') {
+               const existingUser = await getUserByEmail(email);
+
+               if (existingUser) {
+                  const autoLink = await tryAutoLinkInvitedUser({
+                     email,
+                     emailVerified: true,
+                     provider: 'microsoft',
+                     providerUserId: providerSubject,
+                     displayName: name,
+                     avatarUrl,
+                  });
+
+                  if (autoLink.linked) {
+                     const orgResult = await resolveOrganization({
+                        provider: 'microsoft',
+                        providerSubject,
+                     });
+
+                     if (orgResult.success && orgResult.organizationId) {
+                        const authResult = createAuthResult({
+                           userId: orgResult.userId!,
+                           email,
+                           name,
+                           avatarURL: avatarUrl,
+                           provider: authProvider,
+                           organizationId: orgResult.organizationId,
+                        });
+                        await storeAuthResult(orgResult.userId!, authResult);
+
+                        if (interactionUid && provider) {
+                           const oidcResult = {
+                              login: {
+                                 accountId: orgResult.userId!,
+                                 acr: '1',
+                                 amr: ['microsoft'],
+                                 remember: true,
+                                 ts: Math.floor(Date.now() / 1000),
+                              },
+                           };
+                           await provider.interactionFinished(req, res, oidcResult, { mergeWithLastSubmission: false });
+                           log.info(
+                              { interactionUid, userId: orgResult.userId },
+                              'auth-server:microsoft-routes:callback - OIDC interaction completed after invite auto-link',
+                           );
+                           return;
+                        }
+                     }
+
+                     const autoLinkOrgList = orgResult.organizations ?? [];
+                     if (
+                        orgResult.errorCode === 'MULTIPLE_ORGANIZATIONS' &&
+                        autoLinkOrgList.length > 0 &&
+                        interactionUid &&
+                        provider
+                     ) {
+                        const oidcResult = {
+                           login: {
+                              accountId: autoLink.userId!,
+                              acr: '1',
+                              amr: ['microsoft'],
+                              remember: true,
+                              ts: Math.floor(Date.now() / 1000),
+                              email,
+                              name,
+                              avatarUrl: avatarUrl || '',
+                              provider: 'microsoft',
+                              providerSubject,
+                              organizations: autoLinkOrgList,
+                              requiresOrgSelection: true,
+                           },
+                        };
+                        await provider.interactionFinished(req, res, oidcResult, { mergeWithLastSubmission: false });
+                        log.info(
+                           { userId: autoLink.userId, organizationCount: autoLinkOrgList.length },
+                           'auth-server:microsoft-routes:callback - OIDC interaction completed with org selection after invite auto-link',
+                        );
+                        return;
+                     }
+
+                     const callbackUri = getClientCallbackUrl();
+                     const appBaseUrl = new URL(callbackUri).origin;
+                     const serviceUrl = process.env.MOREZERO_SERVICE ? '/' + process.env.MOREZERO_SERVICE : '';
+                     return res.redirect(`${appBaseUrl}${serviceUrl}/api/auth/login?registered=1`);
+                  }
+
+                  log.warn(
+                     { email, reason: autoLink.reason },
+                     'auth-server:microsoft-routes:callback - Existing user could not be auto-linked',
+                  );
+                  const callbackUri = getClientCallbackUrl();
+                  const appBaseUrl = new URL(callbackUri).origin;
+                  const serviceUrl = process.env.MOREZERO_SERVICE ? '/' + process.env.MOREZERO_SERVICE : '';
+                  return res.redirect(
+                     `${appBaseUrl}${serviceUrl}/api/auth/login?error=${encodeURIComponent('An account with this email already exists. Accept your invite or sign in with password.')}`,
+                  );
+               }
+
                log.info({
                   email,
                   providerSubject,
@@ -432,13 +531,13 @@ export default function createMicrosoftRoutes(app: Application, provider: any): 
                      const callbackUri = getClientCallbackUrl();
                      const appBaseUrl = new URL(callbackUri).origin;
                      const serviceUrl = process.env.MOREZERO_SERVICE ? "/" + process.env.MOREZERO_SERVICE : "";
-                     return res.redirect(`${appBaseUrl}${serviceUrl}/login?registered=1`);
+                     return res.redirect(`${appBaseUrl}${serviceUrl}/api/auth/login?registered=1`);
                   }
                } else {
                   const callbackUri = getClientCallbackUrl();
                   const appBaseUrl = new URL(callbackUri).origin;
                   const serviceUrl = process.env.MOREZERO_SERVICE ? "/" + process.env.MOREZERO_SERVICE : "";
-                  return res.redirect(`${appBaseUrl}${serviceUrl}/login?registered=1`);
+                  return res.redirect(`${appBaseUrl}${serviceUrl}/api/auth/login?registered=1`);
                }
             }
 

@@ -1,11 +1,25 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, or, ilike, asc } from 'drizzle-orm';
+import { eq, and, or, ilike, asc, isNull, sql } from 'drizzle-orm';
 import { DRIZZLE } from '../drizzle.module';
 import type { DrizzleDB } from '../drizzle.module';
-import { users, organizationUsers } from '../schema';
+import { users, organizationUsers, userRoleAssignments } from '../schema';
 
 export type UserRow = typeof users.$inferSelect;
 export type UserInsert = typeof users.$inferInsert;
+
+export type OrgMemberRow = {
+  id: string;
+  email: string | null;
+  name: string | null;
+  status: string;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  membershipRole: string;
+  membershipStatus: string;
+  joinedAt: string;
+  roles: string[];
+};
 
 @Injectable()
 export class UsersRepository {
@@ -59,6 +73,108 @@ export class UsersRepository {
       .orderBy(asc(users.name))
       .limit(limit);
     return rows.map((r) => r.user);
+  }
+
+  async listOrgMembers(params: { organizationId: string }): Promise<OrgMemberRow[]> {
+    const rows = await this.db
+      .select({
+        id: users.id,
+        email: users.email,
+        name: users.name,
+        status: users.status,
+        isActive: users.isActive,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+        membershipRole: organizationUsers.role,
+        membershipStatus: organizationUsers.status,
+        joinedAt: organizationUsers.created,
+        roles: sql<string[]>`coalesce(
+          array_agg(${userRoleAssignments.roleName})
+            filter (where ${userRoleAssignments.revokedAt} is null and ${userRoleAssignments.id} is not null),
+          '{}'::text[]
+        )`,
+      })
+      .from(users)
+      .innerJoin(
+        organizationUsers,
+        and(
+          eq(users.id, organizationUsers.userId),
+          eq(organizationUsers.organizationId, params.organizationId),
+        ),
+      )
+      .leftJoin(
+        userRoleAssignments,
+        and(
+          eq(userRoleAssignments.userId, users.id),
+          eq(userRoleAssignments.organizationId, params.organizationId),
+          isNull(userRoleAssignments.revokedAt),
+        ),
+      )
+      .groupBy(
+        users.id,
+        users.email,
+        users.name,
+        users.status,
+        users.isActive,
+        users.createdAt,
+        users.updatedAt,
+        organizationUsers.role,
+        organizationUsers.status,
+        organizationUsers.created,
+      )
+      .orderBy(asc(users.name), asc(users.email));
+
+    return rows.map((r) => ({
+      ...r,
+      roles: Array.isArray(r.roles) ? r.roles.filter(Boolean) : [],
+    }));
+  }
+
+  async findOrgMembership(params: {
+    userId: string;
+    organizationId: string;
+  }): Promise<{ id: string } | null> {
+    const [row] = await this.db
+      .select({ id: organizationUsers.id })
+      .from(organizationUsers)
+      .where(
+        and(
+          eq(organizationUsers.userId, params.userId),
+          eq(organizationUsers.organizationId, params.organizationId),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
+  async removeOrgMembership(params: {
+    userId: string;
+    organizationId: string;
+  }): Promise<boolean> {
+    return this.db.transaction(async (tx) => {
+      await tx
+        .update(userRoleAssignments)
+        .set({ revokedAt: new Date() })
+        .where(
+          and(
+            eq(userRoleAssignments.userId, params.userId),
+            eq(userRoleAssignments.organizationId, params.organizationId),
+            isNull(userRoleAssignments.revokedAt),
+          ),
+        );
+
+      const deleted = await tx
+        .delete(organizationUsers)
+        .where(
+          and(
+            eq(organizationUsers.userId, params.userId),
+            eq(organizationUsers.organizationId, params.organizationId),
+          ),
+        )
+        .returning({ id: organizationUsers.id });
+
+      return deleted.length > 0;
+    });
   }
 
   async create(params: { data: UserInsert }): Promise<UserRow> {

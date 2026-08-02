@@ -1,22 +1,36 @@
 'use client';
 
+import { useState } from 'react';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
-import { AppSidebar, type AppSidebarUser } from './AppSidebar';
+import { ChatDrawer } from '@/components/chat/ChatDrawer';
+import { hasFeature } from '@/lib/features';
+import { AppSidebar } from './AppSidebar';
 
 export interface AppShellProps {
   header: React.ReactNode;
-  user?: AppSidebarUser | null;
+  features?: string[];
+  orgName?: string | null;
   children: React.ReactNode;
 }
 
-export function AppShell({ header, user, children }: AppShellProps) {
+export function AppShell({ header, features, orgName, children }: AppShellProps) {
+  const [chatOpen, setChatOpen] = useState(false);
+  const chatEnabled = hasFeature(features, 'ai.chat');
+
   return (
     <SidebarProvider>
-      <AppSidebar user={user} />
+      <AppSidebar
+        features={features}
+        orgName={orgName}
+        onOpenChat={chatEnabled ? () => setChatOpen(true) : undefined}
+      />
       <SidebarInset>
         {header}
         <div className="flex-1 p-4">{children}</div>
       </SidebarInset>
+      {chatEnabled && (
+        <ChatDrawer open={chatOpen} onOpenChange={setChatOpen} />
+      )}
     </SidebarProvider>
   );
 }

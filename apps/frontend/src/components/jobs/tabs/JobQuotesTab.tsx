@@ -306,6 +306,7 @@ export function JobQuotesTab({
         }}
         jobId={jobId}
         claimId={claimId}
+        aiAssistEnabled
       />
     </div>
   );

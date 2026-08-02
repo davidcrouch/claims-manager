@@ -28,6 +28,8 @@ export interface AuthIdentity {
   is_machine?: boolean;
   is_admin?: boolean;
   roles?: string[];
+  permissions?: string[];
+  features?: string[];
 }
 
 export interface Session {
@@ -47,6 +49,12 @@ function payloadToIdentity(payload: Record<string, unknown>): AuthIdentity {
     is_machine: payload.is_machine as boolean | undefined,
     is_admin: payload.is_admin as boolean | undefined,
     roles: payload.roles as string[] | undefined,
+    permissions: Array.isArray(payload.permissions)
+      ? (payload.permissions as string[])
+      : undefined,
+    features: Array.isArray(payload.features)
+      ? (payload.features as string[])
+      : undefined,
   };
 }
 

@@ -114,6 +114,50 @@ export class EnvironmentVariables {
   @IsString()
   @IsOptional()
   VERTEX_GEMINI_MODEL?: string;
+
+  @IsString()
+  @IsOptional()
+  VERTEX_AI_PROJECT?: string;
+
+  @IsString()
+  @IsOptional()
+  VERTEX_AI_LOCATION?: string;
+
+  @IsString()
+  @IsOptional()
+  VERTEX_EMBEDDING_MODEL?: string;
+
+  @IsString()
+  @IsOptional()
+  DEFAULT_CHAT_MODEL?: string;
+
+  @IsString()
+  @IsOptional()
+  DEFAULT_CHAT_PROVIDER?: string;
+
+  @IsString()
+  @IsOptional()
+  MCP_OAUTH_CALLBACK_BASE_URL?: string;
+
+  @IsString()
+  @IsOptional()
+  CLAIMS_MCP_URL?: string;
+
+  @IsString()
+  @IsOptional()
+  GCP_SECRET_MANAGER_PROJECT?: string;
+
+  @IsString()
+  @IsOptional()
+  AUTH_SERVER_URL?: string;
+
+  @IsString()
+  @IsOptional()
+  AUTH_ISSUER_URL?: string;
+
+  @IsString()
+  @IsOptional()
+  AUTH_JWKS_URI?: string;
 }
 
 export function validate(config: Record<string, unknown>) {

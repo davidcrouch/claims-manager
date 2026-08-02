@@ -32,7 +32,7 @@ const schema = z.object({
   proposalNumber: z.string().optional(),
   name: z.string().optional(),
   proposalFromName: z.string().optional(),
-  totalAmount: z.coerce.number().optional(),
+  totalAmount: z.number().optional(),
   receivedDate: z.string().optional(),
   note: z.string().optional(),
 });
@@ -156,7 +156,19 @@ export function ProposalFormDrawer({
 
             <div className="space-y-2">
               <Label htmlFor="prop-totalAmount">Total Amount (optional)</Label>
-              <Input id="prop-totalAmount" type="number" step="0.01" min="0" {...form.register('totalAmount')} placeholder="0.00" />
+              <Input
+                id="prop-totalAmount"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                {...form.register('totalAmount', {
+                  setValueAs: (v) =>
+                    v === '' || v == null || Number.isNaN(Number(v))
+                      ? undefined
+                      : Number(v),
+                })}
+              />
             </div>
 
             <div className="space-y-2">

@@ -934,3 +934,98 @@ export interface OrganisationClaim {
   createdAt: string;
   updatedAt: string;
 }
+
+// ── MCP Integrations ──
+
+export interface McpIntegration {
+  id: string;
+  name: string;
+  description: string | null;
+  url: string;
+  transportType: string;
+  supportedAuthTypes: string[];
+  authConfig: Record<string, unknown> | null;
+  visibility: string;
+  sharedConnectionPolicy?: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface McpConnection {
+  id: string;
+  integrationId: string;
+  authType: string;
+  visibility: string;
+  status: string;
+  lastTestedAt: string | null;
+  lastError: string | null;
+  enabled: boolean;
+  createdAt: string;
+}
+
+export interface ChatConversationSummary {
+  id: string;
+  title: string | null;
+  agentId?: string | null;
+  relatedEntityType?: string | null;
+  relatedEntityId?: string | null;
+  pinnedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatConversationDetail extends ChatConversationSummary {
+  messages: unknown[];
+}
+
+export interface CreateAgentPayload {
+  name: string;
+  description?: string;
+  provider?: string;
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+  systemPrompt?: string;
+  visibility?: string;
+  chatEnabled?: boolean;
+  enabledTools?: string[];
+  connectionIds?: string[];
+}
+
+export interface CreateSkillPayload {
+  name: string;
+  description?: string;
+  triggerHints?: string[];
+  instructionPrompt: string;
+  category?: string;
+  visibility?: 'public' | 'org' | 'private';
+}
+
+export interface OrgMember {
+  id: string;
+  email: string | null;
+  name: string | null;
+  givenName: string | null;
+  familyName: string | null;
+  roles: string[];
+  status: string;
+  joinedAt: string;
+  lastLoginAt: string | null;
+  isActive: boolean;
+}
+
+export interface AvailableRole {
+  key: string;
+  name: string;
+  description: string | null;
+  scope: string;
+  isSystem: boolean;
+}
+
+export interface InviteUserPayload {
+  email: string;
+  givenName?: string;
+  familyName?: string;
+  roles: string[];
+}

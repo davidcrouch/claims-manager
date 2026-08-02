@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { FileText, Loader2, X } from 'lucide-react';
@@ -26,6 +26,18 @@ export function DocumentTemplatesSettingsPanel({
 }: DocumentTemplatesSettingsPanelProps) {
   const [settings, setSettings] = useState(initialSettings);
   const [savingType, setSavingType] = useState<string | null>(null);
+
+  const docItems = useMemo(() => {
+    const items = Object.fromEntries(
+      docxDocuments.map((doc) => [doc.id, doc.fileName]),
+    ) as Record<string, string>;
+    for (const row of settings) {
+      if (row.filesystemDocument && !items[row.filesystemDocument.id]) {
+        items[row.filesystemDocument.id] = row.filesystemDocument.fileName;
+      }
+    }
+    return items;
+  }, [docxDocuments, settings]);
 
   async function refreshSettings() {
     const res = await fetch('/api/document-templates');
@@ -125,6 +137,7 @@ export function DocumentTemplatesSettingsPanel({
                     onValueChange={(value) => {
                       if (value) void handleAssign(row.documentType, value);
                     }}
+                    items={docItems}
                     disabled={busy || docxDocuments.length === 0}
                   >
                     <SelectTrigger className="w-[220px]">

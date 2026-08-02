@@ -14,9 +14,26 @@ import {
   unique,
   index,
   check,
+  customType,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
+
+const vector = customType<{ data: number[]; driverParam: string }>({
+  dataType() {
+    return 'vector(768)';
+  },
+  toDriver(value: number[]): string {
+    return `[${value.join(',')}]`;
+  },
+  fromDriver(value: string): number[] {
+    return value
+      .replace(/^\[/, '')
+      .replace(/\]$/, '')
+      .split(',')
+      .map(Number);
+  },
+});
 
 // Lookup values
 export const lookupValues = pgTable(
@@ -2477,6 +2494,569 @@ export const poCustodyTransfers = pgTable(
   ],
 );
 
+// ── Agentic AI Platform (doc 46) ───────────────────────────────
+
+export const aiSettings = pgTable(
+  'ai_settings',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    defaultProvider: text('default_provider').notNull().default('vertex-gemini'),
+    defaultModel: text('default_model').notNull().default('gemini-2.5-flash'),
+    defaultTemperature: numeric('default_temperature', { precision: 3, scale: 2 }).notNull().default('0.7'),
+    maxTokensPerResponse: integer('max_tokens_per_response').notNull().default(8192),
+    enabled: boolean('enabled').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique('ai_settings_tenant_id_unique').on(t.tenantId)],
+);
+
+export const mcpIntegration = pgTable(
+  'mcp_integration',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    description: text('description'),
+    url: text('url').notNull(),
+    transportType: text('transport_type').notNull().default('http'),
+    supportedAuthTypes: jsonb('supported_auth_types').notNull().default(['none']),
+    authConfig: jsonb('auth_config').default({}),
+    visibility: text('visibility').notNull().default('org'),
+    status: text('status').notNull().default('draft'),
+    trustedServer: boolean('trusted_server').notNull().default(false),
+    sharedConnectionPolicy: text('shared_connection_policy').notNull().default('user_required'),
+    createdByUserId: uuid('created_by_user_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('mcp_integration_transport_type_check', sql`transport_type IN ('http', 'sse')`),
+    check('mcp_integration_visibility_check', sql`visibility IN ('public', 'org', 'private')`),
+    check('mcp_integration_status_check', sql`status IN ('draft', 'active', 'disabled', 'error')`),
+    check(
+      'mcp_integration_shared_connection_policy_check',
+      sql`shared_connection_policy IN ('org_shared', 'user_required')`,
+    ),
+    index('mcp_integration_tenant_idx').on(t.tenantId),
+  ],
+);
+
+export const mcpConnection = pgTable(
+  'mcp_connection',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    integrationId: uuid('integration_id')
+      .notNull()
+      .references(() => mcpIntegration.id, { onDelete: 'cascade' }),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id'),
+    authType: text('auth_type').notNull().default('none'),
+    credentialRef: text('credential_ref'),
+    status: text('status').notNull().default('pending'),
+    visibility: text('visibility').notNull().default('org'),
+    enabled: boolean('enabled').notNull().default(true),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('mcp_connection_auth_type_check', sql`auth_type IN ('none', 'api_key', 'bearer_passthrough', 'oauth')`),
+    check(
+      'mcp_connection_status_check',
+      sql`status IN ('pending', 'connected', 'reauth_required', 'expired', 'revoked', 'error')`,
+    ),
+    check('mcp_connection_visibility_check', sql`visibility IN ('org', 'private')`),
+    index('mcp_connection_integration_org_idx').on(t.integrationId, t.tenantId),
+    uniqueIndex('mcp_connection_org_integration_user_unique')
+      .on(t.tenantId, t.integrationId, t.userId)
+      .where(sql`deleted_at IS NULL`),
+  ],
+);
+
+export const mcpToolManifest = pgTable('mcp_tool_manifest', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  connectionId: uuid('connection_id')
+    .notNull()
+    .references(() => mcpConnection.id, { onDelete: 'cascade' }),
+  schemaHash: text('schema_hash').notNull(),
+  toolCount: integer('tool_count').notNull().default(0),
+  manifest: jsonb('manifest').notNull().default([]),
+  lastRefreshedAt: timestamp('last_refreshed_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const mcpOauthState = pgTable(
+  'mcp_oauth_state',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id').notNull(),
+    userId: uuid('user_id').notNull(),
+    integrationId: uuid('integration_id')
+      .notNull()
+      .references(() => mcpIntegration.id, { onDelete: 'cascade' }),
+    state: text('state').notNull().unique(),
+    nonce: text('nonce'),
+    pkceVerifier: text('pkce_verifier').notNull(),
+    redirectUri: text('redirect_uri').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+);
+
+export const agent = pgTable(
+  'agent',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    slug: text('slug'),
+    name: text('name').notNull(),
+    description: text('description'),
+    type: text('type').notNull().default('chat'),
+    chatEnabled: boolean('chat_enabled').notNull().default(true),
+    provider: text('provider').notNull().default('vertex-gemini'),
+    model: text('model').notNull().default('gemini-2.5-flash'),
+    temperature: numeric('temperature', { precision: 3, scale: 2 }).default('0.7'),
+    maxTokens: integer('max_tokens').default(8192),
+    systemPrompt: text('system_prompt'),
+    enabledToolRefs: jsonb('enabled_tool_refs').default([]),
+    connectionIds: uuid('connection_ids').array().default([]),
+    visibility: text('visibility').notNull().default('org'),
+    supportsVision: boolean('supports_vision').notNull().default(false),
+    maxSteps: integer('max_steps').notNull().default(10),
+    avatarUrl: text('avatar_url'),
+    isDefault: boolean('is_default').notNull().default(false),
+    pinnedSkills: uuid('pinned_skills').array().default([]),
+    semanticSkills: text('semantic_skills').default('all'),
+    packInstallId: uuid('pack_install_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('agent_type_check', sql`type IN ('chat', 'system')`),
+    check('agent_visibility_check', sql`visibility IN ('public', 'org', 'private')`),
+    check('agent_semantic_skills_check', sql`semantic_skills IN ('all', 'none', 'pinned_only')`),
+    index('agent_tenant_idx').on(t.tenantId),
+    uniqueIndex('agent_tenant_slug_unique')
+      .on(t.tenantId, t.slug)
+      .where(sql`slug IS NOT NULL`),
+  ],
+);
+
+export const chatConversation = pgTable(
+  'chat_conversation',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id').notNull(),
+    userId: uuid('user_id').notNull(),
+    agentId: uuid('agent_id').references(() => agent.id),
+    title: text('title'),
+    messagesJsonb: jsonb('messages_jsonb').notNull().default([]),
+    relatedEntityType: text('related_entity_type'),
+    relatedEntityId: uuid('related_entity_id'),
+    pinnedAt: timestamp('pinned_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('chat_conversation_tenant_user_idx').on(t.tenantId, t.userId),
+    index('chat_conversation_updated_idx').on(t.tenantId, t.userId, t.updatedAt),
+    index('chat_conversation_entity_idx').on(t.relatedEntityType, t.relatedEntityId),
+  ],
+);
+
+export const aiMessageAudit = pgTable(
+  'ai_message_audit',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id').notNull(),
+    userId: uuid('user_id').notNull(),
+    conversationId: uuid('conversation_id').references(() => chatConversation.id),
+    agentId: uuid('agent_id').references(() => agent.id),
+    agentName: text('agent_name'),
+    model: text('model').notNull(),
+    provider: text('provider').notNull(),
+    promptTokens: integer('prompt_tokens').notNull().default(0),
+    completionTokens: integer('completion_tokens').notNull().default(0),
+    totalTokens: integer('total_tokens').notNull().default(0),
+    toolCallsCount: integer('tool_calls_count').notNull().default(0),
+    toolNames: text('tool_names').array().default([]),
+    systemPromptSnapshot: text('system_prompt_snapshot'),
+    durationMs: integer('duration_ms'),
+    status: text('status').notNull().default('success'),
+    errorMessage: text('error_message'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('ai_message_audit_status_check', sql`status IN ('success', 'error', 'cancelled')`),
+    index('ai_message_audit_tenant_created_idx').on(t.tenantId, t.createdAt),
+    index('ai_message_audit_conversation_idx').on(t.conversationId),
+  ],
+);
+
+export const mcpToolInvocation = pgTable(
+  'mcp_tool_invocation',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id').notNull(),
+    agentId: uuid('agent_id'),
+    conversationId: uuid('conversation_id'),
+    messageAuditId: uuid('message_audit_id'),
+    connectionId: uuid('connection_id')
+      .notNull()
+      .references(() => mcpConnection.id),
+    toolName: text('tool_name').notNull(),
+    namespacedToolId: text('namespaced_tool_id').notNull(),
+    inputArgs: jsonb('input_args'),
+    resultSummary: text('result_summary'),
+    status: text('status').notNull().default('pending'),
+    latencyMs: integer('latency_ms'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('mcp_tool_invocation_status_check', sql`status IN ('pending', 'success', 'error', 'timeout')`),
+  ],
+);
+
+export const canvasArtifact = pgTable(
+  'canvas_artifact',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id').notNull(),
+    conversationId: uuid('conversation_id').references(() => chatConversation.id),
+    contentType: text('content_type').notNull(),
+    title: text('title'),
+    content: text('content'),
+    componentName: text('component_name'),
+    componentProps: jsonb('component_props'),
+    language: text('language'),
+    version: integer('version').notNull().default(1),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('canvas_artifact_content_type_check', sql`content_type IN ('markdown', 'code', 'component')`),
+  ],
+);
+
+export const conversationShare = pgTable(
+  'conversation_share',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id').notNull(),
+    conversationId: uuid('conversation_id')
+      .notNull()
+      .references(() => chatConversation.id, { onDelete: 'cascade' }),
+    createdBy: uuid('created_by').notNull(),
+    shareToken: text('share_token').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('conversation_share_token_idx').on(t.shareToken),
+    index('conversation_share_conversation_idx').on(t.conversationId),
+  ],
+);
+
+export const skill = pgTable(
+  'skill',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    description: text('description'),
+    triggerHints: text('trigger_hints').array().default([]),
+    instructionPrompt: text('instruction_prompt').notNull(),
+    requiredToolRefs: jsonb('required_tool_refs').default([]),
+    inputSchema: jsonb('input_schema'),
+    outputSchema: jsonb('output_schema'),
+    invocationMode: text('invocation_mode').notNull().default('inline'),
+    includeHistory: boolean('include_history').notNull().default(false),
+    historyMessageCount: integer('history_message_count').default(5),
+    modelOverride: text('model_override'),
+    providerOverride: text('provider_override'),
+    category: text('category').default('general'),
+    visibility: text('visibility').notNull().default('org'),
+    // Phase 4: upgrade to pgvector vector(768) for semantic skill matching
+    embedding: jsonb('embedding'),
+    embeddingVec: vector('embedding_vec'),
+    packInstallId: uuid('pack_install_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('skill_invocation_mode_check', sql`invocation_mode IN ('inline', 'isolated')`),
+    check('skill_visibility_check', sql`visibility IN ('public', 'org', 'private')`),
+    index('skill_tenant_idx').on(t.tenantId),
+  ],
+);
+
+export const aiMessageFeedback = pgTable(
+  'ai_message_feedback',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id').notNull(),
+    userId: uuid('user_id').notNull(),
+    conversationId: uuid('conversation_id').notNull(),
+    messageId: text('message_id').notNull(),
+    rating: text('rating').notNull(),
+    categories: jsonb('categories').default([]),
+    comment: text('comment'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('ai_message_feedback_rating_check', sql`rating IN ('positive', 'negative')`),
+    uniqueIndex('ai_message_feedback_message_user_idx').on(t.messageId, t.userId),
+  ],
+);
+
+export const aiUsageQuota = pgTable(
+  'ai_usage_quota',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    quotaType: text('quota_type').notNull().default('tokens'),
+    period: text('period').notNull().default('monthly'),
+    limitValue: bigint('limit_value', { mode: 'number' }).notNull(),
+    warnThresholdPct: integer('warn_threshold_pct').notNull().default(80),
+    enforcement: text('enforcement').notNull().default('warn'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('ai_usage_quota_quota_type_check', sql`quota_type IN ('tokens', 'messages', 'cost')`),
+    check('ai_usage_quota_period_check', sql`period IN ('daily', 'monthly')`),
+    check('ai_usage_quota_enforcement_check', sql`enforcement IN ('warn', 'enforce')`),
+    unique('ai_usage_quota_tenant_type_period_unique').on(t.tenantId, t.quotaType, t.period),
+  ],
+);
+
+export const aiChatNotification = pgTable(
+  'ai_chat_notification',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id').notNull(),
+    userId: uuid('user_id').notNull(),
+    conversationId: uuid('conversation_id')
+      .notNull()
+      .references(() => chatConversation.id),
+    eventType: text('event_type').notNull(),
+    title: text('title'),
+    isRead: boolean('is_read').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('ai_chat_notification_user_idx').on(t.tenantId, t.userId, t.isRead)],
+);
+
+export const aiUserMemory = pgTable(
+  'ai_user_memory',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id').notNull(),
+    userId: uuid('user_id').notNull(),
+    scope: text('scope').notNull().default('global'),
+    scopeId: text('scope_id'),
+    key: text('key').notNull(),
+    value: text('value').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('ai_user_memory_tenant_user_key_unique').on(t.tenantId, t.userId, t.key),
+  ],
+);
+
+export const aiScheduledTask = pgTable(
+  'ai_scheduled_task',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull(),
+    name: text('name').notNull(),
+    scheduleType: text('schedule_type').notNull().default('cron'),
+    cronExpression: text('cron_expression'),
+    runAt: timestamp('run_at', { withTimezone: true }),
+    agentId: uuid('agent_id').references(() => agent.id),
+    conversationId: uuid('conversation_id').references(() => chatConversation.id),
+    prompt: text('prompt').notNull(),
+    enabled: boolean('enabled').notNull().default(true),
+    lastRunAt: timestamp('last_run_at', { withTimezone: true }),
+    nextRunAt: timestamp('next_run_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('ai_scheduled_task_tenant_user_idx').on(t.tenantId, t.userId),
+    index('ai_scheduled_task_next_run_idx').on(t.enabled, t.nextRunAt),
+  ],
+);
+
+export const promptTemplate = pgTable('prompt_template', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => organizations.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  description: text('description'),
+  templateText: text('template_text').notNull(),
+  variables: jsonb('variables').default([]),
+  category: text('category').default('general'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const capabilityPackInstall = pgTable(
+  'capability_pack_install',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    packId: text('pack_id').notNull(),
+    packVersion: text('pack_version').notNull(),
+    status: text('status').notNull().default('active'),
+    installedAt: timestamp('installed_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check(
+      'capability_pack_install_status_check',
+      sql`status IN ('active', 'disabled', 'upgrading', 'error')`,
+    ),
+    index('capability_pack_install_tenant_idx').on(t.tenantId),
+  ],
+);
+
+export const capabilityPackArtefact = pgTable(
+  'capability_pack_artefact',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    installId: uuid('install_id')
+      .notNull()
+      .references(() => capabilityPackInstall.id, { onDelete: 'cascade' }),
+    artefactType: text('artefact_type').notNull(),
+    artefactId: uuid('artefact_id').notNull(),
+    sourceHash: text('source_hash'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check(
+      'capability_pack_artefact_artefact_type_check',
+      sql`artefact_type IN ('agent', 'skill', 'prompt_template')`,
+    ),
+    uniqueIndex('capability_pack_artefact_install_artefact_uidx').on(
+      t.installId,
+      t.artefactType,
+      t.artefactId,
+    ),
+  ],
+);
+
+// RBAC — Shore-shaped tables owned by auth-server (shared DB)
+export const roles = pgTable('roles', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  roleName: text('role_name').notNull().unique(),
+  scope: text('scope').notNull().default('org'),
+  label: text('label').notNull(),
+  description: text('description'),
+  isSystem: boolean('is_system').notNull().default(false),
+  isDefault: boolean('is_default').notNull().default(false),
+  defaultForEvent: text('default_for_event'),
+  sortOrder: integer('sort_order').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const permissions = pgTable('permissions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  permissionName: text('permission_name').notNull().unique(),
+  label: text('label').notNull(),
+  description: text('description'),
+  category: text('category').notNull().default('domain'),
+  resourceGroup: text('resource_group'),
+  scope: text('scope').notNull().default('all'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const rolePermissions = pgTable(
+  'role_permissions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    roleId: uuid('role_id')
+      .notNull()
+      .references(() => roles.id, { onDelete: 'cascade' }),
+    permissionId: uuid('permission_id')
+      .notNull()
+      .references(() => permissions.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique('role_permissions_role_permission_key').on(t.roleId, t.permissionId)],
+);
+
+export const userRoleAssignments = pgTable(
+  'user_role_assignments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    roleName: text('role_name').notNull(),
+    grantedAt: timestamp('granted_at', { withTimezone: true }).notNull().defaultNow(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (t) => [
+    unique('user_role_assignments_user_org_role_key').on(
+      t.userId,
+      t.organizationId,
+      t.roleName,
+    ),
+  ],
+);
+
+export const features = pgTable('features', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  featureKey: text('feature_key').notNull().unique(),
+  defaultEnabled: boolean('default_enabled').notNull().default(false),
+  label: text('label'),
+  description: text('description'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const featureGrants = pgTable(
+  'feature_grants',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    featureId: uuid('feature_id')
+      .notNull()
+      .references(() => features.id, { onDelete: 'cascade' }),
+    scope: text('scope').notNull(),
+    scopeId: uuid('scope_id').notNull(),
+    enabled: boolean('enabled').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique('feature_grants_feature_scope_key').on(t.featureId, t.scope, t.scopeId)],
+);
 // Relations (for Drizzle relational queries - optional)
 export const claimsRelations = relations(claims, ({ one, many }) => ({
   accountLookup: one(lookupValues, {

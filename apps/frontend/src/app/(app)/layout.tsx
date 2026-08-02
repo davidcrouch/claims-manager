@@ -24,6 +24,42 @@ async function checkProvisioningStatus(
   }
 }
 
+async function fetchOrgName(
+  token: string,
+  tenantId: string,
+): Promise<string | null> {
+  const LOG = 'frontend:AppLayout:fetchOrgName';
+  try {
+    const res = await fetch(`${getApiBaseUrl()}/organisations/me`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
+      },
+      cache: 'no-store',
+    });
+    if (!res.ok) {
+      console.warn(`${LOG} — failed status=${res.status} tenantId=${tenantId}`);
+      return null;
+    }
+    const data = (await res.json()) as {
+      tradingName?: string | null;
+      name?: string | null;
+    };
+    const name = (data.tradingName || data.name || '').trim();
+    if (!name) {
+      console.warn(`${LOG} — empty name tenantId=${tenantId}`);
+      return null;
+    }
+    return name;
+  } catch (err) {
+    console.warn(
+      `${LOG} — error:`,
+      err instanceof Error ? err.message : String(err),
+    );
+    return null;
+  }
+}
+
 export default async function AppLayout({
   children,
 }: {
@@ -45,7 +81,10 @@ export default async function AppLayout({
     process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID ??
     '';
 
-  const provisioningStatus = await checkProvisioningStatus(token, tenantId);
+  const [provisioningStatus, orgName] = await Promise.all([
+    checkProvisioningStatus(token, tenantId),
+    fetchOrgName(token, tenantId),
+  ]);
 
   if (
     provisioningStatus &&
@@ -61,5 +100,9 @@ export default async function AppLayout({
     picture: identity.picture,
   };
 
-  return <AppLayoutClient user={headerUser}>{children}</AppLayoutClient>;
+  return (
+    <AppLayoutClient user={headerUser} features={identity.features ?? []} orgName={orgName}>
+      {children}
+    </AppLayoutClient>
+  );
 }

@@ -6,9 +6,10 @@ interface AcceptInvitePageProps {
   token: string;
   email: string;
   error?: string | null;
+  nonce?: string;
 }
 
-export function AcceptInvitePage({ token, email, error }: AcceptInvitePageProps) {
+export function AcceptInvitePage({ token, email, error, nonce }: AcceptInvitePageProps) {
   const submitScript = `
     (function() {
       var form = document.getElementById('acceptForm');
@@ -37,7 +38,7 @@ export function AcceptInvitePage({ token, email, error }: AcceptInvitePageProps)
   `;
 
   return (
-    <AuthLayout inlineScript={submitScript}>
+    <AuthLayout inlineScript={submitScript} nonce={nonce}>
       <div className="flex min-h-screen items-center justify-center px-4 py-10">
         <div className="flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-brand-200 bg-white shadow-2xl md:flex-row md:items-stretch">
           <AuthLeftPanel variant="full" />

@@ -23,6 +23,8 @@ import {
   BottomFormDrawerError,
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
+import { ChatDrawer } from '@/components/chat/ChatDrawer';
+import { buildAIContext, type AIContextPayload } from '@/lib/ai/use-ai-context';
 import { createTaskAction } from '@/app/(app)/mutations';
 
 const taskFormSchema = z.object({
@@ -41,6 +43,10 @@ export interface TaskFormDrawerProps {
   onOpenChange: (open: boolean) => void;
   jobId?: string;
   claimId?: string;
+  renderMode?: 'drawer' | 'canvas';
+  aiAssistEnabled?: boolean;
+  /** When set, forces companion layout for an already-open chat drawer. */
+  companionChatOpen?: boolean;
 }
 
 export function TaskFormDrawer({
@@ -48,10 +54,19 @@ export function TaskFormDrawer({
   onOpenChange,
   jobId,
   claimId,
+  renderMode = 'drawer',
+  aiAssistEnabled = false,
+  companionChatOpen: companionChatOpenProp,
 }: TaskFormDrawerProps) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [aiContext, setAiContext] = useState<AIContextPayload | undefined>();
+
+  useEffect(() => {
+    if (!open) setChatOpen(false);
+  }, [open]);
 
   const form = useForm<TaskFormValues>({
     resolver: standardSchemaResolver(taskFormSchema),
@@ -106,18 +121,30 @@ export function TaskFormDrawer({
     }
   }
 
-  return (
-    <BottomFormDrawer
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Create Task"
-      description="Add a new task. Set priority and due date to keep work on track."
-      icon={<CheckSquare className="h-5 w-5" />}
+  function handleAIAssist() {
+    setAiContext(
+      buildAIContext(
+        'TaskFormDrawer',
+        {
+          ...(jobId ? { jobId } : {}),
+          ...(claimId ? { claimId } : {}),
+        },
+        {
+          entityType: 'task',
+          formState: form.getValues(),
+          summary:
+            'The user is creating a new task. Help suggest values or answer questions about this form.',
+        },
+      ),
+    );
+    setChatOpen(true);
+  }
+
+  const formContent = (
+    <form
+      onSubmit={form.handleSubmit(onSubmit)}
+      className="flex min-h-0 flex-1 flex-col"
     >
-      <form
-        onSubmit={form.handleSubmit(onSubmit)}
-        className="flex min-h-0 flex-1 flex-col"
-      >
         <BottomFormDrawerBody>
           <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
             <div className="space-y-2 md:col-span-2">
@@ -198,6 +225,36 @@ export function TaskFormDrawer({
           </Button>
         </BottomFormDrawerFooter>
       </form>
-    </BottomFormDrawer>
+  );
+
+  if (renderMode === 'canvas') {
+    return formContent;
+  }
+
+  return (
+    <>
+      <BottomFormDrawer
+        open={open}
+        onOpenChange={onOpenChange}
+        title="Create Task"
+        description="Add a new task. Set priority and due date to keep work on track."
+        icon={<CheckSquare className="h-5 w-5" />}
+        aiAssistEnabled={aiAssistEnabled}
+        onAIAssist={handleAIAssist}
+        companionChatOpen={companionChatOpenProp ?? chatOpen}
+      >
+        {formContent}
+      </BottomFormDrawer>
+      {aiAssistEnabled && companionChatOpenProp === undefined && (
+        <ChatDrawer
+          open={chatOpen}
+          onOpenChange={setChatOpen}
+          initialContext={aiContext}
+          relatedEntityType={jobId ? 'job' : claimId ? 'claim' : undefined}
+          relatedEntityId={jobId ?? claimId}
+          besideCanvas
+        />
+      )}
+    </>
   );
 }

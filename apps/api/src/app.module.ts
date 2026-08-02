@@ -9,6 +9,7 @@ import more0Config from './config/more0.config';
 import webhookConfig from './config/webhook.config';
 import s3Config from './config/s3.config';
 import gcsConfig from './config/gcs.config';
+import aiConfig from './config/ai.config';
 import { validate } from './config/env.validation';
 import { AuthModule } from './auth/auth.module';
 import { HealthModule } from './health/health.module';
@@ -55,6 +56,13 @@ import { SystemAgentsModule } from './modules/system-agents/system-agents.module
 import { OrganisationsModule } from './modules/organisations/organisations.module';
 import { PubSubModule } from './modules/pubsub/pubsub.module';
 import { ProvisioningModule } from './modules/provisioning/provisioning.module';
+import { McpIntegrationModule } from './modules/mcp-integration/mcp-integration.module';
+import { AgentsModule } from './modules/agents/agents.module';
+import { ConversationsModule } from './modules/conversations/conversations.module';
+import { AiChatModule } from './modules/ai-chat/ai-chat.module';
+import { SkillsModule } from './modules/skills/skills.module';
+import { AuthServerModule } from './modules/auth-server/auth-server.module';
+import { UserManagementModule } from './modules/user-management/user-management.module';
 import { TenantInterceptor } from './tenant/tenant.interceptor';
 import { AllExceptionsFilter, HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -79,6 +87,7 @@ import { OfficeModule } from './common/office/office.module';
         webhookConfig,
         s3Config,
         gcsConfig,
+        aiConfig,
       ],
       validate,
       envFilePath: ['.env'],
@@ -135,6 +144,13 @@ import { OfficeModule } from './common/office/office.module';
     OrganisationsModule,
     PubSubModule,
     ProvisioningModule,
+    McpIntegrationModule,
+    AgentsModule,
+    ConversationsModule,
+    AiChatModule,
+    SkillsModule,
+    AuthServerModule,
+    UserManagementModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

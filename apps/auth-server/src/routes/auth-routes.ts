@@ -2028,9 +2028,8 @@ export default function createAuthRoutes(
                if (redirectUri) {
                   try {
                      const redirectOrigin = new URL(redirectUri).origin;
-                     const redirectPath = new URL(redirectUri).pathname;
-                     const servicePath = redirectPath.split('/api/')[0] || '';
-                     const loginUrl = new URL(`${servicePath}/login`, redirectOrigin);
+                     // Frontend OIDC entry is /api/auth/login (there is no /login page).
+                     const loginUrl = new URL('/api/auth/login', redirectOrigin);
                      loginUrl.searchParams.set('interaction', uid);
                      loginUrl.searchParams.set('email', email);
                      loginUrl.searchParams.set('from', 'register');
@@ -2164,9 +2163,8 @@ export default function createAuthRoutes(
                if (redirectUri) {
                   try {
                      const redirectOrigin = new URL(redirectUri).origin;
-                     const redirectPath = new URL(redirectUri).pathname;
-                     const servicePath = redirectPath.split('/api/')[0] || '';
-                     const loginUrl = new URL(`${servicePath}/login`, redirectOrigin);
+                     // Frontend OIDC entry is /api/auth/login (there is no /login page).
+                     const loginUrl = new URL('/api/auth/login', redirectOrigin);
                      loginUrl.searchParams.set('interaction', uid);
                      loginUrl.searchParams.set('email', email);
                      loginUrl.searchParams.set('from', 'register');
@@ -2838,6 +2836,7 @@ export default function createAuthRoutes(
             React.createElement(AcceptInvitePage, {
                token,
                email: preview.email || '',
+               nonce: res.locals.cspNonce as string | undefined,
             }),
             { title: 'EnsureOS — Accept Invitation' },
          );
@@ -2865,6 +2864,7 @@ export default function createAuthRoutes(
                   token,
                   email: result.email || '',
                   error: result.error,
+                  nonce: res.locals.cspNonce as string | undefined,
                }),
                { title: 'EnsureOS — Accept Invitation' },
             );

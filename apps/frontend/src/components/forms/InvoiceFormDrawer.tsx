@@ -30,7 +30,7 @@ import type { WorkOrder } from '@/types/api';
 const invoiceFormSchema = z.object({
   workOrderId: z.string().min(1, 'Work order is required'),
   invoiceNumber: z.string().optional(),
-  totalAmount: z.coerce.number().optional(),
+  totalAmount: z.number().optional(),
   issueDate: z.string().optional(),
   dueDate: z.string().optional(),
   note: z.string().optional(),
@@ -201,8 +201,13 @@ export function InvoiceFormDrawer({
                 type="number"
                 step="0.01"
                 min="0"
-                {...form.register('totalAmount')}
                 placeholder="0.00"
+                {...form.register('totalAmount', {
+                  setValueAs: (v) =>
+                    v === '' || v == null || Number.isNaN(Number(v))
+                      ? undefined
+                      : Number(v),
+                })}
               />
             </div>
 

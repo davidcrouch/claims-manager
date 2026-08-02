@@ -8,7 +8,12 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { X } from 'lucide-react';
+import { Sparkles, X } from 'lucide-react';
+import {
+  FORM_DRAWER_BESIDE_CHAT_WIDTH_CLASS,
+  FORM_DRAWER_COMPANION_LEFT_CLASS,
+  FORM_DRAWER_WIDTH_CLASS,
+} from './form-drawer-layout';
 
 export interface BottomFormDrawerProps {
   open: boolean;
@@ -19,6 +24,10 @@ export interface BottomFormDrawerProps {
   children: ReactNode;
   /** Tailwind width class for the panel. Defaults to 70% viewport width. */
   widthClassName?: string;
+  aiAssistEnabled?: boolean;
+  onAIAssist?: () => void;
+  /** When true, backdrop leaves the left strip clear for a companion chat drawer. */
+  companionChatOpen?: boolean;
 }
 
 export function BottomFormDrawer({
@@ -28,7 +37,10 @@ export function BottomFormDrawer({
   description,
   icon,
   children,
-  widthClassName = 'w-[70%]',
+  widthClassName = FORM_DRAWER_WIDTH_CLASS,
+  aiAssistEnabled,
+  onAIAssist,
+  companionChatOpen = false,
 }: BottomFormDrawerProps) {
   const [mounted, setMounted] = useState(false);
   const reactId = useId();
@@ -67,7 +79,11 @@ export function BottomFormDrawer({
           aria-hidden={!open}
         >
           <motion.div
-            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            className={
+              companionChatOpen
+                ? `absolute inset-y-0 right-0 ${FORM_DRAWER_COMPANION_LEFT_CLASS} bg-slate-900/40 backdrop-blur-sm`
+                : 'absolute inset-0 bg-slate-900/40 backdrop-blur-sm'
+            }
             variants={{ closed: { opacity: 0 }, open: { opacity: 1 } }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
             onClick={() => onOpenChange(false)}
@@ -77,7 +93,9 @@ export function BottomFormDrawer({
             aria-modal="true"
             aria-labelledby={titleId}
             aria-describedby={description ? descriptionId : undefined}
-            className={`absolute inset-y-0 right-0 flex h-full ${widthClassName} flex-col overflow-hidden border-l border-slate-200 bg-background shadow-2xl`}
+            className={`absolute inset-y-0 right-0 flex h-full flex-col overflow-hidden border-l border-slate-200 bg-background shadow-2xl transition-[width] duration-300 ease-in-out ${
+              companionChatOpen ? FORM_DRAWER_BESIDE_CHAT_WIDTH_CLASS : widthClassName
+            }`}
             variants={{ closed: { x: '100%' }, open: { x: 0 } }}
             transition={{ type: 'spring', damping: 30, stiffness: 280, mass: 0.9 }}
           >
@@ -106,14 +124,26 @@ export function BottomFormDrawer({
                   )}
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => onOpenChange(false)}
-                aria-label="Close"
-                className="mt-0.5 rounded-md p-1.5 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              <div className="flex items-center gap-1">
+                {aiAssistEnabled && (
+                  <button
+                    type="button"
+                    onClick={onAIAssist}
+                    aria-label="AI Assist"
+                    className="mt-0.5 rounded-md p-1.5 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+                  >
+                    <Sparkles className="h-5 w-5" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onOpenChange(false)}
+                  aria-label="Close"
+                  className="mt-0.5 rounded-md p-1.5 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
             </div>
 
             {children}

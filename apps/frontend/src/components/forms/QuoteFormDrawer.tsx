@@ -23,6 +23,8 @@ import {
   BottomFormDrawerError,
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
+import { ChatDrawer } from '@/components/chat/ChatDrawer';
+import { buildAIContext, type AIContextPayload } from '@/lib/ai/use-ai-context';
 import { createQuoteAction } from '@/app/(app)/mutations';
 
 function todayISO(): string {
@@ -59,6 +61,10 @@ export interface QuoteFormDrawerProps {
   onOpenChange: (open: boolean) => void;
   jobId: string;
   claimId?: string | null;
+  renderMode?: 'drawer' | 'canvas';
+  aiAssistEnabled?: boolean;
+  /** When set, forces companion layout for an already-open chat drawer. */
+  companionChatOpen?: boolean;
 }
 
 export function QuoteFormDrawer({
@@ -66,10 +72,19 @@ export function QuoteFormDrawer({
   onOpenChange,
   jobId,
   claimId,
+  renderMode = 'drawer',
+  aiAssistEnabled = false,
+  companionChatOpen: companionChatOpenProp,
 }: QuoteFormDrawerProps) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [aiContext, setAiContext] = useState<AIContextPayload | undefined>();
+
+  useEffect(() => {
+    if (!open) setChatOpen(false);
+  }, [open]);
 
   const form = useForm<QuoteFormValues>({
     resolver: standardSchemaResolver(quoteFormSchema),
@@ -140,20 +155,29 @@ export function QuoteFormDrawer({
   const quoteTypeItems = Object.fromEntries(QUOTE_TYPES.map((t) => [t, t]));
   const quoteType = form.watch('quoteType');
 
-  return (
-    <BottomFormDrawer
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Create Estimate"
-      description="Create a new draft estimate for this job. You can publish it to Crunchwork later."
-      icon={<FileSignature className="h-5 w-5" />}
+  function handleAIAssist() {
+    setAiContext(
+      buildAIContext(
+        'QuoteFormDrawer',
+        { jobId, ...(claimId ? { claimId } : {}) },
+        {
+          entityType: 'quote',
+          formState: form.getValues(),
+          summary:
+            'The user is creating a new estimate. Help suggest values or answer questions about this form.',
+        },
+      ),
+    );
+    setChatOpen(true);
+  }
+
+  const formContent = (
+    <form
+      onSubmit={form.handleSubmit(onSubmit, () => {
+        setError('Please fill in the required fields.');
+      })}
+      className="flex min-h-0 flex-1 flex-col"
     >
-      <form
-        onSubmit={form.handleSubmit(onSubmit, () => {
-          setError('Please fill in the required fields.');
-        })}
-        className="flex min-h-0 flex-1 flex-col"
-      >
         <BottomFormDrawerBody>
           <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
             <div className="space-y-2">
@@ -264,6 +288,36 @@ export function QuoteFormDrawer({
           </Button>
         </BottomFormDrawerFooter>
       </form>
-    </BottomFormDrawer>
+  );
+
+  if (renderMode === 'canvas') {
+    return formContent;
+  }
+
+  return (
+    <>
+      <BottomFormDrawer
+        open={open}
+        onOpenChange={onOpenChange}
+        title="Create Estimate"
+        description="Create a new draft estimate for this job. You can publish it to Crunchwork later."
+        icon={<FileSignature className="h-5 w-5" />}
+        aiAssistEnabled={aiAssistEnabled}
+        onAIAssist={handleAIAssist}
+        companionChatOpen={companionChatOpenProp ?? chatOpen}
+      >
+        {formContent}
+      </BottomFormDrawer>
+      {aiAssistEnabled && companionChatOpenProp === undefined && (
+        <ChatDrawer
+          open={chatOpen}
+          onOpenChange={setChatOpen}
+          initialContext={aiContext}
+          relatedEntityType="job"
+          relatedEntityId={jobId}
+          besideCanvas
+        />
+      )}
+    </>
   );
 }

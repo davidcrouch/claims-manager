@@ -33,7 +33,7 @@ const schema = z.object({
   name: z.string().optional(),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
-  totalAmount: z.coerce.number().optional(),
+  totalAmount: z.number().optional(),
   note: z.string().optional(),
 });
 
@@ -151,7 +151,19 @@ export function WorkOrderFormDrawer({
 
             <div className="space-y-2">
               <Label htmlFor="wo-totalAmount">Total Amount (optional)</Label>
-              <Input id="wo-totalAmount" type="number" step="0.01" min="0" {...form.register('totalAmount')} placeholder="0.00" />
+              <Input
+                id="wo-totalAmount"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                {...form.register('totalAmount', {
+                  setValueAs: (v) =>
+                    v === '' || v == null || Number.isNaN(Number(v))
+                      ? undefined
+                      : Number(v),
+                })}
+              />
             </div>
 
             <div className="space-y-2">

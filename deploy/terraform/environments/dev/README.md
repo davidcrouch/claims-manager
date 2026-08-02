@@ -9,7 +9,7 @@ State: `gs://claims-manager-terraform-state/dev` (shared infra bucket).
 
 | Resource | Module |
 |---|---|
-| Required APIs (`pubsub`, `secretmanager`, `storage`, `iam`, …) | inline |
+| Required APIs (`pubsub`, `secretmanager`, `storage`, `iam`, `aiplatform`, …) | inline |
 | Domain Pub/Sub topics + DLQ topics/pull | `modules/pubsub-claims` |
 | Secret Manager secret shells | `modules/secrets` |
 | GCS app buckets (documents + legacy) | `modules/gcs` |

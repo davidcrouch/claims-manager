@@ -11,6 +11,12 @@ export class OrganisationsController {
     private readonly tenantContext: TenantContext,
   ) {}
 
+  @Get('me')
+  async getMe() {
+    const tenantId = this.tenantContext.getTenantId();
+    return this.organisationsService.getMe(tenantId);
+  }
+
   @Get('ghosts')
   async listGhosts() {
     const tenantId = this.tenantContext.getTenantId();

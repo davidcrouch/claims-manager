@@ -248,7 +248,7 @@ async function createServer(): Promise<Application> {
       app.use('/interaction', authRateLimit as any);
       app.use('/api/auth/signup', authRateLimit as any);
       app.use('/api/auth/reset-password', authRateLimit as any);
-      app.use('/api/auth/accept-invite', authRateLimit as any);
+      app.use('/accept-invite', authRateLimit as any);
       app.use('/oauth/initial-access-token', authRateLimit as any);
       app.use('/oauth/validate-iat', authRateLimit as any);
       app.use('/admin', authRateLimit as any);
@@ -319,10 +319,22 @@ async function mountRoutes(app: Application, provider: any): Promise<void> {
       createSignupRoutes(app);
 
       // ========================================================================
-      // IAT & CLIENT ROUTES (Mount BEFORE OIDC provider so they are not 404'd)
+      // IAT, CLIENT & ADMIN ROUTES (Mount BEFORE OIDC provider so they are not 404'd)
       // ========================================================================
       createIatRoutes(app);
       createClientRoutes(app, provider);
+
+      const { default: createAdminUserRoutes } = await import('./routes/admin-user-routes.js');
+      createAdminUserRoutes(app);
+
+      const { default: createAdminRoleRoutes } = await import('./routes/admin-role-routes.js');
+      createAdminRoleRoutes(app);
+
+      const { default: createAdminPermissionRoutes } = await import('./routes/admin-permission-routes.js');
+      createAdminPermissionRoutes(app);
+
+      const { default: createAdminFeatureRoutes } = await import('./routes/admin-feature-routes.js');
+      createAdminFeatureRoutes(app);
 
       // ========================================================================
       // OIDC PROVIDER MOUNTING (Mount OIDC provider at root after body parsing middleware)
@@ -351,21 +363,6 @@ async function mountRoutes(app: Application, provider: any): Promise<void> {
       // TOKEN EXCHANGE ROUTES (OAuth 2.0 Token Exchange - RFC 8693)
       // ========================================================================
       createTokenExchangeRoutes(app, provider);
-
-      // ========================================================================
-      // ADMIN ROUTES (RBAC, Features, User management)
-      // ========================================================================
-      const { default: createAdminUserRoutes } = await import('./routes/admin-user-routes.js');
-      createAdminUserRoutes(app);
-
-      const { default: createAdminRoleRoutes } = await import('./routes/admin-role-routes.js');
-      createAdminRoleRoutes(app);
-
-      const { default: createAdminPermissionRoutes } = await import('./routes/admin-permission-routes.js');
-      createAdminPermissionRoutes(app);
-
-      const { default: createAdminFeatureRoutes } = await import('./routes/admin-feature-routes.js');
-      createAdminFeatureRoutes(app);
 
       span.setAttributes({ 'server.routes_mounted': true });
       span.setStatus({ code: SpanStatusCode.OK });

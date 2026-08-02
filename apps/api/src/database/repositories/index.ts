@@ -216,3 +216,45 @@ export {
   type PoCustodyTransferRow,
   type PoCustodyTransferInsert,
 } from './po-custody-transfers.repository';
+export {
+  McpIntegrationRepository,
+  type McpIntegrationRow,
+  type McpIntegrationInsert,
+  type McpConnectionRow,
+  type McpConnectionInsert,
+  type McpToolManifestRow,
+  type McpToolManifestInsert,
+  type McpOauthStateRow,
+  type McpOauthStateInsert,
+} from './mcp-integration.repository';
+export {
+  AgentRepository,
+  type AgentRow,
+  type AgentInsert,
+} from './agent.repository';
+export {
+  ConversationRepository,
+  type ChatConversationRow,
+  type ChatConversationInsert,
+} from './conversation.repository';
+export {
+  AiMessageAuditRepository,
+  type AiMessageAuditRow,
+  type AiMessageAuditInsert,
+} from './ai-message-audit.repository';
+export {
+  AiSettingsRepository,
+  type AiSettingsRow,
+  type AiSettingsInsert,
+} from './ai-settings.repository';
+export {
+  SkillRepository,
+  type SkillRow,
+  type SkillInsert,
+} from './skill.repository';
+export { AiMessageFeedbackRepository } from './ai-message-feedback.repository';
+export {
+  AiUserMemoryRepository,
+  type AiUserMemoryRow,
+  type AiUserMemoryInsert,
+} from './ai-user-memory.repository';

@@ -27,7 +27,6 @@ import {
   FolderOpen,
   Unplug,
   Settings,
-  LogOut,
   ChevronRight,
   Package,
   BookOpen,
@@ -35,12 +34,16 @@ import {
   Files,
   Building2,
   ListTree,
+  Bot,
+  Server,
+  Cable,
+  Sparkles,
+  BarChart3,
 } from 'lucide-react';
 import { Collapsible } from '@base-ui/react/collapsible';
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -49,13 +52,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { hasFeature } from '@/lib/features';
+import { cn } from '@/lib/utils';
 
 export interface AppSidebarUser {
   given_name?: string | null;
@@ -65,7 +63,9 @@ export interface AppSidebarUser {
 }
 
 export interface AppSidebarProps {
-  user?: AppSidebarUser | null;
+  features?: string[];
+  orgName?: string | null;
+  onOpenChat?: () => void;
 }
 
 interface NavItem {
@@ -73,6 +73,7 @@ interface NavItem {
   href: string;
   icon: LucideIcon;
   tab?: string;
+  feature?: string;
 }
 
 interface NavGroup {
@@ -187,6 +188,11 @@ const navGroups: NavGroup[] = [
     label: 'ADMIN',
     items: [
       { title: 'Connections', href: '/connections', icon: Unplug },
+      { title: 'MCP Connections', href: '/mcp-connections', icon: Cable, feature: 'ai.connections' },
+      { title: 'MCP Servers', href: '/admin/mcp-servers', icon: Server, feature: 'ai.connections' },
+      { title: 'Agents', href: '/admin/agents', icon: Bot, feature: 'ai.agents' },
+      { title: 'Skills', href: '/admin/skills', icon: Sparkles, feature: 'ai.skills' },
+      { title: 'AI Audit', href: '/admin/ai-audit', icon: BarChart3 },
       { title: 'Catalogue', href: '/admin/catalog', icon: Package },
       { title: 'Document Categories', href: '/admin/documents', icon: FolderOpen },
       { title: 'Document Templates', href: '/admin/document-templates', icon: Files },
@@ -198,24 +204,9 @@ const navGroups: NavGroup[] = [
   },
 ];
 
-function getInitials(user?: AppSidebarUser | null): string {
-  if (user?.given_name?.[0] && user?.family_name?.[0]) {
-    return `${user.given_name[0]}${user.family_name[0]}`;
-  }
-  return user?.email?.[0]?.toUpperCase() ?? '?';
-}
-
-function getDisplayName(user?: AppSidebarUser | null): string {
-  const parts = [user?.given_name, user?.family_name].filter(Boolean);
-  if (parts.length) return parts.join(' ');
-  return user?.email ?? 'Account';
-}
-
-export function AppSidebar({ user }: AppSidebarProps) {
+export function AppSidebar({ features, orgName, onOpenChat }: AppSidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const initials = getInitials(user);
-  const displayName = getDisplayName(user);
 
   const detailContext = parseDetailContext(pathname);
 
@@ -246,9 +237,12 @@ export function AppSidebar({ user }: AppSidebarProps) {
   }
 
   function renderMenuItems(group: NavGroup) {
+    const visibleItems = group.items.filter(
+      (item) => !item.feature || hasFeature(features, item.feature),
+    );
     return (
       <SidebarMenu>
-        {group.items.map((item) => (
+        {visibleItems.map((item) => (
           <SidebarMenuItem key={item.href}>
             <SidebarMenuButton
               render={
@@ -300,31 +294,55 @@ export function AppSidebar({ user }: AppSidebarProps) {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="pb-5">
-        <Link
-          href="/dashboard"
-          className="group/brand flex items-start gap-3 px-2 py-1.5 text-sidebar-foreground transition-opacity duration-200 hover:opacity-90"
-        >
-          <span className="relative mt-0.5 flex size-11 shrink-0 overflow-hidden rounded-md shadow-md ring-1 ring-white/15 transition-transform duration-300 group-hover/brand:scale-105">
-            <Image
-              src="/ensure_logo_dark.png"
-              alt=""
-              width={44}
-              height={44}
-              className="size-full object-contain"
-            />
-          </span>
-          <span className="flex min-w-0 flex-col gap-0.5 group-data-[collapsible=icon]:hidden">
-            <span className="truncate text-lg font-semibold tracking-tight">
-              EnsureOS
+      <SidebarHeader className={orgName ? 'pb-2' : 'pb-5'}>
+        <div className="flex items-center gap-2 px-2 py-1.5">
+          <Link
+            href="/dashboard"
+            className="group/brand flex min-w-0 flex-1 items-start gap-3 text-sidebar-foreground transition-opacity duration-200 hover:opacity-90"
+          >
+            <span className="relative mt-0.5 flex size-11 shrink-0 overflow-hidden rounded-md shadow-md ring-1 ring-white/15 transition-transform duration-300 group-hover/brand:scale-105">
+              <Image
+                src="/ensure_logo_dark.png"
+                alt=""
+                width={44}
+                height={44}
+                className="size-full object-contain"
+              />
             </span>
-            <span className="truncate text-xs leading-tight text-sidebar-foreground/65">
-              Claims workspace
+            <span className="flex min-w-0 flex-col gap-0.5 group-data-[collapsible=icon]:hidden">
+              <span className="truncate text-lg font-semibold tracking-tight">
+                EnsureOS
+              </span>
+              <span className="truncate text-xs leading-tight text-sidebar-foreground/65">
+                Claims workspace
+              </span>
             </span>
-          </span>
-        </Link>
+          </Link>
+          {hasFeature(features, 'ai.chat') && onOpenChat && (
+            <button
+              type="button"
+              onClick={onOpenChat}
+              title="Open chat"
+              aria-label="Open chat"
+              className={cn(
+                'flex size-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-900/30 transition',
+                'hover:scale-105 hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300',
+                'group-data-[collapsible=icon]:size-8',
+              )}
+            >
+              <MessageSquare className="size-4" />
+            </button>
+          )}
+        </div>
       </SidebarHeader>
       <SidebarContent>
+        {orgName ? (
+          <div className="shrink-0 px-4 pb-3 group-data-[collapsible=icon]:hidden">
+            <span className="block truncate text-xs font-medium text-sidebar-foreground">
+              {orgName}
+            </span>
+          </div>
+        ) : null}
         {/* Dashboard — always visible */}
         <SidebarGroup key="top">
           <SidebarGroupContent>
@@ -386,57 +404,6 @@ export function AppSidebar({ user }: AppSidebarProps) {
         {/* Finance, Admin — always visible */}
         {persistentGroups.map((group) => renderCollapsibleGroup(group))}
       </SidebarContent>
-      <SidebarFooter className="pb-6">
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <SidebarMenuButton
-                    tooltip={displayName}
-                    className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
-                  >
-                    <Avatar className="size-6">
-                      <AvatarFallback className="text-[10px]">
-                        {initials}
-                      </AvatarFallback>
-                    </Avatar>
-                    <span className="flex min-w-0 flex-col text-left leading-tight">
-                      <span className="truncate text-xs font-medium">
-                        {displayName}
-                      </span>
-                      {user?.email && (
-                        <span className="truncate text-[10px] text-sidebar-foreground/60">
-                          {user.email}
-                        </span>
-                      )}
-                    </span>
-                  </SidebarMenuButton>
-                }
-              />
-              <DropdownMenuContent side="top" align="start" className="w-56">
-                <div className="px-2 py-1.5">
-                  <p className="text-sm font-medium">{displayName}</p>
-                  {user?.email && (
-                    <p className="text-xs text-muted-foreground">{user.email}</p>
-                  )}
-                </div>
-                <DropdownMenuItem
-                  render={
-                    <a
-                      href="/api/auth/logout"
-                      className="flex w-full cursor-pointer items-center gap-2"
-                    >
-                      <LogOut className="h-4 w-4" />
-                      Log out
-                    </a>
-                  }
-                />
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarFooter>
     </Sidebar>
   );
 }

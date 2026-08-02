@@ -20,6 +20,26 @@ export class OrganisationsService {
     private readonly orgClaimsRepo: OrganisationClaimsRepository,
   ) {}
 
+  async getMe(tenantId: string): Promise<{ id: string; name: string; tradingName: string | null }> {
+    const LOG = 'OrganisationsService.getMe';
+    const [org] = await this.db
+      .select({
+        id: organizations.id,
+        name: organizations.name,
+        tradingName: organizations.tradingName,
+      })
+      .from(organizations)
+      .where(eq(organizations.id, tenantId))
+      .limit(1);
+
+    if (!org) {
+      this.logger.warn(`${LOG} — org not found tenantId=${tenantId}`);
+      return { id: tenantId, name: '', tradingName: null };
+    }
+
+    return org;
+  }
+
   async listGhosts(params: { tenantId: string }) {
     return this.ghostOrgService.findGhostsByTenant({ tenantId: params.tenantId });
   }

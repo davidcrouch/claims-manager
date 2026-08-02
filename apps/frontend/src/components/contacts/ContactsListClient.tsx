@@ -159,7 +159,7 @@ export function ContactsListClient({ initialData }: ContactsListClientProps) {
         )}
       </div>
 
-      <ContactFormDrawer open={drawerOpen} onOpenChange={setDrawerOpen} />
+      <ContactFormDrawer open={drawerOpen} onOpenChange={setDrawerOpen} aiAssistEnabled />
     </div>
   );
 }

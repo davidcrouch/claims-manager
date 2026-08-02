@@ -239,6 +239,55 @@
       "when": 1786200000000,
       "tag": "0033_tenant_provisioning",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1786300000000,
+      "tag": "0034_agentic_ai_platform",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1786400000000,
+      "tag": "0035_enable_pgvector",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1786500000000,
+      "tag": "0036_conversation_share",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1786800000000,
+      "tag": "0038_rbac_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1786900000000,
+      "tag": "0039_ai_user_memory",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1787000000000,
+      "tag": "0040_ai_scheduled_tasks",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1787100000000,
+      "tag": "0041_align_rbac_shore",
+      "breakpoints": true
     }
   ]
 }
