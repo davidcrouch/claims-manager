@@ -37,6 +37,22 @@ locals {
         "roles/secretmanager.secretAccessor",
       ]
     }
+    "claims-mcp" = {
+      namespace      = "platform"
+      ksa_name       = "claims-mcp"
+      gsa_account_id = "claims-mcp-sa"
+      roles = [
+        "roles/secretmanager.secretAccessor",
+      ]
+    }
+    "ms-graph-mcp" = {
+      namespace      = "platform"
+      ksa_name       = "ms-graph-mcp"
+      gsa_account_id = "ms-graph-mcp-sa"
+      roles = [
+        "roles/secretmanager.secretAccessor",
+      ]
+    }
   }
 
   project_iam_bindings = merge([

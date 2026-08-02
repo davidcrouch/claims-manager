@@ -36,6 +36,8 @@ jobs:
           - service: api-server
           - service: auth-server
           - service: frontend
+          - service: claims-mcp
+          - service: ms-graph-mcp
     steps:
       - name: Set image tag
         run: |

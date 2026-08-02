@@ -41,10 +41,12 @@ output "pubsub_topic_names" {
 
 output "cloud_run_uris" {
   value = var.enable_cloud_run ? {
-    api      = module.cloud_run_api[0].uri
-    auth     = module.cloud_run_auth[0].uri
-    frontend = module.cloud_run_frontend[0].uri
-    provider = module.cloud_run_provider[0].uri
+    api          = module.cloud_run_api[0].uri
+    auth         = module.cloud_run_auth[0].uri
+    frontend     = module.cloud_run_frontend[0].uri
+    provider     = module.cloud_run_provider[0].uri
+    claims_mcp   = module.cloud_run_claims_mcp[0].uri
+    ms_graph_mcp = module.cloud_run_ms_graph_mcp[0].uri
   } : {}
   description = "Cloud Run service URIs (*.run.app)"
 }

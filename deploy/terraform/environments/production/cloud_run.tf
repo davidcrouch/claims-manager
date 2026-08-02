@@ -52,6 +52,8 @@ resource "google_artifact_registry_repository_iam_member" "cloud_run_readers" {
     "auth-server",
     "frontend",
     "provider-server",
+    "claims-mcp",
+    "ms-graph-mcp",
   ]) : toset([])
 
   project    = var.infra_project_id
@@ -68,6 +70,8 @@ resource "google_service_account_iam_member" "ci_deployer_actas_run" {
     "auth-server",
     "frontend",
     "provider-server",
+    "claims-mcp",
+    "ms-graph-mcp",
   ]) : toset([])
 
   service_account_id = "projects/${var.project_id}/serviceAccounts/${module.iam.service_account_emails[each.key]}"
@@ -134,13 +138,16 @@ module "cloud_run_api" {
   timeout               = "900s"
   health_path           = var.cloud_run_use_bootstrap_image ? "/" : "/api/v1/health"
   enable_probes         = !var.cloud_run_use_bootstrap_image
-  # Private by default: only IAM invokers (frontend / auth / provider workers).
-  ingress               = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+  # IAM-private (not network-private): Direct VPC with PRIVATE_RANGES_ONLY
+  # cannot reach INTERNAL_ONLY sibling *.run.app URLs. Invoker SA + Google
+  # ID token required; api is not on the public HTTPS LB.
+  ingress               = "INGRESS_TRAFFIC_ALL"
   allow_unauthenticated = false
   invoker_members = [
     "serviceAccount:${module.iam.service_account_emails["frontend"]}",
     "serviceAccount:${module.iam.service_account_emails["auth-server"]}",
     "serviceAccount:${module.iam.service_account_emails["provider-server"]}",
+    "serviceAccount:${module.iam.service_account_emails["claims-mcp"]}",
   ]
   vpc_network = module.networking.vpc_self_link
   vpc_subnet  = module.networking.subnet_self_link
@@ -151,6 +158,9 @@ module "cloud_run_api" {
     VERTEX_AI_PROJECT      = var.project_id
     VERTEX_AI_LOCATION     = "us-central1"
     VERTEX_EMBEDDING_MODEL = "text-embedding-005"
+    SEED_NEW_TENANTS       = "true"
+    # Demo sample rows stay off in production; catalog-dev still runs.
+    SEED_SAMPLE_DATA       = "false"
   }
 
   secret_env_vars = [
@@ -205,6 +215,9 @@ module "cloud_run_auth" {
     REDIS_PROVIDER       = "self-hosted"
     REDIS_HOST           = module.memorystore.host
     REDIS_PORT           = tostring(module.memorystore.port)
+    # New-org catalog seed (auth → api /internal/seed-tenant).
+    SEED_NEW_TENANTS     = "true"
+    API_INTERNAL_URL     = local.api_run_url
   }
 
   secret_env_vars = [
@@ -288,6 +301,82 @@ module "cloud_run_frontend" {
   depends_on = [
     google_project_service.run,
     module.secrets,
+  ]
+}
+
+module "cloud_run_claims_mcp" {
+  count  = var.enable_cloud_run ? 1 : 0
+  source = "../../modules/cloud_run_service"
+
+  project_id            = var.project_id
+  region                = var.region
+  name                  = "claims-mcp"
+  image                 = var.cloud_run_use_bootstrap_image ? local.bootstrap_image : "${local.artifact_host}/claims-mcp:${local.image_tag}"
+  service_account_email = module.iam.service_account_emails["claims-mcp"]
+  container_port        = 4601
+  cpu                   = "1"
+  memory                = "512Mi"
+  min_instances         = 0
+  max_instances         = 2
+  container_concurrency = 40
+  health_path           = var.cloud_run_use_bootstrap_image ? "/" : "/healthz"
+  enable_probes         = !var.cloud_run_use_bootstrap_image
+  # IAM-private; same Direct VPC reachability rationale as api-server.
+  ingress               = "INGRESS_TRAFFIC_ALL"
+  allow_unauthenticated = false
+  invoker_members = [
+    "serviceAccount:${module.iam.service_account_emails["frontend"]}",
+  ]
+  vpc_network = module.networking.vpc_self_link
+  vpc_subnet  = module.networking.subnet_self_link
+
+  env_vars = {
+    NODE_ENV       = "production"
+    CLAIMS_API_URL = local.api_run_url
+  }
+
+  secret_env_vars = []
+
+  depends_on = [
+    google_project_service.run,
+  ]
+}
+
+module "cloud_run_ms_graph_mcp" {
+  count  = var.enable_cloud_run ? 1 : 0
+  source = "../../modules/cloud_run_service"
+
+  project_id            = var.project_id
+  region                = var.region
+  name                  = "ms-graph-mcp"
+  image                 = var.cloud_run_use_bootstrap_image ? local.bootstrap_image : "${local.artifact_host}/ms-graph-mcp:${local.image_tag}"
+  service_account_email = module.iam.service_account_emails["ms-graph-mcp"]
+  container_port        = 8080
+  cpu                   = "1"
+  memory                = "512Mi"
+  min_instances         = 0
+  max_instances         = 2
+  container_concurrency = 40
+  health_path           = var.cloud_run_use_bootstrap_image ? "/" : "/healthz"
+  enable_probes         = !var.cloud_run_use_bootstrap_image
+  # IAM-private; same Direct VPC reachability rationale as api-server.
+  ingress               = "INGRESS_TRAFFIC_ALL"
+  allow_unauthenticated = false
+  invoker_members = [
+    "serviceAccount:${module.iam.service_account_emails["frontend"]}",
+  ]
+  vpc_network = module.networking.vpc_self_link
+  vpc_subnet  = module.networking.subnet_self_link
+
+  env_vars = {
+    NODE_ENV           = "production"
+    GRAPH_API_BASE_URL = "https://graph.microsoft.com/v1.0"
+  }
+
+  secret_env_vars = []
+
+  depends_on = [
+    google_project_service.run,
   ]
 }
 

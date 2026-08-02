@@ -49,6 +49,8 @@ jobs:
       auth-server: ${{ steps.decide.outputs.auth-server }}
       frontend: ${{ steps.decide.outputs.frontend }}
       provider-server: ${{ steps.decide.outputs.provider-server }}
+      claims-mcp: ${{ steps.decide.outputs.claims-mcp }}
+      ms-graph-mcp: ${{ steps.decide.outputs.ms-graph-mcp }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -71,6 +73,10 @@ jobs:
               - 'apps/frontend/**'
             provider-server:
               - 'apps/provider/**'
+            claims-mcp:
+              - 'apps/claims-mcp/**'
+            ms-graph-mcp:
+              - 'apps/ms-graph-mcp/**'
 
       - uses: google-github-actions/auth@v2
         with:
@@ -82,12 +88,14 @@ jobs:
       - id: decide
         name: Decide which images to build
         run: |
-          for image in api-server auth-server frontend provider-server; do
+          for image in api-server auth-server frontend provider-server claims-mcp ms-graph-mcp; do
             case "$image" in
               api-server) changed="${{ steps.changes.outputs.api-server }}" ;;
               auth-server) changed="${{ steps.changes.outputs.auth-server }}" ;;
               frontend) changed="${{ steps.changes.outputs.frontend }}" ;;
               provider-server) changed="${{ steps.changes.outputs.provider-server }}" ;;
+              claims-mcp) changed="${{ steps.changes.outputs.claims-mcp }}" ;;
+              ms-graph-mcp) changed="${{ steps.changes.outputs.ms-graph-mcp }}" ;;
             esac
             if gcloud artifacts docker images describe "${{ env.REGISTRY }}/${image}:latest" > /dev/null 2>&1; then
               existed=true
@@ -122,6 +130,10 @@ jobs:
             dockerfile: apps/frontend/Dockerfile
           - service: provider-server
             dockerfile: apps/provider/Dockerfile
+          - service: claims-mcp
+            dockerfile: apps/claims-mcp/Dockerfile
+          - service: ms-graph-mcp
+            dockerfile: apps/ms-graph-mcp/Dockerfile
     steps:
       - name: Free disk space
         run: |
@@ -147,12 +159,16 @@ jobs:
           BUILD_AUTH: ${{ needs.prepare-docker.outputs.auth-server }}
           BUILD_FRONTEND: ${{ needs.prepare-docker.outputs.frontend }}
           BUILD_PROVIDER: ${{ needs.prepare-docker.outputs.provider-server }}
+          BUILD_CLAIMS_MCP: ${{ needs.prepare-docker.outputs.claims-mcp }}
+          BUILD_MS_GRAPH_MCP: ${{ needs.prepare-docker.outputs.ms-graph-mcp }}
         run: |
           case "${{ matrix.service }}" in
             api-server) SHOULD_BUILD="$BUILD_API" ;;
             auth-server) SHOULD_BUILD="$BUILD_AUTH" ;;
             frontend) SHOULD_BUILD="$BUILD_FRONTEND" ;;
             provider-server) SHOULD_BUILD="$BUILD_PROVIDER" ;;
+            claims-mcp) SHOULD_BUILD="$BUILD_CLAIMS_MCP" ;;
+            ms-graph-mcp) SHOULD_BUILD="$BUILD_MS_GRAPH_MCP" ;;
           esac
           if [ "$SHOULD_BUILD" != "true" ]; then
             echo "Skipping build for ${{ matrix.service }} (will be re-tagged in ensure-tags)"
@@ -185,12 +201,14 @@ jobs:
           IMAGE_TAG: ${{ needs.prepare-docker.outputs.image_tag }}
         run: |
           FAILED=0
-          for image in api-server auth-server frontend provider-server; do
+          for image in api-server auth-server frontend provider-server claims-mcp ms-graph-mcp; do
             case "$image" in
               api-server) built="${{ needs.prepare-docker.outputs.api-server }}" ;;
               auth-server) built="${{ needs.prepare-docker.outputs.auth-server }}" ;;
               frontend) built="${{ needs.prepare-docker.outputs.frontend }}" ;;
               provider-server) built="${{ needs.prepare-docker.outputs.provider-server }}" ;;
+              claims-mcp) built="${{ needs.prepare-docker.outputs.claims-mcp }}" ;;
+              ms-graph-mcp) built="${{ needs.prepare-docker.outputs.ms-graph-mcp }}" ;;
             esac
             if [ "$built" != "true" ]; then
               echo "Re-tagging ${image}:latest → ${image}:${IMAGE_TAG}"

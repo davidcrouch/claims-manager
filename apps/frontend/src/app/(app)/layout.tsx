@@ -1,8 +1,19 @@
 import { redirect } from 'next/navigation';
 import { getSession, getAccessToken } from '@/lib/auth';
 import { getApiBaseUrl } from '@/lib/env';
+import {
+  fetchCloudRunIdToken,
+  resolveApiAudience,
+} from '@/lib/cloud-run-id-token';
 import { AppLayoutClient } from '@/components/layout/AppLayoutClient';
 import { ProvisioningScreen } from '@/components/provisioning/ProvisioningScreen';
+
+async function cloudRunInvokerHeaders(): Promise<Record<string, string>> {
+  const idToken = await fetchCloudRunIdToken(resolveApiAudience());
+  return idToken
+    ? { 'X-Serverless-Authorization': `Bearer ${idToken}` }
+    : {};
+}
 
 async function checkProvisioningStatus(
   token: string,
@@ -13,13 +24,23 @@ async function checkProvisioningStatus(
       headers: {
         Authorization: `Bearer ${token}`,
         ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
+        ...(await cloudRunInvokerHeaders()),
       },
       next: { revalidate: 0 },
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.warn(
+        `frontend:AppLayout:checkProvisioningStatus — failed status=${res.status} tenantId=${tenantId}`,
+      );
+      return null;
+    }
     const data = await res.json();
     return data.provisioningStatus ?? null;
-  } catch {
+  } catch (err) {
+    console.warn(
+      'frontend:AppLayout:checkProvisioningStatus — error:',
+      err instanceof Error ? err.message : String(err),
+    );
     return null;
   }
 }
@@ -34,6 +55,7 @@ async function fetchOrgName(
       headers: {
         Authorization: `Bearer ${token}`,
         ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
+        ...(await cloudRunInvokerHeaders()),
       },
       cache: 'no-store',
     });

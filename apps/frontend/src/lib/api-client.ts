@@ -4,6 +4,10 @@
  */
 
 import { getApiBaseUrl } from './env';
+import {
+  fetchCloudRunIdToken,
+  resolveApiAudience,
+} from './cloud-run-id-token';
 import type {
   Claim,
   Job,
@@ -121,9 +125,21 @@ export function createApiClient(options?: ApiClientOptions) {
     init?: RequestInit
   ): Promise<T> {
     const url = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+    const mergedHeaders: Record<string, string> = {
+      ...(headers as Record<string, string>),
+      ...((init?.headers as Record<string, string> | undefined) ?? {}),
+    };
+    // IAM-protected Cloud Run: keep user JWT on Authorization; platform
+    // invoker token goes on X-Serverless-Authorization.
+    if (typeof window === 'undefined') {
+      const idToken = await fetchCloudRunIdToken(resolveApiAudience());
+      if (idToken) {
+        mergedHeaders['X-Serverless-Authorization'] = `Bearer ${idToken}`;
+      }
+    }
     const res = await fetch(url, {
       ...init,
-      headers: { ...headers, ...(init?.headers ?? {}) },
+      headers: mergedHeaders,
     });
     return handleResponse<T>(res);
   }

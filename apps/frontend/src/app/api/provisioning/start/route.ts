@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import { getSession, getAccessToken } from '@/lib/auth';
 import { getApiBaseUrl } from '@/lib/env';
+import {
+  fetchCloudRunIdToken,
+  resolveApiAudience,
+} from '@/lib/cloud-run-id-token';
 
 export async function POST() {
   const session = await getSession();
@@ -18,12 +22,16 @@ export async function POST() {
     process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID ??
     '';
 
+  const idToken = await fetchCloudRunIdToken(resolveApiAudience());
   const upstream = await fetch(`${getApiBaseUrl()}/provisioning/start`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
       ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
+      ...(idToken
+        ? { 'X-Serverless-Authorization': `Bearer ${idToken}` }
+        : {}),
     },
   });
 

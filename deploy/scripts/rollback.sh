@@ -7,12 +7,15 @@ NAMESPACE_MAP=(
   "api-server:platform"
   "auth-server:platform"
   "frontend:frontend"
+  "provider-server:platform"
+  "claims-mcp:platform"
+  "ms-graph-mcp:platform"
 )
 
 usage() {
   echo "Usage: $0 <service> <previous-tag>"
   echo ""
-  echo "Services: api-server, auth-server, frontend"
+  echo "Services: api-server, auth-server, frontend, provider-server, claims-mcp, ms-graph-mcp"
   echo ""
   echo "Example: $0 api-server main-abc1234"
   exit 1

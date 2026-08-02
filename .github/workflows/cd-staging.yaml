@@ -1,6 +1,6 @@
 name: Deploy Cloud Run Staging
 
-# Deploys api/auth/frontend/provider Cloud Run revisions after CI succeeds.
+# Deploys api/auth/frontend/provider/claims-mcp/ms-graph-mcp Cloud Run revisions after CI succeeds.
 # See deploy/CLOUD_RUN.md.
 
 on:
@@ -39,6 +39,8 @@ jobs:
           - service: api-server
           - service: auth-server
           - service: frontend
+          - service: claims-mcp
+          - service: ms-graph-mcp
     steps:
       - name: Resolve source SHA / tag
         run: |
