@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { CalendarCheck } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { ListPageHeader } from '@/components/layout/ListPageHeader';
 import {
   SortTabs,
@@ -17,6 +19,7 @@ import {
   appointmentTypeName,
 } from '@/components/appointments/AppointmentsTable';
 import { AppointmentFormDrawer } from '@/components/forms/AppointmentFormDrawer';
+import type { JobOption } from '@/components/shared/job-label';
 import { fetchAppointmentsAction } from '@/app/(app)/appointments/actions';
 import type { Appointment } from '@/types/api';
 
@@ -33,7 +36,11 @@ const STATUS_OPTIONS = [
   { id: 'Cancelled', name: 'Cancelled' },
 ];
 
-export function AppointmentsListClient() {
+export function AppointmentsListClient({
+  jobs = [],
+}: {
+  jobs?: JobOption[];
+}) {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -91,6 +98,11 @@ export function AppointmentsListClient() {
 
   function handleRowClick(appointment: Appointment) {
     setEditingAppointment(appointment);
+    setDrawerOpen(true);
+  }
+
+  function handleCreate() {
+    setEditingAppointment(null);
     setDrawerOpen(true);
   }
 
@@ -174,6 +186,15 @@ export function AppointmentsListClient() {
           accent="slate"
         />
       </SetPageHeader>
+      <SetHeaderActions>
+        <Button
+          size="default"
+          onClick={handleCreate}
+          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          Add Appointment
+        </Button>
+      </SetHeaderActions>
 
       <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
@@ -242,14 +263,13 @@ export function AppointmentsListClient() {
         )}
       </div>
 
-      {editingAppointment && (
-        <AppointmentFormDrawer
-          open={drawerOpen}
-          onOpenChange={handleDrawerClose}
-          jobId={editingAppointment.jobId}
-          appointment={editingAppointment}
-        />
-      )}
+      <AppointmentFormDrawer
+        open={drawerOpen}
+        onOpenChange={handleDrawerClose}
+        jobId={editingAppointment?.jobId}
+        jobs={jobs}
+        appointment={editingAppointment ?? undefined}
+      />
     </div>
   );
 }

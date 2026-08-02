@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
-import { WorkOrdersListClient } from '@/components/work-orders/WorkOrdersListClient';
-import { buildJobNameById } from '@/components/shared/job-label';
+import { WorkOrdersPageClient } from '@/components/work-orders/WorkOrdersPageClient';
+import { buildJobNameById, toJobOptions } from '@/components/shared/job-label';
 import type { Job, PaginatedResponse, WorkOrder } from '@/types/api';
 
 export const metadata = { title: 'Work Orders — EnsureOS' };
@@ -54,14 +54,16 @@ export default async function WorkOrdersPage({
     id: row.id,
     name: row.name?.trim() ? row.name : 'Unknown',
   }));
-  const jobNameById = buildJobNameById(jobsRes?.data ?? []);
+  const jobs = jobsRes?.data ?? [];
+  const jobNameById = buildJobNameById(jobs);
 
   return (
-    <WorkOrdersListClient
+    <WorkOrdersPageClient
       initialData={initialData}
       statusOptions={statusOptions}
       workOrderTypes={workOrderTypes}
       jobNameById={jobNameById}
+      jobs={toJobOptions(jobs)}
     />
   );
 }

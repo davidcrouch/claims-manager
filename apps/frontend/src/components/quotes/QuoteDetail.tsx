@@ -31,6 +31,7 @@ import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { TypeBadge } from '@/components/ui/type-badge';
 import { BackButton } from '@/components/layout/BackButton';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import {
   DefRow,
   SectionCard,
@@ -199,66 +200,76 @@ export function QuotePageHeader({ quote }: { quote: Quote }) {
   }
 
   return (
-    <div className="flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-2">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-        <BackButton href="/quotes" label="Back to estimates" />
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100">
-          <FileSpreadsheet className="h-4 w-4 text-amber-600" />
-        </span>
-        <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
-        {isDraft ? (
-          <StatusBadge status="Draft" />
-        ) : (
-          <StatusBadge status={statusName} />
-        )}
-        {quoteTypeName && quoteTypeName !== 'Estimate' && quoteTypeName !== 'Quote' && (
-          <TypeBadge type={quoteTypeName} />
-        )}
-        {quote.jobId && (
-          <Link
-            href={`/jobs/${quote.jobId}`}
-            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-          >
-            View Job
-            <ExternalLink className="h-3 w-3" />
-          </Link>
-        )}
-        {quote.claimId && (
-          <Link
-            href={`/claims/${quote.claimId}`}
-            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-          >
-            View Claim
-            <ExternalLink className="h-3 w-3" />
-          </Link>
-        )}
+    <>
+      <SetHeaderActions>
+        <GenerateDocumentButton
+          entityId={quote.id}
+          documentType="quote"
+          size="default"
+          variant="default"
+          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        />
+      </SetHeaderActions>
+      <div className="flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+          <BackButton href="/quotes" label="Back to estimates" />
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100">
+            <FileSpreadsheet className="h-4 w-4 text-amber-600" />
+          </span>
+          <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
+          {isDraft ? (
+            <StatusBadge status="Draft" />
+          ) : (
+            <StatusBadge status={statusName} />
+          )}
+          {quoteTypeName && quoteTypeName !== 'Estimate' && quoteTypeName !== 'Quote' && (
+            <TypeBadge type={quoteTypeName} />
+          )}
+          {quote.jobId && (
+            <Link
+              href={`/jobs/${quote.jobId}`}
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              View Job
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
+          {quote.claimId && (
+            <Link
+              href={`/claims/${quote.claimId}`}
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              View Claim
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1 text-xs">
+          {isDraft && (
+            <Button
+              size="sm"
+              onClick={handlePublish}
+              disabled={publishing}
+            >
+              <Send className="mr-1.5 h-3.5 w-3.5" />
+              {publishing ? 'Publishing...' : 'Publish'}
+            </Button>
+          )}
+          <div className="flex items-baseline gap-1">
+            <span className="text-muted-foreground">Total:</span>
+            <span className="font-medium">{formatCurrency(quote.totalAmount)}</span>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-muted-foreground">Estimate date:</span>
+            <span className="font-medium">{formatDate(quote.quoteDate)}</span>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-muted-foreground">Updated:</span>
+            <span className="font-medium">{formatDateTime(quote.updatedAt)}</span>
+          </div>
+        </div>
       </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1 text-xs">
-        <GenerateDocumentButton entityId={quote.id} documentType="quote" />
-        {isDraft && (
-          <Button
-            size="sm"
-            onClick={handlePublish}
-            disabled={publishing}
-          >
-            <Send className="mr-1.5 h-3.5 w-3.5" />
-            {publishing ? 'Publishing...' : 'Publish'}
-          </Button>
-        )}
-        <div className="flex items-baseline gap-1">
-          <span className="text-muted-foreground">Total:</span>
-          <span className="font-medium">{formatCurrency(quote.totalAmount)}</span>
-        </div>
-        <div className="flex items-baseline gap-1">
-          <span className="text-muted-foreground">Estimate date:</span>
-          <span className="font-medium">{formatDate(quote.quoteDate)}</span>
-        </div>
-        <div className="flex items-baseline gap-1">
-          <span className="text-muted-foreground">Updated:</span>
-          <span className="font-medium">{formatDateTime(quote.updatedAt)}</span>
-        </div>
-      </div>
-    </div>
+    </>
   );
 }
 

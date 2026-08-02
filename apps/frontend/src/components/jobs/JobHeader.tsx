@@ -68,7 +68,7 @@ export function JobPageHeader({
     ((api.claim as Dict | undefined)?.externalReference as string | undefined);
 
   return (
-    <div className="flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-2">
+    <div className="flex w-full min-w-0 flex-col gap-y-1">
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
         <BackButton href="/jobs" label="Back to jobs" />
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100">
@@ -101,7 +101,7 @@ export function JobPageHeader({
           </span>
         )}
       </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1 text-xs">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pl-20 text-xs">
         <div className="flex items-baseline gap-1">
           <span className="text-muted-foreground">Request:</span>
           <span className="font-medium">{formatDate(job.requestDate)}</span>

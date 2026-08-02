@@ -26,6 +26,8 @@ import {
 import { ChatDrawer } from '@/components/chat/ChatDrawer';
 import { buildAIContext, type AIContextPayload } from '@/lib/ai/use-ai-context';
 import { createQuoteAction } from '@/app/(app)/mutations';
+import { JobSelectField } from '@/components/forms/JobSelectField';
+import type { JobOption } from '@/components/shared/job-label';
 
 function todayISO(): string {
   const d = new Date();
@@ -59,8 +61,11 @@ const QUOTE_TYPES = [
 export interface QuoteFormDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  jobId: string;
+  /** When omitted, a job picker is shown (requires `jobs`). */
+  jobId?: string;
   claimId?: string | null;
+  /** Job options for list-page create flow. */
+  jobs?: JobOption[];
   renderMode?: 'drawer' | 'canvas';
   aiAssistEnabled?: boolean;
   /** When set, forces companion layout for an already-open chat drawer. */
@@ -72,6 +77,7 @@ export function QuoteFormDrawer({
   onOpenChange,
   jobId,
   claimId,
+  jobs,
   renderMode = 'drawer',
   aiAssistEnabled = false,
   companionChatOpen: companionChatOpenProp,
@@ -81,6 +87,7 @@ export function QuoteFormDrawer({
   const [error, setError] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [aiContext, setAiContext] = useState<AIContextPayload | undefined>();
+  const needsJobPicker = !jobId && (jobs?.length ?? 0) > 0;
 
   useEffect(() => {
     if (!open) setChatOpen(false);
@@ -89,7 +96,7 @@ export function QuoteFormDrawer({
   const form = useForm<QuoteFormValues>({
     resolver: standardSchemaResolver(quoteFormSchema),
     defaultValues: {
-      jobId,
+      jobId: jobId ?? '',
       claimId: claimId ?? undefined,
       quoteType: '',
       name: '',
@@ -104,10 +111,12 @@ export function QuoteFormDrawer({
   useEffect(() => {
     form.reset({
       ...form.getValues(),
-      jobId,
+      jobId: jobId ?? '',
       claimId: claimId ?? undefined,
     });
   }, [jobId, claimId, form]);
+
+  const watchedJobId = form.watch('jobId');
 
   async function onSubmit(values: QuoteFormValues) {
     setSubmitting(true);
@@ -127,7 +136,7 @@ export function QuoteFormDrawer({
       if (result.success) {
         onOpenChange(false);
         form.reset({
-          jobId,
+          jobId: jobId ?? '',
           claimId: claimId ?? undefined,
           quoteType: '',
           name: '',
@@ -156,10 +165,18 @@ export function QuoteFormDrawer({
   const quoteType = form.watch('quoteType');
 
   function handleAIAssist() {
+    const assistJobId = watchedJobId || jobId || '';
+    const assistClaimId =
+      claimId ??
+      jobs?.find((j) => j.id === assistJobId)?.claimId ??
+      undefined;
     setAiContext(
       buildAIContext(
         'QuoteFormDrawer',
-        { jobId, ...(claimId ? { claimId } : {}) },
+        {
+          ...(assistJobId ? { jobId: assistJobId } : {}),
+          ...(assistClaimId ? { claimId: assistClaimId } : {}),
+        },
         {
           entityType: 'quote',
           formState: form.getValues(),
@@ -180,6 +197,17 @@ export function QuoteFormDrawer({
     >
         <BottomFormDrawerBody>
           <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+            {needsJobPicker && jobs && (
+              <JobSelectField
+                jobs={jobs}
+                value={watchedJobId}
+                onValueChange={(id) => {
+                  form.setValue('jobId', id, { shouldValidate: true });
+                  const selected = jobs.find((j) => j.id === id);
+                  form.setValue('claimId', selected?.claimId ?? undefined);
+                }}
+              />
+            )}
             <div className="space-y-2">
               <Label htmlFor="name">Name</Label>
               <Input
@@ -300,7 +328,7 @@ export function QuoteFormDrawer({
         open={open}
         onOpenChange={onOpenChange}
         title="Create Estimate"
-        description="Create a new draft estimate for this job. You can publish it to Crunchwork later."
+        description="Create a new draft estimate. You can publish it to Crunchwork later."
         icon={<FileSignature className="h-5 w-5" />}
         aiAssistEnabled={aiAssistEnabled}
         onAIAssist={handleAIAssist}
@@ -314,7 +342,7 @@ export function QuoteFormDrawer({
           onOpenChange={setChatOpen}
           initialContext={aiContext}
           relatedEntityType="job"
-          relatedEntityId={jobId}
+          relatedEntityId={watchedJobId || jobId}
           besideCanvas
         />
       )}

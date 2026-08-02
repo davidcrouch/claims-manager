@@ -25,6 +25,8 @@ import {
 } from '@/components/forms/BottomFormDrawer';
 import { createWorkOrderAction } from '@/app/(app)/mutations';
 import { fetchJobPurchaseOrdersAction } from '@/app/(app)/jobs/[id]/actions';
+import { JobSelectField } from '@/components/forms/JobSelectField';
+import type { JobOption } from '@/components/shared/job-label';
 import type { PurchaseOrder } from '@/types/api';
 
 const schema = z.object({
@@ -46,24 +48,39 @@ function todayISO() {
 export interface WorkOrderFormDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  jobId: string;
+  /** When omitted, a job picker is shown (requires `jobs`). */
+  jobId?: string;
+  jobs?: JobOption[];
 }
 
 export function WorkOrderFormDrawer({
   open,
   onOpenChange,
   jobId,
+  jobs,
 }: WorkOrderFormDrawerProps) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+  const [pickedJobId, setPickedJobId] = useState('');
+  const needsJobPicker = !jobId && (jobs?.length ?? 0) > 0;
+  const effectiveJobId = jobId ?? pickedJobId;
 
   useEffect(() => {
-    if (open) {
-      fetchJobPurchaseOrdersAction(jobId).then((data) => setPurchaseOrders(data ?? []));
+    if (!open) {
+      setPickedJobId('');
+      setPurchaseOrders([]);
     }
-  }, [open, jobId]);
+  }, [open]);
+
+  useEffect(() => {
+    if (open && effectiveJobId) {
+      fetchJobPurchaseOrdersAction(effectiveJobId).then((data) => setPurchaseOrders(data ?? []));
+    } else {
+      setPurchaseOrders([]);
+    }
+  }, [open, effectiveJobId]);
 
   const form = useForm<FormValues>({
     resolver: standardSchemaResolver(schema),
@@ -79,12 +96,16 @@ export function WorkOrderFormDrawer({
   });
 
   async function onSubmit(values: FormValues) {
+    if (!effectiveJobId) {
+      setError('Job is required');
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
       const result = await createWorkOrderAction({
         purchaseOrderId: values.purchaseOrderId,
-        jobId,
+        jobId: effectiveJobId,
         workOrderNumber: values.workOrderNumber || undefined,
         name: values.name || undefined,
         startDate: values.startDate ? new Date(values.startDate).toISOString() : undefined,
@@ -111,12 +132,22 @@ export function WorkOrderFormDrawer({
       open={open}
       onOpenChange={onOpenChange}
       title="Create Work Order"
-      description="Create a new work order linked to a purchase order on this job."
+      description="Create a new work order linked to a purchase order."
       icon={<ClipboardList className="h-5 w-5" />}
     >
       <form onSubmit={form.handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col">
         <BottomFormDrawerBody>
           <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+            {needsJobPicker && jobs && (
+              <JobSelectField
+                jobs={jobs}
+                value={pickedJobId}
+                onValueChange={(id) => {
+                  setPickedJobId(id);
+                  form.setValue('purchaseOrderId', '');
+                }}
+              />
+            )}
             <div className="space-y-2">
               <Label htmlFor="wo-purchaseOrderId">Purchase Order</Label>
               <Select

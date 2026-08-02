@@ -15,6 +15,8 @@ interface BreadcrumbContextValue {
   setItems: (items: BreadcrumbItem[]) => void;
   headerNode: ReactNode | null;
   setHeaderNode: (node: ReactNode | null) => void;
+  headerActions: ReactNode | null;
+  setHeaderActions: (node: ReactNode | null) => void;
 }
 
 const BreadcrumbContext = createContext<BreadcrumbContextValue | null>(null);
@@ -22,6 +24,7 @@ const BreadcrumbContext = createContext<BreadcrumbContextValue | null>(null);
 export function BreadcrumbProvider({ children }: { children: ReactNode }) {
   const [items, setItemsState] = useState<BreadcrumbItem[]>([]);
   const [headerNode, setHeaderNodeState] = useState<ReactNode | null>(null);
+  const [headerActions, setHeaderActionsState] = useState<ReactNode | null>(null);
 
   const setItems = useCallback((newItems: BreadcrumbItem[]) => {
     setItemsState(newItems);
@@ -31,8 +34,14 @@ export function BreadcrumbProvider({ children }: { children: ReactNode }) {
     setHeaderNodeState(node);
   }, []);
 
+  const setHeaderActions = useCallback((node: ReactNode | null) => {
+    setHeaderActionsState(node);
+  }, []);
+
   return (
-    <BreadcrumbContext.Provider value={{ items, setItems, headerNode, setHeaderNode }}>
+    <BreadcrumbContext.Provider
+      value={{ items, setItems, headerNode, setHeaderNode, headerActions, setHeaderActions }}
+    >
       {children}
     </BreadcrumbContext.Provider>
   );
@@ -57,4 +66,14 @@ export function BreadcrumbConsumer() {
     return <div className="min-w-0 flex-1">{headerNode}</div>;
   }
   return <Breadcrumbs items={items} />;
+}
+
+/**
+ * Renders page-registered header actions (via `SetHeaderActions`) to the left
+ * of the user avatar in the app header.
+ */
+export function HeaderActionsConsumer() {
+  const { headerActions } = useBreadcrumbs();
+  if (!headerActions) return null;
+  return <div className="flex shrink-0 items-center gap-2">{headerActions}</div>;
 }

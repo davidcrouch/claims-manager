@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
-import { BillsListClient } from '@/components/bills/BillsListClient';
-import { buildJobNameById } from '@/components/shared/job-label';
+import { BillsPageClient } from '@/components/bills/BillsPageClient';
+import { buildJobNameById, toJobOptions } from '@/components/shared/job-label';
 import type { Bill, Job, PaginatedResponse } from '@/types/api';
 
 export const metadata = { title: 'Bills — EnsureOS' };
@@ -54,14 +54,16 @@ export default async function BillsPage({
     id: vendor.id,
     name: vendor.name?.trim() ? vendor.name : 'Unknown',
   }));
-  const jobNameById = buildJobNameById(jobsRes?.data ?? []);
+  const jobs = jobsRes?.data ?? [];
+  const jobNameById = buildJobNameById(jobs);
 
   return (
-    <BillsListClient
+    <BillsPageClient
       initialData={initialData}
       statusOptions={statusOptions}
       vendorOptions={vendorOptions}
       jobNameById={jobNameById}
+      jobs={toJobOptions(jobs)}
     />
   );
 }

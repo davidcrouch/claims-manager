@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
-import { RfqsListClient } from '@/components/rfqs/RfqsListClient';
-import { buildJobNameById } from '@/components/shared/job-label';
+import { RfqsPageClient } from '@/components/rfqs/RfqsPageClient';
+import { buildJobNameById, toJobOptions } from '@/components/shared/job-label';
 import type { Job, PaginatedResponse, Rfq } from '@/types/api';
 
 export const metadata = { title: 'RFQs — EnsureOS' };
@@ -54,14 +54,16 @@ export default async function RfqsPage({
     id: vendor.id,
     name: vendor.name?.trim() ? vendor.name : 'Unknown',
   }));
-  const jobNameById = buildJobNameById(jobsRes?.data ?? []);
+  const jobs = jobsRes?.data ?? [];
+  const jobNameById = buildJobNameById(jobs);
 
   return (
-    <RfqsListClient
+    <RfqsPageClient
       initialData={initialData}
       statusOptions={statusOptions}
       vendorOptions={vendorOptions}
       jobNameById={jobNameById}
+      jobs={toJobOptions(jobs)}
     />
   );
 }

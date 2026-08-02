@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Plus, Search, X } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { QuoteFormDrawer } from '@/components/forms/QuoteFormDrawer';
 import { QuotesTable, getEstimateTypeName } from '@/components/quotes/QuotesTable';
 import type { QuoteSortField } from '@/components/quotes/QuotesTable';
@@ -209,6 +210,15 @@ export function JobQuotesTab({
 
   return (
     <div className="space-y-4">
+      <SetHeaderActions>
+        <Button
+          size="default"
+          onClick={() => setDrawerOpen(true)}
+          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          Create Estimate
+        </Button>
+      </SetHeaderActions>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
         <Tabs value={tab} onValueChange={(val) => setTab(val as ListTab)}>
           <TabsList>
@@ -253,11 +263,6 @@ export function JobQuotesTab({
           menuTitle="Filter by type"
           itemNoun={{ singular: 'type', plural: 'types' }}
         />
-
-        <Button size="sm" onClick={() => setDrawerOpen(true)}>
-          <Plus className="mr-1 h-3.5 w-3.5" />
-          Create Estimate
-        </Button>
       </div>
 
       {loading || detailLoading ? (

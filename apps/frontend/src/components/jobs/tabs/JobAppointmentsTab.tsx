@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { CalendarPlus, Search, X } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { AppointmentFormDrawer, type JobParty } from '@/components/forms/AppointmentFormDrawer';
 import { AppointmentsTable } from '@/components/appointments/AppointmentsTable';
 import { appointmentStatusLabel, appointmentTypeName } from '@/components/appointments/AppointmentsTable';
@@ -155,6 +156,15 @@ export function JobAppointmentsTab({ jobId, job }: { jobId: string; job: Job }) 
 
   return (
     <div className="space-y-4">
+      <SetHeaderActions>
+        <Button
+          size="default"
+          onClick={handleCreate}
+          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          Create Appointment
+        </Button>
+      </SetHeaderActions>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
         <Tabs value={tab} onValueChange={(val) => setTab(val as ListTab)}>
           <TabsList>
@@ -199,11 +209,6 @@ export function JobAppointmentsTab({ jobId, job }: { jobId: string; job: Job }) 
           menuTitle="Filter by type"
           itemNoun={{ singular: 'type', plural: 'types' }}
         />
-
-        <Button onClick={handleCreate} size="sm">
-          <CalendarPlus className="h-4 w-4 mr-2" />
-          Create Appointment
-        </Button>
       </div>
 
       <AppointmentFormDrawer

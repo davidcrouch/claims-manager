@@ -16,7 +16,8 @@ interface DocumentsToolbarProps {
   onSearch: (value: string) => void;
   layout: 'grid' | 'list';
   onLayoutChange: (layout: 'grid' | 'list') => void;
-  onUpload: () => void;
+  /** When provided, shows an Upload button in the toolbar. Prefer layout header actions instead. */
+  onUpload?: () => void;
   mimeFilter?: string;
   onMimeFilterChange?: (mime: string | undefined) => void;
 }
@@ -108,10 +109,12 @@ export function DocumentsToolbar({
           </button>
         </div>
 
-        <Button size="sm" onClick={onUpload} className="gap-1.5">
-          <Upload className="h-3.5 w-3.5" />
-          Upload
-        </Button>
+        {onUpload && (
+          <Button size="sm" onClick={onUpload} className="gap-1.5">
+            <Upload className="h-3.5 w-3.5" />
+            Upload
+          </Button>
+        )}
       </div>
     </div>
   );

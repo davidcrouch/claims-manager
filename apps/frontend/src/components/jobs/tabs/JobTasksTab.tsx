@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { CheckSquare, Plus, Search, X } from 'lucide-react';
+import { CheckSquare, Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { TypeBadge } from '@/components/ui/type-badge';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { fetchJobTasksAction } from '@/app/(app)/jobs/[id]/actions';
 import { PhaseUnavailable } from '@/components/shared/detail';
 import { TaskFormDrawer } from '@/components/forms/TaskFormDrawer';
@@ -247,6 +248,15 @@ export function JobTasksTab({ jobId }: { jobId: string }) {
 
   return (
     <div className="space-y-4">
+      <SetHeaderActions>
+        <Button
+          size="default"
+          onClick={() => setShowCreate(true)}
+          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          Create Task
+        </Button>
+      </SetHeaderActions>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
         <Tabs value={tab} onValueChange={(val) => setTab(val as ListTab)}>
           <TabsList>
@@ -291,11 +301,6 @@ export function JobTasksTab({ jobId }: { jobId: string }) {
           menuTitle="Filter by priority"
           itemNoun={{ singular: 'priority', plural: 'priorities' }}
         />
-
-        <Button size="sm" variant="outline" onClick={() => setShowCreate(true)}>
-          <Plus className="mr-1 h-3 w-3" />
-          Create Task
-        </Button>
       </div>
 
       {visibleRows.length === 0 ? (

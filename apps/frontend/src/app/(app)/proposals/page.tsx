@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
-import { ProposalsListClient } from '@/components/proposals/ProposalsListClient';
-import { buildJobNameById } from '@/components/shared/job-label';
+import { ProposalsPageClient } from '@/components/proposals/ProposalsPageClient';
+import { buildJobNameById, toJobOptions } from '@/components/shared/job-label';
 import type { Job, PaginatedResponse, Proposal } from '@/types/api';
 
 export const metadata = { title: 'Proposals — EnsureOS' };
@@ -54,14 +54,16 @@ export default async function ProposalsPage({
     id: vendor.id,
     name: vendor.name?.trim() ? vendor.name : 'Unknown',
   }));
-  const jobNameById = buildJobNameById(jobsRes?.data ?? []);
+  const jobs = jobsRes?.data ?? [];
+  const jobNameById = buildJobNameById(jobs);
 
   return (
-    <ProposalsListClient
+    <ProposalsPageClient
       initialData={initialData}
       statusOptions={statusOptions}
       vendorOptions={vendorOptions}
       jobNameById={jobNameById}
+      jobs={toJobOptions(jobs)}
     />
   );
 }

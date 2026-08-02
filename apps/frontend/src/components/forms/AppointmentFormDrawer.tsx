@@ -31,6 +31,8 @@ import {
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
 import { createAppointmentAction, updateAppointmentAction, searchContactsAction } from '@/app/(app)/mutations';
+import { JobSelectField } from '@/components/forms/JobSelectField';
+import type { JobOption } from '@/components/shared/job-label';
 import type { Appointment } from '@/types/api';
 
 const APPOINTMENT_TYPES = [
@@ -115,7 +117,10 @@ export interface JobParty {
 export interface AppointmentFormDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  jobId: string;
+  /** When omitted, a job picker is shown (requires `jobs`). */
+  jobId?: string;
+  /** Job options for list-page create flow. */
+  jobs?: JobOption[];
   jobParties?: JobParty[];
   defaultAddress?: string;
   appointment?: Appointment;
@@ -296,6 +301,7 @@ export function AppointmentFormDrawer({
   open,
   onOpenChange,
   jobId,
+  jobs,
   jobParties = [],
   defaultAddress,
   appointment,
@@ -307,6 +313,7 @@ export function AppointmentFormDrawer({
   const [error, setError] = useState<string | null>(null);
   const [assignees, setAssignees] = useState<PersonRef[]>([]);
   const [selectedParties, setSelectedParties] = useState<JobParty[]>([]);
+  const needsJobPicker = !isEdit && !jobId && (jobs?.length ?? 0) > 0;
 
   const now = todayDateString();
   const defaultTime = '19:15';
@@ -314,7 +321,7 @@ export function AppointmentFormDrawer({
   const form = useForm<AppointmentFormValues>({
     resolver: standardSchemaResolver(appointmentFormSchema),
     defaultValues: {
-      jobId,
+      jobId: jobId ?? '',
       name: '',
       appointmentType: 'Inspection',
       location: 'ONSITE',
@@ -327,6 +334,8 @@ export function AppointmentFormDrawer({
       description: '',
     },
   });
+
+  const watchedJobId = form.watch('jobId');
 
   useEffect(() => {
     if (open) {
@@ -351,7 +360,7 @@ export function AppointmentFormDrawer({
       } else {
         const today = todayDateString();
         form.reset({
-          jobId,
+          jobId: jobId ?? '',
           name: '',
           appointmentType: 'Inspection',
           location: 'ONSITE',
@@ -440,8 +449,8 @@ export function AppointmentFormDrawer({
     <BottomFormDrawer
       open={open}
       onOpenChange={onOpenChange}
-      title={isEdit ? 'Edit Appointment' : 'Create Appointment'}
-      description={isEdit ? 'Update the appointment details below.' : 'Schedule a new appointment for this job. Fill in the details below.'}
+      title={isEdit ? 'Edit Appointment' : 'Add Appointment'}
+      description={isEdit ? 'Update the appointment details below.' : 'Schedule a new appointment. Fill in the details below.'}
       icon={<CalendarClock className="h-5 w-5" />}
     >
       <form
@@ -450,6 +459,13 @@ export function AppointmentFormDrawer({
       >
         <BottomFormDrawerBody>
           <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+            {needsJobPicker && jobs && (
+              <JobSelectField
+                jobs={jobs}
+                value={watchedJobId}
+                onValueChange={(id) => form.setValue('jobId', id, { shouldValidate: true })}
+              />
+            )}
             {/* Title */}
             <div className="space-y-2 md:col-span-2">
               <Label htmlFor="appt-name">

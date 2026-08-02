@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { JobsListClient } from './JobsListClient';
 import { JobFormDrawer } from '@/components/forms/JobFormDrawer';
 import type { Job, PaginatedResponse } from '@/types/api';
@@ -27,15 +28,21 @@ export function JobsPageClient({
 
   return (
     <>
+      <SetHeaderActions>
+        <Button
+          size="default"
+          onClick={() => setDrawerOpen(true)}
+          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          Create Job
+        </Button>
+      </SetHeaderActions>
       <JobsListClient
         initialData={initialData}
         statusOptions={statusOptions}
         jobTypes={jobTypeFilterOptions ?? jobTypes}
         unreadJobIds={unreadJobIds}
         refreshNonce={refreshNonce}
-        headerAction={
-          <Button onClick={() => setDrawerOpen(true)}>Create Job</Button>
-        }
       />
       <JobFormDrawer
         open={drawerOpen}

@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Users, Plus } from 'lucide-react';
+import { Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { ListPageHeader } from '@/components/layout/ListPageHeader';
 import {
   SearchInput,
@@ -92,6 +93,15 @@ export function ContactsListClient({ initialData }: ContactsListClientProps) {
           accent="slate"
         />
       </SetPageHeader>
+      <SetHeaderActions>
+        <Button
+          size="default"
+          onClick={() => setDrawerOpen(true)}
+          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          Add Contact
+        </Button>
+      </SetHeaderActions>
 
       <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
@@ -100,10 +110,6 @@ export function ContactsListClient({ initialData }: ContactsListClientProps) {
             value={search}
             onChange={handleSearchChange}
           />
-          <Button size="sm" className="shrink-0" onClick={() => setDrawerOpen(true)}>
-            <Plus className="mr-1 h-4 w-4" />
-            Add Contact
-          </Button>
         </div>
       </div>
 

@@ -12,6 +12,7 @@ import {
   Save,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { JobOverviewTab, type JobOverviewTabHandle } from './tabs/JobOverviewTab';
 import { JobTypeDetailsTab } from './tabs/JobTypeDetailsTab';
 import { JobPartiesTab } from './tabs/JobPartiesTab';
@@ -127,6 +128,19 @@ export function JobDetail({
   return (
     <div className="flex flex-col">
       {showTabBar && (
+        <SetHeaderActions>
+          <Button
+            size="default"
+            onClick={handleSave}
+            disabled={saving}
+            className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+          >
+            <Save className="h-3.5 w-3.5" />
+            {saving ? 'Saving...' : 'Save'}
+          </Button>
+        </SetHeaderActions>
+      )}
+      {showTabBar && (
         <div className="flex items-center border-b border-slate-200">
           <div className="flex flex-wrap gap-0">
             {overviewTabs.map((t) => {
@@ -148,17 +162,6 @@ export function JobDetail({
                 </button>
               );
             })}
-          </div>
-          <div className="ml-auto pr-2">
-            <Button
-              size="sm"
-              onClick={handleSave}
-              disabled={saving}
-              className="gap-1.5"
-            >
-              <Save className="h-3.5 w-3.5" />
-              {saving ? 'Saving...' : 'Save'}
-            </Button>
           </div>
         </div>
       )}

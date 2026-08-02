@@ -2,10 +2,11 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Search, X, Link2, Unlink } from 'lucide-react';
+import { Search, X, Link2, Unlink } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { JournalFormDrawer } from './JournalFormDrawer';
 import { JournalLinkDrawer } from './JournalLinkDrawer';
 import {
@@ -208,6 +209,15 @@ export function JournalList({
 
   return (
     <div className="space-y-4">
+      <SetHeaderActions>
+        <Button
+          size="default"
+          onClick={() => setCreateDrawerOpen(true)}
+          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          New Journal
+        </Button>
+      </SetHeaderActions>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
         <Tabs value={tab} onValueChange={(val) => setTab(val as ListTab)}>
           <TabsList>
@@ -253,16 +263,10 @@ export function JournalList({
           itemNoun={{ singular: 'status', plural: 'statuses' }}
         />
 
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={() => setLinkDrawerOpen(true)}>
-            <Link2 className="mr-1 size-4" />
-            Link Existing
-          </Button>
-          <Button size="sm" onClick={() => setCreateDrawerOpen(true)}>
-            <Plus className="mr-1 size-4" />
-            New Journal
-          </Button>
-        </div>
+        <Button size="sm" variant="outline" onClick={() => setLinkDrawerOpen(true)}>
+          <Link2 className="mr-1 size-4" />
+          Link Existing
+        </Button>
       </div>
 
       {visibleRows.length === 0 ? (

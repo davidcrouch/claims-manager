@@ -25,6 +25,8 @@ import {
 } from '@/components/forms/BottomFormDrawer';
 import { createBillAction } from '@/app/(app)/mutations';
 import { fetchJobInvoicesAction } from '@/app/(app)/jobs/[id]/actions';
+import { JobSelectField } from '@/components/forms/JobSelectField';
+import type { JobOption } from '@/components/shared/job-label';
 import type { Invoice } from '@/types/api';
 
 const schema = z.object({
@@ -46,24 +48,39 @@ function todayISO() {
 export interface BillFormDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  jobId: string;
+  /** When omitted, a job picker is shown (requires `jobs`). */
+  jobId?: string;
+  jobs?: JobOption[];
 }
 
 export function BillFormDrawer({
   open,
   onOpenChange,
   jobId,
+  jobs,
 }: BillFormDrawerProps) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [pickedJobId, setPickedJobId] = useState('');
+  const needsJobPicker = !jobId && (jobs?.length ?? 0) > 0;
+  const effectiveJobId = jobId ?? pickedJobId;
 
   useEffect(() => {
-    if (open) {
-      fetchJobInvoicesAction(jobId).then((result) => setInvoices(result.data ?? []));
+    if (!open) {
+      setPickedJobId('');
+      setInvoices([]);
     }
-  }, [open, jobId]);
+  }, [open]);
+
+  useEffect(() => {
+    if (open && effectiveJobId) {
+      fetchJobInvoicesAction(effectiveJobId).then((result) => setInvoices(result.data ?? []));
+    } else {
+      setInvoices([]);
+    }
+  }, [open, effectiveJobId]);
 
   const form = useForm<FormValues>({
     resolver: standardSchemaResolver(schema),
@@ -79,12 +96,16 @@ export function BillFormDrawer({
   });
 
   async function onSubmit(values: FormValues) {
+    if (!effectiveJobId) {
+      setError('Job is required');
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
       const result = await createBillAction({
         invoiceId: values.invoiceId,
-        jobId,
+        jobId: effectiveJobId,
         billNumber: values.billNumber || undefined,
         totalAmount: values.totalAmount ?? undefined,
         issueDate: values.issueDate ? new Date(values.issueDate).toISOString() : undefined,
@@ -111,12 +132,22 @@ export function BillFormDrawer({
       open={open}
       onOpenChange={onOpenChange}
       title="Create Bill"
-      description="Record a vendor bill against an invoice on this job."
+      description="Record a vendor bill against an invoice."
       icon={<Receipt className="h-5 w-5" />}
     >
       <form onSubmit={form.handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col">
         <BottomFormDrawerBody>
           <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+            {needsJobPicker && jobs && (
+              <JobSelectField
+                jobs={jobs}
+                value={pickedJobId}
+                onValueChange={(id) => {
+                  setPickedJobId(id);
+                  form.setValue('invoiceId', '');
+                }}
+              />
+            )}
             <div className="space-y-2">
               <Label htmlFor="bill-invoiceId">Invoice</Label>
               <Select

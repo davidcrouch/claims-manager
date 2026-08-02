@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { BookOpen, Plus, Search, X } from 'lucide-react';
+import { BookOpen, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -16,6 +16,7 @@ import {
 } from '@/components/shared/list-filters';
 import { TablePagination } from '@/components/shared/table-pagination';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import {
   ListPageHeader,
   computeStatusBreakdown,
@@ -188,6 +189,15 @@ export function JournalsPageClient({ initialData }: JournalsPageClientProps) {
           accent="slate"
         />
       </SetPageHeader>
+      <SetHeaderActions>
+        <Button
+          size="default"
+          onClick={() => setCreateDrawerOpen(true)}
+          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          New Journal
+        </Button>
+      </SetHeaderActions>
       <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
           <Tabs value={tab} onValueChange={handleTabChange}>
@@ -238,11 +248,6 @@ export function JournalsPageClient({ initialData }: JournalsPageClientProps) {
             menuTitle="Filter by status"
             itemNoun={{ singular: 'status', plural: 'statuses' }}
           />
-
-          <Button size="sm" className="shrink-0" onClick={() => setCreateDrawerOpen(true)}>
-            <Plus className="mr-1 h-4 w-4" />
-            New Journal
-          </Button>
         </div>
       </div>
 

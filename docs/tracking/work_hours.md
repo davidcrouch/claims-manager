@@ -552,3 +552,25 @@
   Extended seeds and catalogue sample data so filing defaults and document templates are available in fresh environments.
   Shipped supporting API and website surfaces for template setup, category management, and pipeline editing.
   Captured an implementation specification for the broader agentic platform direction while landing the staging edge and filing foundations.
+
+- `2026-08-02` `da322cf` **62 h**
+  `234 files | +28652 −296 | Tier 2 standard / Tier 3 complex / Tier 4 deep integration | Heavy orchestration`
+  Lay summary: Staff can chat with an in-product assistant that uses company tools, saved skills, and partner connections, with admin controls for who may use what.
+  **Agentic AI platform with chat, skills, MCP integrations, and Shore-aligned RBAC.** Delivered end-to-end **AI chat** so staff can ask questions, attach files, and complete assisted workflows inside the claims workspace.
+  Added **agents and skills administration** so organisations can configure assistants, tool access, and reusable procedures without engineering changes for each request.
+  Integrated **MCP connections** including claims-domain and Microsoft Graph tool servers so the assistant can act on jobs, contacts, mail, calendar, and related records under controlled credentials.
+  Extended the **sign-in and permission model** with Shore-aligned roles and permission checks so AI and admin features respect organisation access rules.
+  Shipped **conversation memory, sharing, feedback, and audit** surfaces so assisted activity is reviewable and retainable for operations.
+  Delivered the matching **website chat drawer, admin screens, and connection management** so day-to-day use and oversight stay in one product.
+  Outcome: a production-ready assistant foundation that combines chat, tools, skills, and access control for claims operations.
+
+- `2026-08-02` `pending` **5.5 h**
+  `50 files | +1075 −267 | Tier 2 standard | Moderate orchestration`
+  Lay summary: Create buttons now sit in the top header across main work screens, and forms make it clearer which job a new record belongs to.
+  **Header create actions and shared job selection across operational screens.** Moved primary create actions into the app header across bills, quotes, RFQs, purchase orders, work orders, proposals, appointments, and related lists.
+  Added a shared **job picker** so create forms link records to the correct job consistently.
+  Wired job detail tabs and list pages to the same header action pattern for a familiar create experience.
+  Improved appointment and quote flows so actions and job context sit where staff expect them.
+  Kept create drawers available from both list pages and job workspaces without duplicate toolbar clutter.
+  Outcome: staff see create controls in one place and can attach new records to jobs more reliably.
+

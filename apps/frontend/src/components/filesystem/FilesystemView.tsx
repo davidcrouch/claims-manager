@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import { FolderOpen } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { FilesystemBrowser } from './FilesystemBrowser';
 import { PipelineRunHistoryDrawer } from './PipelineRunHistoryDrawer';
 import { DocumentsToolbar } from '@/components/documents/DocumentsToolbar';
@@ -11,6 +12,7 @@ import { DocumentUploadDrawer } from '@/components/documents/DocumentUploadDrawe
 import { DocumentDropZone } from '@/components/documents/DocumentDropZone';
 import { TablePagination } from '@/components/shared/table-pagination';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { ListPageHeader } from '@/components/layout/ListPageHeader';
 import type { FSDocument, FilesystemResponse } from '@/lib/api-client';
 import type { DocumentAction } from '@/components/documents/DocumentCard';
@@ -183,6 +185,15 @@ export function FilesystemView({
           accent="slate"
         />
       </SetPageHeader>
+      <SetHeaderActions>
+        <Button
+          size="default"
+          onClick={() => setUploadDrawerOpen(true)}
+          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          Upload
+        </Button>
+      </SetHeaderActions>
       <div className="flex h-full min-h-0">
         {categories.length > 0 && (
           <aside className="hidden w-64 shrink-0 overflow-y-auto border-r border-slate-200 px-3 lg:block">
@@ -205,7 +216,6 @@ export function FilesystemView({
             }}
             layout={layout}
             onLayoutChange={setLayout}
-            onUpload={() => setUploadDrawerOpen(true)}
           />
 
           <div className="flex-1 overflow-y-auto">

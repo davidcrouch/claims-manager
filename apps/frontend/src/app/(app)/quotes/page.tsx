@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
-import { QuotesListClient } from '@/components/quotes/QuotesListClient';
-import { buildJobNameById } from '@/components/shared/job-label';
+import { QuotesPageClient } from '@/components/quotes/QuotesPageClient';
+import { buildJobNameById, toJobOptions } from '@/components/shared/job-label';
 import type { Job, PaginatedResponse, Quote } from '@/types/api';
 
 export default async function QuotesPage({
@@ -53,14 +53,16 @@ export default async function QuotesPage({
     id: row.id,
     name: row.name?.trim() ? row.name : 'Unknown',
   }));
-  const jobNameById = buildJobNameById(jobsRes?.data ?? []);
+  const jobs = jobsRes?.data ?? [];
+  const jobNameById = buildJobNameById(jobs);
 
   return (
-    <QuotesListClient
+    <QuotesPageClient
       initialData={initialQuotes}
       statusOptions={statusOptions}
       quoteTypes={quoteTypes}
       jobNameById={jobNameById}
+      jobs={toJobOptions(jobs)}
     />
   );
 }

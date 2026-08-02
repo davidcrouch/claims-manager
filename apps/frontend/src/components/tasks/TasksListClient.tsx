@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { CheckSquare, Plus, Search, X } from 'lucide-react';
+import { CheckSquare, Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { TypeBadge } from '@/components/ui/type-badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import {
   ListPageHeader,
   computeStatusBreakdown,
@@ -308,6 +309,15 @@ export function TasksListClient() {
           accent="slate"
         />
       </SetPageHeader>
+      <SetHeaderActions>
+        <Button
+          size="default"
+          onClick={() => setShowCreateTask(true)}
+          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          Create Task
+        </Button>
+      </SetHeaderActions>
 
       <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
@@ -359,11 +369,6 @@ export function TasksListClient() {
             menuTitle="Filter by priority"
             itemNoun={{ singular: 'priority', plural: 'priorities' }}
           />
-
-          <Button size="sm" className="shrink-0 bg-blue-600 text-white hover:bg-blue-500" onClick={() => setShowCreateTask(true)}>
-            <Plus className="mr-1 h-4 w-4" />
-            Create Task
-          </Button>
         </div>
       </div>
 

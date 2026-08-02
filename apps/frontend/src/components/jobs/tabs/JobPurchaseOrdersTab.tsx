@@ -2,10 +2,11 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import Link from 'next/link';
-import { Search, X, Plus } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { PurchaseOrderFormDrawer } from '@/components/forms/PurchaseOrderFormDrawer';
 import { fetchJobPurchaseOrdersAction } from '@/app/(app)/jobs/[id]/actions';
 import { formatCurrency } from '@/components/shared/detail';
@@ -195,6 +196,15 @@ export function JobPurchaseOrdersTab({ jobId }: { jobId: string }) {
 
   return (
     <div className="space-y-4">
+      <SetHeaderActions>
+        <Button
+          size="default"
+          onClick={() => setDrawerOpen(true)}
+          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          Create PO
+        </Button>
+      </SetHeaderActions>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
         <Tabs value={tab} onValueChange={(val) => setTab(val as ListTab)}>
           <TabsList>
@@ -239,11 +249,6 @@ export function JobPurchaseOrdersTab({ jobId }: { jobId: string }) {
           menuTitle="Filter by vendor"
           itemNoun={{ singular: 'vendor', plural: 'vendors' }}
         />
-
-        <Button onClick={() => setDrawerOpen(true)} size="sm">
-          <Plus className="h-4 w-4 mr-2" />
-          Create PO
-        </Button>
       </div>
 
       <PurchaseOrderFormDrawer

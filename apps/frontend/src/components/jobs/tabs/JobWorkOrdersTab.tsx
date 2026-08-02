@@ -2,10 +2,11 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, X, Plus, PackagePlus } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { WorkOrderFormDrawer } from '@/components/forms/WorkOrderFormDrawer';
 import { CapturePoDrawer } from '@/components/forms/CapturePoDrawer';
 import { fetchJobWorkOrdersAction } from '@/app/(app)/jobs/[id]/actions';
@@ -209,6 +210,22 @@ export function JobWorkOrdersTab({ jobId }: { jobId: string }) {
 
   return (
     <div className="space-y-4">
+      <SetHeaderActions>
+        <Button
+          size="default"
+          onClick={() => setCaptureDrawerOpen(true)}
+          className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          Capture External PO
+        </Button>
+        <Button
+          size="default"
+          onClick={() => setDrawerOpen(true)}
+          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          Create Work Order
+        </Button>
+      </SetHeaderActions>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
         <Tabs value={tab} onValueChange={(val) => setTab(val as ListTab)}>
           <TabsList>
@@ -253,15 +270,6 @@ export function JobWorkOrdersTab({ jobId }: { jobId: string }) {
           menuTitle="Filter by type"
           itemNoun={{ singular: 'type', plural: 'types' }}
         />
-
-        <Button variant="outline" onClick={() => setCaptureDrawerOpen(true)} size="sm">
-          <PackagePlus className="h-4 w-4 mr-2" />
-          Capture External PO
-        </Button>
-        <Button onClick={() => setDrawerOpen(true)} size="sm">
-          <Plus className="h-4 w-4 mr-2" />
-          Create Work Order
-        </Button>
       </div>
 
       <WorkOrderFormDrawer

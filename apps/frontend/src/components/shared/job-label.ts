@@ -5,6 +5,12 @@ type JobLabelSource = Pick<
   'id' | 'name' | 'externalJobId' | 'externalReference'
 >;
 
+export type JobOption = {
+  id: string;
+  label: string;
+  claimId?: string | null;
+};
+
 export function jobDisplayName(job: JobLabelSource): string {
   return (
     job.name?.trim() ||
@@ -28,4 +34,15 @@ export function resolveJobName(
 ): string {
   if (!jobId) return '';
   return jobNameById?.[jobId] ?? '';
+}
+
+/** Server-safe helper for Create drawers that need a job picker. */
+export function toJobOptions(
+  jobs: Array<JobLabelSource & { claimId?: string | null }>,
+): JobOption[] {
+  return jobs.map((job) => ({
+    id: job.id,
+    label: jobDisplayName(job),
+    claimId: job.claimId,
+  }));
 }

@@ -25,6 +25,8 @@ import {
 } from '@/components/forms/BottomFormDrawer';
 import { createProposalAction } from '@/app/(app)/mutations';
 import { fetchJobQuotesAction } from '@/app/(app)/jobs/[id]/actions';
+import { JobSelectField } from '@/components/forms/JobSelectField';
+import type { JobOption } from '@/components/shared/job-label';
 import type { Quote } from '@/types/api';
 
 const schema = z.object({
@@ -46,24 +48,39 @@ function todayISO() {
 export interface ProposalFormDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  jobId: string;
+  /** When omitted, a job picker is shown (requires `jobs`). */
+  jobId?: string;
+  jobs?: JobOption[];
 }
 
 export function ProposalFormDrawer({
   open,
   onOpenChange,
   jobId,
+  jobs,
 }: ProposalFormDrawerProps) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [quotes, setQuotes] = useState<Quote[]>([]);
+  const [pickedJobId, setPickedJobId] = useState('');
+  const needsJobPicker = !jobId && (jobs?.length ?? 0) > 0;
+  const effectiveJobId = jobId ?? pickedJobId;
 
   useEffect(() => {
-    if (open) {
-      fetchJobQuotesAction(jobId).then((data) => setQuotes(data ?? []));
+    if (!open) {
+      setPickedJobId('');
+      setQuotes([]);
     }
-  }, [open, jobId]);
+  }, [open]);
+
+  useEffect(() => {
+    if (open && effectiveJobId) {
+      fetchJobQuotesAction(effectiveJobId).then((data) => setQuotes(data ?? []));
+    } else {
+      setQuotes([]);
+    }
+  }, [open, effectiveJobId]);
 
   const form = useForm<FormValues>({
     resolver: standardSchemaResolver(schema),
@@ -79,12 +96,16 @@ export function ProposalFormDrawer({
   });
 
   async function onSubmit(values: FormValues) {
+    if (!effectiveJobId) {
+      setError('Job is required');
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
       const result = await createProposalAction({
         quoteId: values.quoteId,
-        jobId,
+        jobId: effectiveJobId,
         proposalNumber: values.proposalNumber || undefined,
         name: values.name || undefined,
         proposalFromName: values.proposalFromName || undefined,
@@ -111,12 +132,22 @@ export function ProposalFormDrawer({
       open={open}
       onOpenChange={onOpenChange}
       title="Create Proposal"
-      description="Record a vendor proposal linked to an estimate on this job."
+      description="Record a vendor proposal linked to an estimate."
       icon={<FileText className="h-5 w-5" />}
     >
       <form onSubmit={form.handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col">
         <BottomFormDrawerBody>
           <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+            {needsJobPicker && jobs && (
+              <JobSelectField
+                jobs={jobs}
+                value={pickedJobId}
+                onValueChange={(id) => {
+                  setPickedJobId(id);
+                  form.setValue('quoteId', '');
+                }}
+              />
+            )}
             <div className="space-y-2">
               <Label htmlFor="prop-quoteId">Estimate</Label>
               <Select

@@ -17,6 +17,8 @@ import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
 import { createRfqAction } from '@/app/(app)/mutations';
 import { fetchJobQuotesAction } from '@/app/(app)/jobs/[id]/actions';
 import { getQuoteLineItemsAction } from '@/app/(app)/quotes/actions';
+import { JobSelectField } from '@/components/forms/JobSelectField';
+import type { JobOption } from '@/components/shared/job-label';
 import type { Quote } from '@/types/api';
 import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
 
@@ -31,19 +33,25 @@ const STEP_LABELS: Record<WizardStep, string> = {
 export interface RfqFormDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  jobId: string;
+  /** When omitted, a job picker is shown (requires `jobs`). */
+  jobId?: string;
+  jobs?: JobOption[];
 }
 
 export function RfqFormDrawer({
   open,
   onOpenChange,
   jobId,
+  jobs,
 }: RfqFormDrawerProps) {
   const router = useRouter();
 
   const [step, setStep] = useState<WizardStep>('details');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pickedJobId, setPickedJobId] = useState('');
+  const needsJobPicker = !jobId && (jobs?.length ?? 0) > 0;
+  const effectiveJobId = jobId ?? pickedJobId;
 
   // Step 1 state
   const [name, setName] = useState('');
@@ -66,18 +74,23 @@ export function RfqFormDrawer({
     setSelectedItemIds(new Set());
     setError(null);
     setSubmitting(false);
+    setPickedJobId('');
   }, []);
 
   useEffect(() => {
-    if (open) {
-      setQuotesLoading(true);
-      fetchJobQuotesAction(jobId)
-        .then((data) => setQuotes(data ?? []))
-        .finally(() => setQuotesLoading(false));
-    } else {
+    if (!open) {
       reset();
+      return;
     }
-  }, [open, jobId, reset]);
+    if (!effectiveJobId) {
+      setQuotes([]);
+      return;
+    }
+    setQuotesLoading(true);
+    fetchJobQuotesAction(effectiveJobId)
+      .then((data) => setQuotes(data ?? []))
+      .finally(() => setQuotesLoading(false));
+  }, [open, effectiveJobId, reset]);
 
   async function loadLineItems(quoteId: string) {
     setLineItemsLoading(true);
@@ -101,6 +114,10 @@ export function RfqFormDrawer({
   }
 
   function handleNextStep() {
+    if (!effectiveJobId) {
+      setError('Please select a job');
+      return;
+    }
     if (!selectedQuoteId) {
       setError('Please select an estimate');
       return;
@@ -121,12 +138,12 @@ export function RfqFormDrawer({
   }
 
   async function handleSubmit() {
-    if (!selectedQuoteId) return;
+    if (!selectedQuoteId || !effectiveJobId) return;
     setSubmitting(true);
     setError(null);
     try {
       const result = await createRfqAction({
-        jobId,
+        jobId: effectiveJobId,
         quoteId: selectedQuoteId,
         name: name || undefined,
         note: description || undefined,
@@ -188,6 +205,20 @@ export function RfqFormDrawer({
       <BottomFormDrawerBody>
         {step === 'details' && (
           <div className="space-y-6">
+            {needsJobPicker && jobs && (
+              <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+                <JobSelectField
+                  jobs={jobs}
+                  value={pickedJobId}
+                  onValueChange={(id) => {
+                    setPickedJobId(id);
+                    setSelectedQuoteId(null);
+                    setGroups([]);
+                    setSelectedItemIds(new Set());
+                  }}
+                />
+              </div>
+            )}
             {/* Name + Description */}
             <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
               <div className="space-y-2">

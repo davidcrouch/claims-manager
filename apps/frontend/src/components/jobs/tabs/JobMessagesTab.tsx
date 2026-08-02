@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { MessageSquarePlus, Check, Search, X } from 'lucide-react';
+import { Check, Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { MessageFormDrawer } from '@/components/forms/MessageFormDrawer';
 import {
   fetchJobMessagesAction,
@@ -144,6 +145,15 @@ export function JobMessagesTab({
 
   return (
     <div className="space-y-4">
+      <SetHeaderActions>
+        <Button
+          size="default"
+          onClick={() => setDrawerOpen(true)}
+          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          Send Message
+        </Button>
+      </SetHeaderActions>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
         <Tabs value={tab} onValueChange={(val) => setTab(val as ListTab)}>
           <TabsList>
@@ -171,11 +181,6 @@ export function JobMessagesTab({
             </button>
           )}
         </div>
-
-        <Button onClick={() => setDrawerOpen(true)} size="sm">
-          <MessageSquarePlus className="h-4 w-4 mr-2" />
-          Send Message
-        </Button>
       </div>
 
       <MessageFormDrawer

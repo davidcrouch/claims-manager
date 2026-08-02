@@ -151,7 +151,7 @@ export function InvoiceFormDrawer({
     <BottomFormDrawer
       open={open}
       onOpenChange={onOpenChange}
-      title="Submit Invoice"
+      title="Create Invoice"
       description="Submit an invoice against an active work order. Optionally include your invoice number for reference."
       icon={<Receipt className="h-5 w-5" />}
     >
@@ -252,7 +252,7 @@ export function InvoiceFormDrawer({
             Cancel
           </Button>
           <Button type="submit" disabled={submitting}>
-            {submitting ? 'Submitting...' : 'Submit Invoice'}
+            {submitting ? 'Creating...' : 'Create Invoice'}
           </Button>
         </BottomFormDrawerFooter>
       </form>

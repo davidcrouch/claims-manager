@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { MessageSquare, Plus } from 'lucide-react';
+import { MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { ListPageHeader } from '@/components/layout/ListPageHeader';
 import {
   SortTabs,
@@ -48,6 +49,16 @@ export function MessagesListClient() {
           accent="slate"
         />
       </SetPageHeader>
+      <SetHeaderActions>
+        <Button
+          size="default"
+          disabled
+          title="Create from a Job detail page"
+          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          New Message
+        </Button>
+      </SetHeaderActions>
 
       <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
@@ -79,10 +90,6 @@ export function MessagesListClient() {
             menuTitle="Filter by status"
             itemNoun={{ singular: 'status', plural: 'statuses' }}
           />
-          <Button size="sm" className="shrink-0" disabled title="Create from a Job detail page">
-            <Plus className="mr-1 h-4 w-4" />
-            New Message
-          </Button>
         </div>
       </div>
 

@@ -2,10 +2,11 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, X, Plus } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { BillFormDrawer } from '@/components/forms/BillFormDrawer';
 import { fetchJobBillsAction } from '@/app/(app)/jobs/[id]/actions';
 import { formatCurrency } from '@/components/shared/detail';
@@ -166,6 +167,15 @@ export function JobBillsTab({ jobId }: { jobId: string }) {
 
   return (
     <div className="space-y-4">
+      <SetHeaderActions>
+        <Button
+          size="default"
+          onClick={() => setDrawerOpen(true)}
+          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          Create Bill
+        </Button>
+      </SetHeaderActions>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
         <Tabs value={tab} onValueChange={(val) => setTab(val as ListTab)}>
           <TabsList>
@@ -210,11 +220,6 @@ export function JobBillsTab({ jobId }: { jobId: string }) {
           menuTitle="Filter by status"
           itemNoun={{ singular: 'status', plural: 'statuses' }}
         />
-
-        <Button onClick={() => setDrawerOpen(true)} size="sm">
-          <Plus className="h-4 w-4 mr-2" />
-          Create Bill
-        </Button>
       </div>
 
       <BillFormDrawer
