@@ -19,45 +19,34 @@ provider "google" {
   region  = var.region
 }
 
+locals {
+  labels = {
+    product = "claims-manager"
+    env     = var.environment
+  }
+}
+
+# Same shape as staging: Cloud Run + Cloud SQL + Memorystore + GCS.
+# Production uses larger SQL / Redis / Cloud Run CPU+memory (see cloud_run.tf).
 module "networking" {
   source = "../../modules/networking"
 
   project_id  = var.project_id
   region      = var.region
   environment = var.environment
-  # Keep legacy GCP names/CIDRs so dormant production networking is not replaced.
-  subnet_name            = "claims-manager-gke-production"
-  subnet_ip_cidr_range   = "10.0.0.0/20"
-  secondary_range_a_name = "claims-manager-pods-production"
-  secondary_range_b_name = "claims-manager-services-production"
-  secondary_ip_cidr_a    = "10.16.0.0/16"
-  secondary_ip_cidr_b    = "10.1.0.0/22"
-}
-
-module "gke" {
-  source = "../../modules/gke"
-
-  project_id         = var.project_id
-  region             = var.region
-  environment        = var.environment
-  vpc_self_link      = module.networking.vpc_self_link
-  subnet_self_link   = module.networking.subnet_self_link
-  pod_range_name     = module.networking.pod_range_name
-  service_range_name = module.networking.service_range_name
-
-  depends_on = [module.networking]
 }
 
 module "cloudsql" {
   source = "../../modules/cloudsql"
 
-  project_id            = var.project_id
-  region                = var.region
-  environment           = var.environment
-  tier                  = var.cloudsql_tier
-  availability_type     = "REGIONAL"
-  backup_retention_days = 30
-  private_network       = module.networking.vpc_self_link
+  project_id               = var.project_id
+  region                   = var.region
+  environment              = var.environment
+  tier                     = var.cloudsql_tier
+  availability_type        = "REGIONAL"
+  backup_retention_days    = 30
+  private_network          = module.networking.vpc_self_link
+  create_provider_app_user = true
 }
 
 module "memorystore" {
@@ -79,6 +68,8 @@ module "gcs" {
   environment                = var.environment
   hmac_service_account_email = module.iam.service_account_emails["frontend"]
   create_hmac_key            = false
+  create_documents_bucket    = true
+  documents_cors_origins     = var.documents_cors_origins
 }
 
 data "google_project" "this" {
@@ -98,10 +89,9 @@ module "artifact_registry" {
 module "iam" {
   source = "../../modules/iam"
 
-  project_id  = var.project_id
-  environment = var.environment
-
-  depends_on = [module.gke]
+  project_id                   = var.project_id
+  environment                  = var.environment
+  enable_gke_workload_identity = false
 }
 
 module "secrets" {
@@ -117,6 +107,16 @@ module "dns" {
   project_id               = var.project_id
   environment              = var.environment
   dns_name                 = var.dns_name
-  gateway_ip               = var.gateway_ip
-  create_subdomain_records = var.gateway_ip != ""
+  gateway_ip               = null
+  host_records             = null
+  create_subdomain_records = false
+}
+
+module "pubsub" {
+  source = "../../modules/pubsub-claims"
+
+  project_id     = var.project_id
+  project_number = data.google_project.this.number
+  env            = var.environment
+  labels         = local.labels
 }

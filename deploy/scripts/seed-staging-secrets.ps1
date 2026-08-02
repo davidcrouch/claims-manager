@@ -1,7 +1,7 @@
 # deploy/scripts/seed-staging-secrets.ps1
 #
 # Idempotently populates Secret Manager in claims-manager-staging-493807 with
-# the full set of secrets the compose stack on the staging VM reads at
+# the full set of secrets Cloud Run services read at
 # boot. Run this once after `terraform apply` in environments/staging has
 # created the empty secret shells. Re-running is safe - secrets that
 # already have a version are skipped unless -Force is set.

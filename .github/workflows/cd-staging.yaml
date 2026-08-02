@@ -1,10 +1,8 @@
-name: Deploy Staging
+name: Deploy Cloud Run Staging
 
-# Staging runs on a single e2-standard-2 VM with docker compose (MIG-of-1).
-# See deploy/terraform/modules/staging_vm and deploy/compose/staging.
-#
-# Runs after CI completes on main (so Docker images are already pushed to
-# Artifact Registry).
+# Deploys api/auth/frontend/provider Cloud Run revisions after CI succeeds.
+# See deploy/CLOUD_RUN.md.
+
 on:
   workflow_run:
     workflows: ["CI"]
@@ -17,25 +15,13 @@ on:
         required: false
 
 concurrency:
-  group: deploy-staging
+  group: deploy-cloudrun-staging
   cancel-in-progress: false
 
 env:
   STAGING_PROJECT: claims-manager-staging-493807
   GCP_REGION: australia-southeast1
-  GCP_ZONE: australia-southeast1-a
-  ARTIFACT_HOST: australia-southeast1-docker.pkg.dev
-  MIG_NAME: claims-manager-staging-mig
-  ENV_FILE: /var/lib/claims-manager/staging.env
-  COMPOSE_DIR: /mnt/disks/data/compose
-  # COS quirks forcing this path:
-  #   * /root is read-only -> default ~/.docker/config.json unusable.
-  #   * /var is mounted noexec -> docker compose plugin can't live there.
-  # /mnt/disks/data is writable AND exec, so both config.json and the
-  # cli-plugins dir (populated by startup.sh) live here.
-  DOCKER_CONFIG: /mnt/disks/data/docker
-  # Apex domain; hosts are api-staging / auth-staging / app-staging
-  STAGING_DOMAIN: branlamie.com
+  REGISTRY: australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager
 
 jobs:
   deploy:
@@ -45,18 +31,30 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: provider-server
+          - service: api-server
+          - service: auth-server
+          - service: frontend
     steps:
-      - name: Resolve source SHA
+      - name: Resolve source SHA / tag
         run: |
           if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            echo "DEPLOY_SHA=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_ENV
+            echo "DEPLOY_SHA=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_ENV"
           else
-            echo "DEPLOY_SHA=${GITHUB_SHA}" >> $GITHUB_ENV
+            echo "DEPLOY_SHA=${GITHUB_SHA}" >> "$GITHUB_ENV"
           fi
 
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.DEPLOY_SHA }}
+      - name: Set image tag
+        run: |
+          if [ -n "${{ github.event.inputs.image_tag }}" ]; then
+            echo "IMAGE_TAG=${{ github.event.inputs.image_tag }}" >> "$GITHUB_ENV"
+          else
+            echo "IMAGE_TAG=main-${DEPLOY_SHA::7}" >> "$GITHUB_ENV"
+          fi
 
       - uses: google-github-actions/auth@v2
         with:
@@ -65,193 +63,63 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
-      - name: Set image tag
+      - name: Deploy ${{ matrix.service }}
         run: |
-          if [ -n "${{ github.event.inputs.image_tag }}" ]; then
-            echo "IMAGE_TAG=${{ github.event.inputs.image_tag }}" >> $GITHUB_ENV
+          IMAGE="${{ env.REGISTRY }}/${{ matrix.service }}:${IMAGE_TAG}"
+          echo "Deploying ${{ matrix.service }} → ${IMAGE}"
+          if ! gcloud run services describe "${{ matrix.service }}" \
+            --project "${STAGING_PROJECT}" \
+            --region "${GCP_REGION}" > /dev/null 2>&1; then
+            echo "::warning::Cloud Run service ${{ matrix.service }} not found. Apply staging terraform first."
+            exit 0
+          fi
+          gcloud run services update "${{ matrix.service }}" \
+            --project "${STAGING_PROJECT}" \
+            --region "${GCP_REGION}" \
+            --image "${IMAGE}"
+
+  migrate:
+    needs: [deploy]
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Resolve image tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            SHA="${{ github.event.workflow_run.head_sha }}"
           else
-            echo "IMAGE_TAG=main-${DEPLOY_SHA::7}" >> $GITHUB_ENV
+            SHA="${GITHUB_SHA}"
+          fi
+          if [ -n "${{ github.event.inputs.image_tag }}" ]; then
+            echo "IMAGE_TAG=${{ github.event.inputs.image_tag }}" >> "$GITHUB_ENV"
+          else
+            echo "IMAGE_TAG=main-${SHA::7}" >> "$GITHUB_ENV"
           fi
 
-      - name: Resolve MIG instance name
-        id: instance
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ci-deployer@claims-manager-infra-493807.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Run migrate-api Job
         run: |
-          name=$(gcloud compute instance-groups managed list-instances "${MIG_NAME}" \
-            --zone "${GCP_ZONE}" \
+          if ! gcloud run jobs describe migrate-api \
             --project "${STAGING_PROJECT}" \
-            --format="value(instance.basename())" | head -n1)
-          if [ -z "${name}" ]; then
-            echo "::error::No VM instance found in MIG ${MIG_NAME}"
-            exit 1
+            --region "${GCP_REGION}" > /dev/null 2>&1; then
+            echo "::warning::migrate-api job missing; skip"
+            exit 0
           fi
-          echo "INSTANCE_NAME=${name}" >> $GITHUB_ENV
-          echo "Resolved staging VM: ${name}"
-
-      - name: Upload compose tree to VM (via IAP)
-        # scp runs as an IAP-provisioned OS user which cannot write to the
-        # root-owned /mnt/disks/data/compose directory. Land the files in a
-        # user-writable /tmp staging dir first, then sudo-rsync into place so
-        # we keep the stable COMPOSE_DIR path the startup script expects.
-        run: |
-          set -e
-          gcloud compute ssh "${INSTANCE_NAME}" \
-            --tunnel-through-iap \
-            --zone "${GCP_ZONE}" \
+          gcloud run jobs update migrate-api \
             --project "${STAGING_PROJECT}" \
-            --command "rm -rf /tmp/compose-staging && mkdir -p /tmp/compose-staging"
-
-          gcloud compute scp --recurse \
-            --tunnel-through-iap \
-            --zone "${GCP_ZONE}" \
+            --region "${GCP_REGION}" \
+            --image "${{ env.REGISTRY }}/api-server:${IMAGE_TAG}"
+          gcloud run jobs execute migrate-api \
             --project "${STAGING_PROJECT}" \
-            deploy/compose/staging/. \
-            "${INSTANCE_NAME}:/tmp/compose-staging/"
-
-          gcloud compute ssh "${INSTANCE_NAME}" \
-            --tunnel-through-iap \
-            --zone "${GCP_ZONE}" \
-            --project "${STAGING_PROJECT}" \
-            --command "sudo mkdir -p ${COMPOSE_DIR} && sudo rsync -a --delete /tmp/compose-staging/ ${COMPOSE_DIR}/ && rm -rf /tmp/compose-staging"
-
-      # The compose tree above brings the *shape*; the actual values live in
-      # Secret Manager and are rendered into ${ENV_FILE} by the VM's startup
-      # script on every boot. To pick up rotated secrets mid-uptime without
-      # waiting for a MIG replacement, re-render here by pulling the
-      # startup-script out of instance metadata and re-running it (it is
-      # idempotent by design).
-      - name: Re-render env file from Secret Manager
-        run: |
-          gcloud compute ssh "${INSTANCE_NAME}" \
-            --tunnel-through-iap \
-            --zone "${GCP_ZONE}" \
-            --project "${STAGING_PROJECT}" \
-            --command "sudo bash -c 'curl -fsS -H \"Metadata-Flavor: Google\" http://metadata.google.internal/computeMetadata/v1/instance/attributes/startup-script > /tmp/startup.sh && chmod +x /tmp/startup.sh && /tmp/startup.sh >/var/log/startup-rerun.log 2>&1 || true; test -f ${ENV_FILE} && echo \"${ENV_FILE} present\"'"
-
-      # Run drizzle migrations for the api database in a one-shot container
-      # so schema-drift cannot sneak past us before the service pool is up.
-      # Uses apps/api `db:migrate:runtime` which runs against DATABASE_URL.
-      #
-      # The egress network is defined in compose.yaml and is normally created
-      # by `docker compose up`. On a fresh MIG instance (or after a docker
-      # system prune) it doesn't exist yet when this step runs, so we create
-      # it here idempotently with the labels compose expects — compose will
-      # then reuse the same network on `up` below instead of recreating it.
-      - name: Run API database migrations (one-shot)
-        run: |
-          gcloud compute ssh "${INSTANCE_NAME}" \
-            --tunnel-through-iap \
-            --zone "${GCP_ZONE}" \
-            --project "${STAGING_PROJECT}" \
-            --command "set -e; \
-              IMAGE=${ARTIFACT_HOST}/claims-manager-infra-493807/claims-manager/api-server:${IMAGE_TAG}; \
-              DB_URL=\$(sudo grep ^DATABASE_URL_API= ${ENV_FILE} | cut -d= -f2-); \
-              sudo DOCKER_CONFIG=${DOCKER_CONFIG} docker network inspect claims-manager-staging_egress >/dev/null 2>&1 || \
-                sudo DOCKER_CONFIG=${DOCKER_CONFIG} docker network create \
-                  --label com.docker.compose.project=claims-manager-staging \
-                  --label com.docker.compose.network=egress \
-                  claims-manager-staging_egress; \
-              sudo DOCKER_CONFIG=${DOCKER_CONFIG} docker pull \$IMAGE; \
-              sudo DOCKER_CONFIG=${DOCKER_CONFIG} docker run --rm --network claims-manager-staging_egress \
-                --env-file ${ENV_FILE} \
-                -e DATABASE_URL=\$DB_URL \
-                \$IMAGE node dist/database/run-migrations.js"
-
-      # Boot disk is only 20GB on COS and Docker's image store lives on it.
-      # Every deploy pulls a fresh main-<sha> set for each service, so stale
-      # tags accumulate until `no space left on device` wedges the next pull.
-      # `docker image prune -af` only drops images not held by a running
-      # container, so the currently-live stack is never touched.
-      - name: Reclaim docker image space on VM
-        run: |
-          gcloud compute ssh "${INSTANCE_NAME}" \
-            --tunnel-through-iap \
-            --zone "${GCP_ZONE}" \
-            --project "${STAGING_PROJECT}" \
-            --command "set -e; \
-              echo '--- disk before prune ---'; df -h /var/lib/docker; \
-              sudo DOCKER_CONFIG=${DOCKER_CONFIG} docker image prune -af || true; \
-              echo '--- disk after prune ---'; df -h /var/lib/docker"
-
-      - name: Pull images + docker compose up
-        run: |
-          gcloud compute ssh "${INSTANCE_NAME}" \
-            --tunnel-through-iap \
-            --zone "${GCP_ZONE}" \
-            --project "${STAGING_PROJECT}" \
-            --command "set -e; \
-              cd ${COMPOSE_DIR}; \
-              sudo DOCKER_CONFIG=${DOCKER_CONFIG} IMAGE_TAG=${IMAGE_TAG} docker compose -f compose.yaml -f compose.override.yaml --env-file ${ENV_FILE} pull; \
-              sudo DOCKER_CONFIG=${DOCKER_CONFIG} IMAGE_TAG=${IMAGE_TAG} docker compose -f compose.yaml -f compose.override.yaml --env-file ${ENV_FILE} up -d --remove-orphans"
-
-      - name: Wait for api-server health
-        run: |
-          gcloud compute ssh "${INSTANCE_NAME}" \
-            --tunnel-through-iap \
-            --zone "${GCP_ZONE}" \
-            --project "${STAGING_PROJECT}" \
-            --command "set -e; \
-              cd ${COMPOSE_DIR}; \
-              for i in \$(seq 1 30); do \
-                if sudo DOCKER_CONFIG=${DOCKER_CONFIG} docker compose -f compose.yaml --env-file ${ENV_FILE} \
-                    exec -T api-server wget -q --spider http://127.0.0.1:3001/api/v1/health; then \
-                  echo 'api-server healthy'; exit 0; \
-                fi; \
-                echo \"waiting for api-server (\$i/30)...\"; sleep 5; \
-              done; \
-              echo 'api-server did not become healthy'; \
-              sudo DOCKER_CONFIG=${DOCKER_CONFIG} docker compose -f compose.yaml --env-file ${ENV_FILE} \
-                logs --tail=100 api-server; exit 1"
-
-      - name: Wait for auth-server health
-        run: |
-          gcloud compute ssh "${INSTANCE_NAME}" \
-            --tunnel-through-iap \
-            --zone "${GCP_ZONE}" \
-            --project "${STAGING_PROJECT}" \
-            --command "set -e; \
-              cd ${COMPOSE_DIR}; \
-              for i in \$(seq 1 30); do \
-                if sudo DOCKER_CONFIG=${DOCKER_CONFIG} docker compose -f compose.yaml --env-file ${ENV_FILE} \
-                    exec -T auth-server wget -q --spider http://127.0.0.1:4000/health; then \
-                  echo 'auth-server healthy'; exit 0; \
-                fi; \
-                echo \"waiting for auth-server (\$i/30)...\"; sleep 5; \
-              done; \
-              echo 'auth-server did not become healthy'; \
-              sudo DOCKER_CONFIG=${DOCKER_CONFIG} docker compose -f compose.yaml --env-file ${ENV_FILE} \
-                logs --tail=100 auth-server; exit 1"
-
-      - name: Wait for frontend health
-        run: |
-          gcloud compute ssh "${INSTANCE_NAME}" \
-            --tunnel-through-iap \
-            --zone "${GCP_ZONE}" \
-            --project "${STAGING_PROJECT}" \
-            --command "set -e; \
-              cd ${COMPOSE_DIR}; \
-              for i in \$(seq 1 30); do \
-                if sudo DOCKER_CONFIG=${DOCKER_CONFIG} docker compose -f compose.yaml --env-file ${ENV_FILE} \
-                    exec -T frontend wget -q --spider http://127.0.0.1:3000/; then \
-                  echo 'frontend healthy'; exit 0; \
-                fi; \
-                echo \"waiting for frontend (\$i/30)...\"; sleep 5; \
-              done; \
-              echo 'frontend did not become healthy'; \
-              sudo DOCKER_CONFIG=${DOCKER_CONFIG} docker compose -f compose.yaml --env-file ${ENV_FILE} \
-                logs --tail=100 frontend; exit 1"
-
-      # Public-hostname smoke tests exercise Caddy + TLS + DNS end-to-end,
-      # not just the internal docker network.
-      - name: Public-hostname smoke tests
-        run: |
-          set -e
-          echo "api health"
-          curl -fsS --max-time 15 https://api-staging.${STAGING_DOMAIN}/api/v1/health
-          echo
-
-          echo "auth-server OIDC discovery"
-          curl -fsS --max-time 15 https://auth-staging.${STAGING_DOMAIN}/.well-known/openid-configuration | head -c 200
-          echo
-
-          echo "frontend reachable"
-          curl -fsS --max-time 15 -o /dev/null -w "%{http_code}\n" https://app-staging.${STAGING_DOMAIN}/ | grep -E '^(200|301|302|401)$'
+            --region "${GCP_REGION}" \
+            --wait

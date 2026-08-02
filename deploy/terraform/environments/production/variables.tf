@@ -23,13 +23,55 @@ variable "cloudsql_tier" {
   default = "db-custom-4-16384"
 }
 
-variable "gateway_ip" {
-  type        = string
-  description = "External IP address of the GKE Gateway for DNS records"
-  default     = ""
-}
-
 variable "dns_name" {
   type        = string
-  description = "DNS zone name for production (e.g. app.example.com.)"
+  description = "Apex DNS zone with trailing dot (e.g. branlamie.com.). Used for Cloudflare hostname strings when use_public_hostnames=true."
+}
+
+variable "documents_cors_origins" {
+  type        = list(string)
+  default     = ["https://app.branlamie.com"]
+  description = "CORS origins for the documents GCS bucket"
+}
+
+variable "ci_deployer_infra_email" {
+  type        = string
+  description = "Email of the ci-deployer SA in claims-manager-infra that GitHub Actions impersonates"
+  default     = "ci-deployer@claims-manager-infra-493807.iam.gserviceaccount.com"
+}
+
+variable "enable_cloud_run" {
+  type        = bool
+  default     = true
+  description = "Provision Cloud Run services + migrate Job"
+}
+
+variable "use_public_hostnames" {
+  type        = bool
+  default     = false
+  description = "When true, OIDC env uses Cloudflare hostnames (app./auth.). When false, *.run.app."
+}
+
+variable "cloud_run_image_tag" {
+  type        = string
+  default     = "latest"
+  description = "Image tag referenced by terraform (CD deploys newer tags)"
+}
+
+variable "cloud_run_use_bootstrap_image" {
+  type        = bool
+  default     = true
+  description = "Use hello image until first production image push (set false after first deploy)"
+}
+
+variable "cloud_run_api_min_instances" {
+  type        = number
+  default     = 1
+  description = "min-instances for api-server"
+}
+
+variable "more0_gateway_url" {
+  type        = string
+  default     = "http://localhost:3205"
+  description = "More0 HTTP gateway URL for provider-server dispatch"
 }

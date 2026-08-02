@@ -1,76 +1,50 @@
 # Cloud Run deployment model
 
-Target architecture for Claims Manager (low throughput, multi-process):
+Claims Manager runs **Cloud Run only** (staging and production). No GKE, no Compose VM.
 
-| Service | Exposure | Notes |
-|---------|----------|--------|
-| `provider-server` | Public | Provider webhooks (Crunchwork); writes `inbound_webhook_events` |
-| `api-server` | Private (`INGRESS_TRAFFIC_INTERNAL_ONLY`) | Domain API for app/mcp; LibreOffice; More0 tools |
-| `auth-server` | Public | OIDC |
-| `frontend` | Public | Next.js BFF |
-| `migrate-api` | Job | Drizzle migrations |
+| Service | Exposure | Staging size | Production size |
+|---------|----------|--------------|-----------------|
+| `provider-server` | Public | 1 vCPU / 512Mi | 2 vCPU / 1Gi |
+| `api-server` | Private (`INTERNAL_ONLY`) | 2 vCPU / 2Gi | 4 vCPU / 4Gi |
+| `auth-server` | Public | 1 vCPU / 768Mi | 2 vCPU / 1Gi |
+| `frontend` | Public | 1 vCPU / 768Mi | 2 vCPU / 1Gi |
+| `migrate-api` | Job | 1 vCPU / 1Gi | 2 vCPU / 2Gi |
 
-**Data plane (unchanged):** Cloud SQL Postgres (`claims_manager`) + Memorystore Redis + GCS + Pub/Sub.
+**Data plane:** Cloud SQL Postgres + Memorystore Redis + GCS + Pub/Sub.
 
-**Same database:** `provider-server` and `api-server` share `claims_manager`. Prefer SQL user `provider_app` (see [`scripts/grant-provider-app.sql`](scripts/grant-provider-app.sql)).
+**Same database:** `provider-server` and `api-server` share `claims_manager`. Prefer SQL user `provider_app` ([`scripts/grant-provider-app.sql`](scripts/grant-provider-app.sql)).
 
-Compute is **Cloud Run only**. `deploy/k8s/**` and the production GKE terraform module are dormant. Staging Compose VM is removed (`enable_staging_vm=false`). The VPC subnet is named `claims-manager-private-<env>` (not `…-gke-…`).
+**Hostnames:** Cloudflare → `*.run.app` service URLs. Cloud Run domain mappings are not used (unsupported in `australia-southeast1`).
 
-**No Cloud Run domain mappings** — unsupported in `australia-southeast1` and deleted from terraform. Point Cloudflare at the `*.run.app` service URLs.
+**Networking:** Active subnet is `claims-manager-private-<env>`. An orphan `claims-manager-gke-staging` subnet may remain until GCP releases stuck serverless address reservations — it is unused.
 
-## Terraform (staging)
+## Terraform
 
-Files:
+| Env | Path |
+|-----|------|
+| Staging | [`terraform/environments/staging`](terraform/environments/staging) |
+| Production | [`terraform/environments/production`](terraform/environments/production) |
 
-- [`terraform/modules/cloud_run_service`](terraform/modules/cloud_run_service) — reusable service (no domain mapping)
-- [`terraform/environments/staging/cloud_run.tf`](terraform/environments/staging/cloud_run.tf) — api / auth / frontend / provider + migrate Job
-
-Variables:
-
-| Variable | Default | Meaning |
-|----------|---------|---------|
-| `enable_cloud_run` | `true` | Provision Cloud Run services |
-| `enable_staging_vm` | `false` | Compose/Caddy VM (off) |
-| `use_public_hostnames` | `false` | OIDC env uses Cloudflare hostnames vs `*.run.app` |
-| `cloud_run_image_tag` | `latest` | Initial image tag in terraform |
-
-### Apply (first time)
+Shared module: [`terraform/modules/cloud_run_service`](terraform/modules/cloud_run_service).
 
 ```bash
-cd deploy/terraform/environments/staging
+cd deploy/terraform/environments/staging   # or production
 terraform apply
 ```
 
-Then:
-
-1. Seed secrets (includes `database-url-provider`):
-   ```powershell
-   pwsh deploy/scripts/seed-staging-secrets.ps1
-   ```
-2. Grant SQL privileges for `provider_app`:
-   ```bash
-   psql "$DATABASE_URL_ADMIN" -f deploy/scripts/grant-provider-app.sql
-   ```
-3. CI `workflow_dispatch` with `force_build_all=true` to push all four images (including `provider-server`).
-4. `cd-cloudrun-staging` updates Cloud Run revisions to real images.
-5. Optionally set `cloud_run_use_bootstrap_image=false` and re-apply to enable HTTP probes.
-
-### Cutover from Compose VM
-
-1. Confirm Cloud Run health on `*.run.app` URIs (`terraform output cloud_run_uris`).
-2. Point CF Worker / Crunchwork at `provider-server` URI (or `providers-staging` after DNS flip).
-3. Point Cloudflare CNAMEs at the `*.run.app` URLs; set `use_public_hostnames=true` and re-apply so OIDC issuer/callbacks match.
-4. Frontend BFF should call the **private** api URI with identity (not a public API hostname).
+After first image push, keep `cloud_run_use_bootstrap_image=false` (staging default).
 
 ## CI / CD
 
 | Workflow | Role |
 |----------|------|
-| [`.github/workflows/ci.yaml`](../.github/workflows/ci.yaml) | Matrix Docker builds for api / auth / frontend / **provider-server** |
-| [`.github/workflows/cd-cloudrun-staging.yaml`](../.github/workflows/cd-cloudrun-staging.yaml) | Updates Cloud Run images + migrate Job after CI |
-| [`.github/workflows/cd-staging.yaml`](../.github/workflows/cd-staging.yaml) | Legacy Compose VM deploy (keep until cutover) |
+| [`.github/workflows/ci.yaml`](../.github/workflows/ci.yaml) | Matrix Docker builds (api / auth / frontend / provider) |
+| [`.github/workflows/cd-staging.yaml`](../.github/workflows/cd-staging.yaml) | Update staging Cloud Run images + migrate Job after CI |
+| [`.github/workflows/cd-production.yaml`](../.github/workflows/cd-production.yaml) | Update production Cloud Run on `v*.*.*` tags |
 
 ## App sources
 
-- [`apps/provider`](../apps/provider) — `provider-server` Nest ingest app
-- Webhook handlers remain on `apps/api` until traffic is fully cut over; then deprecate public webhook routes on api
+- [`apps/provider`](../apps/provider) — public webhook ingest
+- [`apps/api`](../apps/api) — private domain API
+- [`apps/auth-server`](../apps/auth-server) — OIDC
+- [`apps/frontend`](../apps/frontend) — Next.js BFF

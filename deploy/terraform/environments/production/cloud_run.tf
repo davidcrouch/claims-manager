@@ -1,27 +1,23 @@
-# Cloud Run compute path (see deploy/CLOUD_RUN.md).
-# Custom hostnames are via Cloudflare → *.run.app (domain mappings are not
-# supported in australia-southeast1 and are not provisioned here).
+# Cloud Run compute path — same services as staging, larger CPU/memory.
+# Custom hostnames via Cloudflare → *.run.app (no domain mappings in this region).
 
 locals {
-  artifact_host = "${var.region}-docker.pkg.dev/${var.infra_project_id}/claims-manager"
-  image_tag     = var.cloud_run_image_tag
-  # Placeholder so first terraform apply succeeds before Artifact Registry
-  # images exist. CD replaces with real service images; module ignores image drift.
+  artifact_host   = "${var.region}-docker.pkg.dev/${var.infra_project_id}/claims-manager"
+  image_tag       = var.cloud_run_image_tag
   bootstrap_image = "us-docker.pkg.dev/cloudrun/container/hello"
 
-  # Deterministic *.run.app URLs (project-number form).
   run_host         = "${data.google_project.this.number}.${var.region}.run.app"
   auth_run_url     = "https://auth-server-${local.run_host}"
   frontend_run_url = "https://frontend-${local.run_host}"
   api_run_url      = "https://api-server-${local.run_host}"
 
-  # Public hostnames (Cloudflare → *.run.app). Used when use_public_hostnames=true.
+  # Production hostnames have no env suffix (app.example.com vs app-staging.example.com).
   cloud_run_domain_suffix = trimsuffix(var.dns_name, ".")
   cloud_run_hosts = {
-    api       = "api-${var.environment}.${local.cloud_run_domain_suffix}"
-    auth      = "auth-${var.environment}.${local.cloud_run_domain_suffix}"
-    app       = "app-${var.environment}.${local.cloud_run_domain_suffix}"
-    providers = "providers-${var.environment}.${local.cloud_run_domain_suffix}"
+    api       = "api.${local.cloud_run_domain_suffix}"
+    auth      = "auth.${local.cloud_run_domain_suffix}"
+    app       = "app.${local.cloud_run_domain_suffix}"
+    providers = "providers.${local.cloud_run_domain_suffix}"
   }
 }
 
@@ -81,11 +77,11 @@ module "cloud_run_provider" {
   image                 = var.cloud_run_use_bootstrap_image ? local.bootstrap_image : "${local.artifact_host}/provider-server:${local.image_tag}"
   service_account_email = module.iam.service_account_emails["provider-server"]
   container_port        = 8080
-  cpu                   = "1"
-  memory                = "512Mi"
+  cpu                   = "2"
+  memory                = "1Gi"
   min_instances         = 0
-  max_instances         = 1
-  container_concurrency = 40
+  max_instances         = 3
+  container_concurrency = 80
   health_path           = var.cloud_run_use_bootstrap_image ? "/" : "/api/v1/health"
   enable_probes         = !var.cloud_run_use_bootstrap_image
   ingress               = "INGRESS_TRAFFIC_ALL"
@@ -122,11 +118,11 @@ module "cloud_run_api" {
   image                 = var.cloud_run_use_bootstrap_image ? local.bootstrap_image : "${local.artifact_host}/api-server:${local.image_tag}"
   service_account_email = module.iam.service_account_emails["api-server"]
   container_port        = 3001
-  cpu                   = "2"
-  memory                = "2Gi"
+  cpu                   = "4"
+  memory                = "4Gi"
   min_instances         = var.cloud_run_api_min_instances
-  max_instances         = 2
-  container_concurrency = 20
+  max_instances         = 6
+  container_concurrency = 40
   timeout               = "900s"
   health_path           = var.cloud_run_use_bootstrap_image ? "/" : "/api/v1/health"
   enable_probes         = !var.cloud_run_use_bootstrap_image
@@ -169,10 +165,10 @@ module "cloud_run_auth" {
   image                 = var.cloud_run_use_bootstrap_image ? local.bootstrap_image : "${local.artifact_host}/auth-server:${local.image_tag}"
   service_account_email = module.iam.service_account_emails["auth-server"]
   container_port        = 4000
-  cpu                   = "1"
-  memory                = "768Mi"
-  min_instances         = 0
-  max_instances         = 1
+  cpu                   = "2"
+  memory                = "1Gi"
+  min_instances         = 1
+  max_instances         = 3
   health_path           = var.cloud_run_use_bootstrap_image ? "/" : "/health"
   enable_probes         = !var.cloud_run_use_bootstrap_image
   ingress               = "INGRESS_TRAFFIC_ALL"
@@ -234,10 +230,10 @@ module "cloud_run_frontend" {
   image                 = var.cloud_run_use_bootstrap_image ? local.bootstrap_image : "${local.artifact_host}/frontend:${local.image_tag}"
   service_account_email = module.iam.service_account_emails["frontend"]
   container_port        = 3000
-  cpu                   = "1"
-  memory                = "768Mi"
-  min_instances         = 0
-  max_instances         = 1
+  cpu                   = "2"
+  memory                = "1Gi"
+  min_instances         = 1
+  max_instances         = 4
   health_path           = "/"
   enable_probes         = !var.cloud_run_use_bootstrap_image
   ingress               = "INGRESS_TRAFFIC_ALL"
@@ -306,8 +302,8 @@ resource "google_cloud_run_v2_job" "migrate_api" {
 
         resources {
           limits = {
-            cpu    = "1"
-            memory = "1Gi"
+            cpu    = "2"
+            memory = "2Gi"
           }
         }
 

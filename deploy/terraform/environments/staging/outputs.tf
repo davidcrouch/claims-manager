@@ -1,8 +1,3 @@
-# Outputs consumed by deploy/scripts/seed-staging-secrets.ps1 to
-# construct DATABASE_URL_* / REDIS_URL and to target the HMAC key it
-# creates for the frontend service account. Keep them explicit so the
-# script never has to dig into terraform state internals.
-
 output "cloudsql_private_ip" {
   value       = module.cloudsql.private_ip
   description = "CloudSQL instance private IP (used by DATABASE_URL_API/AUTH)"
@@ -39,11 +34,6 @@ output "frontend_sa_email" {
   description = "Frontend workload SA - target of the GCS HMAC key"
 }
 
-output "staging_vm_public_ip" {
-  value       = var.enable_staging_vm ? module.staging_vm[0].public_ip : null
-  description = "Static external IP fronting Caddy (null when enable_staging_vm=false)"
-}
-
 output "pubsub_topic_names" {
   value       = module.pubsub.topic_names
   description = "Domain Pub/Sub topic names (env-suffixed)"
@@ -56,7 +46,7 @@ output "cloud_run_uris" {
     frontend = module.cloud_run_frontend[0].uri
     provider = module.cloud_run_provider[0].uri
   } : {}
-  description = "Cloud Run service URIs (*.run.app) — use before DNS cutover"
+  description = "Cloud Run service URIs (*.run.app)"
 }
 
 output "cloudsql_provider_app_user" {
@@ -72,4 +62,9 @@ output "cloudsql_provider_app_password" {
 output "use_public_hostnames" {
   value       = var.use_public_hostnames
   description = "Whether OIDC env uses Cloudflare public hostnames vs *.run.app"
+}
+
+output "subnet_name" {
+  value       = module.networking.subnet_name
+  description = "Active private subnet name"
 }

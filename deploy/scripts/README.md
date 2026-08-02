@@ -1,36 +1,8 @@
-# deploy/scripts
+# Deploy scripts
 
-Bootstrapping helpers used by the staging runbook (see
-`deploy/STAGING-BOOTSTRAP.md`).
+| Script | Purpose |
+|--------|---------|
+| [`seed-staging-secrets.ps1`](seed-staging-secrets.ps1) | Write Secret Manager values for staging (DB URLs, redis, etc.) |
+| [`grant-provider-app.sql`](grant-provider-app.sql) | Least-privilege grants for `provider_app` |
 
-## `seed-staging-secrets.ps1`
-
-Populates Secret Manager in `claims-manager-staging-493807` with every secret
-`deploy/compose/staging/compose.yaml` and the VM's `startup.sh` read.
-
-Run after `terraform apply` in `deploy/terraform/environments/staging`
-(which creates the *empty* Secret Manager entries via `module.secrets`).
-
-```powershell
-pwsh deploy/scripts/seed-staging-secrets.ps1             # populate missing
-pwsh deploy/scripts/seed-staging-secrets.ps1 -DryRun     # plan only
-pwsh deploy/scripts/seed-staging-secrets.ps1 -Force      # rotate every secret
-```
-
-Values break down as:
-
-| Bucket      | Source                          | Examples                           |
-| ----------- | ------------------------------- | ---------------------------------- |
-| Derived     | terraform output                | `database-url-*`, `redis-url`      |
-| Random      | RNG / JWK generator             | `auth-jwt-secret`, `auth-jwks-*`   |
-| GCS HMAC    | `gcloud storage hmac create`    | `gcs-hmac-access-key/secret-key`   |
-| Placeholder | `REPLACE_ME` - needs human      | `auth-google-client-*`, `stripe-*` |
-
-The summary at the end lists every placeholder you still need to
-overwrite before staging can serve real traffic.
-
-## `generate-jwks.mjs`
-
-Helper called by the PowerShell seeder to produce the RSA-2048 and
-EC P-256 JWK components the auth-server's `getJwksConfig()` expects.
-Keep in sync with `apps/auth-server/src/config/env-validation.ts`.
+Cloud Run deploy is via GitHub Actions (`.github/workflows/cd-staging.yaml` / `cd-production.yaml`). See [`../CLOUD_RUN.md`](../CLOUD_RUN.md).

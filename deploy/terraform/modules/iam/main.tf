@@ -49,7 +49,6 @@ locals {
   ]...)
 
   ci_deployer_roles = toset(concat([
-    "roles/container.admin",
     "roles/artifactregistry.writer",
     "roles/run.admin",
   ], var.extra_ci_deployer_roles))

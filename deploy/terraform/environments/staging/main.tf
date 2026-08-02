@@ -32,28 +32,11 @@ module "networking" {
   project_id  = var.project_id
   region      = var.region
   environment = var.environment
-  # New private subnet (10.2.0.0/20). Legacy claims-manager-gke-staging may remain
-  # until GCP releases stuck serverless address reservations on that subnet.
+  # Active subnet. Orphan claims-manager-gke-staging may remain in GCP until
+  # serverless address reservations on it are released.
   subnet_ip_cidr_range = "10.2.0.0/20"
   secondary_ip_cidr_a  = "10.18.0.0/16"
   secondary_ip_cidr_b  = "10.19.0.0/22"
-}
-
-# Optional Compose/Caddy VM. Disabled by default — Cloud Run is the staging edge.
-module "staging_vm" {
-  count  = var.enable_staging_vm ? 1 : 0
-  source = "../../modules/staging_vm"
-
-  project_id        = var.project_id
-  region            = var.region
-  zone              = var.staging_vm_zone
-  environment       = var.environment
-  vpc_self_link     = module.networking.vpc_self_link
-  subnet_self_link  = module.networking.subnet_self_link
-  data_disk_size_gb = var.staging_vm_data_disk_size_gb
-  admin_cidr        = var.staging_vm_admin_cidr
-  domain            = trimsuffix(var.dns_name, ".")
-  caddy_admin_email = var.caddy_admin_email
 }
 
 module "cloudsql" {
@@ -69,8 +52,6 @@ module "cloudsql" {
   create_provider_app_user = true
 }
 
-# Minimum Memorystore capacity (M1). Staging stays on BASIC to save spend;
-# production uses STANDARD_HA.
 module "memorystore" {
   source = "../../modules/memorystore"
 
@@ -103,41 +84,17 @@ module "artifact_registry" {
 
   project_id = var.infra_project_id
   location   = var.region
-  reader_members = compact([
+  reader_members = [
     "serviceAccount:${data.google_project.this.number}-compute@developer.gserviceaccount.com",
-    var.enable_staging_vm ? "serviceAccount:${module.staging_vm[0].service_account_email}" : null,
-  ])
+  ]
 }
 
 module "iam" {
   source = "../../modules/iam"
 
-  project_id  = var.project_id
-  environment = var.environment
-
-  # Optional Compose-VM CD roles (only used if enable_staging_vm=true).
-  extra_ci_deployer_roles = [
-    "roles/iap.tunnelResourceAccessor",
-    "roles/compute.instanceAdmin.v1",
-    "roles/compute.osAdminLogin",
-  ]
-
-  # Cloud Run path: no GKE Workload Identity pool in this project.
+  project_id                   = var.project_id
+  environment                  = var.environment
   enable_gke_workload_identity = false
-}
-
-# ci-deployer must be allowed to actAs the VM service account so `gcloud
-# compute ssh` can mint an OS Login SSH key against it. The real
-# ci-deployer lives in the infra project (see
-# deploy/terraform/bootstrap/infra) - module.iam.ci_deployer_email would
-# point at an orphan SA in the staging project that the CI workflows do
-# not use.
-resource "google_service_account_iam_member" "ci_deployer_actas_vm" {
-  count = var.enable_staging_vm ? 1 : 0
-
-  service_account_id = "projects/${var.project_id}/serviceAccounts/${module.staging_vm[0].service_account_email}"
-  role               = "roles/iam.serviceAccountUser"
-  member             = "serviceAccount:${var.ci_deployer_infra_email}"
 }
 
 module "secrets" {
@@ -150,17 +107,14 @@ module "secrets" {
 module "dns" {
   source = "../../modules/dns"
 
-  project_id  = var.project_id
-  environment = var.environment
-  dns_name    = var.dns_name
-  # Public hostnames are owned by Cloudflare → *.run.app. No Cloud Run domain
-  # mappings in this region. Optional VM A records only if enable_staging_vm.
-  gateway_ip   = var.enable_staging_vm ? module.staging_vm[0].public_ip : null
-  host_records = null
+  project_id               = var.project_id
+  environment              = var.environment
+  dns_name                 = var.dns_name
+  gateway_ip               = null
+  host_records             = null
+  create_subdomain_records = false
 }
 
-# Domain Pub/Sub topics (+ DLQ). Push endpoints wired later when a stable
-# public URL for the API push handler is available.
 module "pubsub" {
   source = "../../modules/pubsub-claims"
 
