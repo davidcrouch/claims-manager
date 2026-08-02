@@ -161,6 +161,22 @@ module "cloud_run_api" {
     SEED_NEW_TENANTS       = "true"
     # Demo sample rows stay off in production; catalog-dev still runs.
     SEED_SAMPLE_DATA       = "false"
+    # JWT validation against auth-server (public hostname when LB is on).
+    AUTH_ISSUER_URL = (
+      var.use_public_hostnames
+      ? "https://${local.cloud_run_hosts.auth}"
+      : local.auth_run_url
+    )
+    AUTH_SERVER_URL = (
+      var.use_public_hostnames
+      ? "https://${local.cloud_run_hosts.auth}"
+      : local.auth_run_url
+    )
+    AUTH_JWKS_URI = (
+      var.use_public_hostnames
+      ? "https://${local.cloud_run_hosts.auth}/jwks"
+      : "${local.auth_run_url}/jwks"
+    )
   }
 
   secret_env_vars = [

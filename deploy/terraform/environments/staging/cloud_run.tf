@@ -165,6 +165,22 @@ module "cloud_run_api" {
     VERTEX_EMBEDDING_MODEL = "text-embedding-005"
     SEED_NEW_TENANTS       = "true"
     SEED_SAMPLE_DATA       = "true"
+    # JWT validation against auth-server (public hostname when LB is on).
+    AUTH_ISSUER_URL = (
+      var.use_public_hostnames
+      ? "https://${local.cloud_run_hosts.auth}"
+      : local.auth_run_url
+    )
+    AUTH_SERVER_URL = (
+      var.use_public_hostnames
+      ? "https://${local.cloud_run_hosts.auth}"
+      : local.auth_run_url
+    )
+    AUTH_JWKS_URI = (
+      var.use_public_hostnames
+      ? "https://${local.cloud_run_hosts.auth}/jwks"
+      : "${local.auth_run_url}/jwks"
+    )
   }
 
   secret_env_vars = [
