@@ -40,9 +40,9 @@ export class InternalController {
    * Always runs catalog-dev when enabled. Also runs sample-data when
    * `SEED_SAMPLE_DATA=true`.
    *
-   * Fire-and-forget semantics: returns 202 as soon as the work is
-   * dispatched. Failures are logged server-side, not returned to the
-   * caller — signup must never fail because of a seed hiccup.
+   * Awaits completion before responding so Cloud Run keeps CPU allocated
+   * for the whole seed (request-based CPU throttles fire-and-forget work).
+   * Auth-server still treats this as best-effort / non-blocking for signup.
    *
    * If `SEED_NEW_TENANTS` is not enabled, returns 202 with status
    * `disabled` — lets the caller (and ops) see the toggle state without
@@ -50,10 +50,10 @@ export class InternalController {
    */
   @Post('seed-tenant')
   @HttpCode(HttpStatus.ACCEPTED)
-  seedTenant(@Body() dto: SeedTenantDto): {
+  async seedTenant(@Body() dto: SeedTenantDto): Promise<{
     status: SeedTenantOutcome['status'];
     tenantId: string;
-  } {
+  }> {
     const fn = 'seedTenant';
     this.logger.log(`[${LOG}.${fn}] request tenantId=${dto.tenantId}`);
 
@@ -64,20 +64,21 @@ export class InternalController {
       return { status: 'disabled', tenantId: dto.tenantId };
     }
 
-    void this.internalService
-      .seedTenant({ tenantId: dto.tenantId })
-      .then((outcome) => {
-        this.logger.log(
-          `[${LOG}.${fn}] completed tenantId=${dto.tenantId} status=${outcome.status}`,
-        );
-      })
-      .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : String(err);
-        this.logger.error(
-          `[${LOG}.${fn}] background seed failed tenantId=${dto.tenantId} error=${message}`,
-        );
+    try {
+      const outcome = await this.internalService.seedTenant({
+        tenantId: dto.tenantId,
       });
-
-    return { status: 'seeded', tenantId: dto.tenantId };
+      this.logger.log(
+        `[${LOG}.${fn}] completed tenantId=${dto.tenantId} status=${outcome.status}`,
+      );
+      return { status: outcome.status, tenantId: dto.tenantId };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(
+        `[${LOG}.${fn}] seed failed tenantId=${dto.tenantId} error=${message}`,
+      );
+      // Still 202 — signup must not fail because of a seed hiccup.
+      return { status: 'seeded', tenantId: dto.tenantId };
+    }
   }
 }

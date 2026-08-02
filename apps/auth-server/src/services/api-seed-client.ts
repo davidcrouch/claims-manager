@@ -36,7 +36,9 @@ const baseLogger = createLogger('auth-server:api-seed-client', LoggerType.NODEJS
 const log = createTelemetryLogger(baseLogger, 'api-seed-client', 'ApiSeedClient', 'auth-server');
 
 const DEFAULT_PREFIX = '/api/v1';
-const REQUEST_TIMEOUT_MS = 5_000;
+// Catalog + sample-data seed can take >1m; keep request open so Cloud Run
+// allocates CPU for the full wait (auth signup still fire-and-forgets this).
+const REQUEST_TIMEOUT_MS = 180_000;
 const METADATA_IDENTITY_URL =
   'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity';
 
