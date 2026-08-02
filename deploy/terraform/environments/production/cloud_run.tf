@@ -231,7 +231,7 @@ module "cloud_run_frontend" {
   service_account_email = module.iam.service_account_emails["frontend"]
   container_port        = 3000
   cpu                   = "2"
-  memory                = "768Mi"
+  memory                = "1Gi"
   min_instances         = 0
   max_instances         = 1
   health_path           = "/"
