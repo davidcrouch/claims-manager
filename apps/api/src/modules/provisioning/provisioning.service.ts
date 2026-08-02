@@ -15,6 +15,7 @@ import { FilesystemService } from '../filesystem/filesystem.service';
 import { DocumentsService } from '../filesystem/documents.service';
 import { TemplateRegistryService } from '../document-generation/services/template-registry.service';
 import { seedCatalogDevForTenant } from '../../database/seeds/entries/catalog-dev.seed';
+import filesystemDefaultSeed from '../../database/seeds/entries/filesystem-default.seed';
 import {
   DOCUMENT_TYPES,
   type DocumentType,
@@ -184,6 +185,10 @@ export class ProvisioningService {
       return;
     }
 
+    // Platform Company/Project templates are not created by per-tenant seed;
+    // ensure they exist after a fresh DB (idempotent upsert).
+    await this.ensurePlatformFilesystemTemplates();
+
     try {
       await this.filesystemService.setupFromDefault();
     } catch (error) {
@@ -195,6 +200,22 @@ export class ProvisioningService {
       }
       throw error;
     }
+  }
+
+  private async ensurePlatformFilesystemTemplates(): Promise<void> {
+    const fn = 'ensurePlatformFilesystemTemplates';
+    this.logger.log(`[${LOG}.${fn}] ensuring platform filesystem templates`);
+    const result = await filesystemDefaultSeed.run({
+      db: this.db,
+      logger: {
+        info: (msg) => this.logger.log(`[${LOG}.${fn}] ${msg}`),
+        warn: (msg) => this.logger.warn(`[${LOG}.${fn}] ${msg}`),
+        error: (msg) => this.logger.error(`[${LOG}.${fn}] ${msg}`),
+      },
+    });
+    this.logger.log(
+      `[${LOG}.${fn}] done inserted=${result.inserted} updated=${result.updated} skipped=${result.skipped}`,
+    );
   }
 
   private async stepUploadTemplates(tenantId: string): Promise<void> {
