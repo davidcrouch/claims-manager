@@ -502,7 +502,8 @@ export async function createOidcProvider(): Promise<Provider> {
                      clientId: ctx.oidc?.client?.clientId
                   }, 'Failed to render logout page, using fallback');
 
-                  // Fallback to simple HTML if rendering fails
+                  const fallbackNonce = ctx.res?.locals?.cspNonce;
+                  const nonceAttr = fallbackNonce ? ` nonce="${fallbackNonce}"` : '';
                   ctx.body = `<!DOCTYPE html>
 <html>
 <head>
@@ -514,7 +515,7 @@ export async function createOidcProvider(): Promise<Provider> {
     <h1>Logging out...</h1>
     <p>Please wait while we sign you out.</p>
     ${form}
-    <script>
+    <script${nonceAttr}>
         setTimeout(() => {
             const form = document.getElementById('op.logoutForm');
             if (form) {
@@ -529,6 +530,30 @@ export async function createOidcProvider(): Promise<Provider> {
     </script>
 </body>
 </html>`;
+               }
+            },
+            postLogoutSuccessSource: async function postLogoutSuccessSource(ctx) {
+               const redirectTo = ctx.oidc?.params?.post_logout_redirect_uri;
+               const nonce = ctx.res?.locals?.cspNonce;
+               const nonceAttr = nonce ? ` nonce="${nonce}"` : '';
+
+               log.info({
+                  action: 'post_logout_success',
+                  redirectTo: redirectTo || '(none)',
+                  clientId: ctx.oidc?.params?.client_id,
+               }, 'auth-server:oidc-provider:postLogoutSuccessSource - Session ended');
+
+               if (redirectTo) {
+                  ctx.body = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Signed out</title>
+<script${nonceAttr}>window.location.replace(${JSON.stringify(redirectTo)});</script>
+</head><body><p>Redirecting&hellip;</p></body></html>`;
+               } else {
+                  ctx.body = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Signed out</title></head>
+<body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">
+<div style="text-align:center"><h1>Signed out</h1><p>You have been signed out successfully.</p></div>
+</body></html>`;
                }
             }
          }

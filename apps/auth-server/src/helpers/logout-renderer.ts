@@ -8,15 +8,17 @@ const baseLogger = createLogger('auth-server:logout-renderer', LoggerType.NODEJS
 const log = createTelemetryLogger(baseLogger, 'logout-renderer', 'LogoutRenderer', 'auth-server');
 
 export async function renderLogoutPage(ctx: any, form: string): Promise<string> {
+   const nonce: string | undefined = ctx.res?.locals?.cspNonce;
    try {
       log.debug({
          action: 'render_logout_page',
          clientId: ctx.oidc?.client?.clientId,
          sessionId: ctx.oidc?.session?.id,
-         host: ctx.host
+         host: ctx.host,
+         hasNonce: !!nonce,
       }, 'auth-server:logout-renderer:renderLogoutPage - Rendering logout page with React SSR');
 
-      const html = renderToString(React.createElement(LogoutPage, { form }));
+      const html = renderToString(React.createElement(LogoutPage, { form, nonce }));
       return `<!DOCTYPE html>${html}`;
    } catch (error) {
       log.error({
@@ -25,11 +27,12 @@ export async function renderLogoutPage(ctx: any, form: string): Promise<string> 
          clientId: ctx.oidc?.client?.clientId
       }, 'auth-server:logout-renderer:renderLogoutPage - Failed to render, using fallback');
 
-      return getFallbackLogoutHtml(form);
+      return getFallbackLogoutHtml(form, nonce);
    }
 }
 
-function getFallbackLogoutHtml(form: string): string {
+function getFallbackLogoutHtml(form: string, nonce?: string): string {
+   const nonceAttr = nonce ? ` nonce="${nonce}"` : '';
    return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -42,7 +45,7 @@ function getFallbackLogoutHtml(form: string): string {
       <h1>Logging out...</h1>
       <p>Please wait while we sign you out.</p>
       ${form}
-      <script>
+      <script${nonceAttr}>
          setTimeout(function(){
             var f=document.getElementById('op.logoutForm');
             if(f){var i=document.createElement('input');i.type='hidden';i.name='logout';i.value='yes';f.appendChild(i);f.submit();}
