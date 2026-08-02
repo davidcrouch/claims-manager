@@ -37,6 +37,14 @@ resource "google_project_service" "compute_for_run" {
   disable_on_destroy = false
 }
 
+resource "google_project_service" "aiplatform" {
+  count   = var.enable_cloud_run ? 1 : 0
+  project = var.project_id
+  service = "aiplatform.googleapis.com"
+
+  disable_on_destroy = false
+}
+
 # Artifact Registry readers for Cloud Run runtime SAs.
 resource "google_artifact_registry_repository_iam_member" "cloud_run_readers" {
   for_each = var.enable_cloud_run ? toset([
@@ -138,7 +146,11 @@ module "cloud_run_api" {
   vpc_subnet  = module.networking.subnet_self_link
 
   env_vars = {
-    NODE_ENV = "production"
+    NODE_ENV               = "production"
+    GCP_PROJECT_ID         = var.project_id
+    VERTEX_AI_PROJECT      = var.project_id
+    VERTEX_AI_LOCATION     = "us-central1"
+    VERTEX_EMBEDDING_MODEL = "text-embedding-005"
   }
 
   secret_env_vars = [
@@ -151,6 +163,7 @@ module "cloud_run_api" {
 
   depends_on = [
     google_project_service.run,
+    google_project_service.aiplatform,
     module.secrets,
   ]
 }

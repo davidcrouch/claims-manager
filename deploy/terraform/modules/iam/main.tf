@@ -7,6 +7,7 @@ locals {
       roles = [
         "roles/cloudsql.client",
         "roles/secretmanager.secretAccessor",
+        "roles/aiplatform.user",
       ]
     }
     "auth-server" = {

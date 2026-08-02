@@ -8,17 +8,32 @@ const EMBEDDING_TIMEOUT_MS = 5_000;
 @Injectable()
 export class EmbeddingService {
   private readonly logger = new Logger(EmbeddingService.name);
-  private readonly client: GoogleGenAI;
+  private readonly client: GoogleGenAI | null;
   private readonly model: string;
 
   constructor(private readonly configService: ConfigService) {
     const aiConfig = this.configService.get('ai', { infer: true });
     this.model = aiConfig?.embeddingModel ?? 'text-embedding-005';
+    const project = aiConfig?.vertexProject ?? '';
+    const location = aiConfig?.vertexLocation ?? 'us-central1';
+
+    if (!project) {
+      this.logger.warn(
+        `[${LOG_PREFIX}.constructor] Vertex AI project not configured (set VERTEX_AI_PROJECT or GCP_PROJECT_ID) — embeddings disabled`,
+      );
+      this.client = null;
+      return;
+    }
+
     this.client = new GoogleGenAI({
       vertexai: true,
-      project: aiConfig?.vertexProject ?? '',
-      location: aiConfig?.vertexLocation ?? 'us-central1',
+      project,
+      location,
     });
+  }
+
+  isConfigured(): boolean {
+    return this.client !== null;
   }
 
   async embed(text: string): Promise<number[]> {
@@ -28,6 +43,13 @@ export class EmbeddingService {
 
   async embedBatch(texts: string[]): Promise<number[][]> {
     if (texts.length === 0) return [];
+
+    if (!this.client) {
+      this.logger.warn(
+        `[${LOG_PREFIX}.embedBatch] skipped — Vertex AI not configured textCount=${texts.length}`,
+      );
+      return texts.map(() => []);
+    }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), EMBEDDING_TIMEOUT_MS);
