@@ -44,6 +44,7 @@ export async function fetchCloudRunIdToken(
 
 /** Audience for api-server is the origin of NEXT_PUBLIC_API_URL (no path). */
 export function resolveApiAudience(): string {
-  const url = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5001';
+  const key = 'NEXT_PUBLIC_API_URL';
+  const url = process.env[key] ?? 'http://localhost:5001';
   return url.replace(/\/+$/, '');
 }

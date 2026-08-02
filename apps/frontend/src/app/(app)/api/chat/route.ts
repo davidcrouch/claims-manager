@@ -1,5 +1,9 @@
 import { getAccessToken, getSession } from '@/lib/auth';
 import { getApiBaseUrl } from '@/lib/env';
+import {
+  fetchCloudRunIdToken,
+  resolveApiAudience,
+} from '@/lib/cloud-run-id-token';
 
 export const maxDuration = 120;
 
@@ -21,12 +25,16 @@ export async function POST(req: Request) {
       process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID ??
       undefined;
 
+    const idToken = await fetchCloudRunIdToken(resolveApiAudience());
     const upstream = await fetch(`${getApiBaseUrl()}/ai-chat/stream`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
         ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
+        ...(idToken
+          ? { 'X-Serverless-Authorization': `Bearer ${idToken}` }
+          : {}),
       },
       body: JSON.stringify(body),
     });

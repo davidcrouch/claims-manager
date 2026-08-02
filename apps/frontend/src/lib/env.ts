@@ -9,10 +9,16 @@
 /**
  * Returns the full API base URL: ${NEXT_PUBLIC_API_URL}${NEXT_PUBLIC_API_PREFIX}
  * e.g. http://localhost:5001/api/v1
+ *
+ * Uses dynamic key access to read from the runtime environment so that
+ * webpack DefinePlugin (which inlines NEXT_PUBLIC_* at build time) does not
+ * bake in the build-time value for server-side route handlers.
  */
 export function getApiBaseUrl(): string {
-  const url = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5001';
-  const prefix = process.env.NEXT_PUBLIC_API_PREFIX ?? '/api/v1';
+  const urlKey = 'NEXT_PUBLIC_API_URL';
+  const prefixKey = 'NEXT_PUBLIC_API_PREFIX';
+  const url = process.env[urlKey] ?? 'http://localhost:5001';
+  const prefix = process.env[prefixKey] ?? '/api/v1';
   return `${url.replace(/\/$/, '')}${prefix.startsWith('/') ? prefix : `/${prefix}`}`;
 }
 
