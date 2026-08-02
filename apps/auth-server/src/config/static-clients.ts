@@ -22,7 +22,7 @@ import {
 
 const LOG_PREFIX = 'auth-server:static-clients';
 
-/** Client ID for claims-manager frontend (Next.js app on port 5000). */
+/** Client ID for claims-manager frontend (Next.js app on port 5002). */
 export const CLAIMS_MANAGER_UI_CLIENT_ID = 'claims-manager-ui';
 
 export interface StaticClientConfig {
@@ -102,9 +102,9 @@ const CLIENT_TEMPLATES: ClientTemplate[] = [
          }
       },
       dev_defaults: {
-         redirect_uris: ['http://localhost:5000/api/auth/callback'],
-         post_logout_redirect_uris: ['http://localhost:5000'],
-         backchannel_logout_uri: 'http://localhost:5000/api/auth/backchannel_logout',
+         redirect_uris: ['http://localhost:5002/api/auth/callback'],
+         post_logout_redirect_uris: ['http://localhost:5002'],
+         backchannel_logout_uri: 'http://localhost:5002/api/auth/backchannel_logout',
       },
    },
 ];

@@ -47,12 +47,14 @@ function resolveRedirectUri(req: NextRequest): string {
 
   const hostHeader =
     req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? '';
-  const host = hostHeader.split(',')[0]?.trim().split(':')[0] ?? '';
-  if (!host || isIpHost(host)) return authConfig.oidcRedirectUri;
+  // Keep host:port for the redirect URI; strip port only for the IP check.
+  const hostWithPort = hostHeader.split(',')[0]?.trim() ?? '';
+  const hostname = hostWithPort.replace(/^\[|\]$/g, '').split(':')[0] ?? '';
+  if (!hostname || isIpHost(hostname)) return authConfig.oidcRedirectUri;
   const scheme =
     req.headers.get('x-forwarded-proto') ??
     (req.url.startsWith('https') ? 'https' : 'http');
-  return `${scheme}://${host}/api/auth/callback`;
+  return `${scheme}://${hostWithPort}/api/auth/callback`;
 }
 
 export async function GET(req: NextRequest) {
