@@ -1,27 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAccessToken, getSession } from '@/lib/auth';
 import { getApiBaseUrl } from '@/lib/env';
+import { getUpstreamApiAuth } from '@/lib/upstream-api';
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
-  const token = await getAccessToken();
-
-  if (!session.authenticated || !token) {
+  // No Content-Type — fetch must set multipart boundary from FormData.
+  const auth = await getUpstreamApiAuth();
+  if (!auth) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const formData = await req.formData();
-  const tenantId =
-    session.identity?.organization_id ??
-    process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID ??
-    '';
 
   const response = await fetch(`${getApiBaseUrl()}/ai-chat/upload`, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'x-tenant-id': tenantId,
-    },
+    headers: auth.headers,
     body: formData,
   });
 

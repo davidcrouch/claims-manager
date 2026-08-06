@@ -4,6 +4,10 @@ import { CatalogMismatchService } from '../catalog/services/catalog-mismatch.ser
 import { AddCatalogAssemblyDto, AddCatalogPrimitiveDto } from '../catalog/dto/catalog.dto';
 import { CreateQuoteGroupDto, UpdateQuoteGroupDto, ReorderQuoteGroupsDto, UpdateQuoteLineItemsDto } from './dto/quote-group.dto';
 import { QuotesService } from './quotes.service';
+import { ManualCaptureService, type CaptureEstimateDto } from '../domain/services/manual-capture.service';
+import { TenantContext } from '../../tenant/tenant-context';
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface';
 
 @Controller('quotes')
 export class QuotesController {
@@ -11,7 +15,22 @@ export class QuotesController {
     private readonly quotesService: QuotesService,
     private readonly catalogSelectionService: CatalogSelectionService,
     private readonly catalogMismatchService: CatalogMismatchService,
+    private readonly manualCaptureService: ManualCaptureService,
+    private readonly tenantContext: TenantContext,
   ) {}
+
+  @Post('capture')
+  async capture(
+    @Body() body: CaptureEstimateDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const tenantId = this.tenantContext.getTenantId();
+    return this.manualCaptureService.captureEstimate({
+      tenantId,
+      userId: user.sub,
+      dto: body,
+    });
+  }
 
   @Get()
   async findAll(
@@ -60,8 +79,33 @@ export class QuotesController {
   }
 
   @Post(':id/publish')
-  async publish(@Param('id') id: string) {
-    return this.quotesService.publish({ id });
+  async publish(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.quotesService.publish({ id, userId: user.sub });
+  }
+
+  @Post(':id/approve')
+  async approve(@Param('id') id: string) {
+    return this.quotesService.approve({ id });
+  }
+
+  @Post(':id/incorporate-proposal-pricing')
+  async incorporateProposalPricing(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      proposalId: string;
+      itemMappings: Array<{ quoteItemId: string; proposalItemId: string }>;
+    },
+  ) {
+    await this.quotesService.incorporateProposalPricing({
+      quoteId: id,
+      proposalId: body.proposalId,
+      itemMappings: body.itemMappings ?? [],
+    });
+    return { success: true };
   }
 
   @Get(':id/groups')

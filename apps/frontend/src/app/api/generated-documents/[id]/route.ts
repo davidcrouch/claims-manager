@@ -1,23 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, getAccessToken } from '@/lib/auth';
 import { getApiBaseUrl } from '@/lib/env';
+import { getUpstreamApiAuth } from '@/lib/upstream-api';
 
 async function authHeaders() {
-  const session = await getSession();
-  if (!session.authenticated) return null;
-
-  const token = await getAccessToken();
-  if (!token) return null;
-
-  const tenantId =
-    session.identity?.organization_id ??
-    process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID ??
-    '';
-
-  return {
-    Authorization: `Bearer ${token}`,
-    ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
-  };
+  const auth = await getUpstreamApiAuth();
+  return auth?.headers ?? null;
 }
 
 export async function GET(

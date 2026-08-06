@@ -5,14 +5,21 @@ import { MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
-import { ListPageHeader } from '@/components/layout/ListPageHeader';
+import { PrintButton } from '@/components/shared/PrintButton';
+import { EntityPageHeader } from '@/components/shared/EntityPageHeader';
 import {
   SortTabs,
   SearchInput,
   StatusFilterMenu,
-  ListEmptyState,
+  TableEmptyRow,
   type SortOption,
 } from '@/components/shared/list-filters';
+import {
+  ColumnSettingsHeaderCell,
+  useColumnVisibility,
+  type ColumnVisibilityDef,
+} from '@/components/shared/column-visibility';
+import type { Job, Claim } from '@/types/api';
 
 const SORT_OPTIONS: SortOption[] = [
   { key: 'created_at', label: 'Date' },
@@ -24,11 +31,25 @@ const READ_OPTIONS = [
   { id: 'unread', name: 'Unread' },
 ];
 
-export function MessagesListClient() {
+const MESSAGES_COLUMNS: ColumnVisibilityDef[] = [
+  { key: 'subject', label: 'Subject', locked: true },
+  { key: 'from', label: 'From' },
+  { key: 'to', label: 'To' },
+  { key: 'job_ref', label: 'Job Ref' },
+  { key: 'date', label: 'Date' },
+  { key: 'status', label: 'Status' },
+  { key: 'attachments', label: 'Attachments' },
+];
+
+export function MessagesListClient({ job, parentClaim }: { job?: Job | null; parentClaim?: Claim | null } = {}) {
   const [search, setSearch] = useState('');
   const [sortField, setSortField] = useState('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [readFilter, setReadFilter] = useState<Set<string>>(new Set());
+  const { isVisible, toggle, visibleCount } = useColumnVisibility(
+    'messages',
+    MESSAGES_COLUMNS,
+  );
 
   const handleSort = (field: string) => {
     if (sortField === field) {
@@ -42,11 +63,13 @@ export function MessagesListClient() {
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
       <SetPageHeader>
-        <ListPageHeader
+        <EntityPageHeader
           icon={MessageSquare}
           title="Messages"
           total={0}
           accent="slate"
+          job={job}
+          parentClaim={parentClaim}
         />
       </SetPageHeader>
       <SetHeaderActions>
@@ -58,6 +81,7 @@ export function MessagesListClient() {
         >
           New Message
         </Button>
+        <PrintButton documentType="messages_list" entityId="list" />
       </SetHeaderActions>
 
       <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
@@ -98,22 +122,43 @@ export function MessagesListClient() {
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50">
               <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                <th scope="col" className="px-4 py-3">Subject</th>
-                <th scope="col" className="px-4 py-3">From</th>
-                <th scope="col" className="px-4 py-3">To</th>
-                <th scope="col" className="px-4 py-3">Job Ref</th>
-                <th scope="col" className="px-4 py-3">Date</th>
-                <th scope="col" className="px-4 py-3">Status</th>
-                <th scope="col" className="px-4 py-3">Attachments</th>
+                {isVisible('subject') && (
+                  <th scope="col" className="px-4 py-3">Subject</th>
+                )}
+                {isVisible('from') && (
+                  <th scope="col" className="px-4 py-3">From</th>
+                )}
+                {isVisible('to') && (
+                  <th scope="col" className="px-4 py-3">To</th>
+                )}
+                {isVisible('job_ref') && (
+                  <th scope="col" className="px-4 py-3">Job Ref</th>
+                )}
+                {isVisible('date') && (
+                  <th scope="col" className="px-4 py-3">Date</th>
+                )}
+                {isVisible('status') && (
+                  <th scope="col" className="px-4 py-3">Status</th>
+                )}
+                {isVisible('attachments') && (
+                  <th scope="col" className="px-4 py-3">Attachments</th>
+                )}
                 <th scope="col" className="px-4 py-3">Actions</th>
+                <ColumnSettingsHeaderCell
+                  columns={MESSAGES_COLUMNS}
+                  isVisible={isVisible}
+                  onToggle={toggle}
+                />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {/* Data rows will render here once the messages API is connected */}
+              <TableEmptyRow
+                colSpan={visibleCount + 1 + 1}
+                label="No messages yet. Messages will appear here once the communications API is connected."
+              />
             </tbody>
           </table>
         </div>
-        <ListEmptyState label="No messages yet. Messages will appear here once the communications API is connected." />
       </div>
     </div>
   );

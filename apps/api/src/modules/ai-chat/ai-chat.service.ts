@@ -51,6 +51,11 @@ const CANVAS_TOOL_MAP: Record<string, string> = {
   create_quote: 'QuoteFormDrawer',
   create_task: 'TaskFormDrawer',
   create_contact: 'ContactFormDrawer',
+  open_assessment_building: 'AssessmentBuildingDrawer',
+  open_assessment_general: 'AssessmentGeneralDrawer',
+  open_assessment_hazards: 'AssessmentHazardsDrawer',
+  open_assessment_accommodation: 'AssessmentAccommodationDrawer',
+  open_assessment_other: 'AssessmentOtherDrawer',
 };
 
 interface ResolvedMcpTools {

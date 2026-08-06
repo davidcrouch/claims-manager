@@ -13,6 +13,30 @@ import { ProposalMapper } from './data-mappers/proposal.mapper';
 import { ReportMapper } from './data-mappers/report.mapper';
 import { BillMapper } from './data-mappers/bill.mapper';
 import { RfqMapper } from './data-mappers/rfq.mapper';
+import { JobMapper } from './data-mappers/job.mapper';
+import { ClaimMapper } from './data-mappers/claim.mapper';
+import { ContactMapper } from './data-mappers/contact.mapper';
+import { TaskMapper } from './data-mappers/task.mapper';
+import { AppointmentMapper } from './data-mappers/appointment.mapper';
+import { MessageMapper } from './data-mappers/message.mapper';
+import { JournalMapper } from './data-mappers/journal.mapper';
+import { VendorMapper } from './data-mappers/vendor.mapper';
+import { JobsListMapper } from './data-mappers/jobs-list.mapper';
+import { QuotesListMapper } from './data-mappers/quotes-list.mapper';
+import { InvoicesListMapper } from './data-mappers/invoices-list.mapper';
+import { BillsListMapper } from './data-mappers/bills-list.mapper';
+import { WorkOrdersListMapper } from './data-mappers/work-orders-list.mapper';
+import { PurchaseOrdersListMapper } from './data-mappers/purchase-orders-list.mapper';
+import { ProposalsListMapper } from './data-mappers/proposals-list.mapper';
+import { RfqsListMapper } from './data-mappers/rfqs-list.mapper';
+import { ReportsListMapper } from './data-mappers/reports-list.mapper';
+import { ClaimsListMapper } from './data-mappers/claims-list.mapper';
+import { ContactsListMapper } from './data-mappers/contacts-list.mapper';
+import { TasksListMapper } from './data-mappers/tasks-list.mapper';
+import { AppointmentsListMapper } from './data-mappers/appointments-list.mapper';
+import { MessagesListMapper } from './data-mappers/messages-list.mapper';
+import { JournalsListMapper } from './data-mappers/journals-list.mapper';
+import { VendorsListMapper } from './data-mappers/vendors-list.mapper';
 import type { DataMapper } from './data-mappers/base.mapper';
 import {
   DOCUMENT_TYPE_TO_ENTITY_TYPE,
@@ -43,6 +67,30 @@ export class DocumentGenerationService {
     reportMapper: ReportMapper,
     billMapper: BillMapper,
     rfqMapper: RfqMapper,
+    jobMapper: JobMapper,
+    claimMapper: ClaimMapper,
+    contactMapper: ContactMapper,
+    taskMapper: TaskMapper,
+    appointmentMapper: AppointmentMapper,
+    messageMapper: MessageMapper,
+    journalMapper: JournalMapper,
+    vendorMapper: VendorMapper,
+    jobsListMapper: JobsListMapper,
+    quotesListMapper: QuotesListMapper,
+    invoicesListMapper: InvoicesListMapper,
+    billsListMapper: BillsListMapper,
+    workOrdersListMapper: WorkOrdersListMapper,
+    purchaseOrdersListMapper: PurchaseOrdersListMapper,
+    proposalsListMapper: ProposalsListMapper,
+    rfqsListMapper: RfqsListMapper,
+    reportsListMapper: ReportsListMapper,
+    claimsListMapper: ClaimsListMapper,
+    contactsListMapper: ContactsListMapper,
+    tasksListMapper: TasksListMapper,
+    appointmentsListMapper: AppointmentsListMapper,
+    messagesListMapper: MessagesListMapper,
+    journalsListMapper: JournalsListMapper,
+    vendorsListMapper: VendorsListMapper,
   ) {
     this.mappers = {
       quote: quoteMapper,
@@ -53,6 +101,31 @@ export class DocumentGenerationService {
       report: reportMapper,
       bill: billMapper,
       rfq: rfqMapper,
+      job_details: jobMapper,
+      scope_of_work: jobMapper,
+      claim: claimMapper,
+      contact: contactMapper,
+      task: taskMapper,
+      appointment: appointmentMapper,
+      message: messageMapper,
+      journal: journalMapper,
+      vendor: vendorMapper,
+      jobs_list: jobsListMapper,
+      quotes_list: quotesListMapper,
+      invoices_list: invoicesListMapper,
+      bills_list: billsListMapper,
+      work_orders_list: workOrdersListMapper,
+      purchase_orders_list: purchaseOrdersListMapper,
+      proposals_list: proposalsListMapper,
+      rfqs_list: rfqsListMapper,
+      reports_list: reportsListMapper,
+      claims_list: claimsListMapper,
+      contacts_list: contactsListMapper,
+      tasks_list: tasksListMapper,
+      appointments_list: appointmentsListMapper,
+      messages_list: messagesListMapper,
+      journals_list: journalsListMapper,
+      vendors_list: vendorsListMapper,
     };
   }
 

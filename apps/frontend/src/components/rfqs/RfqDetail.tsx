@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, type MutableRefObject } from 'react';
 import Link from 'next/link';
 import {
   FileQuestion,
@@ -11,14 +11,15 @@ import {
   Layers,
   Package,
   ClipboardList,
-  Send,
   MessageSquare,
   Loader2,
   Save,
+  Pencil,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { BackButton } from '@/components/layout/BackButton';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { Button } from '@/components/ui/button';
 import {
   DefRow,
@@ -30,8 +31,10 @@ import {
   asString,
   type Dict,
 } from '@/components/shared/detail';
-import type { Rfq, Proposal } from '@/types/api';
-import { GenerateDocumentButton } from '@/components/shared/GenerateDocumentButton';
+import type { Rfq, Proposal, Job } from '@/types/api';
+import { PrintButton } from '@/components/shared/PrintButton';
+import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
+import { jobDisplayName } from '@/components/shared/job-label';
 import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
 import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
 import {
@@ -63,15 +66,15 @@ function vendorName(rfq: Rfq): string | undefined {
 
 // ---------- header ----------------------------------------------------------
 
-export function RfqPageHeader({ rfq }: { rfq: Rfq }) {
+export function RfqPageHeader({ rfq, job }: { rfq: Rfq; job?: Job | null }) {
   const title = rfq.rfqNumber ?? rfq.name ?? rfq.id;
   const status = rfq.status?.name ?? 'Unknown';
   const vendor = vendorName(rfq);
 
   return (
-    <div className="flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-2">
+    <div className="flex w-full min-w-0 flex-col gap-y-1">
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-        <BackButton href="/rfqs" label="Back to RFQs" />
+        <BackButton href={job ? `/rfqs?jobId=${job.id}` : '/rfqs'} label="Back to RFQs" />
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-100">
           <FileQuestion className="h-4 w-4 text-violet-600" />
         </span>
@@ -83,12 +86,12 @@ export function RfqPageHeader({ rfq }: { rfq: Rfq }) {
             {vendor}
           </span>
         )}
-        {rfq.jobId && (
+        {job && (
           <Link
-            href={`/jobs/${rfq.jobId}`}
-            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            href={`/jobs/${job.id}`}
+            className="inline-flex items-center gap-1 text-xs uppercase text-primary hover:underline"
           >
-            View Job
+            {jobDisplayName(job)}
             <ExternalLink className="h-3 w-3" />
           </Link>
         )}
@@ -102,8 +105,7 @@ export function RfqPageHeader({ rfq }: { rfq: Rfq }) {
           </Link>
         )}
       </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1 text-xs">
-        <GenerateDocumentButton entityId={rfq.id} documentType="rfq" />
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pl-20 text-xs">
         <div className="flex items-baseline gap-1">
           <span className="text-muted-foreground">Sent:</span>
           <span className="font-medium">{formatDate(rfq.sentDate)}</span>
@@ -254,12 +256,34 @@ function OverviewTab({ rfq }: { rfq: Rfq }) {
   );
 }
 
-function ScopeItemsTab({ rfqId, quoteId }: { rfqId: string; quoteId: string | null }) {
+type ScopeSaveControls = {
+  canSave: boolean;
+  saving: boolean;
+  estimateLoading: boolean;
+  canEdit: boolean;
+};
+
+function ScopeItemsTab({
+  rfqId,
+  quoteId,
+  editing,
+  onSaveControlsChange,
+  onSaveSuccess,
+  saveRef,
+  cancelRef,
+}: {
+  rfqId: string;
+  quoteId: string | null;
+  editing: boolean;
+  onSaveControlsChange?: (controls: ScopeSaveControls | null) => void;
+  onSaveSuccess?: () => void;
+  saveRef?: MutableRefObject<(() => void) | null>;
+  cancelRef?: MutableRefObject<(() => void) | null>;
+}) {
   const [rfqGroups, setRfqGroups] = useState<ApiGroup[] | null>(null);
   const [estimateGroups, setEstimateGroups] = useState<ApiGroup[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [editing, setEditing] = useState(false);
   const [estimateLoading, setEstimateLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
@@ -324,7 +348,7 @@ function ScopeItemsTab({ rfqId, quoteId }: { rfqId: string; quoteId: string | nu
     return false;
   }, [selectedIds, rfqSourceIds]);
 
-  async function handleSaveScope() {
+  const handleSaveScope = useCallback(async () => {
     if (selectedIds.size === 0) {
       setSaveError('Select at least one scope item');
       return;
@@ -338,12 +362,51 @@ function ScopeItemsTab({ rfqId, quoteId }: { rfqId: string; quoteId: string | nu
         return;
       }
       setRfqGroups((result.groups as unknown as ApiGroup[]) ?? []);
+      onSaveSuccess?.();
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to update scope items');
     } finally {
       setSaving(false);
     }
-  }
+  }, [rfqId, selectedIds, onSaveSuccess]);
+
+  const handleCancelEdit = useCallback(() => {
+    setSelectedIds(new Set(rfqSourceIds));
+    setSaveError(null);
+  }, [rfqSourceIds]);
+
+  const canSave = selectionDirty && !saving && selectedIds.size > 0;
+  const canEdit = !!quoteId && !!rfqGroups && rfqGroups.length > 0 && !loading && !error;
+
+  useEffect(() => {
+    if (saveRef) {
+      saveRef.current = quoteId ? () => void handleSaveScope() : null;
+    }
+  }, [saveRef, quoteId, handleSaveScope]);
+
+  useEffect(() => {
+    if (cancelRef) {
+      cancelRef.current = handleCancelEdit;
+    }
+  }, [cancelRef, handleCancelEdit]);
+
+  useEffect(() => {
+    if (!onSaveControlsChange) return;
+    onSaveControlsChange({
+      canSave,
+      saving,
+      estimateLoading,
+      canEdit,
+    });
+  }, [onSaveControlsChange, canSave, saving, estimateLoading, canEdit]);
+
+  useEffect(() => {
+    return () => {
+      onSaveControlsChange?.(null);
+      if (saveRef) saveRef.current = null;
+      if (cancelRef) cancelRef.current = null;
+    };
+  }, [onSaveControlsChange, saveRef, cancelRef]);
 
   if (loading) {
     return (
@@ -385,53 +448,13 @@ function ScopeItemsTab({ rfqId, quoteId }: { rfqId: string; quoteId: string | nu
 
   return (
     <div className="space-y-3">
-      {quoteId && (
-        <div className="flex items-center justify-end gap-3">
-          {saveError && (
-            <p className="mr-auto text-sm text-destructive">{saveError}</p>
-          )}
-          {editing && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!selectionDirty || saving || selectedIds.size === 0}
-              onClick={() => void handleSaveScope()}
-            >
-              {saving ? (
-                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Save className="mr-1.5 h-3.5 w-3.5" />
-              )}
-              Save Scope
-            </Button>
-          )}
-          <div className="flex items-center gap-2">
-            <label
-              htmlFor="edit-scope-toggle"
-              className="text-sm text-muted-foreground select-none cursor-pointer"
-            >
-              Edit
-            </label>
-            <button
-              id="edit-scope-toggle"
-              type="button"
-              role="switch"
-              aria-checked={editing}
-              onClick={() => setEditing((v) => !v)}
-              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 ${
-                editing ? 'bg-emerald-500' : 'bg-slate-200'
-              }`}
-            >
-              <span
-                className={`pointer-events-none block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
-                  editing ? 'translate-x-4' : 'translate-x-0'
-                }`}
-              />
-            </button>
-            {estimateLoading && (
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-            )}
-          </div>
+      {saveError && (
+        <p className="text-sm text-destructive">{saveError}</p>
+      )}
+      {estimateLoading && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Loading estimate line items...
         </div>
       )}
       <QuoteLineItemsTable
@@ -651,6 +674,45 @@ export function RfqDetail({
   fetchProposals: (rfqId: string) => Promise<Proposal[]>;
 }) {
   const [tab, setTab] = useState<RfqTab>('overview');
+  const [editing, setEditing] = useState(false);
+  const [scopeSave, setScopeSave] = useState<ScopeSaveControls | null>(null);
+  const scopeSaveRef = useRef<(() => void) | null>(null);
+  const scopeCancelRef = useRef<(() => void) | null>(null);
+
+  const handleScopeSaveControls = useCallback((controls: ScopeSaveControls | null) => {
+    setScopeSave((prev) => {
+      if (
+        prev?.canSave === controls?.canSave &&
+        prev?.saving === controls?.saving &&
+        prev?.estimateLoading === controls?.estimateLoading &&
+        prev?.canEdit === controls?.canEdit
+      ) {
+        return prev;
+      }
+      return controls;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (tab !== 'scope-items') setEditing(false);
+  }, [tab]);
+
+  const handleCancel = useCallback(() => {
+    scopeCancelRef.current?.();
+    setEditing(false);
+  }, []);
+
+  const handleSaveSuccess = useCallback(() => {
+    setEditing(false);
+  }, []);
+
+  const handleTabChange = useCallback((next: RfqTab) => {
+    if (editing) {
+      scopeCancelRef.current?.();
+      setEditing(false);
+    }
+    setTab(next);
+  }, [editing]);
 
   const tabs: Array<{ id: RfqTab; label: string; icon: typeof Calendar }> = [
     { id: 'overview', label: 'Overview', icon: FileSignature },
@@ -661,8 +723,57 @@ export function RfqDetail({
     { id: 'timeline', label: 'Timeline', icon: Calendar },
   ];
 
+  const showScopeActions = tab === 'scope-items' && (scopeSave?.canEdit ?? !!rfq.quoteId);
+
   return (
     <div className="flex flex-col">
+      <SetHeaderActions>
+        {showScopeActions && (
+          editing ? (
+            <>
+              <Button
+                size="default"
+                variant="outline"
+                onClick={handleCancel}
+                disabled={scopeSave?.saving}
+                className="h-9 gap-1.5 px-4"
+              >
+                Cancel
+              </Button>
+              <Button
+                size="default"
+                onClick={() => scopeSaveRef.current?.()}
+                disabled={!scopeSave?.canSave}
+                className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+              >
+                {scopeSave?.saving ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Save className="h-3.5 w-3.5" />
+                )}
+                {scopeSave?.saving ? 'Saving...' : 'Save Scope'}
+              </Button>
+            </>
+          ) : (
+            <Button
+              size="default"
+              onClick={() => setEditing(true)}
+              className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Edit
+            </Button>
+          )
+        )}
+        <PrintButton documentType="rfq" entityId={rfq.id} />
+        <ArchiveEntityButton
+          entityType="rfq"
+          entityId={rfq.id}
+          statusName={rfq.status?.name}
+          entityLabel={rfq.rfqNumber ?? rfq.name ?? undefined}
+          redirectTo="/rfqs"
+        />
+      </SetHeaderActions>
       <div className="flex flex-wrap gap-0 border-b border-slate-200">
         {tabs.map((t) => {
           const Icon = t.icon;
@@ -671,7 +782,7 @@ export function RfqDetail({
             <button
               key={t.id}
               type="button"
-              onClick={() => setTab(t.id)}
+              onClick={() => handleTabChange(t.id)}
               className={`inline-flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t-md ${
                 active
                   ? 'border-violet-600 bg-violet-50 text-violet-600'
@@ -686,7 +797,17 @@ export function RfqDetail({
       </div>
       <div className="pt-4">
         {tab === 'overview' && <OverviewTab rfq={rfq} />}
-        {tab === 'scope-items' && <ScopeItemsTab rfqId={rfq.id} quoteId={rfq.quoteId ?? null} />}
+        {tab === 'scope-items' && (
+          <ScopeItemsTab
+            rfqId={rfq.id}
+            quoteId={rfq.quoteId ?? null}
+            editing={editing}
+            onSaveControlsChange={handleScopeSaveControls}
+            onSaveSuccess={handleSaveSuccess}
+            saveRef={scopeSaveRef}
+            cancelRef={scopeCancelRef}
+          />
+        )}
         {tab === 'proposals' && (
           <ProposalsTab rfqId={rfq.id} fetchProposals={fetchProposals} />
         )}

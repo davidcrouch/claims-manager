@@ -3,10 +3,11 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
+import { PrintButton } from '@/components/shared/PrintButton';
 import { RfqFormDrawer } from '@/components/forms/RfqFormDrawer';
 import type { JobOption } from '@/components/shared/job-label';
 import { RfqsListClient } from './RfqsListClient';
-import type { PaginatedResponse, Rfq } from '@/types/api';
+import type { PaginatedResponse, Rfq, Job, Claim } from '@/types/api';
 import type { StatusOption } from '@/components/shared/list-filters';
 
 export interface RfqsPageClientProps {
@@ -15,6 +16,8 @@ export interface RfqsPageClientProps {
   vendorOptions: StatusOption[];
   jobNameById?: Record<string, string>;
   jobs: JobOption[];
+  job?: Job | null;
+  parentClaim?: Claim | null;
 }
 
 export function RfqsPageClient({
@@ -23,6 +26,8 @@ export function RfqsPageClient({
   vendorOptions,
   jobNameById,
   jobs,
+  job,
+  parentClaim,
 }: RfqsPageClientProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -36,16 +41,20 @@ export function RfqsPageClient({
         >
           Create RFQ
         </Button>
+        <PrintButton documentType="rfqs_list" entityId="list" />
       </SetHeaderActions>
       <RfqsListClient
         initialData={initialData}
         statusOptions={statusOptions}
         vendorOptions={vendorOptions}
         jobNameById={jobNameById}
+        job={job}
+        parentClaim={parentClaim}
       />
       <RfqFormDrawer
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
+        jobId={job?.id}
         jobs={jobs}
       />
     </>

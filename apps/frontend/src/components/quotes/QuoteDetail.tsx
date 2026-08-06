@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   FileSpreadsheet,
@@ -9,6 +8,7 @@ import {
   FileSignature,
   Calculator,
   CalendarClock,
+  CheckCircle2,
   ShieldCheck,
   Users,
   Building2,
@@ -39,6 +39,7 @@ import {
   formatDate,
   formatDateTime,
   formatCurrency,
+  formatAddress,
   pick,
   asString,
   asBool,
@@ -46,13 +47,15 @@ import {
 } from '@/components/shared/detail';
 import type {
   Quote,
+  Job,
   QuotePartyPayload,
   QuoteScheduleInfo,
   QuoteApprovalInfo,
   CatalogType,
 } from '@/types/api';
-import { toast } from 'sonner';
-import { GenerateDocumentButton } from '@/components/shared/GenerateDocumentButton';
+import { PrintButton } from '@/components/shared/PrintButton';
+import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
+import { jobDisplayName } from '@/components/shared/job-label';
 import { QuoteLineItemsTab } from '@/components/quotes/QuoteLineItemsTab';
 import { JournalList } from '@/components/journals/JournalList';
 import {
@@ -62,9 +65,12 @@ import {
   linkJournalAction,
   unlinkJournalAction,
 } from '@/app/(app)/journals/actions';
-import { publishQuoteAction } from '@/app/(app)/mutations';
 import { QuoteAttachmentsTab } from '@/components/quotes/QuoteAttachmentsTab';
-
+import {
+  EstimatePublishWizard,
+  type EstimatePublishMode,
+} from '@/components/quotes/EstimatePublishWizard';
+import { EstimateApprovalWizard } from '@/components/quotes/EstimateApprovalWizard';
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -105,18 +111,15 @@ function getParty(
 }
 
 function formatPartyAddress(p: QuotePartyPayload): string {
-  const parts = [
-    p.unitNumber,
-    p.streetNumber,
-    p.streetName,
-    p.suburb,
-    p.state,
-    p.postCode,
-    p.country,
-  ]
-    .map((x) => (typeof x === 'string' ? x.trim() : x))
-    .filter(Boolean);
-  return parts.join(', ');
+  return formatAddress({
+    unitNumber: p.unitNumber,
+    streetNumber: p.streetNumber,
+    streetName: p.streetName,
+    suburb: p.suburb,
+    state: p.state,
+    postCode: p.postCode,
+    country: p.country,
+  });
 }
 
 function getScheduleInfo(quote: Quote): QuoteScheduleInfo {
@@ -171,9 +174,9 @@ function getCustomData(quote: Quote): Dict {
 // Header
 // ---------------------------------------------------------------------------
 
-export function QuotePageHeader({ quote }: { quote: Quote }) {
-  const router = useRouter();
-  const [publishing, setPublishing] = useState(false);
+export function QuotePageHeader({ quote, job }: { quote: Quote; job?: Job | null }) {
+  const [publishWizardOpen, setPublishWizardOpen] = useState(false);
+  const [approvalWizardOpen, setApprovalWizardOpen] = useState(false);
   const approval = getApprovalInfo(quote);
   const title =
     quote.name ??
@@ -181,56 +184,76 @@ export function QuotePageHeader({ quote }: { quote: Quote }) {
     quote.externalReference ??
     quote.id;
   const statusName =
-    quote.status?.name ?? approval.statusName ?? 'Unknown';
+    quote.status?.name ?? approval.statusName ?? (quote.externalReference ? 'Unknown' : 'Draft');
   const quoteTypeName = quote.quoteType?.name ?? approval.quoteTypeName;
-  const isDraft = !quote.externalReference;
-
-  async function handlePublish() {
-    setPublishing(true);
-    const result = await publishQuoteAction(quote.id);
-    setPublishing(false);
-    if (result.success) {
-      toast.success('Estimate published successfully');
-      router.refresh();
-    } else {
-      toast.error('Failed to publish estimate', {
-        description: result.error,
-      });
-    }
-  }
+  const canPublish =
+    statusName === 'Draft' ||
+    (!quote.status?.name && !approval.statusName && !quote.externalReference);
+  const publishMode: EstimatePublishMode =
+    job?.provider === 'crunchwork' ? 'external' : 'internal';
+  const isInternal = publishMode === 'internal';
+  const canApprove = statusName === 'Pending' && isInternal;
 
   return (
     <>
       <SetHeaderActions>
-        <GenerateDocumentButton
+        {canPublish && (
+          <Button
+            size="default"
+            onClick={() => setPublishWizardOpen(true)}
+            className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+          >
+            <Send className="h-3.5 w-3.5" />
+            Publish
+          </Button>
+        )}
+        {canApprove && (
+          <Button
+            size="default"
+            onClick={() => setApprovalWizardOpen(true)}
+            className="h-9 gap-1.5 px-4 bg-emerald-600 text-white hover:bg-emerald-500"
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            Received Approval
+          </Button>
+        )}
+        <PrintButton documentType="quote" entityId={quote.id} />
+        <ArchiveEntityButton
+          entityType="quote"
           entityId={quote.id}
-          documentType="quote"
-          size="default"
-          variant="default"
-          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+          statusName={statusName}
+          entityLabel={title}
+          redirectTo={job ? `/quotes?jobId=${job.id}` : '/quotes'}
         />
       </SetHeaderActions>
-      <div className="flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-2">
+      <EstimatePublishWizard
+        open={publishWizardOpen}
+        onOpenChange={setPublishWizardOpen}
+        quoteId={quote.id}
+        mode={publishMode}
+      />
+      <EstimateApprovalWizard
+        open={approvalWizardOpen}
+        onOpenChange={setApprovalWizardOpen}
+        quoteId={quote.id}
+      />
+      <div className="flex w-full min-w-0 flex-col gap-y-1">
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-          <BackButton href="/quotes" label="Back to estimates" />
+          <BackButton href={job ? `/quotes?jobId=${job.id}` : '/quotes'} label="Back to estimates" />
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100">
             <FileSpreadsheet className="h-4 w-4 text-amber-600" />
           </span>
           <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
-          {isDraft ? (
-            <StatusBadge status="Draft" />
-          ) : (
-            <StatusBadge status={statusName} />
-          )}
+          <StatusBadge status={statusName} />
           {quoteTypeName && quoteTypeName !== 'Estimate' && quoteTypeName !== 'Quote' && (
             <TypeBadge type={quoteTypeName} />
           )}
-          {quote.jobId && (
+          {job && (
             <Link
-              href={`/jobs/${quote.jobId}`}
-              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+              href={`/jobs/${job.id}`}
+              className="inline-flex items-center gap-1 text-xs uppercase text-primary hover:underline"
             >
-              View Job
+              {jobDisplayName(job)}
               <ExternalLink className="h-3 w-3" />
             </Link>
           )}
@@ -244,17 +267,7 @@ export function QuotePageHeader({ quote }: { quote: Quote }) {
             </Link>
           )}
         </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1 text-xs">
-          {isDraft && (
-            <Button
-              size="sm"
-              onClick={handlePublish}
-              disabled={publishing}
-            >
-              <Send className="mr-1.5 h-3.5 w-3.5" />
-              {publishing ? 'Publishing...' : 'Publish'}
-            </Button>
-          )}
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pl-20 text-xs">
           <div className="flex items-baseline gap-1">
             <span className="text-muted-foreground">Total:</span>
             <span className="font-medium">{formatCurrency(quote.totalAmount)}</span>

@@ -10,16 +10,16 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
-import {
-  ListPageHeader,
-  computeStatusBreakdown,
-} from '@/components/layout/ListPageHeader';
+import { PrintButton } from '@/components/shared/PrintButton';
+import { EntityPageHeader } from '@/components/shared/EntityPageHeader';
+import { computeStatusBreakdown } from '@/components/layout/ListPageHeader';
 import {
   formatDate,
   ValueFilterMenu,
   SortableColumnHeader,
   commitColumnFilterSelection,
   columnFilterToValuesParam,
+  TableEmptyRow,
 } from '@/components/shared/list-filters';
 import { TaskFormDrawer } from '@/components/forms/TaskFormDrawer';
 import {
@@ -28,8 +28,12 @@ import {
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
 import { TablePagination } from '@/components/shared/table-pagination';
+import {
+  ColumnSettingsHeaderCell,
+  useColumnVisibility,
+} from '@/components/shared/column-visibility';
 import { fetchTasksAction } from '@/app/(app)/tasks/actions';
-import type { Task, LookupRef } from '@/types/api';
+import type { Task, LookupRef, Job, Claim } from '@/types/api';
 
 type ListTab = 'open' | 'completed' | 'all';
 
@@ -48,10 +52,10 @@ type TaskSortField =
   | 'due_date'
   | 'updated_at';
 
-interface ColDef { key: TaskSortField; label: string; filterable?: boolean }
+interface ColDef { key: TaskSortField; label: string; filterable?: boolean; locked?: boolean }
 
 const TABLE_COLUMNS: ColDef[] = [
-  { key: 'name', label: 'Task' },
+  { key: 'name', label: 'Task', locked: true },
   { key: 'status', label: 'Status', filterable: true },
   { key: 'priority', label: 'Priority', filterable: true },
   { key: 'task_type', label: 'Type', filterable: true },
@@ -93,9 +97,10 @@ function isCompletedStatus(name: string | null | undefined): boolean {
 
 const PAGE_SIZE = 20;
 
-export function TasksListClient() {
+export function TasksListClient({ job, parentClaim }: { job?: Job | null; parentClaim?: Claim | null } = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const jobId = searchParams.get('jobId');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -118,6 +123,10 @@ export function TasksListClient() {
   const [typeFilterActive, setTypeFilterActive] = useState(false);
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const { isVisible, toggle, visibleCount } = useColumnVisibility(
+    'tasks',
+    TABLE_COLUMNS,
+  );
   const lastFetchKeyRef = useRef<string | null>(null);
   const statusParam = useMemo(
     () => columnFilterToValuesParam(statusFilterActive, statusFilter),
@@ -151,18 +160,19 @@ export function TasksListClient() {
         status: statusParam,
         priority: priorityParam,
         sort: sortParam,
+        jobId: jobId ?? undefined,
       });
       setTasks(res.data);
       setTotal(res.total);
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, page, sortParam, statusParam, priorityParam]);
+  }, [debouncedSearch, page, sortParam, statusParam, priorityParam, jobId]);
 
   useEffect(() => {
     const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
     const priorityKey = priorityParam === null ? '__none__' : (priorityParam ?? '');
-    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${priorityKey}`;
+    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${priorityKey}|${jobId ?? ''}`;
     const params = new URLSearchParams(searchParams.toString());
     params.set('search', debouncedSearch);
     params.set('tab', tab);
@@ -170,12 +180,14 @@ export function TasksListClient() {
     params.set('sort', sortParam);
     if (statusParam) params.set('status', statusParam); else params.delete('status');
     if (priorityParam) params.set('priority', priorityParam); else params.delete('priority');
+    if (jobId) params.set('jobId', jobId);
+    else params.delete('jobId');
     router.replace(`/tasks?${params}`, { scroll: false });
     if (lastFetchKeyRef.current === fetchKey) return;
     lastFetchKeyRef.current = fetchKey;
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop
-  }, [debouncedSearch, sortParam, tab, page, statusParam, priorityParam]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop: router.replace updates URL -> searchParams changes -> effect re-runs
+  }, [debouncedSearch, sortParam, tab, page, statusParam, priorityParam, jobId]);
 
   const handleColumnSort = (field: TaskSortField) => {
     setColumnSort((prev) => {
@@ -299,7 +311,7 @@ export function TasksListClient() {
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
       <SetPageHeader>
-        <ListPageHeader
+        <EntityPageHeader
           icon={CheckSquare}
           title="Tasks"
           total={total}
@@ -307,6 +319,8 @@ export function TasksListClient() {
           search={debouncedSearch}
           breakdown={breakdown}
           accent="slate"
+          job={job}
+          parentClaim={parentClaim}
         />
       </SetPageHeader>
       <SetHeaderActions>
@@ -317,6 +331,7 @@ export function TasksListClient() {
         >
           Create Task
         </Button>
+        <PrintButton documentType="tasks_list" entityId="list" />
       </SetHeaderActions>
 
       <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
@@ -376,12 +391,11 @@ export function TasksListClient() {
         className="flex-1 px-6 pb-6"
         style={{ minHeight: 0, overflow: 'auto' }}
       >
-        {visibleRows.length > 0 ? (
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50">
                 <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                  {TABLE_COLUMNS.map((col) => (
+                  {TABLE_COLUMNS.filter((col) => isVisible(col.key)).map((col) => (
                     <SortableColumnHeader
                       key={col.key}
                       columnKey={col.key}
@@ -421,10 +435,18 @@ export function TasksListClient() {
                       }
                     />
                   ))}
+                  <ColumnSettingsHeaderCell
+                    columns={TABLE_COLUMNS}
+                    isVisible={isVisible}
+                    onToggle={toggle}
+                  />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {visibleRows.map((task) => {
+                {visibleRows.length === 0 ? (
+                  <TableEmptyRow colSpan={visibleCount + 1} label="No tasks found." />
+                ) : (
+                  visibleRows.map((task) => {
                   const statusName = refName(task.status);
                   const taskTypeName =
                     typeof task.taskType === 'string'
@@ -436,45 +458,56 @@ export function TasksListClient() {
                       onClick={() => setSelectedTask(task)}
                       className="cursor-pointer transition-colors hover:bg-slate-50"
                     >
-                      <td className="px-4 py-3 font-medium text-slate-900">{task.name}</td>
-                      <td className="whitespace-nowrap px-4 py-3">
-                        <StatusBadge status={statusName} />
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3">
-                        <PriorityBadge priority={refName(task.priority)} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <TypeBadge type={taskTypeName} />
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {task.assigneeName ?? task.assignedToUserId ?? '—'}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {formatDate(task.dueDate)}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {formatDate(task.updatedAt)}
-                      </td>
+                      {isVisible('name') && (
+                        <td className="px-4 py-3 font-medium text-slate-900">{task.name}</td>
+                      )}
+                      {isVisible('status') && (
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <StatusBadge status={statusName} />
+                        </td>
+                      )}
+                      {isVisible('priority') && (
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <PriorityBadge priority={refName(task.priority)} />
+                        </td>
+                      )}
+                      {isVisible('task_type') && (
+                        <td className="px-4 py-3">
+                          <TypeBadge type={taskTypeName} />
+                        </td>
+                      )}
+                      {isVisible('assignee') && (
+                        <td className="px-4 py-3 text-slate-600">
+                          {task.assigneeName ?? task.assignedToUserId ?? '—'}
+                        </td>
+                      )}
+                      {isVisible('due_date') && (
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                          {formatDate(task.dueDate)}
+                        </td>
+                      )}
+                      {isVisible('updated_at') && (
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                          {formatDate(task.updatedAt)}
+                        </td>
+                      )}
+                      <td className="px-2 py-3" aria-hidden />
                     </tr>
                   );
-                })}
+                })
+                )}
               </tbody>
             </table>
             <TablePagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={handlePageChange} />
           </div>
-        ) : (
-          <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50">
-            <div className="flex flex-col items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-100">
-                <Search size={24} className="text-slate-400" />
-              </div>
-              <p className="text-sm text-slate-400">No tasks found.</p>
-            </div>
-          </div>
-        )}
       </div>
 
-      <TaskFormDrawer open={showCreateTask} onOpenChange={handleDrawerClose} />
+      <TaskFormDrawer
+        open={showCreateTask}
+        onOpenChange={handleDrawerClose}
+        jobId={job?.id}
+        claimId={job?.claimId ?? parentClaim?.id}
+      />
 
       <BottomFormDrawer
         open={!!selectedTask}

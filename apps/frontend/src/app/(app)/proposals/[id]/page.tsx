@@ -39,10 +39,12 @@ export default async function ProposalDetailPage({
   });
   if (!proposal) notFound();
 
+  const job = proposal.jobId ? await api.getJob(proposal.jobId).catch(() => null) : null;
+
   return (
     <>
       <SetPageHeader>
-        <ProposalPageHeader proposal={proposal} />
+        <ProposalPageHeader proposal={proposal} job={job} />
       </SetPageHeader>
       <ProposalDetail proposal={proposal} />
     </>

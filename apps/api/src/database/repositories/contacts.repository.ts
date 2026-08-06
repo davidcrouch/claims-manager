@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, or, ilike, asc, desc, sql } from 'drizzle-orm';
+import { eq, and, or, ilike, asc, desc, sql, inArray } from 'drizzle-orm';
 import { DRIZZLE } from '../drizzle.module';
 import type { DrizzleDB, DrizzleDbOrTx } from '../drizzle.module';
-import { contacts } from '../schema';
+import { contacts, jobContacts } from '../schema';
 
 export type ContactRow = typeof contacts.$inferSelect;
 export type ContactInsert = typeof contacts.$inferInsert;
@@ -40,13 +40,14 @@ export class ContactsRepository {
     limit?: number;
     search?: string;
     sort?: string;
+    jobId?: string;
   }): Promise<{ data: ContactRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
     const skip = (page - 1) * limit;
 
     const searchPattern = params.search ? `%${params.search}%` : null;
-    const whereClause = searchPattern
+    let whereClause = searchPattern
       ? and(
           eq(contacts.tenantId, params.tenantId),
           or(
@@ -57,6 +58,18 @@ export class ContactsRepository {
           ),
         )
       : eq(contacts.tenantId, params.tenantId);
+
+    if (params.jobId) {
+      const linked = await this.db
+        .select({ contactId: jobContacts.contactId })
+        .from(jobContacts)
+        .where(eq(jobContacts.jobId, params.jobId));
+      const contactIds = linked.map((row) => row.contactId);
+      if (contactIds.length === 0) {
+        return { data: [], total: 0 };
+      }
+      whereClause = and(whereClause, inArray(contacts.id, contactIds));
+    }
 
     const orderBy = buildContactsOrderBy(params.sort);
 

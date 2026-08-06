@@ -3,6 +3,9 @@
 import { useState } from 'react';
 import { MapPin } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
+import { PrintButton } from '@/components/shared/PrintButton';
+import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { PageTimeline } from './PageTimeline';
 import { PageEntryForm } from './PageEntryForm';
 import { useApiClient } from '@/hooks/useApiClient';
@@ -25,6 +28,16 @@ export function JournalDetailClient({ journal, initialPages }: JournalDetailClie
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
+      <SetHeaderActions>
+        <PrintButton documentType="journal" entityId={journal.id} />
+        <ArchiveEntityButton
+          entityType="journal"
+          entityId={journal.id}
+          statusName={journal.status}
+          entityLabel={journal.name}
+          redirectTo="/journals"
+        />
+      </SetHeaderActions>
       {/* Journal header info */}
       <div className="space-y-2">
         {journal.description && (

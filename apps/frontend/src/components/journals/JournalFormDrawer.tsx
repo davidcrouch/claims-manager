@@ -1,17 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { BookOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-  SheetFooter,
-} from '@/components/ui/sheet';
+  BottomFormDrawer,
+  BottomFormDrawerBody,
+  BottomFormDrawerError,
+  BottomFormDrawerFooter,
+} from '@/components/forms/BottomFormDrawer';
+import { JobSelectField } from '@/components/forms/JobSelectField';
+import type { JobOption } from '@/components/shared/job-label';
 import type { Journal } from '@/types/api';
 
 export interface JournalFormDrawerProps {
@@ -21,7 +23,11 @@ export interface JournalFormDrawerProps {
   entityId?: string;
   createJournal: (data: { name: string; description?: string }) => Promise<Journal | null>;
   linkJournal?: (journalId: string) => Promise<boolean>;
+  /** Link the new journal to a Job entity (used when a job is selected). */
+  linkToJob?: (journalId: string, jobId: string) => Promise<boolean>;
   onCreated?: (journal: Journal) => void;
+  jobId?: string | null;
+  jobs?: JobOption[];
 }
 
 export function JournalFormDrawer({
@@ -31,84 +37,158 @@ export function JournalFormDrawer({
   entityId,
   createJournal,
   linkJournal,
+  linkToJob,
   onCreated,
+  jobId,
+  jobs = [],
 }: JournalFormDrawerProps) {
+  const [selectedJobId, setSelectedJobId] = useState(jobId ?? '');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const jobRequired = jobs.length > 0 || Boolean(jobId);
+
+  useEffect(() => {
+    if (open) {
+      setSelectedJobId(jobId ?? '');
+    }
+  }, [open, jobId]);
+
+  const resetForm = () => {
+    setSelectedJobId(jobId ?? '');
+    setName('');
+    setDescription('');
+    setError(null);
+  };
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next) resetForm();
+    onOpenChange(next);
+  };
+
+  const canSubmit =
+    Boolean(name.trim()) &&
+    (!jobRequired || Boolean(selectedJobId.trim())) &&
+    !submitting;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim()) {
+      setError('Name is required');
+      return;
+    }
+    if (jobRequired && !selectedJobId.trim()) {
+      setError('Job is required');
+      return;
+    }
 
     setSubmitting(true);
+    setError(null);
     try {
       const journal = await createJournal({
         name: name.trim(),
         description: description.trim() || undefined,
       });
 
-      if (journal && entityType && entityId && linkJournal) {
+      if (!journal) {
+        setError('Failed to create journal');
+        return;
+      }
+
+      if (selectedJobId && linkToJob) {
+        await linkToJob(journal.id, selectedJobId);
+      }
+
+      const alreadyLinkedToSelectedJob =
+        entityType === 'Job' && entityId === selectedJobId;
+      if (journal && entityType && entityId && linkJournal && !alreadyLinkedToSelectedJob) {
         await linkJournal(journal.id);
       }
 
-      setName('');
-      setDescription('');
-      if (journal) onCreated?.(journal);
+      resetForm();
+      onCreated?.(journal);
     } catch (err) {
       console.error('JournalFormDrawer.handleSubmit:', err);
+      setError(err instanceof Error ? err.message : 'Failed to create journal');
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="gap-0 p-0 [&>button]:text-sidebar-foreground [&>button]:hover:bg-sidebar-accent [&>button]:hover:text-sidebar-foreground">
-        <SheetHeader data-slot="drawer-header" className="border-b border-sidebar-border p-4 pr-12">
-          <SheetTitle className="text-sidebar-foreground">New Journal</SheetTitle>
-          <SheetDescription className="text-sidebar-foreground/65">
-            Create a new journal{entityType ? ` and link it to this ${entityType.toLowerCase()}` : ''}.
-          </SheetDescription>
-        </SheetHeader>
+    <BottomFormDrawer
+      open={open}
+      onOpenChange={handleOpenChange}
+      title="Create Journal"
+      description={
+        entityType
+          ? `Create a new journal and link it to this ${entityType.toLowerCase()}.`
+          : 'Create a new journal for a job.'
+      }
+      icon={<BookOpen className="h-5 w-5" />}
+      widthClassName="w-[60%]"
+    >
+      <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+        <BottomFormDrawerBody>
+          <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+            {(jobs.length > 0 || jobId) && (
+              <JobSelectField
+                jobs={jobs}
+                value={selectedJobId}
+                onValueChange={setSelectedJobId}
+              />
+            )}
 
-        <form onSubmit={handleSubmit} className="space-y-4 px-8 py-6">
-          <div className="space-y-2">
-            <label htmlFor="journal-name" className="text-sm font-medium">
-              Name
-            </label>
-            <Input
-              id="journal-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Site Visit Notes"
-              required
-            />
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="journal-name">
+                Name <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="journal-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Site Visit Notes"
+                required
+              />
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="journal-description">Description</Label>
+              <Textarea
+                id="journal-description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Brief description (optional)"
+                rows={3}
+              />
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <label htmlFor="journal-description" className="text-sm font-medium">
-              Description
-            </label>
-            <Textarea
-              id="journal-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Brief description (optional)"
-              rows={3}
-            />
-          </div>
+          <BottomFormDrawerError error={error} />
+        </BottomFormDrawerBody>
 
-          <SheetFooter className="mt-2 px-0">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={!name.trim() || submitting}>
-              {submitting ? 'Creating…' : 'Create Journal'}
-            </Button>
-          </SheetFooter>
-        </form>
-      </SheetContent>
-    </Sheet>
+        <BottomFormDrawerFooter>
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            className="min-w-36 px-8"
+            onClick={() => handleOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            size="lg"
+            className="min-w-36 px-8"
+            disabled={!canSubmit}
+          >
+            {submitting ? 'Creating…' : 'Create Journal'}
+          </Button>
+        </BottomFormDrawerFooter>
+      </form>
+    </BottomFormDrawer>
   );
 }

@@ -1,12 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ProposalsRepository } from '../../database/repositories';
 import { TenantContext } from '../../tenant/tenant-context';
+import { LookupResolutionService } from '../domain/services/lookup-resolution.service';
 
 @Injectable()
 export class ProposalsService {
+  private readonly logger = new Logger('ProposalsService');
+
   constructor(
     private readonly proposalsRepo: ProposalsRepository,
     private readonly tenantContext: TenantContext,
+    private readonly lookupResolution: LookupResolutionService,
   ) {}
 
   async findAll(params: {
@@ -60,6 +64,86 @@ export class ProposalsService {
   }
 
   async update(params: { id: string; body: Record<string, unknown> }) {
-    return this.proposalsRepo.update({ id: params.id, data: params.body as any });
+    const tenantId = this.tenantContext.getTenantId();
+    const existing = await this.proposalsRepo.findOne({ id: params.id, tenantId });
+    if (!existing) {
+      throw new BadRequestException('Proposal not found');
+    }
+
+    const data: Record<string, unknown> = { ...params.body };
+
+    // Resolve status by name if provided as { status: { name } }
+    const statusObj = params.body.status as { name?: string } | undefined;
+    if (statusObj?.name && typeof statusObj.name === 'string') {
+      const statusLookupId = await this.lookupResolution.resolve({
+        tenantId,
+        domain: 'proposal_status',
+        externalReference: statusObj.name,
+        name: statusObj.name,
+        autoCreate: true,
+      });
+      if (statusLookupId) {
+        data.statusLookupId = statusLookupId;
+      }
+      delete data.status;
+    }
+
+    return this.proposalsRepo.update({ id: params.id, data: data as any });
+  }
+
+  async accept(params: { id: string }) {
+    const tenantId = this.tenantContext.getTenantId();
+    const existing = await this.proposalsRepo.findOne({ id: params.id, tenantId });
+    if (!existing) {
+      throw new BadRequestException('Proposal not found');
+    }
+
+    const statusLookupId = await this.lookupResolution.resolve({
+      tenantId,
+      domain: 'proposal_status',
+      externalReference: 'Accepted',
+      name: 'Accepted',
+      autoCreate: true,
+    });
+
+    const updated = await this.proposalsRepo.update({
+      id: params.id,
+      data: { statusLookupId: statusLookupId ?? undefined },
+    });
+
+    this.logger.log(`ProposalsService.accept — proposal=${params.id} accepted`);
+    return updated;
+  }
+
+  async decline(params: { id: string; reason?: string }) {
+    const tenantId = this.tenantContext.getTenantId();
+    const existing = await this.proposalsRepo.findOne({ id: params.id, tenantId });
+    if (!existing) {
+      throw new BadRequestException('Proposal not found');
+    }
+
+    const statusLookupId = await this.lookupResolution.resolve({
+      tenantId,
+      domain: 'proposal_status',
+      externalReference: 'Declined',
+      name: 'Declined',
+      autoCreate: true,
+    });
+
+    const customData = {
+      ...((existing.customData as Record<string, unknown> | null) ?? {}),
+      ...(params.reason ? { declineReason: params.reason } : {}),
+    };
+
+    const updated = await this.proposalsRepo.update({
+      id: params.id,
+      data: {
+        statusLookupId: statusLookupId ?? undefined,
+        customData,
+      },
+    });
+
+    this.logger.log(`ProposalsService.decline — proposal=${params.id} declined`);
+    return updated;
   }
 }

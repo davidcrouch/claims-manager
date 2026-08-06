@@ -267,21 +267,23 @@ export function CapturePoDrawer({
       </BottomFormDrawerBody>
 
       <BottomFormDrawerFooter>
-        <div className="flex w-full items-center justify-between gap-3">
-          <Button variant="outline" onClick={() => handleOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} disabled={submitting || !canSubmit}>
-            {submitting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Capturing...
-              </>
-            ) : (
-              'Capture PO'
-            )}
-          </Button>
-        </div>
+        <Button
+          variant="outline"
+          size="lg"
+          onClick={() => handleOpenChange(false)}
+        >
+          Cancel
+        </Button>
+        <Button size="lg" onClick={handleSubmit} disabled={submitting || !canSubmit}>
+          {submitting ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Capturing...
+            </>
+          ) : (
+            'Capture PO'
+          )}
+        </Button>
       </BottomFormDrawerFooter>
     </BottomFormDrawer>
   );

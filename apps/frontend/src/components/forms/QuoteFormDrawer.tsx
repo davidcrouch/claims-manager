@@ -37,8 +37,8 @@ function todayISO(): string {
 const quoteFormSchema = z.object({
   jobId: z.string().min(1, 'Job is required'),
   claimId: z.string().optional(),
-  quoteType: z.string().optional(),
-  name: z.string().optional(),
+  quoteType: z.string().min(1, 'Type is required'),
+  name: z.string().min(1, 'Name is required'),
   note: z.string().optional(),
   estimateDate: z.string().min(1, 'Estimate date is required'),
   expiresInDays: z.string().min(1, 'Expires in days is required'),
@@ -87,7 +87,7 @@ export function QuoteFormDrawer({
   const [error, setError] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [aiContext, setAiContext] = useState<AIContextPayload | undefined>();
-  const needsJobPicker = !jobId && (jobs?.length ?? 0) > 0;
+  const needsJobPicker = (jobs?.length ?? 0) > 0;
 
   useEffect(() => {
     if (!open) setChatOpen(false);
@@ -198,30 +198,48 @@ export function QuoteFormDrawer({
         <BottomFormDrawerBody>
           <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
             {needsJobPicker && jobs && (
-              <JobSelectField
-                jobs={jobs}
-                value={watchedJobId}
-                onValueChange={(id) => {
-                  form.setValue('jobId', id, { shouldValidate: true });
-                  const selected = jobs.find((j) => j.id === id);
-                  form.setValue('claimId', selected?.claimId ?? undefined);
-                }}
-              />
+              <>
+                <JobSelectField
+                  jobs={jobs}
+                  value={watchedJobId}
+                  onValueChange={(id) => {
+                    form.setValue('jobId', id, { shouldValidate: true });
+                    const selected = jobs.find((j) => j.id === id);
+                    form.setValue('claimId', selected?.claimId ?? undefined);
+                  }}
+                />
+                {form.formState.errors.jobId && (
+                  <p className="-mt-3 text-sm text-destructive md:col-span-2">
+                    {form.formState.errors.jobId.message}
+                  </p>
+                )}
+              </>
             )}
             <div className="space-y-2">
-              <Label htmlFor="name">Name</Label>
+              <Label htmlFor="name">
+                Name <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="name"
                 {...form.register('name')}
                 placeholder="Estimate name"
               />
+              {form.formState.errors.name && (
+                <p className="text-sm text-destructive">
+                  {form.formState.errors.name.message}
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="quoteType">Type</Label>
+              <Label htmlFor="quoteType">
+                Type <span className="text-destructive">*</span>
+              </Label>
               <Select
                 value={quoteType || null}
-                onValueChange={(v) => form.setValue('quoteType', v ?? '')}
+                onValueChange={(v) =>
+                  form.setValue('quoteType', v ?? '', { shouldValidate: true })
+                }
                 items={quoteTypeItems}
               >
                 <SelectTrigger id="quoteType" className="w-full">
@@ -235,6 +253,11 @@ export function QuoteFormDrawer({
                   ))}
                 </SelectContent>
               </Select>
+              {form.formState.errors.quoteType && (
+                <p className="text-sm text-destructive">
+                  {form.formState.errors.quoteType.message}
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -307,11 +330,12 @@ export function QuoteFormDrawer({
           <Button
             type="button"
             variant="outline"
+            size="lg"
             onClick={() => onOpenChange(false)}
           >
             Cancel
           </Button>
-          <Button type="submit" disabled={submitting}>
+          <Button type="submit" size="lg" disabled={submitting}>
             {submitting ? 'Creating...' : 'Create Estimate'}
           </Button>
         </BottomFormDrawerFooter>

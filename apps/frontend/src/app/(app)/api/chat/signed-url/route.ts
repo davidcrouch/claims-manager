@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAccessToken, getSession } from '@/lib/auth';
 import { getApiBaseUrl } from '@/lib/env';
+import { getUpstreamApiAuth } from '@/lib/upstream-api';
 
 export async function GET(req: NextRequest) {
   const uri = req.nextUrl.searchParams.get('uri');
@@ -8,25 +8,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'uri query parameter is required' }, { status: 400 });
   }
 
-  const session = await getSession();
-  const token = await getAccessToken();
-
-  if (!session.authenticated || !token) {
+  const auth = await getUpstreamApiAuth();
+  if (!auth) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-
-  const tenantId =
-    session.identity?.organization_id ??
-    process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID ??
-    '';
 
   const response = await fetch(
     `${getApiBaseUrl()}/ai-chat/signed-url?uri=${encodeURIComponent(uri)}`,
     {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'x-tenant-id': tenantId,
-      },
+      headers: auth.headers,
     },
   );
 

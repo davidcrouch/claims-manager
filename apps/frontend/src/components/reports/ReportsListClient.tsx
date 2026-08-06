@@ -16,6 +16,7 @@ import {
   columnFilterToIdsParam,
   ValueFilterMenu,
   SortableColumnHeader,
+  TableEmptyRow,
 } from '@/components/shared/list-filters';
 import { TablePagination } from '@/components/shared/table-pagination';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
@@ -24,6 +25,11 @@ import {
   computeStatusBreakdown,
 } from '@/components/layout/ListPageHeader';
 import { fetchReportsAction } from '@/app/(app)/reports/actions';
+import {
+  ColumnSettingsHeaderCell,
+  useColumnVisibility,
+} from '@/components/shared/column-visibility';
+import { ListArchiveButton, LIST_ARCHIVE_SPACER_TD_CLASS } from '@/components/shared/ListArchiveButton';
 import type { Report, PaginatedResponse } from '@/types/api';
 
 type ListTab = 'active' | 'archived' | 'all';
@@ -41,10 +47,10 @@ type ReportSortField =
   | 'created_at'
   | 'updated_at';
 
-interface ColDef { key: ReportSortField; label: string; filterable?: boolean }
+interface ColDef { key: ReportSortField; label: string; filterable?: boolean; locked?: boolean }
 
 const TABLE_COLUMNS: ColDef[] = [
-  { key: 'reference', label: 'Report #' },
+  { key: 'reference', label: 'Report #', locked: true },
   { key: 'status', label: 'Status', filterable: true },
   { key: 'report_type', label: 'Type', filterable: true },
   { key: 'job_ref', label: 'Job Ref' },
@@ -98,6 +104,10 @@ export function ReportsListClient({
   const [typeFilterActive, setTypeFilterActive] = useState(false);
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [statusFilterActive, setStatusFilterActive] = useState(false);
+  const { isVisible, toggle, visibleCount } = useColumnVisibility(
+    'reports',
+    TABLE_COLUMNS,
+  );
   const lastFetchKeyRef = useRef<string | null>(null);
   const statusParam = useMemo(
     () => columnFilterToIdsParam(statusFilterActive, statusFilter, statusOptions),
@@ -317,12 +327,11 @@ export function ReportsListClient({
         className="flex-1 px-6 pb-6"
         style={{ minHeight: 0, overflow: 'auto' }}
       >
-        {visibleRows.length > 0 ? (
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50">
                 <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                  {TABLE_COLUMNS.map((col) => (
+                  {TABLE_COLUMNS.filter((col) => isVisible(col.key)).map((col) => (
                     <SortableColumnHeader
                       key={col.key}
                       columnKey={col.key}
@@ -339,13 +348,19 @@ export function ReportsListClient({
                       }
                     />
                   ))}
-                  <th scope="col" className="px-4 py-3 w-10">
-                    <span className="sr-only">Actions</span>
-                  </th>
+                  <th scope="col" className="px-4 py-3">Actions</th>
+                  <ColumnSettingsHeaderCell
+                    columns={TABLE_COLUMNS}
+                    isVisible={isVisible}
+                    onToggle={toggle}
+                  />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {visibleRows.map((report) => {
+                {visibleRows.length === 0 ? (
+                  <TableEmptyRow colSpan={visibleCount + 2} label="No reports found." />
+                ) : (
+                  visibleRows.map((report) => {
                   const ref = report.reference ?? report.title ?? report.id;
                   const statusName = report.status?.name ?? 'Unknown';
                   const typeName = report.reportType?.name ?? '';
@@ -356,52 +371,84 @@ export function ReportsListClient({
                       onClick={() => router.push(`/reports/${report.id}`)}
                       className="cursor-pointer transition-colors hover:bg-slate-50"
                     >
-                      <td className="px-4 py-3 font-medium text-slate-900">
-                        {ref}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3">
-                        <StatusBadge status={statusName} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <TypeBadge type={typeName} />
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {jobRef ? (
+                      {isVisible('reference') && (
+                        <td className="px-4 py-3 font-medium text-slate-900">
+                          {ref}
+                        </td>
+                      )}
+                      {isVisible('status') && (
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <StatusBadge status={statusName} />
+                        </td>
+                      )}
+                      {isVisible('report_type') && (
+                        <td className="px-4 py-3">
+                          <TypeBadge type={typeName} />
+                        </td>
+                      )}
+                      {isVisible('job_ref') && (
+                        <td className="px-4 py-3 text-slate-600">
+                          {jobRef ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.push(`/jobs/${report.jobId}`);
+                              }}
+                              className="text-primary hover:underline"
+                            >
+                              {jobRef}
+                            </button>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                      )}
+                      {isVisible('created_at') && (
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                          {formatDate(report.createdAt)}
+                        </td>
+                      )}
+                      {isVisible('updated_at') && (
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                          {formatDate(report.updatedAt)}
+                        </td>
+                      )}
+                      <td
+                        className="whitespace-nowrap px-4 py-3 text-slate-600"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="flex items-center gap-2">
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              router.push(`/jobs/${report.jobId}`);
+                              router.push(`/reports/${report.id}`);
                             }}
-                            className="text-primary hover:underline"
+                            className="text-xs text-primary hover:underline"
                           >
-                            {jobRef}
+                            View
                           </button>
-                        ) : (
-                          '—'
-                        )}
+                          <ListArchiveButton
+                            entityType="report"
+                            entityId={report.id}
+                            statusName={statusName}
+                            entityLabel={ref}
+                            onArchived={(id) => {
+                              setData((prev) => ({
+                                ...prev,
+                                data: prev.data.filter((row) => row.id !== id),
+                                total: Math.max(0, prev.total - 1),
+                              }));
+                            }}
+                          />
+                        </div>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {formatDate(report.createdAt)}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {formatDate(report.updatedAt)}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            router.push(`/reports/${report.id}`);
-                          }}
-                          className="text-xs text-primary hover:underline"
-                        >
-                          View
-                        </button>
-                      </td>
+                      <td className={LIST_ARCHIVE_SPACER_TD_CLASS} aria-hidden />
                     </tr>
                   );
-                })}
+                })
+                )}
               </tbody>
             </table>
             <TablePagination
@@ -411,16 +458,6 @@ export function ReportsListClient({
               onPageChange={handlePageChange}
             />
           </div>
-        ) : (
-          <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50">
-            <div className="flex flex-col items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-100">
-                <Search size={24} className="text-slate-400" />
-              </div>
-              <p className="text-sm text-slate-400">No reports found.</p>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

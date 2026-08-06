@@ -46,6 +46,7 @@ export class InvoicesRepository {
     page?: number;
     limit?: number;
     purchaseOrderId?: string;
+    jobId?: string;
     /** Comma-separated status lookup IDs. */
     status?: string;
     /** @deprecated Use status. */
@@ -63,6 +64,9 @@ export class InvoicesRepository {
     let whereClause = eq(invoices.tenantId, params.tenantId);
     if (params.purchaseOrderId) {
       whereClause = and(whereClause, eq(invoices.purchaseOrderId, params.purchaseOrderId))!;
+    }
+    if (params.jobId) {
+      whereClause = and(whereClause, eq(invoices.jobId, params.jobId))!;
     }
     if (statusIds.length > 0) {
       whereClause = and(whereClause, inArray(invoices.statusLookupId, statusIds))!;

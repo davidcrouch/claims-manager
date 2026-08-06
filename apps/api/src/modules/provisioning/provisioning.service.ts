@@ -5,16 +5,18 @@ import {
 } from '@nestjs/common';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { Storage } from '@google-cloud/storage';
 import { ConfigService } from '@nestjs/config';
 import { DRIZZLE, type DrizzleDB } from '../../database/drizzle.module';
-import { organizations } from '../../database/schema';
+import { mcpIntegration, organizations } from '../../database/schema';
 import { TenantContext } from '../../tenant/tenant-context';
 import { FilesystemService } from '../filesystem/filesystem.service';
 import { DocumentsService } from '../filesystem/documents.service';
 import { TemplateRegistryService } from '../document-generation/services/template-registry.service';
 import { seedCatalogDevForTenant } from '../../database/seeds/entries/catalog-dev.seed';
+import { seedMcpForTenant } from '../../database/seeds/entries/mcp.seed';
+import { seedAssessmentSkillsForTenant } from '../../database/seeds/entries/assessment-skills.seed';
 import filesystemDefaultSeed from '../../database/seeds/entries/filesystem-default.seed';
 import {
   DOCUMENT_TYPES,
@@ -35,16 +37,46 @@ const LOG = 'ProvisioningService';
 const DOCX_MIME =
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
+/** Canonical filenames under data/templates/ (spaces, as stored in document.file_name). */
 const DOCUMENT_TYPE_TO_FILE: Record<DocumentType, string> = {
-  invoice: 'TAX_INVOICE.docx',
+  invoice: 'TAX INVOICE.docx',
   bill: 'INVOICE.docx',
-  rfq: 'REQUEST_FOR_QUOTATION.docx',
-  quote: 'REQUEST_FOR_QUOTATION.docx',
-  purchase_order: 'REQUEST_FOR_QUOTATION.docx',
-  work_order: 'SCOPE_OF_WORK.docx',
-  proposal: 'SCOPE_OF_WORK.docx',
-  report: 'SCOPE_OF_WORK.docx',
+  rfq: 'REQUEST FOR QUOTATION.docx',
+  quote: 'REQUEST FOR QUOTATION.docx',
+  purchase_order: 'REQUEST FOR QUOTATION.docx',
+  work_order: 'SCOPE OF WORK.docx',
+  proposal: 'SCOPE OF WORK.docx',
+  report: 'SCOPE OF WORK.docx',
+  job_details: 'SCOPE OF WORK.docx',
+  scope_of_work: 'SCOPE OF WORK.docx',
+  claim: 'SCOPE OF WORK.docx',
+  contact: 'SCOPE OF WORK.docx',
+  task: 'SCOPE OF WORK.docx',
+  appointment: 'SCOPE OF WORK.docx',
+  message: 'SCOPE OF WORK.docx',
+  journal: 'SCOPE OF WORK.docx',
+  vendor: 'SCOPE OF WORK.docx',
+  jobs_list: 'SCOPE OF WORK.docx',
+  quotes_list: 'SCOPE OF WORK.docx',
+  invoices_list: 'SCOPE OF WORK.docx',
+  bills_list: 'SCOPE OF WORK.docx',
+  work_orders_list: 'SCOPE OF WORK.docx',
+  purchase_orders_list: 'SCOPE OF WORK.docx',
+  proposals_list: 'SCOPE OF WORK.docx',
+  rfqs_list: 'SCOPE OF WORK.docx',
+  reports_list: 'SCOPE OF WORK.docx',
+  claims_list: 'SCOPE OF WORK.docx',
+  contacts_list: 'SCOPE OF WORK.docx',
+  tasks_list: 'SCOPE OF WORK.docx',
+  appointments_list: 'SCOPE OF WORK.docx',
+  messages_list: 'SCOPE OF WORK.docx',
+  journals_list: 'SCOPE OF WORK.docx',
+  vendors_list: 'SCOPE OF WORK.docx',
 };
+
+function normalizeTemplateKey(name: string): string {
+  return name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+}
 
 @Injectable()
 export class ProvisioningService {
@@ -110,11 +142,26 @@ export class ProvisioningService {
       throw new Error(`${LOG}.${fn} — organization not found tenantId=${tenantId}`);
     }
 
-    if (org.provisioningStatus === 'complete') {
+    if (org.provisioningStatus === 'provisioning') {
       return this.getStatus();
     }
 
-    if (org.provisioningStatus === 'provisioning') {
+    // Complete orgs still re-run template upload/assign (idempotent). Covers
+    // cases where GCS was unset on first provision and docx were skipped.
+    if (org.provisioningStatus === 'complete') {
+      this.logger.log(
+        `[${LOG}.${fn}] repair path — re-running template + mcp steps tenantId=${tenantId}`,
+      );
+      try {
+        await this.runStep('upload_templates', tenantId);
+        await this.runStep('assign_document_templates', tenantId);
+        await this.runStep('seed_mcp', tenantId);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.error(
+          `[${LOG}.${fn}] repair failed tenantId=${tenantId}: ${message}`,
+        );
+      }
       return this.getStatus();
     }
 
@@ -133,6 +180,7 @@ export class ProvisioningService {
       await this.runStep('upload_templates', tenantId);
       await this.runStep('assign_document_templates', tenantId);
       await this.runStep('seed_catalog', tenantId);
+      await this.runStep('seed_mcp', tenantId);
 
       await this.db
         .update(organizations)
@@ -172,6 +220,9 @@ export class ProvisioningService {
         break;
       case 'seed_catalog':
         await this.stepSeedCatalog(tenantId);
+        break;
+      case 'seed_mcp':
+        await this.stepSeedMcp(tenantId);
         break;
     }
 
@@ -359,21 +410,26 @@ export class ProvisioningService {
     const allDocs = await this.documentsService.findAll({
       categoryId: templatesCategory.id,
       uploadStatus: 'complete',
+      limit: 100,
     });
 
     const docxDocs = allDocs.data.filter((d: { fileName: string }) =>
-      d.fileName.toLowerCase().endsWith('.docx'),
+      (d.fileName ?? '').toLowerCase().endsWith('.docx'),
     );
     if (docxDocs.length === 0) return;
 
+    this.logger.log(
+      `[${LOG}.stepAssignDocumentTemplates] candidates=${docxDocs.map((d) => d.fileName).join(', ')}`,
+    );
+
     for (const documentType of DOCUMENT_TYPES) {
       const targetFile = DOCUMENT_TYPE_TO_FILE[documentType];
-      const matchingDoc = docxDocs.find(
-        (d: { fileName: string }) =>
-          d.fileName.replace(/\s+/g, '_').toUpperCase() === targetFile.toUpperCase() ||
-          d.fileName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() ===
-            targetFile.replace(/[^a-zA-Z0-9]/g, '').toLowerCase(),
-      );
+      const targetKey = normalizeTemplateKey(targetFile);
+      const matchingDoc = docxDocs.find((d: { fileName: string }) => {
+        const name = d.fileName ?? '';
+        if (name.toLowerCase() === targetFile.toLowerCase()) return true;
+        return normalizeTemplateKey(name) === targetKey;
+      });
 
       if (!matchingDoc) {
         this.logger.warn(
@@ -398,6 +454,17 @@ export class ProvisioningService {
     };
 
     await seedCatalogDevForTenant({ db: this.db, tenantId, logger });
+  }
+
+  private async stepSeedMcp(tenantId: string): Promise<void> {
+    const logger = {
+      info: (msg: string) => this.logger.log(`[${LOG}.stepSeedMcp] ${msg}`),
+      warn: (msg: string) => this.logger.warn(`[${LOG}.stepSeedMcp] ${msg}`),
+      error: (msg: string) => this.logger.error(`[${LOG}.stepSeedMcp] ${msg}`),
+    };
+
+    await seedMcpForTenant({ db: this.db, tenantId, logger });
+    await seedAssessmentSkillsForTenant({ db: this.db, tenantId, logger });
   }
 
   private buildStepStatuses(
@@ -465,6 +532,19 @@ export class ProvisioningService {
       }
       case 'seed_catalog':
         return true;
+      case 'seed_mcp': {
+        const [row] = await this.db
+          .select({ id: mcpIntegration.id })
+          .from(mcpIntegration)
+          .where(
+            and(
+              eq(mcpIntegration.tenantId, tenantId),
+              eq(mcpIntegration.name, 'Claims Tools'),
+            ),
+          )
+          .limit(1);
+        return !!row;
+      }
       default:
         return false;
     }

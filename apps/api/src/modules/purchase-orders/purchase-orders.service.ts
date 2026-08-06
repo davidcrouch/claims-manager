@@ -68,6 +68,13 @@ export class PurchaseOrdersService {
     const existing = await this.findOne({ id: params.id });
     if (!existing) return null;
 
+    if (typeof params.body.statusLookupId === 'string' && params.body.statusLookupId) {
+      return this.purchaseOrdersRepo.update({
+        id: params.id,
+        data: { statusLookupId: params.body.statusLookupId },
+      });
+    }
+
     const tenantId = this.tenantContext.getTenantId();
     const connectionId = await this.resolveConnectionId(tenantId);
     const apiPo = await this.crunchworkService.updatePurchaseOrder({

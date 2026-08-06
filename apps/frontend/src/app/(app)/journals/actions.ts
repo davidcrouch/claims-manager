@@ -32,6 +32,7 @@ export async function fetchJournalsAction(params?: {
   page?: number;
   limit?: number;
   status?: string;
+  jobId?: string;
 }): Promise<PaginatedResponse<Journal>> {
   const api = await getApi();
   if (!api) return { data: [], total: 0 };
@@ -40,6 +41,7 @@ export async function fetchJournalsAction(params?: {
       page: params?.page ?? 1,
       limit: params?.limit ?? 20,
       status: params?.status,
+      jobId: params?.jobId,
     });
   } catch (err) {
     console.error('[journals/actions.fetchJournalsAction]', err);

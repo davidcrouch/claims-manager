@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -12,6 +12,7 @@ import {
 } from '@/app/(app)/notifications/actions';
 import type { AppNotification } from '@/types/api';
 
+const LOG_PREFIX = 'frontend:NotificationBell';
 const POLL_INTERVAL_MS = 30_000;
 
 const ENTITY_ROUTE_MAP: Record<string, string> = {
@@ -47,16 +48,42 @@ function timeAgo(dateStr: string): string {
 
 export function NotificationBell() {
   const router = useRouter();
+  const pathname = usePathname();
   const [count, setCount] = useState(0);
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  const stopPollingRef = useRef(false);
+
+  const redirectToLogin = useCallback(() => {
+    if (stopPollingRef.current) return;
+    stopPollingRef.current = true;
+    const returnTo =
+      pathname && pathname.startsWith('/') && !pathname.startsWith('//')
+        ? pathname
+        : '/';
+    console.warn(`${LOG_PREFIX}:redirectToLogin - session lost, redirecting`, {
+      returnTo,
+    });
+    window.location.assign(
+      `/api/auth/login?returnTo=${encodeURIComponent(returnTo)}`,
+    );
+  }, [pathname]);
 
   const refreshCount = useCallback(async () => {
-    const c = await fetchUnreadCountAction();
-    setCount(c);
-  }, []);
+    if (stopPollingRef.current) return;
+    try {
+      const c = await fetchUnreadCountAction();
+      if (stopPollingRef.current) return;
+      setCount(c);
+    } catch (error) {
+      console.error(`${LOG_PREFIX}:refreshCount - request failed`, {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      redirectToLogin();
+    }
+  }, [redirectToLogin]);
 
   useEffect(() => {
     refreshCount();
@@ -88,9 +115,18 @@ export function NotificationBell() {
     }
     setOpen(true);
     setLoading(true);
-    const res = await fetchNotificationsAction({ isRead: false, limit: 15 });
-    setItems(res?.data ?? []);
-    setLoading(false);
+    try {
+      const res = await fetchNotificationsAction({ isRead: false, limit: 15 });
+      if (stopPollingRef.current) return;
+      setItems(res?.data ?? []);
+    } catch (error) {
+      console.error(`${LOG_PREFIX}:handleOpen - request failed`, {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      redirectToLogin();
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleItemClick = async (item: AppNotification) => {
@@ -132,7 +168,7 @@ export function NotificationBell() {
         size="icon"
         aria-label="Notifications"
         onClick={handleToggle}
-        className="relative text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+        className="relative h-9 w-9 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
       >
         <Bell className="h-4 w-4" />
         {count > 0 && (

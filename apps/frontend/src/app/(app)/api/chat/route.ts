@@ -1,18 +1,13 @@
-import { getAccessToken, getSession } from '@/lib/auth';
 import { getApiBaseUrl } from '@/lib/env';
-import {
-  fetchCloudRunIdToken,
-  resolveApiAudience,
-} from '@/lib/cloud-run-id-token';
+import { getUpstreamApiAuth } from '@/lib/upstream-api';
 
 export const maxDuration = 120;
 
 export async function POST(req: Request) {
   try {
-    const session = await getSession();
-    const token = await getAccessToken();
+    const auth = await getUpstreamApiAuth({ contentType: 'application/json' });
 
-    if (!session.authenticated || !token) {
+    if (!auth) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' },
@@ -20,22 +15,10 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const tenantId =
-      session.identity?.organization_id ??
-      process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID ??
-      undefined;
 
-    const idToken = await fetchCloudRunIdToken(resolveApiAudience());
     const upstream = await fetch(`${getApiBaseUrl()}/ai-chat/stream`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
-        ...(idToken
-          ? { 'X-Serverless-Authorization': `Bearer ${idToken}` }
-          : {}),
-      },
+      headers: auth.headers,
       body: JSON.stringify(body),
     });
 

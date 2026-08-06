@@ -2,14 +2,14 @@ import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { WorkOrdersPageClient } from '@/components/work-orders/WorkOrdersPageClient';
 import { buildJobNameById, toJobOptions } from '@/components/shared/job-label';
-import type { Job, PaginatedResponse, WorkOrder } from '@/types/api';
+import type { Job, Claim, PaginatedResponse, WorkOrder } from '@/types/api';
 
 export const metadata = { title: 'Work Orders — EnsureOS' };
 
 export default async function WorkOrdersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; sort?: string; status?: string; workOrderType?: string }>;
+  searchParams: Promise<{ page?: string; sort?: string; status?: string; workOrderType?: string; jobId?: string }>;
 }) {
   const api = await getServerApiClient();
   if (!api) redirect('/api/auth/login');
@@ -25,6 +25,7 @@ export default async function WorkOrdersPage({
         sort: params.sort,
         status: params.status,
         workOrderType: params.workOrderType,
+        jobId: params.jobId,
       })
       .catch((err: unknown) => {
         console.error(
@@ -43,6 +44,21 @@ export default async function WorkOrdersPage({
       return emptyJobs;
     }),
   ]);
+
+  let job: Job | null = null;
+  let parentClaim: Claim | null = null;
+  if (params.jobId) {
+    job = await api.getJob(params.jobId).catch((err: unknown) => {
+      console.error(
+        'frontend:WorkOrdersPage - getJob failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return null;
+    });
+    if (job?.claimId) {
+      parentClaim = await api.getClaim(job.claimId).catch(() => null);
+    }
+  }
 
   const statusOptions = (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map(
     (row) => ({
@@ -64,6 +80,8 @@ export default async function WorkOrdersPage({
       workOrderTypes={workOrderTypes}
       jobNameById={jobNameById}
       jobs={toJobOptions(jobs)}
+      job={job}
+      parentClaim={parentClaim}
     />
   );
 }

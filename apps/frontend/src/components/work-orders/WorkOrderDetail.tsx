@@ -22,20 +22,24 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { BackButton } from '@/components/layout/BackButton';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import {
   DefRow,
   SectionCard,
   formatDate,
   formatDateTime,
   formatCurrency,
+  formatAddress,
   pick,
   asString,
   type Dict,
 } from '@/components/shared/detail';
 import { updateWorkOrderStatusAction } from '@/app/(app)/mutations-status';
 import { InvoiceFormDrawer } from '@/components/forms/InvoiceFormDrawer';
-import type { WorkOrder } from '@/types/api';
-import { GenerateDocumentButton } from '@/components/shared/GenerateDocumentButton';
+import type { WorkOrder, Job } from '@/types/api';
+import { PrintButton } from '@/components/shared/PrintButton';
+import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
+import { jobDisplayName } from '@/components/shared/job-label';
 import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
 import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
 
@@ -74,31 +78,24 @@ function sourceOrgName(wo: WorkOrder): string | undefined {
 }
 
 function partyAddress(party: Dict): string {
-  const parts = [
-    pick(party, 'unitNumber'),
-    pick(party, 'streetNumber'),
-    pick(party, 'streetName'),
-    pick(party, 'suburb'),
-    pick(party, 'state'),
-    pick(party, 'postCode', 'postcode'),
-    pick(party, 'country'),
-  ]
-    .map((x) => (typeof x === 'string' ? x.trim() : x))
-    .filter(Boolean);
-  return parts.join(', ');
+  return formatAddress(party);
 }
 
 // ---------- header ----------------------------------------------------------
 
-export function WorkOrderPageHeader({ wo }: { wo: WorkOrder }) {
+export function WorkOrderPageHeader({ wo, job }: { wo: WorkOrder; job?: Job | null }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [showInvoiceForm, setShowInvoiceForm] = useState(false);
   const payload = getPayload(wo);
   const title = wo.workOrderNumber ?? wo.externalId ?? wo.id;
   const status = lookupName(wo.status, payload, 'status') ?? 'Unknown';
   const woType = lookupName(wo.workOrderType, payload, 'workOrderType');
   const source = sourceOrgName(wo);
   const total = formatCurrency(wo.totalAmount);
+  const jobName = job?.name?.trim() || job?.externalReference?.trim() || undefined;
+  const jobNameById =
+    wo.jobId && jobName ? { [wo.jobId]: jobName } : undefined;
 
   async function handleStatusChange(newStatus: string) {
     setLoading(true);
@@ -111,105 +108,131 @@ export function WorkOrderPageHeader({ wo }: { wo: WorkOrder }) {
   }
 
   return (
-    <div className="flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-2">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-        <BackButton href="/work-orders" label="Back to work orders" />
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-100">
-          <ClipboardCheck className="h-4 w-4 text-indigo-600" />
-        </span>
-        <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
-        {wo.externalId && wo.externalId !== title && (
-          <span className="font-mono text-xs text-muted-foreground">· {wo.externalId}</span>
-        )}
-        <StatusBadge status={status} />
-        {woType && (
-          <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-            <Package className="h-3 w-3" />
-            {woType}
-          </span>
-        )}
-        {source && (
-          <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-            <Building2 className="h-3 w-3" />
-            {source}
-          </span>
-        )}
-        {wo.jobId && (
-          <Link
-            href={`/jobs/${wo.jobId}?tab=work-orders`}
-            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-          >
-            View Job
-            <ExternalLink className="h-3 w-3" />
-          </Link>
-        )}
-        {wo.claimId && (
-          <Link
-            href={`/claims/${wo.claimId}`}
-            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-          >
-            View Claim
-            <ExternalLink className="h-3 w-3" />
-          </Link>
-        )}
-      </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1">
-        <GenerateDocumentButton entityId={wo.id} documentType="work_order" />
-        <div className="flex items-baseline gap-1 text-xs">
-          <span className="text-muted-foreground">Total:</span>
-          <span className="font-medium">{total}</span>
-        </div>
-        <div className="flex items-baseline gap-1 text-xs">
-          <span className="text-muted-foreground">Start:</span>
-          <span className="font-medium">{formatDate(wo.startDate)}</span>
-        </div>
-        <div className="flex items-baseline gap-1 text-xs">
-          <span className="text-muted-foreground">End:</span>
-          <span className="font-medium">{formatDate(wo.endDate)}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {status === 'Issued' && (
-            <>
-              <Button
-                size="sm"
-                disabled={loading}
-                className="bg-green-600 text-white hover:bg-green-700"
-                onClick={() => handleStatusChange('Accepted')}
-              >
-                Accept
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                disabled={loading}
-                onClick={() => handleStatusChange('Rejected')}
-              >
-                Decline
-              </Button>
-            </>
-          )}
-          {status === 'Accepted' && (
+    <>
+      <SetHeaderActions>
+        {status === 'Issued' && (
+          <>
             <Button
-              size="sm"
+              size="default"
               disabled={loading}
-              onClick={() => handleStatusChange('In Progress')}
+              className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+              onClick={() => handleStatusChange('Accepted')}
             >
-              Start Work
+              Accept
             </Button>
-          )}
-          {status === 'In Progress' && (
             <Button
-              size="sm"
+              size="default"
+              variant="destructive"
               disabled={loading}
-              className="bg-green-600 text-white hover:bg-green-700"
-              onClick={() => handleStatusChange('Completed')}
+              className="h-9 gap-1.5 px-4"
+              onClick={() => handleStatusChange('Rejected')}
             >
-              Complete
+              Decline
             </Button>
+          </>
+        )}
+        {status === 'Accepted' && (
+          <Button
+            size="default"
+            disabled={loading}
+            className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+            onClick={() => handleStatusChange('In Progress')}
+          >
+            Start Work
+          </Button>
+        )}
+        {status === 'In Progress' && (
+          <Button
+            size="default"
+            disabled={loading}
+            className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+            onClick={() => handleStatusChange('Completed')}
+          >
+            Complete
+          </Button>
+        )}
+        <Button
+          size="default"
+          onClick={() => setShowInvoiceForm(true)}
+          className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Create Invoice
+        </Button>
+        <PrintButton documentType="work_order" entityId={wo.id} />
+        <ArchiveEntityButton
+          entityType="work_order"
+          entityId={wo.id}
+          statusName={status}
+          entityLabel={title}
+          redirectTo={job ? `/work-orders?jobId=${job.id}` : '/work-orders'}
+        />
+      </SetHeaderActions>
+      <InvoiceFormDrawer
+        open={showInvoiceForm}
+        onOpenChange={setShowInvoiceForm}
+        workOrders={[wo]}
+        jobNameById={jobNameById}
+        defaultWorkOrderId={wo.id}
+      />
+      <div className="flex w-full min-w-0 flex-col gap-y-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+          <BackButton href={job ? `/work-orders?jobId=${job.id}` : '/work-orders'} label="Back to work orders" />
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-100">
+            <ClipboardCheck className="h-4 w-4 text-indigo-600" />
+          </span>
+          <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
+          {wo.externalId && wo.externalId !== title && (
+            <span className="font-mono text-xs text-muted-foreground">· {wo.externalId}</span>
+          )}
+          <StatusBadge status={status} />
+          {woType && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              <Package className="h-3 w-3" />
+              {woType}
+            </span>
+          )}
+          {source && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              <Building2 className="h-3 w-3" />
+              {source}
+            </span>
+          )}
+          {job && (
+            <Link
+              href={`/jobs/${job.id}`}
+              className="inline-flex items-center gap-1 text-xs uppercase text-primary hover:underline"
+            >
+              {jobDisplayName(job)}
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
+          {wo.claimId && (
+            <Link
+              href={`/claims/${wo.claimId}`}
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              View Claim
+              <ExternalLink className="h-3 w-3" />
+            </Link>
           )}
         </div>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pl-20 text-xs">
+          <div className="flex items-baseline gap-1">
+            <span className="text-muted-foreground">Total:</span>
+            <span className="font-medium">{total}</span>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-muted-foreground">Start:</span>
+            <span className="font-medium">{formatDate(wo.startDate)}</span>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-muted-foreground">End:</span>
+            <span className="font-medium">{formatDate(wo.endDate)}</span>
+          </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -513,20 +536,8 @@ type WoTab =
   | 'timeline'
   | 'attachments';
 
-export function WorkOrderDetail({
-  wo,
-  jobName,
-}: {
-  wo: WorkOrder;
-  jobName?: string;
-}) {
+export function WorkOrderDetail({ wo }: { wo: WorkOrder }) {
   const [tab, setTab] = useState<WoTab>('overview');
-  const [showInvoiceForm, setShowInvoiceForm] = useState(false);
-
-  const jobNameById =
-    wo.jobId && jobName
-      ? { [wo.jobId]: jobName }
-      : undefined;
 
   const tabs: Array<{ id: WoTab; label: string; icon: typeof Calendar }> = [
     { id: 'overview', label: 'Overview', icon: Calendar },
@@ -540,14 +551,6 @@ export function WorkOrderDetail({
 
   return (
     <div className="flex flex-col">
-      {wo.purchaseOrderId && (
-        <div className="mb-4 flex justify-end">
-          <Button size="sm" variant="outline" onClick={() => setShowInvoiceForm(true)}>
-            <Plus className="mr-1 h-3 w-3" />
-            Create Invoice
-          </Button>
-        </div>
-      )}
       <div className="flex flex-wrap gap-0 border-b border-slate-200">
         {tabs.map((t) => {
           const Icon = t.icon;
@@ -578,13 +581,6 @@ export function WorkOrderDetail({
         {tab === 'timeline' && <TimelineTab wo={wo} />}
         {tab === 'attachments' && <AttachmentsTab />}
       </div>
-      <InvoiceFormDrawer
-        open={showInvoiceForm}
-        onOpenChange={setShowInvoiceForm}
-        workOrders={[wo]}
-        jobNameById={jobNameById}
-        defaultWorkOrderId={wo.id}
-      />
     </div>
   );
 }

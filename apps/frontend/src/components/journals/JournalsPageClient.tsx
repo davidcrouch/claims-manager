@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { BookOpen, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,33 +13,46 @@ import {
   SortableColumnHeader,
   commitColumnFilterSelection,
   columnFilterToValuesParam,
+  TableEmptyRow,
 } from '@/components/shared/list-filters';
 import { TablePagination } from '@/components/shared/table-pagination';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
-import {
-  ListPageHeader,
-  computeStatusBreakdown,
-} from '@/components/layout/ListPageHeader';
+import { PrintButton } from '@/components/shared/PrintButton';
+import { EntityPageHeader } from '@/components/shared/EntityPageHeader';
+import { computeStatusBreakdown } from '@/components/layout/ListPageHeader';
 import { JournalFormDrawer } from './JournalFormDrawer';
-import { createJournalAction, fetchJournalsAction } from '@/app/(app)/journals/actions';
-import type { Journal, PaginatedResponse } from '@/types/api';
+import {
+  createJournalAction,
+  fetchJournalsAction,
+  linkJournalAction,
+} from '@/app/(app)/journals/actions';
+import {
+  ColumnSettingsHeaderCell,
+  useColumnVisibility,
+} from '@/components/shared/column-visibility';
+import { ListArchiveButton, LIST_ARCHIVE_TH_CLASS, LIST_ARCHIVE_TD_CLASS, LIST_ARCHIVE_SPACER_TD_CLASS } from '@/components/shared/ListArchiveButton';
+import type { Journal, PaginatedResponse, Job, Claim } from '@/types/api';
+import type { JobOption } from '@/components/shared/job-label';
+import { resolveJobName } from '@/components/shared/job-label';
 
 type ListTab = 'active' | 'archived' | 'all';
 
 type JournalSortField =
   | 'name'
   | 'status'
+  | 'job'
   | 'description'
   | 'location'
   | 'pages'
   | 'created_at'
   | 'updated_at';
 
-interface ColDef { key: JournalSortField; label: string; filterable?: boolean }
+interface ColDef { key: JournalSortField; label: string; filterable?: boolean; locked?: boolean }
 
 const TABLE_COLUMNS: ColDef[] = [
-  { key: 'name', label: 'Name' },
+  { key: 'name', label: 'Name', locked: true },
+  { key: 'job', label: 'Job' },
   { key: 'status', label: 'Status', filterable: true },
   { key: 'description', label: 'Description' },
   { key: 'location', label: 'Location' },
@@ -55,6 +68,7 @@ function getJournalSortValue(
   switch (field) {
     case 'name': return j.name;
     case 'status': return j.status;
+    case 'job': return j.jobId;
     case 'description': return j.description;
     case 'location': return j.addressSuburb;
     case 'pages': return j.pageCount ?? 0;
@@ -66,12 +80,24 @@ function getJournalSortValue(
 
 export interface JournalsPageClientProps {
   initialData: PaginatedResponse<Journal> | { data: Journal[]; total: number };
+  job?: Job | null;
+  parentClaim?: Claim | null;
+  jobNameById?: Record<string, string>;
+  jobs?: JobOption[];
 }
 
 const PAGE_SIZE = 20;
 
-export function JournalsPageClient({ initialData }: JournalsPageClientProps) {
+export function JournalsPageClient({
+  initialData,
+  job,
+  parentClaim,
+  jobNameById,
+  jobs = [],
+}: JournalsPageClientProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const jobId = searchParams.get('jobId');
   const [data, setData] = useState<PaginatedResponse<Journal>>(
     'data' in initialData ? initialData as PaginatedResponse<Journal> : { data: [], total: 0 },
   );
@@ -86,6 +112,10 @@ export function JournalsPageClient({ initialData }: JournalsPageClientProps) {
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [statusFilterActive, setStatusFilterActive] = useState(false);
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
+  const { isVisible, toggle, visibleCount } = useColumnVisibility(
+    'journals',
+    TABLE_COLUMNS,
+  );
   const lastFetchKeyRef = useRef<string | null>(null);
   const statusParam = useMemo(
     () => columnFilterToValuesParam(statusFilterActive, statusFilter),
@@ -99,7 +129,15 @@ export function JournalsPageClient({ initialData }: JournalsPageClientProps) {
 
   useEffect(() => {
     const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
-    const fetchKey = `${debouncedSearch}|${tab}|${page}|${statusKey}`;
+    const fetchKey = `${debouncedSearch}|${tab}|${page}|${statusKey}|${jobId ?? ''}`;
+
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('page', String(page));
+    if (statusParam) params.set('status', statusParam); else params.delete('status');
+    if (jobId) params.set('jobId', jobId);
+    else params.delete('jobId');
+    router.replace(`/journals?${params}`, { scroll: false });
+
     if (lastFetchKeyRef.current === fetchKey) return;
     lastFetchKeyRef.current = fetchKey;
 
@@ -108,8 +146,9 @@ export function JournalsPageClient({ initialData }: JournalsPageClientProps) {
       return;
     }
 
-    fetchJournalsAction({ page, limit: PAGE_SIZE, status: statusParam }).then((res) => setData(res));
-  }, [debouncedSearch, tab, page, statusParam]);
+    fetchJournalsAction({ page, limit: PAGE_SIZE, status: statusParam, jobId: jobId ?? undefined }).then((res) => setData(res));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop: router.replace updates URL -> searchParams changes -> effect re-runs
+  }, [debouncedSearch, tab, page, statusParam, jobId]);
 
   const handleCreated = (journal: Journal) => {
     setData((prev) => ({ data: [journal, ...prev.data], total: prev.total + 1 }));
@@ -179,7 +218,7 @@ export function JournalsPageClient({ initialData }: JournalsPageClientProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
       <SetPageHeader>
-        <ListPageHeader
+        <EntityPageHeader
           icon={BookOpen}
           title="Journals"
           total={data.total}
@@ -187,6 +226,8 @@ export function JournalsPageClient({ initialData }: JournalsPageClientProps) {
           search={debouncedSearch}
           breakdown={breakdown}
           accent="slate"
+          job={job}
+          parentClaim={parentClaim}
         />
       </SetPageHeader>
       <SetHeaderActions>
@@ -197,6 +238,7 @@ export function JournalsPageClient({ initialData }: JournalsPageClientProps) {
         >
           New Journal
         </Button>
+        <PrintButton documentType="journals_list" entityId="list" />
       </SetHeaderActions>
       <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
@@ -255,12 +297,11 @@ export function JournalsPageClient({ initialData }: JournalsPageClientProps) {
         className="flex-1 px-6 pb-6"
         style={{ minHeight: 0, overflow: 'auto' }}
       >
-        {visibleRows.length > 0 ? (
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50">
                 <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                  {TABLE_COLUMNS.map((col) => (
+                  {TABLE_COLUMNS.filter((col) => isVisible(col.key)).map((col) => (
                     <SortableColumnHeader
                       key={col.key}
                       columnKey={col.key}
@@ -282,40 +323,94 @@ export function JournalsPageClient({ initialData }: JournalsPageClientProps) {
                       }
                     />
                   ))}
+                  <th scope="col" className={LIST_ARCHIVE_TH_CLASS}>
+                    <span className="sr-only">Actions</span>
+                  </th>
+                  <ColumnSettingsHeaderCell
+                    columns={TABLE_COLUMNS}
+                    isVisible={isVisible}
+                    onToggle={toggle}
+                  />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {visibleRows.map((journal) => (
+                {visibleRows.length === 0 ? (
+                  <TableEmptyRow colSpan={visibleCount + 2} label="No journals found." />
+                ) : (
+                  visibleRows.map((journal) => (
                   <tr
                     key={journal.id}
-                    onClick={() => router.push(`/journals/${journal.id}`)}
+                    onClick={() => {
+                      const jobId = searchParams.get('jobId');
+                      const href = jobId ? `/journals/${journal.id}?jobId=${jobId}` : `/journals/${journal.id}`;
+                      router.push(href);
+                    }}
                     className="cursor-pointer transition-colors hover:bg-slate-50"
                   >
-                    <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
-                      {journal.name}
+                    {isVisible('name') && (
+                      <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
+                        {journal.name}
+                      </td>
+                    )}
+                    {isVisible('job') && (
+                      <td className="px-4 py-3 text-slate-600">
+                        {resolveJobName(journal.jobId, jobNameById)}
+                      </td>
+                    )}
+                    {isVisible('status') && (
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                          {journal.status}
+                        </span>
+                      </td>
+                    )}
+                    {isVisible('description') && (
+                      <td className="max-w-[200px] truncate px-4 py-3 text-slate-600">
+                        {journal.description ?? ''}
+                      </td>
+                    )}
+                    {isVisible('location') && (
+                      <td className="px-4 py-3 text-slate-600">
+                        {journal.addressSuburb ?? ''}
+                      </td>
+                    )}
+                    {isVisible('pages') && (
+                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                        {journal.pageCount ?? 0}
+                      </td>
+                    )}
+                    {isVisible('created_at') && (
+                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                        {formatDate(journal.createdAt)}
+                      </td>
+                    )}
+                    {isVisible('updated_at') && (
+                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                        {formatDate(journal.updatedAt)}
+                      </td>
+                    )}
+                    <td
+                      className={LIST_ARCHIVE_TD_CLASS}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <ListArchiveButton
+                        entityType="journal"
+                        entityId={journal.id}
+                        statusName={journal.status}
+                        entityLabel={journal.name}
+                        onArchived={(id) => {
+                          setData((prev) => ({
+                            ...prev,
+                            data: prev.data.filter((row) => row.id !== id),
+                            total: Math.max(0, prev.total - 1),
+                          }));
+                        }}
+                      />
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
-                        {journal.status}
-                      </span>
-                    </td>
-                    <td className="max-w-[200px] truncate px-4 py-3 text-slate-600">
-                      {journal.description ?? ''}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600">
-                      {journal.addressSuburb ?? ''}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                      {journal.pageCount ?? 0}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                      {formatDate(journal.createdAt)}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                      {formatDate(journal.updatedAt)}
-                    </td>
+                    <td className={LIST_ARCHIVE_SPACER_TD_CLASS} aria-hidden />
                   </tr>
-                ))}
+                ))
+                )}
               </tbody>
             </table>
             <TablePagination
@@ -325,22 +420,17 @@ export function JournalsPageClient({ initialData }: JournalsPageClientProps) {
               onPageChange={handlePageChange}
             />
           </div>
-        ) : (
-          <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50">
-            <div className="flex flex-col items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-100">
-                <Search size={24} className="text-slate-400" />
-              </div>
-              <p className="text-sm text-slate-400">No journals found.</p>
-            </div>
-          </div>
-        )}
       </div>
 
       <JournalFormDrawer
         open={createDrawerOpen}
         onOpenChange={setCreateDrawerOpen}
         createJournal={createJournalAction}
+        linkToJob={(journalId, selectedJobId) =>
+          linkJournalAction(journalId, 'Job', selectedJobId)
+        }
+        jobId={jobId}
+        jobs={jobs}
         onCreated={handleCreated}
       />
     </div>

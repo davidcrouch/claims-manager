@@ -27,7 +27,13 @@ export async function updateProposalStatusAction(id: string, statusName: string)
   const api = await getApi();
   if (!api) return { success: false, error: 'Not authenticated' };
   try {
-    await api.updateProposal(id, { status: { name: statusName } });
+    if (statusName === 'Accepted') {
+      await api.acceptProposal(id);
+    } else if (statusName === 'Declined' || statusName === 'Rejected') {
+      await api.declineProposal(id);
+    } else {
+      await api.updateProposal(id, { status: { name: statusName } });
+    }
     return { success: true };
   } catch (err) {
     console.error('[frontend:mutations-status.updateProposalStatusAction]', err);

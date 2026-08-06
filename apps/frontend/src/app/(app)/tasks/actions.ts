@@ -20,10 +20,15 @@ export async function fetchTasksAction(params?: {
   priority?: string;
   sort?: string;
   order?: 'asc' | 'desc';
+  jobId?: string;
 }): Promise<PaginatedResponse<Task>> {
   const api = await getApi();
   if (!api) return { data: [], total: 0 };
   try {
+    if (params?.jobId) {
+      const tasks = await api.getJobTasks(params.jobId);
+      return { data: tasks, total: tasks.length };
+    }
     return await api.getTasks(params);
   } catch (err) {
     console.error('[tasks/actions fetchTasksAction]', err);

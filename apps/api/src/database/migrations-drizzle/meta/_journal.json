@@ -288,6 +288,34 @@
       "when": 1787100000000,
       "tag": "0041_align_rbac_shore",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1787200000000,
+      "tag": "0042_expand_document_types",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1787300000000,
+      "tag": "0043_cross_tenant_estimate_proposal",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1787400000000,
+      "tag": "0044_add_assessments",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1787500000000,
+      "tag": "0045_assessment_hazard_comments",
+      "breakpoints": true
     }
   ]
 }

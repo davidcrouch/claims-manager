@@ -39,10 +39,12 @@ export default async function PurchaseOrderDetailPage({
   });
   if (!po) notFound();
 
+  const job = po.jobId ? await api.getJob(po.jobId).catch(() => null) : null;
+
   return (
     <>
       <SetPageHeader>
-        <PurchaseOrderPageHeader po={po} />
+        <PurchaseOrderPageHeader po={po} job={job} />
       </SetPageHeader>
       <PurchaseOrderDetail po={po} />
     </>

@@ -16,6 +16,7 @@ export class ContactsController {
       homePhone?: string;
       workPhone?: string;
       notes?: string;
+      typeLookupId?: string;
     },
   ) {
     return this.contactsService.create(body);
@@ -43,13 +44,20 @@ export class ContactsController {
     @Query('limit') limit?: string,
     @Query('search') search?: string,
     @Query('sort') sort?: string,
+    @Query('jobId') jobId?: string,
   ) {
     return this.contactsService.findAll({
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
       search,
       sort,
+      jobId,
     });
+  }
+
+  @Get(':id/jobs')
+  async findRelatedJobs(@Param('id') id: string) {
+    return this.contactsService.findRelatedJobs({ id });
   }
 
   @Get(':id')

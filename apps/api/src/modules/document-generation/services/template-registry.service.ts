@@ -4,6 +4,8 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import { existsSync, readFileSync, readdirSync } from 'fs';
+import { join } from 'path';
 import { GcsStorageService } from '../../../common/gcs/gcs-storage.service';
 import {
   DocumentTemplatesRepository,
@@ -19,6 +21,22 @@ import {
 const DOCX_MIME =
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
+function normalizeTemplateKey(name: string): string {
+  return name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+}
+
+function resolveLocalTemplatesDir(): string | null {
+  const candidates = [
+    join(process.cwd(), 'data', 'templates'),
+    join(process.cwd(), '../../data/templates'),
+    join(process.cwd(), '../../../data/templates'),
+  ];
+  return (
+    candidates.find(
+      (dir) => existsSync(dir) && readdirSync(dir).some((f) => f.endsWith('.docx')),
+    ) ?? null
+  );
+}
 export interface ScenarioTemplateSetting {
   documentType: DocumentType;
   label: string;
@@ -64,6 +82,106 @@ const SCENARIO_META: Record<DocumentType, { label: string; description: string }
   rfq: {
     label: 'RFQ',
     description: 'Generated when producing an RFQ PDF',
+  },
+  job_details: {
+    label: 'Job Details',
+    description: 'Generated from the job print wizard (job summary PDF)',
+  },
+  scope_of_work: {
+    label: 'Scope of Work',
+    description: 'Generated from the job print wizard (scope of work PDF)',
+  },
+  claim: {
+    label: 'Claim',
+    description: 'Generated when printing a single claim detail PDF',
+  },
+  contact: {
+    label: 'Contact',
+    description: 'Generated when printing a single contact detail PDF',
+  },
+  task: {
+    label: 'Task',
+    description: 'Generated when printing a single task detail PDF',
+  },
+  appointment: {
+    label: 'Appointment',
+    description: 'Generated when printing a single appointment detail PDF',
+  },
+  message: {
+    label: 'Message',
+    description: 'Generated when printing a single message detail PDF',
+  },
+  journal: {
+    label: 'Journal',
+    description: 'Generated when printing a single journal detail PDF',
+  },
+  vendor: {
+    label: 'Vendor',
+    description: 'Generated when printing a single vendor detail PDF',
+  },
+  jobs_list: {
+    label: 'Jobs List',
+    description: 'Generated when printing the jobs register PDF',
+  },
+  quotes_list: {
+    label: 'Quotes List',
+    description: 'Generated when printing the quotes/estimates register PDF',
+  },
+  invoices_list: {
+    label: 'Invoices List',
+    description: 'Generated when printing the invoices register PDF',
+  },
+  bills_list: {
+    label: 'Bills List',
+    description: 'Generated when printing the bills register PDF',
+  },
+  work_orders_list: {
+    label: 'Work Orders List',
+    description: 'Generated when printing the work orders register PDF',
+  },
+  purchase_orders_list: {
+    label: 'Purchase Orders List',
+    description: 'Generated when printing the purchase orders register PDF',
+  },
+  proposals_list: {
+    label: 'Proposals List',
+    description: 'Generated when printing the proposals register PDF',
+  },
+  rfqs_list: {
+    label: 'RFQs List',
+    description: 'Generated when printing the RFQs register PDF',
+  },
+  reports_list: {
+    label: 'Reports List',
+    description: 'Generated when printing the reports register PDF',
+  },
+  claims_list: {
+    label: 'Claims List',
+    description: 'Generated when printing the claims register PDF',
+  },
+  contacts_list: {
+    label: 'Contacts List',
+    description: 'Generated when printing the contacts register PDF',
+  },
+  tasks_list: {
+    label: 'Tasks List',
+    description: 'Generated when printing the tasks register PDF',
+  },
+  appointments_list: {
+    label: 'Appointments List',
+    description: 'Generated when printing the appointments register PDF',
+  },
+  messages_list: {
+    label: 'Messages List',
+    description: 'Generated when printing the messages register PDF',
+  },
+  journals_list: {
+    label: 'Journals List',
+    description: 'Generated when printing the journals register PDF',
+  },
+  vendors_list: {
+    label: 'Vendors List',
+    description: 'Generated when printing the vendors register PDF',
   },
 };
 
@@ -206,11 +324,26 @@ export class TemplateRegistryService {
     this.logger.debug(
       `${logPrefix} — loading from GCS via filesystem document id=${template.filesystemDocumentId}`,
     );
-    const fileBuffer = await this.downloadFilesystemDocument({
-      tenantId: params.tenantId,
-      documentId: template.filesystemDocumentId,
-    });
-    return { template, fileBuffer };
+    try {
+      const fileBuffer = await this.downloadFilesystemDocument({
+        tenantId: params.tenantId,
+        documentId: template.filesystemDocumentId,
+      });
+      return { template, fileBuffer };
+    } catch (err) {
+      const localBuffer = await this.tryLoadLocalTemplateFallback({
+        tenantId: params.tenantId,
+        documentId: template.filesystemDocumentId,
+      });
+      if (localBuffer) {
+        this.logger.warn(
+          `${logPrefix} — GCS download failed; using local data/templates fallback ` +
+            `(type=${params.documentType}): ${err instanceof Error ? err.message : err}`,
+        );
+        return { template, fileBuffer: localBuffer };
+      }
+      throw err;
+    }
   }
 
   async findAll(params: {
@@ -239,6 +372,45 @@ export class TemplateRegistryService {
       throw new BadRequestException('Linked filesystem template document is not complete');
     }
     return this.gcsStorage.downloadBuffer(doc.gcsObjectPath);
+  }
+
+  /**
+   * Dev fallback when ADC lacks GCS read access to provisioned template objects.
+   * Matches by linked document fileName against `data/templates/*.docx`.
+   */
+  private async tryLoadLocalTemplateFallback(params: {
+    tenantId: string;
+    documentId: string;
+  }): Promise<Buffer | null> {
+    const logPrefix = 'TemplateRegistryService.tryLoadLocalTemplateFallback';
+    const localDir = resolveLocalTemplatesDir();
+    if (!localDir) return null;
+
+    const doc = await this.documentsRepo.findOne(params.documentId, params.tenantId);
+    const fileName = doc?.fileName;
+    if (!fileName) return null;
+
+    const targetKey = normalizeTemplateKey(fileName);
+    const match = readdirSync(localDir)
+      .filter((f) => f.endsWith('.docx'))
+      .find(
+        (f) =>
+          f.toLowerCase() === fileName.toLowerCase() ||
+          normalizeTemplateKey(f) === targetKey,
+      );
+
+    if (!match) {
+      this.logger.debug(
+        `${logPrefix} — no local match for fileName=${fileName} in ${localDir}`,
+      );
+      return null;
+    }
+
+    const buffer = readFileSync(join(localDir, match));
+    this.logger.log(
+      `${logPrefix} — loaded ${match} from ${localDir} (${buffer.length} bytes)`,
+    );
+    return buffer;
   }
 }
 

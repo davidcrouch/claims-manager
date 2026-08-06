@@ -1,10 +1,11 @@
 import { Module } from '@nestjs/common';
 import { TenantModule } from '../../tenant/tenant.module';
+import { DomainModule } from '../domain/domain.module';
 import { ProposalsController } from './proposals.controller';
 import { ProposalsService } from './proposals.service';
 
 @Module({
-  imports: [TenantModule],
+  imports: [TenantModule, DomainModule],
   controllers: [ProposalsController],
   providers: [ProposalsService],
   exports: [ProposalsService],

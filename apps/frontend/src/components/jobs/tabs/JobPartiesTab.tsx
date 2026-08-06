@@ -1,14 +1,27 @@
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
-import { Mail, Phone, Search, X } from 'lucide-react';
+import { useMemo, useState, useEffect, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
+import { AlertTriangle, Loader2, Mail, Phone, Search, Trash2, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   ValueFilterMenu,
   SortableColumnHeader,
+  TableEmptyRow,
   compareValues,
   commitColumnFilterSelection,
 } from '@/components/shared/list-filters';
+import { removeJobContactAction } from '@/app/(app)/jobs/mutations';
+import { ContactDetailDrawer } from '@/components/contacts/ContactDetailDrawer';
 import type { Job } from '@/types/api';
 
 type Dict = Record<string, unknown>;
@@ -69,6 +82,8 @@ function getSortValue(c: ContactRow, field: ContactSortField): string | null | u
 }
 
 export function JobPartiesTab({ job }: { job: Job }) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
   const api = (job.apiPayload as Dict | undefined) ?? {};
   const contacts = (api.contacts as ContactRow[] | undefined) ?? [];
 
@@ -76,6 +91,11 @@ export function JobPartiesTab({ job }: { job: Job }) {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
   const [typeFilterActive, setTypeFilterActive] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState<ContactRow | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+  const [selectedContact, setSelectedContact] = useState<ContactRow | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
   const [columnSort, setColumnSort] = useState<{ field: ContactSortField; order: 'asc' | 'desc' }>({
     field: 'name',
     order: 'asc',
@@ -85,6 +105,43 @@ export function JobPartiesTab({ job }: { job: Job }) {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
   }, [search]);
+
+  function requestRemove(contact: ContactRow) {
+    if (!contact.id) return;
+    setRemoveError(null);
+    setConfirmRemove(contact);
+  }
+
+  function openContactDetail(contact: ContactRow) {
+    setSelectedContact(contact);
+    setDetailOpen(true);
+  }
+
+  function handleDetailOpenChange(open: boolean) {
+    setDetailOpen(open);
+    if (!open) setSelectedContact(null);
+  }
+
+  function confirmRemoveContact() {
+    const contact = confirmRemove;
+    if (!contact?.id) return;
+
+    setRemovingId(contact.id);
+    setRemoveError(null);
+    startTransition(async () => {
+      try {
+        const result = await removeJobContactAction(job.id, contact.id!);
+        if (!result.success) {
+          setRemoveError(result.error ?? 'Failed to remove contact');
+          return;
+        }
+        setConfirmRemove(null);
+        router.refresh();
+      } finally {
+        setRemovingId(null);
+      }
+    });
+  }
 
   const handleColumnSort = (field: ContactSortField) => {
     setColumnSort((prev) => {
@@ -193,17 +250,7 @@ export function JobPartiesTab({ job }: { job: Job }) {
         />
       </div>
 
-      {visibleRows.length === 0 ? (
-        <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50">
-          <div className="flex flex-col items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-100">
-              <Search size={24} className="text-slate-400" />
-            </div>
-            <p className="text-sm text-slate-400">No contacts found.</p>
-          </div>
-        </div>
-      ) : (
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50">
               <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -231,11 +278,23 @@ export function JobPartiesTab({ job }: { job: Job }) {
                 ))}
                 <th scope="col" className="px-4 py-3">Phones</th>
                 <th scope="col" className="px-4 py-3">Notes</th>
+                <th scope="col" className="w-12 px-2 py-3">
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {visibleRows.map((c, i) => (
-                <tr key={c.id ?? i} className="transition-colors hover:bg-slate-50">
+              {visibleRows.length === 0 ? (
+                <TableEmptyRow colSpan={TABLE_COLUMNS.length + 3} label="No contacts found." />
+              ) : (
+              visibleRows.map((c, i) => {
+                const busy = isPending && removingId === c.id;
+                return (
+                <tr
+                  key={c.id ?? i}
+                  className="cursor-pointer transition-colors hover:bg-slate-50"
+                  onClick={() => openContactDetail(c)}
+                >
                   <td className="px-4 py-3 font-medium text-slate-900">{contactName(c)}</td>
                   <td className="whitespace-nowrap px-4 py-3">
                     <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
@@ -246,6 +305,7 @@ export function JobPartiesTab({ job }: { job: Job }) {
                     {c.email ? (
                       <a
                         href={`mailto:${c.email}`}
+                        onClick={(e) => e.stopPropagation()}
                         className="inline-flex items-center gap-1 text-primary hover:underline"
                       >
                         <Mail className="h-3 w-3" />
@@ -289,12 +349,94 @@ export function JobPartiesTab({ job }: { job: Job }) {
                   <td className="px-4 py-3 text-slate-600">
                     {c.notes ?? <span className="text-slate-400">—</span>}
                   </td>
+                  <td className="px-2 py-3 text-right">
+                    {c.id ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-slate-400 hover:text-destructive"
+                        disabled={busy || (isPending && removingId !== null)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          requestRemove(c);
+                        }}
+                        aria-label={`Remove ${contactName(c)} from job`}
+                      >
+                        {busy ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+                      </Button>
+                    ) : null}
+                  </td>
                 </tr>
-              ))}
+                );
+              })
+              )}
             </tbody>
           </table>
         </div>
-      )}
+
+      <ContactDetailDrawer
+        open={detailOpen}
+        onOpenChange={handleDetailOpenChange}
+        contact={selectedContact}
+        currentJobId={job.id}
+      />
+
+      <Dialog
+        open={confirmRemove !== null}
+        onOpenChange={(open) => {
+          if (!open && !(isPending && removingId !== null)) {
+            setConfirmRemove(null);
+            setRemoveError(null);
+          }
+        }}
+      >
+        <DialogContent showCloseButton={false} className="sm:max-w-sm">
+          <DialogHeader>
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle>Remove contact</DialogTitle>
+                <DialogDescription className="mt-1">
+                  Remove{' '}
+                  <span className="font-medium text-foreground">
+                    {confirmRemove ? contactName(confirmRemove) : 'this contact'}
+                  </span>{' '}
+                  from this job? The contact record itself will not be deleted.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          {removeError && (
+            <p className="text-sm text-destructive">{removeError}</p>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={isPending && removingId !== null}
+              onClick={() => {
+                setConfirmRemove(null);
+                setRemoveError(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={isPending && removingId !== null}
+              onClick={confirmRemoveContact}
+            >
+              {isPending && removingId !== null ? 'Removing…' : 'Remove'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -8,6 +8,8 @@ locals {
         "roles/cloudsql.client",
         "roles/secretmanager.secretAccessor",
         "roles/aiplatform.user",
+        # Documents bucket uploads (provisioning templates + filesystem)
+        "roles/storage.objectAdmin",
       ]
     }
     "auth-server" = {

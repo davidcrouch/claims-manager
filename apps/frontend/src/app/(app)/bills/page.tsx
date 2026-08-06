@@ -2,14 +2,14 @@ import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { BillsPageClient } from '@/components/bills/BillsPageClient';
 import { buildJobNameById, toJobOptions } from '@/components/shared/job-label';
-import type { Bill, Job, PaginatedResponse } from '@/types/api';
+import type { Bill, Job, Claim, PaginatedResponse } from '@/types/api';
 
 export const metadata = { title: 'Bills — EnsureOS' };
 
 export default async function BillsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; sort?: string; status?: string; vendorId?: string }>;
+  searchParams: Promise<{ page?: string; sort?: string; status?: string; vendorId?: string; jobId?: string }>;
 }) {
   const api = await getServerApiClient();
   if (!api) redirect('/api/auth/login');
@@ -25,6 +25,7 @@ export default async function BillsPage({
         sort: params.sort,
         status: params.status,
         vendorId: params.vendorId,
+        jobId: params.jobId,
       })
       .catch((err: unknown) => {
         console.error(
@@ -43,6 +44,21 @@ export default async function BillsPage({
       return emptyJobs;
     }),
   ]);
+
+  let job: Job | null = null;
+  let parentClaim: Claim | null = null;
+  if (params.jobId) {
+    job = await api.getJob(params.jobId).catch((err: unknown) => {
+      console.error(
+        'frontend:BillsPage - getJob failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return null;
+    });
+    if (job?.claimId) {
+      parentClaim = await api.getClaim(job.claimId).catch(() => null);
+    }
+  }
 
   const statusOptions = (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map(
     (row) => ({
@@ -64,6 +80,8 @@ export default async function BillsPage({
       vendorOptions={vendorOptions}
       jobNameById={jobNameById}
       jobs={toJobOptions(jobs)}
+      job={job}
+      parentClaim={parentClaim}
     />
   );
 }

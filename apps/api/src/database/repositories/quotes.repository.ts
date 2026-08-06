@@ -134,15 +134,26 @@ export class QuotesRepository {
   async findOne(params: {
     id: string;
     tenantId: string;
-  }): Promise<QuoteRow | null> {
+  }): Promise<QuoteViewRow | null> {
+    const statusLookup = aliasedTable(lookupValues, 'status_lookup');
+    const quoteTypeLookup = aliasedTable(lookupValues, 'quote_type_lookup');
+
     const [row] = await this.db
-      .select()
+      .select({
+        ...getTableColumns(quotes),
+        statusName: statusLookup.name,
+        statusExternalReference: statusLookup.externalReference,
+        quoteTypeName: quoteTypeLookup.name,
+        quoteTypeExternalReference: quoteTypeLookup.externalReference,
+      })
       .from(quotes)
+      .leftJoin(statusLookup, eq(quotes.statusLookupId, statusLookup.id))
+      .leftJoin(quoteTypeLookup, eq(quotes.quoteTypeLookupId, quoteTypeLookup.id))
       .where(
         and(eq(quotes.id, params.id), eq(quotes.tenantId, params.tenantId)),
       )
       .limit(1);
-    return row ?? null;
+    return (row as QuoteViewRow) ?? null;
   }
 
   async findByJob(params: {

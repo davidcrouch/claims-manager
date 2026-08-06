@@ -7,7 +7,7 @@ import {
   SortTabs,
   SearchInput,
   StatusFilterMenu,
-  ListEmptyState,
+  TableEmptyRow,
   type SortOption,
   type StatusOption,
   buildSortString,
@@ -18,6 +18,11 @@ import {
   compareValues,
   formatDate,
 } from '@/components/shared/list-filters';
+import {
+  ColumnSettingsHeaderCell,
+  useColumnVisibility,
+  type ColumnVisibilityDef,
+} from '@/components/shared/column-visibility';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { ListPageHeader } from '@/components/layout/ListPageHeader';
 import type { Vendor, PaginatedResponse } from '@/types/api';
@@ -36,6 +41,13 @@ const LINK_STATE_OPTIONS: StatusOption[] = [
   { id: LINK_STATE_UNLINKED, name: 'Unlinked' },
 ];
 const LINK_STATE_NOUN = { singular: 'link state', plural: 'link states' };
+
+const TABLE_COLUMNS: ColumnVisibilityDef[] = [
+  { key: 'name', label: 'Name', locked: true },
+  { key: 'reference', label: 'Reference' },
+  { key: 'created', label: 'Created' },
+  { key: 'updated', label: 'Updated' },
+];
 
 export interface VendorsListClientProps {
   initialData: PaginatedResponse<Vendor>;
@@ -58,6 +70,10 @@ export function VendorsListClient({ initialData }: VendorsListClientProps) {
   });
   const [linkFilter, setLinkFilter] = useState<Set<string>>(() =>
     parseStatusIdsFromSearchParam(searchParams.get('link')),
+  );
+  const { isVisible, toggle, visibleCount } = useColumnVisibility(
+    'vendors',
+    TABLE_COLUMNS,
   );
 
   useEffect(() => {
@@ -198,44 +214,66 @@ export function VendorsListClient({ initialData }: VendorsListClientProps) {
         className="flex-1 px-6 pb-6"
         style={{ minHeight: 0, overflow: 'auto' }}
       >
-        {visibleRows.length > 0 ? (
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50">
-                <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <thead className="bg-slate-50">
+              <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                {isVisible('name') && (
                   <th scope="col" className="px-4 py-3">Name</th>
+                )}
+                {isVisible('reference') && (
                   <th scope="col" className="px-4 py-3">Reference</th>
+                )}
+                {isVisible('created') && (
                   <th scope="col" className="px-4 py-3">Created</th>
+                )}
+                {isVisible('updated') && (
                   <th scope="col" className="px-4 py-3">Updated</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {visibleRows.map((vendor) => (
+                )}
+                <ColumnSettingsHeaderCell
+                  columns={TABLE_COLUMNS}
+                  isVisible={isVisible}
+                  onToggle={toggle}
+                />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {visibleRows.length === 0 ? (
+                <TableEmptyRow colSpan={visibleCount + 1} label="No vendors found." />
+              ) : (
+                visibleRows.map((vendor) => (
                   <tr
                     key={vendor.id}
                     onClick={() => router.push(`/vendors/${vendor.id}`)}
                     className="cursor-pointer transition-colors hover:bg-slate-50"
                   >
-                    <td className="px-4 py-3 font-medium text-slate-900">
-                      {vendor.name}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600">
-                      {vendor.externalReference ?? ''}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                      {formatDate(vendor.createdAt)}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                      {formatDate(vendor.updatedAt)}
-                    </td>
+                    {isVisible('name') && (
+                      <td className="px-4 py-3 font-medium text-slate-900">
+                        {vendor.name}
+                      </td>
+                    )}
+                    {isVisible('reference') && (
+                      <td className="px-4 py-3 text-slate-600">
+                        {vendor.externalReference ?? ''}
+                      </td>
+                    )}
+                    {isVisible('created') && (
+                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                        {formatDate(vendor.createdAt)}
+                      </td>
+                    )}
+                    {isVisible('updated') && (
+                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                        {formatDate(vendor.updatedAt)}
+                      </td>
+                    )}
+                    <td className="px-2 py-3" aria-hidden />
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <ListEmptyState label="No vendors found." />
-        )}
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

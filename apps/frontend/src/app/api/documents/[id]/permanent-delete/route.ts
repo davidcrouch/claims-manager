@@ -1,34 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, getAccessToken } from '@/lib/auth';
 import { getApiBaseUrl } from '@/lib/env';
+import { getUpstreamApiAuth } from '@/lib/upstream-api';
 
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await getSession();
-  if (!session.authenticated) {
-    return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
-  }
-
-  const token = await getAccessToken();
-  if (!token) {
+  const auth = await getUpstreamApiAuth();
+  if (!auth) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }
 
   const { id } = await params;
-  const tenantId =
-    session.identity?.organization_id ??
-    process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID ??
-    '';
-
   const url = `${getApiBaseUrl()}/documents/${id}`;
   const upstream = await fetch(url, {
     method: 'DELETE',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
-    },
+    headers: auth.headers,
   });
 
   if (!upstream.ok) {

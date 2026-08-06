@@ -29,3 +29,72 @@ export function formatQuantity(value: string | number | null | undefined): strin
   if (isNaN(num)) return '0';
   return num % 1 === 0 ? num.toString() : num.toFixed(2);
 }
+
+type AddressLike = {
+  unitNumber?: unknown;
+  unit_number?: unknown;
+  streetNumber?: unknown;
+  street_number?: unknown;
+  streetName?: unknown;
+  street_name?: unknown;
+  suburb?: unknown;
+  state?: unknown;
+  postcode?: unknown;
+  postCode?: unknown;
+  country?: unknown;
+} | null | undefined;
+
+function addrStr(v: unknown): string | undefined {
+  if (typeof v !== 'string') return undefined;
+  const t = v.trim();
+  return t || undefined;
+}
+
+/**
+ * Australian-style display: `12/124 Walker St, North Sydney`
+ * Pass `full: true` to include state / postcode / country.
+ */
+export function formatAddress(
+  address: AddressLike,
+  options: { full?: boolean } = {},
+): string {
+  if (!address) return '';
+  const { full = false } = options;
+  const unit = addrStr(address.unitNumber ?? address.unit_number);
+  let streetNumber = addrStr(address.streetNumber ?? address.street_number);
+  let streetName = addrStr(address.streetName ?? address.street_name);
+
+  if (streetNumber && streetName) {
+    const numLower = streetNumber.toLowerCase();
+    const nameLower = streetName.toLowerCase();
+    if (
+      numLower === nameLower ||
+      numLower.endsWith(` ${nameLower}`) ||
+      numLower.endsWith(nameLower)
+    ) {
+      streetName = undefined;
+    }
+  }
+
+  const premise =
+    unit && streetNumber ? `${unit}/${streetNumber}` : unit || streetNumber || '';
+  const street =
+    premise && streetName
+      ? `${premise} ${streetName}`
+      : premise || streetName || '';
+
+  const suburb = addrStr(address.suburb);
+  const state = addrStr(address.state);
+  const postcode = addrStr(address.postcode ?? address.postCode);
+  const country = addrStr(address.country);
+
+  const parts: string[] = [];
+  if (street) parts.push(street);
+  if (suburb) parts.push(suburb);
+  if (full) {
+    if (state) parts.push(state);
+    if (postcode) parts.push(postcode);
+    if (country) parts.push(country);
+  }
+  return parts.join(', ');
+}

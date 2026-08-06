@@ -34,6 +34,7 @@ export class AppointmentsService {
     status?: string;
     sort?: string;
     order?: 'asc' | 'desc';
+    jobId?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
     return this.appointmentsRepo.findAll({ tenantId, ...params });

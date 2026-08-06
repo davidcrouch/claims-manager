@@ -1,7 +1,11 @@
+import Link from 'next/link';
 import { redirect, notFound } from 'next/navigation';
+import { ExternalLink } from 'lucide-react';
 import { getServerApiClient } from '@/lib/server-api';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { JournalDetailClient } from '@/components/journals/JournalDetailClient';
+import { BackButton } from '@/components/layout/BackButton';
+import { jobDisplayName } from '@/components/shared/job-label';
 import type { Metadata } from 'next';
 
 export async function generateMetadata({
@@ -36,6 +40,9 @@ export default async function JournalDetailPage({
   });
   if (!journal) notFound();
 
+  const jobLink = journal.entityLinks?.find((l) => l.entityType === 'job');
+  const job = jobLink ? await api.getJob(jobLink.entityId).catch(() => null) : null;
+
   const pagesResult = await api.getJournalPages(id, { limit: 50 }).catch(() => ({
     data: [],
     total: 0,
@@ -45,7 +52,17 @@ export default async function JournalDetailPage({
     <>
       <SetPageHeader>
         <div className="flex items-center gap-3">
+          <BackButton href={job ? `/journals?jobId=${job.id}` : '/journals'} label="Back to journals" />
           <h1 className="text-lg font-semibold">{journal.name}</h1>
+          {job && (
+            <Link
+              href={`/jobs/${job.id}`}
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              {jobDisplayName(job)}
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
         </div>
       </SetPageHeader>
       <JournalDetailClient journal={journal} initialPages={pagesResult} />

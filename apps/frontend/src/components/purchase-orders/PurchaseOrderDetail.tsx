@@ -35,18 +35,22 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { BackButton } from '@/components/layout/BackButton';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import {
   DefRow,
   SectionCard,
   formatDate,
   formatDateTime,
   formatCurrency,
+  formatAddress,
   pick,
   asString,
   type Dict,
 } from '@/components/shared/detail';
-import type { PurchaseOrder } from '@/types/api';
-import { GenerateDocumentButton } from '@/components/shared/GenerateDocumentButton';
+import type { PurchaseOrder, Job } from '@/types/api';
+import { PrintButton } from '@/components/shared/PrintButton';
+import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
+import { jobDisplayName } from '@/components/shared/job-label';
 import { getPurchaseOrderLineItemsAction } from '@/app/(app)/purchase-orders/actions';
 import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
 import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
@@ -90,23 +94,12 @@ function lookupName(
 }
 
 function partyAddress(party: Dict): string {
-  const parts = [
-    pick(party, 'unitNumber'),
-    pick(party, 'streetNumber'),
-    pick(party, 'streetName'),
-    pick(party, 'suburb'),
-    pick(party, 'state'),
-    pick(party, 'postCode', 'postcode'),
-    pick(party, 'country'),
-  ]
-    .map((x) => (typeof x === 'string' ? x.trim() : x))
-    .filter(Boolean);
-  return parts.join(', ');
+  return formatAddress(party);
 }
 
 // ---------- header ----------------------------------------------------------
 
-export function PurchaseOrderPageHeader({ po }: { po: PurchaseOrder }) {
+export function PurchaseOrderPageHeader({ po, job }: { po: PurchaseOrder; job?: Job | null }) {
   const title = po.purchaseOrderNumber ?? po.externalId ?? po.id;
   const status = lookupName(po, po.status, 'status') ?? 'Unknown';
   const poType = lookupName(po, po.purchaseOrderType, 'purchaseOrderType');
@@ -114,64 +107,75 @@ export function PurchaseOrderPageHeader({ po }: { po: PurchaseOrder }) {
   const total = formatCurrency(po.totalAmount);
 
   return (
-    <div className="flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-2">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-        <BackButton href="/purchase-orders" label="Back to purchase orders" />
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-orange-100">
-          <ShoppingCart className="h-4 w-4 text-orange-600" />
-        </span>
-        <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
-        {po.externalId && po.externalId !== title && (
-          <span className="font-mono text-xs text-muted-foreground">· {po.externalId}</span>
-        )}
-        <StatusBadge status={status} />
-        {poType && (
-          <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-            <Package className="h-3 w-3" />
-            {poType}
+    <>
+      <SetHeaderActions>
+        <PrintButton documentType="purchase_order" entityId={po.id} />
+        <ArchiveEntityButton
+          entityType="purchase_order"
+          entityId={po.id}
+          statusName={status}
+          entityLabel={title}
+          redirectTo={job ? `/purchase-orders?jobId=${job.id}` : '/purchase-orders'}
+        />
+      </SetHeaderActions>
+      <div className="flex w-full min-w-0 flex-col gap-y-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+          <BackButton href={job ? `/purchase-orders?jobId=${job.id}` : '/purchase-orders'} label="Back to purchase orders" />
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-orange-100">
+            <ShoppingCart className="h-4 w-4 text-orange-600" />
           </span>
-        )}
-        {vendor && (
-          <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-            <Building2 className="h-3 w-3" />
-            {vendor}
-          </span>
-        )}
-        {po.jobId && (
-          <Link
-            href={`/jobs/${po.jobId}`}
-            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-          >
-            View job
-            <ExternalLink className="h-3 w-3" />
-          </Link>
-        )}
-        {po.claimId && (
-          <Link
-            href={`/claims/${po.claimId}`}
-            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-          >
-            View claim
-            <ExternalLink className="h-3 w-3" />
-          </Link>
-        )}
+          <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
+          {po.externalId && po.externalId !== title && (
+            <span className="font-mono text-xs text-muted-foreground">· {po.externalId}</span>
+          )}
+          <StatusBadge status={status} />
+          {poType && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              <Package className="h-3 w-3" />
+              {poType}
+            </span>
+          )}
+          {vendor && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              <Building2 className="h-3 w-3" />
+              {vendor}
+            </span>
+          )}
+          {job && (
+            <Link
+              href={`/jobs/${job.id}`}
+              className="inline-flex items-center gap-1 text-xs uppercase text-primary hover:underline"
+            >
+              {jobDisplayName(job)}
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
+          {po.claimId && (
+            <Link
+              href={`/claims/${po.claimId}`}
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              View claim
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pl-20 text-xs">
+          <div className="flex items-baseline gap-1">
+            <span className="text-muted-foreground">Total:</span>
+            <span className="font-medium">{total}</span>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-muted-foreground">Start:</span>
+            <span className="font-medium">{formatDate(po.startDate)}</span>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-muted-foreground">End:</span>
+            <span className="font-medium">{formatDate(po.endDate)}</span>
+          </div>
+        </div>
       </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1 text-xs">
-        <GenerateDocumentButton entityId={po.id} documentType="purchase_order" />
-        <div className="flex items-baseline gap-1">
-          <span className="text-muted-foreground">Total:</span>
-          <span className="font-medium">{total}</span>
-        </div>
-        <div className="flex items-baseline gap-1">
-          <span className="text-muted-foreground">Start:</span>
-          <span className="font-medium">{formatDate(po.startDate)}</span>
-        </div>
-        <div className="flex items-baseline gap-1">
-          <span className="text-muted-foreground">End:</span>
-          <span className="font-medium">{formatDate(po.endDate)}</span>
-        </div>
-      </div>
-    </div>
+    </>
   );
 }
 

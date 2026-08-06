@@ -25,22 +25,22 @@ import {
   SortableColumnHeader,
   commitColumnFilterSelection,
   columnFilterToIdsParam,
+  TableEmptyRow,
 } from '@/components/shared/list-filters';
+import {
+  ColumnSettingsHeaderCell,
+  useColumnVisibility,
+} from '@/components/shared/column-visibility';
+import { ListArchiveButton, LIST_ARCHIVE_TH_CLASS, LIST_ARCHIVE_TD_CLASS, LIST_ARCHIVE_SPACER_TD_CLASS } from '@/components/shared/ListArchiveButton';
 import { TablePagination } from '@/components/shared/table-pagination';
+import { formatAddress } from '@/components/shared/detail';
 
 const PAGE_SIZE = 20;
 
-function formatAddress(claim: Claim): string {
-  const addr = claim.address as
-    | { streetNumber?: string; streetName?: string; suburb?: string }
-    | undefined;
-  if (addr) {
-    const parts = [addr.streetNumber, addr.streetName, addr.suburb].filter(
-      Boolean
-    );
-    if (parts.length) return parts.join(' ');
-  }
-  return claim.addressSuburb ?? '';
+function claimListAddress(claim: Claim): string {
+  return formatAddress(claim.address as Record<string, unknown> | undefined, {
+    fallback: { suburb: claim.addressSuburb },
+  });
 }
 
 function formatDate(value?: string | null): string {
@@ -115,10 +115,11 @@ interface ColumnDef {
   key: ColumnSortField;
   label: string;
   filterable?: boolean;
+  locked?: boolean;
 }
 
 const TABLE_COLUMNS: ColumnDef[] = [
-  { key: 'claim_number', label: 'Claim #' },
+  { key: 'claim_number', label: 'Claim #', locked: true },
   { key: 'status', label: 'Status', filterable: true },
   { key: 'policy', label: 'Policy' },
   { key: 'address', label: 'Address' },
@@ -139,7 +140,7 @@ function getClaimSortValue(
     case 'policy':
       return claim.policyNumber ?? claim.policyName;
     case 'address':
-      return formatAddress(claim) || null;
+      return claimListAddress(claim) || null;
     case 'account':
       return (claim.account as { name?: string })?.name;
     case 'lodgement_date':
@@ -187,6 +188,10 @@ export function ClaimsListClient({
   const [accountFilterActive, setAccountFilterActive] = useState(false);
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [statusFilterActive, setStatusFilterActive] = useState(false);
+  const { isVisible, toggle, visibleCount } = useColumnVisibility(
+    'claims',
+    TABLE_COLUMNS,
+  );
 
   const lastFetchKeyRef = useRef<string | null>(initialFetchKey);
 
@@ -467,12 +472,11 @@ export function ClaimsListClient({
         className="flex-1 px-6 pb-6"
         style={{ minHeight: 0, overflow: 'auto' }}
       >
-        {filteredAndSortedData.length > 0 ? (
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50">
                 <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                  {TABLE_COLUMNS.map((col) => (
+                  {TABLE_COLUMNS.filter((col) => isVisible(col.key)).map((col) => (
                     <SortableColumnHeader
                       key={col.key}
                       columnKey={col.key}
@@ -489,10 +493,21 @@ export function ClaimsListClient({
                       }
                     />
                   ))}
+                  <th scope="col" className={LIST_ARCHIVE_TH_CLASS}>
+                    <span className="sr-only">Actions</span>
+                  </th>
+                  <ColumnSettingsHeaderCell
+                    columns={TABLE_COLUMNS}
+                    isVisible={isVisible}
+                    onToggle={toggle}
+                  />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredAndSortedData.map((claim) => {
+                {filteredAndSortedData.length === 0 ? (
+                  <TableEmptyRow colSpan={visibleCount + 2} label="No claims found." />
+                ) : (
+                  filteredAndSortedData.map((claim) => {
                   const claimNo =
                     claim.claimNumber ?? claim.externalReference ?? claim.id;
                   const statusName =
@@ -508,28 +523,62 @@ export function ClaimsListClient({
                       onClick={() => router.push(`/claims/${claim.id}`)}
                       className="cursor-pointer transition-colors hover:bg-slate-50"
                     >
-                      <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
-                        {claimNo}
+                      {isVisible('claim_number') && (
+                        <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
+                          {claimNo}
+                        </td>
+                      )}
+                      {isVisible('status') && (
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <StatusBadge status={statusName} />
+                        </td>
+                      )}
+                      {isVisible('policy') && (
+                        <td className="px-4 py-3 text-slate-600">{policy}</td>
+                      )}
+                      {isVisible('address') && (
+                        <td className="px-4 py-3 text-slate-600">
+                          {claimListAddress(claim)}
+                        </td>
+                      )}
+                      {isVisible('account') && (
+                        <td className="px-4 py-3 text-slate-600">
+                          {accountName}
+                        </td>
+                      )}
+                      {isVisible('lodgement_date') && (
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                          {formatDate(claim.lodgementDate)}
+                        </td>
+                      )}
+                      {isVisible('updated_at') && (
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                          {formatDate(claim.updatedAt)}
+                        </td>
+                      )}
+                      <td
+                        className={LIST_ARCHIVE_TD_CLASS}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <ListArchiveButton
+                          entityType="claim"
+                          entityId={claim.id}
+                          statusName={statusName}
+                          entityLabel={claimNo}
+                          onArchived={(id) => {
+                            setData((prev) => ({
+                              ...prev,
+                              data: prev.data.filter((row) => row.id !== id),
+                              total: Math.max(0, prev.total - 1),
+                            }));
+                          }}
+                        />
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3">
-                        <StatusBadge status={statusName} />
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">{policy}</td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {formatAddress(claim)}
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {accountName}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {formatDate(claim.lodgementDate)}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {formatDate(claim.updatedAt)}
-                      </td>
+                      <td className={LIST_ARCHIVE_SPACER_TD_CLASS} aria-hidden />
                     </tr>
                   );
-                })}
+                })
+                )}
               </tbody>
             </table>
             <TablePagination
@@ -539,16 +588,6 @@ export function ClaimsListClient({
               onPageChange={handlePageChange}
             />
           </div>
-        ) : (
-          <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50">
-            <div className="flex flex-col items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-100">
-                <Search size={24} className="text-slate-400" />
-              </div>
-              <p className="text-sm text-slate-400">No claims found.</p>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

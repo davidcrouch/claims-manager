@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { LookupsRepository } from '../../database/repositories';
 import { TenantContext } from '../../tenant/tenant-context';
 
@@ -27,5 +27,20 @@ export class LookupsService {
     }
     const tenantId = this.tenantContext.getTenantId();
     return this.lookupsRepo.findOne({ id: params.id, tenantId });
+  }
+
+  async ensureByName(params: { domain: string; name: string }) {
+    if (!this.tenantContext.hasTenant()) {
+      throw new BadRequestException('Tenant context required');
+    }
+    if (!params.domain?.trim() || !params.name?.trim()) {
+      throw new BadRequestException('domain and name are required');
+    }
+    const tenantId = this.tenantContext.getTenantId();
+    return this.lookupsRepo.findOrCreateByName({
+      tenantId,
+      domain: params.domain.trim(),
+      name: params.name.trim(),
+    });
   }
 }

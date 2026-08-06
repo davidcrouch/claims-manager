@@ -5,10 +5,26 @@ import { Users, User, ChevronDown, ChevronRight, Clock } from 'lucide-react';
 import { StatusBadge } from '@/components/ui/status-badge';
 import {
   SortableColumnHeader,
+  TableEmptyRow,
   type ColumnValueFilter,
 } from '@/components/shared/list-filters';
+import {
+  ColumnSettingsHeaderCell,
+  useColumnVisibility,
+  type ColumnVisibilityDef,
+} from '@/components/shared/column-visibility';
 import { formatDateTime } from '@/components/shared/detail';
 import type { Appointment, AppointmentAttendee } from '@/types/api';
+
+const APPOINTMENT_COLUMNS: ColumnVisibilityDef[] = [
+  { key: 'name', label: 'Name', locked: true },
+  { key: 'type', label: 'Type' },
+  { key: 'location', label: 'Location' },
+  { key: 'start_date', label: 'Start' },
+  { key: 'duration', label: 'Duration' },
+  { key: 'status', label: 'Status' },
+  { key: 'attendees', label: 'Attendees' },
+];
 
 export function appointmentTypeName(a: Appointment): string {
   const t = a.appointmentType;
@@ -96,8 +112,12 @@ export function AppointmentsTable({
   typeColumnFilter,
 }: AppointmentsTableProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const { isVisible, toggle, visibleCount } = useColumnVisibility(
+    'appointments',
+    APPOINTMENT_COLUMNS,
+  );
 
-  function toggle(e: React.MouseEvent, id: string) {
+  function toggleExpanded(e: React.MouseEvent, id: string) {
     e.stopPropagation();
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -111,12 +131,11 @@ export function AppointmentsTable({
     return <p className="py-8 text-center text-sm text-muted-foreground">Loading...</p>;
   }
 
-  if (appointments.length === 0) {
-    return <p className="px-4 py-8 text-center text-sm text-muted-foreground">{emptyLabel}</p>;
-  }
-
   const noopSort = () => {};
   const useSortableHeaders = onSort || typeColumnFilter || statusColumnFilter;
+  // Leading expand spacer + visible data columns + settings cell
+  const emptyColSpan = 1 + visibleCount + 1;
+  const expandedColSpan = visibleCount + 1;
 
   return (
     <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -126,49 +145,85 @@ export function AppointmentsTable({
             <th scope="col" className="px-4 py-2.5 w-8" />
             {useSortableHeaders ? (
               <>
-                <SortableColumnHeader columnKey="name" label="Name" activeField={sortField ?? null} sortOrder={sortOrder} onSort={onSort ?? noopSort} />
-                <SortableColumnHeader
-                  columnKey="type"
-                  label="Type"
-                  activeField={sortField ?? null}
-                  sortOrder={sortOrder}
-                  onSort={onSort ?? noopSort}
-                  filter={typeColumnFilter}
-                />
-                <SortableColumnHeader columnKey="location" label="Location" activeField={sortField ?? null} sortOrder={sortOrder} onSort={onSort ?? noopSort} />
-                <SortableColumnHeader columnKey="start_date" label="Start" activeField={sortField ?? null} sortOrder={sortOrder} onSort={onSort ?? noopSort} />
-                <th scope="col" className="px-4 py-2.5">
-                  <Clock className="inline h-3 w-3 mr-1" />
-                  Duration
-                </th>
-                <SortableColumnHeader
-                  columnKey="status"
-                  label="Status"
-                  activeField={sortField ?? null}
-                  sortOrder={sortOrder}
-                  onSort={onSort ?? noopSort}
-                  filter={statusColumnFilter}
-                />
-                <th scope="col" className="px-4 py-2.5">Attendees</th>
+                {isVisible('name') && (
+                  <SortableColumnHeader columnKey="name" label="Name" activeField={sortField ?? null} sortOrder={sortOrder} onSort={onSort ?? noopSort} />
+                )}
+                {isVisible('type') && (
+                  <SortableColumnHeader
+                    columnKey="type"
+                    label="Type"
+                    activeField={sortField ?? null}
+                    sortOrder={sortOrder}
+                    onSort={onSort ?? noopSort}
+                    filter={typeColumnFilter}
+                  />
+                )}
+                {isVisible('location') && (
+                  <SortableColumnHeader columnKey="location" label="Location" activeField={sortField ?? null} sortOrder={sortOrder} onSort={onSort ?? noopSort} />
+                )}
+                {isVisible('start_date') && (
+                  <SortableColumnHeader columnKey="start_date" label="Start" activeField={sortField ?? null} sortOrder={sortOrder} onSort={onSort ?? noopSort} />
+                )}
+                {isVisible('duration') && (
+                  <th scope="col" className="px-4 py-2.5">
+                    <Clock className="inline h-3 w-3 mr-1" />
+                    Duration
+                  </th>
+                )}
+                {isVisible('status') && (
+                  <SortableColumnHeader
+                    columnKey="status"
+                    label="Status"
+                    activeField={sortField ?? null}
+                    sortOrder={sortOrder}
+                    onSort={onSort ?? noopSort}
+                    filter={statusColumnFilter}
+                  />
+                )}
+                {isVisible('attendees') && (
+                  <th scope="col" className="px-4 py-2.5">Attendees</th>
+                )}
               </>
             ) : (
               <>
-                <th scope="col" className="px-4 py-2.5">Name</th>
-                <th scope="col" className="px-4 py-2.5">Type</th>
-                <th scope="col" className="px-4 py-2.5">Location</th>
-                <th scope="col" className="px-4 py-2.5">Start</th>
-                <th scope="col" className="px-4 py-2.5">
-                  <Clock className="inline h-3 w-3 mr-1" />
-                  Duration
-                </th>
-                <th scope="col" className="px-4 py-2.5">Status</th>
-                <th scope="col" className="px-4 py-2.5">Attendees</th>
+                {isVisible('name') && (
+                  <th scope="col" className="px-4 py-2.5">Name</th>
+                )}
+                {isVisible('type') && (
+                  <th scope="col" className="px-4 py-2.5">Type</th>
+                )}
+                {isVisible('location') && (
+                  <th scope="col" className="px-4 py-2.5">Location</th>
+                )}
+                {isVisible('start_date') && (
+                  <th scope="col" className="px-4 py-2.5">Start</th>
+                )}
+                {isVisible('duration') && (
+                  <th scope="col" className="px-4 py-2.5">
+                    <Clock className="inline h-3 w-3 mr-1" />
+                    Duration
+                  </th>
+                )}
+                {isVisible('status') && (
+                  <th scope="col" className="px-4 py-2.5">Status</th>
+                )}
+                {isVisible('attendees') && (
+                  <th scope="col" className="px-4 py-2.5">Attendees</th>
+                )}
               </>
             )}
+            <ColumnSettingsHeaderCell
+              columns={APPOINTMENT_COLUMNS}
+              isVisible={isVisible}
+              onToggle={toggle}
+            />
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {appointments.map((a) => {
+          {appointments.length === 0 ? (
+            <TableEmptyRow colSpan={emptyColSpan} label={emptyLabel} />
+          ) : (
+            appointments.map((a) => {
             const isExpanded = expanded.has(a.id);
             const attendees = a.attendees ?? [];
             return (
@@ -181,7 +236,7 @@ export function AppointmentsTable({
                     <button
                       type="button"
                       aria-label={isExpanded ? 'Collapse' : 'Expand'}
-                      onClick={(e) => toggle(e, a.id)}
+                      onClick={(e) => toggleExpanded(e, a.id)}
                       className="inline-flex items-center justify-center rounded-md p-0.5 hover:bg-muted"
                     >
                       {isExpanded ? (
@@ -191,32 +246,47 @@ export function AppointmentsTable({
                       )}
                     </button>
                   </td>
-                  <td className="px-4 py-2.5 font-medium">{a.name}</td>
-                  <td className="px-4 py-2.5 text-muted-foreground">
-                    {appointmentTypeName(a)}
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                      {a.location}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
-                    {formatDateTime(a.startDate)}
-                  </td>
-                  <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
-                    {appointmentDuration(a)}
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <StatusBadge status={appointmentStatusLabel(a)} />
-                  </td>
-                  <td className="px-4 py-2.5 text-muted-foreground">
-                    {attendees.length}
-                  </td>
+                  {isVisible('name') && (
+                    <td className="px-4 py-2.5 font-medium">{a.name}</td>
+                  )}
+                  {isVisible('type') && (
+                    <td className="px-4 py-2.5 text-muted-foreground">
+                      {appointmentTypeName(a)}
+                    </td>
+                  )}
+                  {isVisible('location') && (
+                    <td className="px-4 py-2.5">
+                      <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                        {a.location}
+                      </span>
+                    </td>
+                  )}
+                  {isVisible('start_date') && (
+                    <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
+                      {formatDateTime(a.startDate)}
+                    </td>
+                  )}
+                  {isVisible('duration') && (
+                    <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
+                      {appointmentDuration(a)}
+                    </td>
+                  )}
+                  {isVisible('status') && (
+                    <td className="px-4 py-2.5">
+                      <StatusBadge status={appointmentStatusLabel(a)} />
+                    </td>
+                  )}
+                  {isVisible('attendees') && (
+                    <td className="px-4 py-2.5 text-muted-foreground">
+                      {attendees.length}
+                    </td>
+                  )}
+                  <td className="px-2 py-3" aria-hidden />
                 </tr>
                 {isExpanded && (
                   <tr className="bg-muted/10">
                     <td />
-                    <td colSpan={7} className="px-4 py-3">
+                    <td colSpan={expandedColSpan} className="px-4 py-3">
                       <div className="space-y-2">
                         <div>
                           <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -242,7 +312,8 @@ export function AppointmentsTable({
                 )}
               </Fragment>
             );
-          })}
+          })
+          )}
         </tbody>
       </table>
     </div>

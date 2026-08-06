@@ -20,6 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { BackButton } from '@/components/layout/BackButton';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import {
   DefRow,
   SectionCard,
@@ -31,9 +32,10 @@ import {
   type Dict,
 } from '@/components/shared/detail';
 import { updateBillStatusAction } from '@/app/(app)/mutations-status';
-import type { Bill } from '@/types/api';
-import { GenerateDocumentButton } from '@/components/shared/GenerateDocumentButton';
-
+import type { Bill, Job } from '@/types/api';
+import { PrintButton } from '@/components/shared/PrintButton';
+import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
+import { jobDisplayName } from '@/components/shared/job-label';
 // ---------- helpers ---------------------------------------------------------
 
 function getPayload(bill: Bill): Dict {
@@ -50,7 +52,7 @@ function vendorName(bill: Bill): string | undefined {
 
 // ---------- header ----------------------------------------------------------
 
-export function BillPageHeader({ bill }: { bill: Bill }) {
+export function BillPageHeader({ bill, job }: { bill: Bill; job?: Job | null }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const title = bill.billNumber ?? bill.externalReference ?? bill.id;
@@ -68,87 +70,97 @@ export function BillPageHeader({ bill }: { bill: Bill }) {
   }
 
   return (
-    <div className="flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-2">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-        <BackButton href="/bills" label="Back to bills" />
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-rose-100">
-          <ReceiptText className="h-4 w-4 text-rose-600" />
-        </span>
-        <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
-        <StatusBadge status={status} />
-        {vendor && (
-          <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-            <Building2 className="h-3 w-3" />
-            {vendor}
-          </span>
-        )}
-        {bill.purchaseOrderId && (
-          <Link
-            href={`/purchase-orders/${bill.purchaseOrderId}`}
-            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-          >
-            View PO
-            <ExternalLink className="h-3 w-3" />
-          </Link>
-        )}
-        {bill.jobId && (
-          <Link
-            href={`/jobs/${bill.jobId}`}
-            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-          >
-            View Job
-            <ExternalLink className="h-3 w-3" />
-          </Link>
-        )}
-      </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1">
-        <GenerateDocumentButton entityId={bill.id} documentType="bill" />
-        <div className="flex items-baseline gap-1 text-xs">
-          <span className="text-muted-foreground">Amount:</span>
-          <span className="font-medium">{formatCurrency(bill.totalAmount)}</span>
-        </div>
-        <div className="flex items-baseline gap-1 text-xs">
-          <span className="text-muted-foreground">Received:</span>
-          <span className="font-medium">{formatDate(bill.receivedDate)}</span>
-        </div>
-        <div className="flex items-baseline gap-1 text-xs">
-          <span className="text-muted-foreground">Due:</span>
-          <span className="font-medium">{formatDate(bill.dueDate)}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {status === 'Received' && (
-            <>
-              <Button
-                size="sm"
-                disabled={loading}
-                className="bg-green-600 text-white hover:bg-green-700"
-                onClick={() => handleStatusChange('Approved')}
-              >
-                Approve
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                disabled={loading}
-                onClick={() => handleStatusChange('Rejected')}
-              >
-                Reject
-              </Button>
-            </>
-          )}
-          {status === 'Approved' && (
+    <>
+      <SetHeaderActions>
+        {status === 'Received' && (
+          <>
             <Button
-              size="sm"
+              size="default"
               disabled={loading}
-              className="bg-green-600 text-white hover:bg-green-700"
-              onClick={() => handleStatusChange('Paid')}
+              className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+              onClick={() => handleStatusChange('Approved')}
             >
-              Mark Paid
+              Approve
             </Button>
+            <Button
+              size="default"
+              variant="destructive"
+              disabled={loading}
+              className="h-9 gap-1.5 px-4"
+              onClick={() => handleStatusChange('Rejected')}
+            >
+              Reject
+            </Button>
+          </>
+        )}
+        {status === 'Approved' && (
+          <Button
+            size="default"
+            disabled={loading}
+            className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+            onClick={() => handleStatusChange('Paid')}
+          >
+            Mark Paid
+          </Button>
+        )}
+        <PrintButton documentType="bill" entityId={bill.id} />
+        <ArchiveEntityButton
+          entityType="bill"
+          entityId={bill.id}
+          statusName={status}
+          entityLabel={title}
+          redirectTo={job ? `/bills?jobId=${job.id}` : '/bills'}
+        />
+      </SetHeaderActions>
+      <div className="flex w-full min-w-0 flex-col gap-y-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+          <BackButton href={job ? `/bills?jobId=${job.id}` : '/bills'} label="Back to bills" />
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-rose-100">
+            <ReceiptText className="h-4 w-4 text-rose-600" />
+          </span>
+          <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
+          <StatusBadge status={status} />
+          {vendor && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              <Building2 className="h-3 w-3" />
+              {vendor}
+            </span>
+          )}
+          {bill.purchaseOrderId && (
+            <Link
+              href={`/purchase-orders/${bill.purchaseOrderId}`}
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              View PO
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
+          {job && (
+            <Link
+              href={`/jobs/${job.id}`}
+              className="inline-flex items-center gap-1 text-xs uppercase text-primary hover:underline"
+            >
+              {jobDisplayName(job)}
+              <ExternalLink className="h-3 w-3" />
+            </Link>
           )}
         </div>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pl-20 text-xs">
+          <div className="flex items-baseline gap-1">
+            <span className="text-muted-foreground">Amount:</span>
+            <span className="font-medium">{formatCurrency(bill.totalAmount)}</span>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-muted-foreground">Received:</span>
+            <span className="font-medium">{formatDate(bill.receivedDate)}</span>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-muted-foreground">Due:</span>
+            <span className="font-medium">{formatDate(bill.dueDate)}</span>
+          </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 

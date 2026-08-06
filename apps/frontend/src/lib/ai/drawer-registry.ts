@@ -43,6 +43,41 @@ export const drawerRegistry: Record<string, DrawerRegistryEntry> = {
         default: m.ContactFormDrawer as unknown as ComponentType<CanvasDrawerProps>,
       })),
   },
+  AssessmentBuildingDrawer: {
+    title: 'Building Structure',
+    loader: () =>
+      import('@/components/assessments/drawers/AssessmentBuildingDrawer').then((m) => ({
+        default: m.AssessmentBuildingDrawer as unknown as ComponentType<CanvasDrawerProps>,
+      })),
+  },
+  AssessmentGeneralDrawer: {
+    title: 'General Questions',
+    loader: () =>
+      import('@/components/assessments/drawers/AssessmentGeneralDrawer').then((m) => ({
+        default: m.AssessmentGeneralDrawer as unknown as ComponentType<CanvasDrawerProps>,
+      })),
+  },
+  AssessmentHazardsDrawer: {
+    title: 'Hazards',
+    loader: () =>
+      import('@/components/assessments/drawers/AssessmentHazardsDrawer').then((m) => ({
+        default: m.AssessmentHazardsDrawer as unknown as ComponentType<CanvasDrawerProps>,
+      })),
+  },
+  AssessmentAccommodationDrawer: {
+    title: 'Temporary Accommodation',
+    loader: () =>
+      import('@/components/assessments/drawers/AssessmentAccommodationDrawer').then((m) => ({
+        default: m.AssessmentAccommodationDrawer as unknown as ComponentType<CanvasDrawerProps>,
+      })),
+  },
+  AssessmentOtherDrawer: {
+    title: 'Other Details',
+    loader: () =>
+      import('@/components/assessments/drawers/AssessmentOtherDrawer').then((m) => ({
+        default: m.AssessmentOtherDrawer as unknown as ComponentType<CanvasDrawerProps>,
+      })),
+  },
 };
 
 export const LazyQuoteFormDrawer = dynamic(

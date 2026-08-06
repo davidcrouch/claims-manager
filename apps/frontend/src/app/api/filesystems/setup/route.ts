@@ -1,32 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, getAccessToken } from '@/lib/auth';
 import { getApiBaseUrl } from '@/lib/env';
+import { getUpstreamApiAuth } from '@/lib/upstream-api';
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
-  if (!session.authenticated) {
+  const auth = await getUpstreamApiAuth({ contentType: 'application/json' });
+  if (!auth) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }
-
-  const token = await getAccessToken();
-  if (!token) {
-    return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
-  }
-
-  const tenantId =
-    session.identity?.organization_id ??
-    process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID ??
-    '';
 
   const body = await req.json();
 
   const upstream = await fetch(`${getApiBaseUrl()}/filesystems/setup`, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
-    },
+    headers: auth.headers,
     body: JSON.stringify(body),
   });
 

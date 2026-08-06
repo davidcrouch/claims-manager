@@ -1,19 +1,9 @@
 import { redirect } from 'next/navigation';
 import { getSession, getAccessToken } from '@/lib/auth';
 import { getApiBaseUrl } from '@/lib/env';
-import {
-  fetchCloudRunIdToken,
-  resolveApiAudience,
-} from '@/lib/cloud-run-id-token';
+import { cloudRunInvokerHeaders } from '@/lib/cloud-run-id-token';
 import { AppLayoutClient } from '@/components/layout/AppLayoutClient';
 import { ProvisioningScreen } from '@/components/provisioning/ProvisioningScreen';
-
-async function cloudRunInvokerHeaders(): Promise<Record<string, string>> {
-  const idToken = await fetchCloudRunIdToken(resolveApiAudience());
-  return idToken
-    ? { 'X-Serverless-Authorization': `Bearer ${idToken}` }
-    : {};
-}
 
 async function checkProvisioningStatus(
   token: string,

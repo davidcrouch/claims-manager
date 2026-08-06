@@ -83,3 +83,109 @@ export function formatBytes(bytes?: number | string | null): string {
   }
   return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
+
+export type AddressLike = {
+  unitNumber?: unknown;
+  unit_number?: unknown;
+  streetNumber?: unknown;
+  street_number?: unknown;
+  streetName?: unknown;
+  street_name?: unknown;
+  suburb?: unknown;
+  state?: unknown;
+  postcode?: unknown;
+  postCode?: unknown;
+  country?: unknown;
+} | null | undefined;
+
+export type FormatAddressOptions = {
+  /** Include state / postcode / country. Default false (short AU display). */
+  full?: boolean;
+  /** Fallback suburb/state/postcode/country when address object is empty. */
+  fallback?: {
+    suburb?: string | null;
+    state?: string | null;
+    postcode?: string | null;
+    country?: string | null;
+  };
+};
+
+function addrStr(v: unknown): string | undefined {
+  if (typeof v !== 'string') return undefined;
+  const t = v.trim();
+  return t || undefined;
+}
+
+/**
+ * Australian-style street line: `12/124 Walker St`
+ * - unit + street number joined with `/`
+ * - street name appended with a space
+ * - avoids duplicating street name when streetNumber already includes it
+ */
+export function formatStreetLine(address: AddressLike): string {
+  if (!address) return '';
+  const unit = addrStr(address.unitNumber ?? address.unit_number);
+  let streetNumber = addrStr(address.streetNumber ?? address.street_number);
+  let streetName = addrStr(address.streetName ?? address.street_name);
+
+  if (streetNumber && streetName) {
+    const numLower = streetNumber.toLowerCase();
+    const nameLower = streetName.toLowerCase();
+    if (
+      numLower === nameLower ||
+      numLower.endsWith(` ${nameLower}`) ||
+      numLower.endsWith(nameLower)
+    ) {
+      streetName = undefined;
+    }
+  }
+
+  const premise =
+    unit && streetNumber ? `${unit}/${streetNumber}` : unit || streetNumber || '';
+
+  if (premise && streetName) return `${premise} ${streetName}`;
+  return premise || streetName || '';
+}
+
+/**
+ * Format an address for display.
+ * Short (default): `12/124 Walker St, North Sydney`
+ * Full: `12/124 Walker St, North Sydney, NSW, 2060, Australia`
+ */
+export function formatAddress(
+  address: AddressLike,
+  options: FormatAddressOptions = {},
+): string {
+  const { full = false, fallback } = options;
+  const street = formatStreetLine(address);
+  const suburb =
+    addrStr(address?.suburb) ?? addrStr(fallback?.suburb ?? undefined);
+  const state =
+    addrStr(address?.state) ?? addrStr(fallback?.state ?? undefined);
+  const postcode =
+    addrStr(address?.postcode ?? address?.postCode) ??
+    addrStr(fallback?.postcode ?? undefined);
+  const country =
+    addrStr(address?.country) ?? addrStr(fallback?.country ?? undefined);
+
+  const parts: string[] = [];
+  if (street) parts.push(street);
+  if (suburb) parts.push(suburb);
+  if (full) {
+    if (state) parts.push(state);
+    if (postcode) parts.push(postcode);
+    if (country) parts.push(country);
+  }
+
+  if (parts.length) return parts.join(', ');
+
+  // No structured street — fall back to whatever locality we have.
+  return [
+    suburb,
+    full ? state : undefined,
+    full ? postcode : undefined,
+    full ? country : undefined,
+  ]
+    .filter(Boolean)
+    .join(', ');
+}

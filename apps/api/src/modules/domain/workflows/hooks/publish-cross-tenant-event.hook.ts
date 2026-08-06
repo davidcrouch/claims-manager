@@ -8,6 +8,8 @@ const CROSS_TENANT_ENTITY_TYPES = new Set([
   'work_order',
   'invoice',
   'bill',
+  'quote',
+  'proposal',
 ]);
 
 @Injectable()

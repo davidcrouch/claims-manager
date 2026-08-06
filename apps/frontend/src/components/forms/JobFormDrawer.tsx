@@ -1,19 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
-import {
-  Briefcase,
-  ChevronRight,
-  Loader2,
-  Plus,
-  Search,
-  UserPlus,
-  X,
-} from 'lucide-react';
+import { Briefcase, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,9 +23,14 @@ import {
   BottomFormDrawerError,
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
+import { ContactFormDrawer } from '@/components/contacts/ContactFormDrawer';
+import {
+  JobContactsPicker,
+  contactFromCreated,
+  type JobContactRef,
+} from '@/components/forms/JobContactsPicker';
 import { createJobAction } from '@/app/(app)/jobs/mutations';
-import { searchContactsAction } from '@/app/(app)/mutations';
-import type { Job } from '@/types/api';
+import type { Contact, Job } from '@/types/api';
 
 type WizardStep = 'details' | 'contacts';
 
@@ -68,22 +65,6 @@ const detailsSchema = z.object({
 
 type DetailsValues = z.infer<typeof detailsSchema>;
 
-type ContactRef = {
-  key: string;
-  contactId?: string;
-  firstName: string;
-  lastName?: string;
-  email?: string;
-  mobilePhone?: string;
-};
-
-type SearchHit = {
-  id: string;
-  type: 'USER' | 'CONTACT';
-  name: string;
-  email?: string;
-};
-
 const AU_STATES = ['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA'] as const;
 
 export interface JobFormDrawerProps {
@@ -104,12 +85,8 @@ export function JobFormDrawer({
   const [step, setStep] = useState<WizardStep>('details');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [contacts, setContacts] = useState<ContactRef[]>([]);
-  const [showNewContact, setShowNewContact] = useState(false);
-  const [newFirstName, setNewFirstName] = useState('');
-  const [newLastName, setNewLastName] = useState('');
-  const [newEmail, setNewEmail] = useState('');
-  const [newMobile, setNewMobile] = useState('');
+  const [contacts, setContacts] = useState<JobContactRef[]>([]);
+  const [contactDrawerOpen, setContactDrawerOpen] = useState(false);
 
   const form = useForm<DetailsValues>({
     resolver: standardSchemaResolver(detailsSchema),
@@ -172,11 +149,7 @@ export function JobFormDrawer({
     setError(null);
     setSubmitting(false);
     setContacts([]);
-    setShowNewContact(false);
-    setNewFirstName('');
-    setNewLastName('');
-    setNewEmail('');
-    setNewMobile('');
+    setContactDrawerOpen(false);
     form.reset();
   }, [form]);
 
@@ -185,6 +158,9 @@ export function JobFormDrawer({
   }, [open, reset]);
 
   function handleOpenChange(next: boolean) {
+    // Keep the job wizard open while the nested contact drawer is visible
+    // (e.g. Escape would otherwise close both).
+    if (!next && contactDrawerOpen) return;
     onOpenChange(next);
     if (!next) reset();
   }
@@ -196,43 +172,18 @@ export function JobFormDrawer({
     setStep('contacts');
   }
 
-  function addSearchedContact(hit: SearchHit) {
-    if (contacts.some((c) => c.contactId === hit.id)) return;
-    const [firstName, ...rest] = hit.name.split(' ');
-    setContacts((prev) => [
-      ...prev,
-      {
-        key: `existing-${hit.id}`,
-        contactId: hit.id,
-        firstName: firstName || hit.name,
-        lastName: rest.join(' ') || undefined,
-        email: hit.email,
-      },
-    ]);
+  function addContact(contact: JobContactRef) {
+    setContacts((prev) => {
+      if (contact.contactId && prev.some((c) => c.contactId === contact.contactId)) {
+        return prev;
+      }
+      return [contact, ...prev];
+    });
+    setError(null);
   }
 
-  function addNewContact() {
-    const firstName = newFirstName.trim();
-    if (!firstName) {
-      setError('First name is required for a new contact');
-      return;
-    }
-    setContacts((prev) => [
-      ...prev,
-      {
-        key: `new-${Date.now()}`,
-        firstName,
-        lastName: newLastName.trim() || undefined,
-        email: newEmail.trim() || undefined,
-        mobilePhone: newMobile.trim() || undefined,
-      },
-    ]);
-    setNewFirstName('');
-    setNewLastName('');
-    setNewEmail('');
-    setNewMobile('');
-    setShowNewContact(false);
-    setError(null);
+  function handleContactCreated(contact: Contact) {
+    addContact(contactFromCreated(contact));
   }
 
   function removeContact(key: string) {
@@ -288,7 +239,13 @@ export function JobFormDrawer({
       if (result.success) {
         handleOpenChange(false);
         if (result.job) onSuccess?.(result.job);
-        router.refresh();
+        // Prefer detail navigation. Do not router.refresh()/replace here —
+        // those race with push and can leave the jobs list on stale rows.
+        if (result.job?.id) {
+          router.push(`/jobs/${result.job.id}`);
+        } else {
+          router.refresh();
+        }
       } else {
         setError(result.error ?? 'Failed to create job');
       }
@@ -302,6 +259,7 @@ export function JobFormDrawer({
   const stepIndex = STEPS.indexOf(step);
 
   return (
+    <>
     <BottomFormDrawer
       open={open}
       onOpenChange={handleOpenChange}
@@ -331,80 +289,82 @@ export function JobFormDrawer({
       <BottomFormDrawerBody>
         {step === 'details' && (
           <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="provider">Provider</Label>
-              <Select
-                value={provider}
-                onValueChange={(v) => {
-                  form.setValue('provider', (v as JobProvider) ?? 'internal', {
-                    shouldValidate: true,
-                  });
-                  form.setValue('jobTypeId', '', { shouldValidate: false });
-                }}
-                items={providerItems}
-              >
-                <SelectTrigger id="provider" className="w-full">
-                  <SelectValue placeholder="Select provider" />
-                </SelectTrigger>
-                <SelectContent>
-                  {JOB_PROVIDERS.map((p) => (
-                    <SelectItem key={p.value} value={p.value}>
-                      {p.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {form.formState.errors.provider && (
-                <p className="text-sm text-destructive">
-                  {form.formState.errors.provider.message}
-                </p>
-              )}
-            </div>
+            <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:col-span-2 md:grid-cols-3">
+              <div className="space-y-2">
+                <Label htmlFor="job-name">Name</Label>
+                <Input
+                  id="job-name"
+                  {...form.register('name')}
+                  placeholder="e.g. Kitchen make-safe"
+                />
+                {form.formState.errors.name && (
+                  <p className="text-sm text-destructive">
+                    {form.formState.errors.name.message}
+                  </p>
+                )}
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="job-name">Name</Label>
-              <Input
-                id="job-name"
-                {...form.register('name')}
-                placeholder="e.g. Kitchen make-safe"
-              />
-              {form.formState.errors.name && (
-                <p className="text-sm text-destructive">
-                  {form.formState.errors.name.message}
-                </p>
-              )}
-            </div>
+              <div className="space-y-2">
+                <Label htmlFor="jobTypeId">Job Type</Label>
+                <Select
+                  value={jobTypeId || null}
+                  onValueChange={(v) =>
+                    form.setValue('jobTypeId', v ?? '', { shouldValidate: true })
+                  }
+                  items={jobTypeItems}
+                >
+                  <SelectTrigger id="jobTypeId" className="w-full">
+                    <SelectValue placeholder="Select job type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {filteredJobTypes.map((jt) => (
+                      <SelectItem key={jt.id} value={jt.id}>
+                        {jt.name ?? jt.id}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {form.formState.errors.jobTypeId && (
+                  <p className="text-sm text-destructive">
+                    {form.formState.errors.jobTypeId.message}
+                  </p>
+                )}
+                {filteredJobTypes.length === 0 && (
+                  <p className="text-sm text-amber-700">
+                    No job types found for this provider.
+                  </p>
+                )}
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="jobTypeId">Job Type</Label>
-              <Select
-                value={jobTypeId || null}
-                onValueChange={(v) =>
-                  form.setValue('jobTypeId', v ?? '', { shouldValidate: true })
-                }
-                items={jobTypeItems}
-              >
-                <SelectTrigger id="jobTypeId" className="w-full">
-                  <SelectValue placeholder="Select job type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {filteredJobTypes.map((jt) => (
-                    <SelectItem key={jt.id} value={jt.id}>
-                      {jt.name ?? jt.id}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {form.formState.errors.jobTypeId && (
-                <p className="text-sm text-destructive">
-                  {form.formState.errors.jobTypeId.message}
-                </p>
-              )}
-              {filteredJobTypes.length === 0 && (
-                <p className="text-sm text-amber-700">
-                  No job types found for this provider.
-                </p>
-              )}
+              <div className="space-y-2">
+                <Label htmlFor="provider">Provider</Label>
+                <Select
+                  value={provider}
+                  onValueChange={(v) => {
+                    form.setValue('provider', (v as JobProvider) ?? 'internal', {
+                      shouldValidate: true,
+                    });
+                    form.setValue('jobTypeId', '', { shouldValidate: false });
+                  }}
+                  items={providerItems}
+                >
+                  <SelectTrigger id="provider" className="w-full">
+                    <SelectValue placeholder="Select provider" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {JOB_PROVIDERS.map((p) => (
+                      <SelectItem key={p.value} value={p.value}>
+                        {p.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {form.formState.errors.provider && (
+                  <p className="text-sm text-destructive">
+                    {form.formState.errors.provider.message}
+                  </p>
+                )}
+              </div>
             </div>
 
             <div className="space-y-2 md:col-span-2">
@@ -492,133 +452,24 @@ export function JobFormDrawer({
         )}
 
         {step === 'contacts' && (
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <Label>Add contacts</Label>
-              <p className="text-sm text-muted-foreground">
-                Search existing contacts or add a new one. Contacts are optional.
-              </p>
-              <ContactSearchField
-                selectedIds={contacts.map((c) => c.contactId).filter(Boolean) as string[]}
-                onSelect={addSearchedContact}
-              />
-            </div>
-
-            {contacts.length > 0 && (
-              <ul className="space-y-2">
-                {contacts.map((c) => (
-                  <li
-                    key={c.key}
-                    className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
-                  >
-                    <div>
-                      <span className="font-medium">
-                        {[c.firstName, c.lastName].filter(Boolean).join(' ')}
-                      </span>
-                      {c.email && (
-                        <span className="ml-2 text-muted-foreground">{c.email}</span>
-                      )}
-                      {!c.contactId && (
-                        <span className="ml-2 rounded bg-emerald-50 px-1.5 py-0.5 text-xs text-emerald-700">
-                          New
-                        </span>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeContact(c.key)}
-                      className="rounded p-1 hover:bg-destructive/10"
-                      aria-label="Remove contact"
-                    >
-                      <X className="h-4 w-4 text-muted-foreground" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {!showNewContact ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setShowNewContact(true)}
-              >
-                <UserPlus className="mr-1.5 h-4 w-4" />
-                New contact
-              </Button>
-            ) : (
-              <div className="space-y-3 rounded-md border p-4">
-                <p className="text-sm font-medium">New contact</p>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="new-first">First name</Label>
-                    <Input
-                      id="new-first"
-                      value={newFirstName}
-                      onChange={(e) => setNewFirstName(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="new-last">Last name</Label>
-                    <Input
-                      id="new-last"
-                      value={newLastName}
-                      onChange={(e) => setNewLastName(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="new-email">Email</Label>
-                    <Input
-                      id="new-email"
-                      type="email"
-                      value={newEmail}
-                      onChange={(e) => setNewEmail(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="new-mobile">Mobile</Label>
-                    <Input
-                      id="new-mobile"
-                      value={newMobile}
-                      onChange={(e) => setNewMobile(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <Button type="button" size="sm" onClick={addNewContact}>
-                    <Plus className="mr-1 h-4 w-4" />
-                    Add
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setShowNewContact(false)}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
+          <JobContactsPicker
+            contacts={contacts}
+            onAdd={addContact}
+            onRemove={removeContact}
+            onNewContact={() => setContactDrawerOpen(true)}
+          />
         )}
 
         <BottomFormDrawerError error={error} />
       </BottomFormDrawerBody>
 
       <BottomFormDrawerFooter>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => handleOpenChange(false)}
-        >
-          Cancel
-        </Button>
         {step === 'contacts' && (
           <Button
             type="button"
             variant="outline"
+            size="lg"
+            className="mr-auto"
             onClick={() => {
               setError(null);
               setStep('details');
@@ -627,102 +478,32 @@ export function JobFormDrawer({
             Back
           </Button>
         )}
+        <Button
+          type="button"
+          variant="outline"
+          size="lg"
+          onClick={() => handleOpenChange(false)}
+        >
+          Cancel
+        </Button>
         {step === 'details' ? (
-          <Button type="button" onClick={handleNext}>
+          <Button type="button" size="lg" onClick={handleNext}>
             Next
             <ChevronRight className="ml-1 h-4 w-4" />
           </Button>
         ) : (
-          <Button type="button" disabled={submitting} onClick={handleSubmit}>
+          <Button type="button" size="lg" disabled={submitting} onClick={handleSubmit}>
             {submitting ? 'Creating...' : 'Create Job'}
           </Button>
         )}
       </BottomFormDrawerFooter>
     </BottomFormDrawer>
-  );
-}
 
-function ContactSearchField({
-  selectedIds,
-  onSelect,
-}: {
-  selectedIds: string[];
-  onSelect: (hit: SearchHit) => void;
-}) {
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<SearchHit[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [showDropdown, setShowDropdown] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setShowDropdown(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  function handleSearch(value: string) {
-    setQuery(value);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (value.trim().length < 2) {
-      setResults([]);
-      setShowDropdown(false);
-      return;
-    }
-    debounceRef.current = setTimeout(async () => {
-      setSearching(true);
-      try {
-        const res = await searchContactsAction(value.trim());
-        const selected = new Set(selectedIds);
-        setResults((res ?? []).filter((r) => !selected.has(r.id)));
-        setShowDropdown(true);
-      } finally {
-        setSearching(false);
-      }
-    }, 300);
-  }
-
-  return (
-    <div className="relative" ref={containerRef}>
-      <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-      <Input
-        value={query}
-        onChange={(e) => handleSearch(e.target.value)}
-        onFocus={() => results.length > 0 && setShowDropdown(true)}
-        placeholder="Search contacts by name or email..."
-        className="pl-8"
-      />
-      {searching && (
-        <Loader2 className="absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-muted-foreground" />
-      )}
-      {showDropdown && results.length > 0 && (
-        <ul className="absolute z-20 mt-1 max-h-48 w-full overflow-auto rounded-md border bg-popover py-1 shadow-md">
-          {results.map((r) => (
-            <li key={r.id}>
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent"
-                onClick={() => {
-                  onSelect(r);
-                  setQuery('');
-                  setResults([]);
-                  setShowDropdown(false);
-                }}
-              >
-                <span className="font-medium">{r.name}</span>
-                {r.email && (
-                  <span className="text-muted-foreground">{r.email}</span>
-                )}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+    <ContactFormDrawer
+      open={contactDrawerOpen}
+      onOpenChange={setContactDrawerOpen}
+      onSuccess={handleContactCreated}
+    />
+    </>
   );
 }

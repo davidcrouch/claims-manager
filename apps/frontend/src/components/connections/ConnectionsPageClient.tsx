@@ -8,7 +8,7 @@ import {
   SortTabs,
   SearchInput,
   StatusFilterMenu,
-  ListEmptyState,
+  TableEmptyRow,
   type SortOption,
   type StatusOption,
   buildSortString,
@@ -201,21 +201,30 @@ export function ConnectionsPageClient({ connections }: ConnectionsPageClientProp
         className="flex-1 px-6 pb-6"
         style={{ minHeight: 0, overflow: 'auto' }}
       >
-        {filtered.length > 0 ? (
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50">
-                <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                  <th scope="col" className="px-4 py-3">Name</th>
-                  <th scope="col" className="px-4 py-3">Provider</th>
-                  <th scope="col" className="px-4 py-3">Environment</th>
-                  <th scope="col" className="px-4 py-3">Status</th>
-                  <th scope="col" className="px-4 py-3">Events</th>
-                  <th scope="col" className="px-4 py-3">Last Event</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filtered.map((conn) => (
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <thead className="bg-slate-50">
+              <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                <th scope="col" className="px-4 py-3">Name</th>
+                <th scope="col" className="px-4 py-3">Provider</th>
+                <th scope="col" className="px-4 py-3">Environment</th>
+                <th scope="col" className="px-4 py-3">Status</th>
+                <th scope="col" className="px-4 py-3">Events</th>
+                <th scope="col" className="px-4 py-3">Last Event</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filtered.length === 0 ? (
+                <TableEmptyRow
+                  colSpan={6}
+                  label={
+                    connections.length === 0
+                      ? 'No connections configured yet.'
+                      : 'No connections match your filters.'
+                  }
+                />
+              ) : (
+                filtered.map((conn) => (
                   <tr
                     key={conn.id}
                     onClick={() => router.push(`/connections/${conn.id}`)}
@@ -248,19 +257,11 @@ export function ConnectionsPageClient({ connections }: ConnectionsPageClientProp
                       {formatDate(conn.lastEventAt)}
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <ListEmptyState
-            label={
-              connections.length === 0
-                ? 'No connections configured yet.'
-                : 'No connections match your filters.'
-            }
-          />
-        )}
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <ConnectionFormDrawer

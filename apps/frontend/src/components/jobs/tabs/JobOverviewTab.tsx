@@ -9,7 +9,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   DefRow, SectionCard, BoolPill, formatDate, formatDateTime,
-  formatCurrency, pick, asString,
+  formatCurrency, formatAddress, pick, asString,
 } from '@/components/shared/detail';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { TypeBadge } from '@/components/ui/type-badge';
@@ -22,26 +22,22 @@ type Dict = Record<string, unknown>;
 
 export interface JobOverviewTabHandle {
   getPendingDates: () => { bookedDate: string | null; attendanceDate: string | null } | null;
+  resetDates: () => void;
 }
 
 function getApi(job: Job): Dict {
   return (job.apiPayload as Dict | undefined) ?? {};
 }
 
-function formatAddress(job: Job): string {
-  const addr = job.address as Dict | undefined;
-  if (addr) {
-    const parts = [
-      pick(addr, 'unitNumber', 'unit_number'),
-      pick(addr, 'streetNumber', 'street_number'),
-      pick(addr, 'streetName', 'street_name'),
-      pick(addr, 'suburb'), pick(addr, 'state'),
-      pick(addr, 'postcode'), pick(addr, 'country'),
-    ].map((x) => (typeof x === 'string' ? x.trim() : x)).filter(Boolean);
-    if (parts.length) return parts.join(', ');
-  }
-  return [job.addressSuburb, job.addressState, job.addressPostcode, job.addressCountry]
-    .filter(Boolean).join(', ');
+function jobAddress(job: Job): string {
+  return formatAddress(job.address as Dict | undefined, {
+    fallback: {
+      suburb: job.addressSuburb,
+      state: job.addressState,
+      postcode: job.addressPostcode,
+      country: job.addressCountry,
+    },
+  });
 }
 
 function toInputDate(val: string | undefined | null): string {
@@ -52,11 +48,21 @@ function toInputDate(val: string | undefined | null): string {
 }
 
 export const JobOverviewTab = forwardRef(function JobOverviewTab(
-  { job, parentClaim, saving }: { job: Job; parentClaim?: Claim | null; saving?: boolean },
+  {
+    job,
+    parentClaim,
+    saving,
+    editing = false,
+  }: {
+    job: Job;
+    parentClaim?: Claim | null;
+    saving?: boolean;
+    editing?: boolean;
+  },
   ref: Ref<JobOverviewTabHandle>,
 ) {
   const api = getApi(job);
-  const address = formatAddress(job);
+  const address = jobAddress(job);
   const statusName = job.status?.name ?? ((api.status as Dict | undefined)?.name as string | undefined) ?? 'Unknown';
   const jobTypeName = job.jobType?.name ?? ((api.jobType as Dict | undefined)?.name as string | undefined);
   const addr = (job.address as Dict | undefined) ?? {};
@@ -103,7 +109,12 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     getPendingDates: () => isDirty
       ? { bookedDate: bookedDate || null, attendanceDate: attendanceDate || null }
       : null,
-  }), [isDirty, bookedDate, attendanceDate]);
+    resetDates: () => {
+      setBookedDate(bookedDateRaw ?? '');
+      setAttendanceDate(attendanceDateRaw ?? '');
+      setScheduleTarget(null);
+    },
+  }), [isDirty, bookedDate, attendanceDate, bookedDateRaw, attendanceDateRaw]);
 
   const handleAppointmentSuccess = (startDate: string) => {
     if (scheduleTarget === 'booked') {
@@ -172,47 +183,55 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
             {vendorJobNumber && <DefRow label="Vendor job number" value={vendorJobNumber} />}
             <DefRow label="Contact date" value={formatDate(contactDate)} />
             <DefRow label="Booked date" value={
-              <div className="flex items-center gap-2">
-                <Input
-                  type="date"
-                  value={toInputDate(bookedDate)}
-                  onChange={(e) => setBookedDate(e.target.value)}
-                  disabled={saving}
-                  className="h-7 w-40 text-sm"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-7 gap-1 text-xs"
-                  onClick={() => setScheduleTarget('booked')}
-                >
-                  <CalendarPlus className="h-3.5 w-3.5" />
-                  Schedule
-                </Button>
-              </div>
+              editing ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="date"
+                    value={toInputDate(bookedDate)}
+                    onChange={(e) => setBookedDate(e.target.value)}
+                    disabled={saving}
+                    className="h-7 w-40 text-sm"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1 text-xs"
+                    onClick={() => setScheduleTarget('booked')}
+                  >
+                    <CalendarPlus className="h-3.5 w-3.5" />
+                    Schedule
+                  </Button>
+                </div>
+              ) : (
+                formatDate(bookedDate || bookedDateRaw)
+              )
             } />
             <DefRow label="Attendance due date" value={formatDate(attendanceDueDate)} />
             <DefRow label="Attendance date" value={
-              <div className="flex items-center gap-2">
-                <Input
-                  type="date"
-                  value={toInputDate(attendanceDate)}
-                  onChange={(e) => setAttendanceDate(e.target.value)}
-                  disabled={saving}
-                  className="h-7 w-40 text-sm"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-7 gap-1 text-xs"
-                  onClick={() => setScheduleTarget('attendance')}
-                >
-                  <CalendarPlus className="h-3.5 w-3.5" />
-                  Schedule
-                </Button>
-              </div>
+              editing ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="date"
+                    value={toInputDate(attendanceDate)}
+                    onChange={(e) => setAttendanceDate(e.target.value)}
+                    disabled={saving}
+                    className="h-7 w-40 text-sm"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1 text-xs"
+                    onClick={() => setScheduleTarget('attendance')}
+                  >
+                    <CalendarPlus className="h-3.5 w-3.5" />
+                    Schedule
+                  </Button>
+                </div>
+              ) : (
+                formatDate(attendanceDate || attendanceDateRaw)
+              )
             } />
             <DefRow label="Completed date" value={formatDate(completedDate)} />
           </SectionCard>

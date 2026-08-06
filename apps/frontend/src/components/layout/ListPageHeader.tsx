@@ -138,7 +138,7 @@ export function ListPageHeader({
   const accentCls = ACCENT_CLASSES[accent];
 
   return (
-    <div className="flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-2">
+    <div className="flex w-full min-w-0 flex-col gap-y-1">
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
         <span
           className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${accentCls.iconBg}`}
@@ -190,7 +190,7 @@ export function ListPageHeader({
         )}
       </div>
       {stats && stats.length > 0 && (
-        <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1 text-xs">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pl-10 text-xs">
           {stats.map((s) => (
             <div key={s.label} className="flex items-baseline gap-1">
               <span className="text-muted-foreground">{s.label}:</span>

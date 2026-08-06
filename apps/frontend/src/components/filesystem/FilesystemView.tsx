@@ -13,9 +13,10 @@ import { DocumentDropZone } from '@/components/documents/DocumentDropZone';
 import { TablePagination } from '@/components/shared/table-pagination';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
-import { ListPageHeader } from '@/components/layout/ListPageHeader';
+import { EntityPageHeader } from '@/components/shared/EntityPageHeader';
 import type { FSDocument, FilesystemResponse } from '@/lib/api-client';
 import type { DocumentAction } from '@/components/documents/DocumentCard';
+import type { Job, Claim } from '@/types/api';
 import {
   assignCategoryAction,
   archiveDocumentAction,
@@ -28,12 +29,16 @@ interface FilesystemViewProps {
   initialFilesystem: FilesystemResponse | null;
   initialDocuments: FSDocument[];
   initialTotal: number;
+  job?: Job | null;
+  parentClaim?: Claim | null;
 }
 
 export function FilesystemView({
   initialFilesystem,
   initialDocuments,
   initialTotal,
+  job,
+  parentClaim,
 }: FilesystemViewProps) {
   const [filesystem] = useState<FilesystemResponse | null>(initialFilesystem);
   const [documents, setDocuments] = useState<FSDocument[]>(initialDocuments);
@@ -176,13 +181,15 @@ export function FilesystemView({
   return (
     <DocumentDropZone onFilesDropped={handleFilesDropped}>
       <SetPageHeader>
-        <ListPageHeader
+        <EntityPageHeader
           icon={FolderOpen}
           title="Documents"
           total={total}
           showing={documents.length}
           search={debouncedSearch}
           accent="slate"
+          job={job}
+          parentClaim={parentClaim}
         />
       </SetPageHeader>
       <SetHeaderActions>

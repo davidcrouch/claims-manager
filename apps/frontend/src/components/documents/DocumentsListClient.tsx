@@ -8,10 +8,15 @@ import { TypeBadge } from '@/components/ui/type-badge';
 import {
   SortableColumnHeader,
   ValueFilterMenu,
+  TableEmptyRow,
   commitColumnFilterSelection,
   columnFilterToValuesParam,
 } from '@/components/shared/list-filters';
 import { TablePagination } from '@/components/shared/table-pagination';
+import {
+  ColumnSettingsHeaderCell,
+  useColumnVisibility,
+} from '@/components/shared/column-visibility';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { ListPageHeader } from '@/components/layout/ListPageHeader';
 import { formatDate, formatBytes } from '@/components/shared/detail';
@@ -26,10 +31,11 @@ interface ColDef {
   key: DocSortField;
   label: string;
   filterable?: boolean;
+  locked?: boolean;
 }
 
 const TABLE_COLUMNS: ColDef[] = [
-  { key: 'title', label: 'Name' },
+  { key: 'title', label: 'Name', locked: true },
   { key: 'type', label: 'Type' },
   { key: 'entity', label: 'Entity', filterable: true },
   { key: 'filename', label: 'Filename' },
@@ -51,6 +57,10 @@ export function DocumentsListClient() {
   }>({ field: 'created_at', order: 'desc' });
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
   const [typeFilterActive, setTypeFilterActive] = useState(false);
+  const { isVisible, toggle, visibleCount } = useColumnVisibility(
+    'documents',
+    TABLE_COLUMNS,
+  );
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -231,12 +241,12 @@ export function DocumentsListClient() {
           <div className="flex h-64 items-center justify-center">
             <p className="text-sm text-slate-400">Loading documents…</p>
           </div>
-        ) : visibleRows.length > 0 ? (
+        ) : (
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50">
                 <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                  {TABLE_COLUMNS.map((col) => (
+                  {TABLE_COLUMNS.filter((col) => isVisible(col.key)).map((col) => (
                     <SortableColumnHeader
                       key={col.key}
                       columnKey={col.key}
@@ -247,66 +257,93 @@ export function DocumentsListClient() {
                       filter={col.key === 'entity' ? typeFilterProps : undefined}
                     />
                   ))}
-                  <th scope="col" className="px-4 py-3 w-10">
-                    <span className="sr-only">Actions</span>
-                  </th>
+                  <th scope="col" className="px-4 py-3 text-right">Actions</th>
+                  <ColumnSettingsHeaderCell
+                    columns={TABLE_COLUMNS}
+                    isVisible={isVisible}
+                    onToggle={toggle}
+                  />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {visibleRows.map((doc) => (
-                  <tr
-                    key={doc.id}
-                    className="cursor-pointer transition-colors hover:bg-slate-50"
-                    onClick={() => {
-                      if (doc.relatedRecordType && doc.relatedRecordId) {
-                        const entity = doc.relatedRecordType.toLowerCase();
-                        const routes: Record<string, string> = {
-                          job: `/jobs/${doc.relatedRecordId}`,
-                          quote: `/quotes/${doc.relatedRecordId}`,
-                          claim: `/claims/${doc.relatedRecordId}`,
-                        };
-                        const path = routes[entity];
-                        if (path) router.push(path);
-                      }
-                    }}
-                  >
-                    <td className="px-4 py-3 font-medium text-slate-900">
-                      {doc.title ?? doc.filename ?? doc.id}
-                    </td>
-                    <td className="px-4 py-3">
-                      {doc.documentType ? (
-                        <TypeBadge type={doc.documentType} />
-                      ) : (
-                        <span className="text-slate-400">—</span>
+                {visibleRows.length === 0 ? (
+                  <TableEmptyRow
+                    colSpan={visibleCount + 2}
+                    label={
+                      debouncedSearch
+                        ? 'No documents match your search.'
+                        : 'No documents found.'
+                    }
+                  />
+                ) : (
+                  visibleRows.map((doc) => (
+                    <tr
+                      key={doc.id}
+                      className="cursor-pointer transition-colors hover:bg-slate-50"
+                      onClick={() => {
+                        if (doc.relatedRecordType && doc.relatedRecordId) {
+                          const entity = doc.relatedRecordType.toLowerCase();
+                          const routes: Record<string, string> = {
+                            job: `/jobs/${doc.relatedRecordId}`,
+                            quote: `/quotes/${doc.relatedRecordId}`,
+                            claim: `/claims/${doc.relatedRecordId}`,
+                          };
+                          const path = routes[entity];
+                          if (path) router.push(path);
+                        }
+                      }}
+                    >
+                      {isVisible('title') && (
+                        <td className="px-4 py-3 font-medium text-slate-900">
+                          {doc.title ?? doc.filename ?? doc.id}
+                        </td>
                       )}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600">
-                      {doc.relatedRecordType ?? '—'}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600">
-                      {doc.filename ?? '—'}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                      {formatBytes(doc.fileSize)}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                      {formatDate(doc.createdAt)}
-                      {doc.uploadedByName ? ` by ${doc.uploadedByName}` : ''}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right">
-                      <a
-                        href={`/api/attachments/${doc.id}/download?disposition=inline`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                      >
-                        <Eye className="h-3 w-3" />
-                        View
-                      </a>
-                    </td>
-                  </tr>
-                ))}
+                      {isVisible('type') && (
+                        <td className="px-4 py-3">
+                          {doc.documentType ? (
+                            <TypeBadge type={doc.documentType} />
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                      )}
+                      {isVisible('entity') && (
+                        <td className="px-4 py-3 text-slate-600">
+                          {doc.relatedRecordType ?? '—'}
+                        </td>
+                      )}
+                      {isVisible('filename') && (
+                        <td className="px-4 py-3 text-slate-600">
+                          {doc.filename ?? '—'}
+                        </td>
+                      )}
+                      {isVisible('size') && (
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                          {formatBytes(doc.fileSize)}
+                        </td>
+                      )}
+                      {isVisible('created_at') && (
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                          {formatDate(doc.createdAt)}
+                          {doc.uploadedByName ? ` by ${doc.uploadedByName}` : ''}
+                        </td>
+                      )}
+                      <td className="whitespace-nowrap px-4 py-3 text-right">
+                        <a
+                          href={`/api/attachments/${doc.id}/download?disposition=inline`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                        >
+                          <Eye className="h-3 w-3" />
+                          View
+                        </a>
+                      </td>
+                      <td className="px-2 py-3" aria-hidden />
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
             <TablePagination
@@ -315,19 +352,6 @@ export function DocumentsListClient() {
               total={total}
               onPageChange={setPage}
             />
-          </div>
-        ) : (
-          <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50">
-            <div className="flex flex-col items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-100">
-                <FolderOpen size={24} className="text-slate-400" />
-              </div>
-              <p className="text-sm text-slate-400">
-                {debouncedSearch
-                  ? 'No documents match your search.'
-                  : 'No documents found.'}
-              </p>
-            </div>
           </div>
         )}
       </div>

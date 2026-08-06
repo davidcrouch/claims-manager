@@ -3,10 +3,11 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
+import { PrintButton } from '@/components/shared/PrintButton';
 import { WorkOrderFormDrawer } from '@/components/forms/WorkOrderFormDrawer';
 import type { JobOption } from '@/components/shared/job-label';
 import { WorkOrdersListClient } from './WorkOrdersListClient';
-import type { PaginatedResponse, WorkOrder } from '@/types/api';
+import type { PaginatedResponse, WorkOrder, Job, Claim } from '@/types/api';
 import type { StatusOption } from '@/components/shared/list-filters';
 
 export interface WorkOrdersPageClientProps {
@@ -15,6 +16,8 @@ export interface WorkOrdersPageClientProps {
   workOrderTypes: StatusOption[];
   jobNameById?: Record<string, string>;
   jobs: JobOption[];
+  job?: Job | null;
+  parentClaim?: Claim | null;
 }
 
 export function WorkOrdersPageClient({
@@ -23,6 +26,8 @@ export function WorkOrdersPageClient({
   workOrderTypes,
   jobNameById,
   jobs,
+  job,
+  parentClaim,
 }: WorkOrdersPageClientProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -36,16 +41,20 @@ export function WorkOrdersPageClient({
         >
           Create Work Order
         </Button>
+        <PrintButton documentType="work_orders_list" entityId="list" />
       </SetHeaderActions>
       <WorkOrdersListClient
         initialData={initialData}
         statusOptions={statusOptions}
         workOrderTypes={workOrderTypes}
         jobNameById={jobNameById}
+        job={job}
+        parentClaim={parentClaim}
       />
       <WorkOrderFormDrawer
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
+        jobId={job?.id}
         jobs={jobs}
       />
     </>

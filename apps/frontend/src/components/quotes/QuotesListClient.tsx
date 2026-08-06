@@ -1,20 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AlertTriangle, FileSpreadsheet, Search, X } from 'lucide-react';
-import { deleteQuoteAction, fetchQuotesAction } from '@/app/(app)/quotes/actions';
-import { Button } from '@/components/ui/button';
+import { FileSpreadsheet, Search, X } from 'lucide-react';
+import { fetchQuotesAction } from '@/app/(app)/quotes/actions';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import {
   type StatusOption,
   isArchivedStatus,
@@ -24,12 +15,12 @@ import {
 } from '@/components/shared/list-filters';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import {
-  ListPageHeader,
-  computeStatusBreakdown,
-} from '@/components/layout/ListPageHeader';
+  EntityPageHeader,
+} from '@/components/shared/EntityPageHeader';
+import { computeStatusBreakdown } from '@/components/layout/ListPageHeader';
 import { TablePagination } from '@/components/shared/table-pagination';
 import { QuotesTable, type QuoteSortField, getEstimateTypeName } from './QuotesTable';
-import type { Quote, PaginatedResponse } from '@/types/api';
+import type { Quote, PaginatedResponse, Job, Claim } from '@/types/api';
 
 type ListTab = 'active' | 'archived' | 'all';
 const VALID_TABS = new Set<ListTab>(['active', 'archived', 'all']);
@@ -43,6 +34,9 @@ export interface QuotesListClientProps {
   statusOptions: StatusOption[];
   quoteTypes: StatusOption[];
   jobNameById?: Record<string, string>;
+  /** When provided, the page header shows job details and data is scoped to this job. */
+  job?: Job | null;
+  parentClaim?: Claim | null;
 }
 
 const PAGE_SIZE = 20;
@@ -52,12 +46,12 @@ export function QuotesListClient({
   statusOptions,
   quoteTypes,
   jobNameById,
+  job,
+  parentClaim,
 }: QuotesListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [isPending, startTransition] = useTransition();
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const jobId = searchParams.get('jobId');
   const [data, setData] = useState(initialData);
 
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
@@ -95,7 +89,7 @@ export function QuotesListClient({
   useEffect(() => {
     const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
     const typeKey = quoteTypeParam === null ? '__none__' : (quoteTypeParam ?? '');
-    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${typeKey}`;
+    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${typeKey}|${jobId ?? ''}`;
     const params = new URLSearchParams(searchParams.toString());
     params.set('search', debouncedSearch);
     params.set('tab', tab);
@@ -103,6 +97,8 @@ export function QuotesListClient({
     params.set('sort', sortParam);
     if (statusParam) params.set('status', statusParam); else params.delete('status');
     if (quoteTypeParam) params.set('quoteType', quoteTypeParam); else params.delete('quoteType');
+    if (jobId) params.set('jobId', jobId);
+    else params.delete('jobId');
     router.replace(`/quotes?${params}`, { scroll: false });
     if (lastFetchKeyRef.current === fetchKey) return;
     lastFetchKeyRef.current = fetchKey;
@@ -110,9 +106,9 @@ export function QuotesListClient({
       setData({ data: [], total: 0 });
       return;
     }
-    fetchQuotesAction({ page, limit: PAGE_SIZE, sort: sortParam, status: statusParam, quoteType: quoteTypeParam }).then((res) => res && setData(res));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop
-  }, [debouncedSearch, sortParam, tab, page, statusParam, quoteTypeParam]);
+    fetchQuotesAction({ page, limit: PAGE_SIZE, sort: sortParam, status: statusParam, quoteType: quoteTypeParam, jobId: jobId ?? undefined }).then((res) => res && setData(res));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop: router.replace updates URL -> searchParams changes -> effect re-runs
+  }, [debouncedSearch, sortParam, tab, page, statusParam, quoteTypeParam, jobId]);
 
   const handleColumnSort = (field: QuoteSortField) => {
     setColumnSort((prev) => {
@@ -221,7 +217,7 @@ export function QuotesListClient({
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
       <SetPageHeader>
-        <ListPageHeader
+        <EntityPageHeader
           icon={FileSpreadsheet}
           title="Estimates"
           total={data.total}
@@ -230,6 +226,8 @@ export function QuotesListClient({
           breakdown={breakdown}
           stats={totalValue ? [{ label: 'Total value', value: totalValue }] : undefined}
           accent="amber"
+          job={job}
+          parentClaim={parentClaim}
         />
       </SetPageHeader>
       <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
@@ -289,101 +287,45 @@ export function QuotesListClient({
         className="flex-1 px-6 pb-6"
         style={{ minHeight: 0, overflow: 'auto' }}
       >
-        {visibleRows.length > 0 ? (
-          <>
-            <QuotesTable
-              quotes={visibleRows}
-              jobNameById={jobNameById}
-              onRowClick={(q) => router.push(`/quotes/${q.id}`)}
-              onDelete={(id) => setConfirmDeleteId(id)}
-              deletingId={isPending ? deletingId : null}
-              showActions
-              sortField={columnSort.field}
-              sortOrder={columnSort.order}
-              onSort={handleColumnSort}
-              statusColumnFilter={{
-                options: uniqueStatuses,
-                selected: statusFilter,
-                active: statusFilterActive,
-                onApply: applyStatusFilter,
-                menuTitle: 'Filter by status',
-                itemNoun: { singular: 'status', plural: 'statuses' },
-              }}
-              estimateTypeColumnFilter={{
-                options: uniqueTypes,
-                selected: typeFilter,
-                active: typeFilterActive,
-                onApply: applyTypeFilter,
-                menuTitle: 'Filter by estimate type',
-                itemNoun: { singular: 'type', plural: 'types' },
-              }}
-            />
-            <TablePagination page={page} pageSize={PAGE_SIZE} total={data.total} onPageChange={handlePageChange} />
-          </>
-        ) : (
-          <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50">
-            <div className="flex flex-col items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-100">
-                <Search size={24} className="text-slate-400" />
-              </div>
-              <p className="text-sm text-slate-400">No estimates found.</p>
-            </div>
-          </div>
-        )}
+        <>
+          <QuotesTable
+            quotes={visibleRows}
+            jobNameById={jobNameById}
+            onRowClick={(q) => {
+              const jobId = searchParams.get('jobId');
+              const href = jobId ? `/quotes/${q.id}?jobId=${jobId}` : `/quotes/${q.id}`;
+              router.push(href);
+            }}
+            onArchived={(id) => {
+              setData((prev) => ({
+                ...prev,
+                data: prev.data.filter((row) => row.id !== id),
+                total: Math.max(0, prev.total - 1),
+              }));
+            }}
+            sortField={columnSort.field}
+            sortOrder={columnSort.order}
+            onSort={handleColumnSort}
+            statusColumnFilter={{
+              options: uniqueStatuses,
+              selected: statusFilter,
+              active: statusFilterActive,
+              onApply: applyStatusFilter,
+              menuTitle: 'Filter by status',
+              itemNoun: { singular: 'status', plural: 'statuses' },
+            }}
+            estimateTypeColumnFilter={{
+              options: uniqueTypes,
+              selected: typeFilter,
+              active: typeFilterActive,
+              onApply: applyTypeFilter,
+              menuTitle: 'Filter by estimate type',
+              itemNoun: { singular: 'type', plural: 'types' },
+            }}
+          />
+          <TablePagination page={page} pageSize={PAGE_SIZE} total={data.total} onPageChange={handlePageChange} />
+        </>
       </div>
-
-      <Dialog
-        open={confirmDeleteId !== null}
-        onOpenChange={(open) => {
-          if (!open) setConfirmDeleteId(null);
-        }}
-      >
-        <DialogContent showCloseButton={false} className="sm:max-w-sm">
-          <DialogHeader>
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600">
-                <AlertTriangle className="h-5 w-5" />
-              </div>
-              <div>
-                <DialogTitle>Delete Estimate</DialogTitle>
-                <DialogDescription className="mt-1">
-                  This action cannot be undone. The estimate and all its line items will be permanently removed.
-                </DialogDescription>
-              </div>
-            </div>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setConfirmDeleteId(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={isPending && deletingId === confirmDeleteId}
-              onClick={() => {
-                if (!confirmDeleteId) return;
-                const idToDelete = confirmDeleteId;
-                setDeletingId(idToDelete);
-                startTransition(async () => {
-                  await deleteQuoteAction(idToDelete);
-                  setData((prev) => ({
-                    ...prev,
-                    data: prev.data.filter((q) => q.id !== idToDelete),
-                    total: Math.max(0, prev.total - 1),
-                  }));
-                  setDeletingId(null);
-                  setConfirmDeleteId(null);
-                  router.refresh();
-                });
-              }}
-            >
-              {isPending && deletingId === confirmDeleteId ? 'Deleting…' : 'Delete'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

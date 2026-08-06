@@ -3,7 +3,7 @@ import { getServerApiClient } from '@/lib/server-api';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { QuoteDetail, QuotePageHeader } from '@/components/quotes/QuoteDetail';
 import type { Metadata } from 'next';
-import type { CatalogType } from '@/types/api';
+import type { CatalogType, Job } from '@/types/api';
 
 export async function generateMetadata({
   params,
@@ -38,8 +38,9 @@ export default async function QuoteDetailPage({
   if (!quote) notFound();
 
   let jobProvider: CatalogType | undefined;
+  let job: Job | null = null;
   if (quote.jobId) {
-    const job = await api.getJob(quote.jobId).catch(() => null);
+    job = await api.getJob(quote.jobId).catch(() => null);
     if (job?.provider === 'crunchwork') {
       jobProvider = 'crunchwork';
     } else {
@@ -50,7 +51,7 @@ export default async function QuoteDetailPage({
   return (
     <>
       <SetPageHeader>
-        <QuotePageHeader quote={quote} />
+        <QuotePageHeader quote={quote} job={job} />
       </SetPageHeader>
       <QuoteDetail quote={quote} jobProvider={jobProvider} />
     </>

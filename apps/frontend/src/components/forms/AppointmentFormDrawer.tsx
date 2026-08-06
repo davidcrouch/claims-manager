@@ -313,7 +313,7 @@ export function AppointmentFormDrawer({
   const [error, setError] = useState<string | null>(null);
   const [assignees, setAssignees] = useState<PersonRef[]>([]);
   const [selectedParties, setSelectedParties] = useState<JobParty[]>([]);
-  const needsJobPicker = !isEdit && !jobId && (jobs?.length ?? 0) > 0;
+  const needsJobPicker = !isEdit && (jobs?.length ?? 0) > 0;
 
   const now = todayDateString();
   const defaultTime = '19:15';
@@ -759,11 +759,12 @@ export function AppointmentFormDrawer({
           <Button
             type="button"
             variant="outline"
+            size="lg"
             onClick={() => onOpenChange(false)}
           >
             Cancel
           </Button>
-          <Button type="submit" disabled={submitting}>
+          <Button type="submit" size="lg" disabled={submitting}>
             {submitting
               ? (isEdit ? 'Saving...' : 'Creating...')
               : (isEdit ? 'Save Changes' : 'Create Appointment')}

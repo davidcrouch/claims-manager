@@ -36,10 +36,14 @@ export default async function BillDetailPage({
   });
   if (!bill) notFound();
 
+  const job = bill.jobId
+    ? await api.getJob(bill.jobId).catch(() => null)
+    : null;
+
   return (
     <>
       <SetPageHeader>
-        <BillPageHeader bill={bill} />
+        <BillPageHeader bill={bill} job={job} />
       </SetPageHeader>
       <BillDetail bill={bill} />
     </>

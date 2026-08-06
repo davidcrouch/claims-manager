@@ -186,6 +186,11 @@ export interface Quote {
   tenantId: string;
   jobId?: string | null;
   claimId?: string | null;
+  issuerOrganisationId?: string | null;
+  recipientOrganisationId?: string | null;
+  custodianTenantId?: string | null;
+  captureMethod?: string | null;
+  ownershipStatus?: string | null;
   /** CW quote UUID (column `external_reference`; CW field `id`). */
   externalReference?: string | null;
   quoteNumber?: string | null;
@@ -396,6 +401,8 @@ export interface Proposal {
   claimId?: string | null;
   rfqId?: string | null;
   vendorId?: string | null;
+  sourceTenantId?: string | null;
+  sourceOrganisationId?: string | null;
   proposalNumber?: string | null;
   name?: string | null;
   reference?: string | null;
@@ -520,8 +527,23 @@ export interface Contact {
   mobilePhone?: string | null;
   homePhone?: string | null;
   workPhone?: string | null;
+  typeLookupId?: string | null;
+  preferredContactMethodLookupId?: string | null;
   notes?: string | null;
   createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ContactRelatedJob {
+  id: string;
+  name?: string | null;
+  externalReference?: string | null;
+  addressSuburb?: string | null;
+  addressState?: string | null;
+  statusName?: string | null;
+  jobTypeName?: string | null;
+  /** Contact role on this job (e.g. Insured). */
+  role?: string | null;
   updatedAt?: string;
 }
 
@@ -810,6 +832,8 @@ export interface JournalEntityLink {
 export interface Journal {
   id: string;
   tenantId: string;
+  /** Resolved from a Job entity link when present. */
+  jobId?: string | null;
   name: string;
   description: string | null;
   status: string;
@@ -1028,4 +1052,69 @@ export interface InviteUserPayload {
   givenName?: string;
   familyName?: string;
   roles: string[];
+}
+
+// Assessments
+export interface Assessment {
+  id: string;
+  tenantId: string;
+  jobId: string | null;
+  name: string;
+  status: string;
+
+  claimRecommendation: string | null;
+  makeSafe: boolean;
+  makeSafeType: string | null;
+  designType: string | null;
+  construction: string | null;
+  roofType: string | null;
+  buildingType: string | null;
+  squares: string | null;
+  buildingAge: number | null;
+  squareMetres: string | null;
+  dateBooked: string | null;
+  overallConditionAcceptable: boolean;
+  iagInspectionRequired: boolean;
+
+  makeSafeCompletionDate: string | null;
+  mainRoofDamage: boolean;
+  dateMainRoofRepaired: string | null;
+  habitable: boolean;
+  mould: boolean;
+  asbestosOnSite: boolean;
+  detachedGarage: boolean;
+  sheds: boolean;
+  swimmingPool: boolean;
+  detachedGrannyFlat: boolean;
+  damageCausedByListedEvent: boolean;
+
+  hazardPoolFencing: boolean;
+  hazardPoolFencingComment: string | null;
+  hazardElectricalGas: boolean;
+  hazardElectricalGasComment: string | null;
+  hazardSewerage: boolean;
+  hazardSewerageComment: string | null;
+  hazardStructural: boolean;
+  hazardStructuralComment: string | null;
+  hazardOther: string | null;
+
+  tempAccomRequiredImmediately: boolean;
+  tempAccomImmediateEstimateDays: number | null;
+  tempRepairsToMakeLivable: string | null;
+  tempAccomRequiredDuringRepairs: boolean;
+  tempAccomRepairsEstimateDays: number | null;
+  workWhileInAccommodation: string | null;
+
+  clientDiscussion: string | null;
+  resultantDamage: string | null;
+  causeOfDamage: string | null;
+  maintenanceRelatedIssues: string | null;
+  comments: string | null;
+  variancesOfScope: string | null;
+
+  createdByUserId: string | null;
+  updatedByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
 }

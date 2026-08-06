@@ -50,8 +50,8 @@ export function RfqFormDrawer({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pickedJobId, setPickedJobId] = useState('');
-  const needsJobPicker = !jobId && (jobs?.length ?? 0) > 0;
-  const effectiveJobId = jobId ?? pickedJobId;
+  const needsJobPicker = (jobs?.length ?? 0) > 0;
+  const effectiveJobId = needsJobPicker ? pickedJobId : (jobId ?? "");
 
   // Step 1 state
   const [name, setName] = useState('');
@@ -82,6 +82,11 @@ export function RfqFormDrawer({
       reset();
       return;
     }
+    setPickedJobId(jobId ?? '');
+  }, [open, jobId, reset]);
+
+  useEffect(() => {
+    if (!open) return;
     if (!effectiveJobId) {
       setQuotes([]);
       return;
@@ -90,7 +95,7 @@ export function RfqFormDrawer({
     fetchJobQuotesAction(effectiveJobId)
       .then((data) => setQuotes(data ?? []))
       .finally(() => setQuotesLoading(false));
-  }, [open, effectiveJobId, reset]);
+  }, [open, effectiveJobId]);
 
   async function loadLineItems(quoteId: string) {
     setLineItemsLoading(true);
@@ -137,6 +142,23 @@ export function RfqFormDrawer({
     if (!next) reset();
   }
 
+  const stepIndex = STEPS.indexOf(step);
+  const selectedQuote = quotes.find((q) => q.id === selectedQuoteId);
+  const selectedEstimateLabel = selectedQuote
+    ? (selectedQuote.quoteNumber ?? selectedQuote.name ?? selectedQuote.id.slice(0, 8))
+    : null;
+
+  function resolveDefaultName(): string {
+    const jobName =
+      jobs?.find((j) => j.id === effectiveJobId)?.label?.trim() ||
+      'Job';
+    const estimateName =
+      selectedQuote?.name?.trim() ||
+      selectedQuote?.quoteNumber?.trim() ||
+      (selectedQuoteId ? selectedQuoteId.slice(0, 8) : 'Estimate');
+    return `${jobName} - ${estimateName}`;
+  }
+
   async function handleSubmit() {
     if (!selectedQuoteId || !effectiveJobId) return;
     setSubmitting(true);
@@ -145,7 +167,7 @@ export function RfqFormDrawer({
       const result = await createRfqAction({
         jobId: effectiveJobId,
         quoteId: selectedQuoteId,
-        name: name || undefined,
+        name: name.trim() || resolveDefaultName(),
         note: description || undefined,
         includePricing: true,
         includeQuantities: true,
@@ -163,12 +185,6 @@ export function RfqFormDrawer({
       setSubmitting(false);
     }
   }
-
-  const stepIndex = STEPS.indexOf(step);
-  const selectedQuote = quotes.find((q) => q.id === selectedQuoteId);
-  const selectedEstimateLabel = selectedQuote
-    ? (selectedQuote.quoteNumber ?? selectedQuote.name ?? selectedQuote.id.slice(0, 8))
-    : null;
 
   return (
     <BottomFormDrawer
@@ -334,33 +350,41 @@ export function RfqFormDrawer({
       </BottomFormDrawerBody>
 
       <BottomFormDrawerFooter>
-        <div className="flex w-full items-center justify-between gap-3">
-          {step === 'details' && (
-            <>
-              <Button variant="outline" onClick={() => handleOpenChange(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleNextStep} disabled={!selectedQuoteId}>
-                Next: Select Scope
-              </Button>
-            </>
-          )}
-          {step === 'scope' && (
-            <>
-              <Button variant="outline" onClick={handleBack}>
-                Back
-              </Button>
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-muted-foreground">
-                  {selectedItemIds.size} item{selectedItemIds.size !== 1 ? 's' : ''} selected
-                </span>
-                <Button onClick={handleSubmit} disabled={submitting || selectedItemIds.size === 0}>
-                  {submitting ? 'Creating...' : 'Create RFQ'}
-                </Button>
-              </div>
-            </>
-          )}
-        </div>
+        {step === 'scope' && (
+          <Button
+            variant="outline"
+            size="lg"
+            className="mr-auto"
+            onClick={handleBack}
+          >
+            Back
+          </Button>
+        )}
+        <Button
+          variant="outline"
+          size="lg"
+          onClick={() => handleOpenChange(false)}
+        >
+          Cancel
+        </Button>
+        {step === 'details' ? (
+          <Button size="lg" onClick={handleNextStep} disabled={!selectedQuoteId}>
+            Next: Select Scope
+          </Button>
+        ) : (
+          <>
+            <span className="text-xs text-muted-foreground">
+              {selectedItemIds.size} item{selectedItemIds.size !== 1 ? 's' : ''} selected
+            </span>
+            <Button
+              size="lg"
+              onClick={handleSubmit}
+              disabled={submitting || selectedItemIds.size === 0}
+            >
+              {submitting ? 'Creating...' : 'Create RFQ'}
+            </Button>
+          </>
+        )}
       </BottomFormDrawerFooter>
     </BottomFormDrawer>
   );

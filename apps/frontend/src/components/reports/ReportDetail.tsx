@@ -13,6 +13,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { BackButton } from '@/components/layout/BackButton';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import {
   DefRow,
   SectionCard,
@@ -23,7 +24,8 @@ import {
   type Dict,
 } from '@/components/shared/detail';
 import type { Report } from '@/types/api';
-import { GenerateDocumentButton } from '@/components/shared/GenerateDocumentButton';
+import { PrintButton } from '@/components/shared/PrintButton';
+import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 
 function getPayload(report: Report): Dict {
   return (report.reportData as Dict | undefined) ?? {};
@@ -35,40 +37,51 @@ export function ReportPageHeader({ report }: { report: Report }) {
   const typeName = (report.reportType as { name?: string })?.name;
 
   return (
-    <div className="flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-2">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-        <BackButton href="/reports" label="Back to reports" />
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted">
-          <ClipboardList className="h-4 w-4 text-muted-foreground" />
-        </span>
-        <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
-        <StatusBadge status={statusName} />
-        {typeName && (
-          <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-            {typeName}
+    <>
+      <SetHeaderActions>
+        <PrintButton documentType="report" entityId={report.id} />
+        <ArchiveEntityButton
+          entityType="report"
+          entityId={report.id}
+          statusName={statusName}
+          entityLabel={title}
+          redirectTo="/reports"
+        />
+      </SetHeaderActions>
+      <div className="flex w-full min-w-0 flex-col gap-y-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+          <BackButton href="/reports" label="Back to reports" />
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted">
+            <ClipboardList className="h-4 w-4 text-muted-foreground" />
           </span>
-        )}
-        {report.jobId && (
-          <Link
-            href={`/jobs/${report.jobId}`}
-            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-          >
-            View Job <ExternalLink className="h-3 w-3" />
-          </Link>
-        )}
-      </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1 text-xs">
-        <GenerateDocumentButton entityId={report.id} documentType="report" />
-        <div className="flex items-baseline gap-1">
-          <span className="text-muted-foreground">Created:</span>
-          <span className="font-medium">{formatDate(report.createdAt)}</span>
+          <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
+          <StatusBadge status={statusName} />
+          {typeName && (
+            <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              {typeName}
+            </span>
+          )}
+          {report.jobId && (
+            <Link
+              href={`/jobs/${report.jobId}`}
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              View Job <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
         </div>
-        <div className="flex items-baseline gap-1">
-          <span className="text-muted-foreground">Updated:</span>
-          <span className="font-medium">{formatDate(report.updatedAt)}</span>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pl-20 text-xs">
+          <div className="flex items-baseline gap-1">
+            <span className="text-muted-foreground">Created:</span>
+            <span className="font-medium">{formatDate(report.createdAt)}</span>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-muted-foreground">Updated:</span>
+            <span className="font-medium">{formatDate(report.updatedAt)}</span>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 

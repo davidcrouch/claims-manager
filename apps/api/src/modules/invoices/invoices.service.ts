@@ -26,6 +26,7 @@ export class InvoicesService {
     page?: number;
     limit?: number;
     purchaseOrderId?: string;
+    jobId?: string;
     status?: string;
     statusId?: string;
     sort?: string;
@@ -36,6 +37,7 @@ export class InvoicesService {
       page: params.page,
       limit: params.limit,
       purchaseOrderId: params.purchaseOrderId,
+      jobId: params.jobId,
       status: params.status,
       statusId: params.statusId,
       sort: params.sort,
@@ -90,6 +92,13 @@ export class InvoicesService {
   async update(params: { id: string; body: Record<string, unknown> }) {
     const existing = await this.findOne({ id: params.id });
     if (!existing) return null;
+
+    if (typeof params.body.statusLookupId === 'string' && params.body.statusLookupId) {
+      return this.invoicesRepo.update({
+        id: params.id,
+        data: { statusLookupId: params.body.statusLookupId },
+      });
+    }
 
     const tenantId = this.tenantContext.getTenantId();
     const connectionId = await this.resolveConnectionId(tenantId);

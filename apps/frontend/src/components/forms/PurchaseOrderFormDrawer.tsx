@@ -64,15 +64,17 @@ export function PurchaseOrderFormDrawer({
   const [error, setError] = useState<string | null>(null);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [pickedJobId, setPickedJobId] = useState('');
-  const needsJobPicker = !jobId && (jobs?.length ?? 0) > 0;
-  const effectiveJobId = jobId ?? pickedJobId;
+  const needsJobPicker = (jobs?.length ?? 0) > 0;
+  const effectiveJobId = needsJobPicker ? pickedJobId : (jobId ?? "");
 
   useEffect(() => {
-    if (!open) {
+    if (open) {
+      setPickedJobId(jobId ?? '');
+    } else {
       setPickedJobId('');
       setQuotes([]);
     }
-  }, [open]);
+  }, [open, jobId]);
 
   useEffect(() => {
     if (open && effectiveJobId) {
@@ -213,8 +215,8 @@ export function PurchaseOrderFormDrawer({
         </BottomFormDrawerBody>
 
         <BottomFormDrawerFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button type="submit" disabled={submitting}>{submitting ? 'Creating...' : 'Create Purchase Order'}</Button>
+          <Button type="button" variant="outline" size="lg" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button type="submit" size="lg" disabled={submitting}>{submitting ? 'Creating...' : 'Create Purchase Order'}</Button>
         </BottomFormDrawerFooter>
       </form>
     </BottomFormDrawer>

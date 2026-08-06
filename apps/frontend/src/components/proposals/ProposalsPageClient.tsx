@@ -3,10 +3,11 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
+import { PrintButton } from '@/components/shared/PrintButton';
 import { ProposalFormDrawer } from '@/components/forms/ProposalFormDrawer';
 import type { JobOption } from '@/components/shared/job-label';
 import { ProposalsListClient } from './ProposalsListClient';
-import type { PaginatedResponse, Proposal } from '@/types/api';
+import type { PaginatedResponse, Proposal, Job, Claim } from '@/types/api';
 import type { StatusOption } from '@/components/shared/list-filters';
 
 export interface ProposalsPageClientProps {
@@ -15,6 +16,8 @@ export interface ProposalsPageClientProps {
   vendorOptions: StatusOption[];
   jobNameById?: Record<string, string>;
   jobs: JobOption[];
+  job?: Job | null;
+  parentClaim?: Claim | null;
 }
 
 export function ProposalsPageClient({
@@ -23,6 +26,8 @@ export function ProposalsPageClient({
   vendorOptions,
   jobNameById,
   jobs,
+  job,
+  parentClaim,
 }: ProposalsPageClientProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -36,16 +41,20 @@ export function ProposalsPageClient({
         >
           Create Proposal
         </Button>
+        <PrintButton documentType="proposals_list" entityId="list" />
       </SetHeaderActions>
       <ProposalsListClient
         initialData={initialData}
         statusOptions={statusOptions}
         vendorOptions={vendorOptions}
         jobNameById={jobNameById}
+        job={job}
+        parentClaim={parentClaim}
       />
       <ProposalFormDrawer
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
+        jobId={job?.id}
         jobs={jobs}
       />
     </>

@@ -41,6 +41,23 @@ export async function publishQuoteAction(id: string): Promise<{ success: boolean
   }
 }
 
+export async function approveQuoteAction(id: string): Promise<{ success: boolean; quote?: Quote; workOrderId?: string; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const result = await api.approveQuote(id);
+    return { success: true, quote: result.quote, workOrderId: result.workOrderId };
+  } catch (err) {
+    console.error('[approveQuoteAction]', err);
+    if (err instanceof ApiError) {
+      const body = err.body as { message?: string; details?: string } | undefined;
+      const detail = body?.details ?? body?.message ?? err.message;
+      return { success: false, error: detail };
+    }
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to approve estimate' };
+  }
+}
+
 export async function createInvoiceAction(body: Record<string, unknown>): Promise<{ success: boolean; invoice?: Invoice; error?: string }> {
   const api = await getApi();
   if (!api) return { success: false, error: 'Not authenticated' };
@@ -106,7 +123,7 @@ export async function updateAppointmentAction(
 
 export async function searchContactsAction(
   query: string,
-): Promise<{ id: string; type: 'USER' | 'CONTACT'; name: string; email?: string }[]> {
+): Promise<{ id: string; type: 'USER' | 'CONTACT'; name: string; email?: string; mobilePhone?: string }[]> {
   const api = await getApi();
   if (!api) return [];
   try {
@@ -126,6 +143,24 @@ export async function createContactAction(body: Record<string, unknown>): Promis
   } catch (err) {
     console.error('[createContactAction]', err);
     return { success: false, error: err instanceof Error ? err.message : 'Failed to create contact' };
+  }
+}
+
+export async function fetchContactTypeLookupsAction(): Promise<
+  { id: string; name?: string; externalReference?: string }[]
+> {
+  const api = await getApi();
+  if (!api) return [];
+  try {
+    const rows = await api.getLookupsByDomain('contact_type');
+    return (Array.isArray(rows) ? rows : []).map((row) => ({
+      id: row.id,
+      name: row.name,
+      externalReference: row.externalReference,
+    }));
+  } catch (err) {
+    console.error('[fetchContactTypeLookupsAction]', err);
+    return [];
   }
 }
 

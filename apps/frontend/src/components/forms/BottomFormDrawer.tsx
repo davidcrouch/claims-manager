@@ -188,7 +188,7 @@ export function BottomFormDrawerFooter({
   return (
     <div
       className={
-        'flex shrink-0 items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/70 px-12 py-4' +
+        'flex shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50/70 px-12 py-4' +
         (className ? ` ${className}` : '')
       }
     >

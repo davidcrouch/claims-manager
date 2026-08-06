@@ -159,6 +159,23 @@ export class ProposalsRepository {
       .orderBy(desc(proposals.updatedAt));
   }
 
+  async findByQuote(params: {
+    quoteId: string;
+    tenantId?: string;
+    tx?: DrizzleDbOrTx;
+  }): Promise<ProposalRow[]> {
+    const db = params.tx ?? this.db;
+    const conditions = [eq(proposals.quoteId, params.quoteId), isNull(proposals.deletedAt)];
+    if (params.tenantId) {
+      conditions.push(eq(proposals.tenantId, params.tenantId));
+    }
+    return db
+      .select()
+      .from(proposals)
+      .where(and(...conditions))
+      .orderBy(desc(proposals.updatedAt));
+  }
+
   async create(params: { data: ProposalInsert; tx?: DrizzleDbOrTx }): Promise<ProposalRow> {
     const db = params.tx ?? this.db;
     const [inserted] = await db

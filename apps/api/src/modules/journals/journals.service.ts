@@ -37,9 +37,11 @@ export class JournalsService {
 
   // -- Journals --
 
-  async findAll(params: { page?: number; limit?: number; status?: string }) {
+  async findAll(params: { page?: number; limit?: number; status?: string; jobId?: string }) {
     const tenantId = this.tenantContext.getTenantId();
-    this.logger.debug(`[JournalsService.findAll] tenantId=${tenantId}`);
+    this.logger.debug(
+      `[JournalsService.findAll] tenantId=${tenantId} jobId=${params.jobId ?? 'none'}`,
+    );
     return this.journalsRepo.findAll({ tenantId, ...params });
   }
 

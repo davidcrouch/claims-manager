@@ -22,8 +22,15 @@ import {
   columnFilterToIdsParam,
   ValueFilterMenu,
   SortableColumnHeader,
+  TableEmptyRow,
 } from '@/components/shared/list-filters';
 import { TablePagination } from '@/components/shared/table-pagination';
+import {
+  ColumnSettingsHeaderCell,
+  useColumnVisibility,
+} from '@/components/shared/column-visibility';
+import { ListArchiveButton, LIST_ARCHIVE_TH_CLASS, LIST_ARCHIVE_TD_CLASS, LIST_ARCHIVE_SPACER_TD_CLASS } from '@/components/shared/ListArchiveButton';
+import { formatAddress } from '@/components/shared/detail';
 
 const PAGE_SIZE = 20;
 
@@ -34,17 +41,10 @@ function parseTab(param: string | null): ListTab {
   return 'active';
 }
 
-function formatAddress(job: Job): string {
-  const addr = job.address as
-    | { streetNumber?: string; streetName?: string; suburb?: string }
-    | undefined;
-  if (addr) {
-    const parts = [addr.streetNumber, addr.streetName, addr.suburb].filter(
-      Boolean,
-    );
-    if (parts.length) return parts.join(' ');
-  }
-  return job.addressSuburb ?? '';
+function jobListAddress(job: Job): string {
+  return formatAddress(job.address as Record<string, unknown> | undefined, {
+    fallback: { suburb: job.addressSuburb },
+  });
 }
 
 type JobSortField =
@@ -55,10 +55,10 @@ type JobSortField =
   | 'request_date'
   | 'updated_at';
 
-interface ColDef { key: JobSortField; label: string; filterable?: boolean }
+interface ColDef { key: JobSortField; label: string; filterable?: boolean; locked?: boolean }
 
 const TABLE_COLUMNS: ColDef[] = [
-  { key: 'external_reference', label: 'Job Ref' },
+  { key: 'external_reference', label: 'Job Ref', locked: true },
   { key: 'status', label: 'Status', filterable: true },
   { key: 'job_type', label: 'Type', filterable: true },
   { key: 'address', label: 'Address' },
@@ -74,6 +74,17 @@ export interface JobsListClientProps {
   headerAction?: React.ReactNode;
   /** Bump to force a list refetch (e.g. after creating a job). */
   refreshNonce?: number;
+  /**
+   * `page` (default): full jobs list with URL sync + page header.
+   * `picker`: embedded list for drawers; no URL sync / page header.
+   */
+  variant?: 'page' | 'picker';
+  /** Highlight the current job in picker mode. */
+  selectedJobId?: string;
+  /** When set (picker), called instead of navigating to `/jobs/:id`. */
+  onJobSelect?: (job: Job) => void;
+  /** Extra class on the outer wrapper (e.g. drawer padding). */
+  className?: string;
 }
 
 export function JobsListClient({
@@ -83,15 +94,25 @@ export function JobsListClient({
   unreadJobIds,
   headerAction,
   refreshNonce = 0,
+  variant = 'page',
+  selectedJobId,
+  onJobSelect,
+  className,
 }: JobsListClientProps) {
+  const isPicker = variant === 'picker';
   const router = useRouter();
   const searchParams = useSearchParams();
   const [data, setData] = useState(initialData);
   const unreadSet = useMemo(() => new Set(unreadJobIds ?? []), [unreadJobIds]);
-  const [search, setSearch] = useState(searchParams.get('search') ?? '');
+  const [search, setSearch] = useState(() =>
+    isPicker ? '' : (searchParams.get('search') ?? ''),
+  );
   const [debouncedSearch, setDebouncedSearch] = useState(search);
-  const [tab, setTab] = useState<ListTab>(() => parseTab(searchParams.get('tab')));
+  const [tab, setTab] = useState<ListTab>(() =>
+    isPicker ? 'active' : parseTab(searchParams.get('tab')),
+  );
   const [page, setPage] = useState(() => {
+    if (isPicker) return 1;
     const p = parseInt(searchParams.get('page') ?? '1', 10);
     return Number.isFinite(p) && p > 0 ? p : 1;
   });
@@ -103,6 +124,10 @@ export function JobsListClient({
   const [typeFilterActive, setTypeFilterActive] = useState(false);
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [statusFilterActive, setStatusFilterActive] = useState(false);
+  const { isVisible, toggle, visibleCount } = useColumnVisibility(
+    'jobs',
+    TABLE_COLUMNS,
+  );
 
   const lastFetchKeyRef = useRef<string | null>(null);
 
@@ -174,11 +199,10 @@ export function JobsListClient({
 
   const sortParam = `${columnSort.field}_${columnSort.order}`;
 
+  // URL sync only — do not tie this to refreshNonce or a create→detail
+  // navigation can race with replace('/jobs?...').
   useEffect(() => {
-    const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
-    const typeKey = jobTypeParam === null ? '__none__' : (jobTypeParam ?? '');
-    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${typeKey}|${refreshNonce}`;
-
+    if (isPicker) return;
     const params = new URLSearchParams(searchParams.toString());
     params.set('search', debouncedSearch);
     params.set('tab', tab);
@@ -188,7 +212,16 @@ export function JobsListClient({
     else params.delete('status');
     if (jobTypeParam) params.set('jobType', jobTypeParam);
     else params.delete('jobType');
-    router.replace(`/jobs?${params}`, { scroll: false });
+    const next = params.toString();
+    if (next === searchParams.toString()) return;
+    router.replace(`/jobs?${next}`, { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, sortParam, tab, page, statusParam, jobTypeParam, isPicker]);
+
+  useEffect(() => {
+    const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
+    const typeKey = jobTypeParam === null ? '__none__' : (jobTypeParam ?? '');
+    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${typeKey}|${refreshNonce}`;
 
     if (lastFetchKeyRef.current === fetchKey) return;
     lastFetchKeyRef.current = fetchKey;
@@ -198,6 +231,7 @@ export function JobsListClient({
       return;
     }
 
+    let cancelled = false;
     fetchJobsAction({
       search: debouncedSearch || undefined,
       page,
@@ -205,8 +239,18 @@ export function JobsListClient({
       sort: sortParam,
       status: statusParam,
       jobType: jobTypeParam,
-    }).then((res) => res && setData(res));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }).then((res) => {
+      if (!cancelled && res) setData(res);
+    });
+
+    return () => {
+      cancelled = true;
+      // If this effect is cleaned up before the request lands (navigate away /
+      // hide), allow the same key to refetch when the list is shown again.
+      if (lastFetchKeyRef.current === fetchKey) {
+        lastFetchKeyRef.current = null;
+      }
+    };
   }, [debouncedSearch, sortParam, tab, page, statusParam, jobTypeParam, refreshNonce]);
 
   const handleColumnSort = (field: JobSortField) => {
@@ -288,20 +332,33 @@ export function JobsListClient({
     itemNoun: { singular: 'type', plural: 'types' },
   };
 
+  const handleRowClick = (job: Job) => {
+    if (onJobSelect) {
+      onJobSelect(job);
+      return;
+    }
+    router.push(`/jobs/${job.id}`);
+  };
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
-      <SetPageHeader>
-        <ListPageHeader
-          icon={Briefcase}
-          title="Jobs"
-          total={data.total}
-          showing={visibleRows.length}
-          search={debouncedSearch}
-          breakdown={breakdown}
-          accent="emerald"
-        />
-      </SetPageHeader>
-      <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
+    <div
+      className={`flex min-h-0 flex-1 flex-col${className ? ` ${className}` : ''}`}
+      style={{ height: '100%' }}
+    >
+      {!isPicker && (
+        <SetPageHeader>
+          <ListPageHeader
+            icon={Briefcase}
+            title="Jobs"
+            total={data.total}
+            showing={visibleRows.length}
+            search={debouncedSearch}
+            breakdown={breakdown}
+            accent="emerald"
+          />
+        </SetPageHeader>
+      )}
+      <div className={`flex flex-col gap-4 pb-4 pt-1 ${isPicker ? 'px-4' : 'px-6'}`}>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
           <Tabs value={tab} onValueChange={handleTabChange}>
             <TabsList>
@@ -357,15 +414,14 @@ export function JobsListClient({
       </div>
 
       <div
-        className="flex-1 px-6 pb-6"
+        className={`flex-1 pb-6 ${isPicker ? 'px-4' : 'px-6'}`}
         style={{ minHeight: 0, overflow: 'auto' }}
       >
-        {visibleRows.length > 0 ? (
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50">
                 <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                  {TABLE_COLUMNS.map((col) => (
+                  {TABLE_COLUMNS.filter((col) => isVisible(col.key)).map((col) => (
                     <SortableColumnHeader
                       key={col.key}
                       columnKey={col.key}
@@ -382,48 +438,98 @@ export function JobsListClient({
                       }
                     />
                   ))}
+                  {!isPicker && (
+                    <th scope="col" className={LIST_ARCHIVE_TH_CLASS}>
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  )}
+                  <ColumnSettingsHeaderCell
+                    columns={TABLE_COLUMNS}
+                    isVisible={isVisible}
+                    onToggle={toggle}
+                  />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {visibleRows.map((job) => {
+                {visibleRows.length === 0 ? (
+                  <TableEmptyRow colSpan={visibleCount + (isPicker ? 1 : 2)} label="No jobs found." />
+                ) : (
+                  visibleRows.map((job) => {
                   const ref = job.name ?? job.externalJobId ?? job.externalReference ?? job.id;
                   const statusName = job.status?.name ?? 'Unknown';
                   const jobTypeName = job.jobType?.name ?? '';
                   const isUnread = unreadSet.has(job.id);
+                  const isSelected = selectedJobId === job.id;
                   return (
                     <tr
                       key={job.id}
-                      onClick={() => router.push(`/jobs/${job.id}`)}
+                      onClick={() => handleRowClick(job)}
                       className={`cursor-pointer transition-colors hover:bg-slate-50 ${
-                        isUnread
-                          ? 'border-l-[3px] border-l-blue-500 bg-blue-100'
-                          : ''
+                        isSelected
+                          ? 'bg-emerald-50 ring-1 ring-inset ring-emerald-200'
+                          : isUnread
+                            ? 'border-l-[3px] border-l-blue-500 bg-blue-100'
+                            : ''
                       }`}
                     >
-                      <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
-                        {isUnread && (
-                          <span className="mr-2 inline-block h-2 w-2 rounded-full bg-blue-500" />
-                        )}
-                        {ref}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3">
-                        <StatusBadge status={statusName} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <TypeBadge type={jobTypeName} />
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {formatAddress(job)}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {formatDate(job.requestDate)}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {formatDate(job.updatedAt)}
-                      </td>
+                      {isVisible('external_reference') && (
+                        <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
+                          {isUnread && !isSelected && (
+                            <span className="mr-2 inline-block h-2 w-2 rounded-full bg-blue-500" />
+                          )}
+                          {ref}
+                        </td>
+                      )}
+                      {isVisible('status') && (
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <StatusBadge status={statusName} />
+                        </td>
+                      )}
+                      {isVisible('job_type') && (
+                        <td className="px-4 py-3">
+                          <TypeBadge type={jobTypeName} />
+                        </td>
+                      )}
+                      {isVisible('address') && (
+                        <td className="px-4 py-3 text-slate-600">
+                          {jobListAddress(job)}
+                        </td>
+                      )}
+                      {isVisible('request_date') && (
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                          {formatDate(job.requestDate)}
+                        </td>
+                      )}
+                      {isVisible('updated_at') && (
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                          {formatDate(job.updatedAt)}
+                        </td>
+                      )}
+                      {!isPicker && (
+                        <td
+                          className={LIST_ARCHIVE_TD_CLASS}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <ListArchiveButton
+                            entityType="job"
+                            entityId={job.id}
+                            statusName={statusName}
+                            entityLabel={ref}
+                            onArchived={(id) => {
+                              setData((prev) => ({
+                                ...prev,
+                                data: prev.data.filter((row) => row.id !== id),
+                                total: Math.max(0, prev.total - 1),
+                              }));
+                            }}
+                          />
+                        </td>
+                      )}
+                      <td className={LIST_ARCHIVE_SPACER_TD_CLASS} aria-hidden />
                     </tr>
                   );
-                })}
+                })
+                )}
               </tbody>
             </table>
             <TablePagination
@@ -433,16 +539,6 @@ export function JobsListClient({
               onPageChange={handlePageChange}
             />
           </div>
-        ) : (
-          <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50">
-            <div className="flex flex-col items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-100">
-                <Search size={24} className="text-slate-400" />
-              </div>
-              <p className="text-sm text-slate-400">No jobs found.</p>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

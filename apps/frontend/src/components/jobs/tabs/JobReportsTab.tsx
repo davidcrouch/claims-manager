@@ -2,9 +2,8 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import { FileBarChart, Search, X } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ReportFormDrawer } from '@/components/forms/ReportFormDrawer';
 import { fetchJobReportsAction } from '@/app/(app)/jobs/[id]/actions';
@@ -16,6 +15,7 @@ import {
   commitColumnFilterSelection,
   ValueFilterMenu,
   SortableColumnHeader,
+  TableEmptyRow,
 } from '@/components/shared/list-filters';
 import type { Report } from '@/types/api';
 
@@ -52,13 +52,16 @@ function getSortValue(r: Report, field: ReportSortField): string | null | undefi
 export function JobReportsTab({
   jobId,
   claimId,
+  drawerOpen,
+  onDrawerOpenChange,
 }: {
   jobId: string;
   claimId?: string | null;
+  drawerOpen: boolean;
+  onDrawerOpenChange: (open: boolean) => void;
 }) {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
-  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const [tab, setTab] = useState<ListTab>('active');
   const [search, setSearch] = useState('');
@@ -245,34 +248,19 @@ export function JobReportsTab({
           menuTitle="Filter by type"
           itemNoun={{ singular: 'type', plural: 'types' }}
         />
-
-        <Button onClick={() => setDrawerOpen(true)} size="sm">
-          <FileBarChart className="h-4 w-4 mr-2" />
-          Create Report
-        </Button>
       </div>
 
       <ReportFormDrawer
         open={drawerOpen}
         onOpenChange={(open) => {
-          setDrawerOpen(open);
+          onDrawerOpenChange(open);
           if (!open) load();
         }}
         jobId={jobId}
         claimId={claimId}
       />
 
-      {visibleRows.length === 0 ? (
-        <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50">
-          <div className="flex flex-col items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-100">
-              <Search size={24} className="text-slate-400" />
-            </div>
-            <p className="text-sm text-slate-400">No reports found.</p>
-          </div>
-        </div>
-      ) : (
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50">
               <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -310,7 +298,10 @@ export function JobReportsTab({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {visibleRows.map((r) => {
+              {visibleRows.length === 0 ? (
+                <TableEmptyRow colSpan={TABLE_COLUMNS.length} label="No reports found." />
+              ) : (
+              visibleRows.map((r) => {
                 const statusName = r.status?.name ?? 'Unknown';
                 return (
                   <tr key={r.id} className="cursor-pointer transition-colors hover:bg-slate-50">
@@ -333,11 +324,12 @@ export function JobReportsTab({
                     <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDate(r.updatedAt)}</td>
                   </tr>
                 );
-              })}
+              })
+              )}
             </tbody>
           </table>
         </div>
-      )}
+
     </div>
   );
 }

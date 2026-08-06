@@ -217,6 +217,11 @@ export {
   type PoCustodyTransferInsert,
 } from './po-custody-transfers.repository';
 export {
+  QuoteCustodyTransfersRepository,
+  type QuoteCustodyTransferRow,
+  type QuoteCustodyTransferInsert,
+} from './quote-custody-transfers.repository';
+export {
   McpIntegrationRepository,
   type McpIntegrationRow,
   type McpIntegrationInsert,
@@ -258,3 +263,8 @@ export {
   type AiUserMemoryRow,
   type AiUserMemoryInsert,
 } from './ai-user-memory.repository';
+export {
+  AssessmentsRepository,
+  type AssessmentRow,
+  type AssessmentInsert,
+} from './assessments.repository';

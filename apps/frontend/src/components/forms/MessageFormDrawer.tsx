@@ -126,11 +126,12 @@ export function MessageFormDrawer({
           <Button
             type="button"
             variant="outline"
+            size="lg"
             onClick={() => onOpenChange(false)}
           >
             Cancel
           </Button>
-          <Button type="submit" disabled={submitting}>
+          <Button type="submit" size="lg" disabled={submitting}>
             {submitting ? 'Sending...' : 'Send Message'}
           </Button>
         </BottomFormDrawerFooter>

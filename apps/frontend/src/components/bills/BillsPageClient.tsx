@@ -3,10 +3,11 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
+import { PrintButton } from '@/components/shared/PrintButton';
 import { BillFormDrawer } from '@/components/forms/BillFormDrawer';
 import type { JobOption } from '@/components/shared/job-label';
 import { BillsListClient } from './BillsListClient';
-import type { Bill, PaginatedResponse } from '@/types/api';
+import type { Bill, Job, Claim, PaginatedResponse } from '@/types/api';
 import type { StatusOption } from '@/components/shared/list-filters';
 
 export interface BillsPageClientProps {
@@ -15,6 +16,8 @@ export interface BillsPageClientProps {
   vendorOptions: StatusOption[];
   jobNameById?: Record<string, string>;
   jobs: JobOption[];
+  job?: Job | null;
+  parentClaim?: Claim | null;
 }
 
 export function BillsPageClient({
@@ -23,6 +26,8 @@ export function BillsPageClient({
   vendorOptions,
   jobNameById,
   jobs,
+  job,
+  parentClaim,
 }: BillsPageClientProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -36,16 +41,20 @@ export function BillsPageClient({
         >
           Create Bill
         </Button>
+        <PrintButton documentType="bills_list" entityId="list" />
       </SetHeaderActions>
       <BillsListClient
         initialData={initialData}
         statusOptions={statusOptions}
         vendorOptions={vendorOptions}
         jobNameById={jobNameById}
+        job={job}
+        parentClaim={parentClaim}
       />
       <BillFormDrawer
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
+        jobId={job?.id}
         jobs={jobs}
       />
     </>

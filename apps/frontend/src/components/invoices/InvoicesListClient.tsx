@@ -14,16 +14,20 @@ import {
   columnFilterToIdsParam,
   ValueFilterMenu,
   SortableColumnHeader,
+  TableEmptyRow,
 } from '@/components/shared/list-filters';
 import { resolveJobName } from '@/components/shared/job-label';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
-import {
-  ListPageHeader,
-  computeStatusBreakdown,
-} from '@/components/layout/ListPageHeader';
+import { EntityPageHeader, type EntityBreakdownItem } from '@/components/shared/EntityPageHeader';
+import { computeStatusBreakdown } from '@/components/layout/ListPageHeader';
 import { fetchInvoicesAction } from '@/app/(app)/invoices/actions';
 import { TablePagination } from '@/components/shared/table-pagination';
-import type { Invoice, PaginatedResponse } from '@/types/api';
+import {
+  ColumnSettingsHeaderCell,
+  useColumnVisibility,
+} from '@/components/shared/column-visibility';
+import { ListArchiveButton, LIST_ARCHIVE_TH_CLASS, LIST_ARCHIVE_TD_CLASS, LIST_ARCHIVE_SPACER_TD_CLASS } from '@/components/shared/ListArchiveButton';
+import type { Claim, Invoice, Job, PaginatedResponse } from '@/types/api';
 import { formatCurrency } from '@/components/shared/detail';
 
 const PAGE_SIZE = 20;
@@ -44,10 +48,10 @@ type InvSortField =
   | 'created_at'
   | 'updated_at';
 
-interface ColDef { key: InvSortField; label: string; filterable?: boolean }
+interface ColDef { key: InvSortField; label: string; filterable?: boolean; locked?: boolean }
 
 const TABLE_COLUMNS: ColDef[] = [
-  { key: 'invoice_number', label: 'Invoice #' },
+  { key: 'invoice_number', label: 'Invoice #', locked: true },
   { key: 'job', label: 'Job' },
   { key: 'status', label: 'Status', filterable: true },
   { key: 'total_amount', label: 'Total' },
@@ -61,6 +65,8 @@ export interface InvoicesListClientProps {
   statusOptions: StatusOption[];
   jobNameById?: Record<string, string>;
   headerAction?: React.ReactNode;
+  job?: Job | null;
+  parentClaim?: Claim | null;
 }
 
 export function InvoicesListClient({
@@ -68,9 +74,12 @@ export function InvoicesListClient({
   statusOptions,
   jobNameById,
   headerAction,
+  job,
+  parentClaim,
 }: InvoicesListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const jobId = searchParams.get('jobId');
   const [data, setData] = useState(initialData);
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [debouncedSearch, setDebouncedSearch] = useState(search);
@@ -85,6 +94,10 @@ export function InvoicesListClient({
   });
   const [statusNameFilter, setStatusNameFilter] = useState<Set<string>>(new Set());
   const [statusFilterActive, setStatusFilterActive] = useState(false);
+  const { isVisible, toggle, visibleCount } = useColumnVisibility(
+    'invoices',
+    TABLE_COLUMNS,
+  );
 
   const lastFetchKeyRef = useRef<string | null>(null);
   const statusParam = useMemo(
@@ -101,7 +114,7 @@ export function InvoicesListClient({
 
   useEffect(() => {
     const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
-    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}`;
+    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${jobId ?? ''}`;
 
     const params = new URLSearchParams(searchParams.toString());
     params.set('search', debouncedSearch);
@@ -110,6 +123,8 @@ export function InvoicesListClient({
     params.set('sort', sortParam);
     if (statusParam) params.set('status', statusParam);
     else params.delete('status');
+    if (jobId) params.set('jobId', jobId);
+    else params.delete('jobId');
     router.replace(`/invoices?${params}`, { scroll: false });
 
     if (lastFetchKeyRef.current === fetchKey) return;
@@ -125,9 +140,10 @@ export function InvoicesListClient({
       limit: PAGE_SIZE,
       sort: sortParam,
       status: statusParam,
+      jobId: jobId ?? undefined,
     }).then((res) => res && setData(res));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, sortParam, tab, page, statusParam]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop: router.replace updates URL -> searchParams changes -> effect re-runs
+  }, [debouncedSearch, sortParam, tab, page, statusParam, jobId]);
 
   const handleColumnSort = (field: InvSortField) => {
     setColumnSort((prev) => {
@@ -230,7 +246,7 @@ export function InvoicesListClient({
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
       <SetPageHeader>
-        <ListPageHeader
+        <EntityPageHeader
           icon={Receipt}
           title="Invoices"
           total={data.total}
@@ -239,6 +255,8 @@ export function InvoicesListClient({
           breakdown={breakdown}
           stats={totalValue ? [{ label: 'Total value', value: totalValue }] : undefined}
           accent="teal"
+          job={job}
+          parentClaim={parentClaim}
         />
       </SetPageHeader>
       <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
@@ -300,12 +318,11 @@ export function InvoicesListClient({
         className="flex-1 px-6 pb-6"
         style={{ minHeight: 0, overflow: 'auto' }}
       >
-        {visibleRows.length > 0 ? (
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50">
                 <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                  {TABLE_COLUMNS.map((col) => (
+                  {TABLE_COLUMNS.filter((col) => isVisible(col.key)).map((col) => (
                     <SortableColumnHeader
                       key={col.key}
                       columnKey={col.key}
@@ -327,42 +344,91 @@ export function InvoicesListClient({
                       }
                     />
                   ))}
+                  <th scope="col" className={LIST_ARCHIVE_TH_CLASS}>
+                    <span className="sr-only">Actions</span>
+                  </th>
+                  <ColumnSettingsHeaderCell
+                    columns={TABLE_COLUMNS}
+                    isVisible={isVisible}
+                    onToggle={toggle}
+                  />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {visibleRows.map((inv) => {
+                {visibleRows.length === 0 ? (
+                  <TableEmptyRow colSpan={visibleCount + 2} label="No invoices found." />
+                ) : (
+                  visibleRows.map((inv) => {
                   const num = inv.invoiceNumber ?? inv.id;
                   const statusName = inv.status?.name ?? 'Unknown';
                   return (
                     <tr
                       key={inv.id}
-                      onClick={() => router.push(`/invoices/${inv.id}`)}
+                      onClick={() => {
+                        const jobId = searchParams.get('jobId');
+                        const href = jobId ? `/invoices/${inv.id}?jobId=${jobId}` : `/invoices/${inv.id}`;
+                        router.push(href);
+                      }}
                       className="cursor-pointer transition-colors hover:bg-slate-50"
                     >
-                      <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
-                        {num}
+                      {isVisible('invoice_number') && (
+                        <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
+                          {num}
+                        </td>
+                      )}
+                      {isVisible('job') && (
+                        <td className="px-4 py-3 text-slate-600">
+                          {resolveJobName(inv.jobId, jobNameById)}
+                        </td>
+                      )}
+                      {isVisible('status') && (
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <StatusBadge status={statusName} />
+                        </td>
+                      )}
+                      {isVisible('total_amount') && (
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                          {formatCurrency(inv.totalAmount)}
+                        </td>
+                      )}
+                      {isVisible('issue_date') && (
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                          {formatDate(inv.issueDate)}
+                        </td>
+                      )}
+                      {isVisible('created_at') && (
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                          {formatDate(inv.createdAt)}
+                        </td>
+                      )}
+                      {isVisible('updated_at') && (
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                          {formatDate(inv.updatedAt)}
+                        </td>
+                      )}
+                      <td
+                        className={LIST_ARCHIVE_TD_CLASS}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <ListArchiveButton
+                          entityType="invoice"
+                          entityId={inv.id}
+                          statusName={statusName}
+                          entityLabel={num}
+                          onArchived={(id) => {
+                            setData((prev) => ({
+                              ...prev,
+                              data: prev.data.filter((row) => row.id !== id),
+                              total: Math.max(0, prev.total - 1),
+                            }));
+                          }}
+                        />
                       </td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {resolveJobName(inv.jobId, jobNameById)}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3">
-                        <StatusBadge status={statusName} />
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {formatCurrency(inv.totalAmount)}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {formatDate(inv.issueDate)}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {formatDate(inv.createdAt)}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {formatDate(inv.updatedAt)}
-                      </td>
+                      <td className={LIST_ARCHIVE_SPACER_TD_CLASS} aria-hidden />
                     </tr>
                   );
-                })}
+                })
+                )}
               </tbody>
             </table>
             <TablePagination
@@ -372,16 +438,6 @@ export function InvoicesListClient({
               onPageChange={handlePageChange}
             />
           </div>
-        ) : (
-          <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50">
-            <div className="flex flex-col items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-100">
-                <Search size={24} className="text-slate-400" />
-              </div>
-              <p className="text-sm text-slate-400">No invoices found.</p>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

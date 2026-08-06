@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import {
   Calendar,
@@ -10,28 +10,23 @@ import {
   FileBarChart,
   Info,
   Save,
+  Pencil,
+  Plus,
+  Printer,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
+import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
+import { AddJobContactsDrawer } from '@/components/forms/AddJobContactsDrawer';
+import { QuoteFormDrawer } from '@/components/forms/QuoteFormDrawer';
+import { WorkOrderFormDrawer } from '@/components/forms/WorkOrderFormDrawer';
+import { JobReportWizard } from '@/components/jobs/JobReportWizard';
 import { JobOverviewTab, type JobOverviewTabHandle } from './tabs/JobOverviewTab';
 import { JobTypeDetailsTab } from './tabs/JobTypeDetailsTab';
 import { JobPartiesTab } from './tabs/JobPartiesTab';
-import { JobAppointmentsTab } from './tabs/JobAppointmentsTab';
-import { JobQuotesTab } from './tabs/JobQuotesTab';
-import { JobPurchaseOrdersTab } from './tabs/JobPurchaseOrdersTab';
-import { JobInvoicesTab } from './tabs/JobInvoicesTab';
-import { JobWorkOrdersTab } from './tabs/JobWorkOrdersTab';
-import { JobRfqsTab } from './tabs/JobRfqsTab';
-import { JobProposalsTab } from './tabs/JobProposalsTab';
-import { JobBillsTab } from './tabs/JobBillsTab';
-import { JobTasksTab } from './tabs/JobTasksTab';
-import { JobMessagesTab } from './tabs/JobMessagesTab';
-import { JobReportsTab } from './tabs/JobReportsTab';
-import { JobAttachmentsTab } from './tabs/JobAttachmentsTab';
 import { JobCommunicationsTab } from './tabs/JobCommunicationsTab';
+import { JobReportsTab } from './tabs/JobReportsTab';
 import { JobTimelineTab } from './tabs/JobTimelineTab';
-import { JobJournalsTab } from './tabs/JobJournalsTab';
-import { ScheduleClient } from '@/components/schedule/ScheduleClient';
 import { hasTypeDetails } from './util/jobType';
 import { updateJobDatesAction } from '@/app/(app)/jobs/[id]/actions';
 import type { Job, Claim } from '@/types/api';
@@ -40,21 +35,8 @@ const VALID_TABS = [
   'overview',
   'type-details',
   'parties',
-  'schedule',
-  'appointments',
-  'quotes',
-  'work-orders',
-  'purchase-orders',
-  'invoices',
-  'rfqs',
-  'proposals',
-  'bills',
-  'tasks',
-  'messages',
   'communications',
   'reports',
-  'attachments',
-  'journals',
   'timeline',
 ] as const;
 
@@ -82,6 +64,18 @@ export function JobDetail({
   const activeTab = normaliseTab(searchParams.get('tab'), showTypeDetails);
   const overviewRef = useRef<JobOverviewTabHandle>(null);
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [contactDrawerOpen, setContactDrawerOpen] = useState(false);
+  const [reportDrawerOpen, setReportDrawerOpen] = useState(false);
+  const [quoteDrawerOpen, setQuoteDrawerOpen] = useState(false);
+  const [workOrderDrawerOpen, setWorkOrderDrawerOpen] = useState(false);
+  const [printWizardOpen, setPrintWizardOpen] = useState(false);
+
+  useEffect(() => {
+    if (activeTab !== 'overview') setEditing(false);
+    if (activeTab !== 'parties') setContactDrawerOpen(false);
+    if (activeTab !== 'reports') setReportDrawerOpen(false);
+  }, [activeTab]);
 
   const onTabChange = useCallback(
     (value: string | null) => {
@@ -100,17 +94,38 @@ export function JobDetail({
 
   const handleSave = useCallback(async () => {
     const pending = overviewRef.current?.getPendingDates();
-    if (!pending) return;
+    if (!pending) {
+      setEditing(false);
+      return;
+    }
     setSaving(true);
     try {
       await updateJobDatesAction(job.id, pending);
       router.refresh();
+      setEditing(false);
     } finally {
       setSaving(false);
     }
   }, [job.id, router]);
 
+  const handleCancel = useCallback(() => {
+    overviewRef.current?.resetDates();
+    setEditing(false);
+  }, []);
+
   const claimId = job.claimId ?? undefined;
+  const existingContacts = (
+    ((job.apiPayload as Record<string, unknown> | undefined)?.contacts as
+      | Array<{
+          id?: string;
+          firstName?: string;
+          lastName?: string;
+          name?: string;
+          email?: string;
+          mobilePhone?: string;
+        }>
+      | undefined) ?? []
+  );
 
   const overviewTabs: Array<{ id: TabValue; label: string; icon: typeof Calendar }> = [
     { id: 'overview', label: 'Overview', icon: Calendar },
@@ -123,92 +138,196 @@ export function JobDetail({
     { id: 'timeline', label: 'Timeline', icon: Clock },
   ];
 
-  const showTabBar = overviewTabs.some((t) => t.id === activeTab);
+  const createActions = (
+    <div className="mr-4 flex items-center gap-2">
+      <Button
+        size="default"
+        onClick={() => setQuoteDrawerOpen(true)}
+        className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+      >
+        <Plus className="h-3.5 w-3.5" />
+        Create Estimate
+      </Button>
+      <Button
+        size="default"
+        onClick={() => setWorkOrderDrawerOpen(true)}
+        className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+      >
+        <Plus className="h-3.5 w-3.5" />
+        Create WO
+      </Button>
+    </div>
+  );
+
+  const printButton = (
+    <Button
+      size="default"
+      onClick={() => setPrintWizardOpen(true)}
+      className="h-9 w-9 px-0 bg-blue-600 text-white hover:bg-blue-500"
+      title="Print report"
+      aria-label="Print report"
+    >
+      <Printer className="h-4 w-4" />
+    </Button>
+  );
+
+  const archiveButton = (
+    <ArchiveEntityButton
+      entityType="job"
+      entityId={job.id}
+      statusName={job.status?.name}
+      entityLabel={job.name ?? job.externalReference ?? undefined}
+      redirectTo="/jobs"
+      className="mr-3"
+    />
+  );
+
+  let tabActions: ReactNode = null;
+  if (activeTab === 'overview') {
+    tabActions = editing ? (
+      <>
+        <Button
+          size="default"
+          variant="outline"
+          onClick={handleCancel}
+          disabled={saving}
+          className="h-9 gap-1.5 px-4"
+        >
+          Cancel
+        </Button>
+        <Button
+          size="default"
+          onClick={handleSave}
+          disabled={saving}
+          className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          <Save className="h-3.5 w-3.5" />
+          {saving ? 'Saving...' : 'Save'}
+        </Button>
+        {printButton}
+      </>
+    ) : (
+      <>
+        <Button
+          size="default"
+          onClick={() => setEditing(true)}
+          className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+          Edit
+        </Button>
+        {printButton}
+      </>
+    );
+  } else if (activeTab === 'parties') {
+    tabActions = (
+      <Button
+        size="default"
+        onClick={() => setContactDrawerOpen(true)}
+        className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+      >
+        <Plus className="h-3.5 w-3.5" />
+        Add Contact
+      </Button>
+    );
+  } else if (activeTab === 'reports') {
+    tabActions = (
+      <Button
+        size="default"
+        onClick={() => setReportDrawerOpen(true)}
+        className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+      >
+        <Plus className="h-3.5 w-3.5" />
+        Add Report
+      </Button>
+    );
+  }
+
+  const headerActions = (
+    <>
+      {createActions}
+      {tabActions}
+      {archiveButton}
+    </>
+  );
 
   return (
     <div className="flex flex-col">
-      {showTabBar && (
-        <SetHeaderActions>
-          <Button
-            size="default"
-            onClick={handleSave}
-            disabled={saving}
-            className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
-          >
-            <Save className="h-3.5 w-3.5" />
-            {saving ? 'Saving...' : 'Save'}
-          </Button>
-        </SetHeaderActions>
-      )}
-      {showTabBar && (
-        <div className="flex items-center border-b border-slate-200">
-          <div className="flex flex-wrap gap-0">
-            {overviewTabs.map((t) => {
-              const Icon = t.icon;
-              const active = activeTab === t.id;
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => onTabChange(t.id)}
-                  className={`inline-flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t-md ${
-                    active
-                      ? 'border-emerald-600 bg-emerald-50 text-emerald-600'
-                      : 'border-transparent bg-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700'
-                  }`}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {t.label}
-                </button>
-              );
-            })}
-          </div>
+      <SetHeaderActions>{headerActions}</SetHeaderActions>
+      <div className="flex items-center border-b border-slate-200">
+        <div className="flex flex-wrap gap-0">
+          {overviewTabs.map((t) => {
+            const Icon = t.icon;
+            const active = activeTab === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => onTabChange(t.id)}
+                className={`inline-flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t-md ${
+                  active
+                    ? 'border-emerald-600 bg-emerald-50 text-emerald-600'
+                    : 'border-transparent bg-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {t.label}
+              </button>
+            );
+          })}
         </div>
-      )}
-      <div className={showTabBar ? 'pt-4' : undefined}>
+      </div>
+      <div className="pt-4">
         {activeTab === 'overview' && (
-          <JobOverviewTab ref={overviewRef} job={job} parentClaim={parentClaim} saving={saving} />
+          <JobOverviewTab
+            ref={overviewRef}
+            job={job}
+            parentClaim={parentClaim}
+            saving={saving}
+            editing={editing}
+          />
         )}
         {activeTab === 'type-details' && showTypeDetails && (
           <JobTypeDetailsTab job={job} />
         )}
         {activeTab === 'parties' && <JobPartiesTab job={job} />}
-        {activeTab === 'schedule' && <ScheduleClient jobId={job.id} />}
-        {activeTab === 'appointments' && <JobAppointmentsTab jobId={job.id} job={job} />}
-        {activeTab === 'quotes' && (
-          <JobQuotesTab
+        {activeTab === 'reports' && (
+          <JobReportsTab
             jobId={job.id}
             claimId={claimId}
-            jobName={job.name ?? job.externalJobId ?? job.externalReference}
-            jobProvider={job.provider === 'crunchwork' ? 'crunchwork' : 'internal'}
+            drawerOpen={reportDrawerOpen}
+            onDrawerOpenChange={setReportDrawerOpen}
           />
-        )}
-        {activeTab === 'work-orders' && (
-          <JobWorkOrdersTab jobId={job.id} />
-        )}
-        {activeTab === 'purchase-orders' && (
-          <JobPurchaseOrdersTab jobId={job.id} />
-        )}
-        {activeTab === 'invoices' && (
-          <JobInvoicesTab jobId={job.id} jobName={job.name} />
-        )}
-        {activeTab === 'rfqs' && <JobRfqsTab jobId={job.id} />}
-        {activeTab === 'proposals' && <JobProposalsTab jobId={job.id} />}
-        {activeTab === 'bills' && <JobBillsTab jobId={job.id} />}
-        {activeTab === 'tasks' && <JobTasksTab jobId={job.id} />}
-        {activeTab === 'messages' && (
-          <JobMessagesTab jobId={job.id} claimId={claimId} />
-        )}
-        {activeTab === 'reports' && (
-          <JobReportsTab jobId={job.id} claimId={claimId} />
         )}
         {activeTab === 'communications' && (
           <JobCommunicationsTab jobId={job.id} />
         )}
-        {activeTab === 'attachments' && <JobAttachmentsTab jobId={job.id} />}
-        {activeTab === 'journals' && <JobJournalsTab jobId={job.id} />}
         {activeTab === 'timeline' && <JobTimelineTab job={job} />}
       </div>
+
+      <AddJobContactsDrawer
+        open={contactDrawerOpen}
+        onOpenChange={setContactDrawerOpen}
+        jobId={job.id}
+        existingContacts={existingContacts}
+        aiAssistEnabled
+      />
+      <QuoteFormDrawer
+        open={quoteDrawerOpen}
+        onOpenChange={setQuoteDrawerOpen}
+        jobId={job.id}
+        claimId={claimId}
+      />
+      <WorkOrderFormDrawer
+        open={workOrderDrawerOpen}
+        onOpenChange={setWorkOrderDrawerOpen}
+        jobId={job.id}
+      />
+      <JobReportWizard
+        open={printWizardOpen}
+        onOpenChange={setPrintWizardOpen}
+        jobId={job.id}
+      />
     </div>
   );
 }

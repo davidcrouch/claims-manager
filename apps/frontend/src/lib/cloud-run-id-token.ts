@@ -51,3 +51,14 @@ export function resolveApiAudience(): string {
     'http://localhost:5001';
   return url.replace(/\/+$/, '');
 }
+
+/**
+ * Headers for frontend (Cloud Run) → api-server (IAM-private) calls.
+ * Empty locally where K_SERVICE is unset.
+ */
+export async function cloudRunInvokerHeaders(): Promise<Record<string, string>> {
+  const idToken = await fetchCloudRunIdToken(resolveApiAudience());
+  return idToken
+    ? { 'X-Serverless-Authorization': `Bearer ${idToken}` }
+    : {};
+}

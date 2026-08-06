@@ -7,7 +7,7 @@ import {
   SortTabs,
   SearchInput,
   StatusFilterMenu,
-  ListEmptyState,
+  TableEmptyRow,
   type SortOption,
   type StatusOption,
   buildSortString,
@@ -209,8 +209,6 @@ export function ConnectionWebhookEventsTable({
         <div className="flex h-32 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm text-slate-400">
           Loading events...
         </div>
-      ) : visibleRows.length === 0 ? (
-        <ListEmptyState label="No webhook events found." />
       ) : (
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
@@ -225,16 +223,20 @@ export function ConnectionWebhookEventsTable({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {visibleRows.map((event) => (
-                <EventRow
-                  key={event.id}
-                  event={event}
-                  expanded={expandedId === event.id}
-                  onToggle={() =>
-                    setExpandedId(expandedId === event.id ? null : event.id)
-                  }
-                />
-              ))}
+              {visibleRows.length === 0 ? (
+                <TableEmptyRow colSpan={6} label="No webhook events found." />
+              ) : (
+                visibleRows.map((event) => (
+                  <EventRow
+                    key={event.id}
+                    event={event}
+                    expanded={expandedId === event.id}
+                    onToggle={() =>
+                      setExpandedId(expandedId === event.id ? null : event.id)
+                    }
+                  />
+                ))
+              )}
             </tbody>
           </table>
         </div>

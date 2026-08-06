@@ -29,6 +29,7 @@ export function useSpeechRecognition({
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const onTranscriptRef = useRef(onTranscript);
+  const interimTranscriptRef = useRef('');
 
   useEffect(() => {
     onTranscriptRef.current = onTranscript;
@@ -37,6 +38,14 @@ export function useSpeechRecognition({
   const isSupported =
     typeof window !== 'undefined' &&
     ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
+
+  const commitInterim = useCallback(() => {
+    const pending = interimTranscriptRef.current.trim();
+    if (!pending) return;
+    onTranscriptRef.current(pending);
+    interimTranscriptRef.current = '';
+    setInterimTranscript('');
+  }, []);
 
   const createRecognition = useCallback(() => {
     if (!isSupported) return null;
@@ -55,12 +64,14 @@ export function useSpeechRecognition({
         const result = event.results[i];
         if (result.isFinal) {
           onTranscriptRef.current(result[0].transcript);
+          interimTranscriptRef.current = '';
           setInterimTranscript('');
         } else {
           interim += result[0].transcript;
         }
       }
       if (interim) {
+        interimTranscriptRef.current = interim;
         setInterimTranscript(interim);
       }
     };
@@ -73,11 +84,12 @@ export function useSpeechRecognition({
 
     recognition.onend = () => {
       setIsListening(false);
-      setInterimTranscript('');
+      // If the browser never finalized the last utterance, commit interim text.
+      commitInterim();
     };
 
     return recognition;
-  }, [isSupported, lang, continuous]);
+  }, [isSupported, lang, continuous, commitInterim]);
 
   const start = useCallback(() => {
     if (!isSupported) return;
@@ -102,7 +114,7 @@ export function useSpeechRecognition({
       recognitionRef.current = null;
     }
     setIsListening(false);
-    setInterimTranscript('');
+    // Leave interim for onend / a final onresult so we don't drop or double-commit.
   }, []);
 
   const toggle = useCallback(() => {

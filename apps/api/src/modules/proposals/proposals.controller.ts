@@ -51,6 +51,16 @@ export class ProposalsController {
     return this.proposalsService.create({ body });
   }
 
+  @Post(':id/accept')
+  async accept(@Param('id') id: string) {
+    return this.proposalsService.accept({ id });
+  }
+
+  @Post(':id/decline')
+  async decline(@Param('id') id: string, @Body() body: { reason?: string }) {
+    return this.proposalsService.decline({ id, reason: body?.reason });
+  }
+
   @Post(':id')
   async update(@Param('id') id: string, @Body() body: Record<string, unknown>) {
     return this.proposalsService.update({ id, body });

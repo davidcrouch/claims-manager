@@ -20,11 +20,13 @@ export class JournalsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('status') status?: string,
+    @Query('jobId') jobId?: string,
   ) {
     return this.journalsService.findAll({
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
       status,
+      jobId,
     });
   }
 

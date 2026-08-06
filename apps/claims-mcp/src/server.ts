@@ -5,6 +5,7 @@ import { registerJobsTools } from './tools/jobs.tool.js';
 import { registerTasksTools } from './tools/tasks.tool.js';
 import { registerContactsTools } from './tools/contacts.tool.js';
 import { registerLookupsTools } from './tools/lookups.tool.js';
+import { registerAssessmentsTools } from './tools/assessments.tool.js';
 
 export interface RequestContext {
   token: string;
@@ -20,7 +21,7 @@ export class ClaimsApiClient {
   async request<T>(
     path: string,
     options?: {
-      method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+      method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
       query?: Record<string, string | number | undefined>;
       body?: unknown;
     },
@@ -102,6 +103,7 @@ export function createClaimsMcpServer(
   registerTasksTools(server, api);
   registerContactsTools(server, api);
   registerLookupsTools(server, api);
+  registerAssessmentsTools(server, api);
 
   return server;
 }

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -45,6 +46,22 @@ export class JobsController {
     @Query('provider') providerOverride?: string,
   ) {
     return this.jobsService.create({ body, providerOverride });
+  }
+
+  @Post(':id/contacts')
+  async addContacts(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { contacts?: Record<string, unknown>[] },
+  ) {
+    return this.jobsService.addContacts({ id, contacts: body.contacts ?? [] });
+  }
+
+  @Delete(':id/contacts/:contactId')
+  async removeContact(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('contactId', ParseUUIDPipe) contactId: string,
+  ) {
+    return this.jobsService.removeContact({ id, contactId });
   }
 
   @Post(':id')

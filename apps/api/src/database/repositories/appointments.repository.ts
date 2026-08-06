@@ -19,12 +19,16 @@ export class AppointmentsRepository {
     status?: string;
     sort?: string;
     order?: 'asc' | 'desc';
+    jobId?: string;
   }): Promise<{ data: AppointmentRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
     const skip = (page - 1) * limit;
 
     const conditions = [eq(appointments.tenantId, params.tenantId)];
+    if (params.jobId) {
+      conditions.push(eq(appointments.jobId, params.jobId));
+    }
     if (params.search) {
       conditions.push(ilike(appointments.name, `%${params.search}%`));
     }

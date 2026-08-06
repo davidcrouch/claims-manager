@@ -25,6 +25,7 @@ import type {
   Appointment,
   Attachment,
   Contact,
+  ContactRelatedJob,
   DashboardStats,
   RecentActivity,
   PaginatedResponse,
@@ -44,6 +45,7 @@ import type {
   UpdateConnectionPayload,
   Journal,
   JournalPage,
+  Assessment,
 } from '@/types/api';
 
 export interface ApiClientOptions {
@@ -238,6 +240,7 @@ export function createApiClient(options?: ApiClientOptions) {
       status?: string;
       sort?: string;
       order?: 'asc' | 'desc';
+      jobId?: string;
     }): Promise<PaginatedResponse<Appointment>> {
       const sp = new URLSearchParams();
       if (params?.page != null) sp.set('page', String(params.page));
@@ -246,6 +249,7 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params?.status) sp.set('status', params.status);
       if (params?.sort) sp.set('sort', params.sort);
       if (params?.order) sp.set('order', params.order);
+      if (params?.jobId) sp.set('jobId', params.jobId);
       return fetchApi<PaginatedResponse<Appointment>>(`/appointments?${sp}`);
     },
 
@@ -379,6 +383,7 @@ export function createApiClient(options?: ApiClientOptions) {
       purchaseOrderId?: string;
       status?: string;
       sort?: string;
+      jobId?: string;
     }): Promise<PaginatedResponse<Invoice>> {
       const sp = new URLSearchParams();
       if (params.page != null) sp.set('page', String(params.page));
@@ -386,6 +391,7 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params.purchaseOrderId) sp.set('purchaseOrderId', params.purchaseOrderId);
       if (params.status) sp.set('status', params.status);
       if (params.sort) sp.set('sort', params.sort);
+      if (params.jobId) sp.set('jobId', params.jobId);
       return fetchApi<PaginatedResponse<Invoice>>(`/invoices?${sp}`);
     },
 
@@ -460,6 +466,10 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi(`/lookups?${sp}`);
     },
 
+    ensureLookup(body: { domain: string; name: string }): Promise<{ id: string; name: string; domain: string }> {
+      return fetchApi('/lookups/ensure', { method: 'POST', body: JSON.stringify(body) });
+    },
+
     createJob(body: Record<string, unknown>, options?: { provider?: string }): Promise<Job> {
       const qs = options?.provider ? `?provider=${encodeURIComponent(options.provider)}` : '';
       return fetchApi<Job>(`/jobs${qs}`, { method: 'POST', body: JSON.stringify(body) });
@@ -469,12 +479,63 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<Job>(`/jobs/${id}`, { method: 'POST', body: JSON.stringify(body) });
     },
 
+    updateClaim(id: string, body: Record<string, unknown>): Promise<Claim> {
+      return fetchApi<Claim>(`/claims/${id}`, { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    updateQuote(id: string, body: Record<string, unknown>): Promise<Quote> {
+      return fetchApi<Quote>(`/quotes/${id}`, { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    updateInvoice(id: string, body: Record<string, unknown>): Promise<Invoice> {
+      return fetchApi<Invoice>(`/invoices/${id}`, { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    updatePurchaseOrder(id: string, body: Record<string, unknown>): Promise<PurchaseOrder> {
+      return fetchApi<PurchaseOrder>(`/purchase-orders/${id}`, { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    updateReport(id: string, body: Record<string, unknown>): Promise<Report> {
+      return fetchApi<Report>(`/reports/${id}`, { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    addJobContacts(
+      id: string,
+      body: {
+        contacts: Array<{
+          contactId?: string;
+          firstName?: string;
+          lastName?: string;
+          email?: string;
+          mobilePhone?: string;
+          homePhone?: string;
+          workPhone?: string;
+          notes?: string;
+        }>;
+      },
+    ): Promise<Job> {
+      return fetchApi<Job>(`/jobs/${id}/contacts`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+
+    removeJobContact(jobId: string, contactId: string): Promise<Job> {
+      return fetchApi<Job>(`/jobs/${jobId}/contacts/${contactId}`, {
+        method: 'DELETE',
+      });
+    },
+
     createQuote(body: Record<string, unknown>): Promise<Quote> {
       return fetchApi<Quote>('/quotes', { method: 'POST', body: JSON.stringify(body) });
     },
 
     publishQuote(id: string): Promise<Quote> {
       return fetchApi<Quote>(`/quotes/${id}/publish`, { method: 'POST' });
+    },
+
+    approveQuote(id: string): Promise<{ quote: Quote; workOrderId: string }> {
+      return fetchApi<{ quote: Quote; workOrderId: string }>(`/quotes/${id}/approve`, { method: 'POST' });
     },
 
     createInvoice(body: Record<string, unknown>): Promise<Invoice> {
@@ -518,13 +579,23 @@ export function createApiClient(options?: ApiClientOptions) {
       limit?: number;
       search?: string;
       sort?: string;
+      jobId?: string;
     }): Promise<PaginatedResponse<Contact>> {
       const sp = new URLSearchParams();
       if (params?.page != null) sp.set('page', String(params.page));
       if (params?.limit != null) sp.set('limit', String(params.limit));
       if (params?.search) sp.set('search', params.search);
       if (params?.sort) sp.set('sort', params.sort);
+      if (params?.jobId) sp.set('jobId', params.jobId);
       return fetchApi<PaginatedResponse<Contact>>(`/contacts?${sp}`);
+    },
+
+    getContact(id: string): Promise<Contact> {
+      return fetchApi<Contact>(`/contacts/${id}`);
+    },
+
+    getContactRelatedJobs(id: string): Promise<ContactRelatedJob[]> {
+      return fetchApi<ContactRelatedJob[]>(`/contacts/${id}/jobs`);
     },
 
     getJobContacts(jobId: string): Promise<{ id: string; type: 'CONTACT'; name: string; email?: string }[]> {
@@ -538,7 +609,7 @@ export function createApiClient(options?: ApiClientOptions) {
     searchContacts(
       query: string,
       type?: 'USER' | 'CONTACT',
-    ): Promise<{ id: string; type: 'USER' | 'CONTACT'; name: string; email?: string }[]> {
+    ): Promise<{ id: string; type: 'USER' | 'CONTACT'; name: string; email?: string; mobilePhone?: string }[]> {
       const sp = new URLSearchParams({ search: query, limit: '20' });
       if (type === 'USER') {
         return fetchApi(`/contacts/search-users?${sp}`);
@@ -550,6 +621,7 @@ export function createApiClient(options?: ApiClientOptions) {
           type: 'CONTACT' as const,
           name: [c.firstName, c.lastName].filter(Boolean).join(' ') || c.email || 'Unknown',
           email: c.email ?? undefined,
+          mobilePhone: c.mobilePhone ?? undefined,
         }));
       });
     },
@@ -685,6 +757,24 @@ export function createApiClient(options?: ApiClientOptions) {
 
     updateProposal(id: string, body: Record<string, unknown>): Promise<Proposal> {
       return fetchApi<Proposal>(`/proposals/${id}`, { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    acceptProposal(id: string): Promise<Proposal> {
+      return fetchApi<Proposal>(`/proposals/${id}/accept`, { method: 'POST' });
+    },
+
+    declineProposal(id: string, reason?: string): Promise<Proposal> {
+      return fetchApi<Proposal>(`/proposals/${id}/decline`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      });
+    },
+
+    captureEstimate(body: CaptureEstimateRequest): Promise<CaptureEstimateResponse> {
+      return fetchApi<CaptureEstimateResponse>('/quotes/capture', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
     },
 
     // Bills
@@ -1100,11 +1190,13 @@ export function createApiClient(options?: ApiClientOptions) {
       page?: number;
       limit?: number;
       status?: string;
+      jobId?: string;
     }): Promise<PaginatedResponse<Journal>> {
       const sp = new URLSearchParams();
       if (params?.page != null) sp.set('page', String(params.page));
       if (params?.limit != null) sp.set('limit', String(params.limit));
       if (params?.status) sp.set('status', params.status);
+      if (params?.jobId) sp.set('jobId', params.jobId);
       return fetchApi<PaginatedResponse<Journal>>(`/journals?${sp}`);
     },
 
@@ -1250,6 +1342,44 @@ export function createApiClient(options?: ApiClientOptions) {
       attachmentId: string,
     ): Promise<{ downloadUrl: string; fileName: string; mimeType: string }> {
       return fetchApi(`/journals/${journalId}/pages/${pageId}/attachments/${attachmentId}/download`);
+    },
+
+    // -- Assessments --
+
+    getAssessments(params?: {
+      page?: number;
+      limit?: number;
+      status?: string;
+      jobId?: string;
+    }): Promise<PaginatedResponse<Assessment>> {
+      const sp = new URLSearchParams();
+      if (params?.page != null) sp.set('page', String(params.page));
+      if (params?.limit != null) sp.set('limit', String(params.limit));
+      if (params?.status) sp.set('status', params.status);
+      if (params?.jobId) sp.set('jobId', params.jobId);
+      return fetchApi<PaginatedResponse<Assessment>>(`/assessments?${sp}`);
+    },
+
+    getAssessment(id: string): Promise<Assessment> {
+      return fetchApi<Assessment>(`/assessments/${id}`);
+    },
+
+    createAssessment(data: Partial<Assessment> & { name: string }): Promise<Assessment> {
+      return fetchApi<Assessment>('/assessments', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    updateAssessment(id: string, data: Partial<Assessment>): Promise<Assessment> {
+      return fetchApi<Assessment>(`/assessments/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      });
+    },
+
+    deleteAssessment(id: string): Promise<{ deleted: boolean }> {
+      return fetchApi(`/assessments/${id}`, { method: 'DELETE' });
     },
 
     getScheduleEvents(params: {
@@ -2164,6 +2294,30 @@ export interface CapturePoRequest {
 export interface CapturePoResponse {
   purchaseOrderId: string;
   workOrderId: string;
+  issuerOrganisationId: string;
+  issuerCreated: boolean;
+}
+
+export interface CaptureEstimateRequest {
+  issuer: CapturePoIssuer;
+  quoteNumber?: string;
+  name: string;
+  reference?: string;
+  note?: string;
+  quoteDate?: string;
+  expiresInDays?: number;
+  subTotal?: number;
+  totalTax?: number;
+  totalAmount?: number;
+  jobId?: string;
+  claimId?: string;
+  rfqId?: string;
+  sourceDocumentId?: string;
+}
+
+export interface CaptureEstimateResponse {
+  quoteId: string;
+  proposalId: string;
   issuerOrganisationId: string;
   issuerCreated: boolean;
 }

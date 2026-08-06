@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
+import { PrintButton } from '@/components/shared/PrintButton';
 import { JobsListClient } from './JobsListClient';
 import { JobFormDrawer } from '@/components/forms/JobFormDrawer';
 import type { Job, PaginatedResponse } from '@/types/api';
@@ -36,6 +37,7 @@ export function JobsPageClient({
         >
           Create Job
         </Button>
+        <PrintButton documentType="jobs_list" entityId="list" />
       </SetHeaderActions>
       <JobsListClient
         initialData={initialData}
@@ -48,7 +50,10 @@ export function JobsPageClient({
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
         jobTypes={jobTypes}
-        onSuccess={() => setRefreshNonce((n) => n + 1)}
+        onSuccess={() => {
+          // Force the list to refetch when we return from the new job page.
+          setRefreshNonce((n) => n + 1);
+        }}
       />
     </>
   );

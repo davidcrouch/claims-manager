@@ -17,6 +17,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { BackButton } from '@/components/layout/BackButton';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import {
   DefRow,
   SectionCard,
@@ -24,8 +25,10 @@ import {
   formatDateTime,
   formatCurrency,
 } from '@/components/shared/detail';
-import type { Invoice } from '@/types/api';
-import { GenerateDocumentButton } from '@/components/shared/GenerateDocumentButton';
+import type { Invoice, Job } from '@/types/api';
+import { PrintButton } from '@/components/shared/PrintButton';
+import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
+import { jobDisplayName } from '@/components/shared/job-label';
 import { JournalList } from '@/components/journals/JournalList';
 import {
   fetchJournalsByEntityAction,
@@ -37,54 +40,65 @@ import {
 
 // ---------- header ----------------------------------------------------------
 
-export function InvoicePageHeader({ invoice }: { invoice: Invoice }) {
+export function InvoicePageHeader({ invoice, job }: { invoice: Invoice; job?: Job | null }) {
   const title = invoice.invoiceNumber ?? invoice.id;
   const statusName = invoice.status?.name ?? 'Unknown';
 
   return (
-    <div className="flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-2">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-        <BackButton href="/invoices" label="Back to invoices" />
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-teal-100">
-          <Receipt className="h-4 w-4 text-teal-600" />
-        </span>
-        <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
-        <StatusBadge status={statusName} />
-        {invoice.purchaseOrderId && (
-          <Link
-            href={`/purchase-orders/${invoice.purchaseOrderId}`}
-            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-          >
-            View PO
-            <ExternalLink className="h-3 w-3" />
-          </Link>
-        )}
-        {invoice.jobId && (
-          <Link
-            href={`/jobs/${invoice.jobId}`}
-            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-          >
-            View Job
-            <ExternalLink className="h-3 w-3" />
-          </Link>
-        )}
+    <>
+      <SetHeaderActions>
+        <PrintButton documentType="invoice" entityId={invoice.id} />
+        <ArchiveEntityButton
+          entityType="invoice"
+          entityId={invoice.id}
+          statusName={statusName}
+          entityLabel={title}
+          redirectTo={job ? `/invoices?jobId=${job.id}` : '/invoices'}
+        />
+      </SetHeaderActions>
+      <div className="flex w-full min-w-0 flex-col gap-y-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+          <BackButton href={job ? `/invoices?jobId=${job.id}` : '/invoices'} label="Back to invoices" />
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-teal-100">
+            <Receipt className="h-4 w-4 text-teal-600" />
+          </span>
+          <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
+          <StatusBadge status={statusName} />
+          {invoice.purchaseOrderId && (
+            <Link
+              href={`/purchase-orders/${invoice.purchaseOrderId}`}
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              View PO
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
+          {job && (
+            <Link
+              href={`/jobs/${job.id}`}
+              className="inline-flex items-center gap-1 text-xs uppercase text-primary hover:underline"
+            >
+              {jobDisplayName(job)}
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pl-20 text-xs">
+          <div className="flex items-baseline gap-1">
+            <span className="text-muted-foreground">Amount:</span>
+            <span className="font-medium">{formatCurrency(invoice.totalAmount)}</span>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-muted-foreground">Issue date:</span>
+            <span className="font-medium">{formatDate(invoice.issueDate)}</span>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-muted-foreground">Updated:</span>
+            <span className="font-medium">{formatDateTime(invoice.updatedAt)}</span>
+          </div>
+        </div>
       </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1 text-xs">
-        <GenerateDocumentButton entityId={invoice.id} documentType="invoice" />
-        <div className="flex items-baseline gap-1">
-          <span className="text-muted-foreground">Amount:</span>
-          <span className="font-medium">{formatCurrency(invoice.totalAmount)}</span>
-        </div>
-        <div className="flex items-baseline gap-1">
-          <span className="text-muted-foreground">Issue date:</span>
-          <span className="font-medium">{formatDate(invoice.issueDate)}</span>
-        </div>
-        <div className="flex items-baseline gap-1">
-          <span className="text-muted-foreground">Updated:</span>
-          <span className="font-medium">{formatDateTime(invoice.updatedAt)}</span>
-        </div>
-      </div>
-    </div>
+    </>
   );
 }
 

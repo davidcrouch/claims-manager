@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { PurchaseOrdersPageClient } from '@/components/purchase-orders/PurchaseOrdersPageClient';
 import { buildJobNameById, toJobOptions } from '@/components/shared/job-label';
-import type { Job, PaginatedResponse, PurchaseOrder } from '@/types/api';
+import type { Job, PaginatedResponse, PurchaseOrder, Claim } from '@/types/api';
 
 export default async function PurchaseOrdersPage({
   searchParams,
@@ -43,6 +43,21 @@ export default async function PurchaseOrdersPage({
     }),
   ]);
 
+  let job: Job | null = null;
+  let parentClaim: Claim | null = null;
+  if (params.jobId) {
+    job = await api.getJob(params.jobId).catch((err: unknown) => {
+      console.error(
+        'frontend:PurchaseOrdersPage - getJob failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return null;
+    });
+    if (job?.claimId) {
+      parentClaim = await api.getClaim(job.claimId).catch(() => null);
+    }
+  }
+
   const statusOptions = (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map(
     (row) => ({
       id: row.id,
@@ -63,6 +78,8 @@ export default async function PurchaseOrdersPage({
       vendorOptions={vendorOptions}
       jobNameById={jobNameById}
       jobs={toJobOptions(jobs)}
+      job={job}
+      parentClaim={parentClaim}
     />
   );
 }

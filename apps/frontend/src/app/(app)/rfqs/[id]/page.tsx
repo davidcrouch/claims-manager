@@ -37,10 +37,12 @@ export default async function RfqDetailPage({
   });
   if (!rfq) notFound();
 
+  const job = rfq.jobId ? await api.getJob(rfq.jobId).catch(() => null) : null;
+
   return (
     <>
       <SetPageHeader>
-        <RfqPageHeader rfq={rfq} />
+        <RfqPageHeader rfq={rfq} job={job} />
       </SetPageHeader>
       <RfqDetail rfq={rfq} fetchProposals={fetchRfqProposalsAction} />
     </>

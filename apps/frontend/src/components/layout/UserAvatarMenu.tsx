@@ -37,11 +37,11 @@ export function UserAvatarMenu({ user }: UserAvatarMenuProps) {
         className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
         aria-label={`Account menu for ${displayName}`}
       >
-        <Avatar size="sm" className="size-8 cursor-pointer">
+        <Avatar className="size-9 cursor-pointer">
           {user?.picture ? (
             <AvatarImage src={user.picture} alt={displayName} />
           ) : null}
-          <AvatarFallback className="bg-sidebar-accent text-xs font-medium text-sidebar-foreground">
+          <AvatarFallback className="bg-sidebar-accent text-sm font-medium text-sidebar-foreground">
             {initials}
           </AvatarFallback>
         </Avatar>

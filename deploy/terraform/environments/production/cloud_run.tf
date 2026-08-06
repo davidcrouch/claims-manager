@@ -6,10 +6,12 @@ locals {
   image_tag       = var.cloud_run_image_tag
   bootstrap_image = "us-docker.pkg.dev/cloudrun/container/hello"
 
-  run_host         = "${data.google_project.this.number}.${var.region}.run.app"
-  auth_run_url     = "https://auth-server-${local.run_host}"
-  frontend_run_url = "https://frontend-${local.run_host}"
-  api_run_url      = "https://api-server-${local.run_host}"
+  run_host             = "${data.google_project.this.number}.${var.region}.run.app"
+  auth_run_url         = "https://auth-server-${local.run_host}"
+  frontend_run_url     = "https://frontend-${local.run_host}"
+  api_run_url          = "https://api-server-${local.run_host}"
+  claims_mcp_run_url   = "https://claims-mcp-${local.run_host}"
+  ms_graph_mcp_run_url = "https://ms-graph-mcp-${local.run_host}"
 
   # Production hostnames have no env suffix (app.example.com vs app-staging.example.com).
   cloud_run_domain_suffix = trimsuffix(var.dns_name, ".")
@@ -161,6 +163,21 @@ module "cloud_run_api" {
     SEED_NEW_TENANTS       = "true"
     # Demo sample rows stay off in production; catalog-dev still runs.
     SEED_SAMPLE_DATA       = "false"
+    # Documents / provisioning template uploads (CI syncs data/templates → platform/templates/)
+    GCS_DOCUMENTS_BUCKET   = module.gcs.documents_bucket_name
+    GCS_UPLOAD_CORS_ORIGIN = (
+      var.use_public_hostnames
+      ? "https://${local.cloud_run_hosts.app}"
+      : local.frontend_run_url
+    )
+    # MCP integrations seeded into new orgs (path must include /mcp)
+    CLAIMS_MCP_URL   = "${local.claims_mcp_run_url}/mcp"
+    MS_GRAPH_MCP_URL = "${local.ms_graph_mcp_run_url}/mcp"
+    MCP_OAUTH_CALLBACK_BASE_URL = (
+      var.use_public_hostnames
+      ? "https://${local.cloud_run_hosts.app}"
+      : local.frontend_run_url
+    )
     # JWT validation against auth-server (public hostname when LB is on).
     AUTH_ISSUER_URL = (
       var.use_public_hostnames
@@ -344,6 +361,7 @@ module "cloud_run_claims_mcp" {
   allow_unauthenticated = false
   invoker_members = [
     "serviceAccount:${module.iam.service_account_emails["frontend"]}",
+    "serviceAccount:${module.iam.service_account_emails["api-server"]}",
   ]
   vpc_network = module.networking.vpc_self_link
   vpc_subnet  = module.networking.subnet_self_link
@@ -382,6 +400,7 @@ module "cloud_run_ms_graph_mcp" {
   allow_unauthenticated = false
   invoker_members = [
     "serviceAccount:${module.iam.service_account_emails["frontend"]}",
+    "serviceAccount:${module.iam.service_account_emails["api-server"]}",
   ]
   vpc_network = module.networking.vpc_self_link
   vpc_subnet  = module.networking.subnet_self_link

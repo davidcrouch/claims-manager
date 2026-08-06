@@ -87,6 +87,13 @@ export class ClaimsService {
     const existing = await this.findOne({ id: params.id });
     if (!existing) return null;
 
+    if (typeof params.body.statusLookupId === 'string' && params.body.statusLookupId) {
+      return this.claimsRepo.update({
+        id: params.id,
+        data: { statusLookupId: params.body.statusLookupId },
+      });
+    }
+
     const tenantId = this.tenantContext.getTenantId();
     const connectionId = await this.resolveConnectionId(tenantId);
     const apiClaim = await this.crunchworkService.updateClaim({

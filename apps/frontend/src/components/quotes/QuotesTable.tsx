@@ -1,8 +1,12 @@
 'use client';
 
-import { Trash2 } from 'lucide-react';
-import { formatDate, SortableColumnHeader, type ColumnValueFilter } from '@/components/shared/list-filters';
+import { formatDate, SortableColumnHeader, TableEmptyRow, type ColumnValueFilter } from '@/components/shared/list-filters';
+import {
+  ColumnSettingsHeaderCell,
+  useColumnVisibility,
+} from '@/components/shared/column-visibility';
 import { resolveJobName } from '@/components/shared/job-label';
+import { ListArchiveButton, LIST_ARCHIVE_TH_CLASS, LIST_ARCHIVE_TD_CLASS, LIST_ARCHIVE_SPACER_TD_CLASS } from '@/components/shared/ListArchiveButton';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { TypeBadge } from '@/components/ui/type-badge';
 import type { Quote } from '@/types/api';
@@ -51,10 +55,10 @@ export type QuoteSortField =
   | 'quote_date'
   | 'updated_at';
 
-interface ColDef { key: QuoteSortField; label: string; filterable?: boolean }
+interface ColDef { key: QuoteSortField; label: string; filterable?: boolean; locked?: boolean }
 
 const TABLE_COLUMNS: ColDef[] = [
-  { key: 'quote_number', label: 'Estimate #' },
+  { key: 'quote_number', label: 'Estimate #', locked: true },
   { key: 'job', label: 'Job' },
   { key: 'reference', label: 'Reference' },
   { key: 'status', label: 'Status', filterable: true },
@@ -68,9 +72,7 @@ export interface QuotesTableProps {
   quotes: Quote[];
   jobNameById?: Record<string, string>;
   onRowClick?: (quote: Quote) => void;
-  onDelete?: (quoteId: string) => void;
-  deletingId?: string | null;
-  showActions?: boolean;
+  onArchived?: (quoteId: string) => void;
   sortField?: QuoteSortField;
   sortOrder?: 'asc' | 'desc';
   onSort?: (field: QuoteSortField) => void;
@@ -82,16 +84,19 @@ export function QuotesTable({
   quotes,
   jobNameById,
   onRowClick,
-  onDelete,
-  deletingId,
-  showActions = false,
+  onArchived,
   sortField,
   sortOrder = 'desc',
   onSort,
   statusColumnFilter,
   estimateTypeColumnFilter,
 }: QuotesTableProps) {
-  if (quotes.length === 0) return null;
+  const { isVisible, toggle, visibleCount } = useColumnVisibility(
+    'quotes',
+    TABLE_COLUMNS,
+  );
+  const visibleColumns = TABLE_COLUMNS.filter((col) => isVisible(col.key));
+  const colSpan = visibleCount + 2;
 
   return (
     <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -99,7 +104,7 @@ export function QuotesTable({
         <thead className="bg-slate-50">
           <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             {onSort || statusColumnFilter || estimateTypeColumnFilter
-              ? TABLE_COLUMNS.map((col) => (
+              ? visibleColumns.map((col) => (
                   <SortableColumnHeader
                     key={col.key}
                     columnKey={col.key}
@@ -116,20 +121,26 @@ export function QuotesTable({
                     }
                   />
                 ))
-              : TABLE_COLUMNS.map((col) => (
+              : visibleColumns.map((col) => (
                   <th key={col.key} scope="col" className="px-4 py-3">
                     {col.label}
                   </th>
                 ))}
-            {showActions && (
-              <th scope="col" className="px-4 py-3 w-10">
-                <span className="sr-only">Actions</span>
-              </th>
-            )}
+            <th scope="col" className={LIST_ARCHIVE_TH_CLASS}>
+              <span className="sr-only">Actions</span>
+            </th>
+            <ColumnSettingsHeaderCell
+              columns={TABLE_COLUMNS}
+              isVisible={isVisible}
+              onToggle={toggle}
+            />
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {quotes.map((quote) => {
+          {quotes.length === 0 ? (
+            <TableEmptyRow colSpan={colSpan} label="No estimates found." />
+          ) : (
+            quotes.map((quote) => {
             const num = quote.quoteNumber ?? quote.name ?? quote.id;
             const statusName = quote.status?.name ?? 'Unknown';
             const estimateType = getEstimateTypeName(quote);
@@ -139,49 +150,63 @@ export function QuotesTable({
                 onClick={() => onRowClick?.(quote)}
                 className="cursor-pointer transition-colors hover:bg-slate-50"
               >
-                <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
-                  {num}
-                </td>
-                <td className="px-4 py-3 text-slate-600">
-                  {resolveJobName(quote.jobId, jobNameById)}
-                </td>
-                <td className="px-4 py-3 text-slate-600">
-                  {quote.name ?? ''}
-                </td>
-                <td className="whitespace-nowrap px-4 py-3">
-                  <StatusBadge status={statusName} />
-                </td>
-                <td className="px-4 py-3">
-                  <TypeBadge type={estimateType} />
-                </td>
-                <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                  {formatAmount(quote.totalAmount)}
-                </td>
-                <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                  {formatDate(quote.quoteDate)}
-                </td>
-                <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                  {formatDate(quote.updatedAt)}
-                </td>
-                {showActions && (
-                  <td className="whitespace-nowrap px-4 py-2 text-center">
-                    <button
-                      type="button"
-                      disabled={deletingId === quote.id}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDelete?.(quote.id);
-                      }}
-                      className="inline-flex items-center justify-center rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-                      title="Delete estimate"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                {isVisible('quote_number') && (
+                  <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
+                    {num}
                   </td>
                 )}
+                {isVisible('job') && (
+                  <td className="px-4 py-3 text-slate-600">
+                    {resolveJobName(quote.jobId, jobNameById)}
+                  </td>
+                )}
+                {isVisible('reference') && (
+                  <td className="px-4 py-3 text-slate-600">
+                    {quote.name ?? ''}
+                  </td>
+                )}
+                {isVisible('status') && (
+                  <td className="whitespace-nowrap px-4 py-3">
+                    <StatusBadge status={statusName} />
+                  </td>
+                )}
+                {isVisible('estimate_type') && (
+                  <td className="px-4 py-3">
+                    <TypeBadge type={estimateType} />
+                  </td>
+                )}
+                {isVisible('total_amount') && (
+                  <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                    {formatAmount(quote.totalAmount)}
+                  </td>
+                )}
+                {isVisible('quote_date') && (
+                  <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                    {formatDate(quote.quoteDate)}
+                  </td>
+                )}
+                {isVisible('updated_at') && (
+                  <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                    {formatDate(quote.updatedAt)}
+                  </td>
+                )}
+                <td
+                  className={LIST_ARCHIVE_TD_CLASS}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <ListArchiveButton
+                    entityType="quote"
+                    entityId={quote.id}
+                    statusName={statusName}
+                    entityLabel={num}
+                    onArchived={onArchived}
+                  />
+                </td>
+                <td className={LIST_ARCHIVE_SPACER_TD_CLASS} aria-hidden />
               </tr>
             );
-          })}
+          })
+          )}
         </tbody>
       </table>
     </div>

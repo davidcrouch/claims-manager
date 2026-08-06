@@ -58,6 +58,15 @@ function resolveRedirectUri(req: NextRequest): string {
 }
 
 export async function GET(req: NextRequest) {
+  return startLogin(req);
+}
+
+/** Safety net: Server Action redirects can arrive as POST; same OIDC start as GET. */
+export async function POST(req: NextRequest) {
+  return startLogin(req);
+}
+
+async function startLogin(req: NextRequest) {
   try {
     const interaction = req.nextUrl.searchParams.get('interaction');
     if (interaction) {

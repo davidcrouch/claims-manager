@@ -574,3 +574,14 @@
   Kept create drawers available from both list pages and job workspaces without duplicate toolbar clutter.
   Outcome: staff see create controls in one place and can attach new records to jobs more reliably.
 
+
+- `2026-08-07` `pending` **50.5 h**
+  `291 files | +16 394 −7 321 | Tier 2 standard / Tier 3 complex / Tier 4 deep integration | Heavy orchestration`
+  Lay summary: Staff can run site assessments, move estimates and proposals between partner organisations, generate documents from more record types, and archive day-to-day records from list screens.
+  **Assessments, cross-organisation estimates and proposals, broader document generation, and shared list archive controls.** Delivered a full **assessments** capability so teams can capture site findings, hazards, and comments against jobs with matching API, assistant tools, and workspace screens.
+  Enabled **cross-organisation estimate and proposal handoffs** so partner tenants can receive, review, and progress shared commercial documents with custody tracking.
+  Expanded **template-driven document generation** across claims, jobs, contacts, journals, messages, tasks, vendors, and major list views so staff can produce client-ready files from more records.
+  Added **shared archive and status controls** on list and detail screens so active versus archived work is managed consistently across modules.
+  Improved **estimate capture, approval, and publish** flows plus job contact linking so quoting and party management stay in one workspace.
+  Outcome: operations, commercial handoffs, documentation, and record lifecycle controls land as one coherent product update.
+

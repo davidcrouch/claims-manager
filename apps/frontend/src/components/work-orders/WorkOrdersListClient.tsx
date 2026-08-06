@@ -16,17 +16,24 @@ import {
   columnFilterToIdsParam,
   ValueFilterMenu,
   SortableColumnHeader,
+  TableEmptyRow,
 } from '@/components/shared/list-filters';
 import { resolveJobName } from '@/components/shared/job-label';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import {
-  ListPageHeader,
-  computeStatusBreakdown,
-} from '@/components/layout/ListPageHeader';
+  EntityPageHeader,
+  type EntityBreakdownItem,
+} from '@/components/shared/EntityPageHeader';
+import { computeStatusBreakdown } from '@/components/layout/ListPageHeader';
 import { CapturePoDrawer } from '@/components/forms/CapturePoDrawer';
 import { fetchWorkOrdersAction } from '@/app/(app)/work-orders/actions';
 import { TablePagination } from '@/components/shared/table-pagination';
-import type { WorkOrder, PaginatedResponse } from '@/types/api';
+import {
+  ColumnSettingsHeaderCell,
+  useColumnVisibility,
+} from '@/components/shared/column-visibility';
+import { ListArchiveButton, LIST_ARCHIVE_TH_CLASS, LIST_ARCHIVE_TD_CLASS, LIST_ARCHIVE_SPACER_TD_CLASS } from '@/components/shared/ListArchiveButton';
+import type { WorkOrder, PaginatedResponse, Job, Claim } from '@/types/api';
 
 const PAGE_SIZE = 20;
 
@@ -49,7 +56,7 @@ function formatAmount(value?: string | null): string {
 }
 
 type WOSortField =
-  | 'work_order_number'
+  | 'name'
   | 'job'
   | 'status'
   | 'wo_type'
@@ -58,10 +65,10 @@ type WOSortField =
   | 'start_date'
   | 'updated_at';
 
-interface ColDef { key: WOSortField; label: string; filterable?: boolean }
+interface ColDef { key: WOSortField; label: string; filterable?: boolean; locked?: boolean }
 
 const TABLE_COLUMNS: ColDef[] = [
-  { key: 'work_order_number', label: 'WO #' },
+  { key: 'name', label: 'Name', locked: true },
   { key: 'job', label: 'Job' },
   { key: 'status', label: 'Status', filterable: true },
   { key: 'wo_type', label: 'Type', filterable: true },
@@ -76,6 +83,9 @@ export interface WorkOrdersListClientProps {
   statusOptions: StatusOption[];
   workOrderTypes: StatusOption[];
   jobNameById?: Record<string, string>;
+  /** When provided, the page header shows job details and data is scoped to this job. */
+  job?: Job | null;
+  parentClaim?: Claim | null;
 }
 
 export function WorkOrdersListClient({
@@ -83,9 +93,12 @@ export function WorkOrdersListClient({
   statusOptions,
   workOrderTypes,
   jobNameById,
+  job,
+  parentClaim,
 }: WorkOrdersListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const jobId = searchParams.get('jobId');
   const [data, setData] = useState(initialData);
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [debouncedSearch, setDebouncedSearch] = useState(search);
@@ -103,6 +116,10 @@ export function WorkOrdersListClient({
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [statusFilterActive, setStatusFilterActive] = useState(false);
   const [captureDrawerOpen, setCaptureDrawerOpen] = useState(false);
+  const { isVisible, toggle, visibleCount } = useColumnVisibility(
+    'work-orders',
+    TABLE_COLUMNS,
+  );
 
   const lastFetchKeyRef = useRef<string | null>(null);
   const statusParam = useMemo(
@@ -124,7 +141,7 @@ export function WorkOrdersListClient({
   useEffect(() => {
     const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
     const typeKey = workOrderTypeParam === null ? '__none__' : (workOrderTypeParam ?? '');
-    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${typeKey}`;
+    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${typeKey}|${jobId ?? ''}`;
 
     const params = new URLSearchParams(searchParams.toString());
     params.set('search', debouncedSearch);
@@ -133,6 +150,8 @@ export function WorkOrdersListClient({
     params.set('sort', sortParam);
     if (statusParam) params.set('status', statusParam); else params.delete('status');
     if (workOrderTypeParam) params.set('workOrderType', workOrderTypeParam); else params.delete('workOrderType');
+    if (jobId) params.set('jobId', jobId);
+    else params.delete('jobId');
     router.replace(`/work-orders?${params}`, { scroll: false });
 
     if (lastFetchKeyRef.current === fetchKey) return;
@@ -149,16 +168,17 @@ export function WorkOrdersListClient({
       sort: sortParam,
       status: statusParam,
       workOrderType: workOrderTypeParam,
+      jobId: jobId ?? undefined,
     }).then((res) => res && setData(res));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, sortParam, tab, page, statusParam, workOrderTypeParam]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop: router.replace updates URL -> searchParams changes -> effect re-runs
+  }, [debouncedSearch, sortParam, tab, page, statusParam, workOrderTypeParam, jobId]);
 
   const handleColumnSort = (field: WOSortField) => {
     setColumnSort((prev) => {
       if (prev.field === field) {
         return { field, order: prev.order === 'asc' ? 'desc' : 'asc' };
       }
-      return { field, order: field === 'work_order_number' ? 'asc' : 'desc' };
+      return { field, order: field === 'name' ? 'asc' : 'desc' };
     });
     setPage(1);
   };
@@ -289,7 +309,7 @@ export function WorkOrdersListClient({
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
       <SetPageHeader>
-        <ListPageHeader
+        <EntityPageHeader
           icon={ClipboardCheck}
           title="Work Orders"
           total={data.total}
@@ -298,6 +318,8 @@ export function WorkOrdersListClient({
           breakdown={breakdown}
           stats={totalValue ? [{ label: 'Total value', value: totalValue }] : undefined}
           accent="indigo"
+          job={job}
+          parentClaim={parentClaim}
         />
       </SetPageHeader>
       <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
@@ -367,12 +389,11 @@ export function WorkOrdersListClient({
         className="flex-1 px-6 pb-6"
         style={{ minHeight: 0, overflow: 'auto' }}
       >
-        {visibleRows.length > 0 ? (
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50">
                 <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                  {TABLE_COLUMNS.map((col) => (
+                  {TABLE_COLUMNS.filter((col) => isVisible(col.key)).map((col) => (
                     <SortableColumnHeader
                       key={col.key}
                       columnKey={col.key}
@@ -389,54 +410,105 @@ export function WorkOrdersListClient({
                       }
                     />
                   ))}
+                  <th scope="col" className={LIST_ARCHIVE_TH_CLASS}>
+                    <span className="sr-only">Actions</span>
+                  </th>
+                  <ColumnSettingsHeaderCell
+                    columns={TABLE_COLUMNS}
+                    isVisible={isVisible}
+                    onToggle={toggle}
+                  />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {visibleRows.map((wo) => {
-                  const num = wo.workOrderNumber ?? wo.externalId ?? wo.id;
+                {visibleRows.length === 0 ? (
+                  <TableEmptyRow colSpan={visibleCount + 2} label="No work orders found." />
+                ) : (
+                  visibleRows.map((wo) => {
+                  const displayName = wo.name?.trim() || wo.workOrderNumber || wo.externalId || wo.id;
                   const statusName = wo.status?.name ?? 'Unknown';
                   const woType = wo.workOrderType?.name ?? '';
                   const source = wo.sourceExternalReference ?? '';
                   return (
                     <tr
                       key={wo.id}
-                      onClick={() => router.push(`/work-orders/${wo.id}`)}
+                      onClick={() => {
+                        const jobId = searchParams.get('jobId');
+                        const href = jobId ? `/work-orders/${wo.id}?jobId=${jobId}` : `/work-orders/${wo.id}`;
+                        router.push(href);
+                      }}
                       className="cursor-pointer transition-colors hover:bg-slate-50"
                     >
-                      <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
-                        {num}
+                      {isVisible('name') && (
+                        <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
+                          {displayName}
+                        </td>
+                      )}
+                      {isVisible('job') && (
+                        <td className="px-4 py-3 text-slate-600">
+                          {resolveJobName(wo.jobId, jobNameById)}
+                        </td>
+                      )}
+                      {isVisible('status') && (
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <StatusBadge status={statusName} />
+                        </td>
+                      )}
+                      {isVisible('wo_type') && (
+                        <td className="px-4 py-3">
+                          <TypeBadge type={woType} />
+                        </td>
+                      )}
+                      {isVisible('source') && (
+                        <td className="px-4 py-3 text-slate-600">
+                          <span className="flex items-center gap-1.5">
+                            {source}
+                            {wo.sourceOrganisationId && (
+                              <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20">
+                                External
+                              </span>
+                            )}
+                          </span>
+                        </td>
+                      )}
+                      {isVisible('total_amount') && (
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                          {formatAmount(wo.totalAmount)}
+                        </td>
+                      )}
+                      {isVisible('start_date') && (
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                          {formatDate(wo.startDate)}
+                        </td>
+                      )}
+                      {isVisible('updated_at') && (
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                          {formatDate(wo.updatedAt)}
+                        </td>
+                      )}
+                      <td
+                        className={LIST_ARCHIVE_TD_CLASS}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <ListArchiveButton
+                          entityType="work_order"
+                          entityId={wo.id}
+                          statusName={statusName}
+                          entityLabel={displayName}
+                          onArchived={(id) => {
+                            setData((prev) => ({
+                              ...prev,
+                              data: prev.data.filter((row) => row.id !== id),
+                              total: Math.max(0, prev.total - 1),
+                            }));
+                          }}
+                        />
                       </td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {resolveJobName(wo.jobId, jobNameById)}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3">
-                        <StatusBadge status={statusName} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <TypeBadge type={woType} />
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">
-                        <span className="flex items-center gap-1.5">
-                          {source}
-                          {wo.sourceOrganisationId && (
-                            <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20">
-                              External
-                            </span>
-                          )}
-                        </span>
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {formatAmount(wo.totalAmount)}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {formatDate(wo.startDate)}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {formatDate(wo.updatedAt)}
-                      </td>
+                      <td className={LIST_ARCHIVE_SPACER_TD_CLASS} aria-hidden />
                     </tr>
                   );
-                })}
+                })
+                )}
               </tbody>
             </table>
             <TablePagination
@@ -446,16 +518,6 @@ export function WorkOrdersListClient({
               onPageChange={handlePageChange}
             />
           </div>
-        ) : (
-          <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50">
-            <div className="flex flex-col items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-100">
-                <Search size={24} className="text-slate-400" />
-              </div>
-              <p className="text-sm text-slate-400">No work orders found.</p>
-            </div>
-          </div>
-        )}
       </div>
 
       <CapturePoDrawer

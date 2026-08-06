@@ -188,7 +188,16 @@ export class OrganisationsService {
       }
 
       // 3. Transfer custodial POs
-      const result = await this.custodyTransferService.transferCustodialPurchaseOrders({
+      const poResult = await this.custodyTransferService.transferCustodialPurchaseOrders({
+        ghostOrganisationId: claim.ghostOrganisationId,
+        issuerTenantId: claim.claimingTenantId,
+        organisationClaimId: claimId,
+        transferredByUserId: reviewedByUserId,
+        tx,
+      });
+
+      // 4. Transfer custodial Quotes/Estimates
+      const quoteResult = await this.custodyTransferService.transferCustodialQuotes({
         ghostOrganisationId: claim.ghostOrganisationId,
         issuerTenantId: claim.claimingTenantId,
         organisationClaimId: claimId,
@@ -199,7 +208,9 @@ export class OrganisationsService {
       return {
         claimId,
         status: 'approved',
-        ...result,
+        transferredCount: poResult.transferredCount + quoteResult.transferredCount,
+        purchaseOrderIds: poResult.purchaseOrderIds,
+        quoteIds: quoteResult.quoteIds,
       };
     });
   }

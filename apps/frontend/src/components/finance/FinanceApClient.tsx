@@ -10,7 +10,7 @@ import {
   SortTabs,
   SearchInput,
   StatusFilterMenu,
-  ListEmptyState,
+  TableEmptyRow,
   type SortOption,
   compareDates,
   compareValues,
@@ -201,22 +201,24 @@ export function FinanceApClient({ summary, bills }: Props) {
       </div>
 
       <div className="flex-1 px-6 pb-6" style={{ minHeight: 0, overflow: 'auto' }}>
-        {visibleRows.length > 0 ? (
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50">
-                <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                  <th scope="col" className="px-4 py-3">Bill #</th>
-                  <th scope="col" className="px-4 py-3 text-right">Amount</th>
-                  <th scope="col" className="px-4 py-3">Received</th>
-                  <th scope="col" className="px-4 py-3">Due Date</th>
-                  <th scope="col" className="px-4 py-3">Status</th>
-                  <th scope="col" className="px-4 py-3 text-right">Age (days)</th>
-                  <th scope="col" className="px-4 py-3">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {visibleRows.map((bill) => (
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <thead className="bg-slate-50">
+              <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                <th scope="col" className="px-4 py-3">Bill #</th>
+                <th scope="col" className="px-4 py-3 text-right">Amount</th>
+                <th scope="col" className="px-4 py-3">Received</th>
+                <th scope="col" className="px-4 py-3">Due Date</th>
+                <th scope="col" className="px-4 py-3">Status</th>
+                <th scope="col" className="px-4 py-3 text-right">Age (days)</th>
+                <th scope="col" className="px-4 py-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {visibleRows.length === 0 ? (
+                <TableEmptyRow colSpan={7} label="No payables match your filters." />
+              ) : (
+                visibleRows.map((bill) => (
                   <tr key={bill.id} className="transition-colors hover:bg-slate-50">
                     <td className="px-4 py-3 font-medium text-slate-900">
                       <Link href={`/bills/${bill.id}`} className="text-primary hover:underline">
@@ -249,13 +251,11 @@ export function FinanceApClient({ summary, bills }: Props) {
                       </Link>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <ListEmptyState label="No payables match your filters." />
-        )}
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

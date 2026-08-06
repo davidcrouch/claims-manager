@@ -7,6 +7,12 @@ import {
   purchaseOrderCombos,
   purchaseOrderItems,
   quotes,
+  quoteGroups,
+  quoteCombos,
+  quoteItems,
+  proposalGroups,
+  proposalCombos,
+  proposalItems,
   invoices,
 } from '../../../database/schema';
 import {
@@ -20,6 +26,7 @@ import {
 import { VersioningService } from './versioning.service';
 import { LineItemSyncService } from './line-item-sync.service';
 import { VisibilityService } from './visibility.service';
+import { LookupResolutionService } from './lookup-resolution.service';
 
 export interface IssuanceResult {
   versionNumber: number;
@@ -45,6 +52,7 @@ export class DocumentIssuanceService {
     private readonly versioning: VersioningService,
     private readonly lineItemSync: LineItemSyncService,
     private readonly visibility: VisibilityService,
+    private readonly lookupResolution: LookupResolutionService,
     private readonly workOrdersRepo: WorkOrdersRepository,
     private readonly proposalsRepo: ProposalsRepository,
     private readonly billsRepo: BillsRepository,
@@ -71,7 +79,7 @@ export class DocumentIssuanceService {
     // 1. Load document + line items
     const { entity, lineItems } = await this.loadDocumentWithItems(documentType, documentId, tx);
 
-    // 1b. Stamp issuer/recipient org on PO if not already set (standard issuance path)
+    // 1b. Stamp issuer/recipient org if not already set (standard issuance path)
     if (documentType === 'purchase_order') {
       const needsIssuerStamp = !entity.issuerOrganisationId;
       const needsRecipientStamp = !entity.recipientOrganisationId && params.recipientTenantId;
@@ -80,6 +88,19 @@ export class DocumentIssuanceService {
         if (needsIssuerStamp) updates.issuerOrganisationId = tenantId;
         if (needsRecipientStamp) updates.recipientOrganisationId = params.recipientTenantId;
         await tx.update(purchaseOrders).set(updates).where(eq(purchaseOrders.id, documentId));
+        if (needsIssuerStamp) entity.issuerOrganisationId = tenantId;
+        if (needsRecipientStamp) entity.recipientOrganisationId = params.recipientTenantId;
+      }
+    }
+
+    if (documentType === 'quote') {
+      const needsIssuerStamp = !entity.issuerOrganisationId;
+      const needsRecipientStamp = !entity.recipientOrganisationId && params.recipientTenantId;
+      if (needsIssuerStamp || needsRecipientStamp) {
+        const updates: Record<string, unknown> = { updatedAt: new Date() };
+        if (needsIssuerStamp) updates.issuerOrganisationId = tenantId;
+        if (needsRecipientStamp) updates.recipientOrganisationId = params.recipientTenantId;
+        await tx.update(quotes).set(updates).where(eq(quotes.id, documentId));
         if (needsIssuerStamp) entity.issuerOrganisationId = tenantId;
         if (needsRecipientStamp) entity.recipientOrganisationId = params.recipientTenantId;
       }
@@ -183,7 +204,34 @@ export class DocumentIssuanceService {
   ): Promise<{ entity: Record<string, unknown>; lineItems: unknown[] }> {
     const [entity] = await tx.select().from(quotes).where(eq(quotes.id, id)).limit(1);
     if (!entity) throw new Error(`DocumentIssuanceService — Quote ${id} not found`);
-    return { entity: entity as unknown as Record<string, unknown>, lineItems: [] };
+
+    const groups = await tx.select().from(quoteGroups).where(eq(quoteGroups.quoteId, id));
+
+    const lineItems: unknown[] = [];
+    for (const group of groups) {
+      const combos = await tx
+        .select()
+        .from(quoteCombos)
+        .where(eq(quoteCombos.quoteGroupId, group.id));
+
+      const groupItems = await tx
+        .select()
+        .from(quoteItems)
+        .where(eq(quoteItems.quoteGroupId, group.id));
+
+      const comboData: unknown[] = [];
+      for (const combo of combos) {
+        const items = await tx
+          .select()
+          .from(quoteItems)
+          .where(eq(quoteItems.quoteComboId, combo.id));
+        comboData.push({ ...combo, items });
+      }
+
+      lineItems.push({ ...group, combos: comboData, items: groupItems });
+    }
+
+    return { entity: entity as unknown as Record<string, unknown>, lineItems };
   }
 
   private async loadInvoice(
@@ -267,24 +315,50 @@ export class DocumentIssuanceService {
   private async createProposalFromQuote(params: {
     sourceDocumentId: string;
     sourceEntity: Record<string, unknown>;
+    sourceLineItems: unknown[];
     sourceTenantId: string;
     recipientTenantId: string;
     versionNumber: number;
     tx: DrizzleDbOrTx;
   }): Promise<string> {
     const src = params.sourceEntity;
+    const tx = params.tx;
+
+    const statusLookupId = await this.lookupResolution.resolve({
+      tenantId: params.recipientTenantId,
+      domain: 'proposal_status',
+      externalReference: 'Received',
+      name: 'Received',
+      autoCreate: true,
+      tx,
+    });
 
     const proposalData: Partial<ProposalInsert> = {
       tenantId: params.recipientTenantId,
       quoteId: params.sourceDocumentId,
       claimId: src.claimId as string | undefined,
       jobId: src.jobId as string | undefined,
+      sourceTenantId: params.sourceTenantId,
+      sourceOrganisationId: (src.issuerOrganisationId as string) ?? params.sourceTenantId,
       proposalNumber: src.quoteNumber as string | undefined,
       name: src.name as string | undefined,
       reference: src.reference as string | undefined,
       note: src.note as string | undefined,
-      statusLookupId: src.statusLookupId as string | undefined,
-      proposalPayload: src.apiPayload as Record<string, unknown> ?? {},
+      statusLookupId: statusLookupId ?? undefined,
+      receivedDate: new Date(),
+      proposalDate: (src.quoteDate as Date | undefined) ?? undefined,
+      expiresInDays: src.expiresInDays as number | undefined,
+      subTotal: src.subTotal as string | undefined,
+      totalTax: src.totalTax as string | undefined,
+      totalAmount: src.totalAmount as string | undefined,
+      // Perspective swap: vendor identity → proposalFrom; buyer → proposalTo
+      proposalFrom: (src.quoteFrom as Record<string, unknown>) ?? {},
+      proposalTo: (src.quoteTo as Record<string, unknown>) ?? {},
+      proposalFor: (src.quoteFor as Record<string, unknown>) ?? {},
+      proposalFromName: (src.quoteFromName as string | undefined) ?? undefined,
+      proposalToName: (src.quoteToName as string | undefined) ?? undefined,
+      proposalToEmail: (src.quoteToEmail as string | undefined) ?? undefined,
+      proposalPayload: (src.apiPayload as Record<string, unknown>) ?? {},
       sourceVersionNumber: params.versionNumber,
       latestAvailableVersion: params.versionNumber,
       versionAcknowledged: false,
@@ -292,10 +366,139 @@ export class DocumentIssuanceService {
 
     const created = await this.proposalsRepo.create({
       data: proposalData as ProposalInsert,
-      tx: params.tx,
+      tx,
     });
 
+    await this.copyQuoteLineItemsToProposal({
+      proposalId: created.id,
+      recipientTenantId: params.recipientTenantId,
+      sourceLineItems: params.sourceLineItems,
+      tx,
+    });
+
+    this.logger.log(
+      `DocumentIssuanceService.createProposalFromQuote — created proposal=${created.id} from quote=${params.sourceDocumentId}`,
+    );
+
     return created.id;
+  }
+
+  /**
+   * Copy commercially visible quote line items into the proposal hierarchy.
+   * Excludes internal items and strips vendor margin fields.
+   */
+  private async copyQuoteLineItemsToProposal(params: {
+    proposalId: string;
+    recipientTenantId: string;
+    sourceLineItems: unknown[];
+    tx: DrizzleDbOrTx;
+  }): Promise<void> {
+    const { proposalId, recipientTenantId, sourceLineItems, tx } = params;
+
+    for (const rawGroup of sourceLineItems) {
+      const group = rawGroup as {
+        groupLabelLookupId?: string | null;
+        description?: string | null;
+        dimensions?: Record<string, unknown>;
+        sortIndex?: number;
+        totals?: Record<string, unknown>;
+        combos?: unknown[];
+        items?: unknown[];
+      };
+
+      const [proposalGroup] = await tx
+        .insert(proposalGroups)
+        .values({
+          tenantId: recipientTenantId,
+          proposalId,
+          groupLabelLookupId: group.groupLabelLookupId ?? null,
+          description: group.description ?? null,
+          dimensions: group.dimensions ?? {},
+          sortIndex: group.sortIndex ?? 0,
+          totals: group.totals ?? {},
+        })
+        .returning();
+
+      const groupItems = Array.isArray(group.items) ? group.items : [];
+      for (const rawItem of groupItems) {
+        const item = rawItem as Record<string, unknown>;
+        if (item.internal === true) continue;
+        await tx.insert(proposalItems).values(this.mapQuoteItemToProposalItem({
+          item,
+          recipientTenantId,
+          proposalGroupId: proposalGroup.id,
+          proposalComboId: null,
+        }));
+      }
+
+      const combos = Array.isArray(group.combos) ? group.combos : [];
+      for (const rawCombo of combos) {
+        const combo = rawCombo as {
+          name?: string | null;
+          description?: string | null;
+          category?: string | null;
+          subCategory?: string | null;
+          quantity?: string | null;
+          sortIndex?: number;
+          totals?: Record<string, unknown>;
+          items?: unknown[];
+        };
+
+        const [proposalCombo] = await tx
+          .insert(proposalCombos)
+          .values({
+            tenantId: recipientTenantId,
+            proposalGroupId: proposalGroup.id,
+            name: combo.name ?? null,
+            description: combo.description ?? null,
+            category: combo.category ?? null,
+            subCategory: combo.subCategory ?? null,
+            quantity: combo.quantity ?? null,
+            sortIndex: combo.sortIndex ?? 0,
+            totals: combo.totals ?? {},
+          })
+          .returning();
+
+        const comboItems = Array.isArray(combo.items) ? combo.items : [];
+        for (const rawItem of comboItems) {
+          const item = rawItem as Record<string, unknown>;
+          if (item.internal === true) continue;
+          await tx.insert(proposalItems).values(this.mapQuoteItemToProposalItem({
+            item,
+            recipientTenantId,
+            proposalGroupId: null,
+            proposalComboId: proposalCombo.id,
+          }));
+        }
+      }
+    }
+  }
+
+  private mapQuoteItemToProposalItem(params: {
+    item: Record<string, unknown>;
+    recipientTenantId: string;
+    proposalGroupId: string | null;
+    proposalComboId: string | null;
+  }) {
+    const { item, recipientTenantId, proposalGroupId, proposalComboId } = params;
+    // Intentionally omit buyCost, markupType, markupValue, allocatedCost, committedCost
+    return {
+      tenantId: recipientTenantId,
+      proposalGroupId,
+      proposalComboId,
+      unitTypeLookupId: (item.unitTypeLookupId as string | undefined) ?? null,
+      name: (item.name as string | undefined) ?? null,
+      description: (item.description as string | undefined) ?? null,
+      category: (item.category as string | undefined) ?? null,
+      subCategory: (item.subCategory as string | undefined) ?? null,
+      itemType: (item.itemType as string | undefined) ?? null,
+      quantity: (item.quantity as string | undefined) ?? null,
+      tax: (item.tax as string | undefined) ?? null,
+      unitCost: (item.unitCost as string | undefined) ?? null,
+      sortIndex: (item.sortIndex as number | undefined) ?? 0,
+      note: (item.note as string | undefined) ?? null,
+      totals: (item.totals as Record<string, unknown> | undefined) ?? {},
+    };
   }
 
   private async createBillFromInvoice(params: {

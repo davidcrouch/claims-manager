@@ -2,6 +2,7 @@ import { Injectable, Inject, Optional, BadRequestException, NotFoundException, L
 import {
   JobsRepository,
   ContactsRepository,
+  LookupsRepository,
   type JobInsert,
   type JobViewRow,
 } from '../../database/repositories';
@@ -21,6 +22,7 @@ type ContactInput = {
   homePhone?: string;
   workPhone?: string;
   notes?: string;
+  typeLookupId?: string;
 };
 
 @Injectable()
@@ -31,6 +33,7 @@ export class JobsService {
     private readonly jobsRepo: JobsRepository,
     private readonly contactsRepo: ContactsRepository,
     private readonly jobContactsRepo: JobContactsRepository,
+    private readonly lookupsRepo: LookupsRepository,
     private readonly tenantContext: TenantContext,
     private readonly outboundSync: OutboundSyncService,
     private readonly lookupResolver: LookupResolver,
@@ -261,6 +264,170 @@ export class JobsService {
     return job;
   }
 
+  async addContacts(params: {
+    id: string;
+    contacts: Record<string, unknown>[];
+  }) {
+    const tenantId = this.tenantContext.getTenantId();
+    const existing = await this.jobsRepo.findOne({ id: params.id, tenantId });
+    if (!existing) throw new NotFoundException('Job not found');
+
+    const contactsInput = (Array.isArray(params.contacts) ? params.contacts : []) as ContactInput[];
+    if (contactsInput.length === 0) {
+      throw new BadRequestException('contacts is required');
+    }
+
+    this.logger.debug(
+      `JobsService.addContacts — jobId=${params.id} tenantId=${tenantId} contacts=${contactsInput.length}`,
+    );
+
+    await this.db.transaction(async (tx) => {
+      const resolvedContacts = await this.resolveContacts({
+        tenantId,
+        contacts: contactsInput,
+        tx,
+      });
+
+      const existingLinks = await this.jobContactsRepo.findByJob({
+        jobId: params.id,
+        tx,
+      });
+      const linkedIds = new Set(existingLinks.map((l) => l.contactId));
+      const minSort = existingLinks.reduce(
+        (min, row) => Math.min(min, row.sortIndex ?? 0),
+        0,
+      );
+      // Negative sort indexes put newly added contacts above existing ones.
+      let nextSort = Math.min(minSort, 0) - resolvedContacts.length;
+
+      const apiPayload =
+        existing.apiPayload && typeof existing.apiPayload === 'object' && !Array.isArray(existing.apiPayload)
+          ? { ...(existing.apiPayload as Record<string, unknown>) }
+          : {};
+      const priorSnapshots = Array.isArray(apiPayload.contacts)
+        ? ([...apiPayload.contacts] as Record<string, unknown>[])
+        : [];
+      const priorById = new Map<string, Record<string, unknown>>();
+      for (const snap of priorSnapshots) {
+        const id = typeof snap.id === 'string' ? snap.id : undefined;
+        if (id) priorById.set(id, snap);
+      }
+
+      const newSnapshots: Record<string, unknown>[] = [];
+      for (const contact of resolvedContacts) {
+        if (!linkedIds.has(contact.contactId)) {
+          await this.jobContactsRepo.upsert({
+            data: {
+              tenantId,
+              jobId: params.id,
+              contactId: contact.contactId,
+              sortIndex: nextSort,
+              sourcePayload: contact.snapshot,
+            },
+            tx,
+          });
+          nextSort += 1;
+          linkedIds.add(contact.contactId);
+          newSnapshots.push(contact.snapshot);
+          priorById.delete(contact.contactId);
+        } else {
+          await this.jobContactsRepo.upsert({
+            data: {
+              tenantId,
+              jobId: params.id,
+              contactId: contact.contactId,
+              sortIndex:
+                existingLinks.find((l) => l.contactId === contact.contactId)?.sortIndex ?? 0,
+              sourcePayload: contact.snapshot,
+            },
+            tx,
+          });
+          priorById.set(contact.contactId, contact.snapshot);
+        }
+      }
+
+      const remainingPrior = priorSnapshots
+        .map((snap) => {
+          const id = typeof snap.id === 'string' ? snap.id : undefined;
+          if (!id) return snap;
+          return priorById.get(id) ?? snap;
+        })
+        .filter((snap) => {
+          const id = typeof snap.id === 'string' ? snap.id : undefined;
+          // Drop duplicates that were moved into newSnapshots.
+          return !id || !newSnapshots.some((n) => n.id === id);
+        });
+
+      await this.jobsRepo.update({
+        id: params.id,
+        data: {
+          apiPayload: {
+            ...apiPayload,
+            contacts: [...newSnapshots, ...remainingPrior],
+          },
+        },
+        tx,
+      });
+    });
+
+    return this.findOne({ id: params.id });
+  }
+
+  async removeContact(params: { id: string; contactId: string }) {
+    const tenantId = this.tenantContext.getTenantId();
+    const existing = await this.jobsRepo.findOne({ id: params.id, tenantId });
+    if (!existing) throw new NotFoundException('Job not found');
+
+    this.logger.debug(
+      `JobsService.removeContact — jobId=${params.id} contactId=${params.contactId} tenantId=${tenantId}`,
+    );
+
+    await this.db.transaction(async (tx) => {
+      await this.jobContactsRepo.deleteByJobAndContact({
+        jobId: params.id,
+        contactId: params.contactId,
+        tx,
+      });
+
+      const apiPayload =
+        existing.apiPayload && typeof existing.apiPayload === 'object' && !Array.isArray(existing.apiPayload)
+          ? { ...(existing.apiPayload as Record<string, unknown>) }
+          : {};
+      const priorSnapshots = Array.isArray(apiPayload.contacts)
+        ? (apiPayload.contacts as Record<string, unknown>[])
+        : [];
+      const nextContacts = priorSnapshots.filter((snap) => snap.id !== params.contactId);
+
+      await this.jobsRepo.update({
+        id: params.id,
+        data: {
+          apiPayload: {
+            ...apiPayload,
+            contacts: nextContacts,
+          },
+        },
+        tx,
+      });
+    });
+
+    return this.findOne({ id: params.id });
+  }
+
+  private async resolveContactType(
+    tenantId: string,
+    typeLookupId?: string | null,
+  ): Promise<Record<string, unknown> | undefined> {
+    const id = typeLookupId?.trim();
+    if (!id) return undefined;
+    const lookup = await this.lookupsRepo.findOne({ id, tenantId });
+    if (!lookup) return { id };
+    return {
+      id: lookup.id,
+      name: lookup.name ?? undefined,
+      externalReference: lookup.externalReference ?? undefined,
+    };
+  }
+
   private async resolveContacts(params: {
     tenantId: string;
     contacts: ContactInput[];
@@ -280,6 +447,7 @@ export class JobsService {
         if (!existing) {
           throw new BadRequestException(`Contact not found: ${contactId}`);
         }
+        const type = await this.resolveContactType(params.tenantId, existing.typeLookupId);
         snapshot = {
           id: existing.id,
           firstName: existing.firstName ?? undefined,
@@ -289,12 +457,14 @@ export class JobsService {
           homePhone: existing.homePhone ?? undefined,
           workPhone: existing.workPhone ?? undefined,
           notes: existing.notes ?? undefined,
+          ...(type ? { type } : {}),
         };
       } else {
         const firstName = input.firstName?.trim();
         if (!firstName) {
           throw new BadRequestException('Contact firstName is required when contactId is not provided');
         }
+        const typeLookupId = input.typeLookupId?.trim() || null;
         const created = await this.contactsRepo.create({
           data: {
             tenantId: params.tenantId,
@@ -305,10 +475,12 @@ export class JobsService {
             homePhone: input.homePhone?.trim() || null,
             workPhone: input.workPhone?.trim() || null,
             notes: input.notes?.trim() || null,
+            typeLookupId,
           },
           tx: params.tx,
         });
         contactId = created.id;
+        const type = await this.resolveContactType(params.tenantId, created.typeLookupId);
         snapshot = {
           id: created.id,
           firstName: created.firstName ?? undefined,
@@ -318,6 +490,7 @@ export class JobsService {
           homePhone: created.homePhone ?? undefined,
           workPhone: created.workPhone ?? undefined,
           notes: created.notes ?? undefined,
+          ...(type ? { type } : {}),
         };
       }
 

@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, Post, Body, Query } from '@nestjs/common';
 import { LookupsService } from './lookups.service';
 
 @Controller('lookups')
@@ -13,6 +13,14 @@ export class LookupsController {
     return this.lookupsService.findByDomain({
       domain: domain || '',
       providerCode: providerCode || undefined,
+    });
+  }
+
+  @Post('ensure')
+  async ensure(@Body() body: { domain: string; name: string }) {
+    return this.lookupsService.ensureByName({
+      domain: body.domain,
+      name: body.name,
     });
   }
 

@@ -3,10 +3,11 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
+import { PrintButton } from '@/components/shared/PrintButton';
 import { PurchaseOrderFormDrawer } from '@/components/forms/PurchaseOrderFormDrawer';
 import type { JobOption } from '@/components/shared/job-label';
 import { PurchaseOrdersListClient } from './PurchaseOrdersListClient';
-import type { PaginatedResponse, PurchaseOrder } from '@/types/api';
+import type { PaginatedResponse, PurchaseOrder, Job, Claim } from '@/types/api';
 import type { StatusOption } from '@/components/shared/list-filters';
 
 export interface PurchaseOrdersPageClientProps {
@@ -15,6 +16,8 @@ export interface PurchaseOrdersPageClientProps {
   vendorOptions: StatusOption[];
   jobNameById?: Record<string, string>;
   jobs: JobOption[];
+  job?: Job | null;
+  parentClaim?: Claim | null;
 }
 
 export function PurchaseOrdersPageClient({
@@ -23,6 +26,8 @@ export function PurchaseOrdersPageClient({
   vendorOptions,
   jobNameById,
   jobs,
+  job,
+  parentClaim,
 }: PurchaseOrdersPageClientProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -36,16 +41,20 @@ export function PurchaseOrdersPageClient({
         >
           Create PO
         </Button>
+        <PrintButton documentType="purchase_orders_list" entityId="list" />
       </SetHeaderActions>
       <PurchaseOrdersListClient
         initialData={initialData}
         statusOptions={statusOptions}
         vendorOptions={vendorOptions}
         jobNameById={jobNameById}
+        job={job}
+        parentClaim={parentClaim}
       />
       <PurchaseOrderFormDrawer
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
+        jobId={job?.id}
         jobs={jobs}
       />
     </>

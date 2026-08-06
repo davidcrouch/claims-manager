@@ -145,6 +145,10 @@ export class EnvironmentVariables {
 
   @IsString()
   @IsOptional()
+  MS_GRAPH_MCP_URL?: string;
+
+  @IsString()
+  @IsOptional()
   GCP_SECRET_MANAGER_PROJECT?: string;
 
   @IsString()

@@ -17,7 +17,8 @@ export class JournalsRepository {
     page?: number;
     limit?: number;
     status?: string;
-  }): Promise<{ data: JournalRow[]; total: number }> {
+    jobId?: string;
+  }): Promise<{ data: Array<JournalRow & { jobId: string | null }>; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
     const skip = (page - 1) * limit;
@@ -29,6 +30,24 @@ export class JournalsRepository {
     const statuses = params.status?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
     if (statuses.length > 0) {
       whereClause = and(whereClause, inArray(journals.status, statuses));
+    }
+
+    if (params.jobId) {
+      const linked = await this.db
+        .select({ journalId: journalEntityLinks.journalId })
+        .from(journalEntityLinks)
+        .where(
+          and(
+            eq(journalEntityLinks.tenantId, params.tenantId),
+            eq(journalEntityLinks.entityType, 'Job'),
+            eq(journalEntityLinks.entityId, params.jobId),
+          ),
+        );
+      const journalIds = linked.map((row) => row.journalId);
+      if (journalIds.length === 0) {
+        return { data: [], total: 0 };
+      }
+      whereClause = and(whereClause, inArray(journals.id, journalIds));
     }
 
     const [data, countResult] = await Promise.all([
@@ -46,7 +65,40 @@ export class JournalsRepository {
     ]);
 
     const total = countResult[0]?.count ?? 0;
-    return { data, total };
+
+    if (data.length === 0) {
+      return { data: [], total };
+    }
+
+    const journalIds = data.map((row) => row.id);
+    const jobLinks = await this.db
+      .select({
+        journalId: journalEntityLinks.journalId,
+        entityId: journalEntityLinks.entityId,
+      })
+      .from(journalEntityLinks)
+      .where(
+        and(
+          eq(journalEntityLinks.tenantId, params.tenantId),
+          eq(journalEntityLinks.entityType, 'Job'),
+          inArray(journalEntityLinks.journalId, journalIds),
+        ),
+      );
+
+    const jobIdByJournal = new Map<string, string>();
+    for (const link of jobLinks) {
+      if (!jobIdByJournal.has(link.journalId)) {
+        jobIdByJournal.set(link.journalId, link.entityId);
+      }
+    }
+
+    return {
+      data: data.map((row) => ({
+        ...row,
+        jobId: jobIdByJournal.get(row.id) ?? null,
+      })),
+      total,
+    };
   }
 
   async findOne(params: { id: string; tenantId: string }): Promise<JournalRow | null> {

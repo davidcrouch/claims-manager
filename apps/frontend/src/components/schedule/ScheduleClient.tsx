@@ -8,9 +8,9 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
-import { ListPageHeader } from '@/components/layout/ListPageHeader';
+import { EntityPageHeader } from '@/components/shared/EntityPageHeader';
 import { fetchScheduleEventsAction } from '@/app/(app)/schedule/actions';
-import type { ScheduleEvent, ScheduleEventType } from '@/types/api';
+import type { ScheduleEvent, ScheduleEventType, Job, Claim } from '@/types/api';
 
 type ViewMode = 'month' | 'week' | 'day';
 
@@ -164,7 +164,7 @@ function EventBar({ event }: { event: ScheduleEvent }) {
   );
 }
 
-export function ScheduleClient({ jobId }: { jobId?: string } = {}) {
+export function ScheduleClient({ jobId, job, parentClaim }: { jobId?: string; job?: Job | null; parentClaim?: Claim | null } = {}) {
   const [view, setView] = useState<ViewMode>('month');
   const [cursor, setCursor] = useState(() => new Date());
   const [events, setEvents] = useState<ScheduleEvent[]>([]);
@@ -223,18 +223,18 @@ export function ScheduleClient({ jobId }: { jobId?: string } = {}) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
-      {!jobId && (
-        <SetPageHeader>
-          <ListPageHeader
-            icon={Calendar}
-            title="Schedule"
-            total={total}
-            accent="slate"
-          />
-        </SetPageHeader>
-      )}
+      <SetPageHeader>
+        <EntityPageHeader
+          icon={Calendar}
+          title="Schedule"
+          total={total}
+          accent="slate"
+          job={job}
+          parentClaim={parentClaim}
+        />
+      </SetPageHeader>
 
-      <div className={`flex flex-col gap-4 ${jobId ? 'pb-4' : 'px-6 pb-4 pt-1'}`}>
+      <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Button
@@ -288,7 +288,7 @@ export function ScheduleClient({ jobId }: { jobId?: string } = {}) {
         </div>
       </div>
 
-      <div className={`flex-1 ${jobId ? 'pb-6' : 'px-6 pb-6'}`} style={{ minHeight: 0, overflow: 'auto' }}>
+      <div className="flex-1 px-6 pb-6" style={{ minHeight: 0, overflow: 'auto' }}>
         {view === 'month' && (
           <MonthView cells={cells} curMonth={curMonth} eventMap={eventMap} />
         )}

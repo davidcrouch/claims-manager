@@ -64,15 +64,17 @@ export function WorkOrderFormDrawer({
   const [error, setError] = useState<string | null>(null);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [pickedJobId, setPickedJobId] = useState('');
-  const needsJobPicker = !jobId && (jobs?.length ?? 0) > 0;
-  const effectiveJobId = jobId ?? pickedJobId;
+  const needsJobPicker = (jobs?.length ?? 0) > 0;
+  const effectiveJobId = needsJobPicker ? pickedJobId : (jobId ?? "");
 
   useEffect(() => {
-    if (!open) {
+    if (open) {
+      setPickedJobId(jobId ?? '');
+    } else {
       setPickedJobId('');
       setPurchaseOrders([]);
     }
-  }, [open]);
+  }, [open, jobId]);
 
   useEffect(() => {
     if (open && effectiveJobId) {
@@ -116,7 +118,11 @@ export function WorkOrderFormDrawer({
       if (result.success) {
         onOpenChange(false);
         form.reset();
-        router.refresh();
+        if (result.workOrder?.id) {
+          router.push(`/work-orders/${result.workOrder.id}`);
+        } else {
+          router.refresh();
+        }
       } else {
         setError(result.error ?? 'Failed to create work order');
       }
@@ -216,8 +222,8 @@ export function WorkOrderFormDrawer({
         </BottomFormDrawerBody>
 
         <BottomFormDrawerFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button type="submit" disabled={submitting}>{submitting ? 'Creating...' : 'Create Work Order'}</Button>
+          <Button type="button" variant="outline" size="lg" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button type="submit" size="lg" disabled={submitting}>{submitting ? 'Creating...' : 'Create Work Order'}</Button>
         </BottomFormDrawerFooter>
       </form>
     </BottomFormDrawer>

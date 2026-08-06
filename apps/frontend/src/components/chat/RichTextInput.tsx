@@ -75,6 +75,14 @@ export const RichTextInput = forwardRef<RichTextInputRef, RichTextInputProps>(
       }
     }, [editor, disabled]);
 
+    // Sync when parent updates value externally (speech, suggestions, edit).
+    useEffect(() => {
+      if (!editor) return;
+      const next = initialValue ?? '';
+      if (editor.getText() === next) return;
+      editor.commands.setContent(next);
+    }, [editor, initialValue]);
+
     useImperativeHandle(
       ref,
       () => ({

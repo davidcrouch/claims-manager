@@ -139,11 +139,12 @@ export function ReportFormDrawer({
           <Button
             type="button"
             variant="outline"
+            size="lg"
             onClick={() => onOpenChange(false)}
           >
             Cancel
           </Button>
-          <Button type="submit" disabled={submitting}>
+          <Button type="submit" size="lg" disabled={submitting}>
             {submitting ? 'Creating...' : 'Create Report'}
           </Button>
         </BottomFormDrawerFooter>

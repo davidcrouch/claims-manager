@@ -1,9 +1,49 @@
 import { Logger } from '@nestjs/common';
+import { GoogleAuth } from 'google-auth-library';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 
 const logger = new Logger('McpClient');
+
+/**
+ * For IAM-private Cloud Run MCP services, keep the user/app Bearer on
+ * Authorization and put the platform invoker token on X-Serverless-Authorization.
+ */
+async function withCloudRunInvokerHeaders(
+  url: string,
+  headers?: Record<string, string>,
+): Promise<Record<string, string> | undefined> {
+  const merged: Record<string, string> = { ...(headers ?? {}) };
+  const isCloudRun =
+    !!process.env.K_SERVICE && /\.run\.app$/i.test(new URL(url).hostname);
+  if (!isCloudRun) {
+    return Object.keys(merged).length > 0 ? merged : undefined;
+  }
+
+  try {
+    const auth = new GoogleAuth();
+    const client = await auth.getIdTokenClient(new URL(url).origin);
+    const reqHeaders = await client.getRequestHeaders();
+    const invoker =
+      reqHeaders['Authorization'] ??
+      reqHeaders['authorization'] ??
+      (reqHeaders as { Authorization?: string }).Authorization;
+    if (invoker) {
+      merged['X-Serverless-Authorization'] = invoker.startsWith('Bearer ')
+        ? invoker
+        : `Bearer ${invoker}`;
+    }
+  } catch (err) {
+    logger.warn(
+      `[McpClient.withCloudRunInvokerHeaders] failed url=${url}: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
+
+  return Object.keys(merged).length > 0 ? merged : undefined;
+}
 
 export interface McpClientConfig {
   transportType: 'http' | 'sse';
@@ -43,9 +83,9 @@ export async function createNativeMCPClient(
   const client = new Client({ name: 'claims-api', version: '1.0.0' });
 
   const url = new URL(config.url);
-
-  const transportHeaders = config.headers
-    ? new Headers(Object.entries(config.headers))
+  const headerMap = await withCloudRunInvokerHeaders(config.url, config.headers);
+  const transportHeaders = headerMap
+    ? new Headers(Object.entries(headerMap))
     : undefined;
 
   let transport: StreamableHTTPClientTransport | SSEClientTransport;

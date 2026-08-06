@@ -2,14 +2,14 @@ import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { RfqsPageClient } from '@/components/rfqs/RfqsPageClient';
 import { buildJobNameById, toJobOptions } from '@/components/shared/job-label';
-import type { Job, PaginatedResponse, Rfq } from '@/types/api';
+import type { Job, Claim, PaginatedResponse, Rfq } from '@/types/api';
 
 export const metadata = { title: 'RFQs — EnsureOS' };
 
 export default async function RfqsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; sort?: string; status?: string; vendorId?: string }>;
+  searchParams: Promise<{ page?: string; sort?: string; status?: string; vendorId?: string; jobId?: string }>;
 }) {
   const api = await getServerApiClient();
   if (!api) redirect('/api/auth/login');
@@ -25,6 +25,7 @@ export default async function RfqsPage({
         sort: params.sort,
         status: params.status,
         vendorId: params.vendorId,
+        jobId: params.jobId,
       })
       .catch((err: unknown) => {
         console.error(
@@ -43,6 +44,21 @@ export default async function RfqsPage({
       return emptyJobs;
     }),
   ]);
+
+  let job: Job | null = null;
+  let parentClaim: Claim | null = null;
+  if (params.jobId) {
+    job = await api.getJob(params.jobId).catch((err: unknown) => {
+      console.error(
+        'frontend:RfqsPage - getJob failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return null;
+    });
+    if (job?.claimId) {
+      parentClaim = await api.getClaim(job.claimId).catch(() => null);
+    }
+  }
 
   const statusOptions = (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map(
     (row) => ({
@@ -64,6 +80,8 @@ export default async function RfqsPage({
       vendorOptions={vendorOptions}
       jobNameById={jobNameById}
       jobs={toJobOptions(jobs)}
+      job={job}
+      parentClaim={parentClaim}
     />
   );
 }

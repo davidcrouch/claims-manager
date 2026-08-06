@@ -22,6 +22,10 @@ function buildWorkOrdersOrderBy(sort?: string) {
       return [desc(workOrders.createdAt)];
     case 'created_at_asc':
       return [asc(workOrders.createdAt)];
+    case 'name_asc':
+      return [asc(workOrders.name)];
+    case 'name_desc':
+      return [desc(workOrders.name)];
     case 'work_order_number_asc':
       return [asc(workOrders.workOrderNumber)];
     case 'work_order_number_desc':

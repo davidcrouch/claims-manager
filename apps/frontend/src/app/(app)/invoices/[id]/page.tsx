@@ -36,10 +36,14 @@ export default async function InvoiceDetailPage({
   });
   if (!invoice) notFound();
 
+  const job = invoice.jobId
+    ? await api.getJob(invoice.jobId).catch(() => null)
+    : null;
+
   return (
     <>
       <SetPageHeader>
-        <InvoicePageHeader invoice={invoice} />
+        <InvoicePageHeader invoice={invoice} job={job} />
       </SetPageHeader>
       <InvoiceDetail invoice={invoice} />
     </>

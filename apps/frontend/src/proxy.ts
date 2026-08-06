@@ -8,6 +8,17 @@ function isPublicApi(pathname: string): boolean {
   return PUBLIC_API_PREFIXES.some((p) => pathname.startsWith(p));
 }
 
+/** Server Actions / RSC mutations are POST; redirecting them to login yields 405. */
+function isNonNavigationalRequest(req: NextRequest): boolean {
+  if (req.headers.has('next-action')) return true;
+  const method = req.method.toUpperCase();
+  return method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS';
+}
+
+function unauthorizedJson() {
+  return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+}
+
 export function proxy(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
   const hasAuthCookie = !!req.cookies.get(AUTH_COOKIE)?.value;
@@ -15,7 +26,7 @@ export function proxy(req: NextRequest) {
   if (pathname.startsWith('/api/')) {
     if (isPublicApi(pathname)) return NextResponse.next();
     if (!hasAuthCookie) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return unauthorizedJson();
     }
     return NextResponse.next();
   }
@@ -25,6 +36,9 @@ export function proxy(req: NextRequest) {
 
   // Legacy / mistaken /login links (auth-server used to send users here).
   if (pathname === '/login') {
+    if (isNonNavigationalRequest(req)) {
+      return unauthorizedJson();
+    }
     const loginUrl = new URL('/api/auth/login', req.url);
     req.nextUrl.searchParams.forEach((value, key) => {
       loginUrl.searchParams.set(key, value);
@@ -33,6 +47,10 @@ export function proxy(req: NextRequest) {
   }
 
   if (!hasAuthCookie) {
+    // Browser navigations: send to OIDC. Server Actions must not follow this redirect.
+    if (isNonNavigationalRequest(req)) {
+      return unauthorizedJson();
+    }
     const loginUrl = new URL('/api/auth/login', req.url);
     loginUrl.searchParams.set('returnTo', pathname);
     return NextResponse.redirect(loginUrl);

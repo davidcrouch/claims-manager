@@ -2,12 +2,12 @@ import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { InvoicesPageClient } from '@/components/invoices/InvoicesPageClient';
 import { buildJobNameById } from '@/components/shared/job-label';
-import type { Invoice, Job, PaginatedResponse, WorkOrder } from '@/types/api';
+import type { Claim, Invoice, Job, PaginatedResponse, WorkOrder } from '@/types/api';
 
 export default async function InvoicesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; purchaseOrderId?: string; status?: string; sort?: string }>;
+  searchParams: Promise<{ page?: string; purchaseOrderId?: string; status?: string; sort?: string; jobId?: string }>;
 }) {
   const api = await getServerApiClient();
   if (!api) redirect('/api/auth/login');
@@ -25,6 +25,7 @@ export default async function InvoicesPage({
         purchaseOrderId: params.purchaseOrderId,
         status: params.status,
         sort: params.sort,
+        jobId: params.jobId,
       })
       .catch((err: unknown) => {
         console.error(
@@ -53,6 +54,21 @@ export default async function InvoicesPage({
   const workOrders = workOrdersRes?.data ?? [];
   const jobNameById = buildJobNameById(jobsRes?.data ?? []);
 
+  let job: Job | null = null;
+  let parentClaim: Claim | null = null;
+  if (params.jobId) {
+    job = await api.getJob(params.jobId).catch((err: unknown) => {
+      console.error(
+        'frontend:InvoicesPage - getJob failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return null;
+    });
+    if (job?.claimId) {
+      parentClaim = await api.getClaim(job.claimId).catch(() => null);
+    }
+  }
+
   const statusOptions = (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map(
     (row) => ({
       id: row.id,
@@ -66,6 +82,8 @@ export default async function InvoicesPage({
       workOrders={workOrders}
       jobNameById={jobNameById}
       statusOptions={statusOptions}
+      job={job}
+      parentClaim={parentClaim}
     />
   );
 }

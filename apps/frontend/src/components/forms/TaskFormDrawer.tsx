@@ -216,11 +216,12 @@ export function TaskFormDrawer({
           <Button
             type="button"
             variant="outline"
+            size="lg"
             onClick={() => onOpenChange(false)}
           >
             Cancel
           </Button>
-          <Button type="submit" disabled={submitting}>
+          <Button type="submit" size="lg" disabled={submitting}>
             {submitting ? 'Creating...' : 'Create Task'}
           </Button>
         </BottomFormDrawerFooter>

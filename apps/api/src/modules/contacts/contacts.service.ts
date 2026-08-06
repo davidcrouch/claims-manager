@@ -1,5 +1,9 @@
 import { Injectable, ConflictException } from '@nestjs/common';
-import { ContactsRepository, UsersRepository } from '../../database/repositories';
+import {
+  ContactsRepository,
+  UsersRepository,
+  LookupsRepository,
+} from '../../database/repositories';
 import { JobContactsRepository } from '../../database/repositories/job-contacts.repository';
 import { TenantContext } from '../../tenant/tenant-context';
 
@@ -9,6 +13,7 @@ export class ContactsService {
     private readonly contactsRepo: ContactsRepository,
     private readonly usersRepo: UsersRepository,
     private readonly jobContactsRepo: JobContactsRepository,
+    private readonly lookupsRepo: LookupsRepository,
     private readonly tenantContext: TenantContext,
   ) {}
 
@@ -17,6 +22,7 @@ export class ContactsService {
     limit?: number;
     search?: string;
     sort?: string;
+    jobId?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
     return this.contactsRepo.findAll({
@@ -25,12 +31,59 @@ export class ContactsService {
       limit: params.limit,
       search: params.search,
       sort: params.sort,
+      jobId: params.jobId,
     });
   }
 
   async findOne(params: { id: string }) {
     const tenantId = this.tenantContext.getTenantId();
     return this.contactsRepo.findOne({ id: params.id, tenantId });
+  }
+
+  async findRelatedJobs(params: { id: string }) {
+    const tenantId = this.tenantContext.getTenantId();
+    const contact = await this.contactsRepo.findOne({
+      id: params.id,
+      tenantId,
+    });
+
+    let fallbackRole: string | null = null;
+    if (contact?.typeLookupId) {
+      const lookup = await this.lookupsRepo.findOne({
+        id: contact.typeLookupId,
+        tenantId,
+      });
+      fallbackRole = lookup?.name ?? lookup?.externalReference ?? null;
+    }
+
+    const rows = await this.jobContactsRepo.findJobsByContact({
+      contactId: params.id,
+      tenantId,
+    });
+
+    return rows.map((row) => {
+      const payload = row.sourcePayload ?? {};
+      const type = payload.type;
+      let role: string | null = null;
+      if (typeof type === 'string') {
+        role = type;
+      } else if (type && typeof type === 'object') {
+        const t = type as { name?: string; externalReference?: string };
+        role = t.name ?? t.externalReference ?? null;
+      }
+
+      return {
+        id: row.jobId,
+        name: row.name,
+        externalReference: row.externalReference,
+        addressSuburb: row.addressSuburb,
+        addressState: row.addressState,
+        statusName: row.statusName,
+        jobTypeName: row.jobTypeName,
+        role: role ?? fallbackRole,
+        updatedAt: row.updatedAt,
+      };
+    });
   }
 
   async create(params: {
@@ -41,6 +94,7 @@ export class ContactsService {
     homePhone?: string;
     workPhone?: string;
     notes?: string;
+    typeLookupId?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
 
@@ -66,6 +120,7 @@ export class ContactsService {
         homePhone: params.homePhone ?? null,
         workPhone: params.workPhone ?? null,
         notes: params.notes ?? null,
+        typeLookupId: params.typeLookupId?.trim() || null,
       },
     });
   }

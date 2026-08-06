@@ -19,6 +19,7 @@ export async function fetchAppointmentsAction(params?: {
   status?: string;
   sort?: string;
   order?: 'asc' | 'desc';
+  jobId?: string;
 }): Promise<PaginatedResponse<Appointment>> {
   const api = await getApi();
   if (!api) return { data: [], total: 0 };

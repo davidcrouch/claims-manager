@@ -5,13 +5,16 @@ import { InvoicesListClient } from './InvoicesListClient';
 import { InvoiceFormDrawer } from '@/components/forms/InvoiceFormDrawer';
 import { Button } from '@/components/ui/button';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
-import type { Invoice, PaginatedResponse, WorkOrder } from '@/types/api';
+import { PrintButton } from '@/components/shared/PrintButton';
+import type { Claim, Invoice, Job, PaginatedResponse, WorkOrder } from '@/types/api';
 
 export interface InvoicesPageClientProps {
   initialData: PaginatedResponse<Invoice>;
   workOrders: WorkOrder[];
   jobNameById: Record<string, string>;
   statusOptions: { id: string; name: string }[];
+  job?: Job | null;
+  parentClaim?: Claim | null;
 }
 
 export function InvoicesPageClient({
@@ -19,6 +22,8 @@ export function InvoicesPageClient({
   workOrders,
   jobNameById,
   statusOptions,
+  job,
+  parentClaim,
 }: InvoicesPageClientProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -32,16 +37,21 @@ export function InvoicesPageClient({
         >
           Create Invoice
         </Button>
+        <PrintButton documentType="invoices_list" entityId="list" />
       </SetHeaderActions>
       <InvoicesListClient
         initialData={initialData}
         statusOptions={statusOptions}
         jobNameById={jobNameById}
+        job={job}
+        parentClaim={parentClaim}
       />
       <InvoiceFormDrawer
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
-        workOrders={workOrders}
+        workOrders={
+          job ? workOrders.filter((wo) => wo.jobId === job.id) : workOrders
+        }
         jobNameById={jobNameById}
       />
     </>

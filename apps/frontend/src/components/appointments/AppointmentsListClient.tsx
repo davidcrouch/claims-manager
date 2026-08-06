@@ -1,11 +1,14 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { CalendarCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
-import { ListPageHeader } from '@/components/layout/ListPageHeader';
+import { PrintButton } from '@/components/shared/PrintButton';
+import { computeStatusBreakdown } from '@/components/layout/ListPageHeader';
+import { EntityPageHeader } from '@/components/shared/EntityPageHeader';
 import {
   SortTabs,
   SearchInput,
@@ -21,7 +24,7 @@ import {
 import { AppointmentFormDrawer } from '@/components/forms/AppointmentFormDrawer';
 import type { JobOption } from '@/components/shared/job-label';
 import { fetchAppointmentsAction } from '@/app/(app)/appointments/actions';
-import type { Appointment } from '@/types/api';
+import type { Appointment, Job, Claim } from '@/types/api';
 
 const SORT_OPTIONS: SortOption[] = [
   { key: 'start_date', label: 'Start' },
@@ -38,9 +41,14 @@ const STATUS_OPTIONS = [
 
 export function AppointmentsListClient({
   jobs = [],
+  job,
+  parentClaim,
 }: {
   jobs?: JobOption[];
+  job?: Job | null;
+  parentClaim?: Claim | null;
 }) {
+  const searchParams = useSearchParams();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -61,6 +69,8 @@ export function AppointmentsListClient({
     [statusFilter],
   );
 
+  const jobId = searchParams.get('jobId') ?? undefined;
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -71,13 +81,14 @@ export function AppointmentsListClient({
         status: statusParam,
         sort: sortField,
         order: sortOrder,
+        jobId,
       });
       setAppointments(res.data);
       setTotal(res.total);
     } finally {
       setLoading(false);
     }
-  }, [page, search, sortField, sortOrder, statusParam]);
+  }, [page, search, sortField, sortOrder, statusParam, jobId]);
 
   useEffect(() => {
     load();
@@ -176,14 +187,20 @@ export function AppointmentsListClient({
     return rows;
   }, [appointments, statusNameFilterActive, statusNameFilter, typeFilterActive, typeFilter]);
 
+  const breakdown = computeStatusBreakdown(visibleAppointments, (a) => a.status);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
       <SetPageHeader>
-        <ListPageHeader
+        <EntityPageHeader
           icon={CalendarCheck}
           title="Appointments"
           total={total}
+          showing={visibleAppointments.length}
+          breakdown={breakdown}
           accent="slate"
+          job={job}
+          parentClaim={parentClaim}
         />
       </SetPageHeader>
       <SetHeaderActions>
@@ -194,6 +211,7 @@ export function AppointmentsListClient({
         >
           Add Appointment
         </Button>
+        <PrintButton documentType="appointments_list" entityId="list" />
       </SetHeaderActions>
 
       <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
@@ -266,7 +284,7 @@ export function AppointmentsListClient({
       <AppointmentFormDrawer
         open={drawerOpen}
         onOpenChange={handleDrawerClose}
-        jobId={editingAppointment?.jobId}
+        jobId={editingAppointment?.jobId ?? job?.id}
         jobs={jobs}
         appointment={editingAppointment ?? undefined}
       />

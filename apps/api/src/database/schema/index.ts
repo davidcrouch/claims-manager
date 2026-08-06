@@ -285,6 +285,11 @@ export const quotes = pgTable(
       .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     claimId: uuid('claim_id').references(() => claims.id, { onDelete: 'cascade' }),
     jobId: uuid('job_id').references(() => jobs.id, { onDelete: 'cascade' }),
+    issuerOrganisationId: uuid('issuer_organisation_id').references(() => organizations.id),
+    recipientOrganisationId: uuid('recipient_organisation_id').references(() => organizations.id),
+    custodianTenantId: uuid('custodian_tenant_id').references(() => organizations.id),
+    captureMethod: text('capture_method'),
+    ownershipStatus: text('ownership_status').notNull().default('owned'),
     externalReference: text('external_reference'),
     quoteNumber: text('quote_number'),
     name: text('name'),
@@ -322,6 +327,13 @@ export const quotes = pgTable(
     index('idx_quotes_job').on(t.tenantId, t.jobId),
     index('idx_quotes_claim').on(t.tenantId, t.claimId),
     index('idx_quotes_status').on(t.tenantId, t.statusLookupId),
+    index('idx_quotes_issuer_org').on(t.issuerOrganisationId),
+    index('idx_quotes_ownership').on(t.ownershipStatus),
+    uniqueIndex('UQ_quotes_issuer_org_number')
+      .on(t.issuerOrganisationId, t.quoteNumber)
+      .where(
+        sql`issuer_organisation_id IS NOT NULL AND quote_number IS NOT NULL AND deleted_at IS NULL`,
+      ),
   ],
 );
 
@@ -1483,6 +1495,8 @@ export const proposals = pgTable(
     jobId: uuid('job_id').references(() => jobs.id, { onDelete: 'cascade' }),
     rfqId: uuid('rfq_id').references(() => rfqs.id, { onDelete: 'set null' }),
     vendorId: uuid('vendor_id').references(() => vendors.id),
+    sourceTenantId: uuid('source_tenant_id'),
+    sourceOrganisationId: uuid('source_organisation_id').references(() => organizations.id),
     proposalNumber: text('proposal_number'),
     name: text('name'),
     reference: text('reference'),
@@ -1519,6 +1533,7 @@ export const proposals = pgTable(
     index('idx_proposal_rfq').on(t.tenantId, t.rfqId),
     index('idx_proposal_vendor').on(t.tenantId, t.vendorId),
     index('idx_proposal_number').on(t.tenantId, t.proposalNumber),
+    index('idx_proposal_source_org').on(t.sourceOrganisationId),
   ],
 );
 
@@ -2400,7 +2415,7 @@ export const documentTemplates = pgTable(
   (t) => [
     check(
       'chk_doc_template_type',
-      sql`document_type IN ('quote','invoice','purchase_order','work_order','proposal','report','bill','rfq')`,
+      sql`document_type IN ('quote','invoice','purchase_order','work_order','proposal','report','bill','rfq','job_details','scope_of_work','claim','contact','task','appointment','message','journal','vendor','jobs_list','quotes_list','invoices_list','bills_list','work_orders_list','purchase_orders_list','proposals_list','rfqs_list','reports_list','claims_list','contacts_list','tasks_list','appointments_list','messages_list','journals_list','vendors_list')`,
     ),
     unique('UQ_doc_template_tenant_type').on(t.tenantId, t.documentType),
     index('idx_doc_templates_tenant_type').on(t.tenantId, t.documentType),
@@ -2433,7 +2448,7 @@ export const generatedDocuments = pgTable(
   (t) => [
     check(
       'chk_gen_doc_type',
-      sql`document_type IN ('quote','invoice','purchase_order','work_order','proposal','report','bill','rfq')`,
+      sql`document_type IN ('quote','invoice','purchase_order','work_order','proposal','report','bill','rfq','job_details','scope_of_work','claim','contact','task','appointment','message','journal','vendor','jobs_list','quotes_list','invoices_list','bills_list','work_orders_list','purchase_orders_list','proposals_list','rfqs_list','reports_list','claims_list','contacts_list','tasks_list','appointments_list','messages_list','journals_list','vendors_list')`,
     ),
     check('chk_gen_doc_trigger', sql`trigger IN ('manual','workflow')`),
     check('chk_gen_doc_status', sql`status IN ('pending','processing','completed','failed')`),
@@ -2492,6 +2507,28 @@ export const poCustodyTransfers = pgTable(
   (t) => [
     index('idx_custody_transfer_po').on(t.purchaseOrderId),
   ],
+);
+
+// ── Quote Custody Transfers (audit log) ───────────────────────
+export const quoteCustodyTransfers = pgTable(
+  'quote_custody_transfers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    quoteId: uuid('quote_id')
+      .notNull()
+      .references(() => quotes.id),
+    fromTenantId: uuid('from_tenant_id')
+      .notNull()
+      .references(() => organizations.id),
+    toTenantId: uuid('to_tenant_id')
+      .notNull()
+      .references(() => organizations.id),
+    organisationClaimId: uuid('organisation_claim_id').references(() => organisationClaims.id),
+    transferredByUserId: text('transferred_by_user_id'),
+    transferredAt: timestamp('transferred_at', { withTimezone: true }).notNull().defaultNow(),
+    metadata: jsonb('metadata').notNull().default({}),
+  },
+  (t) => [index('idx_custody_transfer_quote').on(t.quoteId)],
 );
 
 // ── Agentic AI Platform (doc 46) ───────────────────────────────
@@ -3057,6 +3094,80 @@ export const featureGrants = pgTable(
   },
   (t) => [unique('feature_grants_feature_scope_key').on(t.featureId, t.scope, t.scopeId)],
 );
+// Assessments
+export const assessments = pgTable(
+  'assessments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    jobId: uuid('job_id').references(() => jobs.id, { onDelete: 'set null' }),
+    name: text('name').notNull(),
+    status: text('status').notNull().default('draft'),
+
+    claimRecommendation: text('claim_recommendation'),
+    makeSafe: boolean('make_safe').notNull().default(false),
+    makeSafeType: text('make_safe_type'),
+    designType: text('design_type'),
+    construction: text('construction'),
+    roofType: text('roof_type'),
+    buildingType: text('building_type'),
+    squares: numeric('squares', { precision: 10, scale: 2 }),
+    buildingAge: integer('building_age'),
+    squareMetres: numeric('square_metres', { precision: 10, scale: 2 }),
+    dateBooked: date('date_booked'),
+    overallConditionAcceptable: boolean('overall_condition_acceptable').notNull().default(false),
+    iagInspectionRequired: boolean('iag_inspection_required').notNull().default(false),
+
+    makeSafeCompletionDate: date('make_safe_completion_date'),
+    mainRoofDamage: boolean('main_roof_damage').notNull().default(false),
+    dateMainRoofRepaired: date('date_main_roof_repaired'),
+    habitable: boolean('habitable').notNull().default(true),
+    mould: boolean('mould').notNull().default(false),
+    asbestosOnSite: boolean('asbestos_on_site').notNull().default(false),
+    detachedGarage: boolean('detached_garage').notNull().default(false),
+    sheds: boolean('sheds').notNull().default(false),
+    swimmingPool: boolean('swimming_pool').notNull().default(false),
+    detachedGrannyFlat: boolean('detached_granny_flat').notNull().default(false),
+    damageCausedByListedEvent: boolean('damage_caused_by_listed_event').notNull().default(false),
+
+    hazardPoolFencing: boolean('hazard_pool_fencing').notNull().default(false),
+    hazardPoolFencingComment: text('hazard_pool_fencing_comment'),
+    hazardElectricalGas: boolean('hazard_electrical_gas').notNull().default(false),
+    hazardElectricalGasComment: text('hazard_electrical_gas_comment'),
+    hazardSewerage: boolean('hazard_sewerage').notNull().default(false),
+    hazardSewerageComment: text('hazard_sewerage_comment'),
+    hazardStructural: boolean('hazard_structural').notNull().default(false),
+    hazardStructuralComment: text('hazard_structural_comment'),
+    hazardOther: text('hazard_other'),
+
+    tempAccomRequiredImmediately: boolean('temp_accom_required_immediately').notNull().default(false),
+    tempAccomImmediateEstimateDays: integer('temp_accom_immediate_estimate_days'),
+    tempRepairsToMakeLivable: text('temp_repairs_to_make_livable'),
+    tempAccomRequiredDuringRepairs: boolean('temp_accom_required_during_repairs').notNull().default(false),
+    tempAccomRepairsEstimateDays: integer('temp_accom_repairs_estimate_days'),
+    workWhileInAccommodation: text('work_while_in_accommodation'),
+
+    clientDiscussion: text('client_discussion'),
+    resultantDamage: text('resultant_damage'),
+    causeOfDamage: text('cause_of_damage'),
+    maintenanceRelatedIssues: text('maintenance_related_issues'),
+    comments: text('comments'),
+    variancesOfScope: text('variances_of_scope'),
+
+    createdByUserId: text('created_by_user_id'),
+    updatedByUserId: text('updated_by_user_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [
+    check('chk_assessment_status', sql`status IN ('draft', 'submitted', 'reviewed', 'archived')`),
+    index('idx_assessments_tenant').on(t.tenantId, t.status),
+  ],
+);
+
 // Relations (for Drizzle relational queries - optional)
 export const claimsRelations = relations(claims, ({ one, many }) => ({
   accountLookup: one(lookupValues, {

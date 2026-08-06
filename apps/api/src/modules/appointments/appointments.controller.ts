@@ -13,6 +13,7 @@ export class AppointmentsController {
     @Query('status') status?: string,
     @Query('sort') sort?: string,
     @Query('order') order?: string,
+    @Query('jobId') jobId?: string,
   ) {
     return this.appointmentsService.findAll({
       page: page ? parseInt(page, 10) : undefined,
@@ -21,6 +22,7 @@ export class AppointmentsController {
       status: status || undefined,
       sort: sort || undefined,
       order: order === 'desc' ? 'desc' : 'asc',
+      jobId: jobId || undefined,
     });
   }
 

@@ -42,6 +42,7 @@ import {
   GeneratedDocumentsRepository,
   OrganisationClaimsRepository,
   PoCustodyTransfersRepository,
+  QuoteCustodyTransfersRepository,
   McpIntegrationRepository,
   AgentRepository,
   ConversationRepository,
@@ -50,6 +51,7 @@ import {
   SkillRepository,
   AiMessageFeedbackRepository,
   AiUserMemoryRepository,
+  AssessmentsRepository,
 } from './repositories';
 
 const repositories = [
@@ -94,6 +96,7 @@ const repositories = [
   GeneratedDocumentsRepository,
   OrganisationClaimsRepository,
   PoCustodyTransfersRepository,
+  QuoteCustodyTransfersRepository,
   McpIntegrationRepository,
   AgentRepository,
   ConversationRepository,
@@ -102,6 +105,7 @@ const repositories = [
   SkillRepository,
   AiMessageFeedbackRepository,
   AiUserMemoryRepository,
+  AssessmentsRepository,
 ];
 
 @Global()

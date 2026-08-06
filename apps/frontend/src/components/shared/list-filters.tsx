@@ -330,6 +330,23 @@ export function ListEmptyState({ label }: { label: string }) {
   );
 }
 
+/** Empty tbody row so list tables keep sortable/filterable headers when there are 0 records. */
+export function TableEmptyRow({
+  colSpan,
+  label,
+}: {
+  colSpan: number;
+  label: string;
+}) {
+  return (
+    <tr>
+      <td colSpan={colSpan} className="px-4 py-12 text-center text-sm text-slate-400">
+        {label}
+      </td>
+    </tr>
+  );
+}
+
 /**
  * Compare helper that handles nulls and string vs numeric values consistently
  * for client-side sorting of list rows.

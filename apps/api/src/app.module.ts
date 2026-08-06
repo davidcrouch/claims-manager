@@ -47,6 +47,7 @@ import { WorkflowModule } from './modules/domain/workflows/workflow.module';
 import { OutboundModule } from './modules/domain/outbound/outbound.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
 import { JournalsModule } from './modules/journals/journals.module';
+import { AssessmentsModule } from './modules/assessments/assessments.module';
 import { ScheduleModule } from './modules/schedule/schedule.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { DocumentGenerationModule } from './modules/document-generation/document-generation.module';
@@ -135,6 +136,7 @@ import { OfficeModule } from './common/office/office.module';
     OutboundModule,
     CatalogModule,
     JournalsModule,
+    AssessmentsModule,
     ScheduleModule,
     NotificationsModule,
     SystemAgentsModule,

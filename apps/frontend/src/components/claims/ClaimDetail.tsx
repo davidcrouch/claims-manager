@@ -30,6 +30,9 @@ import {
 } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { BackButton } from '@/components/layout/BackButton';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
+import { PrintButton } from '@/components/shared/PrintButton';
+import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import {
   DefRow,
   SectionCard,
@@ -37,6 +40,7 @@ import {
   formatDate,
   formatDateTime,
   formatCurrency,
+  formatAddress,
   pick,
   asString,
   asBool,
@@ -44,31 +48,15 @@ import {
 } from '@/components/shared/detail';
 import type { Claim } from '@/types/api';
 
-function formatAddress(claim: Claim): string {
-  const addr = claim.address as Dict | undefined;
-  if (addr) {
-    const parts = [
-      pick(addr, 'unitNumber', 'unit_number'),
-      pick(addr, 'streetNumber', 'street_number'),
-      pick(addr, 'streetName', 'street_name'),
-      pick(addr, 'suburb'),
-      pick(addr, 'state'),
-      pick(addr, 'postcode'),
-      pick(addr, 'country'),
-    ]
-      .map((x) => (typeof x === 'string' ? x.trim() : x))
-      .filter(Boolean);
-    if (parts.length) return parts.join(', ');
-  }
-  const fallback = [
-    claim.addressSuburb,
-    claim.addressState,
-    claim.addressPostcode,
-    claim.addressCountry,
-  ]
-    .filter(Boolean)
-    .join(', ');
-  return fallback || '';
+function claimAddress(claim: Claim): string {
+  return formatAddress(claim.address as Dict | undefined, {
+    fallback: {
+      suburb: claim.addressSuburb,
+      state: claim.addressState,
+      postcode: claim.addressPostcode,
+      country: claim.addressCountry,
+    },
+  });
 }
 
 function getApi(claim: Claim): Dict {
@@ -97,7 +85,7 @@ function getCustomData(claim: Claim): Dict {
 
 function OverviewTab({ claim }: { claim: Claim }) {
   const api = getApi(claim);
-  const address = formatAddress(claim);
+  const address = claimAddress(claim);
   const status =
     (claim.status as { name?: string })?.name ??
     ((api.status as Dict | undefined)?.name as string | undefined) ??
@@ -860,13 +848,24 @@ export function ClaimPageHeader({ claim }: { claim: Claim }) {
   const account =
     (claim.account as { name?: string })?.name ??
     ((api.account as Dict | undefined)?.name as string | undefined);
-  const address = formatAddress(claim);
+  const address = claimAddress(claim);
   const jobs = claim.jobs ?? [];
 
   return (
-    <div className="flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-2">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-        <BackButton href="/claims" label="Back to claims" />
+    <>
+      <SetHeaderActions>
+        <PrintButton documentType="claim" entityId={claim.id} />
+        <ArchiveEntityButton
+          entityType="claim"
+          entityId={claim.id}
+          statusName={claim.status?.name}
+          entityLabel={claim.claimNumber ?? claim.externalReference ?? undefined}
+          redirectTo="/claims"
+        />
+      </SetHeaderActions>
+      <div className="flex w-full min-w-0 flex-col gap-y-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+          <BackButton href="/claims" label="Back to claims" />
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-100">
           <FileText className="h-4 w-4 text-blue-600" />
         </span>
@@ -890,7 +889,7 @@ export function ClaimPageHeader({ claim }: { claim: Claim }) {
           </span>
         )}
       </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1 text-xs">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pl-20 text-xs">
         <div className="flex items-baseline gap-1">
           <span className="text-muted-foreground">Lodged:</span>
           <span className="font-medium">{formatDate(claim.lodgementDate)}</span>
@@ -905,6 +904,7 @@ export function ClaimPageHeader({ claim }: { claim: Claim }) {
         </div>
       </div>
     </div>
+    </>
   );
 }
 

@@ -17,6 +17,7 @@ import { organizations } from '../../database/schema';
 import type { SeedResult } from '../../database/seeds/lib/runner';
 import { seedSampleDataForTenant } from '../../database/seeds/entries/sample-data.seed';
 import { seedCatalogDevForTenant } from '../../database/seeds/entries/catalog-dev.seed';
+import { seedMcpForTenant } from '../../database/seeds/entries/mcp.seed';
 
 const LOG = 'InternalService';
 
@@ -94,6 +95,12 @@ export class InternalService {
         logger,
       });
 
+      const mcpResult = await seedMcpForTenant({
+        db: this.db,
+        tenantId,
+        logger,
+      });
+
       let sampleResult: SeedResult | undefined;
       if (includeSample) {
         sampleResult = await seedSampleDataForTenant({
@@ -108,10 +115,19 @@ export class InternalService {
       }
 
       const result: SeedResult = {
-        inserted: catalogResult.inserted + (sampleResult?.inserted ?? 0),
-        updated: catalogResult.updated + (sampleResult?.updated ?? 0),
-        skipped: catalogResult.skipped + (sampleResult?.skipped ?? 0),
-        notes: `tenant=${tenantId}; catalog;${includeSample ? ' sample-data' : ' no-sample'}`,
+        inserted:
+          catalogResult.inserted +
+          mcpResult.inserted +
+          (sampleResult?.inserted ?? 0),
+        updated:
+          catalogResult.updated +
+          mcpResult.updated +
+          (sampleResult?.updated ?? 0),
+        skipped:
+          catalogResult.skipped +
+          mcpResult.skipped +
+          (sampleResult?.skipped ?? 0),
+        notes: `tenant=${tenantId}; catalog; mcp;${includeSample ? ' sample-data' : ' no-sample'}`,
       };
 
       this.logger.log(

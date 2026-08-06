@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
@@ -11,6 +11,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   BottomFormDrawer,
   BottomFormDrawerBody,
   BottomFormDrawerError,
@@ -18,9 +25,14 @@ import {
 } from '@/components/forms/BottomFormDrawer';
 import { ChatDrawer } from '@/components/chat/ChatDrawer';
 import { buildAIContext, type AIContextPayload } from '@/lib/ai/use-ai-context';
-import { createContactAction } from '@/app/(app)/mutations';
+import {
+  createContactAction,
+  fetchContactTypeLookupsAction,
+} from '@/app/(app)/mutations';
+import type { Contact } from '@/types/api';
 
 const contactFormSchema = z.object({
+  typeLookupId: z.string().min(1, 'Contact type is required'),
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().optional(),
   email: z.string().email('Invalid email').optional().or(z.literal('')),
@@ -32,6 +44,12 @@ const contactFormSchema = z.object({
 
 type ContactFormValues = z.infer<typeof contactFormSchema>;
 
+type ContactTypeLookup = {
+  id: string;
+  name?: string;
+  externalReference?: string;
+};
+
 export interface ContactFormDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -39,6 +57,8 @@ export interface ContactFormDrawerProps {
   aiAssistEnabled?: boolean;
   /** When set, forces companion layout for an already-open chat drawer. */
   companionChatOpen?: boolean;
+  /** Called after a contact is created so the parent can update local state. */
+  onSuccess?: (contact: Contact) => void;
 }
 
 export function ContactFormDrawer({
@@ -47,20 +67,19 @@ export function ContactFormDrawer({
   renderMode = 'drawer',
   aiAssistEnabled = false,
   companionChatOpen: companionChatOpenProp,
+  onSuccess,
 }: ContactFormDrawerProps) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [aiContext, setAiContext] = useState<AIContextPayload | undefined>();
-
-  useEffect(() => {
-    if (!open) setChatOpen(false);
-  }, [open]);
+  const [contactTypes, setContactTypes] = useState<ContactTypeLookup[]>([]);
 
   const form = useForm<ContactFormValues>({
     resolver: standardSchemaResolver(contactFormSchema),
     defaultValues: {
+      typeLookupId: '',
       firstName: '',
       lastName: '',
       email: '',
@@ -71,11 +90,37 @@ export function ContactFormDrawer({
     },
   });
 
+  const typeLookupId = form.watch('typeLookupId');
+
+  const contactTypeItems = useMemo(
+    () =>
+      Object.fromEntries(
+        contactTypes.map((t) => [t.id, t.name ?? t.externalReference ?? t.id]),
+      ) as Record<string, string>,
+    [contactTypes],
+  );
+
+  useEffect(() => {
+    if (!open) {
+      setChatOpen(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const rows = await fetchContactTypeLookupsAction();
+      if (!cancelled) setContactTypes(rows);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
   async function onSubmit(values: ContactFormValues) {
     setSubmitting(true);
     setError(null);
     try {
       const result = await createContactAction({
+        typeLookupId: values.typeLookupId,
         firstName: values.firstName,
         lastName: values.lastName || undefined,
         email: values.email || undefined,
@@ -87,6 +132,7 @@ export function ContactFormDrawer({
       if (result.success) {
         onOpenChange(false);
         form.reset();
+        if (result.contact) onSuccess?.(result.contact);
         router.refresh();
       } else {
         setError(result.error ?? 'Failed to create contact');
@@ -121,6 +167,33 @@ export function ContactFormDrawer({
     >
         <BottomFormDrawerBody>
           <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="typeLookupId">Contact Type</Label>
+              <Select
+                value={typeLookupId || null}
+                onValueChange={(v) =>
+                  form.setValue('typeLookupId', v ?? '', { shouldValidate: true })
+                }
+                items={contactTypeItems}
+              >
+                <SelectTrigger id="typeLookupId" className="w-full">
+                  <SelectValue placeholder="Select contact type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {contactTypes.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name ?? t.externalReference ?? t.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {form.formState.errors.typeLookupId && (
+                <p className="text-sm text-destructive">
+                  {form.formState.errors.typeLookupId.message}
+                </p>
+              )}
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="firstName">First Name</Label>
               <Input

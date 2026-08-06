@@ -12,6 +12,7 @@ export const PROVISIONING_STEPS = [
   'upload_templates',
   'assign_document_templates',
   'seed_catalog',
+  'seed_mcp',
 ] as const;
 
 export type ProvisioningStep = (typeof PROVISIONING_STEPS)[number];
@@ -35,6 +36,7 @@ export const STEP_LABELS: Record<ProvisioningStep, string> = {
   upload_templates: 'Installing standard templates',
   assign_document_templates: 'Configuring document generation',
   seed_catalog: 'Loading your catalogue',
+  seed_mcp: 'Connecting AI tools',
 };
 
 export const PLATFORM_TEMPLATES_PREFIX = 'platform/templates/';

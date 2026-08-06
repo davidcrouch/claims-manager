@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, getAccessToken } from '@/lib/auth';
 import { getApiBaseUrl } from '@/lib/env';
+import { getUpstreamApiAuth } from '@/lib/upstream-api';
 
 /**
  * Serves the thumbnail as image bytes so the browser can use this route
@@ -12,29 +12,15 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await getSession();
-  if (!session.authenticated) {
-    return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
-  }
-
-  const token = await getAccessToken();
-  if (!token) {
+  const auth = await getUpstreamApiAuth();
+  if (!auth) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }
 
   const { id } = await params;
-  const tenantId =
-    session.identity?.organization_id ??
-    process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID ??
-    '';
-
-  const authHeaders = {
-    Authorization: `Bearer ${token}`,
-    ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
-  };
 
   const url = `${getApiBaseUrl()}/documents/${id}/thumbnail`;
-  const upstream = await fetch(url, { headers: authHeaders });
+  const upstream = await fetch(url, { headers: auth.headers });
 
   if (!upstream.ok) {
     return new NextResponse(null, { status: upstream.status });
@@ -47,7 +33,7 @@ export async function GET(
 
   if (data.streamFallback || !data.url) {
     const streamUrl = `${getApiBaseUrl()}/documents/${id}/thumbnail/stream`;
-    const streamRes = await fetch(streamUrl, { headers: authHeaders });
+    const streamRes = await fetch(streamUrl, { headers: auth.headers });
 
     if (!streamRes.ok || !streamRes.body) {
       return new NextResponse(null, { status: streamRes.status || 502 });

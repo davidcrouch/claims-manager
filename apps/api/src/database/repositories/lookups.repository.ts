@@ -84,4 +84,41 @@ export class LookupsRepository {
       .returning();
     return row;
   }
+
+  async findByName(params: {
+    tenantId: string;
+    domain: string;
+    name: string;
+  }): Promise<LookupValueRow | null> {
+    const [row] = await this.db
+      .select()
+      .from(lookupValues)
+      .where(
+        and(
+          eq(lookupValues.tenantId, params.tenantId),
+          eq(lookupValues.domain, params.domain),
+          eq(lookupValues.name, params.name),
+          eq(lookupValues.isActive, true),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
+  async findOrCreateByName(params: {
+    tenantId: string;
+    domain: string;
+    name: string;
+  }): Promise<LookupValueRow> {
+    const existing = await this.findByName(params);
+    if (existing) return existing;
+    return this.create({
+      tenantId: params.tenantId,
+      data: {
+        domain: params.domain,
+        name: params.name,
+        externalReference: `${params.domain}-${params.name.toLowerCase().replace(/\s+/g, '-')}`,
+      },
+    });
+  }
 }

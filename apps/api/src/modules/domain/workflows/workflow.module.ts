@@ -21,6 +21,8 @@ import { purchaseOrderStandard } from './definitions/purchase-order.workflows';
 import { workOrderStandard } from './definitions/work-order.workflows';
 import { contactOnboarding, contactRemoval } from './definitions/contact.workflows';
 import { jobStandard } from './definitions/job.workflows';
+import { quoteStandard } from './definitions/quote.workflows';
+import { proposalStandard } from './definitions/proposal.workflows';
 
 @Module({
   imports: [DomainModule, OutboundModule, forwardRef(() => DocumentGenerationModule)],
@@ -57,6 +59,8 @@ export class WorkflowModule implements OnModuleInit {
     this.engine.registerDefinition(contactOnboarding);
     this.engine.registerDefinition(contactRemoval);
     this.engine.registerDefinition(jobStandard);
+    this.engine.registerDefinition(quoteStandard);
+    this.engine.registerDefinition(proposalStandard);
 
     // Register guards
     this.engine.registerGuard(this.hasLineItems);
