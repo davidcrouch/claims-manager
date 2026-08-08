@@ -36,6 +36,7 @@ export interface ApiItem {
 
 export interface ApiCombo {
   id?: string;
+  kind?: 'assembly' | 'scope';
   name?: string;
   component?: string;
   description?: string;
@@ -46,6 +47,26 @@ export interface ApiCombo {
   catalogComboId?: string;
   lineScopeStatus?: ApiLookup;
   items?: ApiItem[];
+  subTotal?: number;
+  totalTax?: number;
+  total?: number;
+  allocatedCost?: number;
+  committedCost?: number;
+}
+
+export interface ApiScope {
+  id?: string;
+  name?: string;
+  component?: string;
+  description?: string;
+  category?: string;
+  subCategory?: string | null;
+  index?: number;
+  quantity?: number;
+  catalogScopeId?: string;
+  lineScopeStatus?: ApiLookup;
+  items?: ApiItem[];
+  combos?: ApiCombo[];
   subTotal?: number;
   totalTax?: number;
   total?: number;
@@ -66,6 +87,7 @@ export interface ApiGroup {
   total?: number;
   items?: ApiItem[];
   combos?: ApiCombo[];
+  scopes?: ApiScope[];
 }
 
 export interface FlatLineItemRow {

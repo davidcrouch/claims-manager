@@ -26,9 +26,11 @@ export default async function CatalogItemsPage({
 
   const { catalogId } = await params;
 
-  const [catalog, categories, template, unresolved] = await Promise.all([
+  const [catalog, categories, types, unitTypes, template, unresolved] = await Promise.all([
     api.getCatalog(catalogId).catch(() => null),
     api.getCatalogCategoriesTree().catch(() => []),
+    api.getCatalogTypes().catch(() => []),
+    api.getLookupsByDomain('unit_type').catch(() => []),
     api.getCatalogImportTemplate(undefined).catch(() => ({ csv: '', columns: [], catalogType: 'internal' })),
     api.getCatalogUnresolvedReferences().catch(() => []),
   ]);
@@ -49,6 +51,8 @@ export default async function CatalogItemsPage({
       catalogName={catalog.name}
       catalogType={catalog.type}
       categories={categories}
+      types={types}
+      unitTypes={unitTypes}
       templateCsv={template.csv}
       unresolvedReferences={unresolvedReferences}
     />

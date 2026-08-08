@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -14,6 +14,7 @@ import {
   Package,
   ClipboardList,
   MessageSquare,
+  Loader2,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -31,10 +32,14 @@ import {
   type Dict,
 } from '@/components/shared/detail';
 import { updateProposalStatusAction } from '@/app/(app)/mutations-status';
-import type { Proposal, Job } from '@/types/api';
+import type { Proposal, Job, Rfq, Quote } from '@/types/api';
 import { PrintButton } from '@/components/shared/PrintButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { jobDisplayName } from '@/components/shared/job-label';
+import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
+import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
+import { groupsFromDocumentPayload } from '@/components/quotes/quote-line-items.utils';
+import { getProposalLineItemsAction } from '@/app/(app)/proposals/actions';
 
 // ---------- helpers ---------------------------------------------------------
 
@@ -178,11 +183,32 @@ export function ProposalPageHeader({ proposal, job }: { proposal: Proposal; job?
 
 // ---------- tabs ------------------------------------------------------------
 
-function OverviewTab({ proposal }: { proposal: Proposal }) {
+function rfqDisplayName(rfq: Rfq): string {
+  return rfq.rfqNumber?.trim() || rfq.name?.trim() || rfq.id;
+}
+
+function quoteDisplayName(quote: Quote): string {
+  return quote.name?.trim() || quote.quoteNumber?.trim() || quote.reference?.trim() || quote.id;
+}
+
+function OverviewTab({
+  proposal,
+  job,
+  rfq,
+  quote,
+}: {
+  proposal: Proposal;
+  job?: Job | null;
+  rfq?: Rfq | null;
+  quote?: Quote | null;
+}) {
   const payload = getPayload(proposal);
   const status = proposal.status?.name ?? 'Unknown';
   const vendor = vendorFromName(proposal);
   const proposalType = proposal.proposalType?.name;
+  const jobLabel = job ? jobDisplayName(job) : proposal.jobId;
+  const rfqLabel = rfq ? rfqDisplayName(rfq) : proposal.rfqId;
+  const estimateLabel = quote ? quoteDisplayName(quote) : proposal.quoteId;
 
   return (
     <div className="space-y-4">
@@ -256,7 +282,7 @@ function OverviewTab({ proposal }: { proposal: Proposal }) {
                   href={`/rfqs/${proposal.rfqId}`}
                   className="inline-flex items-center gap-1 text-primary hover:underline"
                 >
-                  {proposal.rfqId}
+                  {rfqLabel}
                   <ExternalLink className="h-3 w-3" />
                 </Link>
               ) : (
@@ -272,7 +298,23 @@ function OverviewTab({ proposal }: { proposal: Proposal }) {
                   href={`/jobs/${proposal.jobId}`}
                   className="inline-flex items-center gap-1 text-primary hover:underline"
                 >
-                  {proposal.jobId}
+                  {jobLabel}
+                  <ExternalLink className="h-3 w-3" />
+                </Link>
+              ) : (
+                '—'
+              )
+            }
+          />
+          <DefRow
+            label="Source estimate"
+            value={
+              proposal.quoteId ? (
+                <Link
+                  href={`/quotes/${proposal.quoteId}`}
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                >
+                  {estimateLabel}
                   <ExternalLink className="h-3 w-3" />
                 </Link>
               ) : (
@@ -336,21 +378,71 @@ function OverviewTab({ proposal }: { proposal: Proposal }) {
   );
 }
 
-function LineItemsTab() {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Line Items</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">
-          Proposal line items follow the same group / combo / item hierarchy as
-          Estimates/Quotes, showing the sub-contractor&apos;s pricing. They will be
-          rendered here once the line items API is connected.
-        </p>
-      </CardContent>
-    </Card>
-  );
+function LineItemsTab({ proposal }: { proposal: Proposal }) {
+  const [groups, setGroups] = useState<ApiGroup[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const fallback = groupsFromDocumentPayload(proposal.proposalPayload);
+    const result = await getProposalLineItemsAction(proposal.id);
+    if (result.success && result.groups && result.groups.length > 0) {
+      setGroups(result.groups as ApiGroup[]);
+      setError(null);
+    } else if (fallback.length > 0) {
+      setGroups(fallback);
+      setError(null);
+    } else {
+      setGroups([]);
+      setError(result.error ?? null);
+    }
+    setLoading(false);
+  }, [proposal.id, proposal.proposalPayload]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-12">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error && (!groups || groups.length === 0)) {
+    return (
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Line items</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-destructive">{error}</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!groups || groups.length === 0) {
+    return (
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Line Items</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            No line items found for this proposal.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return <QuoteLineItemsTable groups={groups} readOnly />;
 }
 
 function ActivitiesTab() {
@@ -411,7 +503,17 @@ type ProposalTab =
   | 'communications'
   | 'timeline';
 
-export function ProposalDetail({ proposal }: { proposal: Proposal }) {
+export function ProposalDetail({
+  proposal,
+  job,
+  rfq,
+  quote,
+}: {
+  proposal: Proposal;
+  job?: Job | null;
+  rfq?: Rfq | null;
+  quote?: Quote | null;
+}) {
   const [tab, setTab] = useState<ProposalTab>('overview');
 
   const tabs: Array<{ id: ProposalTab; label: string; icon: typeof Calendar }> = [
@@ -446,8 +548,8 @@ export function ProposalDetail({ proposal }: { proposal: Proposal }) {
         })}
       </div>
       <div className="pt-4">
-        {tab === 'overview' && <OverviewTab proposal={proposal} />}
-        {tab === 'line-items' && <LineItemsTab />}
+        {tab === 'overview' && <OverviewTab proposal={proposal} job={job} rfq={rfq} quote={quote} />}
+        {tab === 'line-items' && <LineItemsTab proposal={proposal} />}
         {tab === 'activities' && <ActivitiesTab />}
         {tab === 'communications' && <CommunicationsTab />}
         {tab === 'timeline' && <TimelineTab proposal={proposal} />}

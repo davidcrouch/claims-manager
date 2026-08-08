@@ -305,7 +305,7 @@ export async function seedCatalogDevForTenant(params: {
   for (const r of csvRows) {
     const code = (r.code || '').trim();
     if (!code) continue;
-    const kind = (r.kind || 'primitive').trim() as 'primitive' | 'assembly';
+    const kind = (r.kind || 'primitive').trim() as 'primitive' | 'assembly' | 'scope';
     const typeCode = (r.type_code || 'other').trim();
     const typeId = typeByCode.get(typeCode);
     if (!typeId) {

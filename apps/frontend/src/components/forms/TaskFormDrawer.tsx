@@ -26,6 +26,7 @@ import {
 import { ChatDrawer } from '@/components/chat/ChatDrawer';
 import { buildAIContext, type AIContextPayload } from '@/lib/ai/use-ai-context';
 import { createTaskAction } from '@/app/(app)/mutations';
+import { OrgUserSelect } from '@/components/forms/OrgUserSelect';
 
 const taskFormSchema = z.object({
   jobId: z.string().optional(),
@@ -34,6 +35,7 @@ const taskFormSchema = z.object({
   priority: z.string().min(1, 'Priority is required'),
   dueDate: z.string().min(1, 'Due date is required'),
   description: z.string().optional(),
+  assignedToUserId: z.string().optional(),
 });
 
 type TaskFormValues = z.infer<typeof taskFormSchema>;
@@ -77,6 +79,7 @@ export function TaskFormDrawer({
       priority: 'Medium',
       dueDate: '',
       description: '',
+      assignedToUserId: '',
     },
   });
 
@@ -99,6 +102,9 @@ export function TaskFormDrawer({
         priority: values.priority,
         dueDate: values.dueDate,
         description: values.description || undefined,
+        ...(values.assignedToUserId
+          ? { assignedToUserId: values.assignedToUserId }
+          : {}),
       });
       if (result.success) {
         onOpenChange(false);
@@ -109,6 +115,7 @@ export function TaskFormDrawer({
           priority: 'Medium',
           dueDate: '',
           description: '',
+          assignedToUserId: '',
         });
         router.refresh();
       } else {
@@ -196,6 +203,18 @@ export function TaskFormDrawer({
                   {form.formState.errors.dueDate.message}
                 </p>
               )}
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <OrgUserSelect
+                id="task-assignedToUserId"
+                value={form.watch('assignedToUserId') || null}
+                onChange={(userId) =>
+                  form.setValue('assignedToUserId', userId ?? '', {
+                    shouldValidate: false,
+                  })
+                }
+              />
             </div>
 
             <div className="space-y-2 md:col-span-2">

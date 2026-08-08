@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { GripVertical, Layers, Package, Pin, PinOff, Search, Tag, X } from 'lucide-react';
+import { Boxes, GripVertical, Layers, Package, Pin, PinOff, Search, Tag, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -29,7 +29,7 @@ export interface CatalogPickerDrawerProps {
 async function fetchAllCatalogItems(params: {
   catalogId?: string;
   q?: string;
-  kind?: 'primitive' | 'assembly';
+  kind?: 'primitive' | 'assembly' | 'scope';
 }): Promise<CatalogItem[]> {
   const pageSize = params.q ? 500 : 100;
   const all: CatalogItem[] = [];
@@ -69,6 +69,7 @@ function toDragPayload(item: CatalogItem): CatalogDragPayload {
 
 function CatalogRow({ item }: { item: CatalogItem }) {
   const isAssembly = item.kind === 'assembly';
+  const isScope = item.kind === 'scope';
 
   return (
     <li
@@ -97,10 +98,16 @@ function CatalogRow({ item }: { item: CatalogItem }) {
         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span
             className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 capitalize ${
-              isAssembly ? 'bg-violet-100 text-violet-700' : 'bg-sky-100 text-sky-700'
+              isScope
+                ? 'bg-violet-100 text-violet-700'
+                : isAssembly
+                  ? 'bg-slate-200 text-slate-700'
+                  : 'bg-sky-100 text-sky-700'
             }`}
           >
-            {isAssembly ? (
+            {isScope ? (
+              <Boxes className="h-3 w-3" />
+            ) : isAssembly ? (
               <Layers className="h-3 w-3" />
             ) : (
               <Package className="h-3 w-3" />
@@ -128,6 +135,7 @@ function ItemsTab({ open, catalogType }: { open: boolean; catalogType?: CatalogT
   const [selectedCatalogId, setSelectedCatalogId] = useState<string>('');
   const [showAssemblies, setShowAssemblies] = useState(true);
   const [showPrimitives, setShowPrimitives] = useState(true);
+  const [showScopes, setShowScopes] = useState(true);
   const fetchGeneration = useRef(0);
 
   useEffect(() => {
@@ -208,6 +216,7 @@ function ItemsTab({ open, catalogType }: { open: boolean; catalogType?: CatalogT
     setSelectedCatalogId('');
     setShowAssemblies(true);
     setShowPrimitives(true);
+    setShowScopes(true);
     setItems([]);
     setCatalogsReady(false);
     setLoading(false);
@@ -216,6 +225,7 @@ function ItemsTab({ open, catalogType }: { open: boolean; catalogType?: CatalogT
   const visibleItems = items.filter((item) => {
     if (item.kind === 'assembly') return showAssemblies;
     if (item.kind === 'primitive') return showPrimitives;
+    if (item.kind === 'scope') return showScopes;
     return false;
   });
 
@@ -238,6 +248,14 @@ function ItemsTab({ open, catalogType }: { open: boolean; catalogType?: CatalogT
               aria-label="Show primitives"
             />
             Primitive
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
+            <Checkbox
+              checked={showScopes}
+              onCheckedChange={setShowScopes}
+              aria-label="Show scopes"
+            />
+            Scopes
           </label>
         </div>
         {catalogs.length > 1 && (
@@ -271,8 +289,8 @@ function ItemsTab({ open, catalogType }: { open: boolean; catalogType?: CatalogT
         )}
         {!loading && visibleItems.length === 0 && (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            {!showAssemblies && !showPrimitives
-              ? 'Select Assemblies or Primitive to show items'
+            {!showAssemblies && !showPrimitives && !showScopes
+              ? 'Select Assemblies, Primitive or Scopes to show items'
               : 'No catalogue items found'}
           </p>
         )}

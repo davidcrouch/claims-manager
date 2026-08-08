@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   Receipt,
@@ -13,6 +13,7 @@ import {
   MessageSquare,
   Paperclip,
   BookOpen,
+  Loader2,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -37,6 +38,10 @@ import {
   linkJournalAction,
   unlinkJournalAction,
 } from '@/app/(app)/journals/actions';
+import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
+import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
+import { groupsFromDocumentPayload } from '@/components/quotes/quote-line-items.utils';
+import { getPurchaseOrderLineItemsAction } from '@/app/(app)/purchase-orders/actions';
 
 // ---------- header ----------------------------------------------------------
 
@@ -201,8 +206,44 @@ function OverviewTab({ invoice }: { invoice: Invoice }) {
 }
 
 function LineItemsTab({ invoice }: { invoice: Invoice }) {
-  const payload = ((invoice as any).apiPayload ?? (invoice as any).invoicePayload ?? {}) as Record<string, unknown>;
+  const payload = (invoice.invoicePayload ?? invoice.apiPayload ?? {}) as Record<string, unknown>;
+  const payloadGroups = groupsFromDocumentPayload(payload);
   const lineItems = (payload.lineItems ?? payload.items ?? []) as Array<Record<string, unknown>>;
+  const [poGroups, setPoGroups] = useState<ApiGroup[] | null>(null);
+  const [loading, setLoading] = useState(payloadGroups.length === 0 && !!invoice.purchaseOrderId);
+
+  const loadPo = useCallback(async () => {
+    if (payloadGroups.length > 0 || !invoice.purchaseOrderId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    const result = await getPurchaseOrderLineItemsAction(invoice.purchaseOrderId);
+    if (result.success && result.groups) {
+      setPoGroups(result.groups as ApiGroup[]);
+    }
+    setLoading(false);
+  }, [invoice.purchaseOrderId, payloadGroups.length]);
+
+  useEffect(() => {
+    void loadPo();
+  }, [loadPo]);
+
+  const groups = payloadGroups.length > 0 ? payloadGroups : poGroups;
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-12">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (groups && groups.length > 0) {
+    return <QuoteLineItemsTable groups={groups} readOnly />;
+  }
 
   if (lineItems.length === 0) {
     return (

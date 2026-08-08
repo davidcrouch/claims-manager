@@ -85,6 +85,7 @@ export class JobsService {
     search?: string;
     status?: string;
     jobType?: string;
+    assignedToUserId?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
     this.logger.debug(`JobsService.findAll — tenantId=${tenantId} claimId=${params.claimId ?? 'all'}`);
@@ -97,6 +98,7 @@ export class JobsService {
       search: params.search,
       status: params.status,
       jobType: params.jobType,
+      assignedToUserId: params.assignedToUserId,
     });
     return { data: result.data.map(this.shapeJobResponse), total: result.total };
   }
@@ -109,10 +111,11 @@ export class JobsService {
   }
 
   private shapeJobResponse(row: JobViewRow) {
-    const { statusName, statusExternalReference, jobTypeName, jobTypeExternalReference, vendorName, vendorExternalReference, connectionProviderCode, ...rest } = row;
+    const { statusName, statusExternalReference, jobTypeName, jobTypeExternalReference, vendorName, vendorExternalReference, connectionProviderCode, assigneeName, ...rest } = row;
     return {
       ...rest,
       provider: connectionProviderCode ?? 'internal',
+      assigneeName: assigneeName ?? null,
       status: row.statusLookupId
         ? { id: row.statusLookupId, name: statusName ?? undefined, externalReference: statusExternalReference ?? undefined }
         : undefined,
@@ -217,6 +220,10 @@ export class JobsService {
       return inserted;
     });
 
+    this.logger.debug(
+      `JobsService.create — id=${job.id} assignedToUserId=${job.assignedToUserId ?? 'none'}`,
+    );
+
     const filesystemTemplateId =
       typeof params.body.filesystemTemplateId === 'string'
         ? params.body.filesystemTemplateId
@@ -235,7 +242,7 @@ export class JobsService {
       throw err;
     }
 
-    return job;
+    return this.findOne({ id: job.id });
   }
 
   async update(params: {
@@ -281,7 +288,7 @@ export class JobsService {
       return updated;
     });
 
-    return job;
+    return this.findOne({ id: params.id });
   }
 
   async addContacts(params: {
@@ -554,6 +561,7 @@ export class JobsService {
       excess: body.excess != null ? String(body.excess) : undefined,
       makeSafeRequired: (body.makeSafeRequired as boolean) ?? undefined,
       jobInstructions: asText(body.jobInstructions),
+      assignedToUserId: parseOptionalUserId(body.assignedToUserId) ?? undefined,
       apiPayload: contactSnapshots.length > 0 ? { contacts: contactSnapshots } : {},
     };
   }
@@ -585,6 +593,18 @@ export class JobsService {
     if (body.jobTypeLookupId !== undefined) data.jobTypeLookupId = body.jobTypeLookupId as string;
     if (body.parentJobId !== undefined) data.parentJobId = body.parentJobId as string;
     if (body.customData !== undefined) data.customData = body.customData as Record<string, unknown>;
+    if (body.assignedToUserId !== undefined) {
+      data.assignedToUserId = parseOptionalUserId(body.assignedToUserId) ?? null;
+    }
     return data;
   }
+}
+
+function parseOptionalUserId(value: unknown): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === '__unassigned__') return null;
+  return trimmed;
 }

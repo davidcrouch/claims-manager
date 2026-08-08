@@ -31,7 +31,7 @@ import {
   asString,
   type Dict,
 } from '@/components/shared/detail';
-import type { Rfq, Proposal, Job } from '@/types/api';
+import type { Rfq, Proposal, Job, Quote } from '@/types/api';
 import { PrintButton } from '@/components/shared/PrintButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { jobDisplayName } from '@/components/shared/job-label';
@@ -125,10 +125,32 @@ export function RfqPageHeader({ rfq, job }: { rfq: Rfq; job?: Job | null }) {
 
 // ---------- tabs ------------------------------------------------------------
 
-function OverviewTab({ rfq }: { rfq: Rfq }) {
+function quoteDisplayName(quote: Quote): string {
+  return (
+    quote.name?.trim() ||
+    quote.quoteNumber?.trim() ||
+    quote.reference?.trim() ||
+    quote.id
+  );
+}
+
+function OverviewTab({
+  rfq,
+  job,
+  quote,
+}: {
+  rfq: Rfq;
+  job?: Job | null;
+  quote?: Quote | null;
+}) {
   const status = rfq.status?.name ?? 'Unknown';
   const vendor = vendorName(rfq);
   const payload = getPayload(rfq);
+  const jobLabel = job ? jobDisplayName(job) : rfq.jobId;
+  const estimateLabel =
+    quote
+      ? quoteDisplayName(quote)
+      : asString(pick(payload, 'quoteNumber', 'quoteReference', 'quoteName')) ?? rfq.quoteId;
 
   return (
     <div className="space-y-4">
@@ -167,7 +189,7 @@ function OverviewTab({ rfq }: { rfq: Rfq }) {
                   href={`/jobs/${rfq.jobId}`}
                   className="inline-flex items-center gap-1 text-primary hover:underline"
                 >
-                  {rfq.jobId}
+                  {jobLabel}
                   <ExternalLink className="h-3 w-3" />
                 </Link>
               ) : (
@@ -183,7 +205,7 @@ function OverviewTab({ rfq }: { rfq: Rfq }) {
                   href={`/quotes/${rfq.quoteId}`}
                   className="inline-flex items-center gap-1 text-primary hover:underline"
                 >
-                  {asString(pick(payload, 'quoteNumber', 'quoteReference')) ?? rfq.quoteId}
+                  {estimateLabel}
                   <ExternalLink className="h-3 w-3" />
                 </Link>
               ) : (
@@ -477,21 +499,33 @@ function ScopeItemsTab({
  */
 function collectSourceQuoteIds(groups: ApiGroup[]): Set<string> {
   const ids = new Set<string>();
+  const collectCombo = (combo: NonNullable<ApiGroup['combos']>[number]) => {
+    const comboSrc = (combo as Record<string, unknown>).sourceQuoteComboId;
+    if (typeof comboSrc === 'string') ids.add(comboSrc);
+    else if (combo.id) ids.add(combo.id);
+    for (const item of combo.items ?? []) {
+      const src = (item as Record<string, unknown>).sourceQuoteItemId;
+      if (typeof src === 'string') ids.add(src);
+      else if (item.id) ids.add(item.id);
+    }
+  };
   for (const group of groups) {
     for (const item of group.items ?? []) {
       const src = (item as Record<string, unknown>).sourceQuoteItemId;
       if (typeof src === 'string') ids.add(src);
       else if (item.id) ids.add(item.id);
     }
-    for (const combo of group.combos ?? []) {
-      const comboSrc = (combo as Record<string, unknown>).sourceQuoteComboId;
-      if (typeof comboSrc === 'string') ids.add(comboSrc);
-      else if (combo.id) ids.add(combo.id);
-      for (const item of combo.items ?? []) {
+    for (const combo of group.combos ?? []) collectCombo(combo);
+    for (const scope of group.scopes ?? []) {
+      const scopeSrc = (scope as Record<string, unknown>).sourceQuoteComboId;
+      if (typeof scopeSrc === 'string') ids.add(scopeSrc);
+      else if (scope.id) ids.add(scope.id);
+      for (const item of scope.items ?? []) {
         const src = (item as Record<string, unknown>).sourceQuoteItemId;
         if (typeof src === 'string') ids.add(src);
         else if (item.id) ids.add(item.id);
       }
+      for (const combo of scope.combos ?? []) collectCombo(combo);
     }
   }
   return ids;
@@ -512,8 +546,28 @@ function filterGroupsBySelectedIds(groups: ApiGroup[], selectedIds: Set<string>)
           return { ...combo, items: childItems };
         })
         .filter(Boolean) as NonNullable<ApiGroup['combos']>;
-      if (items.length === 0 && combos.length === 0) return null;
-      return { ...group, items, combos };
+      const scopes = (group.scopes ?? [])
+        .map((scope) => {
+          const childItems = (scope.items ?? []).filter(
+            (item) => item.id && selectedIds.has(item.id),
+          );
+          const childCombos = (scope.combos ?? [])
+            .map((combo) => {
+              const comboItems = (combo.items ?? []).filter(
+                (item) => item.id && selectedIds.has(item.id),
+              );
+              const comboSelected = !!combo.id && selectedIds.has(combo.id);
+              if (!comboSelected && comboItems.length === 0) return null;
+              return { ...combo, items: comboItems };
+            })
+            .filter(Boolean) as NonNullable<ApiGroup['combos']>;
+          const scopeSelected = !!scope.id && selectedIds.has(scope.id);
+          if (!scopeSelected && childItems.length === 0 && childCombos.length === 0) return null;
+          return { ...scope, items: childItems, combos: childCombos };
+        })
+        .filter(Boolean) as NonNullable<ApiGroup['scopes']>;
+      if (items.length === 0 && combos.length === 0 && scopes.length === 0) return null;
+      return { ...group, items, combos, scopes };
     })
     .filter(Boolean) as ApiGroup[];
 }
@@ -668,9 +722,13 @@ type RfqTab =
 
 export function RfqDetail({
   rfq,
+  job,
+  quote,
   fetchProposals,
 }: {
   rfq: Rfq;
+  job?: Job | null;
+  quote?: Quote | null;
   fetchProposals: (rfqId: string) => Promise<Proposal[]>;
 }) {
   const [tab, setTab] = useState<RfqTab>('overview');
@@ -796,7 +854,7 @@ export function RfqDetail({
         })}
       </div>
       <div className="pt-4">
-        {tab === 'overview' && <OverviewTab rfq={rfq} />}
+        {tab === 'overview' && <OverviewTab rfq={rfq} job={job} quote={quote} />}
         {tab === 'scope-items' && (
           <ScopeItemsTab
             rfqId={rfq.id}

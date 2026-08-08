@@ -102,6 +102,8 @@ export interface Job {
   addressState?: string | null;
   addressCountry?: string | null;
   jobInstructions?: string | null;
+  assignedToUserId?: string | null;
+  assigneeName?: string | null;
 
   /** Provider that created this job: 'crunchwork' for webhook-originated, 'internal' for manual. */
   provider?: 'crunchwork' | 'internal' | string;
@@ -320,6 +322,8 @@ export interface Invoice {
   tax?: string | null;
   totalAmount?: string | null;
   excessAmount?: string | null;
+  invoicePayload?: Record<string, unknown> | null;
+  apiPayload?: Record<string, unknown> | null;
   createdAt?: string;
   updatedAt?: string;
   status?: LookupRef;
@@ -710,6 +714,70 @@ export interface UpdateConnectionPayload {
   config?: Record<string, unknown>;
 }
 
+export type InboxQueueKey =
+  | 'workOrdersToAccept'
+  | 'proposalsToReview'
+  | 'rfqsAwaiting'
+  | 'estimatesToPublish'
+  | 'overdueTasks'
+  | 'myTasks'
+  | 'overdueInvoices'
+  | 'overdueBills';
+
+export interface DashboardInboxItem {
+  id: string;
+  entityType: string;
+  title: string;
+  subtitle?: string;
+  status?: string;
+  dueAt?: string | null;
+  href: string;
+  jobId?: string | null;
+}
+
+export interface DashboardActiveJobItem {
+  id: string;
+  title: string;
+  status?: string;
+  jobType?: string;
+  address?: string;
+  requestDate?: string | null;
+  updatedAt?: string | null;
+  unread: boolean;
+  href: string;
+}
+
+export interface DashboardInboxQueue {
+  key: InboxQueueKey;
+  title: string;
+  count: number;
+  href: string;
+  items: DashboardInboxItem[];
+}
+
+export interface DashboardInbox {
+  generatedAt: string;
+  snapshot: {
+    activeJobs: number;
+    unreadCount: number;
+    unreadJobCount: number;
+    arOverdueCount: number;
+    apOverdueCount: number;
+    arTotalOverdue: number;
+    apTotalOverdue: number;
+    actionRequired: number;
+  };
+  queues: DashboardInboxQueue[];
+  today: DashboardInboxItem[];
+  unread: DashboardInboxItem[];
+  activeJobs: {
+    scopedToUser: boolean;
+    count: number;
+    href: string;
+    items: DashboardActiveJobItem[];
+  };
+}
+
 export interface DashboardStats {
   totalClaims: number;
   totalJobs: number;
@@ -801,7 +869,7 @@ export interface CatalogItem {
   code: string;
   name: string;
   description: string | null;
-  kind: 'primitive' | 'assembly';
+  kind: 'primitive' | 'assembly' | 'scope';
   typeId: string;
   categoryId: string | null;
   subCategoryId: string | null;

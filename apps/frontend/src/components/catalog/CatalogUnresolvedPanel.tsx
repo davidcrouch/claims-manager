@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -14,9 +13,10 @@ export interface CatalogUnresolvedEntry {
 
 export interface CatalogUnresolvedPanelProps {
   entries: CatalogUnresolvedEntry[];
+  onCreateItem?: () => void;
 }
 
-export function CatalogUnresolvedPanel({ entries }: CatalogUnresolvedPanelProps) {
+export function CatalogUnresolvedPanel({ entries, onCreateItem }: CatalogUnresolvedPanelProps) {
   if (entries.length === 0) return null;
 
   return (
@@ -47,9 +47,15 @@ export function CatalogUnresolvedPanel({ entries }: CatalogUnresolvedPanelProps)
             </li>
           ))}
         </ul>
-        <Link href="/admin/catalog/new" className="text-xs text-primary hover:underline">
-          Create or edit catalogue item →
-        </Link>
+        {onCreateItem && (
+          <button
+            type="button"
+            onClick={onCreateItem}
+            className="text-xs text-primary hover:underline"
+          >
+            Create or edit catalogue item →
+          </button>
+        )}
       </CardContent>
     </Card>
   );

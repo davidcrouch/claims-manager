@@ -16,6 +16,7 @@ import {
   proposalItems,
 } from '../../database/schema';
 import { TenantContext } from '../../tenant/tenant-context';
+import { isScopeComboPayload } from '../catalog/catalog.utils';
 
 function parseDecimal(value: string | null | undefined): number | undefined {
   if (value == null) return undefined;
@@ -317,6 +318,31 @@ export class RfqsService {
           ? { name: group.description }
           : { name: `Group ${index + 1}` };
 
+    const assemblyCombos = groupCombos.filter((c) => !isScopeComboPayload(c.comboPayload));
+    const scopeCombos = groupCombos.filter((c) => isScopeComboPayload(c.comboPayload));
+
+    const mapCombo = (combo: (typeof groupCombos)[number]) => {
+      const comboTotals = (combo.totals as Record<string, unknown>) ?? {};
+      const kind = isScopeComboPayload(combo.comboPayload) ? 'scope' : 'assembly';
+      return {
+        id: combo.id,
+        kind,
+        sourceQuoteComboId: combo.sourceQuoteComboId ?? undefined,
+        name: combo.name,
+        description: combo.description,
+        category: combo.category,
+        subCategory: combo.subCategory,
+        index: combo.sortIndex,
+        quantity: parseDecimal(combo.quantity),
+        subTotal: asNumber(comboTotals.subTotal),
+        totalTax: asNumber(comboTotals.totalTax),
+        total: asNumber(comboTotals.total),
+        items: (comboItemsByCombo.get(combo.id) ?? []).map((item) =>
+          this.mapRfqItemRow(item, lookupMap),
+        ),
+      };
+    };
+
     return {
       id: group.id,
       sourceQuoteGroupId: group.sourceQuoteGroupId ?? undefined,
@@ -332,25 +358,11 @@ export class RfqsService {
       items: (directItemsByGroup.get(group.id) ?? []).map((item) =>
         this.mapRfqItemRow(item, lookupMap),
       ),
-      combos: groupCombos.map((combo) => {
-        const comboTotals = (combo.totals as Record<string, unknown>) ?? {};
-        return {
-          id: combo.id,
-          sourceQuoteComboId: combo.sourceQuoteComboId ?? undefined,
-          name: combo.name,
-          description: combo.description,
-          category: combo.category,
-          subCategory: combo.subCategory,
-          index: combo.sortIndex,
-          quantity: parseDecimal(combo.quantity),
-          subTotal: asNumber(comboTotals.subTotal),
-          totalTax: asNumber(comboTotals.totalTax),
-          total: asNumber(comboTotals.total),
-          items: (comboItemsByCombo.get(combo.id) ?? []).map((item) =>
-            this.mapRfqItemRow(item, lookupMap),
-          ),
-        };
-      }),
+      combos: assemblyCombos.map(mapCombo),
+      scopes: scopeCombos.map((combo) => ({
+        ...mapCombo(combo),
+        combos: [],
+      })),
     };
     });
   }

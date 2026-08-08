@@ -1,11 +1,22 @@
-import { Injectable, Optional, BadRequestException } from '@nestjs/common';
+import { Injectable, Optional, BadRequestException, Logger } from '@nestjs/common';
 import { TasksRepository, type TaskInsert } from '../../database/repositories';
 import { TenantContext } from '../../tenant/tenant-context';
 import { CrunchworkService } from '../../crunchwork/crunchwork.service';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
 
+function parseOptionalUserId(value: unknown): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === '__unassigned__') return null;
+  return trimmed;
+}
+
 @Injectable()
 export class TasksService {
+  private readonly logger = new Logger(TasksService.name);
+
   constructor(
     private readonly tasksRepo: TasksRepository,
     private readonly tenantContext: TenantContext,
@@ -32,6 +43,7 @@ export class TasksService {
     entityType?: string;
     entityId?: string;
     assignedToUserId?: string;
+    overdue?: boolean;
     sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
@@ -46,6 +58,7 @@ export class TasksService {
       entityType: params.entityType,
       entityId: params.entityId,
       assignedToUserId: params.assignedToUserId,
+      overdue: params.overdue,
       sort: params.sort,
     });
   }
@@ -95,6 +108,11 @@ export class TasksService {
       claimId = relatedEntityId;
     }
 
+    const assignedToUserId = parseOptionalUserId(params.body.assignedToUserId) ?? undefined;
+    this.logger.debug(
+      `TasksService.create — tenantId=${tenantId} assignedToUserId=${assignedToUserId ?? 'none'}`,
+    );
+
     try {
       const connectionId = await this.resolveConnectionId(tenantId);
       const apiTask = await this.crunchworkService.createTask({
@@ -114,6 +132,7 @@ export class TasksService {
         dueDate: apiObj.dueDate ? new Date(apiObj.dueDate as string) : undefined,
         priority: (apiObj.priority ?? params.body?.priority ?? 'Low') as string,
         status: (apiObj.status ?? 'Open') as string,
+        assignedToUserId,
         taskPayload: apiTask as Record<string, unknown>,
       };
       return this.tasksRepo.create({ data: insertData });
@@ -129,7 +148,7 @@ export class TasksService {
         dueDate: params.body.dueDate ? new Date(params.body.dueDate as string) : undefined,
         priority: (params.body.priority as string) ?? 'Low',
         status: 'Open',
-        assignedToUserId: params.body.assignedToUserId as string,
+        assignedToUserId,
         taskPayload: {},
       };
       return this.tasksRepo.create({ data: insertData });
@@ -141,20 +160,56 @@ export class TasksService {
     if (!existing) return null;
 
     const tenantId = this.tenantContext.getTenantId();
-    const connectionId = await this.resolveConnectionId(tenantId);
-    const apiTask = await this.crunchworkService.updateTask({
-      connectionId,
-      taskId: params.id,
-      body: params.body,
-    });
+    const assignedToUserId = parseOptionalUserId(params.body.assignedToUserId);
+    const localPatch: Partial<TaskInsert> = {};
+    if (assignedToUserId !== undefined) {
+      localPatch.assignedToUserId = assignedToUserId;
+    }
+    if (params.body.name !== undefined) {
+      localPatch.name = params.body.name as string;
+    }
+    if (params.body.description !== undefined) {
+      localPatch.description = (params.body.description as string) || null;
+    }
+    if (params.body.priority !== undefined) {
+      localPatch.priority = params.body.priority as string;
+    }
+    if (params.body.dueDate !== undefined) {
+      localPatch.dueDate = params.body.dueDate
+        ? new Date(params.body.dueDate as string)
+        : null;
+    }
+    if (params.body.status !== undefined) {
+      localPatch.status = params.body.status as string;
+    }
 
-    const apiObj = apiTask as Record<string, unknown>;
-    return this.tasksRepo.update({
-      id: params.id,
-      data: {
-        taskPayload: apiTask as Record<string, unknown>,
-        status: (apiObj.status as string) ?? existing.status,
-      },
-    });
+    this.logger.debug(
+      `TasksService.update — id=${params.id} assignedToUserId=${assignedToUserId === undefined ? 'unchanged' : assignedToUserId ?? 'none'}`,
+    );
+
+    try {
+      const connectionId = await this.resolveConnectionId(tenantId);
+      const apiTask = await this.crunchworkService.updateTask({
+        connectionId,
+        taskId: params.id,
+        body: params.body,
+      });
+
+      const apiObj = apiTask as Record<string, unknown>;
+      return this.tasksRepo.update({
+        id: params.id,
+        data: {
+          ...localPatch,
+          taskPayload: apiTask as Record<string, unknown>,
+          status: (apiObj.status as string) ?? localPatch.status ?? existing.status,
+        },
+      });
+    } catch {
+      if (Object.keys(localPatch).length === 0) return existing;
+      return this.tasksRepo.update({
+        id: params.id,
+        data: localPatch,
+      });
+    }
   }
 }

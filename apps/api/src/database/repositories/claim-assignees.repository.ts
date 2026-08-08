@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, inArray, notInArray, isNull, or } from 'drizzle-orm';
+import { and, eq, inArray, notInArray, isNull, or, ilike } from 'drizzle-orm';
 import { DRIZZLE } from '../drizzle.module';
 import type { DrizzleDB, DrizzleDbOrTx } from '../drizzle.module';
 import { claimAssignees } from '../schema';
@@ -17,6 +17,27 @@ export type ClaimAssigneeInsert = typeof claimAssignees.$inferInsert;
 @Injectable()
 export class ClaimAssigneesRepository {
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
+
+  async findClaimIdsByAssignee(params: {
+    tenantId: string;
+    userId?: string | null;
+    email?: string | null;
+  }): Promise<string[]> {
+    const userId = params.userId?.trim() || null;
+    const email = params.email?.trim().toLowerCase() || null;
+    if (!userId && !email) return [];
+
+    const identityParts = [];
+    if (userId) identityParts.push(eq(claimAssignees.userId, userId));
+    if (email) identityParts.push(ilike(claimAssignees.email, email));
+    const identityClause = identityParts.length === 1 ? identityParts[0] : or(...identityParts);
+
+    const rows = await this.db
+      .selectDistinct({ claimId: claimAssignees.claimId })
+      .from(claimAssignees)
+      .where(and(eq(claimAssignees.tenantId, params.tenantId), identityClause));
+    return rows.map((r) => r.claimId);
+  }
 
   async findByClaim(params: {
     claimId: string;

@@ -59,7 +59,7 @@ const TABLE_COLUMNS: ColDef[] = [
   { key: 'status', label: 'Status', filterable: true },
   { key: 'priority', label: 'Priority', filterable: true },
   { key: 'task_type', label: 'Type', filterable: true },
-  { key: 'assignee', label: 'Assigned to' },
+  { key: 'assignee', label: 'Assigned' },
   { key: 'due_date', label: 'Due Date' },
   { key: 'updated_at', label: 'Updated' },
 ];
@@ -101,6 +101,8 @@ export function TasksListClient({ job, parentClaim }: { job?: Job | null; parent
   const router = useRouter();
   const searchParams = useSearchParams();
   const jobId = searchParams.get('jobId');
+  const overdue = searchParams.get('overdue') === 'true';
+  const assignedToUserId = searchParams.get('assignedToUserId');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -157,22 +159,24 @@ export function TasksListClient({ job, parentClaim }: { job?: Job | null; parent
         page,
         limit: PAGE_SIZE,
         search: debouncedSearch || undefined,
-        status: statusParam,
+        status: statusParam || (overdue ? 'Open' : undefined),
         priority: priorityParam,
         sort: sortParam,
         jobId: jobId ?? undefined,
+        assignedToUserId: assignedToUserId ?? undefined,
+        overdue: overdue || undefined,
       });
       setTasks(res.data);
       setTotal(res.total);
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, page, sortParam, statusParam, priorityParam, jobId]);
+  }, [debouncedSearch, page, sortParam, statusParam, priorityParam, jobId, overdue, assignedToUserId]);
 
   useEffect(() => {
     const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
     const priorityKey = priorityParam === null ? '__none__' : (priorityParam ?? '');
-    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${priorityKey}|${jobId ?? ''}`;
+    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${priorityKey}|${jobId ?? ''}|${overdue}|${assignedToUserId ?? ''}`;
     const params = new URLSearchParams(searchParams.toString());
     params.set('search', debouncedSearch);
     params.set('tab', tab);
@@ -182,12 +186,16 @@ export function TasksListClient({ job, parentClaim }: { job?: Job | null; parent
     if (priorityParam) params.set('priority', priorityParam); else params.delete('priority');
     if (jobId) params.set('jobId', jobId);
     else params.delete('jobId');
+    if (overdue) params.set('overdue', 'true');
+    else params.delete('overdue');
+    if (assignedToUserId) params.set('assignedToUserId', assignedToUserId);
+    else params.delete('assignedToUserId');
     router.replace(`/tasks?${params}`, { scroll: false });
     if (lastFetchKeyRef.current === fetchKey) return;
     lastFetchKeyRef.current = fetchKey;
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop: router.replace updates URL -> searchParams changes -> effect re-runs
-  }, [debouncedSearch, sortParam, tab, page, statusParam, priorityParam, jobId]);
+  }, [debouncedSearch, sortParam, tab, page, statusParam, priorityParam, jobId, overdue, assignedToUserId]);
 
   const handleColumnSort = (field: TaskSortField) => {
     setColumnSort((prev) => {
@@ -343,6 +351,12 @@ export function TasksListClient({ job, parentClaim }: { job?: Job | null; parent
               <TabsTrigger value="all">All</TabsTrigger>
             </TabsList>
           </Tabs>
+          {(overdue || assignedToUserId) && (
+            <p className="text-sm text-muted-foreground">
+              {overdue ? 'Showing overdue open tasks' : 'Showing assigned tasks'}
+              {overdue && assignedToUserId ? ' assigned to you' : ''}.
+            </p>
+          )}
 
           <div className="relative flex-1">
             <Search
@@ -478,7 +492,7 @@ export function TasksListClient({ job, parentClaim }: { job?: Job | null; parent
                       )}
                       {isVisible('assignee') && (
                         <td className="px-4 py-3 text-slate-600">
-                          {task.assigneeName ?? task.assignedToUserId ?? '—'}
+                          {task.assigneeName ?? '—'}
                         </td>
                       )}
                       {isVisible('due_date') && (
@@ -535,9 +549,9 @@ export function TasksListClient({ job, parentClaim }: { job?: Job | null; parent
                     }
                   />
                 </DetailField>
-                <DetailField label="Assigned to">
+                <DetailField label="Assigned">
                   <span className="text-sm text-slate-700">
-                    {selectedTask.assigneeName ?? selectedTask.assignedToUserId ?? '—'}
+                    {selectedTask.assigneeName ?? '—'}
                   </span>
                 </DetailField>
                 <DetailField label="Due Date">

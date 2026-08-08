@@ -45,6 +45,15 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function estimateLabel(quote: Quote): string {
+  return (
+    quote.name?.trim() ||
+    quote.quoteNumber?.trim() ||
+    quote.reference?.trim() ||
+    quote.id
+  );
+}
+
 export interface PurchaseOrderFormDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -151,10 +160,11 @@ export function PurchaseOrderFormDrawer({
               />
             )}
             <div className="space-y-2">
-              <Label htmlFor="po-quoteId">Estimate (optional)</Label>
+              <Label htmlFor="po-quoteId">Estimate</Label>
               <Select
                 value={form.watch('quoteId')}
                 onValueChange={(v) => form.setValue('quoteId', v ?? '')}
+                items={Object.fromEntries(quotes.map((q) => [q.id, estimateLabel(q)]))}
               >
                 <SelectTrigger id="po-quoteId">
                   <SelectValue placeholder="Select estimate" />
@@ -162,7 +172,7 @@ export function PurchaseOrderFormDrawer({
                 <SelectContent>
                   {quotes.map((q) => (
                     <SelectItem key={q.id} value={q.id}>
-                      {q.quoteNumber ?? q.name ?? q.id}
+                      {estimateLabel(q)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -170,17 +180,17 @@ export function PurchaseOrderFormDrawer({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="po-purchaseOrderNumber">PO # (optional)</Label>
+              <Label htmlFor="po-purchaseOrderNumber">PO #</Label>
               <Input id="po-purchaseOrderNumber" {...form.register('purchaseOrderNumber')} placeholder="e.g. PO-001" />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="po-name">Name (optional)</Label>
+              <Label htmlFor="po-name">Name</Label>
               <Input id="po-name" {...form.register('name')} placeholder="Purchase order name" />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="po-totalAmount">Total Amount (optional)</Label>
+              <Label htmlFor="po-totalAmount">Total Amount</Label>
               <Input
                 id="po-totalAmount"
                 type="number"
@@ -197,17 +207,17 @@ export function PurchaseOrderFormDrawer({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="po-startDate">Start Date (optional)</Label>
+              <Label htmlFor="po-startDate">Start Date</Label>
               <Input id="po-startDate" type="date" {...form.register('startDate')} />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="po-endDate">End Date (optional)</Label>
+              <Label htmlFor="po-endDate">End Date</Label>
               <Input id="po-endDate" type="date" {...form.register('endDate')} />
             </div>
 
             <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="po-note">Note (optional)</Label>
+              <Label htmlFor="po-note">Note</Label>
               <Textarea id="po-note" {...form.register('note')} placeholder="Add a note..." rows={3} />
             </div>
           </div>

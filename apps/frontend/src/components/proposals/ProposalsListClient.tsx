@@ -126,6 +126,11 @@ export function ProposalsListClient({
   }, [search]);
 
   useEffect(() => {
+    setData(initialData);
+    lastFetchKeyRef.current = null;
+  }, [initialData]);
+
+  useEffect(() => {
     const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
     const vendorKey = vendorParam === null ? '__none__' : (vendorParam ?? '');
     const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${vendorKey}|${jobId ?? ''}`;

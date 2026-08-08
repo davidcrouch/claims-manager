@@ -8,7 +8,16 @@ export const metadata = { title: 'Tasks — EnsureOS' };
 export default async function TasksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; search?: string; jobId?: string; status?: string; priority?: string; sort?: string }>;
+  searchParams: Promise<{
+    page?: string;
+    search?: string;
+    jobId?: string;
+    status?: string;
+    priority?: string;
+    sort?: string;
+    overdue?: string;
+    assignedToUserId?: string;
+  }>;
 }) {
   const api = await getServerApiClient();
   if (!api) redirect('/api/auth/login');

@@ -12,6 +12,7 @@ import {
 import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
 import { TenantContext } from '../../../tenant/tenant-context';
 import { CatalogPricingService } from './catalog-pricing.service';
+import { isCatalogBomParentKind } from '../catalog.utils';
 
 @Injectable()
 export class CatalogAssemblyService {
@@ -30,8 +31,8 @@ export class CatalogAssemblyService {
   async findComponents(params: { assemblyId: string }) {
     const tenantId = this.getTenantId();
     const assembly = await this.itemsRepo.findById({ tenantId, id: params.assemblyId });
-    if (!assembly || assembly.kind !== 'assembly') {
-      throw new NotFoundException('Assembly not found');
+    if (!assembly || !isCatalogBomParentKind(assembly.kind)) {
+      throw new NotFoundException('Assembly or scope not found');
     }
 
     const lines = await this.bomRepo.findByAssemblyId({
@@ -71,8 +72,8 @@ export class CatalogAssemblyService {
   }) {
     const tenantId = this.getTenantId();
     const assembly = await this.itemsRepo.findById({ tenantId, id: params.assemblyId });
-    if (!assembly || assembly.kind !== 'assembly') {
-      throw new NotFoundException('Assembly not found');
+    if (!assembly || !isCatalogBomParentKind(assembly.kind)) {
+      throw new NotFoundException('Assembly or scope not found');
     }
 
     for (const line of params.lines) {
@@ -216,8 +217,8 @@ export class CatalogAssemblyService {
       tenantId: params.tenantId,
       id: params.assemblyId,
     });
-    if (!assembly || assembly.kind !== 'assembly') {
-      throw new BadRequestException('Target must be an assembly');
+    if (!assembly || !isCatalogBomParentKind(assembly.kind)) {
+      throw new BadRequestException('Target must be an assembly or scope');
     }
 
     const component = await this.itemsRepo.findById({
@@ -225,6 +226,9 @@ export class CatalogAssemblyService {
       id: params.componentId,
     });
     if (!component) throw new BadRequestException('Component not found');
+    if (component.kind === 'scope') {
+      throw new BadRequestException('Scopes cannot be nested inside assemblies or scopes');
+    }
 
     const cycle = await this.bomRepo.wouldCreateCycle({
       tenantId: params.tenantId,

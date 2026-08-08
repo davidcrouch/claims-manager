@@ -70,7 +70,7 @@ export function QuoteLineItemsTab({
     startTransition(async () => {
       const qty = quantity.trim() || '1';
       const result =
-        payload.kind === 'assembly'
+        payload.kind === 'assembly' || payload.kind === 'scope'
           ? await addCatalogAssemblyToQuoteAction({
               quoteId: quote.id,
               catalogAssemblyId: payload.id,
@@ -186,17 +186,38 @@ export function QuoteLineItemsTab({
     });
   }
 
+  function handleDeleteScope(scopeId: string) {
+    startTransition(async () => {
+      const result = await deleteQuoteComboAction({ quoteId: quote.id, comboId: scopeId });
+      if (!result.success) {
+        console.error(`${PREFIX}.handleDeleteScope — ${result.error}`);
+        toast.error(result.error ?? 'Failed to delete scope');
+        return;
+      }
+      toast.success('Scope deleted');
+      setStructurallyDirty(true);
+      await loadLineItems();
+      router.refresh();
+    });
+  }
+
   function handleSaveLineItems(edits: Record<string, Record<string, string>>) {
     startTransition(async () => {
       const items: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string; unitCost?: string; markupValue?: string; tax?: string; unitType?: string }> = [];
       const combos: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string }> = [];
 
       for (const [rowKey, fields] of Object.entries(edits)) {
+        const isScope = rowKey.includes('-scope-') && !rowKey.includes('-combo-') && !rowKey.includes('-item-');
         const isCombo = rowKey.includes('-combo-') && !rowKey.includes('-item-');
-        const idMatch = rowKey.match(/(?:combo|item)-([0-9a-f-]{36})(?:-item-|$)/);
+        const idMatch = rowKey.match(/(?:scope|combo|item)-([0-9a-f-]{36})(?:-item-|$)/);
         if (!idMatch) continue;
 
-        if (isCombo) {
+        if (isScope) {
+          const scopeId = rowKey.match(/-scope-([0-9a-f-]{36})$/)?.[1];
+          if (scopeId) {
+            combos.push({ id: scopeId, name: fields.name, component: fields.component, description: fields.description, quantity: fields.quantity });
+          }
+        } else if (isCombo) {
           const comboId = rowKey.match(/-combo-([0-9a-f-]{36})$/)?.[1];
           if (comboId) {
             combos.push({ id: comboId, name: fields.name, component: fields.component, description: fields.description, quantity: fields.quantity });
@@ -279,6 +300,7 @@ export function QuoteLineItemsTab({
         onDeleteGroup={(id) => setDeletingGroupId(id)}
         onDeleteItem={handleDeleteItem}
         onDeleteCombo={handleDeleteCombo}
+        onDeleteScope={handleDeleteScope}
         onMoveGroupUp={(id) => handleMoveGroup(id, 'up')}
         onMoveGroupDown={(id) => handleMoveGroup(id, 'down')}
         onOpenCatalogDrawer={() => onDrawerOpenChange(true)}

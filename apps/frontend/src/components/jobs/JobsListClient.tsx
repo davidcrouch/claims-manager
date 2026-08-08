@@ -51,6 +51,7 @@ type JobSortField =
   | 'external_reference'
   | 'status'
   | 'job_type'
+  | 'assignee'
   | 'address'
   | 'request_date'
   | 'updated_at';
@@ -61,6 +62,7 @@ const TABLE_COLUMNS: ColDef[] = [
   { key: 'external_reference', label: 'Job Ref', locked: true },
   { key: 'status', label: 'Status', filterable: true },
   { key: 'job_type', label: 'Type', filterable: true },
+  { key: 'assignee', label: 'Assigned' },
   { key: 'address', label: 'Address' },
   { key: 'request_date', label: 'Requested' },
   { key: 'updated_at', label: 'Updated' },
@@ -488,6 +490,11 @@ export function JobsListClient({
                       {isVisible('job_type') && (
                         <td className="px-4 py-3">
                           <TypeBadge type={jobTypeName} />
+                        </td>
+                      )}
+                      {isVisible('assignee') && (
+                        <td className="px-4 py-3 text-slate-600">
+                          {job.assigneeName ?? '—'}
                         </td>
                       )}
                       {isVisible('address') && (

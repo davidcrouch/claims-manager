@@ -45,6 +45,15 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function estimateLabel(quote: Quote): string {
+  return (
+    quote.name?.trim() ||
+    quote.quoteNumber?.trim() ||
+    quote.reference?.trim() ||
+    quote.id
+  );
+}
+
 export interface ProposalFormDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -153,16 +162,17 @@ export function ProposalFormDrawer({
             <div className="space-y-2">
               <Label htmlFor="prop-quoteId">Estimate</Label>
               <Select
-                value={form.watch('quoteId')}
+                value={form.watch('quoteId') || null}
                 onValueChange={(v) => form.setValue('quoteId', v ?? '')}
+                items={Object.fromEntries(quotes.map((q) => [q.id, estimateLabel(q)]))}
               >
-                <SelectTrigger id="prop-quoteId">
+                <SelectTrigger id="prop-quoteId" className="w-full">
                   <SelectValue placeholder="Select estimate" />
                 </SelectTrigger>
                 <SelectContent>
                   {quotes.map((q) => (
                     <SelectItem key={q.id} value={q.id}>
-                      {q.quoteNumber ?? q.name ?? q.id}
+                      {estimateLabel(q)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -173,22 +183,22 @@ export function ProposalFormDrawer({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="prop-proposalNumber">Proposal # (optional)</Label>
+              <Label htmlFor="prop-proposalNumber">Proposal #</Label>
               <Input id="prop-proposalNumber" {...form.register('proposalNumber')} placeholder="e.g. PROP-001" />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="prop-name">Name (optional)</Label>
+              <Label htmlFor="prop-name">Name</Label>
               <Input id="prop-name" {...form.register('name')} placeholder="Proposal name" />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="prop-proposalFromName">Vendor Name (optional)</Label>
+              <Label htmlFor="prop-proposalFromName">Vendor Name</Label>
               <Input id="prop-proposalFromName" {...form.register('proposalFromName')} placeholder="Vendor name" />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="prop-totalAmount">Total Amount (optional)</Label>
+              <Label htmlFor="prop-totalAmount">Total Amount</Label>
               <Input
                 id="prop-totalAmount"
                 type="number"
@@ -205,12 +215,12 @@ export function ProposalFormDrawer({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="prop-receivedDate">Received Date (optional)</Label>
+              <Label htmlFor="prop-receivedDate">Received Date</Label>
               <Input id="prop-receivedDate" type="date" {...form.register('receivedDate')} />
             </div>
 
             <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="prop-note">Note (optional)</Label>
+              <Label htmlFor="prop-note">Note</Label>
               <Textarea id="prop-note" {...form.register('note')} placeholder="Add a note..." rows={3} />
             </div>
           </div>

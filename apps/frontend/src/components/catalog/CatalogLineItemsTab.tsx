@@ -68,6 +68,60 @@ function mapCatalogGroupsToApiGroups(
         catalogItemId: item.catalogItemId,
       })),
     })),
+    scopes: g.scopes?.map((scope) => ({
+      id: scope.id,
+      name: scope.name,
+      component: scope.component,
+      description: scope.description,
+      category: scope.category || undefined,
+      subCategory: scope.subCategory,
+      quantity: scope.quantity,
+      catalogScopeId: scope.catalogScopeId,
+      items: scope.items?.map((item) => ({
+        id: item.id,
+        name: item.name,
+        component: item.component,
+        description: item.description,
+        type: item.type || undefined,
+        category: item.category || undefined,
+        subCategory: item.subCategory,
+        quantity: item.quantity,
+        unitCost: item.unitCost,
+        buyCost: item.buyCost,
+        markupType: item.markupType || undefined,
+        markupValue: item.markupValue,
+        tax: item.tax,
+        unitType: item.unitType ?? undefined,
+        catalogItemId: item.catalogItemId,
+      })),
+      combos: scope.combos?.map((combo) => ({
+        id: combo.id,
+        name: combo.name,
+        component: combo.component,
+        description: combo.description,
+        category: combo.category || undefined,
+        subCategory: combo.subCategory,
+        quantity: combo.quantity,
+        catalogComboId: combo.catalogComboId,
+        items: combo.items?.map((item) => ({
+          id: item.id,
+          name: item.name,
+          component: item.component,
+          description: item.description,
+          type: item.type || undefined,
+          category: item.category || undefined,
+          subCategory: item.subCategory,
+          quantity: item.quantity,
+          unitCost: item.unitCost,
+          buyCost: item.buyCost,
+          markupType: item.markupType || undefined,
+          markupValue: item.markupValue,
+          tax: item.tax,
+          unitType: item.unitType ?? undefined,
+          catalogItemId: item.catalogItemId,
+        })),
+      })),
+    })),
   }));
 }
 
@@ -75,10 +129,12 @@ export function CatalogLineItemsTab({
   catalogId,
   search,
   onDirtyChange,
+  reloadToken = 0,
 }: {
   catalogId: string;
   search?: string;
   onDirtyChange?: (dirty: boolean, save: () => void) => void;
+  reloadToken?: number;
 }) {
   const router = useRouter();
   const [groups, setGroups] = useState<ApiGroup[]>([]);
@@ -103,7 +159,7 @@ export function CatalogLineItemsTab({
 
   useEffect(() => {
     void loadGroupedItems();
-  }, [loadGroupedItems]);
+  }, [loadGroupedItems, reloadToken]);
 
   const filteredGroups = useMemo(() => {
     const term = (search ?? '').trim().toLowerCase();
@@ -134,8 +190,47 @@ export function CatalogLineItemsTab({
             return null;
           })
           .filter(Boolean) as typeof group.combos;
-        if (filteredItems.length > 0 || (filteredCombos && filteredCombos.length > 0)) {
-          return { ...group, items: filteredItems, combos: filteredCombos };
+        const filteredScopes = (group.scopes ?? [])
+          .map((scope) => {
+            const scopeMatch =
+              (scope.name ?? '').toLowerCase().includes(term) ||
+              (scope.component ?? '').toLowerCase().includes(term) ||
+              'scope'.includes(term);
+            const matchingItems = (scope.items ?? []).filter(
+              (item) =>
+                (item.name ?? '').toLowerCase().includes(term) ||
+                (item.component ?? '').toLowerCase().includes(term) ||
+                (item.description ?? '').toLowerCase().includes(term),
+            );
+            const matchingCombos = (scope.combos ?? [])
+              .map((combo) => {
+                const comboMatch =
+                  (combo.name ?? '').toLowerCase().includes(term) ||
+                  (combo.component ?? '').toLowerCase().includes(term);
+                const comboMatchingItems = (combo.items ?? []).filter(
+                  (item) =>
+                    (item.name ?? '').toLowerCase().includes(term) ||
+                    (item.component ?? '').toLowerCase().includes(term) ||
+                    (item.description ?? '').toLowerCase().includes(term),
+                );
+                if (comboMatch || comboMatchingItems.length > 0) {
+                  return { ...combo, items: comboMatch ? combo.items : comboMatchingItems };
+                }
+                return null;
+              })
+              .filter(Boolean) as typeof scope.combos;
+            if (scopeMatch || matchingItems.length > 0 || (matchingCombos && matchingCombos.length > 0)) {
+              return {
+                ...scope,
+                items: scopeMatch ? scope.items : matchingItems,
+                combos: scopeMatch ? scope.combos : matchingCombos,
+              };
+            }
+            return null;
+          })
+          .filter(Boolean) as typeof group.scopes;
+        if (filteredItems.length > 0 || (filteredCombos && filteredCombos.length > 0) || (filteredScopes && filteredScopes.length > 0)) {
+          return { ...group, items: filteredItems, combos: filteredCombos, scopes: filteredScopes };
         }
         return null;
       })
@@ -179,6 +274,21 @@ export function CatalogLineItemsTab({
     });
   }
 
+  function handleDeleteScope(scopeId: string) {
+    startTransition(async () => {
+      const result = await deleteCatalogItemAction(scopeId);
+      if (!result.success) {
+        console.error(`${PREFIX}.handleDeleteScope — ${result.error}`);
+        toast.error(result.error ?? 'Failed to delete scope');
+        return;
+      }
+      toast.success('Scope deleted');
+      setStructurallyDirty(true);
+      await loadGroupedItems();
+      router.refresh();
+    });
+  }
+
   function handleSaveLineItems(edits: Record<string, Record<string, string>>) {
     startTransition(async () => {
       const items: Array<{
@@ -207,13 +317,37 @@ export function CatalogLineItemsTab({
             }
           }
         }
+        for (const scope of group.scopes ?? []) {
+          for (const item of scope.items ?? []) {
+            if (item.id && item.catalogItemId) {
+              bomItemIdMap.set(item.id, item.catalogItemId);
+            }
+          }
+          for (const combo of scope.combos ?? []) {
+            for (const item of combo.items ?? []) {
+              if (item.id && item.catalogItemId) {
+                bomItemIdMap.set(item.id, item.catalogItemId);
+              }
+            }
+          }
+        }
       }
 
       for (const [rowKey, fields] of Object.entries(edits)) {
+        const isScope = rowKey.includes('-scope-') && !rowKey.includes('-combo-') && !rowKey.includes('-item-');
         const isCombo = rowKey.includes('-combo-') && !rowKey.includes('-item-');
         const bomMatch = rowKey.match(/-combo-([0-9a-f-]{36})-item-([0-9a-f-]{36})$/);
 
-        if (isCombo) {
+        if (isScope) {
+          const scopeId = rowKey.match(/-scope-([0-9a-f-]{36})$/)?.[1];
+          if (scopeId) {
+            items.push({
+              id: scopeId,
+              name: fields.name,
+              description: fields.description,
+            });
+          }
+        } else if (isCombo) {
           const comboId = rowKey.match(/-combo-([0-9a-f-]{36}|__[a-z]+__)$/)?.[1];
           if (comboId && !comboId.startsWith('__')) {
             items.push({
@@ -247,8 +381,9 @@ export function CatalogLineItemsTab({
         } else {
           const itemId = rowKey.match(/-item-([0-9a-f-]{36})$/)?.[1];
           if (itemId) {
+            const catalogItemId = bomItemIdMap.get(itemId) ?? itemId;
             items.push({
-              id: itemId,
+              id: catalogItemId,
               name: fields.name,
               description: fields.description,
               unitType: fields.unitType,
@@ -256,6 +391,16 @@ export function CatalogLineItemsTab({
               markupValue: fields.markupValue,
               tax: fields.tax,
             });
+            const scopeBomMatch = rowKey.match(/-scope-([0-9a-f-]{36})-item-([0-9a-f-]{36})$/);
+            if (scopeBomMatch && fields.quantity !== undefined) {
+              const [, scopeId, lineId] = scopeBomMatch;
+              bomUpdates.push({
+                assemblyId: scopeId,
+                lineId,
+                componentId: catalogItemId,
+                quantity: fields.quantity,
+              });
+            }
           }
         }
       }
@@ -314,6 +459,7 @@ export function CatalogLineItemsTab({
         onDeleteGroup={(id) => setDeletingGroupId(id)}
         onDeleteItem={handleDeleteItem}
         onDeleteCombo={handleDeleteCombo}
+        onDeleteScope={handleDeleteScope}
         onMoveGroupUp={(id) => handleMoveGroup(id, 'up')}
         onMoveGroupDown={(id) => handleMoveGroup(id, 'down')}
         onSave={handleSaveLineItems}

@@ -9,7 +9,11 @@ import {
   CatalogItemsRepository,
 } from '../../../database/repositories';
 import { TenantContext } from '../../../tenant/tenant-context';
-import type { CatalogItemKind, CatalogPricingMode } from '../catalog.utils';
+import {
+  isCatalogBomParentKind,
+  type CatalogItemKind,
+  type CatalogPricingMode,
+} from '../catalog.utils';
 import { CatalogPricingService } from './catalog-pricing.service';
 import { CatalogAssemblyService } from './catalog-assembly.service';
 
@@ -66,7 +70,7 @@ export class CatalogItemService {
     if (!item) throw new NotFoundException('Catalog item not found');
 
     const components =
-      item.kind === 'assembly'
+      isCatalogBomParentKind(item.kind)
         ? await this.assemblyService.findComponents({ assemblyId: item.id })
         : [];
 
@@ -101,7 +105,7 @@ export class CatalogItemService {
     if (params.kind === 'primitive' && !params.unitTypeLookupId) {
       throw new BadRequestException('Primitive items require a unit type');
     }
-    if (params.kind === 'assembly' && !params.pricingMode) {
+    if (isCatalogBomParentKind(params.kind) && !params.pricingMode) {
       params.pricingMode = 'computed';
     }
 
@@ -129,7 +133,7 @@ export class CatalogItemService {
         markupType: params.markupType,
         markupValue: params.markupValue,
         taxRate: params.taxRate,
-        pricingMode: params.kind === 'assembly' ? (params.pricingMode ?? 'computed') : null,
+        pricingMode: isCatalogBomParentKind(params.kind) ? (params.pricingMode ?? 'computed') : null,
         fixedUnitCost: params.fixedUnitCost,
         externalReference: params.externalReference,
         effectiveFrom: params.effectiveFrom,
@@ -139,7 +143,7 @@ export class CatalogItemService {
       },
     });
 
-    if (item.kind === 'assembly') {
+    if (isCatalogBomParentKind(item.kind)) {
       await this.pricingService.refreshComputedCost({ tenantId, assemblyId: item.id });
     }
 
@@ -210,7 +214,7 @@ export class CatalogItemService {
       },
     });
 
-    if (row?.kind === 'assembly') {
+    if (row && isCatalogBomParentKind(row.kind)) {
       await this.pricingService.refreshComputedCost({ tenantId, assemblyId: row.id });
       await this.assemblyService.refreshParentAssemblyCosts({ componentId: row.id });
     } else if (row) {
@@ -231,8 +235,8 @@ export class CatalogItemService {
     const tenantId = this.getTenantId();
     const item = await this.itemsRepo.findById({ tenantId, id: params.id });
     if (!item) throw new NotFoundException('Catalog item not found');
-    if (item.kind !== 'assembly') {
-      throw new BadRequestException('Only assemblies support cost refresh');
+    if (!isCatalogBomParentKind(item.kind)) {
+      throw new BadRequestException('Only assemblies and scopes support cost refresh');
     }
     return this.pricingService.refreshComputedCost({ tenantId, assemblyId: params.id });
   }

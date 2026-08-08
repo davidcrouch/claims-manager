@@ -316,7 +316,7 @@ export class CatalogImportService {
 
         if (existing) {
           await this.itemsRepo.update({ tenantId: ctx.tenantId, id: existing.id, data: rowData });
-          if (existing.kind === 'assembly') {
+          if (existing.kind === 'assembly' || existing.kind === 'scope') {
             await this.pricingService.refreshComputedCost({
               tenantId: ctx.tenantId,
               assemblyId: existing.id,
@@ -329,7 +329,7 @@ export class CatalogImportService {
             tenantId: ctx.tenantId,
             data: { ...rowData, code, catalogId: ctx.catalogId, isActive: true },
           });
-          if (row.kind === 'assembly') {
+          if (row.kind === 'assembly' || row.kind === 'scope') {
             await this.pricingService.refreshComputedCost({
               tenantId: ctx.tenantId,
               assemblyId: row.id,
@@ -470,7 +470,7 @@ export class CatalogImportService {
 
     const kindRaw = cellByField(ctx, cells, 'kind');
     const kind =
-      kindRaw === 'primitive' || kindRaw === 'assembly'
+      kindRaw === 'primitive' || kindRaw === 'assembly' || kindRaw === 'scope'
         ? kindRaw
         : ctx.importFormat === 'crunchwork'
           ? 'primitive'
@@ -494,7 +494,7 @@ export class CatalogImportService {
     const issues: string[] = [];
     const warnings: string[] = [];
 
-    if (kind !== 'primitive' && kind !== 'assembly') {
+    if (kind !== 'primitive' && kind !== 'assembly' && kind !== 'scope') {
       issues.push(`Invalid kind: ${kind || '(missing)'}`);
     }
 
@@ -549,12 +549,12 @@ export class CatalogImportService {
 
     const kindRaw = cellByField(ctx, cells, 'kind');
     const kind: CatalogItemKind =
-      kindRaw === 'primitive' || kindRaw === 'assembly'
+      kindRaw === 'primitive' || kindRaw === 'assembly' || kindRaw === 'scope'
         ? kindRaw
         : ctx.importFormat === 'crunchwork'
           ? 'primitive'
           : (kindRaw as CatalogItemKind);
-    if (kind !== 'primitive' && kind !== 'assembly') {
+    if (kind !== 'primitive' && kind !== 'assembly' && kind !== 'scope') {
       throw new Error(`Invalid kind: ${kind}`);
     }
 
@@ -618,7 +618,7 @@ export class CatalogImportService {
       markupValue: cellByField(ctx, cells, 'markupValue') || undefined,
       taxRate: cellByField(ctx, cells, 'taxRate') || undefined,
       pricingMode: (cellByField(ctx, cells, 'pricingMode') ||
-        (kind === 'assembly' ? 'computed' : null)) as CatalogPricingMode | null,
+        (kind === 'assembly' || kind === 'scope' ? 'computed' : null)) as CatalogPricingMode | null,
       fixedUnitCost: cellByField(ctx, cells, 'fixedUnitCost') || undefined,
       externalReference: cellByField(ctx, cells, 'externalReference') || undefined,
       isActive,

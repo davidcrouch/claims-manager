@@ -263,6 +263,7 @@ export const jobs = pgTable(
     addressCountry: text('address_country'),
     jobInstructions: text('job_instructions'),
     syncStatus: text('sync_status'),
+    assignedToUserId: text('assigned_to_user_id'),
     apiPayload: jsonb('api_payload').notNull().default({}),
     customData: jsonb('custom_data').notNull().default({}),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -272,6 +273,7 @@ export const jobs = pgTable(
   (t) => [
     uniqueIndex('UQ_jobs_tenant_extref').on(t.tenantId, t.externalReference),
     index('idx_jobs_claim').on(t.tenantId, t.claimId),
+    index('idx_jobs_assigned').on(t.tenantId, t.assignedToUserId),
   ],
 );
 
@@ -1901,10 +1903,10 @@ export const catalogItems = pgTable(
     index('idx_catalog_items_category').on(t.tenantId, t.categoryId),
     index('idx_catalog_items_kind').on(t.tenantId, t.kind),
     index('idx_catalog_items_catalog').on(t.tenantId, t.catalogId, t.isActive, t.deletedAt),
-    check('chk_catalog_items_kind', sql`kind IN ('primitive', 'assembly')`),
+    check('chk_catalog_items_kind', sql`kind IN ('primitive', 'assembly', 'scope')`),
     check(
       'chk_catalog_items_primitive_unit',
-      sql`kind = 'assembly' OR unit_type_lookup_id IS NOT NULL`,
+      sql`kind IN ('assembly', 'scope') OR unit_type_lookup_id IS NOT NULL`,
     ),
     check(
       'chk_catalog_items_assembly_pricing',

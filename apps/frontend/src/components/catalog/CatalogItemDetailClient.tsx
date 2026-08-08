@@ -124,7 +124,7 @@ export function CatalogItemDetailClient({
             </CardContent>
           </Card>
 
-          {item.kind === 'assembly' && (
+          {(item.kind === 'assembly' || item.kind === 'scope') && (
             <CatalogBomEditor
               assemblyId={item.id}
               components={components}

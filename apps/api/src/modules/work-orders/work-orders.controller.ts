@@ -41,6 +41,11 @@ export class WorkOrdersController {
     return this.workOrdersService.findByPurchaseOrder({ purchaseOrderId });
   }
 
+  @Get(':id/line-items')
+  getLineItems(@Param('id') id: string) {
+    return this.catalogSelectionService.getWorkOrderLineItems({ workOrderId: id });
+  }
+
   @Get(':id')
   async findOne(@Param('id') id: string) {
     return this.workOrdersService.findOne({ id });

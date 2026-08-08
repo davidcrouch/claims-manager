@@ -35,3 +35,27 @@ export async function fetchProposalsAction(params?: {
     return { data: [], total: 0 };
   }
 }
+
+export async function getProposalLineItemsAction(proposalId: string): Promise<{
+  success: boolean;
+  groups?: Array<Record<string, unknown>>;
+  error?: string;
+}> {
+  const session = await getSession();
+  if (!session.authenticated) return { success: false, error: 'Not authenticated' };
+
+  const token = await getAccessToken();
+  if (!token) return { success: false, error: 'Not authenticated' };
+
+  const api = createApiClient({ token });
+  try {
+    const groups = await api.getProposalLineItems(proposalId);
+    return { success: true, groups };
+  } catch (err) {
+    console.error('[proposals/actions.getProposalLineItemsAction]', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to load line items',
+    };
+  }
+}

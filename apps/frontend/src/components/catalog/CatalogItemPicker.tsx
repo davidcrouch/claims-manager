@@ -11,7 +11,7 @@ import type { CatalogItem } from '@/types/api';
 export interface CatalogItemPickerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  kind?: 'primitive' | 'assembly';
+  kind?: 'primitive' | 'assembly' | 'scope';
   onSelect: (item: CatalogItem) => void;
 }
 

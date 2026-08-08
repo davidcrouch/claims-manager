@@ -16,12 +16,17 @@ import { TypeBadge } from '@/components/ui/type-badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { AppointmentFormDrawer, type JobParty } from '@/components/forms/AppointmentFormDrawer';
+import { OrgUserSelect } from '@/components/forms/OrgUserSelect';
 import type { Job, Claim } from '@/types/api';
 
 type Dict = Record<string, unknown>;
 
 export interface JobOverviewTabHandle {
-  getPendingDates: () => { bookedDate: string | null; attendanceDate: string | null } | null;
+  getPendingDates: () => {
+    bookedDate: string | null;
+    attendanceDate: string | null;
+    assignedToUserId: string | null;
+  } | null;
   resetDates: () => void;
 }
 
@@ -99,22 +104,32 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
 
   const [bookedDate, setBookedDate] = useState(bookedDateRaw ?? '');
   const [attendanceDate, setAttendanceDate] = useState(attendanceDateRaw ?? '');
+  const [assignedToUserId, setAssignedToUserId] = useState(job.assignedToUserId ?? '');
   const [scheduleTarget, setScheduleTarget] = useState<'booked' | 'attendance' | null>(null);
 
   const jobParties = ((job.apiPayload as Record<string, unknown>)?.contacts as JobParty[]) ?? [];
 
-  const isDirty = bookedDate !== (bookedDateRaw ?? '') || attendanceDate !== (attendanceDateRaw ?? '');
+  const originalAssigned = job.assignedToUserId ?? '';
+  const isDirty =
+    bookedDate !== (bookedDateRaw ?? '') ||
+    attendanceDate !== (attendanceDateRaw ?? '') ||
+    assignedToUserId !== originalAssigned;
 
   useImperativeHandle(ref, () => ({
     getPendingDates: () => isDirty
-      ? { bookedDate: bookedDate || null, attendanceDate: attendanceDate || null }
+      ? {
+          bookedDate: bookedDate || null,
+          attendanceDate: attendanceDate || null,
+          assignedToUserId: assignedToUserId || null,
+        }
       : null,
     resetDates: () => {
       setBookedDate(bookedDateRaw ?? '');
       setAttendanceDate(attendanceDateRaw ?? '');
+      setAssignedToUserId(originalAssigned);
       setScheduleTarget(null);
     },
-  }), [isDirty, bookedDate, attendanceDate, bookedDateRaw, attendanceDateRaw]);
+  }), [isDirty, bookedDate, attendanceDate, bookedDateRaw, attendanceDateRaw, assignedToUserId, originalAssigned]);
 
   const handleAppointmentSuccess = (startDate: string) => {
     if (scheduleTarget === 'booked') {
@@ -157,6 +172,22 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
           {insurerRef && <DefRow label="Insurer reference" value={insurerRef} />}
           <DefRow label="Job type" value={<TypeBadge type={jobTypeName} />} />
           <DefRow label="Status" value={<StatusBadge status={statusName} />} />
+          <DefRow
+            label="Assigned"
+            value={
+              editing ? (
+                <OrgUserSelect
+                  id="job-overview-assigned"
+                  showLabel={false}
+                  value={assignedToUserId || null}
+                  onChange={(userId) => setAssignedToUserId(userId ?? '')}
+                  disabled={saving}
+                />
+              ) : (
+                job.assigneeName ?? '—'
+              )
+            }
+          />
           <DefRow label="Provider" value={
             <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
               job.provider === 'crunchwork'

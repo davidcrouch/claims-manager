@@ -23,6 +23,7 @@ export class JobsController {
     @Query('search') search?: string,
     @Query('status') status?: string,
     @Query('jobType') jobType?: string,
+    @Query('assignedToUserId') assignedToUserId?: string,
   ) {
     return this.jobsService.findAll({
       page: page ? parseInt(page, 10) : 1,
@@ -32,6 +33,7 @@ export class JobsController {
       search,
       status,
       jobType,
+      assignedToUserId,
     });
   }
 

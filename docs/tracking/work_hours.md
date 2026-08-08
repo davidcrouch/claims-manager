@@ -596,3 +596,13 @@
   Filing defaults and template administration stay aligned with the company versus project model.
   Outcome: filing, job setup, and site journals work together as one consistent operational workspace.
 
+- `2026-08-09` `PENDING` **8 h**
+  `90 files | +4 845 −934 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  Lay summary: The home screen is now a morning worklist, jobs and tasks can be assigned to people, the catalogue supports larger scope items, and quote lines are easier to edit.
+  **Operations inbox, catalogue scopes, job assignment, and richer quote line items.** The home dashboard is a morning worklist of active jobs, items needing a decision, today’s schedule, and unread notices, each linking to the right screen.
+  Staff can assign jobs and tasks to people in the organisation from create and edit forms.
+  The product catalogue supports scope-style items as well as simple and assembled items, with a smoother add-and-edit experience.
+  Quote line items are easier to review and edit, including grouping and catalogue picks used on estimates and related commercial documents.
+  Work orders, proposals, RFQs, invoices, and bills show clearer status and next-step actions from their detail screens.
+  Outcome: daily work, ownership, catalogue structure, and quoting sit together in one operational update.
+

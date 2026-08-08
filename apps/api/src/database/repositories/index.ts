@@ -48,6 +48,7 @@ export {
   TasksRepository,
   type TaskRow,
   type TaskInsert,
+  type TaskViewRow,
 } from './tasks.repository';
 export {
   MessagesRepository,

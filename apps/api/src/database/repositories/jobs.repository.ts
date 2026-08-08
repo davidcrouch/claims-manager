@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, isNull, desc, asc, sql, gte, ilike, or, inArray, aliasedTable, getTableColumns } from 'drizzle-orm';
+import { eq, and, isNull, desc, asc, sql, gte, ilike, or, inArray, notInArray, aliasedTable, getTableColumns } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
-import { jobs, lookupValues, vendors, integrationConnections } from '../schema';
+import { jobs, lookupValues, vendors, integrationConnections, users } from '../schema';
+
+const assigneeJoinOn = sql`${jobs.assignedToUserId} = ${users.id}::text`;
 
 function buildJobOrderBy(sort?: string) {
   switch (sort) {
@@ -24,6 +26,10 @@ function buildJobOrderBy(sort?: string) {
       return [asc(jobs.addressSuburb)];
     case 'address_desc':
       return [desc(jobs.addressSuburb)];
+    case 'assignee_asc':
+      return [asc(users.name)];
+    case 'assignee_desc':
+      return [desc(users.name)];
     case 'updated_at_desc':
     default:
       return [desc(jobs.updatedAt)];
@@ -41,6 +47,7 @@ export interface JobViewRow extends JobRow {
   vendorName: string | null;
   vendorExternalReference: string | null;
   connectionProviderCode: string | null;
+  assigneeName: string | null;
 }
 
 @Injectable()
@@ -58,6 +65,7 @@ export class JobsRepository {
     status?: string;
     /** Comma-separated job type lookup IDs */
     jobType?: string;
+    assignedToUserId?: string;
   }): Promise<{ data: JobViewRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
@@ -107,6 +115,10 @@ export class JobsRepository {
       whereParts.push(inArray(jobs.jobTypeLookupId, jobTypeIds));
     }
 
+    if (params.assignedToUserId) {
+      whereParts.push(eq(jobs.assignedToUserId, params.assignedToUserId));
+    }
+
     const whereClause = and(...whereParts);
 
     let orderBy;
@@ -138,12 +150,14 @@ export class JobsRepository {
           vendorName: vendors.name,
           vendorExternalReference: vendors.externalReference,
           connectionProviderCode: integrationConnections.providerCode,
+          assigneeName: users.name,
         })
         .from(jobs)
         .leftJoin(statusLookup, eq(jobs.statusLookupId, statusLookup.id))
         .leftJoin(jobTypeLookup, eq(jobs.jobTypeLookupId, jobTypeLookup.id))
         .leftJoin(vendors, eq(jobs.vendorId, vendors.id))
         .leftJoin(integrationConnections, eq(jobs.connectionId, integrationConnections.id))
+        .leftJoin(users, assigneeJoinOn)
         .where(whereClause)
         .orderBy(...orderBy)
         .limit(limit)
@@ -175,15 +189,90 @@ export class JobsRepository {
         vendorName: vendors.name,
         vendorExternalReference: vendors.externalReference,
         connectionProviderCode: integrationConnections.providerCode,
+        assigneeName: users.name,
       })
       .from(jobs)
       .leftJoin(statusLookup, eq(jobs.statusLookupId, statusLookup.id))
       .leftJoin(jobTypeLookup, eq(jobs.jobTypeLookupId, jobTypeLookup.id))
       .leftJoin(vendors, eq(jobs.vendorId, vendors.id))
       .leftJoin(integrationConnections, eq(jobs.connectionId, integrationConnections.id))
+      .leftJoin(users, assigneeJoinOn)
       .where(and(eq(jobs.id, params.id), eq(jobs.tenantId, params.tenantId)))
       .limit(1);
     return (row as JobViewRow) ?? null;
+  }
+
+  async findActiveForInbox(params: {
+    tenantId: string;
+    excludeStatusIds?: string[];
+    claimIds?: string[];
+    limit?: number;
+  }): Promise<{ data: JobViewRow[]; total: number }> {
+    const limit = Math.min(params.limit ?? 12, 50);
+    const statusLookup = aliasedTable(lookupValues, 'status_lookup');
+    const jobTypeLookup = aliasedTable(lookupValues, 'job_type_lookup');
+    const excludeStatusIds = params.excludeStatusIds?.filter(Boolean) ?? [];
+    const claimIds = params.claimIds?.filter(Boolean) ?? [];
+
+    const whereParts = [
+      eq(jobs.tenantId, params.tenantId),
+      isNull(jobs.deletedAt),
+    ];
+    if (excludeStatusIds.length > 0) {
+      whereParts.push(
+        or(isNull(jobs.statusLookupId), notInArray(jobs.statusLookupId, excludeStatusIds))!,
+      );
+    }
+    if (claimIds.length > 0) {
+      whereParts.push(inArray(jobs.claimId, claimIds));
+    }
+    const whereClause = and(...whereParts);
+
+    const [data, countResult] = await Promise.all([
+      this.db
+        .select({
+          ...this.jobColumns(),
+          statusName: statusLookup.name,
+          statusExternalReference: statusLookup.externalReference,
+          jobTypeName: jobTypeLookup.name,
+          jobTypeExternalReference: jobTypeLookup.externalReference,
+          vendorName: vendors.name,
+          vendorExternalReference: vendors.externalReference,
+          connectionProviderCode: integrationConnections.providerCode,
+          assigneeName: users.name,
+        })
+        .from(jobs)
+        .leftJoin(statusLookup, eq(jobs.statusLookupId, statusLookup.id))
+        .leftJoin(jobTypeLookup, eq(jobs.jobTypeLookupId, jobTypeLookup.id))
+        .leftJoin(vendors, eq(jobs.vendorId, vendors.id))
+        .leftJoin(integrationConnections, eq(jobs.connectionId, integrationConnections.id))
+        .leftJoin(users, assigneeJoinOn)
+        .where(whereClause)
+        .orderBy(desc(jobs.updatedAt))
+        .limit(limit),
+      this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(jobs)
+        .where(whereClause),
+    ]);
+
+    return { data: data as JobViewRow[], total: countResult[0]?.count ?? 0 };
+  }
+
+  async findByIds(params: {
+    tenantId: string;
+    ids: string[];
+  }): Promise<Array<Pick<JobRow, 'id' | 'name' | 'externalReference'>>> {
+    const ids = [...new Set(params.ids.filter(Boolean))];
+    if (ids.length === 0) return [];
+    return this.db
+      .select({
+        id: jobs.id,
+        name: jobs.name,
+        externalReference: jobs.externalReference,
+      })
+      .from(jobs)
+      .where(and(eq(jobs.tenantId, params.tenantId), inArray(jobs.id, ids)));
   }
 
   async findByIdAndTenant(params: {

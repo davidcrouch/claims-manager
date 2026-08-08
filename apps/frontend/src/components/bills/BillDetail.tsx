@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -15,6 +15,7 @@ import {
   ClipboardList,
   MessageSquare,
   Paperclip,
+  Loader2,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -36,6 +37,10 @@ import type { Bill, Job } from '@/types/api';
 import { PrintButton } from '@/components/shared/PrintButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { jobDisplayName } from '@/components/shared/job-label';
+import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
+import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
+import { groupsFromDocumentPayload } from '@/components/quotes/quote-line-items.utils';
+import { getPurchaseOrderLineItemsAction } from '@/app/(app)/purchase-orders/actions';
 // ---------- helpers ---------------------------------------------------------
 
 function getPayload(bill: Bill): Dict {
@@ -319,17 +324,89 @@ function OverviewTab({ bill }: { bill: Bill }) {
   );
 }
 
-function LineItemsTab() {
+function LineItemsTab({ bill }: { bill: Bill }) {
+  const payload = (bill.billPayload ?? {}) as Record<string, unknown>;
+  const payloadGroups = groupsFromDocumentPayload(payload);
+  const lineItems = (payload.lineItems ?? payload.items ?? []) as Array<Record<string, unknown>>;
+  const [poGroups, setPoGroups] = useState<ApiGroup[] | null>(null);
+  const [loading, setLoading] = useState(payloadGroups.length === 0 && !!bill.purchaseOrderId);
+
+  const loadPo = useCallback(async () => {
+    if (payloadGroups.length > 0 || !bill.purchaseOrderId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    const result = await getPurchaseOrderLineItemsAction(bill.purchaseOrderId);
+    if (result.success && result.groups) {
+      setPoGroups(result.groups as ApiGroup[]);
+    }
+    setLoading(false);
+  }, [bill.purchaseOrderId, payloadGroups.length]);
+
+  useEffect(() => {
+    void loadPo();
+  }, [loadPo]);
+
+  const groups = payloadGroups.length > 0 ? payloadGroups : poGroups;
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-12">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (groups && groups.length > 0) {
+    return <QuoteLineItemsTable groups={groups} readOnly />;
+  }
+
+  if (lineItems.length === 0) {
+    return (
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Line Items</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            No line items found for this bill.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm">Line Items</CardTitle>
       </CardHeader>
       <CardContent>
-        <p className="text-sm text-muted-foreground">
-          Items from the linked PO that this bill covers will appear here once
-          the line items API is connected.
-        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b text-left text-muted-foreground">
+                <th className="pb-2 pr-4 font-medium">Item Name</th>
+                <th className="pb-2 pr-4 text-right font-medium">Quantity</th>
+                <th className="pb-2 pr-4 text-right font-medium">Unit Cost</th>
+                <th className="pb-2 text-right font-medium">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lineItems.map((item, idx) => (
+                <tr key={idx} className="border-b last:border-0">
+                  <td className="py-2 pr-4">{String(item.name ?? item.itemName ?? '—')}</td>
+                  <td className="py-2 pr-4 text-right">{item.quantity != null ? String(item.quantity) : '—'}</td>
+                  <td className="py-2 pr-4 text-right">{formatCurrency(item.unitCost ?? item.unitPrice ?? item.rate)}</td>
+                  <td className="py-2 text-right">{formatCurrency(item.total ?? item.amount ?? item.lineTotal)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </CardContent>
     </Card>
   );
@@ -446,7 +523,7 @@ export function BillDetail({ bill }: { bill: Bill }) {
       </div>
       <div className="pt-4">
         {tab === 'overview' && <OverviewTab bill={bill} />}
-        {tab === 'line-items' && <LineItemsTab />}
+        {tab === 'line-items' && <LineItemsTab bill={bill} />}
         {tab === 'activities' && <ActivitiesTab />}
         {tab === 'communications' && <CommunicationsTab />}
         {tab === 'timeline' && <TimelineTab bill={bill} />}

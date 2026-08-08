@@ -441,6 +441,7 @@ export class DocumentIssuanceService {
           quantity?: string | null;
           sortIndex?: number;
           totals?: Record<string, unknown>;
+          comboPayload?: Record<string, unknown>;
           items?: unknown[];
         };
 
@@ -456,6 +457,7 @@ export class DocumentIssuanceService {
             quantity: combo.quantity ?? null,
             sortIndex: combo.sortIndex ?? 0,
             totals: combo.totals ?? {},
+            comboPayload: combo.comboPayload ?? {},
           })
           .returning();
 

@@ -1,7 +1,10 @@
 import {
   applyMarkup,
+  comboKindFromPayload,
   computeLineTotals,
   formatDecimal,
+  isCatalogBomParentKind,
+  isScopeComboPayload,
   parseDecimal,
 } from './catalog.utils';
 
@@ -33,6 +36,29 @@ describe('catalog.utils', () => {
       expect(totals.subTotal).toBe('100.0000');
       expect(totals.totalTax).toBe('10.0000');
       expect(totals.total).toBe('110.0000');
+    });
+  });
+
+  describe('isCatalogBomParentKind', () => {
+    it('treats assembly and scope as BOM parents', () => {
+      expect(isCatalogBomParentKind('assembly')).toBe(true);
+      expect(isCatalogBomParentKind('scope')).toBe(true);
+      expect(isCatalogBomParentKind('primitive')).toBe(false);
+    });
+  });
+
+  describe('comboKindFromPayload', () => {
+    it('reads kind from payload or nested comboPayload', () => {
+      expect(comboKindFromPayload({ kind: 'scope' })).toBe('scope');
+      expect(comboKindFromPayload({ comboPayload: { kind: 'scope' } })).toBe('scope');
+      expect(comboKindFromPayload({ kind: 'assembly' })).toBe('assembly');
+      expect(comboKindFromPayload({})).toBe('assembly');
+      expect(comboKindFromPayload(null)).toBe('assembly');
+    });
+
+    it('detects scope combo payloads', () => {
+      expect(isScopeComboPayload({ kind: 'scope' })).toBe(true);
+      expect(isScopeComboPayload({ kind: 'assembly' })).toBe(false);
     });
   });
 

@@ -39,14 +39,18 @@ export default async function ProposalDetailPage({
   });
   if (!proposal) notFound();
 
-  const job = proposal.jobId ? await api.getJob(proposal.jobId).catch(() => null) : null;
+  const [job, rfq, quote] = await Promise.all([
+    proposal.jobId ? api.getJob(proposal.jobId).catch(() => null) : Promise.resolve(null),
+    proposal.rfqId ? api.getRfq(proposal.rfqId).catch(() => null) : Promise.resolve(null),
+    proposal.quoteId ? api.getQuote(proposal.quoteId).catch(() => null) : Promise.resolve(null),
+  ]);
 
   return (
     <>
       <SetPageHeader>
         <ProposalPageHeader proposal={proposal} job={job} />
       </SetPageHeader>
-      <ProposalDetail proposal={proposal} />
+      <ProposalDetail proposal={proposal} job={job} rfq={rfq} quote={quote} />
     </>
   );
 }

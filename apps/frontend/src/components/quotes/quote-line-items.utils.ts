@@ -1,4 +1,4 @@
-import type { ApiGroup, FlatLineItemRow } from '@/components/quotes/quote-line-items.types';
+import type { ApiCombo, ApiGroup, FlatLineItemRow } from '@/components/quotes/quote-line-items.types';
 import type { Quote } from '@/types/api';
 import type { Dict } from '@/components/shared/detail';
 
@@ -12,6 +12,13 @@ export function getPayloadGroups(quote: Quote): ApiGroup[] {
   return Array.isArray(groups) ? (groups as ApiGroup[]) : [];
 }
 
+export function groupsFromDocumentPayload(
+  payload: Record<string, unknown> | null | undefined,
+): ApiGroup[] {
+  const groups = payload?.groups;
+  return Array.isArray(groups) ? (groups as ApiGroup[]) : [];
+}
+
 export function groupLabel(group: ApiGroup, index: number, fallbackPrefix = 'Group'): string {
   return (
     group.groupLabel?.name ??
@@ -19,6 +26,57 @@ export function groupLabel(group: ApiGroup, index: number, fallbackPrefix = 'Gro
     group.description ??
     `${fallbackPrefix} ${index + 1}`
   );
+}
+
+export function comboKindFromRecord(
+  combo: ApiCombo | Record<string, unknown>,
+): 'assembly' | 'scope' {
+  const rec = combo as Record<string, unknown>;
+  if (rec.kind === 'scope') return 'scope';
+  const payload = rec.comboPayload;
+  if (payload && typeof payload === 'object' && (payload as Record<string, unknown>).kind === 'scope') {
+    return 'scope';
+  }
+  return 'assembly';
+}
+
+/** Split combos tagged as scopes into `group.scopes` so every document uses the same UI. */
+export function normalizeLineItemGroups(groups: ApiGroup[]): ApiGroup[] {
+  return groups.map((group) => {
+    const existingScopes = [...(group.scopes ?? [])];
+    const existingIds = new Set(existingScopes.map((s) => s.id).filter(Boolean) as string[]);
+    const assemblyCombos: ApiCombo[] = [];
+
+    for (const combo of group.combos ?? []) {
+      if (comboKindFromRecord(combo) !== 'scope') {
+        assemblyCombos.push(combo);
+        continue;
+      }
+      if (combo.id && existingIds.has(combo.id)) continue;
+      existingScopes.push({
+        id: combo.id,
+        name: combo.name,
+        component: combo.component,
+        description: combo.description,
+        category: combo.category,
+        subCategory: combo.subCategory,
+        index: combo.index,
+        quantity: combo.quantity,
+        catalogScopeId: combo.catalogComboId,
+        lineScopeStatus: combo.lineScopeStatus,
+        items: combo.items,
+        combos: [],
+        subTotal: combo.subTotal,
+        totalTax: combo.totalTax,
+        total: combo.total,
+        allocatedCost: combo.allocatedCost,
+        committedCost: combo.committedCost,
+      });
+      if (combo.id) existingIds.add(combo.id);
+    }
+
+    return { ...group, combos: assemblyCombos, scopes: existingScopes };
+  });
 }
 
 export function flattenGroups(groups: ApiGroup[]): FlatLineItemRow[] {
@@ -47,6 +105,31 @@ export function flattenGroups(groups: ApiGroup[]): FlatLineItemRow[] {
           assemblyName: comboName,
           item,
         });
+      }
+    }
+
+    for (const scope of group.scopes ?? []) {
+      const scopeName = scope.name ?? 'Scope';
+      for (const item of scope.items ?? []) {
+        rows.push({
+          rowKey: `scope-item-${scope.id ?? scopeName}-${item.id ?? item.name ?? rows.length}`,
+          groupId: group.id,
+          groupLabel: label,
+          assemblyName: scopeName,
+          item,
+        });
+      }
+      for (const combo of scope.combos ?? []) {
+        const comboName = combo.name ?? 'Assembly';
+        for (const item of combo.items ?? []) {
+          rows.push({
+            rowKey: `scope-combo-item-${combo.id ?? comboName}-${item.id ?? item.name ?? rows.length}`,
+            groupId: group.id,
+            groupLabel: label,
+            assemblyName: `${scopeName} / ${comboName}`,
+            item,
+          });
+        }
       }
     }
   });

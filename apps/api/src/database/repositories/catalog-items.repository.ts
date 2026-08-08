@@ -44,7 +44,7 @@ export class CatalogItemsRepository {
   async findMany(params: {
     tenantId: string;
     catalogId?: string;
-    kind?: 'primitive' | 'assembly';
+    kind?: 'primitive' | 'assembly' | 'scope';
     typeId?: string;
     categoryIds?: string[];
     search?: string;
@@ -54,8 +54,7 @@ export class CatalogItemsRepository {
     sort?: string;
   }): Promise<{ data: CatalogItemRow[]; total: number }> {
     const page = params.page ?? 1;
-    const maxLimit = params.search?.trim() ? 500 : 100;
-    const limit = Math.min(params.limit ?? 20, maxLimit);
+    const limit = Math.min(params.limit ?? 20, 5000);
     const offset = (page - 1) * limit;
 
     const conditions = [

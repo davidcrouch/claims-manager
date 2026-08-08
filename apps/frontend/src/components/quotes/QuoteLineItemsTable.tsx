@@ -21,6 +21,7 @@ import {
   Eye,
   EyeOff,
   X,
+  Boxes,
 } from 'lucide-react';
 import { formatCurrency } from '@/components/shared/detail';
 import {
@@ -30,8 +31,8 @@ import {
   type CatalogDragPayload,
   type GroupLabelDragPayload,
 } from '@/components/catalog/catalog-drag';
-import type { ApiCombo, ApiGroup, ApiItem } from '@/components/quotes/quote-line-items.types';
-import { groupLabel } from '@/components/quotes/quote-line-items.utils';
+import type { ApiCombo, ApiGroup, ApiItem, ApiScope } from '@/components/quotes/quote-line-items.types';
+import { groupLabel, normalizeLineItemGroups } from '@/components/quotes/quote-line-items.utils';
 import { cn } from '@/lib/utils';
 import {
   DropdownMenu,
@@ -103,9 +104,11 @@ function nearestEditableField(
 
 type RowEntry =
   | { kind: 'item'; key: string; item: ApiItem }
-  | { kind: 'assembly'; key: string; combo: ApiCombo };
+  | { kind: 'assembly'; key: string; combo: ApiCombo }
+  | { kind: 'scope'; key: string; scope: ApiScope };
 
 const ASSEMBLY_EDITABLE_FIELDS: EditableFieldKey[] = ['name', 'component', 'description', 'quantity'];
+const SCOPE_EDITABLE_FIELDS: EditableFieldKey[] = ['name', 'component', 'description', 'quantity'];
 
 function initItemInputs(item: ApiItem): Record<EditableFieldKey, string> {
   return {
@@ -126,6 +129,19 @@ function initComboInputs(combo: ApiCombo): Record<EditableFieldKey, string> {
     component: combo.component ?? '',
     description: combo.description ?? '',
     quantity: String(combo.quantity ?? 0),
+    unitType: '',
+    unitCost: '0',
+    markupValue: '0',
+    tax: '0',
+  };
+}
+
+function initScopeInputs(scope: ApiScope): Record<EditableFieldKey, string> {
+  return {
+    name: scope.name ?? '',
+    component: scope.component ?? '',
+    description: scope.description ?? '',
+    quantity: String(scope.quantity ?? 0),
     unitType: '',
     unitCost: '0',
     markupValue: '0',
@@ -882,6 +898,451 @@ function AssemblyBlock({
   );
 }
 
+function ScopeBlock({
+  scope,
+  scopeKey,
+  isCollapsed,
+  onToggle,
+  showMarkup,
+  showGst,
+  showCategory = true,
+  editState,
+  editInputs,
+  selectedRows,
+  dirtyRowKeys,
+  collapsedCombos,
+  onToggleCombo,
+  onItemClick,
+  onAssemblyClick,
+  onScopeClick,
+  onCellSelect,
+  onInputChange,
+  onCellKeyDown,
+  onDeleteScope,
+  onDeleteCombo,
+  onDeleteItem,
+  showSelect,
+  selectedIds,
+  onToggleIds,
+}: {
+  scope: ApiScope;
+  scopeKey: string;
+  isCollapsed: boolean;
+  onToggle: () => void;
+  showMarkup: boolean;
+  showGst: boolean;
+  showCategory?: boolean;
+  editState: { rowKey: string; field: EditableFieldKey } | null;
+  editInputs: Record<string, Record<EditableFieldKey, string>>;
+  selectedRows: Set<string>;
+  dirtyRowKeys: Set<string>;
+  collapsedCombos: Set<string>;
+  onToggleCombo: (key: string) => void;
+  onItemClick: (e: React.MouseEvent, rowKey: string, item: ApiItem) => void;
+  onAssemblyClick: (e: React.MouseEvent, rowKey: string, combo: ApiCombo) => void;
+  onScopeClick: (e: React.MouseEvent, rowKey: string, scope: ApiScope) => void;
+  onCellSelect: (rowKey: string, field: EditableFieldKey) => void;
+  onInputChange: (rowKey: string, field: EditableFieldKey, value: string) => void;
+  onCellKeyDown: (e: React.KeyboardEvent) => void;
+  onDeleteScope?: (scopeId: string) => void;
+  onDeleteCombo?: (comboId: string) => void;
+  onDeleteItem?: (request: DeleteItemRequest) => void;
+  showSelect?: boolean;
+  selectedIds?: Set<string>;
+  onToggleIds?: (ids: string[]) => void;
+}) {
+  const scopeName = scope.name ?? 'Scope';
+  const scopeCategory =
+    [scope.category, scope.subCategory].filter(Boolean).join(' / ') || '—';
+  const isEditing = editState?.rowKey === scopeKey || (selectedRows.has(scopeKey) && editState !== null);
+  const scopeInputs = editInputs[scopeKey] ?? null;
+  const scopeItems = scope.items ?? [];
+  const scopeCombos = scope.combos ?? [];
+
+  const allChildIds = useMemo(() => {
+    const ids: string[] = [];
+    if (scope.id) ids.push(scope.id);
+    for (const item of scopeItems) { if (item.id) ids.push(item.id); }
+    for (const combo of scopeCombos) {
+      if (combo.id) ids.push(combo.id);
+      for (const item of combo.items ?? []) { if (item.id) ids.push(item.id); }
+    }
+    return ids;
+  }, [scope.id, scopeItems, scopeCombos]);
+
+  const scopeSelectedCount = allChildIds.filter((id) => selectedIds?.has(id)).length;
+  const scopeChecked =
+    allChildIds.length === 0
+      ? false
+      : scopeSelectedCount === 0
+        ? false
+        : scopeSelectedCount === allChildIds.length
+          ? true
+          : 'indeterminate';
+  const scopePicked = !showSelect || scopeChecked === true || scopeChecked === 'indeterminate';
+
+  const scopeTotal = useMemo(() => {
+    let sum = 0;
+    function addItem(item: ApiItem, itemKey: string) {
+      const inputs = editInputs[itemKey];
+      const qty = inputs ? parseFloat(inputs.quantity) || 0 : (item.quantity ?? 0);
+      const uc = inputs ? parseFloat(inputs.unitCost) || 0 : (item.unitCost ?? 0);
+      const ext = qty * uc;
+      const mkVal = inputs ? parseFloat(inputs.markupValue) || 0 : (item.markupValue ?? 19);
+      const mkAmt = item.markupType === 'fixed' ? mkVal * qty : ext * (mkVal / 100);
+      const taxPct = inputs ? parseFloat(inputs.tax) || 0 : (item.tax ?? 0);
+      const gstAmt = (ext + mkAmt) * (taxPct / 100);
+      sum += ext + (showMarkup ? mkAmt : 0) + (showGst ? gstAmt : 0);
+    }
+    for (let idx = 0; idx < scopeItems.length; idx++) {
+      const item = scopeItems[idx];
+      addItem(item, `${scopeKey}-item-${item.id ?? idx}`);
+    }
+    for (let ci = 0; ci < scopeCombos.length; ci++) {
+      const combo = scopeCombos[ci];
+      const comboKey = `${scopeKey}-combo-${combo.id ?? ci}`;
+      for (let ii = 0; ii < (combo.items ?? []).length; ii++) {
+        const item = combo.items![ii];
+        addItem(item, `${comboKey}-item-${item.id ?? ii}`);
+      }
+    }
+    return sum;
+  }, [scopeItems, scopeCombos, scopeKey, showMarkup, showGst, editInputs]);
+
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
+  const componentInputRef = useRef<HTMLInputElement | null>(null);
+  const descriptionInputRef = useRef<HTMLInputElement | null>(null);
+  const qtyInputRef = useRef<HTMLInputElement | null>(null);
+
+  const isPrimary = editState?.rowKey === scopeKey;
+  const isScopeMultiSelected = selectedRows.size > 1 && selectedRows.has(scopeKey);
+  const scopeBg = isScopeMultiSelected ? 'bg-blue-50/30' : 'bg-violet-50/40';
+  const scopeRing = isScopeMultiSelected
+    ? 'ring-2 ring-inset ring-blue-400 bg-blue-50/30'
+    : 'ring-2 ring-inset ring-violet-300 bg-violet-50/40';
+
+  useEffect(() => {
+    if (isEditing && isPrimary) {
+      if (editState?.field === 'name') {
+        nameInputRef.current?.focus();
+        nameInputRef.current?.select();
+      } else if (editState?.field === 'component') {
+        componentInputRef.current?.focus();
+        componentInputRef.current?.select();
+      } else if (editState?.field === 'description') {
+        descriptionInputRef.current?.focus();
+        descriptionInputRef.current?.select();
+      } else if (editState?.field === 'quantity') {
+        qtyInputRef.current?.focus();
+        qtyInputRef.current?.select();
+      }
+    }
+  }, [isEditing, isPrimary, editState?.field]);
+
+  const totalChildLineCount =
+    scopeItems.length +
+    scopeCombos.reduce((cs, c) => cs + (c.items?.length ?? 0), 0);
+
+  return (
+    <>
+      {/* Scope header row */}
+      <tr
+        data-item-row
+        className={cn(
+          'cursor-pointer transition-colors',
+          showSelect && !scopePicked && 'opacity-40',
+          isEditing
+            ? scopeRing
+            : dirtyRowKeys.has(scopeKey)
+              ? 'bg-emerald-200 hover:bg-emerald-300'
+              : 'bg-violet-100 hover:bg-violet-200',
+        )}
+        onClick={(e) => {
+          if (showSelect) {
+            onToggleIds?.(allChildIds);
+            return;
+          }
+          if (isEditing) {
+            onToggle();
+            return;
+          }
+          const target = e.target as HTMLElement;
+          const fieldArea = target.closest('[data-scope-field]');
+          if (fieldArea) {
+            onScopeClick(e, scopeKey, scope);
+            if (isCollapsed) onToggle();
+          } else {
+            onToggle();
+          }
+        }}
+      >
+        {showSelect && (
+          <td className="w-10 px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+            <Checkbox
+              checked={scopeChecked === true}
+              indeterminate={scopeChecked === 'indeterminate'}
+              onCheckedChange={() => onToggleIds?.(allChildIds)}
+              aria-label={`Select scope ${scopeName}`}
+            />
+          </td>
+        )}
+        <td
+          className={cn(
+            'p-0',
+            isEditing
+              ? isScopeMultiSelected
+                ? 'shadow-[inset_0_0_0_1px_#93c5fd33] bg-blue-50/30'
+                : 'shadow-[inset_0_0_0_1px_#8b5cf633] bg-violet-50/40'
+              : 'px-4 py-2.5 hover:bg-violet-50 hover:shadow-[inset_0_0_0_2px_#7c3aed]',
+          )}
+          colSpan={1}
+        >
+          {isEditing && scopeInputs ? (
+            <div className="pl-2">
+              <div className="flex items-center">
+                <div className="flex items-center gap-1.5 shrink-0 pr-1">
+                  {isCollapsed ? (
+                    <ChevronRight className="h-3.5 w-3.5 text-violet-600" />
+                  ) : (
+                    <ChevronDown className="h-3.5 w-3.5 text-violet-600" />
+                  )}
+                  <Boxes className="h-3.5 w-3.5 text-violet-500" />
+                </div>
+                <div
+                  className={cn(
+                    'flex-1 min-w-0 rounded-sm transition-shadow',
+                    editState?.field === 'name'
+                      ? 'shadow-[inset_0_0_0_2px_#2563eb] bg-white relative z-[1]'
+                      : '',
+                  )}
+                  onClick={(e) => { e.stopPropagation(); onCellSelect(scopeKey, 'name'); }}
+                >
+                  <input
+                    ref={nameInputRef}
+                    value={scopeInputs.name}
+                    onChange={(e) => onInputChange(scopeKey, 'name', e.target.value)}
+                    onKeyDown={onCellKeyDown}
+                    onFocus={() => onCellSelect(scopeKey, 'name')}
+                    placeholder="Scope name…"
+                    className="w-full bg-transparent px-4 py-2 text-sm font-semibold text-violet-900 outline-none placeholder:text-violet-300 truncate"
+                  />
+                </div>
+                <div
+                  className={cn(
+                    'flex-1 min-w-0 border-l border-violet-200 rounded-sm transition-shadow',
+                    editState?.field === 'component'
+                      ? 'shadow-[inset_0_0_0_2px_#2563eb] bg-white relative z-[1]'
+                      : '',
+                  )}
+                  onClick={(e) => { e.stopPropagation(); onCellSelect(scopeKey, 'component'); }}
+                >
+                  <input
+                    ref={componentInputRef}
+                    value={scopeInputs.component}
+                    onChange={(e) => onInputChange(scopeKey, 'component', e.target.value)}
+                    onKeyDown={onCellKeyDown}
+                    onFocus={() => onCellSelect(scopeKey, 'component')}
+                    placeholder="Component…"
+                    className="w-full bg-transparent px-4 py-2 text-sm text-violet-600 outline-none placeholder:text-violet-300 truncate"
+                  />
+                </div>
+              </div>
+              <div
+                className={cn(
+                  'border-t border-violet-100 rounded-sm transition-shadow',
+                  editState?.field === 'description'
+                    ? 'shadow-[inset_0_0_0_2px_#2563eb] bg-white relative z-[1]'
+                    : '',
+                )}
+                onClick={(e) => { e.stopPropagation(); onCellSelect(scopeKey, 'description'); }}
+              >
+                <input
+                  ref={descriptionInputRef}
+                  value={scopeInputs.description}
+                  onChange={(e) => onInputChange(scopeKey, 'description', e.target.value)}
+                  onKeyDown={onCellKeyDown}
+                  onFocus={() => onCellSelect(scopeKey, 'description')}
+                  placeholder="Description…"
+                  className="w-full bg-transparent px-4 py-1.5 text-xs text-violet-500 outline-none placeholder:text-violet-300"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="flex min-h-[2.75rem] items-center gap-2">
+              {isCollapsed ? (
+                <ChevronRight className="h-3.5 w-3.5 text-violet-600" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5 text-violet-600" />
+              )}
+              <Boxes className="h-3.5 w-3.5 text-violet-500" />
+              <div
+                className="flex-1 min-w-0"
+                data-scope-field="name"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-violet-900 truncate">
+                    {scopeName}
+                    {(scopeInputs?.component ?? scope.component) && (
+                      <span className="font-normal text-violet-600">
+                        {' - '}{scopeInputs?.component ?? scope.component}
+                      </span>
+                    )}
+                  </span>
+                  <span className="shrink-0 rounded-full bg-violet-200 px-2 py-0.5 text-[10px] font-medium text-violet-800">
+                    {totalChildLineCount} item{totalChildLineCount !== 1 ? 's' : ''}
+                    {scopeCombos.length > 0 && ` · ${scopeCombos.length} assembl${scopeCombos.length !== 1 ? 'ies' : 'y'}`}
+                  </span>
+                </div>
+                <p className="mt-0.5 line-clamp-1 min-h-4 text-xs text-violet-500">
+                  {scopeInputs?.description ?? scope.description ?? '\u00a0'}
+                </p>
+              </div>
+            </div>
+          )}
+        </td>
+        <td className={cn('px-4 py-2.5 text-xs text-violet-700', isEditing && (isScopeMultiSelected ? 'bg-blue-50/30' : scopeBg))}>Scope</td>
+        {showCategory && (
+          <td className={cn('px-4 py-2.5 text-xs text-violet-700', isEditing && (isScopeMultiSelected ? 'bg-blue-50/30' : scopeBg))}>{scopeCategory}</td>
+        )}
+        <td
+          data-col="quantity"
+          data-scope-field="quantity"
+          className={cn(
+            'whitespace-nowrap text-right',
+            isEditing
+              ? cn('p-0 transition-shadow', editState?.field === 'quantity'
+                  ? 'shadow-[inset_0_0_0_2px_#2563eb] bg-white relative z-[1]'
+                  : isScopeMultiSelected ? 'bg-blue-50/30' : scopeBg)
+              : 'px-4 py-2.5 hover:bg-violet-50 hover:shadow-[inset_0_0_0_2px_#7c3aed]',
+          )}
+          onClick={isEditing ? (e) => { e.stopPropagation(); onCellSelect(scopeKey, 'quantity'); } : undefined}
+        >
+          {isEditing && scopeInputs ? (
+            <input
+              ref={qtyInputRef}
+              value={scopeInputs.quantity}
+              onChange={(e) => onInputChange(scopeKey, 'quantity', e.target.value)}
+              onKeyDown={onCellKeyDown}
+              onFocus={() => onCellSelect(scopeKey, 'quantity')}
+              className="w-full bg-transparent px-4 py-2.5 text-right font-mono text-sm text-violet-700 outline-none"
+            />
+          ) : (
+            <span className="font-mono text-sm text-violet-700">{scope.quantity ?? '—'}</span>
+          )}
+        </td>
+        <td className={cn('px-4 py-2.5', isEditing && (isScopeMultiSelected ? 'bg-blue-50/30' : scopeBg))} />
+        <td className={cn('px-4 py-2.5', isEditing && (isScopeMultiSelected ? 'bg-blue-50/30' : scopeBg))} />
+        {showMarkup && (
+          <td className={cn('px-4 py-2.5', isEditing && (isScopeMultiSelected ? 'bg-blue-50/30' : scopeBg))} />
+        )}
+        {showGst && (
+          <td className={cn('px-4 py-2.5', isEditing && (isScopeMultiSelected ? 'bg-blue-50/30' : scopeBg))} />
+        )}
+        <td className={cn('whitespace-nowrap px-4 py-2.5 text-right font-semibold text-violet-900', isEditing && (isScopeMultiSelected ? 'bg-blue-50/30' : scopeBg))}>
+          {formatCurrency(scopeTotal)}
+        </td>
+        <td className={cn('w-10 px-2', isEditing && (isScopeMultiSelected ? 'bg-blue-50/30' : scopeBg))}>
+          {onDeleteScope && scope.id && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                }
+              />
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => onDeleteScope(scope.id!)}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="mr-2 h-3.5 w-3.5" />
+                  Delete scope
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </td>
+      </tr>
+
+      {/* Scope children: standalone items + assemblies */}
+      {!isCollapsed && (
+        <>
+          {scopeItems.map((item, idx) => {
+            const itemKey = `${scopeKey}-item-${item.id ?? idx}`;
+            const itemEditing = editState?.rowKey === itemKey || (selectedRows.has(itemKey) && editState !== null);
+            const itemPrimary = editState?.rowKey === itemKey;
+            return (
+              <ItemRow
+                key={itemKey}
+                item={item}
+                rowKey={itemKey}
+                indented
+                showMarkup={showMarkup}
+                showGst={showGst}
+                showCategory={showCategory}
+                isEditing={itemEditing}
+                selectedField={itemEditing ? (editState?.field ?? null) : null}
+                editInputs={editInputs[itemKey] ?? null}
+                isPrimaryEdit={itemPrimary}
+                isMultiSelected={selectedRows.size > 1 && selectedRows.has(itemKey)}
+                isDirtyRow={dirtyRowKeys.has(itemKey)}
+                onRowClick={onItemClick}
+                onCellSelect={onCellSelect}
+                onInputChange={onInputChange}
+                onCellKeyDown={onCellKeyDown}
+                onDelete={onDeleteItem}
+                showSelect={showSelect}
+                isPicked={!showSelect || (!!item.id && !!selectedIds?.has(item.id))}
+                onTogglePick={() => item.id && onToggleIds?.([item.id])}
+              />
+            );
+          })}
+          {scopeCombos.map((combo, comboIdx) => {
+            const comboKey = `${scopeKey}-combo-${combo.id ?? comboIdx}`;
+            const isComboCollapsed = collapsedCombos.has(comboKey);
+            const comboItems = combo.items ?? [];
+            const comboItemCount = comboItems.length;
+            return (
+              <AssemblyBlock
+                key={comboKey}
+                combo={combo}
+                comboKey={comboKey}
+                comboItems={comboItems}
+                comboItemCount={comboItemCount}
+                isCollapsed={isComboCollapsed}
+                onToggle={() => onToggleCombo(comboKey)}
+                showMarkup={showMarkup}
+                showGst={showGst}
+                showCategory={showCategory}
+                editState={editState}
+                editInputs={editInputs}
+                selectedRows={selectedRows}
+                dirtyRowKeys={dirtyRowKeys}
+                onItemClick={onItemClick}
+                onAssemblyClick={onAssemblyClick}
+                onCellSelect={onCellSelect}
+                onInputChange={onInputChange}
+                onCellKeyDown={onCellKeyDown}
+                onDeleteCombo={onDeleteCombo}
+                onDeleteItem={onDeleteItem}
+                showSelect={showSelect}
+                selectedIds={selectedIds}
+                onToggleIds={onToggleIds}
+              />
+            );
+          })}
+        </>
+      )}
+    </>
+  );
+}
+
 export interface DeleteItemRequest {
   itemId: string;
   itemName?: string;
@@ -905,6 +1366,7 @@ export interface QuoteLineItemsTableProps {
   onDeleteGroup?: (groupId: string) => void;
   onDeleteItem?: (request: DeleteItemRequest) => void;
   onDeleteCombo?: (comboId: string) => void;
+  onDeleteScope?: (scopeId: string) => void;
   onMoveGroupUp?: (groupId: string) => void;
   onMoveGroupDown?: (groupId: string) => void;
   onOpenCatalogDrawer?: () => void;
@@ -953,7 +1415,7 @@ function modeLabels(mode: LineItemsMode) {
 }
 
 export function QuoteLineItemsTable({
-  groups,
+  groups: rawGroups,
   activeDropKey,
   setActiveDropKey,
   onCatalogDrop,
@@ -962,6 +1424,7 @@ export function QuoteLineItemsTable({
   onDeleteGroup,
   onDeleteItem,
   onDeleteCombo,
+  onDeleteScope,
   onMoveGroupUp,
   onMoveGroupDown,
   onOpenCatalogDrawer,
@@ -973,12 +1436,14 @@ export function QuoteLineItemsTable({
   selection,
   compact,
 }: QuoteLineItemsTableProps) {
+  const groups = useMemo(() => normalizeLineItemGroups(rawGroups), [rawGroups]);
   const labels = modeLabels(mode);
   const showCategory = mode !== 'catalog';
   const showSelect = !!selection;
   const isReadOnly = !!readOnly || showSelect;
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [collapsedCombos, setCollapsedCombos] = useState<Set<string>>(new Set());
+  const [collapsedScopes, setCollapsedScopes] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [showMarkup, setShowMarkup] = useState(true);
   const [showGst, setShowGst] = useState(true);
@@ -1039,6 +1504,15 @@ export function QuoteLineItemsTable({
     });
   };
 
+  const toggleScope = (scopeKey: string) => {
+    setCollapsedScopes((prev) => {
+      const next = new Set(prev);
+      if (next.has(scopeKey)) next.delete(scopeKey);
+      else next.add(scopeKey);
+      return next;
+    });
+  };
+
   const allCollapsed = useMemo(() => {
     if (groups.length === 0) return false;
     return groups.every((g, i) => collapsed.has(g.id ?? `group-${i}`));
@@ -1064,7 +1538,9 @@ export function QuoteLineItemsTable({
         (sum, g) =>
           sum +
           (g.items?.length ?? 0) +
-          (g.combos ?? []).reduce((cs, c) => cs + (c.items?.length ?? 0), 0),
+          (g.combos ?? []).reduce((cs, c) => cs + (c.items?.length ?? 0), 0) +
+          (g.scopes ?? []).reduce((ss, s) =>
+            ss + (s.items?.length ?? 0) + (s.combos ?? []).reduce((cs, c) => cs + (c.items?.length ?? 0), 0), 0),
         0,
       ),
     [groups],
@@ -1088,6 +1564,24 @@ export function QuoteLineItemsTable({
           rows.push({ kind: 'item', key: `${comboKey}-item-${item.id ?? ii}`, item });
         }
       }
+      for (let si = 0; si < (g.scopes ?? []).length; si++) {
+        const scope = g.scopes![si];
+        const scopeKey = `${gId}-scope-${scope.id ?? si}`;
+        rows.push({ kind: 'scope', key: scopeKey, scope });
+        for (let ii = 0; ii < (scope.items ?? []).length; ii++) {
+          const item = scope.items![ii];
+          rows.push({ kind: 'item', key: `${scopeKey}-item-${item.id ?? ii}`, item });
+        }
+        for (let ci = 0; ci < (scope.combos ?? []).length; ci++) {
+          const combo = scope.combos![ci];
+          const comboKey = `${scopeKey}-combo-${combo.id ?? ci}`;
+          rows.push({ kind: 'assembly', key: comboKey, combo });
+          for (let ii = 0; ii < (combo.items ?? []).length; ii++) {
+            const item = combo.items![ii];
+            rows.push({ kind: 'item', key: `${comboKey}-item-${item.id ?? ii}`, item });
+          }
+        }
+      }
     }
     return rows;
   }, [groups]);
@@ -1104,6 +1598,9 @@ export function QuoteLineItemsTable({
         for (const f of Object.keys(orig) as EditableFieldKey[]) {
           if (inputs[f] !== orig[f]) return true;
         }
+      } else if (entry.kind === 'scope') {
+        const orig = initScopeInputs(entry.scope);
+        if (inputs.quantity !== orig.quantity) return true;
       } else {
         const orig = initComboInputs(entry.combo);
         if (inputs.quantity !== orig.quantity) return true;
@@ -1117,7 +1614,11 @@ export function QuoteLineItemsTable({
     for (const entry of itemRowIndex) {
       const inputs = editInputs[entry.key];
       if (!inputs) continue;
-      const orig = entry.kind === 'item' ? initItemInputs(entry.item) : initComboInputs(entry.combo);
+      const orig = entry.kind === 'item'
+        ? initItemInputs(entry.item)
+        : entry.kind === 'scope'
+          ? initScopeInputs(entry.scope)
+          : initComboInputs(entry.combo);
       let changed = false;
       for (const f of Object.keys(orig) as EditableFieldKey[]) {
         if (inputs[f] !== orig[f]) { changed = true; break; }
@@ -1166,6 +1667,22 @@ export function QuoteLineItemsTable({
         for (let ii = 0; ii < (combo.items ?? []).length; ii++) {
           const item = combo.items![ii];
           addItem(item, `${comboKey}-item-${item.id ?? ii}`);
+        }
+      }
+      for (let si = 0; si < (g.scopes ?? []).length; si++) {
+        const scope = g.scopes![si];
+        const scopeKey = `${gId}-scope-${scope.id ?? si}`;
+        for (let ii = 0; ii < (scope.items ?? []).length; ii++) {
+          const item = scope.items![ii];
+          addItem(item, `${scopeKey}-item-${item.id ?? ii}`);
+        }
+        for (let ci = 0; ci < (scope.combos ?? []).length; ci++) {
+          const combo = scope.combos![ci];
+          const comboKey = `${scopeKey}-combo-${combo.id ?? ci}`;
+          for (let ii = 0; ii < (combo.items ?? []).length; ii++) {
+            const item = combo.items![ii];
+            addItem(item, `${comboKey}-item-${item.id ?? ii}`);
+          }
         }
       }
     }
@@ -1240,6 +1757,38 @@ export function QuoteLineItemsTable({
     setSelectedKey(null);
   }
 
+  function handleScopeClick(e: React.MouseEvent, rowKey: string, scope: ApiScope) {
+    if (isReadOnly) return;
+    const target = e.target as HTMLElement;
+    const fieldEl = target.closest('[data-scope-field]');
+    const scopeField = fieldEl?.getAttribute('data-scope-field');
+    const field: EditableFieldKey = scopeField === 'quantity' ? 'quantity' : 'name';
+
+    setEditInputs((prev) => {
+      if (prev[rowKey]) return prev;
+      return { ...prev, [rowKey]: initScopeInputs(scope) };
+    });
+
+    if (e.ctrlKey || e.metaKey) {
+      setSelectedRows((prev) => {
+        const next = new Set(prev);
+        if (next.size === 0 && editState) next.add(editState.rowKey);
+        if (next.has(rowKey)) {
+          next.delete(rowKey);
+          if (next.size <= 1) return new Set();
+        } else {
+          next.add(rowKey);
+        }
+        return next;
+      });
+      setEditState({ rowKey, field });
+    } else {
+      setSelectedRows(new Set());
+      setEditState({ rowKey, field });
+    }
+    setSelectedKey(null);
+  }
+
   function handleCellSelect(rowKey: string, field: EditableFieldKey) {
     if (isReadOnly) return;
     setEditState({ rowKey, field });
@@ -1264,12 +1813,16 @@ export function QuoteLineItemsTable({
     let effectiveField = field;
     if (target.kind === 'assembly') {
       effectiveField = ASSEMBLY_EDITABLE_FIELDS.includes(field) ? field : 'name';
+    } else if (target.kind === 'scope') {
+      effectiveField = SCOPE_EDITABLE_FIELDS.includes(field) ? field : 'name';
     }
     setEditInputs((prev) => {
       if (prev[target.key]) return prev;
       const inputs = target.kind === 'assembly'
         ? initComboInputs(target.combo)
-        : initItemInputs(target.item);
+        : target.kind === 'scope'
+          ? initScopeInputs(target.scope)
+          : initItemInputs(target.item);
       return { ...prev, [target.key]: inputs };
     });
     setEditState({ rowKey: target.key, field: effectiveField });
@@ -1280,7 +1833,9 @@ export function QuoteLineItemsTable({
     const currentRow = visibleRowIndex.find((r) => r.key === editState.rowKey);
     const fields = currentRow?.kind === 'assembly'
       ? ASSEMBLY_EDITABLE_FIELDS
-      : getEditableFields(showMarkup, showGst);
+      : currentRow?.kind === 'scope'
+        ? SCOPE_EDITABLE_FIELDS
+        : getEditableFields(showMarkup, showGst);
     const colIdx = fields.indexOf(editState.field);
     const inNameCol = NAME_COL_FIELDS.includes(editState.field);
 
@@ -1408,6 +1963,16 @@ export function QuoteLineItemsTable({
       );
     };
 
+    const matchesScope = (scope: ApiScope) => {
+      const category = [scope.category, scope.subCategory].filter(Boolean).join(' / ');
+      return (
+        (scope.name ?? '').toLowerCase().includes(term) ||
+        (scope.component ?? '').toLowerCase().includes(term) ||
+        'scope'.includes(term) ||
+        category.toLowerCase().includes(term)
+      );
+    };
+
     return result
       .map((group) => {
         const filteredItems = (group.items ?? []).filter(matchesItem);
@@ -1421,8 +1986,32 @@ export function QuoteLineItemsTable({
             return null;
           })
           .filter(Boolean) as typeof group.combos;
-        if (filteredItems.length > 0 || (filteredCombos && filteredCombos.length > 0)) {
-          return { ...group, items: filteredItems, combos: filteredCombos };
+        const filteredScopes = (group.scopes ?? [])
+          .map((scope) => {
+            const scopeMatch = matchesScope(scope);
+            const matchingItems = (scope.items ?? []).filter(matchesItem);
+            const matchingCombos = (scope.combos ?? [])
+              .map((combo) => {
+                const comboMatch = matchesCombo(combo);
+                const comboMatchingItems = (combo.items ?? []).filter(matchesItem);
+                if (comboMatch || comboMatchingItems.length > 0) {
+                  return { ...combo, items: comboMatch ? combo.items : comboMatchingItems };
+                }
+                return null;
+              })
+              .filter(Boolean) as ApiCombo[];
+            if (scopeMatch || matchingItems.length > 0 || matchingCombos.length > 0) {
+              return {
+                ...scope,
+                items: scopeMatch ? scope.items : matchingItems,
+                combos: scopeMatch ? scope.combos : matchingCombos,
+              };
+            }
+            return null;
+          })
+          .filter(Boolean) as typeof group.scopes;
+        if (filteredItems.length > 0 || (filteredCombos && filteredCombos.length > 0) || (filteredScopes && filteredScopes.length > 0)) {
+          return { ...group, items: filteredItems, combos: filteredCombos, scopes: filteredScopes };
         }
         return null;
       })
@@ -1445,6 +2034,24 @@ export function QuoteLineItemsTable({
         for (let ii = 0; ii < (combo.items ?? []).length; ii++) {
           const item = combo.items![ii];
           rows.push({ kind: 'item', key: `${comboKey}-item-${item.id ?? ii}`, item });
+        }
+      }
+      for (let si = 0; si < (g.scopes ?? []).length; si++) {
+        const scope = g.scopes![si];
+        const scopeKey = `${gId}-scope-${scope.id ?? si}`;
+        rows.push({ kind: 'scope', key: scopeKey, scope });
+        for (let ii = 0; ii < (scope.items ?? []).length; ii++) {
+          const item = scope.items![ii];
+          rows.push({ kind: 'item', key: `${scopeKey}-item-${item.id ?? ii}`, item });
+        }
+        for (let ci = 0; ci < (scope.combos ?? []).length; ci++) {
+          const combo = scope.combos![ci];
+          const comboKey = `${scopeKey}-combo-${combo.id ?? ci}`;
+          rows.push({ kind: 'assembly', key: comboKey, combo });
+          for (let ii = 0; ii < (combo.items ?? []).length; ii++) {
+            const item = combo.items![ii];
+            rows.push({ kind: 'item', key: `${comboKey}-item-${item.id ?? ii}`, item });
+          }
         }
       }
     }
@@ -1754,6 +2361,7 @@ export function QuoteLineItemsTable({
 
         const standaloneItems = group.items ?? [];
         const combos = group.combos ?? [];
+        const scopes = group.scopes ?? [];
 
         function computeItemTotal(item: ApiItem, rowKey: string): number {
           const inputs = editInputs[rowKey];
@@ -1774,10 +2382,21 @@ export function QuoteLineItemsTable({
         const comboTotalSum = combos.reduce((sum, c, ci) =>
           sum + (c.items ?? []).reduce((s, it, ii) =>
             s + computeItemTotal(it, `${gId}-combo-${c.id ?? ci}-item-${it.id ?? ii}`), 0), 0);
-        const groupTotal = standaloneTotal + comboTotalSum;
+        const scopeTotalSum = scopes.reduce((sum, scope, si) => {
+          const scopeKey = `${gId}-scope-${scope.id ?? si}`;
+          const scopeItemSum = (scope.items ?? []).reduce((s, it, ii) =>
+            s + computeItemTotal(it, `${scopeKey}-item-${it.id ?? ii}`), 0);
+          const scopeComboSum = (scope.combos ?? []).reduce((s, c, ci) =>
+            s + (c.items ?? []).reduce((cs, it, ii) =>
+              cs + computeItemTotal(it, `${scopeKey}-combo-${c.id ?? ci}-item-${it.id ?? ii}`), 0), 0);
+          return sum + scopeItemSum + scopeComboSum;
+        }, 0);
+        const groupTotal = standaloneTotal + comboTotalSum + scopeTotalSum;
         const totalLineCount =
           standaloneItems.length +
-          combos.reduce((cs, c) => cs + (c.items?.length ?? 0), 0);
+          combos.reduce((cs, c) => cs + (c.items?.length ?? 0), 0) +
+          scopes.reduce((ss, s) => ss + (s.items?.length ?? 0) + (s.combos ?? []).reduce((cs, c) => cs + (c.items?.length ?? 0), 0), 0);
+        const hasRows = standaloneItems.length > 0 || combos.length > 0 || scopes.length > 0;
 
         const dropProps = isReadOnly ? {} : {
           onDragOver: (e: React.DragEvent) => {
@@ -1851,6 +2470,7 @@ export function QuoteLineItemsTable({
 
               <span className="text-xs tabular-nums text-blue-700">
                 {totalLineCount} item{totalLineCount !== 1 ? 's' : ''}
+                {scopes.length > 0 && ` · ${scopes.length} scope${scopes.length !== 1 ? 's' : ''}`}
                 {combos.length > 0 && ` · ${combos.length} assembl${combos.length !== 1 ? 'ies' : 'y'}`}
               </span>
               <span className="text-sm font-medium tabular-nums text-blue-900">
@@ -1914,7 +2534,7 @@ export function QuoteLineItemsTable({
             {/* Group body - items table */}
             {!isCollapsed && (
               <div className="bg-white">
-                {totalLineCount > 0 ? (
+                {hasRows ? (
                   <div className="overflow-x-auto">
                     <table className="w-full table-fixed divide-y divide-slate-100 text-sm">
                       <colgroup>
@@ -2015,6 +2635,43 @@ export function QuoteLineItemsTable({
                             />
                           );
                         })}
+
+                        {/* Scope groups */}
+                        {(group.scopes ?? []).map((scope, scopeIdx) => {
+                          const scopeKey = `${gId}-scope-${scope.id ?? scopeIdx}`;
+                          const isScopeCollapsed = searchTerm ? false : collapsedScopes.has(scopeKey);
+
+                          return (
+                            <ScopeBlock
+                              key={scopeKey}
+                              scope={scope}
+                              scopeKey={scopeKey}
+                              isCollapsed={isScopeCollapsed}
+                              onToggle={() => toggleScope(scopeKey)}
+                              showMarkup={showMarkup}
+                              showGst={showGst}
+                              showCategory={showCategory}
+                              editState={isReadOnly ? null : editState}
+                              editInputs={editInputs}
+                              selectedRows={selectedRows}
+                              dirtyRowKeys={dirtyRowKeys}
+                              collapsedCombos={collapsedCombos}
+                              onToggleCombo={toggleCombo}
+                              onItemClick={handleItemClick}
+                              onAssemblyClick={handleAssemblyClick}
+                              onScopeClick={handleScopeClick}
+                              onCellSelect={handleCellSelect}
+                              onInputChange={handleInputChange}
+                              onCellKeyDown={handleCellKeyDown}
+                              onDeleteScope={isReadOnly ? undefined : onDeleteScope}
+                              onDeleteCombo={isReadOnly ? undefined : onDeleteCombo}
+                              onDeleteItem={isReadOnly ? undefined : onDeleteItem}
+                              showSelect={showSelect}
+                              selectedIds={selection?.selectedIds}
+                              onToggleIds={toggleSelectionIds}
+                            />
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -2041,6 +2698,18 @@ function collectGroupSelectableIds(group: ApiGroup): string[] {
     if (combo.id) ids.push(combo.id);
     for (const item of combo.items ?? []) {
       if (item.id) ids.push(item.id);
+    }
+  }
+  for (const scope of group.scopes ?? []) {
+    if (scope.id) ids.push(scope.id);
+    for (const item of scope.items ?? []) {
+      if (item.id) ids.push(item.id);
+    }
+    for (const combo of scope.combos ?? []) {
+      if (combo.id) ids.push(combo.id);
+      for (const item of combo.items ?? []) {
+        if (item.id) ids.push(item.id);
+      }
     }
   }
   return ids;

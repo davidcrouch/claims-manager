@@ -2,66 +2,119 @@
 
 **Route:** `/dashboard`
 **Sidebar:** Top-level (above groups)
+**API:** `GET /dashboard/inbox` (plan 21)
+
+The dashboard is a **tenant ops inbox** — a morning worklist of records waiting on a decision, today’s calendar, overdue tasks, and unread notifications. It is **not** an org KPI scoreboard.
+
+Queues are labelled honestly as **team** work (“Overdue tasks”, not “Your overdue tasks”). A **My tasks** subsection appears only when the logged-in user’s id matches `tasks.assignedToUserId`.
 
 ---
 
 ## Layout
 
 ```
-┌────────────────────────────────────────────────┐
-│ KPI Cards (4-column grid)                       │
-├────────────────────────────────────────────────┤
-│ Recent Activity        │ Upcoming (sidebar)     │
-│ (timeline feed)        │ Tasks due this week    │
-│                        │ Appointments today     │
-└────────────────────────┴───────────────────────┘
+Good morning, Dave                              Sat 8 Aug
+4 items need a decision
+
+┌ Active jobs ┐ ┌ Needs action ┐ ┌ Unread ┐ ┌ AR overdue ┐ ┌ AP overdue ┐
+│     18      │ │      4       │ │   5    │ │   $12,400  │ │   $3,100   │
+└─────────────┘ └──────────────┘ └────────┘ └────────────┘ └────────────┘
+
+┌ Active jobs (18) ──────── View all ─┐  ┌ Today ──────────────┐
+│ MIL-2601  In Progress  Repair       │  │ 09:00 Site visit    │
+│ 12 Smith St, Richmond               │  ├ Needs a decision ───┤
+│ MIL-2602  Pending      Make Safe    │  │ [WOs 3] [Props 2]   │
+│ …                                   │  │ WO-12 · Received    │
+└─────────────────────────────────────┘  ├ New and unread ─────┤
+                                         │ New job received    │
+                                         └─────────────────────┘
 ```
 
----
+**Primary column:** active jobs list (title, address, status, type, updated). Labelled **Your active jobs** when claim-assignee email/`userId` matches the logged-in user; otherwise **Active jobs** (tenant open book).
 
-## KPI Cards
+**Rail:** today, consolidated decision queue, optional my tasks, unread.
 
-| Card | Data Source | Link |
-|------|------------|------|
-| Active Jobs | Count of jobs with active status | `/jobs?status=active` |
-| Open Work Orders | Count of WOs with status ≠ completed | `/work-orders` |
-| Pending Invoices | Invoices in Submitted status | `/invoices?status=submitted` |
-| Overdue Tasks | Tasks past due date | `/tasks?filter=overdue` |
+Layout header shows the greeting + date/decision subtitle (replaces the “Dashboard” title). The page body starts at the metric + Today row.
+
+Empty queues collapse or show a one-line empty state. Every row and badge deep-links to an existing filtered list or detail page.
 
 ---
 
-## Recent Activity Feed
+## Snapshot bar
 
-Timeline-style list showing latest events across all entities:
+Compact badges (not hero KPI tiles):
+
+| Badge | Source | Link |
+|-------|--------|------|
+| Active jobs | Jobs whose status is not archived/closed | `/jobs` |
+| Unread | Unread notification count | `/notifications` (or scroll to unread panel) |
+| AR overdue | Finance AR overdue count | `/finance/ar` |
+| AP overdue | Finance AP overdue count | `/finance/ap` |
+
+---
+
+## Needs a decision
+
+Actionable queues. Preview ~5 rows each. Status filter hrefs use resolved lookup ids.
+
+| Queue | Status names (lookup, case-insensitive) | Link |
+|-------|-----------------------------------------|------|
+| Work orders to accept | `Received`, `Issued` | `/work-orders?status={id}` |
+| Proposals to review | `Received`, `Under Review` | `/proposals?status={id}` |
+| RFQs waiting on vendors | `Sent` | `/rfqs?status={id}` |
+| Estimates ready to publish | `Approved` | `/quotes?status={id}` |
+
+Row fields: human title (document number / name), subtitle (job ref), status, due date when present. Never raw UUIDs.
+
+---
+
+## Today
+
+Schedule events for the local calendar day from `GET /schedule/events` (appointments, tasks, WOs, POs, RFQs, bills, quotes). Link: `/schedule`.
 
 | Field | Description |
 |-------|-------------|
-| Icon | Entity-type icon |
-| Description | "Job MIL260121220-BMS2 status changed to In Progress" |
-| Entity link | Click → entity detail |
-| Timestamp | Relative (2h ago, yesterday) |
-| User | Who triggered (or "System") |
-
-**Sources:** Job status changes, new quotes, PO issued, invoice submitted, task completed, message received
+| Time | Start time |
+| Title | Event title |
+| Entity | Job ref when present |
 
 ---
 
-## Upcoming Panel
+## Overdue / due soon
 
-**Tasks due this week:**
+Open tasks past due, plus open tasks due in the next 7 days. Link: `/tasks?status=Open&overdue=true`.
+
+Optional **My tasks** queue: only when `assignedToUserId ===` current user id. Link: `/tasks?assignedToUserId={sub}`.
 
 | Field | Description |
 |-------|-------------|
 | Name | Task name (link) |
 | Due | Date (red if overdue) |
-| Priority | Badge |
-| Entity | Job/Claim ref |
+| Priority | Badge when present |
+| Entity | Job/claim ref |
 
-**Appointments today:**
+---
 
-| Field | Description |
-|-------|-------------|
-| Title | Appointment name |
-| Time | Start time |
-| Location | On-site / Digital |
-| Entity | Job ref |
+## New and unread
+
+Unread notifications (`isRead=false`), not webhook recent-activity. Entity → route map matches the header notification bell. Empty: “You're caught up”.
+
+---
+
+## Money waiting
+
+Finance overdue counts and amounts as subtitles (not giant $ tiles).
+
+| Row | Link |
+|-----|------|
+| Overdue invoices (AR) | `/finance/ar` |
+| Overdue bills (AP) | `/finance/ap` |
+
+---
+
+## Out of scope
+
+- Org KPI tile grid (plan 33j superseded)
+- Messages widget (inbox still a shell)
+- Per-user notifications / claim-assignee matching
+- Role-specific dashboards

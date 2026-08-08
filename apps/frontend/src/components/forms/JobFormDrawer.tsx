@@ -30,6 +30,7 @@ import {
   type JobContactRef,
 } from '@/components/forms/JobContactsPicker';
 import { createJobAction } from '@/app/(app)/jobs/mutations';
+import { OrgUserSelect } from '@/components/forms/OrgUserSelect';
 import type { Contact, Job } from '@/types/api';
 
 type WizardStep = 'details' | 'contacts';
@@ -62,6 +63,7 @@ const detailsSchema = z.object({
   state: z.string().optional(),
   postcode: z.string().optional(),
   country: z.string().optional(),
+  assignedToUserId: z.string().optional(),
 });
 
 type DetailsValues = z.infer<typeof detailsSchema>;
@@ -109,6 +111,7 @@ export function JobFormDrawer({
       state: '',
       postcode: '',
       country: 'Australia',
+      assignedToUserId: '',
     },
   });
 
@@ -268,6 +271,9 @@ export function JobFormDrawer({
             ? { filesystemTemplateId: values.filesystemTemplateId }
             : {}),
           ...(hasAddress ? { address } : {}),
+          ...(values.assignedToUserId
+            ? { assignedToUserId: values.assignedToUserId }
+            : {}),
           contacts: contacts.map((c) =>
             c.contactId
               ? { contactId: c.contactId }
@@ -413,6 +419,18 @@ export function JobFormDrawer({
                   </p>
                 </div>
               )}
+
+              <div className="space-y-2">
+                <OrgUserSelect
+                  id="job-assignedToUserId"
+                  value={form.watch('assignedToUserId') || null}
+                  onChange={(userId) =>
+                    form.setValue('assignedToUserId', userId ?? '', {
+                      shouldValidate: false,
+                    })
+                  }
+                />
+              </div>
 
               <div className="space-y-2">
                 <Label htmlFor="provider">Provider</Label>

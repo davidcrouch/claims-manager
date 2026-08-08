@@ -21,6 +21,8 @@ export async function fetchTasksAction(params?: {
   sort?: string;
   order?: 'asc' | 'desc';
   jobId?: string;
+  assignedToUserId?: string;
+  overdue?: boolean;
 }): Promise<PaginatedResponse<Task>> {
   const api = await getApi();
   if (!api) return { data: [], total: 0 };

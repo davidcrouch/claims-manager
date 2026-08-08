@@ -27,7 +27,7 @@ export class CatalogItemsController {
   @Get()
   findMany(
     @Query('catalogId') catalogId?: string,
-    @Query('kind') kind?: 'primitive' | 'assembly',
+    @Query('kind') kind?: 'primitive' | 'assembly' | 'scope',
     @Query('typeId') typeId?: string,
     @Query('categoryId') categoryId?: string,
     @Query('q') search?: string,

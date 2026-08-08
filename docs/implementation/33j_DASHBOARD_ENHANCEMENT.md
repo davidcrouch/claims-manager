@@ -1,6 +1,8 @@
 # 33j — Dashboard Enhancement
 
-## Objective
+> **Superseded.** The org KPI tile grid (Customers / Vendors / Finance / Operations count cards) is retired. The dashboard is a tenant **ops inbox** — see [`ui/01_DASHBOARD.md`](ui/01_DASHBOARD.md) and [`21_DASHBOARD_AGGREGATION.md`](21_DASHBOARD_AGGREGATION.md) (`GET /dashboard/inbox`). Do not implement the extended stats DTO or metric-card layout below.
+
+## Objective (historical)
 
 Update the Dashboard page to include clickable metric cards that navigate to the relevant list pages introduced in plan 33. Add new stats for the new entity types and make the dashboard a useful operational overview for the Contractor (Prime) role.
 

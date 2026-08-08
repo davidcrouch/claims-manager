@@ -41,6 +41,11 @@ export class ProposalsController {
     return this.proposalsService.findByVendor({ vendorId });
   }
 
+  @Get(':id/line-items')
+  async getLineItems(@Param('id') id: string) {
+    return this.proposalsService.getProposalLineItems({ proposalId: id });
+  }
+
   @Get(':id')
   async findOne(@Param('id') id: string) {
     return this.proposalsService.findOne({ id });

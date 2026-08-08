@@ -102,4 +102,8 @@ export class CreateJobDto {
   @IsOptional()
   @IsUUID()
   filesystemTemplateId?: string;
+
+  @IsOptional()
+  @IsString()
+  assignedToUserId?: string | null;
 }

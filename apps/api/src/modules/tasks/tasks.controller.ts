@@ -16,6 +16,7 @@ export class TasksController {
     @Query('entityType') entityType?: string,
     @Query('entityId') entityId?: string,
     @Query('assignedToUserId') assignedToUserId?: string,
+    @Query('overdue') overdue?: string,
     @Query('sort') sort?: string,
   ) {
     return this.tasksService.findAll({
@@ -28,6 +29,7 @@ export class TasksController {
       entityType,
       entityId,
       assignedToUserId,
+      overdue: overdue === 'true' || overdue === '1',
       sort,
     });
   }

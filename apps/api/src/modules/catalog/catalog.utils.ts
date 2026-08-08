@@ -1,7 +1,26 @@
 import type { CatalogItemRow } from '../../database/repositories/catalog-items.repository';
 
-export type CatalogItemKind = 'primitive' | 'assembly';
+export type CatalogItemKind = 'primitive' | 'assembly' | 'scope';
 export type CatalogPricingMode = 'computed' | 'fixed' | 'cost_plus';
+
+export function isCatalogBomParentKind(kind: string): kind is 'assembly' | 'scope' {
+  return kind === 'assembly' || kind === 'scope';
+}
+
+export function comboKindFromPayload(payload: unknown): 'assembly' | 'scope' {
+  if (!payload || typeof payload !== 'object') return 'assembly';
+  const rec = payload as Record<string, unknown>;
+  if (rec.kind === 'scope') return 'scope';
+  const nested = rec.comboPayload;
+  if (nested && typeof nested === 'object' && (nested as Record<string, unknown>).kind === 'scope') {
+    return 'scope';
+  }
+  return 'assembly';
+}
+
+export function isScopeComboPayload(payload: unknown): boolean {
+  return comboKindFromPayload(payload) === 'scope';
+}
 
 export interface ResolvedCatalogPrice {
   unitCost: string;

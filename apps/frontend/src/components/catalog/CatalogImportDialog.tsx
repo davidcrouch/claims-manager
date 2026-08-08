@@ -29,6 +29,9 @@ export interface CatalogImportDialogProps {
   templateCsv: string;
   catalogId?: string;
   catalogType?: CatalogType;
+  /** When set, the dialog is controlled and the built-in trigger is hidden. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 type WizardStep = 'catalog' | 'select' | 'review' | 'confirm' | 'importing' | 'report';
@@ -88,10 +91,14 @@ export function CatalogImportDialog({
   templateCsv,
   catalogId: initialCatalogId,
   catalogType: initialCatalogType,
+  open: openProp,
+  onOpenChange,
 }: CatalogImportDialogProps) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const isControlled = openProp !== undefined;
+  const open = isControlled ? openProp : uncontrolledOpen;
   const [step, setStep] = useState<WizardStep>(initialCatalogId ? 'select' : 'catalog');
 
   // Catalogue selection state
@@ -146,7 +153,8 @@ export function CatalogImportDialog({
   }, [open, initialCatalogId]);
 
   function handleOpenChange(next: boolean) {
-    setOpen(next);
+    if (!isControlled) setUncontrolledOpen(next);
+    onOpenChange?.(next);
     if (!next) reset();
   }
 
@@ -276,10 +284,12 @@ export function CatalogImportDialog({
 
   return (
     <>
-      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
-        <Upload className="mr-1 h-4 w-4" />
-        Import CSV
-      </Button>
+      {!isControlled && (
+        <Button size="sm" variant="outline" onClick={() => handleOpenChange(true)}>
+          <Upload className="mr-1 h-4 w-4" />
+          Import CSV
+        </Button>
+      )}
 
       <BottomFormDrawer
         open={open}

@@ -3,7 +3,7 @@ export const GROUP_LABEL_DRAG_MIME = 'application/x-claims-group-label';
 
 export interface CatalogDragPayload {
   id: string;
-  kind: 'primitive' | 'assembly';
+  kind: 'primitive' | 'assembly' | 'scope';
   code: string;
   name: string;
 }

@@ -25,6 +25,8 @@ import {
   buildItemSnapshotFields,
   computeLineTotals,
   formatDecimal,
+  isCatalogBomParentKind,
+  isScopeComboPayload,
   parseDecimal,
 } from '../catalog.utils';
 import { CatalogPricingService } from './catalog-pricing.service';
@@ -88,6 +90,21 @@ export class CatalogSelectionService {
     }
 
     const tenantId = this.getTenantId();
+    const catalogItem = await this.itemsRepo.findById({
+      tenantId,
+      id: params.catalogItemId,
+    });
+    if (catalogItem && isCatalogBomParentKind(catalogItem.kind)) {
+      if (!params.quoteGroupId) {
+        throw new BadRequestException('quoteGroupId is required when adding an assembly or scope');
+      }
+      return this.addAssemblyToQuote({
+        quoteGroupId: params.quoteGroupId,
+        catalogAssemblyId: catalogItem.id,
+        quantity: params.quantity,
+      });
+    }
+
     const snapshot = await this.buildSnapshot({ tenantId, catalogItemId: params.catalogItemId });
     const totals = computeLineTotals({
       quantity: params.quantity,
@@ -635,6 +652,8 @@ export class CatalogSelectionService {
       const dimensions = (group.dimensions as Record<string, unknown>) ?? {};
       const groupTotals = (group.totals as Record<string, unknown>) ?? {};
       const groupCombos = combosByGroup.get(group.id) ?? [];
+      const assemblyCombos = groupCombos.filter((c) => !isScopeComboPayload(c.comboPayload));
+      const scopeCombos = groupCombos.filter((c) => isScopeComboPayload(c.comboPayload));
 
       const lookupValue = group.groupLabelLookupId
         ? lookupMap.get(group.groupLabelLookupId)
@@ -644,6 +663,30 @@ export class CatalogSelectionService {
         : group.description
           ? { name: group.description }
           : { name: `Group ${index + 1}` };
+
+      const mapCombo = (combo: (typeof groupCombos)[number]) => {
+        const comboTotals = (combo.totals as Record<string, unknown>) ?? {};
+        const kind = isScopeComboPayload(combo.comboPayload) ? 'scope' : 'assembly';
+        return {
+          id: combo.id,
+          kind,
+          name: combo.name,
+          component: combo.component,
+          description: combo.description,
+          category: combo.category,
+          subCategory: combo.subCategory,
+          index: combo.sortIndex,
+          quantity: combo.quantity ? parseDecimal(combo.quantity) : undefined,
+          catalogComboId: combo.catalogComboId,
+          catalogScopeId: combo.catalogComboId,
+          subTotal: asNumber(comboTotals.subTotal),
+          totalTax: asNumber(comboTotals.totalTax),
+          total: asNumber(comboTotals.total),
+          items: (comboItemsByCombo.get(combo.id) ?? []).map((item) =>
+            this.mapQuoteItemRow(item, lookupMap),
+          ),
+        };
+      };
 
       return {
         id: group.id,
@@ -659,26 +702,11 @@ export class CatalogSelectionService {
         items: (directItemsByGroup.get(group.id) ?? []).map((item) =>
           this.mapQuoteItemRow(item, lookupMap),
         ),
-        combos: groupCombos.map((combo) => {
-          const comboTotals = (combo.totals as Record<string, unknown>) ?? {};
-          return {
-            id: combo.id,
-            name: combo.name,
-            component: combo.component,
-            description: combo.description,
-            category: combo.category,
-            subCategory: combo.subCategory,
-            index: combo.sortIndex,
-            quantity: combo.quantity ? parseDecimal(combo.quantity) : undefined,
-            catalogComboId: combo.catalogComboId,
-            subTotal: asNumber(comboTotals.subTotal),
-            totalTax: asNumber(comboTotals.totalTax),
-            total: asNumber(comboTotals.total),
-            items: (comboItemsByCombo.get(combo.id) ?? []).map((item) =>
-              this.mapQuoteItemRow(item, lookupMap),
-            ),
-          };
-        }),
+        combos: assemblyCombos.map(mapCombo),
+        scopes: scopeCombos.map((combo) => ({
+          ...mapCombo(combo),
+          combos: [],
+        })),
       };
     });
   }
@@ -781,6 +809,8 @@ export class CatalogSelectionService {
       const dimensions = (group.dimensions as Record<string, unknown>) ?? {};
       const groupTotals = (group.totals as Record<string, unknown>) ?? {};
       const groupCombos = combosByGroup.get(group.id) ?? [];
+      const assemblyCombos = groupCombos.filter((c) => !isScopeComboPayload(c.comboPayload));
+      const scopeCombos = groupCombos.filter((c) => isScopeComboPayload(c.comboPayload));
 
       const lookupValue = group.groupLabelLookupId
         ? lookupMap.get(group.groupLabelLookupId)
@@ -790,6 +820,29 @@ export class CatalogSelectionService {
         : group.description
           ? { name: group.description }
           : { name: `Group ${index + 1}` };
+
+      const mapCombo = (combo: (typeof groupCombos)[number]) => {
+        const comboTotals = (combo.totals as Record<string, unknown>) ?? {};
+        const kind = isScopeComboPayload(combo.comboPayload) ? 'scope' : 'assembly';
+        return {
+          id: combo.id,
+          kind,
+          name: combo.name,
+          description: combo.description,
+          category: combo.category,
+          subCategory: combo.subCategory,
+          index: combo.sortIndex,
+          quantity: combo.quantity ? parseDecimal(combo.quantity) : undefined,
+          catalogComboId: combo.catalogComboId,
+          catalogScopeId: combo.catalogComboId,
+          subTotal: asNumber(comboTotals.subTotal),
+          totalTax: asNumber(comboTotals.totalTax),
+          total: asNumber(comboTotals.total),
+          items: (comboItemsByCombo.get(combo.id) ?? []).map((item) =>
+            this.mapPurchaseOrderItemRow(item, lookupMap),
+          ),
+        };
+      };
 
       return {
         id: group.id,
@@ -805,27 +858,205 @@ export class CatalogSelectionService {
         items: (directItemsByGroup.get(group.id) ?? []).map((item) =>
           this.mapPurchaseOrderItemRow(item, lookupMap),
         ),
-        combos: groupCombos.map((combo) => {
-          const comboTotals = (combo.totals as Record<string, unknown>) ?? {};
-          return {
-            id: combo.id,
-            name: combo.name,
-            description: combo.description,
-            category: combo.category,
-            subCategory: combo.subCategory,
-            index: combo.sortIndex,
-            quantity: combo.quantity ? parseDecimal(combo.quantity) : undefined,
-            catalogComboId: combo.catalogComboId,
-            subTotal: asNumber(comboTotals.subTotal),
-            totalTax: asNumber(comboTotals.totalTax),
-            total: asNumber(comboTotals.total),
-            items: (comboItemsByCombo.get(combo.id) ?? []).map((item) =>
-              this.mapPurchaseOrderItemRow(item, lookupMap),
-            ),
-          };
-        }),
+        combos: assemblyCombos.map(mapCombo),
+        scopes: scopeCombos.map((combo) => ({
+          ...mapCombo(combo),
+          combos: [],
+        })),
       };
     });
+  }
+
+  async getWorkOrderLineItems(params: { workOrderId: string }) {
+    const tenantId = this.getTenantId();
+    const groups = await this.db
+      .select()
+      .from(workOrderGroups)
+      .where(
+        and(
+          eq(workOrderGroups.tenantId, tenantId),
+          eq(workOrderGroups.workOrderId, params.workOrderId),
+          isNull(workOrderGroups.deletedAt),
+        ),
+      )
+      .orderBy(workOrderGroups.sortIndex);
+
+    if (groups.length === 0) return [];
+
+    const groupIds = groups.map((g) => g.id);
+
+    const lookupIds = new Set<string>();
+    for (const g of groups) {
+      if (g.groupLabelLookupId) lookupIds.add(g.groupLabelLookupId);
+    }
+
+    const combos = await this.db
+      .select()
+      .from(workOrderCombos)
+      .where(
+        and(
+          eq(workOrderCombos.tenantId, tenantId),
+          inArray(workOrderCombos.workOrderGroupId, groupIds),
+          isNull(workOrderCombos.deletedAt),
+        ),
+      )
+      .orderBy(workOrderCombos.sortIndex);
+
+    const comboIds = combos.map((c) => c.id);
+    const directItems =
+      groupIds.length > 0
+        ? await this.db
+            .select()
+            .from(workOrderItems)
+            .where(
+              and(
+                eq(workOrderItems.tenantId, tenantId),
+                inArray(workOrderItems.workOrderGroupId, groupIds),
+                isNull(workOrderItems.deletedAt),
+              ),
+            )
+            .orderBy(workOrderItems.sortIndex)
+        : [];
+
+    const comboItems =
+      comboIds.length > 0
+        ? await this.db
+            .select()
+            .from(workOrderItems)
+            .where(
+              and(
+                eq(workOrderItems.tenantId, tenantId),
+                inArray(workOrderItems.workOrderComboId, comboIds),
+                isNull(workOrderItems.deletedAt),
+              ),
+            )
+            .orderBy(workOrderItems.sortIndex)
+        : [];
+
+    for (const item of [...directItems, ...comboItems]) {
+      if (item.unitTypeLookupId) lookupIds.add(item.unitTypeLookupId);
+    }
+    const lookupMap = await this.lookupsRepo.findByIds({ ids: [...lookupIds], tenantId });
+
+    const combosByGroup = new Map<string, typeof combos>();
+    for (const combo of combos) {
+      const list = combosByGroup.get(combo.workOrderGroupId) ?? [];
+      list.push(combo);
+      combosByGroup.set(combo.workOrderGroupId, list);
+    }
+
+    const directItemsByGroup = new Map<string, typeof directItems>();
+    for (const item of directItems) {
+      if (!item.workOrderGroupId) continue;
+      const list = directItemsByGroup.get(item.workOrderGroupId) ?? [];
+      list.push(item);
+      directItemsByGroup.set(item.workOrderGroupId, list);
+    }
+
+    const comboItemsByCombo = new Map<string, typeof comboItems>();
+    for (const item of comboItems) {
+      if (!item.workOrderComboId) continue;
+      const list = comboItemsByCombo.get(item.workOrderComboId) ?? [];
+      list.push(item);
+      comboItemsByCombo.set(item.workOrderComboId, list);
+    }
+
+    return groups.map((group, index) => {
+      const dimensions = (group.dimensions as Record<string, unknown>) ?? {};
+      const groupTotals = (group.totals as Record<string, unknown>) ?? {};
+      const groupCombos = combosByGroup.get(group.id) ?? [];
+      const assemblyCombos = groupCombos.filter((c) => !isScopeComboPayload(c.comboPayload));
+      const scopeCombos = groupCombos.filter((c) => isScopeComboPayload(c.comboPayload));
+
+      const lookupValue = group.groupLabelLookupId
+        ? lookupMap.get(group.groupLabelLookupId)
+        : null;
+      const groupLabelObj = lookupValue
+        ? { id: lookupValue.id, name: lookupValue.name, externalReference: lookupValue.externalReference }
+        : group.description
+          ? { name: group.description }
+          : { name: `Group ${index + 1}` };
+
+      const mapCombo = (combo: (typeof groupCombos)[number]) => {
+        const comboTotals = (combo.totals as Record<string, unknown>) ?? {};
+        const kind = isScopeComboPayload(combo.comboPayload) ? 'scope' : 'assembly';
+        return {
+          id: combo.id,
+          kind,
+          name: combo.name,
+          description: combo.description,
+          category: combo.category,
+          subCategory: combo.subCategory,
+          index: combo.sortIndex,
+          quantity: combo.quantity ? parseDecimal(combo.quantity) : undefined,
+          catalogComboId: combo.catalogComboId,
+          catalogScopeId: combo.catalogComboId,
+          subTotal: asNumber(comboTotals.subTotal),
+          totalTax: asNumber(comboTotals.totalTax),
+          total: asNumber(comboTotals.total),
+          items: (comboItemsByCombo.get(combo.id) ?? []).map((item) =>
+            this.mapWorkOrderItemRow(item, lookupMap),
+          ),
+        };
+      };
+
+      return {
+        id: group.id,
+        groupLabel: groupLabelObj,
+        description: group.description,
+        length: asNumber(dimensions.length),
+        width: asNumber(dimensions.width),
+        height: asNumber(dimensions.height),
+        index: group.sortIndex,
+        subTotal: asNumber(groupTotals.subTotal),
+        totalTax: asNumber(groupTotals.totalTax),
+        total: asNumber(groupTotals.total),
+        items: (directItemsByGroup.get(group.id) ?? []).map((item) =>
+          this.mapWorkOrderItemRow(item, lookupMap),
+        ),
+        combos: assemblyCombos.map(mapCombo),
+        scopes: scopeCombos.map((combo) => ({
+          ...mapCombo(combo),
+          combos: [],
+        })),
+      };
+    });
+  }
+
+  private mapWorkOrderItemRow(
+    row: typeof workOrderItems.$inferSelect,
+    lookupMap?: Map<string, { id: string; name: string | null; externalReference: string | null; [k: string]: unknown }>,
+  ) {
+    const totals = (row.totals as Record<string, unknown>) ?? {};
+
+    const unitTypeLookup = row.unitTypeLookupId && lookupMap
+      ? lookupMap.get(row.unitTypeLookupId)
+      : undefined;
+
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      type: row.itemType,
+      category: row.category,
+      subCategory: row.subCategory,
+      index: row.sortIndex,
+      quantity: row.quantity ? parseDecimal(row.quantity) : 0,
+      tax: row.tax ? parseDecimal(row.tax) : undefined,
+      unitCost: row.unitCost ? parseDecimal(row.unitCost) : undefined,
+      buyCost: row.buyCost ? parseDecimal(row.buyCost) : undefined,
+      markupType: row.markupType,
+      markupValue: row.markupValue ? parseDecimal(row.markupValue) : undefined,
+      unitType: unitTypeLookup
+        ? { id: unitTypeLookup.id, name: unitTypeLookup.name, externalReference: unitTypeLookup.externalReference }
+        : undefined,
+      catalogItemId: row.catalogItemId,
+      tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
+      note: row.note,
+      subTotal: asNumber(totals.subTotal),
+      totalTax: asNumber(totals.totalTax),
+      total: asNumber(totals.total),
+    };
   }
 
   private mapPurchaseOrderItemRow(
@@ -1129,8 +1360,8 @@ export class CatalogSelectionService {
       tenantId: params.tenantId,
       id: params.assemblyId,
     });
-    if (!assembly || assembly.kind !== 'assembly' || !assembly.isActive) {
-      throw new NotFoundException('Active assembly not found');
+    if (!assembly || (assembly.kind !== 'assembly' && assembly.kind !== 'scope') || !assembly.isActive) {
+      throw new NotFoundException('Active assembly or scope not found');
     }
 
     const categoryName = assembly.categoryId
@@ -1149,10 +1380,6 @@ export class CatalogSelectionService {
       assemblyId: params.assemblyId,
       tx: params.tx,
     });
-
-    if (bomLines.length === 0) {
-      throw new BadRequestException('Assembly has no BOM components');
-    }
 
     const comboQuantity = params.quantity;
     let comboRecord: Record<string, unknown>;
@@ -1174,10 +1401,12 @@ export class CatalogSelectionService {
           quoteGroupId: params.groupId,
           catalogComboId: assembly.id,
           name: assembly.name,
+          component: assembly.code,
           description: assembly.description,
           category: categoryName,
           subCategory: subCategoryName,
           quantity: comboQuantity,
+          comboPayload: { kind: assembly.kind },
         })
         .returning();
       comboRecord = combo;
@@ -1205,6 +1434,7 @@ export class CatalogSelectionService {
           category: categoryName,
           subCategory: subCategoryName,
           quantity: comboQuantity,
+          comboPayload: { kind: assembly.kind },
         })
         .returning();
       comboRecord = combo;
@@ -1232,6 +1462,7 @@ export class CatalogSelectionService {
           category: categoryName,
           subCategory: subCategoryName,
           quantity: comboQuantity,
+          comboPayload: { kind: assembly.kind },
         })
         .returning();
       comboRecord = combo;

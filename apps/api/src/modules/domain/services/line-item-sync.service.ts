@@ -78,8 +78,8 @@ export class LineItemSyncService {
         });
       }
 
-      // Items nested within combos (hierarchical structure)
-      const combos = (group.combos as Record<string, unknown>[]) ?? [];
+      // Items nested within combos / scopes (hierarchical structure)
+      const combos = combosFromGroup(group);
       for (let ci = 0; ci < combos.length; ci++) {
         const combo = combos[ci];
         const [createdCombo] = await db
@@ -93,7 +93,7 @@ export class LineItemSyncService {
             subCategory: (combo.subCategory as string) ?? undefined,
             quantity: (combo.quantity as string) ?? undefined,
             sortIndex: ci,
-            comboPayload: combo,
+            comboPayload: comboPayloadWithKind(combo),
           })
           .returning();
 
@@ -145,7 +145,6 @@ export class LineItemSyncService {
     for (let gi = 0; gi < groups.length; gi++) {
       const group = groups[gi];
       const directItems = (group.items as Record<string, unknown>[]) ?? [];
-      const combos = (group.combos as Record<string, unknown>[]) ?? [];
 
       const [createdGroup] = await db
         .insert(workOrderGroups)
@@ -179,9 +178,10 @@ export class LineItemSyncService {
         });
       }
 
-      // Items nested within combos (hierarchical structure)
-      for (let ci = 0; ci < combos.length; ci++) {
-        const combo = combos[ci];
+      // Items nested within combos / scopes (hierarchical structure)
+      const nestedCombos = combosFromGroup(group);
+      for (let ci = 0; ci < nestedCombos.length; ci++) {
+        const combo = nestedCombos[ci];
         const [createdCombo] = await db
           .insert(workOrderCombos)
           .values({
@@ -193,7 +193,7 @@ export class LineItemSyncService {
             subCategory: (combo.subCategory as string) ?? undefined,
             quantity: (combo.quantity as string) ?? undefined,
             sortIndex: ci,
-            comboPayload: combo,
+            comboPayload: comboPayloadWithKind(combo),
           })
           .returning();
 
@@ -223,4 +223,24 @@ export class LineItemSyncService {
       `${logPrefix} — synced ${groups.length} groups for WO=${params.workOrderId}`,
     );
   }
+}
+
+function combosFromGroup(group: Record<string, unknown>): Record<string, unknown>[] {
+  const combos = Array.isArray(group.combos)
+    ? [...(group.combos as Record<string, unknown>[])]
+    : [];
+  const scopes = Array.isArray(group.scopes) ? (group.scopes as Record<string, unknown>[]) : [];
+  for (const scope of scopes) {
+    combos.push({ ...scope, kind: 'scope' });
+  }
+  return combos;
+}
+
+function comboPayloadWithKind(combo: Record<string, unknown>): Record<string, unknown> {
+  const existing =
+    combo.comboPayload && typeof combo.comboPayload === 'object'
+      ? (combo.comboPayload as Record<string, unknown>)
+      : {};
+  const kind = combo.kind ?? existing.kind ?? 'assembly';
+  return { ...combo, kind, comboPayload: { ...existing, kind } };
 }

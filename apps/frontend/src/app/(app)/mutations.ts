@@ -134,6 +134,24 @@ export async function searchContactsAction(
   }
 }
 
+export async function listOrgUsersForSelectAction(): Promise<
+  { id: string; name: string; email?: string }[]
+> {
+  const api = await getApi();
+  if (!api) return [];
+  try {
+    const users = await api.listOrgUsersForSelect();
+    return users.map((u) => ({
+      id: u.id,
+      name: u.name?.trim() || u.email || 'Unknown',
+      email: u.email,
+    }));
+  } catch (err) {
+    console.error('[listOrgUsersForSelectAction]', err);
+    return [];
+  }
+}
+
 export async function createContactAction(body: Record<string, unknown>): Promise<{ success: boolean; contact?: Contact; error?: string }> {
   const api = await getApi();
   if (!api) return { success: false, error: 'Not authenticated' };

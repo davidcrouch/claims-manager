@@ -90,8 +90,8 @@ export class CreateCatalogItemDto {
   @IsString()
   description?: string;
 
-  @IsIn(['primitive', 'assembly'])
-  kind!: 'primitive' | 'assembly';
+  @IsIn(['primitive', 'assembly', 'scope'])
+  kind!: 'primitive' | 'assembly' | 'scope';
 
   @IsUUID()
   typeId!: string;

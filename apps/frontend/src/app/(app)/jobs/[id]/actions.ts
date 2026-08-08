@@ -188,15 +188,23 @@ export async function fetchJobContactsAction(
 
 export async function updateJobDatesAction(
   jobId: string,
-  dates: { bookedDate?: string | null; attendanceDate?: string | null },
+  dates: {
+    bookedDate?: string | null;
+    attendanceDate?: string | null;
+    assignedToUserId?: string | null;
+  },
 ): Promise<{ success: boolean; error?: string }> {
   const api = await getApi();
   if (!api) return { success: false, error: 'Not authenticated' };
   try {
     const job = await api.getJob(jobId);
     const existing = (job?.customData as Record<string, unknown>) ?? {};
-    const merged = { ...existing, ...dates };
-    await api.updateJob(jobId, { customData: merged });
+    const { assignedToUserId, ...dateFields } = dates;
+    const merged = { ...existing, ...dateFields };
+    await api.updateJob(jobId, {
+      customData: merged,
+      ...(assignedToUserId !== undefined ? { assignedToUserId } : {}),
+    });
     return { success: true };
   } catch (err) {
     console.error('[jobs/[id]/actions updateJobDatesAction]', err);

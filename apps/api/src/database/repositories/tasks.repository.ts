@@ -1,11 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, desc, asc, lt, sql, inArray } from 'drizzle-orm';
+import { eq, and, desc, asc, lt, sql, inArray, getTableColumns } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
-import { tasks } from '../schema';
+import { tasks, users } from '../schema';
 
 export type TaskRow = typeof tasks.$inferSelect;
 export type TaskInsert = typeof tasks.$inferInsert;
+
+export interface TaskViewRow extends TaskRow {
+  assigneeName: string | null;
+}
+
+const assigneeJoinOn = sql`${tasks.assignedToUserId} = ${users.id}::text`;
 
 function buildTasksOrderBy(sort?: string) {
   switch (sort) {
@@ -25,6 +31,10 @@ function buildTasksOrderBy(sort?: string) {
       return [asc(tasks.priority)];
     case 'priority_desc':
       return [desc(tasks.priority)];
+    case 'assignee_asc':
+      return [asc(users.name)];
+    case 'assignee_desc':
+      return [desc(users.name)];
     default:
       return [asc(tasks.dueDate), desc(tasks.createdAt)];
   }
@@ -45,8 +55,9 @@ export class TasksRepository {
     entityType?: string;
     entityId?: string;
     assignedToUserId?: string;
+    overdue?: boolean;
     sort?: string;
-  }): Promise<{ data: TaskRow[]; total: number }> {
+  }): Promise<{ data: TaskViewRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
     const skip = (page - 1) * limit;
@@ -75,11 +86,19 @@ export class TasksRepository {
     if (params.assignedToUserId) {
       whereClause = and(whereClause, eq(tasks.assignedToUserId, params.assignedToUserId))!;
     }
+    if (params.overdue) {
+      whereClause = and(
+        whereClause,
+        eq(tasks.status, 'Open'),
+        lt(tasks.dueDate, new Date()),
+      )!;
+    }
 
     const [data, countResult] = await Promise.all([
       this.db
-        .select()
+        .select(this.taskViewColumns())
         .from(tasks)
+        .leftJoin(users, assigneeJoinOn)
         .where(whereClause)
         .orderBy(...buildTasksOrderBy(params.sort))
         .limit(limit)
@@ -91,17 +110,18 @@ export class TasksRepository {
     ]);
 
     const total = countResult[0]?.count ?? 0;
-    return { data, total };
+    return { data: data as TaskViewRow[], total };
   }
 
   async findByEntity(params: {
     tenantId: string;
     entityType: string;
     entityId: string;
-  }): Promise<TaskRow[]> {
-    return this.db
-      .select()
+  }): Promise<TaskViewRow[]> {
+    const rows = await this.db
+      .select(this.taskViewColumns())
       .from(tasks)
+      .leftJoin(users, assigneeJoinOn)
       .where(
         and(
           eq(tasks.tenantId, params.tenantId),
@@ -110,12 +130,14 @@ export class TasksRepository {
         ),
       )
       .orderBy(asc(tasks.dueDate));
+    return rows as TaskViewRow[];
   }
 
-  async findOverdue(params: { tenantId: string }): Promise<TaskRow[]> {
-    return this.db
-      .select()
+  async findOverdue(params: { tenantId: string }): Promise<TaskViewRow[]> {
+    const rows = await this.db
+      .select(this.taskViewColumns())
       .from(tasks)
+      .leftJoin(users, assigneeJoinOn)
       .where(
         and(
           eq(tasks.tenantId, params.tenantId),
@@ -124,31 +146,37 @@ export class TasksRepository {
         ),
       )
       .orderBy(asc(tasks.dueDate));
+    return rows as TaskViewRow[];
   }
 
-  async findOne(params: { id: string; tenantId: string }): Promise<TaskRow | null> {
+  async findOne(params: { id: string; tenantId: string }): Promise<TaskViewRow | null> {
     const [row] = await this.db
-      .select()
+      .select(this.taskViewColumns())
       .from(tasks)
+      .leftJoin(users, assigneeJoinOn)
       .where(and(eq(tasks.id, params.id), eq(tasks.tenantId, params.tenantId)))
       .limit(1);
-    return row ?? null;
+    return (row as TaskViewRow) ?? null;
   }
 
-  async findByJob(params: { jobId: string; tenantId: string }): Promise<TaskRow[]> {
-    return this.db
-      .select()
+  async findByJob(params: { jobId: string; tenantId: string }): Promise<TaskViewRow[]> {
+    const rows = await this.db
+      .select(this.taskViewColumns())
       .from(tasks)
+      .leftJoin(users, assigneeJoinOn)
       .where(and(eq(tasks.jobId, params.jobId), eq(tasks.tenantId, params.tenantId)))
       .orderBy(asc(tasks.dueDate));
+    return rows as TaskViewRow[];
   }
 
-  async findByClaim(params: { claimId: string; tenantId: string }): Promise<TaskRow[]> {
-    return this.db
-      .select()
+  async findByClaim(params: { claimId: string; tenantId: string }): Promise<TaskViewRow[]> {
+    const rows = await this.db
+      .select(this.taskViewColumns())
       .from(tasks)
+      .leftJoin(users, assigneeJoinOn)
       .where(and(eq(tasks.claimId, params.claimId), eq(tasks.tenantId, params.tenantId)))
       .orderBy(asc(tasks.dueDate));
+    return rows as TaskViewRow[];
   }
 
   async create(params: { data: TaskInsert; tx?: DrizzleDbOrTx }): Promise<TaskRow> {
@@ -185,5 +213,12 @@ export class TasksRepository {
         ),
       );
     return r?.count ?? 0;
+  }
+
+  private taskViewColumns() {
+    return {
+      ...getTableColumns(tasks),
+      assigneeName: users.name,
+    };
   }
 }

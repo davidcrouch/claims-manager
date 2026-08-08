@@ -27,6 +27,7 @@ import type {
   Contact,
   ContactRelatedJob,
   DashboardStats,
+  DashboardInbox,
   RecentActivity,
   PaginatedResponse,
   FinanceSummary,
@@ -185,6 +186,7 @@ export function createApiClient(options?: ApiClientOptions) {
       sort?: string;
       status?: string;
       jobType?: string;
+      assignedToUserId?: string;
     }): Promise<PaginatedResponse<Job>> {
       const sp = new URLSearchParams();
       if (params.page != null) sp.set('page', String(params.page));
@@ -194,6 +196,7 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params.sort) sp.set('sort', params.sort);
       if (params.status) sp.set('status', params.status ?? '');
       if (params.jobType) sp.set('jobType', params.jobType);
+      if (params.assignedToUserId) sp.set('assignedToUserId', params.assignedToUserId);
       return fetchApi<PaginatedResponse<Job>>(`/jobs?${sp}`);
     },
 
@@ -217,6 +220,8 @@ export function createApiClient(options?: ApiClientOptions) {
       priority?: string;
       sort?: string;
       order?: 'asc' | 'desc';
+      assignedToUserId?: string;
+      overdue?: boolean;
     }): Promise<PaginatedResponse<Task>> {
       const sp = new URLSearchParams();
       if (params?.page != null) sp.set('page', String(params.page));
@@ -226,6 +231,8 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params?.priority) sp.set('priority', params.priority);
       if (params?.sort) sp.set('sort', params.sort);
       if (params?.order) sp.set('order', params.order);
+      if (params?.assignedToUserId) sp.set('assignedToUserId', params.assignedToUserId);
+      if (params?.overdue) sp.set('overdue', 'true');
       return fetchApi<PaginatedResponse<Task>>(`/tasks?${sp}`);
     },
 
@@ -385,6 +392,14 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<Array<Record<string, unknown>>>(`/purchase-orders/${poId}/line-items`);
     },
 
+    getWorkOrderLineItems(woId: string): Promise<Array<Record<string, unknown>>> {
+      return fetchApi<Array<Record<string, unknown>>>(`/work-orders/${woId}/line-items`);
+    },
+
+    getProposalLineItems(proposalId: string): Promise<Array<Record<string, unknown>>> {
+      return fetchApi<Array<Record<string, unknown>>>(`/proposals/${proposalId}/line-items`);
+    },
+
     getInvoices(params: {
       page?: number;
       limit?: number;
@@ -429,6 +444,10 @@ export function createApiClient(options?: ApiClientOptions) {
 
     getReport(id: string): Promise<Report | null> {
       return fetchApi<Report | null>(`/reports/${id}`);
+    },
+
+    getDashboardInbox(): Promise<DashboardInbox> {
+      return fetchApi<DashboardInbox>('/dashboard/inbox');
     },
 
     getDashboardStats(): Promise<DashboardStats> {
@@ -564,6 +583,14 @@ export function createApiClient(options?: ApiClientOptions) {
 
     createTask(body: Record<string, unknown>): Promise<Task> {
       return fetchApi<Task>('/tasks', { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    updateTask(id: string, body: Record<string, unknown>): Promise<Task> {
+      return fetchApi<Task>(`/tasks/${id}`, { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    listOrgUsersForSelect(): Promise<{ id: string; type: 'USER'; name: string; email?: string }[]> {
+      return fetchApi(`/contacts/search-users?limit=100`);
     },
 
     createAppointment(body: Record<string, unknown>): Promise<unknown> {
@@ -944,7 +971,7 @@ export function createApiClient(options?: ApiClientOptions) {
 
     getCatalogItems(params?: {
       catalogId?: string;
-      kind?: 'primitive' | 'assembly';
+      kind?: 'primitive' | 'assembly' | 'scope';
       typeId?: string;
       categoryId?: string;
       q?: string;

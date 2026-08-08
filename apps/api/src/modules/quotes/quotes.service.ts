@@ -812,6 +812,7 @@ export class QuotesService {
           quantity: c.quantity,
           sortIndex: c.sortIndex,
           totals: c.totals,
+          comboPayload: c.comboPayload,
         })
         .returning();
       comboIdMap.set(c.id, woCombo.id);
