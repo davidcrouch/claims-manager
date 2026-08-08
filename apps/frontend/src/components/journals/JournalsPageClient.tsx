@@ -56,7 +56,7 @@ const TABLE_COLUMNS: ColDef[] = [
   { key: 'status', label: 'Status', filterable: true },
   { key: 'description', label: 'Description' },
   { key: 'location', label: 'Location' },
-  { key: 'pages', label: 'Pages' },
+  { key: 'pages', label: 'Entries' },
   { key: 'created_at', label: 'Created' },
   { key: 'updated_at', label: 'Updated' },
 ];

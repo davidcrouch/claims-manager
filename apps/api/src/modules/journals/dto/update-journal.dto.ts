@@ -1,4 +1,5 @@
 import { IsString, IsOptional, IsNumber, IsObject, IsIn } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class UpdateJournalDto {
   @IsOptional()
@@ -18,10 +19,16 @@ export class UpdateJournalDto {
   address?: Record<string, unknown>;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   latitude?: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   longitude?: number;
+
+  @IsOptional()
+  @IsObject()
+  metadata?: Record<string, unknown>;
 }

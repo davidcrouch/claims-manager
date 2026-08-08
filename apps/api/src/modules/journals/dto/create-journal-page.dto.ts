@@ -1,6 +1,37 @@
-import { IsString, IsOptional, IsNumber, IsIn, IsDateString } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsIn,
+  IsDateString,
+  IsArray,
+  IsUUID,
+  ValidateNested,
+  IsObject,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class JournalPageBlockDto {
+  @IsString()
+  id!: string;
+
+  @IsIn(['note', 'upload'])
+  type!: 'note' | 'upload';
+
+  @IsOptional()
+  @IsString()
+  text?: string;
+
+  @IsOptional()
+  @IsUUID()
+  attachmentId?: string;
+}
 
 export class CreateJournalPageDto {
+  @IsOptional()
+  @IsString()
+  name?: string;
+
   @IsOptional()
   @IsString()
   body?: string;
@@ -28,4 +59,15 @@ export class CreateJournalPageDto {
   @IsOptional()
   @IsDateString()
   capturedAt?: string;
+
+  /** Ordered content blocks (notes + uploads). Stored in page metadata. */
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => JournalPageBlockDto)
+  blocks?: JournalPageBlockDto[];
+
+  @IsOptional()
+  @IsObject()
+  metadata?: Record<string, unknown>;
 }

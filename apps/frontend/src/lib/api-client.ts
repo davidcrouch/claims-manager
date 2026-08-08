@@ -43,6 +43,7 @@ import type {
   WebhookEvent,
   CreateConnectionPayload,
   UpdateConnectionPayload,
+  AddressPayload,
   Journal,
   JournalPage,
   Assessment,
@@ -126,7 +127,14 @@ export function createApiClient(options?: ApiClientOptions) {
     path: string,
     init?: RequestInit
   ): Promise<T> {
-    const url = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+    // Browser calls without an explicit token go through the Next.js BFF
+    // (`/api/v1/...`) so the httpOnly session cookie can be exchanged for a
+    // Bearer token. Server-side / token-bearing clients hit Nest directly.
+    const useBrowserBff = typeof window !== 'undefined' && !options?.token;
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    const url = useBrowserBff
+      ? `/api/v1${normalizedPath}`
+      : `${baseUrl}${normalizedPath}`;
     const mergedHeaders: Record<string, string> = {
       ...(headers as Record<string, string>),
       ...((init?.headers as Record<string, string> | undefined) ?? {}),
@@ -1211,9 +1219,10 @@ export function createApiClient(options?: ApiClientOptions) {
     createJournal(data: {
       name: string;
       description?: string;
-      address?: Record<string, unknown>;
+      address?: AddressPayload;
       latitude?: number;
       longitude?: number;
+      metadata?: Record<string, unknown>;
     }): Promise<Journal> {
       return fetchApi<Journal>('/journals', {
         method: 'POST',
@@ -1228,6 +1237,7 @@ export function createApiClient(options?: ApiClientOptions) {
       address?: Record<string, unknown>;
       latitude?: number;
       longitude?: number;
+      metadata?: Record<string, unknown>;
     }): Promise<Journal> {
       return fetchApi<Journal>(`/journals/${id}`, {
         method: 'PATCH',
@@ -1267,6 +1277,7 @@ export function createApiClient(options?: ApiClientOptions) {
     },
 
     createJournalPage(journalId: string, data: {
+      name?: string;
       body?: string;
       bodyFormat?: string;
       latitude?: number;
@@ -1274,6 +1285,11 @@ export function createApiClient(options?: ApiClientOptions) {
       locationAccuracy?: number;
       locationLabel?: string;
       capturedAt?: string;
+      blocks?: Array<
+        | { id: string; type: 'note'; text?: string }
+        | { id: string; type: 'upload'; attachmentId?: string }
+      >;
+      metadata?: Record<string, unknown>;
     }): Promise<JournalPage> {
       return fetchApi<JournalPage>(`/journals/${journalId}/pages`, {
         method: 'POST',
@@ -1282,11 +1298,17 @@ export function createApiClient(options?: ApiClientOptions) {
     },
 
     updateJournalPage(journalId: string, pageId: string, data: {
+      name?: string;
       body?: string;
       bodyFormat?: string;
       latitude?: number;
       longitude?: number;
       locationLabel?: string;
+      blocks?: Array<
+        | { id: string; type: 'note'; text?: string }
+        | { id: string; type: 'upload'; attachmentId?: string }
+      >;
+      metadata?: Record<string, unknown>;
     }): Promise<JournalPage> {
       return fetchApi<JournalPage>(`/journals/${journalId}/pages/${pageId}`, {
         method: 'PATCH',
@@ -1303,8 +1325,11 @@ export function createApiClient(options?: ApiClientOptions) {
       mimeType: string;
       fileSize?: number;
       storageKey: string;
+      documentId?: string;
+      thumbnailStorageKey?: string;
       fileUrl?: string;
       caption?: string;
+      sortIndex?: number;
       width?: number;
       height?: number;
     }): Promise<unknown> {
@@ -1437,8 +1462,55 @@ export function createApiClient(options?: ApiClientOptions) {
 
     // -- Filesystem --
 
+    /** @deprecated Prefer getCompanyFilesystem */
     getFilesystem(): Promise<FilesystemResponse | null> {
       return fetchApi<FilesystemResponse | null>('/filesystems');
+    },
+
+    getCompanyFilesystem(): Promise<FilesystemResponse | null> {
+      return fetchApi<FilesystemResponse | null>('/filesystems/company');
+    },
+
+    getJobFilesystem(jobId: string): Promise<FilesystemResponse> {
+      return fetchApi<FilesystemResponse>(`/filesystems/jobs/${jobId}`);
+    },
+
+    getFilesystemOverview(): Promise<FilesystemOverviewResponse> {
+      return fetchApi<FilesystemOverviewResponse>('/filesystems/overview');
+    },
+
+    getFilesystemDefaults(): Promise<FilesystemDefaultsResponse> {
+      return fetchApi<FilesystemDefaultsResponse>('/filesystems/defaults');
+    },
+
+    updateFilesystemDefaults(data: {
+      defaultCompanyTemplateId?: string | null;
+      defaultProjectTemplateId?: string | null;
+    }): Promise<FilesystemDefaultsResponse> {
+      return fetchApi<FilesystemDefaultsResponse>('/filesystems/defaults', {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      });
+    },
+
+    setupJobFilesystem(
+      jobId: string,
+      templateId?: string,
+    ): Promise<FilesystemResponse> {
+      return fetchApi<FilesystemResponse>(`/filesystems/jobs/${jobId}/setup`, {
+        method: 'POST',
+        body: JSON.stringify(templateId ? { templateId } : {}),
+      });
+    },
+
+    backfillProjectFilesystems(): Promise<{
+      scanned: number;
+      created: number;
+      errors: Array<{ jobId: string; error: string }>;
+    }> {
+      return fetchApi('/filesystems/backfill-project-filesystems', {
+        method: 'POST',
+      });
     },
 
     setupFilesystem(templateId: string): Promise<FilesystemResponse> {
@@ -1454,8 +1526,9 @@ export function createApiClient(options?: ApiClientOptions) {
       });
     },
 
-    getFilesystemTemplates(): Promise<{ data: FilesystemTemplate[] }> {
-      return fetchApi<{ data: FilesystemTemplate[] }>('/filesystem-templates');
+    getFilesystemTemplates(kind?: FilesystemTemplateKind): Promise<{ data: FilesystemTemplate[] }> {
+      const q = kind ? `?kind=${kind}` : '';
+      return fetchApi<{ data: FilesystemTemplate[] }>(`/filesystem-templates${q}`);
     },
 
     getFilesystemTemplate(id: string): Promise<FilesystemTemplate> {
@@ -1519,12 +1592,18 @@ export function createApiClient(options?: ApiClientOptions) {
       });
     },
 
-    getArtifactExportSettings(): Promise<ArtifactExportSettings> {
-      return fetchApi<ArtifactExportSettings>('/filesystems/artifact-export');
+    getArtifactExportSettings(
+      scope: ArtifactExportScope = 'company',
+    ): Promise<ArtifactExportSettings> {
+      const qs = scope === 'company' ? '' : `?scope=${encodeURIComponent(scope)}`;
+      return fetchApi<ArtifactExportSettings>(`/filesystems/artifact-export${qs}`);
     },
 
     updateArtifactExportSettings(
-      data: ArtifactExportSettings,
+      data: ArtifactExportSettings & {
+        scope?: ArtifactExportScope;
+        templateId?: string;
+      },
     ): Promise<ArtifactExportSettings> {
       return fetchApi<ArtifactExportSettings>('/filesystems/artifact-export', {
         method: 'PATCH',
@@ -1630,6 +1709,8 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params?.uncategorised) sp.set('uncategorised', 'true');
       if (params?.relatedRecordType) sp.set('relatedRecordType', params.relatedRecordType);
       if (params?.relatedRecordId) sp.set('relatedRecordId', params.relatedRecordId);
+      if (params?.filesystemId) sp.set('filesystemId', params.filesystemId);
+      if (params?.jobId) sp.set('jobId', params.jobId);
       if (params?.uploadStatus) sp.set('uploadStatus', params.uploadStatus);
       if (params?.sort) sp.set('sort', params.sort);
       return fetchApi<{ data: FSDocument[]; total: number }>(`/documents?${sp}`);
@@ -2049,10 +2130,29 @@ export interface FilesystemResponse {
   id: string;
   tenantId: string;
   name: string;
+  kind?: FilesystemTemplateKind;
+  jobId?: string | null;
   sourceTemplateId: string | null;
   categories: FilesystemCategory[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface FilesystemOverviewProject {
+  jobId: string;
+  jobLabel: string;
+  /** Present when a project FS already exists; null until folders are lazy-loaded/created. */
+  filesystem: FilesystemResponse | null;
+}
+
+export interface FilesystemOverviewResponse {
+  company: FilesystemResponse | null;
+  projects: FilesystemOverviewProject[];
+}
+
+export interface FilesystemDefaultsResponse {
+  defaultCompanyTemplateId: string | null;
+  defaultProjectTemplateId: string | null;
 }
 
 export type FilesystemTemplateKind = 'company' | 'project';
@@ -2066,6 +2166,7 @@ export interface FilesystemTemplate {
   kind?: FilesystemTemplateKind;
   isDefault: boolean;
   categories?: FilesystemTemplateCategory[];
+  pipelines?: FilesystemTemplatePipeline[];
   createdAt: string;
 }
 
@@ -2078,6 +2179,30 @@ export interface FilesystemTemplateCategory {
   slug: string;
   config: CategoryConfig;
   sortOrder: number;
+}
+
+export interface FilesystemTemplatePipelineStep {
+  id: string;
+  pipelineId: string;
+  agentId: string;
+  stepOrder: number;
+  config?: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface FilesystemTemplatePipeline {
+  id: string;
+  templateId: string;
+  templateCategoryId: string | null;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  triggerOn: string;
+  sortOrder: number;
+  steps?: FilesystemTemplatePipelineStep[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 /**
@@ -2112,6 +2237,11 @@ export interface FlatCategoryUpsert {
 
 export type ArtifactContentType = 'markdown' | 'code' | 'json' | 'html' | 'image';
 
+export type ArtifactExportScope = 'company' | 'project';
+
+/**
+ * Company: category UUIDs. Project: category slugs in the same fields.
+ */
 export interface ArtifactExportSettings {
   defaultCategoryId?: string | null;
   categoryByContentType?: Partial<Record<ArtifactContentType, string>>;
@@ -2247,6 +2377,8 @@ export interface DocumentListParams {
   uncategorised?: boolean;
   relatedRecordType?: string;
   relatedRecordId?: string;
+  filesystemId?: string;
+  jobId?: string;
   uploadStatus?: string;
   sort?: string;
 }
@@ -2258,6 +2390,8 @@ export interface UploadUrlRequest {
   relatedRecordType?: string;
   relatedRecordId?: string;
   categoryId?: string;
+  filesystemId?: string;
+  jobId?: string;
 }
 
 export interface UploadUrlApiResponse {

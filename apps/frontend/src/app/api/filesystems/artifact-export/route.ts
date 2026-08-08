@@ -6,13 +6,15 @@ async function getAuth() {
   return getUpstreamApiAuth({ contentType: 'application/json' });
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const auth = await getAuth();
   if (!auth) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }
 
-  const upstream = await fetch(`${getApiBaseUrl()}/filesystems/artifact-export`, {
+  const scope = req.nextUrl.searchParams.get('scope');
+  const qs = scope ? `?scope=${encodeURIComponent(scope)}` : '';
+  const upstream = await fetch(`${getApiBaseUrl()}/filesystems/artifact-export${qs}`, {
     headers: auth.headers,
   });
 

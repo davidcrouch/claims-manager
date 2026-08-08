@@ -22,4 +22,14 @@ export class CreateDocumentUploadUrlDto {
   @IsOptional()
   @IsUUID()
   categoryId?: string;
+
+  /** Owning filesystem; inferred from category when omitted. */
+  @IsOptional()
+  @IsUUID()
+  filesystemId?: string;
+
+  /** When set, document is tagged to the job and scoped to its project FS. */
+  @IsOptional()
+  @IsUUID()
+  jobId?: string;
 }

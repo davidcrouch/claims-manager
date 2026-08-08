@@ -25,11 +25,24 @@ interface ProvisioningStatus {
   completedAt: string | null;
 }
 
+interface TemplateOption {
+  id: string;
+  name: string;
+  description: string | null;
+  kind?: string;
+  isDefault: boolean;
+}
+
 export function ProvisioningScreen() {
-  const router = useRouter(); // used for Skip / failed-path navigation
+  const router = useRouter();
   const [status, setStatus] = useState<ProvisioningStatus | null>(null);
   const [started, setStarted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [companyTemplates, setCompanyTemplates] = useState<TemplateOption[]>([]);
+  const [projectTemplates, setProjectTemplates] = useState<TemplateOption[]>([]);
+  const [companyTemplateId, setCompanyTemplateId] = useState('');
+  const [projectTemplateId, setProjectTemplateId] = useState('');
+  const [templatesLoaded, setTemplatesLoaded] = useState(false);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -44,32 +57,67 @@ export function ProvisioningScreen() {
     }
   }, []);
 
-  const startProvisioning = useCallback(async () => {
+  const loadTemplates = useCallback(async () => {
     try {
-      setStarted(true);
-      const res = await fetch('/api/provisioning/start', { method: 'POST' });
-      if (!res.ok) throw new Error(`Provisioning start failed: ${res.status}`);
-      const data = (await res.json()) as ProvisioningStatus;
-      setStatus(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start provisioning');
+      const [companyRes, projectRes] = await Promise.all([
+        fetch('/api/filesystem-templates?kind=company'),
+        fetch('/api/filesystem-templates?kind=project'),
+      ]);
+      const companyJson = companyRes.ok ? await companyRes.json() : { data: [] };
+      const projectJson = projectRes.ok ? await projectRes.json() : { data: [] };
+      const company = (companyJson.data ?? []) as TemplateOption[];
+      const project = (projectJson.data ?? []) as TemplateOption[];
+      setCompanyTemplates(company);
+      setProjectTemplates(project);
+      setCompanyTemplateId(company.find((t) => t.isDefault)?.id ?? company[0]?.id ?? '');
+      setProjectTemplateId(project.find((t) => t.isDefault)?.id ?? project[0]?.id ?? '');
+      setTemplatesLoaded(true);
+    } catch {
+      setTemplatesLoaded(true);
     }
   }, []);
 
+  const startProvisioning = useCallback(
+    async (opts?: { companyFilesystemTemplateId?: string; defaultProjectFilesystemTemplateId?: string }) => {
+      try {
+        setStarted(true);
+        setError(null);
+        const res = await fetch('/api/provisioning/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            companyFilesystemTemplateId: opts?.companyFilesystemTemplateId,
+            defaultProjectFilesystemTemplateId: opts?.defaultProjectFilesystemTemplateId,
+          }),
+        });
+        if (!res.ok) throw new Error(`Provisioning start failed: ${res.status}`);
+        const data = (await res.json()) as ProvisioningStatus;
+        setStatus(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to start provisioning');
+        setStarted(false);
+      }
+    },
+    [],
+  );
+
   useEffect(() => {
     fetchStatus().then((data) => {
-      if (data && data.provisioningStatus === 'pending' && !started) {
-        startProvisioning();
+      if (!data) return;
+      if (data.provisioningStatus === 'pending') {
+        void loadTemplates();
+      } else if (
+        data.provisioningStatus === 'provisioning' ||
+        data.provisioningStatus === 'failed'
+      ) {
+        setStarted(true);
       }
     });
-  }, [fetchStatus, startProvisioning, started]);
+  }, [fetchStatus, loadTemplates]);
 
   useEffect(() => {
     if (!status) return;
     if (status.provisioningStatus === 'complete') {
-      // App layout is a server component that chose ProvisioningScreen based
-      // on status at render time. Soft push alone can reuse that RSC payload
-      // and leave us stuck here — force a full navigation so layout re-checks.
       const timeout = setTimeout(() => {
         window.location.assign('/dashboard');
       }, 800);
@@ -77,12 +125,12 @@ export function ProvisioningScreen() {
     }
     if (
       status.provisioningStatus === 'provisioning' ||
-      status.provisioningStatus === 'pending'
+      (status.provisioningStatus === 'pending' && started)
     ) {
       const interval = setInterval(fetchStatus, 2500);
       return () => clearInterval(interval);
     }
-  }, [status, fetchStatus]);
+  }, [status, fetchStatus, started]);
 
   function getStepIcon(stepStatus: ProvisioningStep['status']) {
     switch (stepStatus) {
@@ -106,18 +154,24 @@ export function ProvisioningScreen() {
 
   const isComplete = status?.provisioningStatus === 'complete';
   const isFailed = status?.provisioningStatus === 'failed';
+  const showTemplatePicker =
+    status?.provisioningStatus === 'pending' && !started && templatesLoaded;
 
   const title = isComplete
     ? 'Ready to go'
     : isFailed
       ? 'Setup encountered an issue'
-      : 'Setting up your workspace';
+      : showTemplatePicker
+        ? 'Choose your document structure'
+        : 'Setting up your workspace';
 
   const subtitle = isComplete
     ? 'Your workspace is ready. Redirecting…'
     : isFailed
       ? 'Some steps could not complete. You can retry or continue with limited functionality.'
-      : "We're preparing everything for you. This only takes a moment.";
+      : showTemplatePicker
+        ? 'Pick a company folder template and a default project template used when new jobs are created.'
+        : "We're preparing everything for you. This only takes a moment.";
 
   return (
     <main className="relative flex min-h-screen grow flex-col bg-white">
@@ -143,7 +197,6 @@ export function ProvisioningScreen() {
           className="flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl border bg-white shadow-2xl md:flex-row md:items-stretch"
           style={{ borderColor: BRAND_200 }}
         >
-          {/* Left brand panel — mirrors auth-server AuthLeftPanel */}
           <div
             className="relative flex min-h-[200px] w-full flex-1 basis-0 flex-col items-center justify-center overflow-hidden px-5 py-8 sm:px-6 md:min-h-0"
             style={{ backgroundColor: BRAND_950 }}
@@ -168,7 +221,6 @@ export function ProvisioningScreen() {
             </div>
           </div>
 
-          {/* Right content — same dialog column as login fields */}
           <div className="flex min-w-0 flex-1 basis-0 flex-col justify-center px-8 py-10 sm:px-10">
             <div className="mb-8 text-center md:text-left">
               <div className="mb-3 flex items-center justify-center gap-3 md:justify-start">
@@ -199,41 +251,100 @@ export function ProvisioningScreen() {
               </div>
             )}
 
-            <div className="space-y-4">
-              {(status?.steps ?? []).map((step) => (
-                <div key={step.step} className="flex items-start gap-3">
-                  {getStepIcon(step.status)}
-                  <div className="min-w-0 flex-1">
-                    <span
-                      className={
-                        step.status === 'done'
-                          ? 'text-sm text-slate-900'
-                          : step.status === 'running'
-                            ? 'text-sm font-medium text-slate-900'
-                            : step.status === 'failed'
-                              ? 'text-sm text-red-600'
-                              : 'text-sm text-slate-400'
-                      }
-                    >
-                      {step.label}
-                    </span>
-                    {step.error && (
-                      <p className="mt-0.5 text-xs text-red-600">{step.error}</p>
-                    )}
-                  </div>
-                </div>
-              ))}
+            {showTemplatePicker ? (
+              <div className="space-y-5">
+                <label className="block space-y-1.5">
+                  <span className="text-sm font-medium text-slate-800">Company folders</span>
+                  <select
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                    value={companyTemplateId}
+                    onChange={(e) => setCompanyTemplateId(e.target.value)}
+                  >
+                    {companyTemplates.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                        {t.isDefault ? ' (default)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="block text-xs text-slate-500">
+                    Applied now for organisation-wide documents.
+                  </span>
+                </label>
 
-              {!status?.steps?.length && !error && (
-                <div className="flex items-center gap-3 text-sm text-slate-500">
-                  <Loader2
-                    className="h-5 w-5 animate-spin"
-                    style={{ color: BRAND_500 }}
-                  />
-                  Starting setup…
-                </div>
-              )}
-            </div>
+                <label className="block space-y-1.5">
+                  <span className="text-sm font-medium text-slate-800">
+                    Default project folders
+                  </span>
+                  <select
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                    value={projectTemplateId}
+                    onChange={(e) => setProjectTemplateId(e.target.value)}
+                  >
+                    {projectTemplates.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                        {t.isDefault ? ' (default)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="block text-xs text-slate-500">
+                    Used when creating jobs; each job gets its own copy.
+                  </span>
+                </label>
+
+                <button
+                  type="button"
+                  disabled={!companyTemplateId || !projectTemplateId}
+                  onClick={() =>
+                    startProvisioning({
+                      companyFilesystemTemplateId: companyTemplateId,
+                      defaultProjectFilesystemTemplateId: projectTemplateId,
+                    })
+                  }
+                  className="inline-flex w-full items-center justify-center rounded-lg px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 disabled:opacity-50"
+                  style={{ backgroundColor: BRAND_500 }}
+                >
+                  Continue setup
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {(status?.steps ?? []).map((step) => (
+                  <div key={step.step} className="flex items-start gap-3">
+                    {getStepIcon(step.status)}
+                    <div className="min-w-0 flex-1">
+                      <span
+                        className={
+                          step.status === 'done'
+                            ? 'text-sm text-slate-900'
+                            : step.status === 'running'
+                              ? 'text-sm font-medium text-slate-900'
+                              : step.status === 'failed'
+                                ? 'text-sm text-red-600'
+                                : 'text-sm text-slate-400'
+                        }
+                      >
+                        {step.label}
+                      </span>
+                      {step.error && (
+                        <p className="mt-0.5 text-xs text-red-600">{step.error}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {!status?.steps?.length && !error && (
+                  <div className="flex items-center gap-3 text-sm text-slate-500">
+                    <Loader2
+                      className="h-5 w-5 animate-spin"
+                      style={{ color: BRAND_500 }}
+                    />
+                    Loading…
+                  </div>
+                )}
+              </div>
+            )}
 
             {isFailed && (
               <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -241,7 +352,10 @@ export function ProvisioningScreen() {
                   type="button"
                   onClick={() => {
                     setError(null);
-                    startProvisioning();
+                    startProvisioning({
+                      companyFilesystemTemplateId: companyTemplateId || undefined,
+                      defaultProjectFilesystemTemplateId: projectTemplateId || undefined,
+                    });
                   }}
                   className="inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-95"
                   style={{ backgroundColor: BRAND_500 }}

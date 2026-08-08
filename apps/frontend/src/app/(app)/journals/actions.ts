@@ -2,7 +2,7 @@
 
 import { getSession, getAccessToken } from '@/lib/auth';
 import { createApiClient } from '@/lib/api-client';
-import type { Journal, PaginatedResponse } from '@/types/api';
+import type { AddressPayload, Journal, PaginatedResponse } from '@/types/api';
 
 async function getApi() {
   const session = await getSession();
@@ -52,6 +52,10 @@ export async function fetchJournalsAction(params?: {
 export async function createJournalAction(data: {
   name: string;
   description?: string;
+  address?: AddressPayload;
+  latitude?: number;
+  longitude?: number;
+  metadata?: Record<string, unknown>;
 }): Promise<Journal | null> {
   const api = await getApi();
   if (!api) return null;

@@ -872,10 +872,17 @@ export interface JournalPageAttachment {
   height: number | null;
   durationSeconds: string | null;
   thumbnailStorageKey: string | null;
+  /** Documents-module id when the upload went through document upload. */
+  documentId?: string | null;
   metadata: Record<string, unknown>;
   createdByUserId: string | null;
   createdAt: string;
 }
+
+/** Ordered content units on a journal entry (notes and uploads interleaved). */
+export type JournalPageBlock =
+  | { id: string; type: 'note'; text: string }
+  | { id: string; type: 'upload'; attachmentId: string };
 
 export type ScheduleEventType =
   | 'appointment'
@@ -911,7 +918,10 @@ export interface JournalPage {
   locationLabel: string | null;
   capturedAt: string;
   sortIndex: number;
-  metadata: Record<string, unknown>;
+  metadata: Record<string, unknown> & {
+    name?: string;
+    blocks?: JournalPageBlock[];
+  };
   createdByUserId: string | null;
   createdAt: string;
   updatedAt: string;

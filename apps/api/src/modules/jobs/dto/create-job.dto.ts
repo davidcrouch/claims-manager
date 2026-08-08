@@ -97,4 +97,9 @@ export class CreateJobDto {
   @ValidateNested({ each: true })
   @Type(() => CreateJobContactDto)
   contacts?: CreateJobContactDto[];
+
+  /** Project filesystem template (kind=project). Falls back to org default. */
+  @IsOptional()
+  @IsUUID()
+  filesystemTemplateId?: string;
 }

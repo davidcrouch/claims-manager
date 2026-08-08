@@ -1,4 +1,17 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  Res,
+  StreamableFile,
+} from '@nestjs/common';
+import type { Response } from 'express';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { JournalsService } from './journals.service';
 import {
@@ -183,5 +196,26 @@ export class JournalsController {
     @Param('attachmentId', ParseUUIDPipe) attachmentId: string,
   ) {
     return this.journalsService.getDownloadUrl({ journalId, pageId, attachmentId });
+  }
+
+  /** Stream bytes through the API (local ADC cannot mint signed URLs). */
+  @Get(':journalId/pages/:pageId/attachments/:attachmentId/stream')
+  async streamAttachment(
+    @Param('journalId', ParseUUIDPipe) journalId: string,
+    @Param('pageId', ParseUUIDPipe) pageId: string,
+    @Param('attachmentId', ParseUUIDPipe) attachmentId: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { stream, fileName, mimeType } = await this.journalsService.getDownloadStream({
+      journalId,
+      pageId,
+      attachmentId,
+    });
+    res.set({
+      'Content-Type': mimeType || 'application/octet-stream',
+      'Cache-Control': 'private, max-age=300',
+      'Content-Disposition': `inline; filename="${encodeURIComponent(fileName)}"`,
+    });
+    return new StreamableFile(stream as any);
   }
 }

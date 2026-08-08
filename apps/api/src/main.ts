@@ -79,8 +79,21 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
+  app.enableShutdownHooks();
+
   const port = configService.get<number>('app.port') ?? 3001;
-  await app.listen(port);
+  try {
+    await app.listen(port);
+  } catch (err) {
+    const code = err && typeof err === 'object' && 'code' in err ? err.code : undefined;
+    if (code === 'EADDRINUSE') {
+      console.error(
+        `[main.bootstrap] Port ${port} is already in use (likely a leftover API process). Run: pnpm --filter api kill`,
+      );
+      process.exit(1);
+    }
+    throw err;
+  }
 
   console.log(`[main.bootstrap] Application listening on port ${port}`);
   console.log(`[main.bootstrap] Home page at /`);

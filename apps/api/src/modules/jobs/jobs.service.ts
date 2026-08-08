@@ -12,6 +12,7 @@ import { TenantContext } from '../../tenant/tenant-context';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
 import { LookupResolver } from '../external/lookup-resolver.service';
 import { OutboundSyncService } from '../domain/outbound/outbound-sync.service';
+import { FilesystemService } from '../filesystem/filesystem.service';
 
 type ContactInput = {
   contactId?: string;
@@ -37,6 +38,7 @@ export class JobsService {
     private readonly tenantContext: TenantContext,
     private readonly outboundSync: OutboundSyncService,
     private readonly lookupResolver: LookupResolver,
+    private readonly filesystemService: FilesystemService,
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
     @Optional() private readonly connectionResolver?: ConnectionResolverService,
   ) {}
@@ -214,6 +216,24 @@ export class JobsService {
 
       return inserted;
     });
+
+    const filesystemTemplateId =
+      typeof params.body.filesystemTemplateId === 'string'
+        ? params.body.filesystemTemplateId
+        : undefined;
+
+    try {
+      await this.filesystemService.ensureProjectFilesystemForJob(
+        tenantId,
+        job.id,
+        filesystemTemplateId,
+      );
+    } catch (err) {
+      this.logger.error(
+        `JobsService.create — project filesystem setup failed jobId=${job.id}: ${err instanceof Error ? err.message : err}`,
+      );
+      throw err;
+    }
 
     return job;
   }

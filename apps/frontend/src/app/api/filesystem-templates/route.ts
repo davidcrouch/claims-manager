@@ -6,13 +6,15 @@ async function getAuth() {
   return getUpstreamApiAuth({ contentType: 'application/json' });
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const auth = await getAuth();
   if (!auth) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }
 
-  const upstream = await fetch(`${getApiBaseUrl()}/filesystem-templates`, {
+  const kind = req.nextUrl.searchParams.get('kind');
+  const qs = kind ? `?kind=${encodeURIComponent(kind)}` : '';
+  const upstream = await fetch(`${getApiBaseUrl()}/filesystem-templates${qs}`, {
     headers: auth.headers,
   });
 

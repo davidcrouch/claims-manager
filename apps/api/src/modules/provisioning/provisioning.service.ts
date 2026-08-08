@@ -83,6 +83,11 @@ export class ProvisioningService {
   private readonly logger = new Logger(LOG);
   private readonly storage: Storage | null;
   private readonly bucket: string;
+  /** Template choices for the in-flight provisioning run (request-scoped on this instance). */
+  private pendingFilesystemOptions: {
+    companyFilesystemTemplateId?: string;
+    defaultProjectFilesystemTemplateId?: string;
+  } | null = null;
 
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
@@ -128,7 +133,10 @@ export class ProvisioningService {
     };
   }
 
-  async startProvisioning(): Promise<ProvisioningStatusResponse> {
+  async startProvisioning(options?: {
+    companyFilesystemTemplateId?: string;
+    defaultProjectFilesystemTemplateId?: string;
+  }): Promise<ProvisioningStatusResponse> {
     const tenantId = this.tenantContext.getTenantId();
     const fn = 'startProvisioning';
 
@@ -164,6 +172,11 @@ export class ProvisioningService {
       }
       return this.getStatus();
     }
+
+    this.pendingFilesystemOptions = {
+      companyFilesystemTemplateId: options?.companyFilesystemTemplateId,
+      defaultProjectFilesystemTemplateId: options?.defaultProjectFilesystemTemplateId,
+    };
 
     await this.db
       .update(organizations)
@@ -230,23 +243,24 @@ export class ProvisioningService {
   }
 
   private async stepFilesystemSetup(): Promise<void> {
-    const existing = await this.filesystemService.getFilesystem();
-    if (existing && existing.categories.length > 0) {
-      this.logger.log(`[${LOG}.stepFilesystemSetup] already set up — skipping`);
-      return;
-    }
-
     // Platform Company/Project templates are not created by per-tenant seed;
     // ensure they exist after a fresh DB (idempotent upsert).
     await this.ensurePlatformFilesystemTemplates();
 
+    const options = this.pendingFilesystemOptions;
+    this.pendingFilesystemOptions = null;
+
     try {
-      await this.filesystemService.setupFromDefault();
+      await this.filesystemService.provisionCompanyFilesystem({
+        companyTemplateId: options?.companyFilesystemTemplateId,
+        defaultProjectTemplateId: options?.defaultProjectFilesystemTemplateId,
+      });
     } catch (error) {
       if (
         error instanceof Error &&
         error.message.includes('already set up')
       ) {
+        this.logger.log(`[${LOG}.stepFilesystemSetup] already set up — skipping`);
         return;
       }
       throw error;

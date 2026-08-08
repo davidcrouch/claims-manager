@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { convertWithOptions } from 'libreoffice-convert';
 import { existsSync } from 'fs';
+import { delimiter, join } from 'path';
 
 const SOFFICE_CANDIDATES = [
   process.env.LIBREOFFICE_PATH,
@@ -10,7 +11,18 @@ const SOFFICE_CANDIDATES = [
   '/usr/local/bin/soffice',
   '/usr/bin/soffice',
   '/usr/bin/libreoffice',
+  'C:\\Program Files\\LibreOffice\\program\\soffice.exe',
+  'C:\\Program Files\\LibreOffice\\program\\soffice.com',
+  'C:\\Program Files (x86)\\LibreOffice\\program\\soffice.exe',
 ].filter((p): p is string => Boolean(p));
+
+function sofficeFromPath(): string[] {
+  const dirs = (process.env.PATH ?? '').split(delimiter);
+  const names = process.platform === 'win32'
+    ? ['soffice.exe', 'soffice.com', 'soffice']
+    : ['soffice', 'libreoffice'];
+  return dirs.flatMap((dir) => names.map((name) => join(dir, name)));
+}
 
 @Injectable()
 export class OfficeConverterService {
@@ -44,10 +56,12 @@ export class OfficeConverterService {
     sourceFileName: string;
   }): Promise<Buffer> {
     const logPrefix = 'OfficeConverterService.convert';
-    const sofficeBinaryPaths = SOFFICE_CANDIDATES.filter((p) => existsSync(p));
+    const sofficeBinaryPaths = [...SOFFICE_CANDIDATES, ...sofficeFromPath()].filter((p) =>
+      existsSync(p),
+    );
     if (sofficeBinaryPaths.length === 0) {
       throw new Error(
-        'Could not find soffice binary. Install LibreOffice (e.g. brew install --cask libreoffice).',
+        'Could not find soffice binary. Install LibreOffice or set LIBREOFFICE_PATH.',
       );
     }
 

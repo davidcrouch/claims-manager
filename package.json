@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "pnpm --filter frontend dev",
     "dev:api": "pnpm --filter api dev",
+    "kill:frontend": "pnpm --filter frontend kill",
+    "kill:api": "pnpm --filter api kill",
     "dev:claims-mcp": "pnpm --filter claims-mcp dev",
     "dev:ms-graph-mcp": "pnpm --filter ms-graph-mcp dev",
     "build:claims-mcp": "pnpm --filter claims-mcp build",

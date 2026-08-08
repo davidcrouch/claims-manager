@@ -19,7 +19,11 @@ function unauthorizedJson() {
   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 }
 
-export function proxy(req: NextRequest) {
+/**
+ * Keep this file as middleware.ts (not proxy.ts). Next 16.2 Turbopack 404s
+ * valid app routes when src/proxy.ts is present (vercel/next.js#92921).
+ */
+export function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
   const hasAuthCookie = !!req.cookies.get(AUTH_COOKIE)?.value;
 

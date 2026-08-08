@@ -1,11 +1,18 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { BookOpen } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { BookOpen, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   BottomFormDrawer,
   BottomFormDrawerBody,
@@ -14,20 +21,78 @@ import {
 } from '@/components/forms/BottomFormDrawer';
 import { JobSelectField } from '@/components/forms/JobSelectField';
 import type { JobOption } from '@/components/shared/job-label';
-import type { Journal } from '@/types/api';
+import type { AddressPayload, Journal } from '@/types/api';
+
+const AU_STATES = ['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA'] as const;
+
+export type CreateJournalInput = {
+  name: string;
+  description?: string;
+  address?: AddressPayload;
+  latitude?: number;
+  longitude?: number;
+  metadata?: Record<string, unknown>;
+};
 
 export interface JournalFormDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   entityType?: string;
   entityId?: string;
-  createJournal: (data: { name: string; description?: string }) => Promise<Journal | null>;
+  createJournal: (data: CreateJournalInput) => Promise<Journal | null>;
   linkJournal?: (journalId: string) => Promise<boolean>;
   /** Link the new journal to a Job entity (used when a job is selected). */
   linkToJob?: (journalId: string, jobId: string) => Promise<boolean>;
   onCreated?: (journal: Journal) => void;
   jobId?: string | null;
   jobs?: JobOption[];
+}
+
+type SiteAddressForm = {
+  unitNumber: string;
+  streetNumber: string;
+  streetName: string;
+  suburb: string;
+  state: string;
+  postcode: string;
+  country: string;
+};
+
+const EMPTY_ADDRESS: SiteAddressForm = {
+  unitNumber: '',
+  streetNumber: '',
+  streetName: '',
+  suburb: '',
+  state: '',
+  postcode: '',
+  country: 'Australia',
+};
+
+function addressFromJob(job: JobOption | undefined): SiteAddressForm {
+  if (!job) return { ...EMPTY_ADDRESS };
+  const a = job.address ?? {};
+  return {
+    unitNumber: a.unitNumber ?? '',
+    streetNumber: a.streetNumber ?? '',
+    streetName: a.streetName ?? '',
+    suburb: a.suburb ?? job.addressSuburb ?? '',
+    state: a.state ?? job.addressState ?? '',
+    postcode: a.postcode ?? job.addressPostcode ?? '',
+    country: a.country ?? job.addressCountry ?? 'Australia',
+  };
+}
+
+function toAddressPayload(form: SiteAddressForm): AddressPayload | undefined {
+  const address: AddressPayload = {
+    unitNumber: form.unitNumber.trim() || undefined,
+    streetNumber: form.streetNumber.trim() || undefined,
+    streetName: form.streetName.trim() || undefined,
+    suburb: form.suburb.trim() || undefined,
+    state: form.state.trim() || undefined,
+    postcode: form.postcode.trim() || undefined,
+    country: form.country.trim() || undefined,
+  };
+  return Object.values(address).some(Boolean) ? address : undefined;
 }
 
 export function JournalFormDrawer({
@@ -45,27 +110,87 @@ export function JournalFormDrawer({
   const [selectedJobId, setSelectedJobId] = useState(jobId ?? '');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [visitDate, setVisitDate] = useState('');
+  const [address, setAddress] = useState<SiteAddressForm>(EMPTY_ADDRESS);
+  const [location, setLocation] = useState<{
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+  } | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [locating, setLocating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const jobRequired = jobs.length > 0 || Boolean(jobId);
 
+  const stateItems = useMemo(
+    () => Object.fromEntries(AU_STATES.map((s) => [s, s])) as Record<string, string>,
+    [],
+  );
+
   useEffect(() => {
-    if (open) {
-      setSelectedJobId(jobId ?? '');
+    if (!open) return;
+    const initialJobId = jobId ?? '';
+    setSelectedJobId(initialJobId);
+    const job = jobs.find((j) => j.id === initialJobId);
+    setAddress(addressFromJob(job));
+  }, [open, jobId, jobs]);
+
+  const handleJobChange = (nextJobId: string) => {
+    setSelectedJobId(nextJobId);
+    const job = jobs.find((j) => j.id === nextJobId);
+    if (job?.address || job?.addressSuburb) {
+      setAddress(addressFromJob(job));
     }
-  }, [open, jobId]);
+  };
 
   const resetForm = () => {
     setSelectedJobId(jobId ?? '');
     setName('');
     setDescription('');
+    setVisitDate('');
+    setAddress(addressFromJob(jobs.find((j) => j.id === (jobId ?? ''))));
+    setLocation(null);
+    setLocationError(null);
+    setLocating(false);
     setError(null);
   };
 
   const handleOpenChange = (next: boolean) => {
     if (!next) resetForm();
     onOpenChange(next);
+  };
+
+  const updateAddressField = <K extends keyof SiteAddressForm>(
+    key: K,
+    value: SiteAddressForm[K],
+  ) => {
+    setAddress((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const captureLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation not supported by this browser');
+      return;
+    }
+    setLocating(true);
+    setLocationError(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLocation({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+        });
+        setLocating(false);
+      },
+      (err) => {
+        setLocationError(err.message);
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
   };
 
   const canSubmit =
@@ -87,9 +212,18 @@ export function JournalFormDrawer({
     setSubmitting(true);
     setError(null);
     try {
+      const addressPayload = toAddressPayload(address);
+      const metadata: Record<string, unknown> = {};
+      if (visitDate.trim()) metadata.visitDate = visitDate.trim();
+      if (location?.accuracy != null) metadata.locationAccuracy = location.accuracy;
+
       const journal = await createJournal({
         name: name.trim(),
         description: description.trim() || undefined,
+        address: addressPayload,
+        latitude: location?.latitude,
+        longitude: location?.longitude,
+        metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
       });
 
       if (!journal) {
@@ -124,8 +258,8 @@ export function JournalFormDrawer({
       title="Create Journal"
       description={
         entityType
-          ? `Create a new journal and link it to this ${entityType.toLowerCase()}.`
-          : 'Create a new journal for a job.'
+          ? `Create a site-visit journal and link it to this ${entityType.toLowerCase()}.`
+          : 'Create a site-visit journal for a job.'
       }
       icon={<BookOpen className="h-5 w-5" />}
       widthClassName="w-[60%]"
@@ -137,9 +271,19 @@ export function JournalFormDrawer({
               <JobSelectField
                 jobs={jobs}
                 value={selectedJobId}
-                onValueChange={setSelectedJobId}
+                onValueChange={handleJobChange}
               />
             )}
+
+            <div className="space-y-2">
+              <Label htmlFor="journal-visit-date">Visit date</Label>
+              <Input
+                id="journal-visit-date"
+                type="date"
+                value={visitDate}
+                onChange={(e) => setVisitDate(e.target.value)}
+              />
+            </div>
 
             <div className="space-y-2 md:col-span-2">
               <Label htmlFor="journal-name">
@@ -149,20 +293,126 @@ export function JournalFormDrawer({
                 id="journal-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Site Visit Notes"
+                placeholder="e.g. Initial site inspection"
                 required
               />
             </div>
 
             <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="journal-description">Description</Label>
+              <Label htmlFor="journal-description">Purpose / notes</Label>
               <Textarea
                 id="journal-description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Brief description (optional)"
+                placeholder="Why you're on site, scope of visit, access notes…"
                 rows={3}
               />
+            </div>
+
+            <div className="md:col-span-2">
+              <p className="mb-3 text-sm font-medium text-foreground">Site address</p>
+              <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-6">
+                <div className="space-y-2 md:col-span-1">
+                  <Label htmlFor="journal-unit">Unit</Label>
+                  <Input
+                    id="journal-unit"
+                    value={address.unitNumber}
+                    onChange={(e) => updateAddressField('unitNumber', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-1">
+                  <Label htmlFor="journal-street-no">Street no.</Label>
+                  <Input
+                    id="journal-street-no"
+                    value={address.streetNumber}
+                    onChange={(e) => updateAddressField('streetNumber', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-4">
+                  <Label htmlFor="journal-street-name">Street name</Label>
+                  <Input
+                    id="journal-street-name"
+                    value={address.streetName}
+                    onChange={(e) => updateAddressField('streetName', e.target.value)}
+                    placeholder="e.g. Smith Street"
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="journal-suburb">Suburb</Label>
+                  <Input
+                    id="journal-suburb"
+                    value={address.suburb}
+                    onChange={(e) => updateAddressField('suburb', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-1">
+                  <Label htmlFor="journal-state">State</Label>
+                  <Select
+                    value={address.state || null}
+                    onValueChange={(v) => updateAddressField('state', v ?? '')}
+                    items={stateItems}
+                  >
+                    <SelectTrigger id="journal-state" className="w-full">
+                      <SelectValue placeholder="State" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {AU_STATES.map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {s}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2 md:col-span-1">
+                  <Label htmlFor="journal-postcode">Postcode</Label>
+                  <Input
+                    id="journal-postcode"
+                    value={address.postcode}
+                    onChange={(e) => updateAddressField('postcode', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="journal-country">Country</Label>
+                  <Input
+                    id="journal-country"
+                    value={address.country}
+                    onChange={(e) => updateAddressField('country', e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <div className="flex items-center justify-between gap-3">
+                <Label>GPS location</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={captureLocation}
+                  disabled={locating}
+                >
+                  <MapPin className="size-3.5" />
+                  {locating ? 'Locating…' : location ? 'Update location' : 'Use current location'}
+                </Button>
+              </div>
+              {location ? (
+                <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                  {location.latitude.toFixed(5)}, {location.longitude.toFixed(5)}
+                  {location.accuracy != null && (
+                    <span className="ml-2 text-xs">±{Math.round(location.accuracy)}m</span>
+                  )}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Optional — capture GPS when you are at the job site.
+                </p>
+              )}
+              {locationError && (
+                <p className="text-sm text-destructive">{locationError}</p>
+              )}
             </div>
           </div>
 

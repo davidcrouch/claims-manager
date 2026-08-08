@@ -38,6 +38,10 @@ describe('WebhookOrchestratorService', () => {
       updateProcessingStatus: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<InboundWebhookEventsRepository>;
 
+    const notificationsRepo = {
+      create: jest.fn().mockResolvedValue(undefined),
+    } as unknown as ConstructorParameters<typeof WebhookOrchestratorService>[6];
+
     const service = new WebhookOrchestratorService(
       config,
       more0,
@@ -45,6 +49,7 @@ describe('WebhookOrchestratorService', () => {
       retry,
       processingLogRepo,
       webhookRepo,
+      notificationsRepo,
     );
     return { service, more0, inProc, processingLogRepo, webhookRepo };
   };

@@ -33,6 +33,7 @@ async function fetchAllCatalogItems(params: {
 }): Promise<CatalogItem[]> {
   const pageSize = params.q ? 500 : 100;
   const all: CatalogItem[] = [];
+  const seen = new Set<string>();
   let page = 1;
 
   while (page <= 50) {
@@ -45,7 +46,11 @@ async function fetchAllCatalogItems(params: {
       sort: 'code_asc',
     });
     if (!result?.data.length) break;
-    all.push(...result.data);
+    for (const item of result.data) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      all.push(item);
+    }
     if (all.length >= result.total) break;
     page += 1;
   }

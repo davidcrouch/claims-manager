@@ -72,9 +72,13 @@ function formatDate(dateStr: string): string {
   });
 }
 
+function getThumbSrc(doc: FSDocument): string {
+  return `/api/documents/${doc.id}/thumbnail`;
+}
+
 function hasPossibleThumbnail(doc: FSDocument): boolean {
   if (doc.thumbnailUri) return true;
-  if (doc.mimeType?.startsWith('image/') && (doc.gcsBucket || doc.uri)) return true;
+  if (doc.mimeType?.startsWith('image/') && doc.gcsBucket) return true;
   return false;
 }
 
@@ -139,7 +143,7 @@ export function DocumentCard({ document: doc, categories, onAction, layout = 'gr
         {showThumb && !thumbFailed ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={`/api/documents/${doc.id}/thumbnail`}
+            src={getThumbSrc(doc)}
             alt={doc.fileName ?? 'Document thumbnail'}
             className="absolute inset-0 h-full w-full object-contain"
             onLoad={(e) => {

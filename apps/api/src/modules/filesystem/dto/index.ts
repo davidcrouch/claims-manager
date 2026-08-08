@@ -1,6 +1,8 @@
 export { CreateFilesystemTemplateDto } from './create-filesystem-template.dto';
 export { UpdateFilesystemTemplateDto } from './update-filesystem-template.dto';
 export { SetupFilesystemDto } from './setup-filesystem.dto';
+export { SetupJobFilesystemDto } from './setup-job-filesystem.dto';
+export { UpdateFilesystemDefaultsDto } from './update-filesystem-defaults.dto';
 export { UpdateCategoryDto } from './update-category.dto';
 export { CreateCategoryDto } from './create-category.dto';
 export { ReplaceCategoriesDto, ReplaceCategoryItem } from './replace-categories.dto';

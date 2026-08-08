@@ -5,28 +5,31 @@ import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type {
   ArtifactContentType,
+  ArtifactExportScope,
   ArtifactExportSettings,
   FilesystemCategoryNode,
 } from '@/lib/api-client';
 
 interface FlatCategory {
-  id: string;
+  value: string;
   label: string;
   slug: string;
 }
 
 function flattenCategories(
   categories: FilesystemCategoryNode[],
+  valueMode: 'id' | 'slug',
   prefix = '',
 ): FlatCategory[] {
   const result: FlatCategory[] = [];
   for (const cat of categories) {
     const label = prefix ? `${prefix} / ${cat.displayName}` : cat.displayName;
-    if (cat.id) {
-      result.push({ id: cat.id, label, slug: cat.slug });
+    const value = valueMode === 'slug' ? cat.slug : cat.id;
+    if (value) {
+      result.push({ value, label, slug: cat.slug });
     }
     if (cat.children?.length) {
-      result.push(...flattenCategories(cat.children, label));
+      result.push(...flattenCategories(cat.children, valueMode, label));
     }
   }
   return result;
@@ -42,31 +45,48 @@ const CONTENT_TYPES: { key: ArtifactContentType; label: string }[] = [
 
 interface ArtifactExportDefaultsPanelProps {
   categories: FilesystemCategoryNode[];
+  scope?: ArtifactExportScope;
+  /** company → category id; project → category slug */
+  valueMode?: 'id' | 'slug';
+  /** Project: template used to validate slugs when org default is not saved yet */
+  templateId?: string;
 }
 
 export function ArtifactExportDefaultsPanel({
   categories,
+  scope = 'company',
+  valueMode = scope === 'project' ? 'slug' : 'id',
+  templateId,
 }: ArtifactExportDefaultsPanelProps) {
-  const flatCategories = useMemo(() => flattenCategories(categories), [categories]);
+  const flatCategories = useMemo(
+    () => flattenCategories(categories, valueMode),
+    [categories, valueMode],
+  );
   const [settings, setSettings] = useState<ArtifactExportSettings>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    fetch('/api/filesystems/artifact-export')
+    const qs = scope === 'company' ? '' : `?scope=${encodeURIComponent(scope)}`;
+    setIsLoading(true);
+    fetch(`/api/filesystems/artifact-export${qs}`)
       .then((r) => (r.ok ? r.json() : {}))
       .then(setSettings)
       .catch(() => setSettings({}))
       .finally(() => setIsLoading(false));
-  }, []);
+  }, [scope]);
 
   const handleSave = () => {
     startTransition(async () => {
       const res = await fetch('/api/filesystems/artifact-export', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings),
+        body: JSON.stringify({
+          scope,
+          ...(scope === 'project' && templateId ? { templateId } : {}),
+          ...settings,
+        }),
       });
       if (res.ok) {
         const updated = await res.json();
@@ -77,12 +97,12 @@ export function ArtifactExportDefaultsPanel({
     });
   };
 
-  const updateContentTypeMapping = (key: ArtifactContentType, categoryId: string) => {
+  const updateContentTypeMapping = (key: ArtifactContentType, categoryValue: string) => {
     setSettings((prev) => ({
       ...prev,
       categoryByContentType: {
         ...prev.categoryByContentType,
-        [key]: categoryId || undefined,
+        [key]: categoryValue || undefined,
       },
     }));
   };
@@ -96,12 +116,15 @@ export function ArtifactExportDefaultsPanel({
     );
   }
 
+  const description =
+    scope === 'project'
+      ? 'Where chat and canvas artifacts are saved on a job filesystem when no category is specified.'
+      : 'Where chat and canvas artifacts are saved when no category is specified.';
+
   return (
-    <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
       <h4 className="text-sm font-semibold text-slate-900">AI export defaults</h4>
-      <p className="mt-1 text-xs text-slate-500">
-        Where chat and canvas artifacts are saved when no category is specified.
-      </p>
+      <p className="mt-1 text-xs text-slate-500">{description}</p>
 
       <div className="mt-4 space-y-3">
         <label className="block text-xs font-medium text-slate-700">
@@ -118,8 +141,9 @@ export function ArtifactExportDefaultsPanel({
           >
             <option value="">— Select category —</option>
             {flatCategories.map((cat) => (
-              <option key={cat.id} value={cat.id}>
+              <option key={cat.value} value={cat.value}>
                 {cat.label}
+                {valueMode === 'slug' ? ` (${cat.slug})` : ''}
               </option>
             ))}
           </select>
@@ -138,7 +162,7 @@ export function ArtifactExportDefaultsPanel({
                 >
                   <option value="">Use default</option>
                   {flatCategories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
+                    <option key={cat.value} value={cat.value}>
                       {cat.label}
                     </option>
                   ))}

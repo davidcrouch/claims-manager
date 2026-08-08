@@ -10,6 +10,8 @@ interface UseDocumentUploadOptions {
   categoryId?: string | null;
   relatedRecordType?: string;
   relatedRecordId?: string;
+  filesystemId?: string | null;
+  jobId?: string | null;
   onComplete?: () => void;
 }
 
@@ -79,6 +81,8 @@ export function useDocumentUpload(options?: UseDocumentUploadOptions) {
             categoryId: opts?.categoryId ?? undefined,
             relatedRecordType: opts?.relatedRecordType,
             relatedRecordId: opts?.relatedRecordId,
+            filesystemId: opts?.filesystemId ?? undefined,
+            jobId: opts?.jobId ?? undefined,
           })),
         }),
       });

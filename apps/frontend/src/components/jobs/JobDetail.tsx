@@ -18,8 +18,6 @@ import { Button } from '@/components/ui/button';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { AddJobContactsDrawer } from '@/components/forms/AddJobContactsDrawer';
-import { QuoteFormDrawer } from '@/components/forms/QuoteFormDrawer';
-import { WorkOrderFormDrawer } from '@/components/forms/WorkOrderFormDrawer';
 import { JobReportWizard } from '@/components/jobs/JobReportWizard';
 import { JobOverviewTab, type JobOverviewTabHandle } from './tabs/JobOverviewTab';
 import { JobTypeDetailsTab } from './tabs/JobTypeDetailsTab';
@@ -67,8 +65,6 @@ export function JobDetail({
   const [editing, setEditing] = useState(false);
   const [contactDrawerOpen, setContactDrawerOpen] = useState(false);
   const [reportDrawerOpen, setReportDrawerOpen] = useState(false);
-  const [quoteDrawerOpen, setQuoteDrawerOpen] = useState(false);
-  const [workOrderDrawerOpen, setWorkOrderDrawerOpen] = useState(false);
   const [printWizardOpen, setPrintWizardOpen] = useState(false);
 
   useEffect(() => {
@@ -137,27 +133,6 @@ export function JobDetail({
     { id: 'reports', label: 'Reports', icon: FileBarChart },
     { id: 'timeline', label: 'Timeline', icon: Clock },
   ];
-
-  const createActions = (
-    <div className="mr-4 flex items-center gap-2">
-      <Button
-        size="default"
-        onClick={() => setQuoteDrawerOpen(true)}
-        className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
-      >
-        <Plus className="h-3.5 w-3.5" />
-        Create Estimate
-      </Button>
-      <Button
-        size="default"
-        onClick={() => setWorkOrderDrawerOpen(true)}
-        className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
-      >
-        <Plus className="h-3.5 w-3.5" />
-        Create WO
-      </Button>
-    </div>
-  );
 
   const printButton = (
     <Button
@@ -245,7 +220,6 @@ export function JobDetail({
 
   const headerActions = (
     <>
-      {createActions}
       {tabActions}
       {archiveButton}
     </>
@@ -311,17 +285,6 @@ export function JobDetail({
         jobId={job.id}
         existingContacts={existingContacts}
         aiAssistEnabled
-      />
-      <QuoteFormDrawer
-        open={quoteDrawerOpen}
-        onOpenChange={setQuoteDrawerOpen}
-        jobId={job.id}
-        claimId={claimId}
-      />
-      <WorkOrderFormDrawer
-        open={workOrderDrawerOpen}
-        onOpenChange={setWorkOrderDrawerOpen}
-        jobId={job.id}
       />
       <JobReportWizard
         open={printWizardOpen}

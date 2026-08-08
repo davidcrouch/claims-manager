@@ -8,12 +8,11 @@
     // breaks `node dist/main.js` and `node dist/database/run-migrations.js`
     // in the production image).
     "rootDir": "./src",
-    // Keep the incremental build cache inside dist/ so it is cleared whenever
-    // nest-cli deletes the output directory (`deleteOutDir: true`). Otherwise
-    // a stale cache at the repo root makes tsc believe outputs already exist
-    // and it emits nothing after dist/ has been wiped, leaving
-    // `node dist/main.js` unable to resolve the entrypoint.
-    "tsBuildInfoFile": "./dist/tsconfig.build.tsbuildinfo"
+    // API is an app, not a published library — skip .d.ts emit.
+    "declaration": false,
+    // Keep the incremental typecheck cache outside dist/ so `deleteOutDir`
+    // (used by nest build / SWC) does not wipe it on every compile.
+    "tsBuildInfoFile": "./tsconfig.build.tsbuildinfo"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "test", "dist", "**/*spec.ts"]

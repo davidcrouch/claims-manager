@@ -8,6 +8,7 @@ import {
   Patch,
   Post,
   Put,
+  Query,
 } from '@nestjs/common';
 import { FilesystemService } from './filesystem.service';
 import {
@@ -17,15 +18,64 @@ import {
   ReplaceCategoriesDto,
 } from './dto';
 import { GenerateCategoryDescriptionDto } from './dto/generate-category-description.dto';
-import type { ArtifactExportSettings } from './artifact-export.types';
+import { SetupJobFilesystemDto } from './dto/setup-job-filesystem.dto';
+import { UpdateFilesystemDefaultsDto } from './dto/update-filesystem-defaults.dto';
+import type {
+  ArtifactExportScope,
+  UpdateArtifactExportSettingsDto,
+} from './artifact-export.types';
 
 @Controller('filesystems')
 export class FilesystemController {
   constructor(private readonly filesystemService: FilesystemService) {}
 
+  /** @deprecated Prefer GET /filesystems/company */
   @Get()
   async getFilesystem() {
     return this.filesystemService.getFilesystem();
+  }
+
+  @Get('company')
+  async getCompanyFilesystem() {
+    return this.filesystemService.getCompanyFilesystem();
+  }
+
+  @Get('overview')
+  async getOverview() {
+    return this.filesystemService.getOverview();
+  }
+
+  @Get('categories/search')
+  async searchCategories(@Query('q') q?: string) {
+    return this.filesystemService.searchCategories(q ?? '');
+  }
+
+  @Get('defaults')
+  async getDefaults() {
+    return this.filesystemService.getFilesystemDefaults();
+  }
+
+  @Patch('defaults')
+  async updateDefaults(@Body() dto: UpdateFilesystemDefaultsDto) {
+    return this.filesystemService.updateFilesystemDefaults(dto);
+  }
+
+  @Get('jobs/:jobId')
+  async getJobFilesystem(@Param('jobId', ParseUUIDPipe) jobId: string) {
+    return this.filesystemService.getJobFilesystem(jobId);
+  }
+
+  @Post('jobs/:jobId/setup')
+  async setupJobFilesystem(
+    @Param('jobId', ParseUUIDPipe) jobId: string,
+    @Body() dto: SetupJobFilesystemDto,
+  ) {
+    return this.filesystemService.setupJobFilesystem(jobId, dto.templateId);
+  }
+
+  @Post('backfill-project-filesystems')
+  async backfillProjectFilesystems() {
+    return this.filesystemService.backfillMissingProjectFilesystems();
   }
 
   @Post('setup')
@@ -44,12 +94,12 @@ export class FilesystemController {
   }
 
   @Get('artifact-export')
-  async getArtifactExport() {
-    return this.filesystemService.getArtifactExportSettings();
+  async getArtifactExport(@Query('scope') scope?: ArtifactExportScope) {
+    return this.filesystemService.getArtifactExportSettings(scope ?? 'company');
   }
 
   @Patch('artifact-export')
-  async updateArtifactExport(@Body() body: ArtifactExportSettings) {
+  async updateArtifactExport(@Body() body: UpdateArtifactExportSettingsDto) {
     return this.filesystemService.updateArtifactExportSettings(body);
   }
 

@@ -23,14 +23,21 @@ import {
   ColumnSettingsHeaderCell,
   useColumnVisibility,
 } from '@/components/shared/column-visibility';
-import type { Journal } from '@/types/api';
+import type { AddressPayload, Journal } from '@/types/api';
 
 export interface JournalListProps {
   entityType: string;
   entityId: string;
   fetchJournals: () => Promise<Journal[]>;
   fetchAllJournals: () => Promise<Journal[]>;
-  createJournal: (data: { name: string; description?: string }) => Promise<Journal | null>;
+  createJournal: (data: {
+    name: string;
+    description?: string;
+    address?: AddressPayload;
+    latitude?: number;
+    longitude?: number;
+    metadata?: Record<string, unknown>;
+  }) => Promise<Journal | null>;
   linkJournal: (journalId: string) => Promise<boolean>;
   unlinkJournal: (journalId: string) => Promise<boolean>;
 }
@@ -50,7 +57,7 @@ const TABLE_COLUMNS: ColDef[] = [
   { key: 'name', label: 'Name', locked: true },
   { key: 'status', label: 'Status', filterable: true },
   { key: 'suburb', label: 'Location' },
-  { key: 'pages', label: 'Pages' },
+  { key: 'pages', label: 'Entries' },
   { key: 'updated_at', label: 'Updated' },
 ];
 

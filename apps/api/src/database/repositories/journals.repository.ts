@@ -18,7 +18,7 @@ export class JournalsRepository {
     limit?: number;
     status?: string;
     jobId?: string;
-  }): Promise<{ data: Array<JournalRow & { jobId: string | null }>; total: number }> {
+  }): Promise<{ data: Array<JournalRow & { jobId: string | null; pageCount: number }>; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
     const skip = (page - 1) * limit;
@@ -71,19 +71,22 @@ export class JournalsRepository {
     }
 
     const journalIds = data.map((row) => row.id);
-    const jobLinks = await this.db
-      .select({
-        journalId: journalEntityLinks.journalId,
-        entityId: journalEntityLinks.entityId,
-      })
-      .from(journalEntityLinks)
-      .where(
-        and(
-          eq(journalEntityLinks.tenantId, params.tenantId),
-          eq(journalEntityLinks.entityType, 'Job'),
-          inArray(journalEntityLinks.journalId, journalIds),
+    const [jobLinks, pageCounts] = await Promise.all([
+      this.db
+        .select({
+          journalId: journalEntityLinks.journalId,
+          entityId: journalEntityLinks.entityId,
+        })
+        .from(journalEntityLinks)
+        .where(
+          and(
+            eq(journalEntityLinks.tenantId, params.tenantId),
+            eq(journalEntityLinks.entityType, 'Job'),
+            inArray(journalEntityLinks.journalId, journalIds),
+          ),
         ),
-      );
+      this.getPageCounts({ tenantId: params.tenantId, journalIds }),
+    ]);
 
     const jobIdByJournal = new Map<string, string>();
     for (const link of jobLinks) {
@@ -96,6 +99,7 @@ export class JournalsRepository {
       data: data.map((row) => ({
         ...row,
         jobId: jobIdByJournal.get(row.id) ?? null,
+        pageCount: pageCounts.get(row.id) ?? 0,
       })),
       total,
     };
@@ -120,7 +124,7 @@ export class JournalsRepository {
     tenantId: string;
     entityType: string;
     entityId: string;
-  }): Promise<JournalRow[]> {
+  }): Promise<Array<JournalRow & { pageCount: number }>> {
     const links = await this.db
       .select({ journalId: journalEntityLinks.journalId })
       .from(journalEntityLinks)
@@ -135,17 +139,25 @@ export class JournalsRepository {
     if (links.length === 0) return [];
 
     const journalIds = links.map((l) => l.journalId);
-    return this.db
-      .select()
-      .from(journals)
-      .where(
-        and(
-          eq(journals.tenantId, params.tenantId),
-          inArray(journals.id, journalIds),
-          isNull(journals.deletedAt),
-        ),
-      )
-      .orderBy(desc(journals.updatedAt));
+    const [rows, pageCounts] = await Promise.all([
+      this.db
+        .select()
+        .from(journals)
+        .where(
+          and(
+            eq(journals.tenantId, params.tenantId),
+            inArray(journals.id, journalIds),
+            isNull(journals.deletedAt),
+          ),
+        )
+        .orderBy(desc(journals.updatedAt)),
+      this.getPageCounts({ tenantId: params.tenantId, journalIds }),
+    ]);
+
+    return rows.map((row) => ({
+      ...row,
+      pageCount: pageCounts.get(row.id) ?? 0,
+    }));
   }
 
   async create(params: { data: JournalInsert }): Promise<JournalRow> {
@@ -184,6 +196,34 @@ export class JournalsRepository {
         ),
       );
     return result?.count ?? 0;
+  }
+
+  async getPageCounts(params: {
+    tenantId: string;
+    journalIds: string[];
+  }): Promise<Map<string, number>> {
+    if (params.journalIds.length === 0) return new Map();
+
+    const rows = await this.db
+      .select({
+        journalId: journalPages.journalId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(journalPages)
+      .where(
+        and(
+          eq(journalPages.tenantId, params.tenantId),
+          inArray(journalPages.journalId, params.journalIds),
+          isNull(journalPages.deletedAt),
+        ),
+      )
+      .groupBy(journalPages.journalId);
+
+    const counts = new Map<string, number>();
+    for (const row of rows) {
+      counts.set(row.journalId, row.count);
+    }
+    return counts;
   }
 
   // -- Entity links --

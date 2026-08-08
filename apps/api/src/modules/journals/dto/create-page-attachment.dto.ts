@@ -1,4 +1,5 @@
-import { IsString, IsOptional, IsNumber, IsInt } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsInt, IsUUID } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreatePageAttachmentDto {
   @IsString()
@@ -8,11 +9,20 @@ export class CreatePageAttachmentDto {
   mimeType!: string;
 
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   fileSize?: number;
 
   @IsString()
   storageKey!: string;
+
+  @IsOptional()
+  @IsUUID()
+  documentId?: string;
+
+  @IsOptional()
+  @IsString()
+  thumbnailStorageKey?: string;
 
   @IsOptional()
   @IsString()
@@ -23,14 +33,22 @@ export class CreatePageAttachmentDto {
   caption?: string;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  sortIndex?: number;
+
+  @IsOptional()
+  @Type(() => Number)
   @IsInt()
   width?: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   height?: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   durationSeconds?: number;
 }

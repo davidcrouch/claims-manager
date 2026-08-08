@@ -945,6 +945,9 @@ export const organizations = pgTable(
     provisioningStatus: text('provisioning_status').notNull().default('pending'),
     provisioningStartedAt: timestamp('provisioning_started_at', { withTimezone: true }),
     provisioningCompletedAt: timestamp('provisioning_completed_at', { withTimezone: true }),
+    /** FK enforced in SQL migration 0046 (avoids Drizzle circular type with filesystem_template). */
+    defaultCompanyFilesystemTemplateId: uuid('default_company_filesystem_template_id'),
+    defaultProjectFilesystemTemplateId: uuid('default_project_filesystem_template_id'),
   },
   (t) => [
     uniqueIndex('UQ_organizations_abn')
@@ -2138,6 +2141,9 @@ export const filesystemTemplates = pgTable(
     index('idx_filesystem_template_tenant').on(t.tenantId),
     index('idx_filesystem_template_kind').on(t.kind),
     check('chk_filesystem_template_kind', sql`kind IN ('company', 'project')`),
+    uniqueIndex('filesystem_template_platform_default_per_kind')
+      .on(t.kind)
+      .where(sql`is_default = true AND tenant_id IS NULL AND archived_at IS NULL`),
   ],
 );
 
@@ -2176,14 +2182,18 @@ export const filesystemTemplateCategories = pgTable(
   ],
 );
 
+/** Instance kind mirrors template kinds: company = org-wide; project = per-job. */
+export type FilesystemKind = FilesystemTemplateKind;
+
 export const filesystems = pgTable(
   'filesystem',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     tenantId: uuid('tenant_id')
       .notNull()
-      .unique()
       .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    kind: text('kind').$type<FilesystemKind>().notNull().default('company'),
+    jobId: uuid('job_id').references(() => jobs.id, { onDelete: 'restrict' }),
     name: text('name').notNull().default('Documents'),
     sourceTemplateId: uuid('source_template_id').references(() => filesystemTemplates.id),
     copiedAt: timestamp('copied_at', { withTimezone: true }),
@@ -2193,6 +2203,19 @@ export const filesystems = pgTable(
   },
   (t) => [
     index('idx_filesystem_tenant').on(t.tenantId),
+    index('idx_filesystem_tenant_kind').on(t.tenantId, t.kind),
+    index('idx_filesystem_job').on(t.jobId),
+    check('chk_filesystem_kind', sql`kind IN ('company', 'project')`),
+    check(
+      'chk_filesystem_kind_job',
+      sql`(kind = 'company' AND job_id IS NULL) OR (kind = 'project' AND job_id IS NOT NULL)`,
+    ),
+    uniqueIndex('filesystem_tenant_company_unique')
+      .on(t.tenantId)
+      .where(sql`kind = 'company' AND archived_at IS NULL`),
+    uniqueIndex('filesystem_job_project_unique')
+      .on(t.jobId)
+      .where(sql`kind = 'project' AND job_id IS NOT NULL AND archived_at IS NULL`),
   ],
 );
 
@@ -2226,6 +2249,9 @@ export const documents = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    filesystemId: uuid('filesystem_id').references(() => filesystems.id, {
+      onDelete: 'set null',
+    }),
     filesystemCategoryId: uuid('filesystem_category_id').references(() => filesystemCategories.id, { onDelete: 'set null' }),
     relatedRecordType: text('related_record_type'),
     relatedRecordId: uuid('related_record_id'),
@@ -2248,6 +2274,7 @@ export const documents = pgTable(
   (t) => [
     index('idx_document_tenant').on(t.tenantId),
     index('idx_document_category').on(t.filesystemCategoryId),
+    index('idx_document_filesystem').on(t.filesystemId),
     index('idx_document_related').on(t.tenantId, t.relatedRecordType, t.relatedRecordId),
     index('idx_document_status').on(t.tenantId, t.uploadStatus),
   ],

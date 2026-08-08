@@ -16,20 +16,12 @@ export default async function DocumentsPage({
   }
 
   const params = await searchParams;
-
-  const [filesystemResult, documentsResult] = await Promise.allSettled([
-    api.getFilesystem(),
-    api.getDocuments({ page: 1, limit: 24 }),
-  ]);
-
-  const filesystem = filesystemResult.status === 'fulfilled' ? filesystemResult.value : null;
-  const documentsData =
-    documentsResult.status === 'fulfilled' ? documentsResult.value : { data: [], total: 0 };
+  const jobId = params.jobId;
 
   let job: Job | null = null;
   let parentClaim: Claim | null = null;
-  if (params.jobId) {
-    job = await api.getJob(params.jobId).catch((err: unknown) => {
+  if (jobId) {
+    job = await api.getJob(jobId).catch((err: unknown) => {
       console.error(
         'frontend:DocumentsPage - getJob failed:',
         err instanceof Error ? err.message : err,
@@ -41,14 +33,53 @@ export default async function DocumentsPage({
     }
   }
 
+  if (jobId) {
+    const [filesystemResult, documentsResult] = await Promise.allSettled([
+      api.getJobFilesystem(jobId),
+      api.getDocuments({ page: 1, limit: 24, jobId }),
+    ]);
+
+    const filesystem =
+      filesystemResult.status === 'fulfilled' ? filesystemResult.value : null;
+    const documentsData =
+      documentsResult.status === 'fulfilled'
+        ? documentsResult.value
+        : { data: [], total: 0 };
+
+    return (
+      <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
+        <FilesystemView
+          mode="job"
+          initialFilesystem={filesystem}
+          initialDocuments={documentsData.data}
+          initialTotal={documentsData.total}
+          job={job}
+          parentClaim={parentClaim}
+        />
+      </div>
+    );
+  }
+
+  const [overviewResult, documentsResult] = await Promise.allSettled([
+    api.getFilesystemOverview(),
+    api.getDocuments({ page: 1, limit: 24 }),
+  ]);
+
+  const overview =
+    overviewResult.status === 'fulfilled' ? overviewResult.value : null;
+  const documentsData =
+    documentsResult.status === 'fulfilled'
+      ? documentsResult.value
+      : { data: [], total: 0 };
+
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
       <FilesystemView
-        initialFilesystem={filesystem}
+        mode="overview"
+        initialOverview={overview}
+        initialFilesystem={overview?.company ?? null}
         initialDocuments={documentsData.data}
         initialTotal={documentsData.total}
-        job={job}
-        parentClaim={parentClaim}
       />
     </div>
   );

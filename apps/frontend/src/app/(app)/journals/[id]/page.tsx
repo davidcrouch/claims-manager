@@ -40,8 +40,9 @@ export default async function JournalDetailPage({
   });
   if (!journal) notFound();
 
-  const jobLink = journal.entityLinks?.find((l) => l.entityType === 'job');
-  const job = jobLink ? await api.getJob(jobLink.entityId).catch(() => null) : null;
+  const jobLink = journal.entityLinks?.find((l) => l.entityType.toLowerCase() === 'job');
+  const jobId = jobLink?.entityId ?? journal.jobId ?? null;
+  const job = jobId ? await api.getJob(jobId).catch(() => null) : null;
 
   const pagesResult = await api.getJournalPages(id, { limit: 50 }).catch(() => ({
     data: [],
@@ -65,7 +66,7 @@ export default async function JournalDetailPage({
           )}
         </div>
       </SetPageHeader>
-      <JournalDetailClient journal={journal} initialPages={pagesResult} />
+      <JournalDetailClient journal={journal} initialPages={pagesResult} job={job} />
     </>
   );
 }

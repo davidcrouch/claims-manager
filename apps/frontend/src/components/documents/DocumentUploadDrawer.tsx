@@ -24,6 +24,8 @@ interface DocumentUploadDrawerProps {
   categoryId?: string | null;
   relatedRecordType?: string;
   relatedRecordId?: string;
+  filesystemId?: string | null;
+  jobId?: string | null;
   onComplete?: () => void;
 }
 
@@ -33,6 +35,8 @@ export function DocumentUploadDrawer({
   categoryId,
   relatedRecordType,
   relatedRecordId,
+  filesystemId,
+  jobId,
   onComplete,
 }: DocumentUploadDrawerProps) {
   const {
@@ -48,6 +52,8 @@ export function DocumentUploadDrawer({
     categoryId,
     relatedRecordType,
     relatedRecordId,
+    filesystemId,
+    jobId,
   });
 
   const [stagedFiles, setStagedFiles] = useState<StagedFile[]>([]);

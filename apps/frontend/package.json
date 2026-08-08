@@ -3,9 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 5002",
+    "dev": "node ../../scripts/dev-with-port-cleanup.mjs --label frontend --default-port 5000 --resolve next/dist/bin/next -- dev -p 5000",
+    "kill": "node ../../scripts/kill-listen-port.mjs --label frontend --default-port 5000",
     "build": "next build",
-    "start": "next start -p 5002",
+    "start": "next start -p 5000",
     "lint": "eslint"
   },
   "dependencies": {

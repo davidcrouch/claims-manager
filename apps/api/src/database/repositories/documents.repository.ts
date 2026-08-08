@@ -11,6 +11,7 @@ export interface DocumentFilters {
   uncategorised?: boolean;
   relatedRecordType?: string;
   relatedRecordId?: string;
+  filesystemId?: string;
   search?: string;
   uploadStatus?: string;
 }
@@ -42,6 +43,10 @@ export class DocumentsRepository {
 
     if (filters.uncategorised) {
       conditions.push(isNull(documents.filesystemCategoryId));
+    }
+
+    if (filters.filesystemId) {
+      conditions.push(eq(documents.filesystemId, filters.filesystemId));
     }
 
     if (filters.relatedRecordType) {
@@ -82,6 +87,42 @@ export class DocumentsRepository {
 
     const total = countResult[0]?.count ?? 0;
     return { data, total };
+  }
+
+  async countByCategory(tenantId: string, filesystemId?: string): Promise<{
+    counts: Record<string, number>;
+    uncategorised: number;
+    total: number;
+  }> {
+    const conditions: any[] = [
+      eq(documents.tenantId, tenantId),
+      isNull(documents.archivedAt),
+    ];
+    if (filesystemId) {
+      conditions.push(eq(documents.filesystemId, filesystemId));
+    }
+
+    const rows = await this.db
+      .select({
+        categoryId: documents.filesystemCategoryId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(documents)
+      .where(and(...conditions))
+      .groupBy(documents.filesystemCategoryId);
+
+    const counts: Record<string, number> = {};
+    let uncategorised = 0;
+    let total = 0;
+    for (const row of rows) {
+      total += row.count;
+      if (row.categoryId) {
+        counts[row.categoryId] = row.count;
+      } else {
+        uncategorised = row.count;
+      }
+    }
+    return { counts, uncategorised, total };
   }
 
   async findOne(id: string, tenantId: string): Promise<DocumentRow | null> {

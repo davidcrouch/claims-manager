@@ -6,7 +6,6 @@ import { LayoutTemplate, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -160,46 +159,47 @@ export function FilesystemTemplateDrawer({
       widthClassName="w-[85%]"
     >
       <BottomFormDrawerBody className="flex h-full flex-col !px-0 !py-0">
-        <div className="mx-auto w-full max-w-lg shrink-0 space-y-5 border-b border-slate-200 px-12 py-6">
-          <div className="space-y-2">
-            <Label htmlFor="template-kind">Type</Label>
-            <Select
-              value={kind}
-              onValueChange={(v) => setKind(v as FilesystemTemplateKind)}
-              disabled={isPlatform || isEditing}
-            >
-              <SelectTrigger id="template-kind">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="company">Company — org-wide documents</SelectItem>
-                <SelectItem value="project">Project — per-job documents</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+        <div className="shrink-0 border-b border-slate-200 px-12 py-6">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(14rem,18rem)_minmax(12rem,1fr)_minmax(14rem,1.5fr)] sm:items-end">
+            <div className="space-y-2">
+              <Label htmlFor="template-kind">Type</Label>
+              <Select
+                value={kind}
+                onValueChange={(v) => setKind(v as FilesystemTemplateKind)}
+                disabled={isPlatform || isEditing}
+              >
+                <SelectTrigger id="template-kind">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="company">Company — org-wide documents</SelectItem>
+                  <SelectItem value="project">Project — per-job documents</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="template-name">Name</Label>
-            <Input
-              id="template-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={kind === 'project' ? 'e.g. Restoration Job' : 'e.g. Company Docs'}
-              autoFocus
-              disabled={isPlatform}
-            />
-          </div>
+            <div className="space-y-2">
+              <Label htmlFor="template-name">Name</Label>
+              <Input
+                id="template-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={kind === 'project' ? 'e.g. Restoration Job' : 'e.g. Company Docs'}
+                autoFocus
+                disabled={isPlatform}
+              />
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="template-description">Description</Label>
-            <Textarea
-              id="template-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Optional description of this template's purpose"
-              rows={2}
-              disabled={isPlatform}
-            />
+            <div className="space-y-2">
+              <Label htmlFor="template-description">Description</Label>
+              <Input
+                id="template-description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Optional description of this template's purpose"
+                disabled={isPlatform}
+              />
+            </div>
           </div>
         </div>
 

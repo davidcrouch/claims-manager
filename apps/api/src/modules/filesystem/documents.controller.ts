@@ -23,6 +23,8 @@ export class DocumentsController {
     @Query('uncategorised') uncategorised?: string,
     @Query('relatedRecordType') relatedRecordType?: string,
     @Query('relatedRecordId') relatedRecordId?: string,
+    @Query('filesystemId') filesystemId?: string,
+    @Query('jobId') jobId?: string,
     @Query('uploadStatus') uploadStatus?: string,
     @Query('sort') sort?: string,
   ) {
@@ -34,9 +36,18 @@ export class DocumentsController {
       uncategorised: uncategorised === 'true',
       relatedRecordType,
       relatedRecordId,
+      filesystemId,
+      jobId,
       uploadStatus,
       sort,
     });
+  }
+
+  @Get('counts')
+  async countByCategory(
+    @Query('filesystemId') filesystemId?: string,
+  ) {
+    return this.documentsService.countByCategory(filesystemId);
   }
 
   @Get(':id')

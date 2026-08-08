@@ -21,5 +21,12 @@
     "noImplicitAny": true,
     "strictBindCallApply": true,
     "noFallthroughCasesInSwitch": true
+  },
+  // Windows + TS 4.9+: native FS events can spuriously fire "File change detected"
+  // and nest start --watch restarts the app with no real edits. See Nest FAQ
+  // "File change detected loops endlessly".
+  "watchOptions": {
+    "watchFile": "fixedPollingInterval",
+    "excludeDirectories": ["**/node_modules", "**/dist"]
   }
 }

@@ -1,10 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { MapPin, Paperclip, Image as ImageIcon, Clock } from 'lucide-react';
+import { MapPin, Paperclip, Clock } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import type { JournalPage } from '@/types/api';
+import { attachmentThumbSrc, resolvePageBlocks } from './page-blocks';
 
 export interface PageTimelineProps {
   pages: JournalPage[];
@@ -85,50 +86,90 @@ export function PageTimeline({ pages }: PageTimelineProps) {
                       )}
                     </div>
 
-                    {page.body && (
-                      <p className="whitespace-pre-wrap text-sm">{page.body}</p>
+                    {typeof page.metadata?.name === 'string' && page.metadata.name && (
+                      <h3 className="mb-1 text-sm font-medium">{page.metadata.name}</h3>
                     )}
 
-                    {page.attachments && page.attachments.length > 0 && (
-                      <div className="mt-3 space-y-2">
-                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                          {page.attachments
-                            .filter((a) => a.mimeType.startsWith('image/'))
-                            .map((att) => (
-                              <button
-                                key={att.id}
-                                type="button"
-                                className="group relative h-24 overflow-hidden rounded-md bg-muted"
-                                onClick={() => setExpandedImage(att.fileUrl ?? att.storageKey)}
-                              >
-                                <img
-                                  src={att.fileUrl ?? `/api/files/${att.storageKey}`}
-                                  alt={att.caption ?? att.fileName}
-                                  className="size-full object-cover transition-transform group-hover:scale-105"
-                                />
-                                {att.caption && (
-                                  <span className="absolute inset-x-0 bottom-0 bg-black/50 px-1 py-0.5 text-[10px] text-white">
-                                    {att.caption}
-                                  </span>
-                                )}
-                              </button>
-                            ))}
-                        </div>
+                    {(() => {
+                      const blocks = resolvePageBlocks(page);
+                      const notes = blocks.filter((b) => b.type === 'note');
+                      const uploads = blocks.filter((b) => b.type === 'upload' && b.attachment);
+                      return (
+                        <>
+                          {notes.map((b) => (
+                            <p key={b.id} className="whitespace-pre-wrap text-sm text-muted-foreground">
+                              {b.text}
+                            </p>
+                          ))}
 
-                        {page.attachments.filter((a) => !a.mimeType.startsWith('image/')).length > 0 && (
-                          <div className="flex flex-wrap gap-2">
-                            {page.attachments
-                              .filter((a) => !a.mimeType.startsWith('image/'))
-                              .map((att) => (
-                                <Badge key={att.id} variant="secondary" className="gap-1 text-xs">
-                                  <Paperclip className="size-3" />
-                                  {att.fileName}
-                                </Badge>
-                              ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
+                          {uploads.length > 0 && (
+                            <div className="mt-3 space-y-2">
+                              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                {uploads
+                                  .filter((b) => b.type === 'upload' && b.attachment)
+                                  .map((b) => {
+                                    const att = b.type === 'upload' ? b.attachment : null;
+                                    if (!att) return null;
+                                    const thumbSrc = attachmentThumbSrc(att);
+                                    if (!thumbSrc) return null;
+                                    return (
+                                      <button
+                                        key={b.id}
+                                        type="button"
+                                        className="group relative h-24 overflow-hidden rounded-md bg-muted"
+                                        onClick={() =>
+                                          setExpandedImage(att.fileUrl && att.mimeType.startsWith('image/')
+                                            ? att.fileUrl
+                                            : thumbSrc)
+                                        }
+                                      >
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        <img
+                                          src={thumbSrc}
+                                          alt={att.caption ?? att.fileName}
+                                          className="size-full object-cover transition-transform group-hover:scale-105"
+                                        />
+                                        {att.caption && (
+                                          <span className="absolute inset-x-0 bottom-0 bg-black/50 px-1 py-0.5 text-[10px] text-white">
+                                            {att.caption}
+                                          </span>
+                                        )}
+                                      </button>
+                                    );
+                                  })}
+                              </div>
+
+                              {uploads.some(
+                                (b) =>
+                                  b.type === 'upload' &&
+                                  b.attachment &&
+                                  !attachmentThumbSrc(b.attachment),
+                              ) && (
+                                <div className="flex flex-wrap gap-2">
+                                  {uploads
+                                    .filter(
+                                      (b) =>
+                                        b.type === 'upload' &&
+                                        b.attachment &&
+                                        !attachmentThumbSrc(b.attachment),
+                                    )
+                                    .map((b) => {
+                                      const att = b.type === 'upload' ? b.attachment : null;
+                                      if (!att) return null;
+                                      return (
+                                        <Badge key={b.id} variant="secondary" className="gap-1 text-xs">
+                                          <Paperclip className="size-3" />
+                                          {att.fileName}
+                                        </Badge>
+                                      );
+                                    })}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </CardContent>
                 </Card>
               </div>

@@ -1,4 +1,4 @@
-import type { Job } from '@/types/api';
+import type { AddressPayload, Job } from '@/types/api';
 
 type JobLabelSource = Pick<
   Job,
@@ -9,6 +9,12 @@ export type JobOption = {
   id: string;
   label: string;
   claimId?: string | null;
+  /** Optional site address used to prefill journal create forms. */
+  address?: AddressPayload | null;
+  addressSuburb?: string | null;
+  addressPostcode?: string | null;
+  addressState?: string | null;
+  addressCountry?: string | null;
 };
 
 export function jobDisplayName(job: JobLabelSource): string {
@@ -36,13 +42,60 @@ export function resolveJobName(
   return jobNameById?.[jobId] ?? '';
 }
 
+function normalizeJobAddress(
+  job: JobLabelSource & {
+    claimId?: string | null;
+    address?: AddressPayload | Record<string, unknown> | null;
+    addressSuburb?: string | null;
+    addressPostcode?: string | null;
+    addressState?: string | null;
+    addressCountry?: string | null;
+  },
+): AddressPayload | null {
+  const raw =
+    job.address && typeof job.address === 'object' && !Array.isArray(job.address)
+      ? (job.address as Record<string, unknown>)
+      : {};
+  const asText = (value: unknown): string | undefined =>
+    typeof value === 'string' && value.trim() ? value.trim() : undefined;
+
+  const address: AddressPayload = {
+    unitNumber: asText(raw.unitNumber),
+    streetNumber: asText(raw.streetNumber),
+    streetName: asText(raw.streetName),
+    suburb: asText(raw.suburb) ?? asText(job.addressSuburb) ?? undefined,
+    state: asText(raw.state) ?? asText(job.addressState) ?? undefined,
+    postcode: asText(raw.postcode) ?? asText(job.addressPostcode) ?? undefined,
+    country: asText(raw.country) ?? asText(job.addressCountry) ?? undefined,
+  };
+
+  return Object.values(address).some(Boolean) ? address : null;
+}
+
 /** Server-safe helper for Create drawers that need a job picker. */
 export function toJobOptions(
-  jobs: Array<JobLabelSource & { claimId?: string | null }>,
+  jobs: Array<
+    JobLabelSource & {
+      claimId?: string | null;
+      address?: AddressPayload | Record<string, unknown> | null;
+      addressSuburb?: string | null;
+      addressPostcode?: string | null;
+      addressState?: string | null;
+      addressCountry?: string | null;
+    }
+  >,
 ): JobOption[] {
-  return jobs.map((job) => ({
-    id: job.id,
-    label: jobDisplayName(job),
-    claimId: job.claimId,
-  }));
+  return jobs.map((job) => {
+    const address = normalizeJobAddress(job);
+    return {
+      id: job.id,
+      label: jobDisplayName(job),
+      claimId: job.claimId,
+      address,
+      addressSuburb: address?.suburb ?? job.addressSuburb ?? null,
+      addressPostcode: address?.postcode ?? job.addressPostcode ?? null,
+      addressState: address?.state ?? job.addressState ?? null,
+      addressCountry: address?.country ?? job.addressCountry ?? null,
+    };
+  });
 }

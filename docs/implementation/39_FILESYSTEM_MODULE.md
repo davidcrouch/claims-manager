@@ -5,7 +5,9 @@
 
 ## Overview
 
-Add a **document filesystem** to Claims Manager — a virtual category tree (per-tenant) that organises uploaded documents. File bytes are stored in GCS via the native `@google-cloud/storage` SDK using Application Default Credentials (ADC); metadata and folder structure live in PostgreSQL via Drizzle.
+Add a **document filesystem** to Claims Manager — a virtual category tree that organises uploaded documents. File bytes are stored in GCS via the native `@google-cloud/storage` SDK using Application Default Credentials (ADC); metadata and folder structure live in PostgreSQL via Drizzle.
+
+> **Update (doc 47):** Organisations now have a **company** filesystem plus a **project** filesystem per job. See [47_COMPANY_PROJECT_FILESYSTEMS.md](./47_COMPANY_PROJECT_FILESYSTEMS.md). The “one filesystem per org” assumption below is superseded.
 
 ### Key Design Decisions
 

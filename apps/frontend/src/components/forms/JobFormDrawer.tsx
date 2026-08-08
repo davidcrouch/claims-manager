@@ -51,6 +51,7 @@ const detailsSchema = z.object({
   provider: z.enum(['internal', 'crunchwork']),
   name: z.string().min(1, 'Name is required'),
   jobTypeId: z.string().min(1, 'Job type is required'),
+  filesystemTemplateId: z.string().optional(),
   jobInstructions: z.string().optional(),
   makeSafeRequired: z.boolean().optional(),
   excess: z.string().optional(),
@@ -87,6 +88,9 @@ export function JobFormDrawer({
   const [error, setError] = useState<string | null>(null);
   const [contacts, setContacts] = useState<JobContactRef[]>([]);
   const [contactDrawerOpen, setContactDrawerOpen] = useState(false);
+  const [projectTemplates, setProjectTemplates] = useState<
+    Array<{ id: string; name: string; isDefault?: boolean }>
+  >([]);
 
   const form = useForm<DetailsValues>({
     resolver: standardSchemaResolver(detailsSchema),
@@ -94,6 +98,7 @@ export function JobFormDrawer({
       provider: 'internal',
       name: '',
       jobTypeId: '',
+      filesystemTemplateId: '',
       jobInstructions: '',
       makeSafeRequired: false,
       excess: '',
@@ -156,6 +161,43 @@ export function JobFormDrawer({
   useEffect(() => {
     if (!open) reset();
   }, [open, reset]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [templatesRes, defaultsRes] = await Promise.all([
+          fetch('/api/filesystem-templates?kind=project'),
+          fetch('/api/filesystems/defaults'),
+        ]);
+        const templatesJson = templatesRes.ok
+          ? await templatesRes.json()
+          : { data: [] };
+        const defaultsJson = defaultsRes.ok ? await defaultsRes.json() : {};
+        if (cancelled) return;
+        const templates = (templatesJson.data ?? []) as Array<{
+          id: string;
+          name: string;
+          isDefault?: boolean;
+        }>;
+        setProjectTemplates(templates);
+        const preferred =
+          (defaultsJson.defaultProjectTemplateId as string | undefined) ||
+          templates.find((t) => t.isDefault)?.id ||
+          templates[0]?.id ||
+          '';
+        if (preferred) {
+          form.setValue('filesystemTemplateId', preferred);
+        }
+      } catch {
+        // non-blocking — job create falls back to org/platform default
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, form]);
 
   function handleOpenChange(next: boolean) {
     // Keep the job wizard open while the nested contact drawer is visible
@@ -222,6 +264,9 @@ export function JobFormDrawer({
           jobInstructions: values.jobInstructions?.trim() || undefined,
           makeSafeRequired: values.makeSafeRequired ?? false,
           excess: values.excess ? parseFloat(values.excess) : undefined,
+          ...(values.filesystemTemplateId
+            ? { filesystemTemplateId: values.filesystemTemplateId }
+            : {}),
           ...(hasAddress ? { address } : {}),
           contacts: contacts.map((c) =>
             c.contactId
@@ -335,6 +380,39 @@ export function JobFormDrawer({
                   </p>
                 )}
               </div>
+
+              {projectTemplates.length > 0 && (
+                <div className="space-y-2">
+                  <Label htmlFor="filesystemTemplateId">Document folders</Label>
+                  <Select
+                    value={form.watch('filesystemTemplateId') || null}
+                    onValueChange={(v) =>
+                      form.setValue('filesystemTemplateId', v ?? '', {
+                        shouldValidate: true,
+                      })
+                    }
+                    items={Object.fromEntries(
+                      projectTemplates.map((t) => [t.id, t.name]),
+                    )}
+                  >
+                    <SelectTrigger id="filesystemTemplateId" className="w-full">
+                      <SelectValue placeholder="Project folder template" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {projectTemplates.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.name}
+                          {t.isDefault ? ' (default)' : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Creates this job&apos;s project document filesystem from the
+                    selected template.
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="provider">Provider</Label>

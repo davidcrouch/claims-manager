@@ -7,32 +7,33 @@ export type CatalogItemRow = typeof catalogItems.$inferSelect;
 export type CatalogItemInsert = typeof catalogItems.$inferInsert;
 
 function buildCatalogItemsOrderBy(sort?: string) {
+  const idAsc = asc(catalogItems.id);
   switch (sort) {
     case 'code_desc':
-      return [desc(catalogItems.code)];
+      return [desc(catalogItems.code), idAsc];
     case 'name_asc':
-      return [asc(catalogItems.name)];
+      return [asc(catalogItems.name), idAsc];
     case 'name_desc':
-      return [desc(catalogItems.name)];
+      return [desc(catalogItems.name), idAsc];
     case 'kind_asc':
-      return [asc(catalogItems.kind)];
+      return [asc(catalogItems.kind), idAsc];
     case 'kind_desc':
-      return [desc(catalogItems.kind)];
+      return [desc(catalogItems.kind), idAsc];
     case 'type_asc':
-      return [asc(catalogItems.typeId)];
+      return [asc(catalogItems.typeId), idAsc];
     case 'type_desc':
-      return [desc(catalogItems.typeId)];
+      return [desc(catalogItems.typeId), idAsc];
     case 'category_asc':
-      return [asc(catalogItems.categoryId)];
+      return [asc(catalogItems.categoryId), idAsc];
     case 'category_desc':
-      return [desc(catalogItems.categoryId)];
+      return [desc(catalogItems.categoryId), idAsc];
     case 'unit_cost_asc':
-      return [asc(catalogItems.unitCost)];
+      return [asc(catalogItems.unitCost), idAsc];
     case 'unit_cost_desc':
-      return [desc(catalogItems.unitCost)];
+      return [desc(catalogItems.unitCost), idAsc];
     case 'code_asc':
     default:
-      return [asc(catalogItems.code)];
+      return [asc(catalogItems.code), idAsc];
   }
 }
 

@@ -137,7 +137,7 @@ export const COMPANY_FILESYSTEM_TEMPLATE: SeededFilesystemTemplate = {
 export const PROJECT_FILESYSTEM_TEMPLATE: SeededFilesystemTemplate = {
   name: 'Project',
   kind: 'project',
-  isDefault: false,
+  isDefault: true,
   description:
     'Per-job document folders aligned with the Jobs workspace — intake, assessments, estimates, ' +
     'site evidence, works, procurement, invoices, and correspondence.',
@@ -234,10 +234,484 @@ export const PROJECT_FILESYSTEM_TEMPLATE: SeededFilesystemTemplate = {
   ],
 };
 
+/**
+ * Claims Contractor — company filesystem for a professional insurance claims
+ * restoration / building contractor (panel agreements, licences, trade master).
+ */
+export const CLAIMS_CONTRACTOR_FILESYSTEM_TEMPLATE: SeededFilesystemTemplate = {
+  name: 'Claims Contractor',
+  kind: 'company',
+  isDefault: false,
+  description:
+    'Organisation folders for a professional claims contractor — licences, insurances, ' +
+    'WHS systems, insurer panel agreements, preferred trades, and reusable claim forms. ' +
+    'Job/claim packs belong on a Claims Project filesystem.',
+  pipelines: [CLASSIFY_PIPELINE],
+  categories: [
+    {
+      displayName: 'Compliance & Authority',
+      slug: 'COMPLIANCE_AUTHORITY',
+      description:
+        'Company-level licences, registrations, and authority to trade as a claims contractor. ' +
+        'Do NOT file job-specific permits or site SWMS here.',
+      sortOrder: 0,
+      config: { color: '#1d4ed8', retentionDays: YEARS_7 },
+      children: [
+        {
+          displayName: 'Licences & Registrations',
+          slug: 'LICENCES_REGISTRATIONS',
+          description:
+            'Builder licence, contractor registration, trade licences, and regulatory certificates of registration. ' +
+            'Do NOT file job building permits here.',
+          sortOrder: 0,
+          config: { color: '#2563eb', retentionDays: YEARS_7 },
+        },
+        {
+          displayName: 'Insurance Certificates',
+          slug: 'INSURANCE_CERTIFICATES',
+          description:
+            'Company certificates of currency — public liability, professional indemnity, workers compensation, ' +
+            'and contract works. Do NOT file job excess receipts or claim-specific policies here.',
+          sortOrder: 1,
+          config: { color: '#3b82f6', retentionDays: YEARS_7 },
+        },
+        {
+          displayName: 'WHS & Safety Systems',
+          slug: 'WHS_SAFETY_SYSTEMS',
+          description:
+            'Company WHS policy, master SWMS library, induction packs, and safety management system docs. ' +
+            'Do NOT file job-specific signed SWMS or site safety plans here.',
+          sortOrder: 2,
+          config: { color: '#60a5fa', retentionDays: YEARS_7 },
+        },
+      ],
+    },
+    {
+      displayName: 'Panel & Insurer Relationships',
+      slug: 'PANEL_INSURER',
+      description:
+        'Standing agreements and onboarding packs with insurers and claims administrators. ' +
+        'Do NOT file claim-specific correspondence or instructions here.',
+      sortOrder: 1,
+      config: { color: '#7c3aed', retentionDays: YEARS_7 },
+      children: [
+        {
+          displayName: 'Panel Agreements',
+          slug: 'PANEL_AGREEMENTS',
+          description:
+            'Signed panel contractor agreements, deeds, rate schedules, and appointment letters with insurers. ' +
+            'Do NOT file per-claim work authorisations here.',
+          sortOrder: 0,
+          config: { color: '#8b5cf6', retentionDays: YEARS_7 },
+        },
+        {
+          displayName: 'SLA & Performance',
+          slug: 'SLA_PERFORMANCE',
+          description:
+            'Service level agreements, KPI packs, audit outcomes, and panel performance reports. ' +
+            'Do NOT file individual job completion reports here.',
+          sortOrder: 1,
+          config: { color: '#a78bfa', retentionDays: YEARS_5 },
+        },
+      ],
+    },
+    {
+      displayName: 'Finance & Admin',
+      slug: 'FINANCE_ADMIN',
+      description:
+        'Bank details, tax/GST records, corporate contracts, and office admin. ' +
+        'Do NOT file job client invoices or supplier bills for a specific claim here.',
+      sortOrder: 2,
+      config: { color: '#ca8a04', retentionDays: YEARS_7 },
+    },
+    {
+      displayName: 'People & Capability',
+      slug: 'PEOPLE_CAPABILITY',
+      description:
+        'Employee records, inductions, qualifications, and training for claims delivery staff. ' +
+        'Do NOT file job subcontractor agreements here — use Preferred Trades or the project filesystem.',
+      sortOrder: 3,
+      config: { color: '#c026d3', retentionDays: YEARS_7 },
+      children: [
+        {
+          displayName: 'HR Records',
+          slug: 'HR_RECORDS',
+          description:
+            'Employment contracts, position descriptions, and HR correspondence for company staff. ' +
+            'Do NOT file trade/vendor packs here.',
+          sortOrder: 0,
+          config: { color: '#d946ef', retentionDays: YEARS_7 },
+        },
+        {
+          displayName: 'Training & Competency',
+          slug: 'TRAINING_COMPETENCY',
+          description:
+            'Training certificates, asbestos awareness, height safety, and claims-process competency records. ' +
+            'Do NOT file site induction sign-ons for a specific job here.',
+          sortOrder: 1,
+          config: { color: '#e879f9', retentionDays: YEARS_5 },
+        },
+      ],
+    },
+    {
+      displayName: 'Preferred Trades',
+      slug: 'PREFERRED_TRADES',
+      description:
+        'Standing subcontractor/supplier agreements, certificates of currency, and preferred-trade packs. ' +
+        'Do NOT file RFQs, POs, or bills for a specific claim — those belong on Claims Project.',
+      sortOrder: 4,
+      config: { color: '#0891b2', retentionDays: YEARS_5 },
+    },
+    {
+      displayName: 'Templates & Forms',
+      slug: 'TEMPLATES_FORMS',
+      description:
+        'Blank LOA, scope, assessment, make-safe, and letterhead templates used across claims. ' +
+        'Do NOT file completed/filled forms for a job here.',
+      sortOrder: 5,
+      config: { color: '#64748b', retentionDays: YEARS_5 },
+    },
+    {
+      displayName: 'Quality & Audits',
+      slug: 'QUALITY_AUDITS',
+      description:
+        'Internal quality manuals, process audits, and non-job-specific compliance reviews. ' +
+        'Do NOT file insurer job audits tied to a single claim here.',
+      sortOrder: 6,
+      config: { color: '#0d9488', retentionDays: YEARS_5 },
+    },
+    {
+      displayName: 'Correspondence',
+      slug: 'CORRESPONDENCE',
+      description:
+        'General company correspondence not tied to a single claim (panel letters, landlord MOUs, industry notices). ' +
+        'Claim-specific insurer/insured emails belong on Claims Project.',
+      sortOrder: 7,
+      config: { color: '#94a3b8', retentionDays: YEARS_5 },
+    },
+    {
+      displayName: 'AI Exports',
+      slug: 'AI_EXPORTS',
+      description:
+        'Artifacts generated by AI for company-level use. Do NOT file source claim or site documents here.',
+      sortOrder: 8,
+      config: { color: '#ec4899', retentionDays: DAYS_90 },
+    },
+    {
+      displayName: 'Other',
+      slug: 'OTHER',
+      description:
+        'Catch-all when no other company category fits. Prefer a more specific category when possible.',
+      sortOrder: 9,
+      config: { color: '#a3a3a3', retentionDays: YEARS_5 },
+    },
+  ],
+};
+
+/**
+ * Claims Project — per-job filesystem for professional insurance claims work
+ * (intake → assessment → scope → works → procurement → financials).
+ */
+export const CLAIMS_PROJECT_FILESYSTEM_TEMPLATE: SeededFilesystemTemplate = {
+  name: 'Claims Project',
+  kind: 'project',
+  isDefault: false,
+  description:
+    'Per-claim document folders for a professional claims project — intake, assessments, ' +
+    'scope & commercial, site evidence, works, procurement, financials, and correspondence.',
+  pipelines: [CLASSIFY_PIPELINE],
+  categories: [
+    {
+      displayName: 'Claim Intake',
+      slug: 'CLAIM_INTAKE',
+      description:
+        'First notification and job setup pack: FNOL, authority, policy extracts, access and instructions. ' +
+        'Do NOT file builder assessments, quotes, or site photos here.',
+      sortOrder: 0,
+      config: { color: '#1d4ed8', retentionDays: YEARS_7 },
+      children: [
+        {
+          displayName: 'FNOL & Advice',
+          slug: 'FNOL_ADVICE',
+          description:
+            'First notification of loss, claim advice, referral emails, and claim summary from insurer/adjuster. ' +
+            'Do NOT file letter of authority or site photos here.',
+          sortOrder: 0,
+          config: { color: '#2563eb', retentionDays: YEARS_7 },
+        },
+        {
+          displayName: 'Authority & Policy',
+          slug: 'AUTHORITY_POLICY',
+          description:
+            'Letter of authority, policy extracts, excess details, and cover confirmations for this claim. ' +
+            'Do NOT file estimates or work authorisations for scope here.',
+          sortOrder: 1,
+          config: { color: '#3b82f6', retentionDays: YEARS_7 },
+        },
+        {
+          displayName: 'Access & Instructions',
+          slug: 'ACCESS_INSTRUCTIONS',
+          description:
+            'Site access instructions, insured contact details, keyholder notes, and job instruction packs. ' +
+            'Do NOT file SWMS or work orders here.',
+          sortOrder: 2,
+          config: { color: '#60a5fa', retentionDays: YEARS_7 },
+        },
+      ],
+    },
+    {
+      displayName: 'Assessments & Reports',
+      slug: 'ASSESSMENTS_REPORTS',
+      description:
+        'Builder assessments, specialist reports, make-safe reports, and completion reports for this claim. ' +
+        'Do NOT file estimates/quotes or purchase orders here.',
+      sortOrder: 1,
+      config: { color: '#7c3aed', retentionDays: YEARS_7 },
+      children: [
+        {
+          displayName: 'Site Assessment',
+          slug: 'SITE_ASSESSMENT',
+          description:
+            'Builder/contractor site assessment reports and damage schedules. ' +
+            'Do NOT file engineer/hygienist specialist reports or raw site photos here.',
+          sortOrder: 0,
+          config: { color: '#8b5cf6', retentionDays: YEARS_7 },
+        },
+        {
+          displayName: 'Specialist Reports',
+          slug: 'SPECIALIST_REPORTS',
+          description:
+            'Engineer, hygienist, asbestos, electrical, and other specialist reports. ' +
+            'Do NOT file the main builder assessment or make-safe report here.',
+          sortOrder: 1,
+          config: { color: '#a78bfa', retentionDays: YEARS_7 },
+        },
+        {
+          displayName: 'Make-Safe & Temporary Works',
+          slug: 'MAKESAFE_TEMPORARY',
+          description:
+            'Make-safe reports, temporary works records, and emergency mitigation documentation. ' +
+            'Do NOT file permanent works completion reports here.',
+          sortOrder: 2,
+          config: { color: '#c4b5fd', retentionDays: YEARS_7 },
+        },
+      ],
+    },
+    {
+      displayName: 'Scope & Commercial',
+      slug: 'SCOPE_COMMERCIAL',
+      description:
+        'Scope of works, customer/insurer estimates and quotes, and variations for this claim. ' +
+        'Do NOT file vendor RFQs or purchase orders here.',
+      sortOrder: 2,
+      config: { color: '#d97706', retentionDays: YEARS_7 },
+      children: [
+        {
+          displayName: 'Scope of Works',
+          slug: 'SCOPE_OF_WORKS',
+          description:
+            'Agreed or proposed scope of works and line-item schedules for the claim. ' +
+            'Do NOT file priced quotes or variation approvals here.',
+          sortOrder: 0,
+          config: { color: '#f59e0b', retentionDays: YEARS_7 },
+        },
+        {
+          displayName: 'Estimates & Quotes',
+          slug: 'ESTIMATES_QUOTES',
+          description:
+            'Customer/insurer-facing estimates and quotes (Job → Estimates). ' +
+            'Do NOT file vendor proposals — those are Procurement.',
+          sortOrder: 1,
+          config: { color: '#fbbf24', retentionDays: YEARS_7 },
+        },
+        {
+          displayName: 'Variations',
+          slug: 'VARIATIONS',
+          description:
+            'Variation requests, approvals, and revised commercial schedules for this claim. ' +
+            'Do NOT file original estimates or supplier change-orders here.',
+          sortOrder: 2,
+          config: { color: '#fcd34d', retentionDays: YEARS_7 },
+        },
+      ],
+    },
+    {
+      displayName: 'Site Evidence',
+      slug: 'SITE_EVIDENCE',
+      description:
+        'Site photos, videos, moisture/thermal readings, and before/after evidence. ' +
+        'Do NOT file written assessment reports here.',
+      sortOrder: 3,
+      config: { color: '#059669', retentionDays: YEARS_7 },
+      children: [
+        {
+          displayName: 'Photos & Video',
+          slug: 'PHOTOS_VIDEO',
+          description:
+            'Site photographs and video of damage, progress, and completion. ' +
+            'Do NOT file moisture logs or written reports here.',
+          sortOrder: 0,
+          config: { color: '#10b981', retentionDays: YEARS_7 },
+        },
+        {
+          displayName: 'Moisture & Readings',
+          slug: 'MOISTURE_READINGS',
+          description:
+            'Moisture maps, thermal images, and technical meter readings. ' +
+            'Do NOT file general site photos or hygienist narrative reports here.',
+          sortOrder: 1,
+          config: { color: '#34d399', retentionDays: YEARS_7 },
+        },
+      ],
+    },
+    {
+      displayName: 'Works & Compliance',
+      slug: 'WORKS_COMPLIANCE',
+      description:
+        'Work orders, permits, SWMS/safety docs, progress records, and practical completion. ' +
+        'Do NOT file supplier invoices or client invoices here.',
+      sortOrder: 4,
+      config: { color: '#dc2626', retentionDays: YEARS_7 },
+      children: [
+        {
+          displayName: 'Work Orders',
+          slug: 'WORK_ORDERS',
+          description:
+            'Internal and trade work orders for this claim (Job → Work Orders). ' +
+            'Do NOT file purchase orders to suppliers here.',
+          sortOrder: 0,
+          config: { color: '#ef4444', retentionDays: YEARS_7 },
+        },
+        {
+          displayName: 'Permits & Approvals',
+          slug: 'PERMITS_APPROVALS',
+          description:
+            'Building permits, council approvals, and statutory notices for this site. ' +
+            'Do NOT file company licences — those are on Claims Contractor.',
+          sortOrder: 1,
+          config: { color: '#f87171', retentionDays: YEARS_7 },
+        },
+        {
+          displayName: 'SWMS & Safety',
+          slug: 'SWMS_SAFETY',
+          description:
+            'Job-specific SWMS, site safety plans, and induction sign-ons. ' +
+            'Do NOT file company master WHS policies here.',
+          sortOrder: 2,
+          config: { color: '#fca5a5', retentionDays: YEARS_7 },
+        },
+        {
+          displayName: 'Progress & Completion',
+          slug: 'PROGRESS_COMPLETION',
+          description:
+            'Progress records, practical completion, handover packs, and warranties for this claim. ' +
+            'Do NOT file make-safe-only reports — use Make-Safe & Temporary Works.',
+          sortOrder: 3,
+          config: { color: '#fecaca', retentionDays: YEARS_7 },
+        },
+      ],
+    },
+    {
+      displayName: 'Procurement',
+      slug: 'PROCUREMENT',
+      description:
+        'Vendor RFQs, proposals, purchase orders, and supplier bills for this claim. ' +
+        'Do NOT file customer-facing estimates or client invoices here.',
+      sortOrder: 5,
+      config: { color: '#0891b2', retentionDays: YEARS_7 },
+      children: [
+        {
+          displayName: 'RFQs & Proposals',
+          slug: 'RFQS_PROPOSALS',
+          description:
+            'Requests for quote to trades/suppliers and their proposals (Job → RFQs / Proposals). ' +
+            'Do NOT file customer estimates here.',
+          sortOrder: 0,
+          config: { color: '#06b6d4', retentionDays: YEARS_7 },
+        },
+        {
+          displayName: 'Purchase Orders',
+          slug: 'PURCHASE_ORDERS',
+          description:
+            'Purchase orders issued to suppliers and subcontractors for this claim. ' +
+            'Do NOT file work orders or supplier bills here.',
+          sortOrder: 1,
+          config: { color: '#22d3ee', retentionDays: YEARS_7 },
+        },
+        {
+          displayName: 'Supplier Bills',
+          slug: 'SUPPLIER_BILLS',
+          description:
+            'Supplier and subcontractor invoices/bills for this claim (Job → Bills). ' +
+            'Do NOT file client/insurer invoices — those are Financials.',
+          sortOrder: 2,
+          config: { color: '#67e8f9', retentionDays: YEARS_7 },
+        },
+      ],
+    },
+    {
+      displayName: 'Financials',
+      slug: 'FINANCIALS',
+      description:
+        'Client/insurer invoices, remittance, and excess collection for this claim. ' +
+        'Do NOT file supplier bills — those are Procurement.',
+      sortOrder: 6,
+      config: { color: '#ca8a04', retentionDays: YEARS_7 },
+      children: [
+        {
+          displayName: 'Client Invoices',
+          slug: 'CLIENT_INVOICES',
+          description:
+            'Invoices to insurer, insured, or client for this claim (Job → Invoices). ' +
+            'Do NOT file remittance advices or excess receipts here.',
+          sortOrder: 0,
+          config: { color: '#eab308', retentionDays: YEARS_7 },
+        },
+        {
+          displayName: 'Excess & Remittance',
+          slug: 'EXCESS_REMITTANCE',
+          description:
+            'Excess collection receipts, remittance advices, and payment confirmations for this claim. ' +
+            'Do NOT file the original tax invoices here.',
+          sortOrder: 1,
+          config: { color: '#facc15', retentionDays: YEARS_7 },
+        },
+      ],
+    },
+    {
+      displayName: 'Correspondence',
+      slug: 'CORRESPONDENCE',
+      description:
+        'Claim-specific emails and letters with insurer, insured, adjuster, and trades. ' +
+        'Do NOT file formal quotes, POs, or invoices here — use those categories instead.',
+      sortOrder: 7,
+      config: { color: '#64748b', retentionDays: YEARS_5 },
+    },
+    {
+      displayName: 'AI Exports',
+      slug: 'AI_EXPORTS',
+      description:
+        'AI-generated artifacts for this claim. Do NOT file original site evidence or source claim docs here.',
+      sortOrder: 8,
+      config: { color: '#ec4899', retentionDays: DAYS_90 },
+    },
+    {
+      displayName: 'Other',
+      slug: 'OTHER',
+      description:
+        'Catch-all for claim documents that do not fit another category. Prefer a more specific category when possible.',
+      sortOrder: 9,
+      config: { color: '#a3a3a3', retentionDays: YEARS_5 },
+    },
+  ],
+};
+
 /** Platform starters seeded for every environment. */
 export const PLATFORM_FILESYSTEM_TEMPLATES: SeededFilesystemTemplate[] = [
   COMPANY_FILESYSTEM_TEMPLATE,
   PROJECT_FILESYSTEM_TEMPLATE,
+  CLAIMS_CONTRACTOR_FILESYSTEM_TEMPLATE,
+  CLAIMS_PROJECT_FILESYSTEM_TEMPLATE,
 ];
 
 /** @deprecated use COMPANY_FILESYSTEM_TEMPLATE — kept for import compatibility during transition */

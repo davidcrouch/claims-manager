@@ -585,3 +585,14 @@
   Improved **estimate capture, approval, and publish** flows plus job contact linking so quoting and party management stay in one workspace.
   Outcome: operations, commercial handoffs, documentation, and record lifecycle controls land as one coherent product update.
 
+- `2026-08-08` `PENDING` **38 h**
+  `104 files | +10 013 −1 005 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
+  Lay summary: Staff can keep company documents separate from each job’s files, choose filing templates when setting up the organisation and creating jobs, and keep clearer site journals.
+  **Company and project document libraries, richer site journals, and smoother first-time setup.** Organisations now have a company filing area plus a separate project filing area for each job, chosen from templates during setup and when a job is created.
+  The documents workspace shows company files and all projects together, or a single job’s project files when that job is in focus.
+  Organisation setup asks for company and default project filing templates so new workspaces start with the right structure.
+  Site journals support clearer overviews and structured page entries so field notes are easier to capture and review.
+  Word documents preview more reliably, and local development starts more cleanly if a port is already in use.
+  Filing defaults and template administration stay aligned with the company versus project model.
+  Outcome: filing, job setup, and site journals work together as one consistent operational workspace.
+

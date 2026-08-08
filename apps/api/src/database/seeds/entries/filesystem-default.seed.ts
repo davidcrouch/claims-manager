@@ -3,6 +3,7 @@
  *
  * - Company (is_default): org-wide document tree
  * - Project: per-job document tree (Jobs workspace)
+ * - Claims Contractor / Claims Project: professional claims-contractor trees
  *
  * Replaces legacy "Default" / fat construction trees. Descriptions are
  * classifier prompts — keep them when editing categories.
@@ -106,12 +107,25 @@ function flattenOrgCategories(
   return rows;
 }
 
+function collectCategorySlugs(nodes: SeededCategoryNode[]): Set<string> {
+  const slugs = new Set<string>();
+  for (const node of nodes) {
+    slugs.add(node.slug);
+    if (node.children?.length) {
+      for (const childSlug of collectCategorySlugs(node.children)) {
+        slugs.add(childSlug);
+      }
+    }
+  }
+  return slugs;
+}
+
 function needsTemplateReseed(
   cats: Array<{ slug: string; description: string | null }>,
   expected: SeededFilesystemTemplate,
 ): boolean {
   if (cats.length === 0) return true;
-  const expectedSlugs = new Set(expected.categories.map((c) => c.slug));
+  const expectedSlugs = collectCategorySlugs(expected.categories);
   const actualSlugs = new Set(cats.map((c) => c.slug));
   if (expectedSlugs.size !== actualSlugs.size) return true;
   for (const s of expectedSlugs) {
@@ -248,7 +262,7 @@ async function upsertPlatformTemplate(
     logger.info(`${LOG} created platform template="${def.name}" id=${templateId}`);
   }
 
-  // Ensure only Company is default among platform templates
+  // Ensure at most one platform default per kind
   if (def.isDefault) {
     await db
       .update(schema.filesystemTemplates)
@@ -256,6 +270,7 @@ async function upsertPlatformTemplate(
       .where(
         and(
           isNull(schema.filesystemTemplates.tenantId),
+          eq(schema.filesystemTemplates.kind, def.kind),
           eq(schema.filesystemTemplates.isDefault, true),
           isNull(schema.filesystemTemplates.archivedAt),
         ),
@@ -412,7 +427,7 @@ async function upgradeBloatedOrgFilesystems(
 
 const seed: Seed = {
   name: 'filesystem-default',
-  description: 'Platform Company + Project filesystem templates',
+  description: 'Platform Company, Project, and Claims filesystem templates',
   async run(ctx: SeedContext): Promise<SeedResult> {
     const { db, logger } = ctx;
     let inserted = 0;
@@ -422,13 +437,13 @@ const seed: Seed = {
     updated += await archiveLegacyDefault(db, logger);
 
     let companyTemplateId = '';
-    let companyDef = PLATFORM_FILESYSTEM_TEMPLATES.find((t) => t.kind === 'company')!;
+    let companyDef = PLATFORM_FILESYSTEM_TEMPLATES.find((t) => t.kind === 'company' && t.isDefault)!;
 
     for (const def of PLATFORM_FILESYSTEM_TEMPLATES) {
       const result = await upsertPlatformTemplate(db, def, logger);
       inserted += result.inserted;
       updated += result.updated;
-      if (def.kind === 'company') {
+      if (def.kind === 'company' && def.isDefault) {
         companyTemplateId = result.templateId;
         companyDef = def;
       }
@@ -449,7 +464,7 @@ const seed: Seed = {
       inserted,
       updated,
       skipped,
-      notes: 'Company + Project platform templates',
+      notes: 'Company, Project, Claims Contractor, Claims Project platform templates',
     };
   },
 };
