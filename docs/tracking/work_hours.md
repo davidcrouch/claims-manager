@@ -585,7 +585,7 @@
   Improved **estimate capture, approval, and publish** flows plus job contact linking so quoting and party management stay in one workspace.
   Outcome: operations, commercial handoffs, documentation, and record lifecycle controls land as one coherent product update.
 
-- `2026-08-08` `PENDING` **38 h**
+- `2026-08-08` `f8692c3` **38 h**
   `104 files | +10 013 −1 005 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
   Lay summary: Staff can keep company documents separate from each job’s files, choose filing templates when setting up the organisation and creating jobs, and keep clearer site journals.
   **Company and project document libraries, richer site journals, and smoother first-time setup.** Organisations now have a company filing area plus a separate project filing area for each job, chosen from templates during setup and when a job is created.
