@@ -10,38 +10,38 @@ export const jobStandard: WorkflowDefinition = {
       id: 'received',
       label: 'Received',
       transitions: [
-        { to: 'accepted', action: 'accept' },
-        { to: 'declined', action: 'decline' },
+        { to: 'accepted', action: 'accept', onEnter: ['syncStatusLookup'] },
+        { to: 'declined', action: 'decline', onEnter: ['syncStatusLookup'] },
       ],
     },
     {
       id: 'accepted',
       label: 'Accepted',
       transitions: [
-        { to: 'in_progress', action: 'start' },
+        { to: 'in_progress', action: 'start', onEnter: ['syncStatusLookup'] },
       ],
     },
     {
       id: 'in_progress',
       label: 'In Progress',
       transitions: [
-        { to: 'on_hold', action: 'hold' },
-        { to: 'pending_completion', action: 'complete', guards: ['allTasksClosed'] },
+        { to: 'on_hold', action: 'hold', onEnter: ['syncStatusLookup'] },
+        { to: 'pending_completion', action: 'complete', guards: ['allTasksClosed'], onEnter: ['syncStatusLookup'] },
       ],
     },
     {
       id: 'on_hold',
       label: 'On Hold',
       transitions: [
-        { to: 'in_progress', action: 'resume' },
+        { to: 'in_progress', action: 'resume', onEnter: ['syncStatusLookup'] },
       ],
     },
     {
       id: 'pending_completion',
       label: 'Pending Completion',
       transitions: [
-        { to: 'completed', action: 'finalize', onEnter: ['syncOutbound'] },
-        { to: 'in_progress', action: 'reopen' },
+        { to: 'completed', action: 'finalize', onEnter: ['syncStatusLookup', 'syncOutbound'] },
+        { to: 'in_progress', action: 'reopen', onEnter: ['syncStatusLookup'] },
       ],
     },
     {

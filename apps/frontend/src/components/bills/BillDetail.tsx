@@ -108,7 +108,7 @@ export function BillPageHeader({ bill, job }: { bill: Bill; job?: Job | null }) 
             Mark Paid
           </Button>
         )}
-        <PrintButton documentType="bill" entityId={bill.id} />
+        <PrintButton documentType="bill" entityId={bill.id} jobId={job?.id} />
         <ArchiveEntityButton
           entityType="bill"
           entityId={bill.id}

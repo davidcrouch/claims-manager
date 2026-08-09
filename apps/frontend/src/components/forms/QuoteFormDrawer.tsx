@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
-import { FileSignature } from 'lucide-react';
+import { FileSignature, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -27,6 +27,10 @@ import { ChatDrawer } from '@/components/chat/ChatDrawer';
 import { buildAIContext, type AIContextPayload } from '@/lib/ai/use-ai-context';
 import { createQuoteAction } from '@/app/(app)/mutations';
 import { JobSelectField } from '@/components/forms/JobSelectField';
+import {
+  CreateSubmitOverlay,
+  useCreateSubmitPhase,
+} from '@/components/forms/CreateSubmitOverlay';
 import type { JobOption } from '@/components/shared/job-label';
 
 function todayISO(): string {
@@ -83,7 +87,8 @@ export function QuoteFormDrawer({
   companionChatOpen: companionChatOpenProp,
 }: QuoteFormDrawerProps) {
   const router = useRouter();
-  const [submitting, setSubmitting] = useState(false);
+  const { phase, busy, startCreating, startOpening, resetPhase } =
+    useCreateSubmitPhase();
   const [error, setError] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [aiContext, setAiContext] = useState<AIContextPayload | undefined>();
@@ -119,7 +124,7 @@ export function QuoteFormDrawer({
   const watchedJobId = form.watch('jobId');
 
   async function onSubmit(values: QuoteFormValues) {
-    setSubmitting(true);
+    startCreating();
     setError(null);
     try {
       const result = await createQuoteAction({
@@ -134,30 +139,21 @@ export function QuoteFormDrawer({
         estimatedCompletion: values.estimatedCompletion || undefined,
       });
       if (result.success) {
-        onOpenChange(false);
-        form.reset({
-          jobId: jobId ?? '',
-          claimId: claimId ?? undefined,
-          quoteType: '',
-          name: '',
-          note: '',
-          estimateDate: todayISO(),
-          expiresInDays: '30',
-          estimatedStart: '',
-          estimatedCompletion: '',
-        });
         if (result.quote?.id) {
+          startOpening();
           router.push(`/quotes/${result.quote.id}`);
-        } else {
-          router.refresh();
+          return;
         }
+        resetPhase();
+        onOpenChange(false);
+        router.refresh();
       } else {
         setError(result.error ?? 'Failed to create estimate');
+        resetPhase();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create estimate');
-    } finally {
-      setSubmitting(false);
+      resetPhase();
     }
   }
 
@@ -331,19 +327,32 @@ export function QuoteFormDrawer({
             type="button"
             variant="outline"
             size="lg"
+            disabled={busy}
             onClick={() => onOpenChange(false)}
           >
             Cancel
           </Button>
-          <Button type="submit" size="lg" disabled={submitting}>
-            {submitting ? 'Creating...' : 'Create Estimate'}
+          <Button type="submit" size="lg" disabled={busy}>
+            {busy ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {phase === 'opening' ? 'Opening…' : 'Creating…'}
+              </>
+            ) : (
+              'Create Estimate'
+            )}
           </Button>
         </BottomFormDrawerFooter>
       </form>
   );
 
   if (renderMode === 'canvas') {
-    return formContent;
+    return (
+      <>
+        {formContent}
+        <CreateSubmitOverlay phase={phase} entityLabel="estimate" />
+      </>
+    );
   }
 
   return (
@@ -357,9 +366,11 @@ export function QuoteFormDrawer({
         aiAssistEnabled={aiAssistEnabled}
         onAIAssist={handleAIAssist}
         companionChatOpen={companionChatOpenProp ?? chatOpen}
+        preventClose={busy}
       >
         {formContent}
       </BottomFormDrawer>
+      <CreateSubmitOverlay phase={phase} entityLabel="estimate" />
       {aiAssistEnabled && companionChatOpenProp === undefined && (
         <ChatDrawer
           open={chatOpen}

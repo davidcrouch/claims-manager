@@ -9,6 +9,8 @@ import {
   documentPipelineRunSteps,
   documents,
   filesystems,
+  filesystemCategories,
+  type CategoryConfig,
 } from '../../database/schema';
 import type {
   CreatePipelineDto,
@@ -20,6 +22,9 @@ import { MAX_PIPELINE_STEPS } from './pipeline.types';
 import { PipelineRunnerService } from './pipeline-runner.service';
 
 const LOG = '[PipelineService]';
+
+/** Related records whose upload destination is already explicit — skip inbox classifiers. */
+const FILED_RELATED_RECORD_TYPES = new Set(['Journal']);
 
 @Injectable()
 export class PipelineService {
@@ -166,19 +171,29 @@ export class PipelineService {
       .limit(1);
     if (!fs) return;
 
-    const fsPipelines = await this.db
-      .select()
-      .from(documentPipelines)
-      .where(
-        and(
-          eq(documentPipelines.tenantId, tenantId),
-          eq(documentPipelines.isActive, true),
-          eq(documentPipelines.triggerOn, 'upload_complete'),
-          eq(documentPipelines.filesystemId, fs.id),
-          isNull(documentPipelines.categoryId),
-        ),
-      )
-      .orderBy(documentPipelines.sortOrder);
+    const runFilesystemPipelines = await this.shouldRunFilesystemUploadPipelines(doc, tenantId);
+
+    const fsPipelines = runFilesystemPipelines
+      ? await this.db
+          .select()
+          .from(documentPipelines)
+          .where(
+            and(
+              eq(documentPipelines.tenantId, tenantId),
+              eq(documentPipelines.isActive, true),
+              eq(documentPipelines.triggerOn, 'upload_complete'),
+              eq(documentPipelines.filesystemId, fs.id),
+              isNull(documentPipelines.categoryId),
+            ),
+          )
+          .orderBy(documentPipelines.sortOrder)
+      : [];
+
+    if (!runFilesystemPipelines) {
+      this.logger.debug(
+        `${LOG}.triggerUploadPipelines skip filesystem pipelines docId=${documentId} related=${doc.relatedRecordType ?? 'none'} category=${doc.filesystemCategoryId ?? 'none'}`,
+      );
+    }
 
     let catPipelines: (typeof fsPipelines)[number][] = [];
     if (doc.filesystemCategoryId) {
@@ -197,7 +212,13 @@ export class PipelineService {
     }
 
     const all = [...fsPipelines, ...catPipelines];
-    if (all.length === 0) return;
+    if (all.length === 0) {
+      await this.db
+        .update(documents)
+        .set({ pipelineStatus: 'skipped', pipelineError: null, updatedAt: new Date() })
+        .where(eq(documents.id, documentId));
+      return;
+    }
 
     await this.db
       .update(documents)
@@ -332,6 +353,42 @@ export class PipelineService {
       result.push({ ...run, steps });
     }
     return result;
+  }
+
+  /**
+   * Filesystem-root upload pipelines (Document Classifier) are an inbox tool.
+   * Skip them when the file already has an explicit home:
+   * - related record types like Journal
+   * - a folder, unless that folder opts in via runFilesystemPipelinesOnUpload
+   */
+  private async shouldRunFilesystemUploadPipelines(
+    doc: {
+      filesystemCategoryId: string | null;
+      relatedRecordType: string | null;
+    },
+    tenantId: string,
+  ): Promise<boolean> {
+    if (doc.relatedRecordType && FILED_RELATED_RECORD_TYPES.has(doc.relatedRecordType)) {
+      return false;
+    }
+    if (!doc.filesystemCategoryId) {
+      return true;
+    }
+
+    const [cat] = await this.db
+      .select({ config: filesystemCategories.config, filesystemId: filesystemCategories.filesystemId })
+      .from(filesystemCategories)
+      .innerJoin(filesystems, eq(filesystems.id, filesystemCategories.filesystemId))
+      .where(
+        and(
+          eq(filesystemCategories.id, doc.filesystemCategoryId),
+          eq(filesystems.tenantId, tenantId),
+        ),
+      )
+      .limit(1);
+
+    const config = (cat?.config ?? {}) as CategoryConfig;
+    return config.runFilesystemPipelinesOnUpload === true;
   }
 
   private async assertPipeline(pipelineId: string, tenantId: string) {

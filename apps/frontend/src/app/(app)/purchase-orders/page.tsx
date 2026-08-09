@@ -32,7 +32,7 @@ export default async function PurchaseOrdersPage({
         );
         return empty;
       }),
-    api.getLookupsByDomain('po_status').catch(() => []),
+    api.getLookupsByDomain('purchase_order_status').catch(() => []),
     api.getVendors({ limit: 100 }).catch(() => ({ data: [] })),
     api.getJobs({ limit: 100 }).catch((err: unknown) => {
       console.error(

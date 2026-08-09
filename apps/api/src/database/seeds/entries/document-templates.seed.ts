@@ -15,8 +15,8 @@ import type { Seed, SeedContext, SeedLogger, SeedResult } from '../lib/runner';
 import type { SeedDb } from '../lib/db';
 import { templatesDir } from '../lib/catalog-data-paths';
 import * as schema from '../../schema';
-import type { DocumentType } from '../../../modules/document-generation/types/document-types';
-import { DOCUMENT_TYPES } from '../../../modules/document-generation/types/document-types';
+import type { AssignableTemplateType } from '../../../modules/document-generation/types/document-types';
+import { ASSIGNABLE_TEMPLATE_TYPES } from '../../../modules/document-generation/types/document-types';
 
 const LOG = '[seeds/document-templates]';
 
@@ -48,7 +48,8 @@ const TEMPLATE_FILES = [
  * Map each Document Templates scenario to one of the standard Word files.
  * Scenarios without a dedicated file reuse the closest match.
  */
-const DOCUMENT_TYPE_TO_FILE: Record<DocumentType, (typeof TEMPLATE_FILES)[number]> = {
+const DOCUMENT_TYPE_TO_FILE: Record<AssignableTemplateType, (typeof TEMPLATE_FILES)[number]> = {
+  default: 'SCOPE OF WORK.docx',
   invoice: 'TAX INVOICE.docx',
   bill: 'INVOICE.docx',
   rfq: 'REQUEST FOR QUOTATION.docx',
@@ -66,6 +67,7 @@ const DOCUMENT_TYPE_TO_FILE: Record<DocumentType, (typeof TEMPLATE_FILES)[number
   message: 'SCOPE OF WORK.docx',
   journal: 'SCOPE OF WORK.docx',
   vendor: 'SCOPE OF WORK.docx',
+  assessment: 'SCOPE OF WORK.docx',
   jobs_list: 'SCOPE OF WORK.docx',
   quotes_list: 'SCOPE OF WORK.docx',
   invoices_list: 'SCOPE OF WORK.docx',
@@ -244,7 +246,7 @@ async function upsertTemplateDocument(params: {
 async function upsertDocumentTemplateAssignment(params: {
   db: SeedDb;
   tenantId: string;
-  documentType: DocumentType;
+  documentType: AssignableTemplateType;
   fileName: string;
   filesystemDocumentId: string;
 }): Promise<'inserted' | 'updated' | 'skipped'> {
@@ -357,7 +359,7 @@ export async function seedDocumentTemplatesForTenant(params: {
       else skipped += 1;
     }
 
-    for (const documentType of DOCUMENT_TYPES) {
+    for (const documentType of ASSIGNABLE_TEMPLATE_TYPES) {
       const fileName = DOCUMENT_TYPE_TO_FILE[documentType];
       const filesystemDocumentId = docIdByFile.get(fileName);
       if (!filesystemDocumentId) {
@@ -391,7 +393,7 @@ export async function seedDocumentTemplatesForTenant(params: {
   }
 
   logger.info(
-    `${LOG} done tenant=${tenantId} files=${TEMPLATE_FILES.length} scenarios=${DOCUMENT_TYPES.length}`,
+    `${LOG} done tenant=${tenantId} files=${TEMPLATE_FILES.length} scenarios=${ASSIGNABLE_TEMPLATE_TYPES.length}`,
   );
 
   return {

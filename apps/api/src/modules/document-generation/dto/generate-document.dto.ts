@@ -10,12 +10,32 @@ export class GenerateDocumentDto {
   @IsEnum(DOCUMENT_TYPES)
   documentType: DocumentType;
 
-  @ApiProperty({ description: 'The ID of the entity to generate a document for' })
+  @ApiPropertyOptional({
+    description:
+      'Entity ID to generate for. Required for detail reports. List reports default to the tenant organisation.',
+  })
+  @IsOptional()
   @IsUUID()
-  entityId: string;
+  entityId?: string;
 
-  @ApiPropertyOptional({ description: 'Specific template to use (defaults to the tenant default)' })
+  @ApiPropertyOptional({ description: 'Specific template assignment to use' })
   @IsOptional()
   @IsUUID()
   templateId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Filesystem .docx to use instead of the assigned template for this report type',
+  })
+  @IsOptional()
+  @IsUUID()
+  filesystemDocumentId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Company or job filesystem folder to save the generated PDF into. Omit to download only.',
+  })
+  @IsOptional()
+  @IsUUID()
+  destinationCategoryId?: string;
 }

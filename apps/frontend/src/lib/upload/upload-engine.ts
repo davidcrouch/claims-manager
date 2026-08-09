@@ -1,14 +1,18 @@
 import type { UploadTask } from './types';
 import { generateThumbnailBlob } from './thumbnail-generator';
 
-type UploadEventType = 'progress' | 'complete' | 'error' | 'queue-complete';
+type UploadEventType = 'progress' | 'uploaded' | 'complete' | 'error' | 'queue-complete';
 
 type UploadEventPayload = {
   progress: { taskId: string; progress: number };
-  complete: { taskId: string; documentId: string };
+  /** GCS object (+ thumbnail) is in place; server bookkeeping may still be running. */
+  uploaded: { taskId: string; documentId: string };
+  complete: { taskId: string; documentId: string; pipelineStatus?: string | null };
   error: { taskId: string; error: string };
   'queue-complete': undefined;
 };
+
+const MARK_COMPLETE_TIMEOUT_MS = 15_000;
 
 type Listener<T extends UploadEventType> = (payload: UploadEventPayload[T]) => void;
 
@@ -135,6 +139,10 @@ export class UploadEngine {
       thumbnailUploaded = await this.uploadThumbnail(task);
     }
 
+    task.status = 'completing';
+    task.progress = 100;
+    this.emit('uploaded', { taskId: task.id, documentId: task.documentId });
+
     await this.markComplete(task, thumbnailUploaded);
   }
 
@@ -182,18 +190,37 @@ export class UploadEngine {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(MARK_COMPLETE_TIMEOUT_MS),
       });
 
       if (!res.ok) {
         throw new Error(`Complete request failed: ${res.status}`);
       }
 
+      const payload = (await res.json().catch(() => ({}))) as { pipelineStatus?: string | null };
+      task.pipelineStatus = payload.pipelineStatus ?? null;
       task.status = 'completed';
-      this.emit('complete', { taskId: task.id, documentId: task.documentId });
+      this.emit('complete', {
+        taskId: task.id,
+        documentId: task.documentId,
+        pipelineStatus: task.pipelineStatus,
+      });
     } catch (err) {
-      task.status = 'failed';
-      task.error = err instanceof Error ? err.message : 'Failed to mark upload complete';
-      this.emit('error', { taskId: task.id, error: task.error });
+      const timedOut =
+        err instanceof DOMException
+          ? err.name === 'TimeoutError' || err.name === 'AbortError'
+          : err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError');
+      if (timedOut) {
+        console.warn(
+          `[${LOG_PREFIX}.markComplete] timed out after ${MARK_COMPLETE_TIMEOUT_MS}ms; treating GCS upload as complete docId=${task.documentId}`,
+        );
+        task.status = 'completed';
+        this.emit('complete', { taskId: task.id, documentId: task.documentId });
+      } else {
+        task.status = 'failed';
+        task.error = err instanceof Error ? err.message : 'Failed to mark upload complete';
+        this.emit('error', { taskId: task.id, error: task.error });
+      }
     } finally {
       this.checkQueueComplete();
       this.processQueue();

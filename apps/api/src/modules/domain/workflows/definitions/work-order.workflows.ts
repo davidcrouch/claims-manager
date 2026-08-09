@@ -10,33 +10,33 @@ export const workOrderStandard: WorkflowDefinition = {
       id: 'received',
       label: 'Received',
       transitions: [
-        { to: 'accepted', action: 'accept', onEnter: ['publishCrossTenantEvent'] },
-        { to: 'declined', action: 'decline', onEnter: ['publishCrossTenantEvent'] },
+        { to: 'accepted', action: 'accept', onEnter: ['syncStatusLookup', 'publishCrossTenantEvent'] },
+        { to: 'declined', action: 'decline', onEnter: ['syncStatusLookup', 'publishCrossTenantEvent'] },
       ],
     },
     {
       id: 'accepted',
       label: 'Accepted',
       transitions: [
-        { to: 'scheduled', action: 'schedule' },
-        { to: 'in_progress', action: 'start' },
-        { to: 'declined', action: 'decline', onEnter: ['publishCrossTenantEvent'] },
+        { to: 'scheduled', action: 'schedule', onEnter: ['syncStatusLookup'] },
+        { to: 'in_progress', action: 'start', onEnter: ['syncStatusLookup'] },
+        { to: 'declined', action: 'decline', onEnter: ['syncStatusLookup', 'publishCrossTenantEvent'] },
       ],
     },
     {
       id: 'scheduled',
       label: 'Scheduled',
       transitions: [
-        { to: 'in_progress', action: 'start' },
-        { to: 'accepted', action: 'unschedule' },
+        { to: 'in_progress', action: 'start', onEnter: ['syncStatusLookup'] },
+        { to: 'accepted', action: 'unschedule', onEnter: ['syncStatusLookup'] },
       ],
     },
     {
       id: 'in_progress',
       label: 'In Progress',
       transitions: [
-        { to: 'completed', action: 'complete', onEnter: ['publishCrossTenantEvent'] },
-        { to: 'accepted', action: 'pause' },
+        { to: 'completed', action: 'complete', onEnter: ['syncStatusLookup', 'enableInvoiceCreation', 'publishCrossTenantEvent'] },
+        { to: 'accepted', action: 'pause', onEnter: ['syncStatusLookup'] },
       ],
     },
     {

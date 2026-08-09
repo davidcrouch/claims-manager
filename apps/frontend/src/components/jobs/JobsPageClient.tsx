@@ -15,6 +15,7 @@ export interface JobsPageClientProps {
   jobTypeFilterOptions?: { id: string; name: string }[];
   statusOptions: { id: string; name: string }[];
   unreadJobIds?: string[];
+  currentUserId?: string | null;
 }
 
 export function JobsPageClient({
@@ -23,6 +24,7 @@ export function JobsPageClient({
   jobTypeFilterOptions,
   statusOptions,
   unreadJobIds,
+  currentUserId,
 }: JobsPageClientProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [refreshNonce, setRefreshNonce] = useState(0);
@@ -50,6 +52,7 @@ export function JobsPageClient({
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
         jobTypes={jobTypes}
+        currentUserId={currentUserId}
         onSuccess={() => {
           // Force the list to refetch when we return from the new job page.
           setRefreshNonce((n) => n + 1);

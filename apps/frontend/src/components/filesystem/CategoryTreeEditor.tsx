@@ -14,6 +14,7 @@ import {
   Clock,
   Sparkles,
   Loader2,
+  Workflow,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
@@ -648,6 +649,31 @@ export function CategoryConfigPanel({
         />
         <p className={cn('mt-0.5 text-[11px]', sublabelCls)}>
           Auto-delete documents after this many days
+        </p>
+      </div>
+
+      <div>
+        <Label className={cn(labelCls, 'flex items-center gap-1')}>
+          <Workflow className="h-3 w-3" />
+          Filesystem upload pipelines
+        </Label>
+        <label className={cn('mt-1.5 flex items-start gap-2 text-sm', isDark ? 'text-white/80' : 'text-slate-700')}>
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={config.runFilesystemPipelinesOnUpload === true}
+            onChange={(e) =>
+              updateConfig({ runFilesystemPipelinesOnUpload: e.target.checked ? true : false })
+            }
+          />
+          <span>
+            Run filesystem-level pipelines (e.g. Document Classifier) for files already in this
+            folder
+          </span>
+        </label>
+        <p className={cn('mt-0.5 text-[11px]', sublabelCls)}>
+          Off by default — an explicit folder is treated as already filed. Category-specific
+          pipelines below still run.
         </p>
       </div>
 

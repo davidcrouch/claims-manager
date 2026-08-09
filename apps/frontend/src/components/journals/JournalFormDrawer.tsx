@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { BookOpen, MapPin } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { BookOpen, Loader2, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -20,10 +21,22 @@ import {
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
 import { JobSelectField } from '@/components/forms/JobSelectField';
+import {
+  CreateSubmitOverlay,
+  useCreateSubmitPhase,
+} from '@/components/forms/CreateSubmitOverlay';
 import type { JobOption } from '@/components/shared/job-label';
 import type { AddressPayload, Journal } from '@/types/api';
 
 const AU_STATES = ['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA'] as const;
+
+function todayLocalDateInputValue(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 
 export type CreateJournalInput = {
   name: string;
@@ -107,10 +120,11 @@ export function JournalFormDrawer({
   jobId,
   jobs = [],
 }: JournalFormDrawerProps) {
+  const router = useRouter();
   const [selectedJobId, setSelectedJobId] = useState(jobId ?? '');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [visitDate, setVisitDate] = useState('');
+  const [visitDate, setVisitDate] = useState(todayLocalDateInputValue);
   const [address, setAddress] = useState<SiteAddressForm>(EMPTY_ADDRESS);
   const [location, setLocation] = useState<{
     latitude: number;
@@ -119,7 +133,8 @@ export function JournalFormDrawer({
   } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const { phase: submitPhase, busy, startCreating, startOpening, resetPhase } =
+    useCreateSubmitPhase();
   const [error, setError] = useState<string | null>(null);
 
   const jobRequired = jobs.length > 0 || Boolean(jobId);
@@ -135,6 +150,7 @@ export function JournalFormDrawer({
     setSelectedJobId(initialJobId);
     const job = jobs.find((j) => j.id === initialJobId);
     setAddress(addressFromJob(job));
+    setVisitDate(todayLocalDateInputValue());
   }, [open, jobId, jobs]);
 
   const handleJobChange = (nextJobId: string) => {
@@ -149,15 +165,17 @@ export function JournalFormDrawer({
     setSelectedJobId(jobId ?? '');
     setName('');
     setDescription('');
-    setVisitDate('');
+    setVisitDate(todayLocalDateInputValue());
     setAddress(addressFromJob(jobs.find((j) => j.id === (jobId ?? ''))));
     setLocation(null);
     setLocationError(null);
     setLocating(false);
     setError(null);
+    resetPhase();
   };
 
   const handleOpenChange = (next: boolean) => {
+    if (!next && busy) return;
     if (!next) resetForm();
     onOpenChange(next);
   };
@@ -196,7 +214,7 @@ export function JournalFormDrawer({
   const canSubmit =
     Boolean(name.trim()) &&
     (!jobRequired || Boolean(selectedJobId.trim())) &&
-    !submitting;
+    !busy;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -209,7 +227,7 @@ export function JournalFormDrawer({
       return;
     }
 
-    setSubmitting(true);
+    startCreating();
     setError(null);
     try {
       const addressPayload = toAddressPayload(address);
@@ -228,6 +246,7 @@ export function JournalFormDrawer({
 
       if (!journal) {
         setError('Failed to create journal');
+        resetPhase();
         return;
       }
 
@@ -241,17 +260,23 @@ export function JournalFormDrawer({
         await linkJournal(journal.id);
       }
 
-      resetForm();
       onCreated?.(journal);
+      startOpening();
+      const linkedJobId =
+        selectedJobId.trim() || (entityType === 'Job' ? entityId : undefined);
+      const href = linkedJobId
+        ? `/journals/${journal.id}?jobId=${linkedJobId}`
+        : `/journals/${journal.id}`;
+      router.push(href);
     } catch (err) {
       console.error('JournalFormDrawer.handleSubmit:', err);
       setError(err instanceof Error ? err.message : 'Failed to create journal');
-    } finally {
-      setSubmitting(false);
+      resetPhase();
     }
   };
 
   return (
+    <>
     <BottomFormDrawer
       open={open}
       onOpenChange={handleOpenChange}
@@ -263,6 +288,7 @@ export function JournalFormDrawer({
       }
       icon={<BookOpen className="h-5 w-5" />}
       widthClassName="w-[60%]"
+      preventClose={busy}
     >
       <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
         <BottomFormDrawerBody>
@@ -425,6 +451,7 @@ export function JournalFormDrawer({
             variant="outline"
             size="lg"
             className="min-w-36 px-8"
+            disabled={busy}
             onClick={() => handleOpenChange(false)}
           >
             Cancel
@@ -435,10 +462,20 @@ export function JournalFormDrawer({
             className="min-w-36 px-8"
             disabled={!canSubmit}
           >
-            {submitting ? 'Creating…' : 'Create Journal'}
+            {busy ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {submitPhase === 'opening' ? 'Opening…' : 'Creating…'}
+              </>
+            ) : (
+              'Create Journal'
+            )}
           </Button>
         </BottomFormDrawerFooter>
       </form>
     </BottomFormDrawer>
+
+    <CreateSubmitOverlay phase={submitPhase} entityLabel="journal" />
+    </>
   );
 }

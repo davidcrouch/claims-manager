@@ -10,14 +10,14 @@ export const quoteStandard: WorkflowDefinition = {
       id: 'draft',
       label: 'Draft',
       transitions: [
-        { to: 'approved', action: 'approve', guards: ['hasLineItems'] },
+        { to: 'approved', action: 'approve', guards: ['hasLineItems'], onEnter: ['syncStatusLookup'] },
       ],
     },
     {
       id: 'approved',
       label: 'Approved',
       transitions: [
-        { to: 'published', action: 'publish', onEnter: ['issueDocument', 'publishCrossTenantEvent'] },
+        { to: 'published', action: 'publish', onEnter: ['syncStatusLookup', 'issueDocument', 'publishCrossTenantEvent'] },
       ],
     },
     {

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
-import { BookOpen } from 'lucide-react';
+import { BookOpen, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,6 +14,10 @@ import {
   BottomFormDrawerError,
 } from '@/components/forms/BottomFormDrawer';
 import { createCatalogAction, updateCatalogAction } from '@/app/(app)/admin/catalog/actions';
+import {
+  CreateSubmitOverlay,
+  useCreateSubmitPhase,
+} from '@/components/forms/CreateSubmitOverlay';
 import type { Catalog, CatalogType } from '@/types/api';
 
 export interface CatalogFormDrawerProps {
@@ -36,7 +40,8 @@ const CATALOG_TYPES: { value: CatalogType; label: string }[] = [
 export function CatalogFormDrawer({ open, onOpenChange, catalog }: CatalogFormDrawerProps) {
   const router = useRouter();
   const isEdit = !!catalog;
-  const [submitting, setSubmitting] = useState(false);
+  const { phase, busy, startCreating, startOpening, resetPhase } =
+    useCreateSubmitPhase();
   const [error, setError] = useState<string | null>(null);
 
   const { register, handleSubmit, reset, formState: { errors: formErrors } } = useForm<FormValues>({
@@ -48,40 +53,50 @@ export function CatalogFormDrawer({ open, onOpenChange, catalog }: CatalogFormDr
   });
 
   async function onSubmit(values: FormValues) {
-    setSubmitting(true);
+    startCreating();
     setError(null);
 
     const res = isEdit
       ? await updateCatalogAction(catalog!.id, values as unknown as Record<string, unknown>)
       : await createCatalogAction(values);
 
-    setSubmitting(false);
-
     if (!res.success) {
       setError(res.error ?? 'Failed to save catalogue');
+      resetPhase();
       return;
     }
 
+    if (!isEdit && 'id' in res && res.id) {
+      startOpening();
+      router.push(`/admin/catalog/${res.id}`);
+      return;
+    }
+
+    resetPhase();
     onOpenChange(false);
     reset();
     router.refresh();
   }
 
   function handleOpenChange(next: boolean) {
+    if (!next && busy) return;
     onOpenChange(next);
     if (!next) {
       reset();
       setError(null);
+      resetPhase();
     }
   }
 
   return (
+    <>
     <BottomFormDrawer
       open={open}
       onOpenChange={handleOpenChange}
       title={isEdit ? 'Edit Catalogue' : 'New Catalogue'}
       description={isEdit ? 'Update catalogue details' : 'Create a new catalogue for your items'}
       icon={<BookOpen className="h-5 w-5" />}
+      preventClose={busy}
     >
       <form onSubmit={handleSubmit(onSubmit)}>
         <BottomFormDrawerBody>
@@ -133,15 +148,29 @@ export function CatalogFormDrawer({ open, onOpenChange, catalog }: CatalogFormDr
 
         <BottomFormDrawerFooter>
           <div className="flex w-full items-center justify-between gap-3">
-            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
+            <Button type="button" variant="outline" disabled={busy} onClick={() => handleOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? 'Saving…' : isEdit ? 'Save changes' : 'Create catalogue'}
+            <Button type="submit" disabled={busy}>
+              {busy ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {phase === 'opening' ? 'Opening…' : isEdit ? 'Saving…' : 'Creating…'}
+                </>
+              ) : isEdit ? (
+                'Save changes'
+              ) : (
+                'Create catalogue'
+              )}
             </Button>
           </div>
         </BottomFormDrawerFooter>
       </form>
     </BottomFormDrawer>
+    <CreateSubmitOverlay
+      phase={phase}
+      entityLabel={isEdit ? 'catalogue' : 'catalogue'}
+    />
+    </>
   );
 }

@@ -1,7 +1,7 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { eq, and, ilike, sql, inArray } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../../../database/drizzle.module';
-import { organizations, purchaseOrders } from '../../../database/schema';
+import { organizations, purchaseOrders, quotes } from '../../../database/schema';
 
 export interface GhostCandidate {
   organisationId: string;
@@ -118,7 +118,7 @@ export class GhostOrganisationService {
       .values({
         name: displayName,
         slug,
-        status: 'active',
+        status: 'inactive',
         object: 'organization',
         created: new Date().toISOString(),
         modified: new Date().toISOString(),
@@ -233,30 +233,53 @@ export class GhostOrganisationService {
   async findGhostsByTenant(params: {
     tenantId: string;
   }): Promise<GhostOrganisation[]> {
-    const rows = await this.db
-      .selectDistinctOn([organizations.id], {
-        id: organizations.id,
-        name: organizations.name,
-        slug: organizations.slug,
-        abn: organizations.abn,
-        legalName: organizations.legalName,
-        tradingName: organizations.tradingName,
-        primaryEmail: organizations.primaryEmail,
-        emailDomain: organizations.emailDomain,
-        phone: organizations.phone,
-        subscriptionStatus: organizations.subscriptionStatus,
-      })
-      .from(organizations)
-      .innerJoin(
-        purchaseOrders,
-        and(
-          eq(purchaseOrders.issuerOrganisationId, organizations.id),
-          eq(purchaseOrders.custodianTenantId, params.tenantId),
-        ),
-      )
-      .where(eq(organizations.subscriptionStatus, 'ghost'));
+    const ghostCols = {
+      id: organizations.id,
+      name: organizations.name,
+      slug: organizations.slug,
+      abn: organizations.abn,
+      legalName: organizations.legalName,
+      tradingName: organizations.tradingName,
+      primaryEmail: organizations.primaryEmail,
+      emailDomain: organizations.emailDomain,
+      phone: organizations.phone,
+      subscriptionStatus: organizations.subscriptionStatus,
+    };
 
-    return rows;
+    const [poGhosts, quoteGhosts] = await Promise.all([
+      this.db
+        .selectDistinctOn([organizations.id], ghostCols)
+        .from(organizations)
+        .innerJoin(
+          purchaseOrders,
+          and(
+            eq(purchaseOrders.issuerOrganisationId, organizations.id),
+            eq(purchaseOrders.custodianTenantId, params.tenantId),
+          ),
+        )
+        .where(eq(organizations.subscriptionStatus, 'ghost')),
+      this.db
+        .selectDistinctOn([organizations.id], ghostCols)
+        .from(organizations)
+        .innerJoin(
+          quotes,
+          and(
+            eq(quotes.issuerOrganisationId, organizations.id),
+            eq(quotes.custodianTenantId, params.tenantId),
+          ),
+        )
+        .where(eq(organizations.subscriptionStatus, 'ghost')),
+    ]);
+
+    const seen = new Set<string>();
+    const result: GhostOrganisation[] = [];
+    for (const row of [...poGhosts, ...quoteGhosts]) {
+      if (!seen.has(row.id)) {
+        seen.add(row.id);
+        result.push(row);
+      }
+    }
+    return result;
   }
 
   private generateSlug(name: string): string {

@@ -53,11 +53,11 @@ export class PurchaseOrderTransformer implements EntityTransformer {
     // Lookups
     if (isPlainObject(payload.status)) {
       const extRef = asString(payload.status.externalReference) ?? asString(payload.status.id);
-      if (extRef) lookups.push({ field: 'statusLookupId', domain: 'work_order_status', externalReference: extRef, autoCreate: true });
+      if (extRef) lookups.push({ field: 'statusLookupId', domain: 'purchase_order_status', externalReference: extRef, autoCreate: true });
     }
     if (isPlainObject(payload.purchaseOrderType)) {
       const extRef = asString(payload.purchaseOrderType.externalReference) ?? asString(payload.purchaseOrderType.id);
-      if (extRef) lookups.push({ field: 'workOrderTypeLookupId', domain: 'work_order_type', externalReference: extRef, autoCreate: true });
+      if (extRef) lookups.push({ field: 'workOrderTypeLookupId', domain: 'purchase_order_type', externalReference: extRef, autoCreate: true });
     }
 
     return { entity, lookups, parentRefs };

@@ -74,7 +74,7 @@ export function DashboardInboxClient({
   const jobsTitle = inbox.activeJobs?.scopedToUser ? 'Your active jobs' : 'Active jobs';
 
   const todayPanel = (
-    <RailPanel className="h-full" title="Today" href="/schedule" hrefLabel="Schedule">
+    <RailPanel title="Today" href="/schedule" hrefLabel="Schedule">
       {inbox.today.length === 0 ? (
         <p className="px-2 py-2 text-sm text-slate-500">{DASHBOARD_EMPTY_COPY.today}</p>
       ) : (
@@ -96,20 +96,19 @@ export function DashboardInboxClient({
 
   return (
     <div className="-mx-1 space-y-6">
-      <div className="grid grid-cols-2 items-stretch gap-x-2 gap-y-6 sm:grid-cols-3 xl:grid-cols-[repeat(5,minmax(0,1fr))_minmax(18rem,22rem)]">
-        <DashboardSnapshotBar snapshot={inbox.snapshot} />
-        <div className="col-span-2 min-h-[7.5rem] sm:col-span-3 xl:col-span-1">{todayPanel}</div>
+      <DashboardSnapshotBar snapshot={inbox.snapshot} />
 
-        <div className="col-span-2 sm:col-span-3 xl:col-span-4">
-          <DashboardActiveJobs
-            title={jobsTitle}
-            count={inbox.activeJobs?.count ?? inbox.snapshot.activeJobs}
-            href={inbox.activeJobs?.href ?? '/jobs'}
-            items={inbox.activeJobs?.items ?? []}
-          />
-        </div>
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)_minmax(18rem,22rem)]">
+        {todayPanel}
 
-        <div className="col-span-2 space-y-4 sm:col-span-3 xl:col-span-2">
+        <DashboardActiveJobs
+          title={jobsTitle}
+          count={inbox.activeJobs?.count ?? inbox.snapshot.activeJobs}
+          href={inbox.activeJobs?.href ?? '/jobs'}
+          items={inbox.activeJobs?.items ?? []}
+        />
+
+        <div className="space-y-4">
           <RailPanel id="attention" title="Needs a decision">
             {decisionQueues.length > 0 && (
               <div className="mb-1 flex flex-wrap gap-1.5 px-2 pt-2">

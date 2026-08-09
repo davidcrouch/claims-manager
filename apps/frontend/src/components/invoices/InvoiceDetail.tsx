@@ -52,7 +52,7 @@ export function InvoicePageHeader({ invoice, job }: { invoice: Invoice; job?: Jo
   return (
     <>
       <SetHeaderActions>
-        <PrintButton documentType="invoice" entityId={invoice.id} />
+        <PrintButton documentType="invoice" entityId={invoice.id} jobId={job?.id} />
         <ArchiveEntityButton
           entityType="invoice"
           entityId={invoice.id}

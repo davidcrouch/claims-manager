@@ -86,9 +86,11 @@ export class DocumentsService {
     this.logger.debug(`[DocumentsService.findAll] tenantId=${tenantId}`);
 
     let filesystemId = params.filesystemId;
+    let orRelatedRecordId: string | undefined;
     if (!filesystemId && params.jobId) {
       const projectFs = await this.filesystemsRepo.findByJob(tenantId, params.jobId);
       filesystemId = projectFs?.id;
+      orRelatedRecordId = params.jobId;
     }
 
     return this.documentsRepo.findAll({
@@ -99,6 +101,7 @@ export class DocumentsService {
         relatedRecordType: params.relatedRecordType,
         relatedRecordId: params.relatedRecordId,
         filesystemId,
+        orRelatedRecordId,
         search: params.search,
         uploadStatus: params.uploadStatus,
       },
@@ -255,15 +258,18 @@ export class DocumentsService {
       `${logPrefix} — docId=${documentId} verified=${!!metadata} thumbnail=${!!thumbnailUri}`,
     );
 
-    void this.pipelineService
-      ?.triggerUploadPipelines(documentId, tenantId)
-      .catch((err) => {
-        this.logger.warn(
-          `${logPrefix} — pipeline trigger failed: ${err instanceof Error ? err.message : err}`,
-        );
-      });
+    // Enqueue matching pipelines (executeRun stays background). Await enqueue so
+    // the response includes pipelineStatus pending | skipped.
+    try {
+      await this.pipelineService?.triggerUploadPipelines(documentId, tenantId);
+    } catch (err) {
+      this.logger.warn(
+        `${logPrefix} — pipeline trigger failed: ${err instanceof Error ? err.message : err}`,
+      );
+    }
 
-    return updated;
+    const withPipeline = await this.documentsRepo.findOne(documentId, tenantId);
+    return withPipeline ?? updated;
   }
 
   private isWordDocument(mimeType: string | null | undefined, fileName: string): boolean {
@@ -272,25 +278,39 @@ export class DocumentsService {
     return lower.endsWith('.docx') || lower.endsWith('.doc');
   }
 
-  private async generateWordThumbnail(params: {
+  private isPdfDocument(mimeType: string | null | undefined, fileName: string): boolean {
+    if (mimeType === 'application/pdf') return true;
+    return fileName.toLowerCase().endsWith('.pdf');
+  }
+
+  private officeThumbnailSourceName(
+    fileName: string,
+    mimeType?: string | null,
+  ): string {
+    if (this.isPdfDocument(mimeType, fileName)) return 'source.pdf';
+    const lower = fileName.toLowerCase();
+    if (lower.endsWith('.doc') && !lower.endsWith('.docx')) return 'source.doc';
+    return 'source.docx';
+  }
+
+  private async generateOfficeThumbnailFromBuffer(params: {
     tenantId: string;
     documentId: string;
-    gcsObjectPath: string;
+    buffer: Buffer;
     fileName: string;
+    mimeType?: string | null;
   }): Promise<string> {
-    const logPrefix = 'DocumentsService.generateWordThumbnail';
-    this.logger.debug(`${logPrefix} — docId=${params.documentId} path=${params.gcsObjectPath}`);
-
-    const sourceBuffer = await this.gcsStorage.downloadBuffer(params.gcsObjectPath);
+    const logPrefix = 'DocumentsService.generateOfficeThumbnailFromBuffer';
+    const isPdf = this.isPdfDocument(params.mimeType, params.fileName);
     const isDocx =
-      params.fileName.toLowerCase().endsWith('.docx') ||
-      (sourceBuffer.length >= 2 && sourceBuffer[0] === 0x50 && sourceBuffer[1] === 0x4b);
+      !isPdf &&
+      (params.fileName.toLowerCase().endsWith('.docx') ||
+        (params.buffer.length >= 2 && params.buffer[0] === 0x50 && params.buffer[1] === 0x4b));
 
     try {
-      const sourceFileName = isDocx ? 'source.docx' : 'source.doc';
       const pngBuffer = await this.officeConverter.convertToPng({
-        buffer: sourceBuffer,
-        sourceFileName,
+        buffer: params.buffer,
+        sourceFileName: this.officeThumbnailSourceName(params.fileName, params.mimeType),
       });
       const thumbnailObjectPath = `tenants/${params.tenantId}/documents/${params.documentId}/thumbnail.png`;
       await this.gcsStorage.uploadBuffer({
@@ -303,13 +323,13 @@ export class DocumentsService {
       );
       return thumbnailObjectPath;
     } catch (error) {
-      if (!isDocx) throw error;
+      if (isPdf || !isDocx) throw error;
       this.logger.warn(
         `${logPrefix} — LibreOffice unavailable, using docx text preview docId=${params.documentId}: ${
           error instanceof Error ? error.message : error
         }`,
       );
-      const svgBuffer = renderDocxPreviewSvg(sourceBuffer, params.fileName);
+      const svgBuffer = renderDocxPreviewSvg(params.buffer, params.fileName);
       const thumbnailObjectPath = `tenants/${params.tenantId}/documents/${params.documentId}/thumbnail.svg`;
       await this.gcsStorage.uploadBuffer({
         objectPath: thumbnailObjectPath,
@@ -323,7 +343,26 @@ export class DocumentsService {
     }
   }
 
-  private async ensureWordThumbnail(doc: {
+  private async generateWordThumbnail(params: {
+    tenantId: string;
+    documentId: string;
+    gcsObjectPath: string;
+    fileName: string;
+    mimeType?: string | null;
+  }): Promise<string> {
+    const logPrefix = 'DocumentsService.generateWordThumbnail';
+    this.logger.debug(`${logPrefix} — docId=${params.documentId} path=${params.gcsObjectPath}`);
+    const sourceBuffer = await this.gcsStorage.downloadBuffer(params.gcsObjectPath);
+    return this.generateOfficeThumbnailFromBuffer({
+      tenantId: params.tenantId,
+      documentId: params.documentId,
+      buffer: sourceBuffer,
+      fileName: params.fileName,
+      mimeType: params.mimeType,
+    });
+  }
+
+  private async ensureGeneratedThumbnail(doc: {
     id: string;
     tenantId: string;
     mimeType: string;
@@ -335,25 +374,135 @@ export class DocumentsService {
     if (doc.thumbnailUri) {
       return parseGcsPath(doc.thumbnailUri)?.objectPath ?? null;
     }
-    if (!this.isWordDocument(doc.mimeType, doc.fileName)) return null;
+    if (
+      !this.isWordDocument(doc.mimeType, doc.fileName) &&
+      !this.isPdfDocument(doc.mimeType, doc.fileName)
+    ) {
+      return null;
+    }
     try {
       const objectPath = await this.generateWordThumbnail({
         tenantId: doc.tenantId,
         documentId: doc.id,
         gcsObjectPath: doc.gcsObjectPath,
         fileName: doc.fileName,
+        mimeType: doc.mimeType,
       });
       const thumbnailUri = `https://storage.googleapis.com/${doc.gcsBucket}/${objectPath}`;
       await this.documentsRepo.update(doc.id, doc.tenantId, { thumbnailUri });
       return objectPath;
     } catch (error) {
       this.logger.warn(
-        `[DocumentsService.ensureWordThumbnail] docId=${doc.id}: ${
+        `[DocumentsService.ensureGeneratedThumbnail] docId=${doc.id}: ${
           error instanceof Error ? error.message : error
         }`,
       );
       return null;
     }
+  }
+
+  async createFromBuffer(params: {
+    fileName: string;
+    mimeType: string;
+    buffer: Buffer;
+    categoryId: string;
+    relatedRecordType?: string | null;
+    relatedRecordId?: string | null;
+    userId?: string;
+    tenantId?: string;
+  }) {
+    const logPrefix = 'DocumentsService.createFromBuffer';
+    const tenantId = params.tenantId ?? this.tenantContext.getTenantId();
+    this.validateMimeType(params.mimeType);
+
+    const resolved = await this.resolveUploadScope(
+      {
+        fileName: params.fileName,
+        mimeType: params.mimeType,
+        categoryId: params.categoryId,
+        relatedRecordType: params.relatedRecordType ?? undefined,
+        relatedRecordId: params.relatedRecordId ?? undefined,
+      },
+      tenantId,
+    );
+
+    const documentId = crypto.randomUUID();
+    const safeFileName = params.fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const gcsObjectPath = `tenants/${tenantId}/documents/${documentId}/${safeFileName}`;
+    const bucket = this.gcsStorage.getBucketName();
+
+    if (!bucket) {
+      throw new ServiceUnavailableException(
+        'Document uploads not configured. Set GCP_PROJECT_ID and GCS_DOCUMENTS_BUCKET.',
+      );
+    }
+
+    await this.gcsStorage.uploadBuffer({
+      objectPath: gcsObjectPath,
+      buffer: params.buffer,
+      contentType: params.mimeType,
+    });
+
+    let thumbnailUri: string | null = null;
+    if (
+      this.isPdfDocument(params.mimeType, params.fileName) ||
+      this.isWordDocument(params.mimeType, params.fileName)
+    ) {
+      try {
+        const thumbnailPath = await this.generateOfficeThumbnailFromBuffer({
+          tenantId,
+          documentId,
+          buffer: params.buffer,
+          fileName: params.fileName,
+          mimeType: params.mimeType,
+        });
+        thumbnailUri = `https://storage.googleapis.com/${bucket}/${thumbnailPath}`;
+      } catch (err) {
+        this.logger.warn(
+          `${logPrefix} — thumbnail failed docId=${documentId}: ${
+            err instanceof Error ? err.message : err
+          }`,
+        );
+      }
+    }
+
+    const uri = `https://storage.googleapis.com/${bucket}/${gcsObjectPath}`;
+    await this.documentsRepo.create({
+      id: documentId,
+      tenantId,
+      filesystemId: resolved.filesystemId,
+      filesystemCategoryId: resolved.categoryId,
+      relatedRecordType: resolved.relatedRecordType,
+      relatedRecordId: resolved.relatedRecordId,
+      fileName: params.fileName,
+      mimeType: params.mimeType,
+      fileSizeBytes: params.buffer.length,
+      gcsBucket: bucket,
+      gcsObjectPath,
+      uri,
+      uploadStatus: 'complete',
+      sourceSystem: 'document-generation',
+      uploadedByUserId: params.userId ?? null,
+      thumbnailUri,
+    });
+
+    this.logger.log(
+      `${logPrefix} — docId=${documentId} categoryId=${resolved.categoryId} bytes=${params.buffer.length}`,
+    );
+
+    try {
+      await this.pipelineService?.triggerUploadPipelines(documentId, tenantId);
+    } catch (err) {
+      this.logger.warn(
+        `${logPrefix} — pipeline trigger failed: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+
+    const created = await this.documentsRepo.findOne(documentId, tenantId);
+    if (!created) {
+      throw new NotFoundException('Created document not found');
+    }
+    return created;
   }
 
   async markUploadFailed(documentId: string) {
@@ -407,13 +556,15 @@ export class DocumentsService {
     return { updated: results.filter(Boolean).length };
   }
 
-  private async resolveUploadScope(dto: CreateDocumentUploadUrlDto): Promise<{
+  private async resolveUploadScope(
+    dto: CreateDocumentUploadUrlDto,
+    tenantId = this.tenantContext.getTenantId(),
+  ): Promise<{
     filesystemId: string | null;
     categoryId: string | null;
     relatedRecordType: string | null;
     relatedRecordId: string | null;
   }> {
-    const tenantId = this.tenantContext.getTenantId();
     let filesystemId = dto.filesystemId ?? null;
     let categoryId = dto.categoryId ?? null;
     let relatedRecordType = dto.relatedRecordType ?? null;
@@ -486,7 +637,7 @@ export class DocumentsService {
 
     let location = this.resolveThumbnailLocation(doc);
     if (!location) {
-      const objectPath = await this.ensureWordThumbnail(doc);
+      const objectPath = await this.ensureGeneratedThumbnail(doc);
       if (objectPath) {
         location = { bucket: doc.gcsBucket, objectPath };
       }
@@ -518,7 +669,7 @@ export class DocumentsService {
 
     let location = this.resolveThumbnailLocation(doc);
     if (!location) {
-      const objectPath = await this.ensureWordThumbnail(doc);
+      const objectPath = await this.ensureGeneratedThumbnail(doc);
       if (objectPath) {
         location = { bucket: doc.gcsBucket, objectPath };
       }

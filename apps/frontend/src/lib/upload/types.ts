@@ -17,6 +17,7 @@ export interface UploadTask {
   categoryId?: string | null;
   relatedRecordType?: string;
   relatedRecordId?: string;
+  pipelineStatus?: string | null;
 }
 
 export interface UploadUrlResponse {

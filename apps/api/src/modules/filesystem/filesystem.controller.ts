@@ -61,8 +61,13 @@ export class FilesystemController {
   }
 
   @Get('jobs/:jobId')
-  async getJobFilesystem(@Param('jobId', ParseUUIDPipe) jobId: string) {
-    return this.filesystemService.getJobFilesystem(jobId);
+  async getJobFilesystem(
+    @Param('jobId', ParseUUIDPipe) jobId: string,
+    @Query('ensure') ensure?: string,
+  ) {
+    return this.filesystemService.getJobFilesystem(jobId, {
+      ensure: ensure !== 'false',
+    });
   }
 
   @Post('jobs/:jobId/setup')

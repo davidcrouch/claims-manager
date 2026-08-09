@@ -15,7 +15,10 @@ import {
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { JournalPage, JournalPageAttachment } from '@/types/api';
+import { DocumentProcessingStatus } from '@/components/documents/DocumentProcessingStatus';
+import { useDocumentPipelineProgress } from '@/hooks/useDocumentPipelineProgress';
 import {
+  attachmentDocumentId,
   attachmentThumbSrc,
   countNoteBlocks,
   countUploadBlocks,
@@ -180,6 +183,23 @@ function EntryContent({
   page: JournalPage;
   onExpand: (url: string) => void;
 }) {
+  const documentIds = useMemo(
+    () =>
+      (page.attachments ?? [])
+        .map((attachment) => attachmentDocumentId(attachment))
+        .filter((id): id is string => Boolean(id)),
+    [page.attachments],
+  );
+  const pipeline = useDocumentPipelineProgress(documentIds, {
+    enabled: documentIds.length > 0,
+    showIdle: false,
+    assumeNoneAfterMs: 8_000,
+  });
+  const showPipeline =
+    pipeline.phase === 'pending' ||
+    pipeline.phase === 'running' ||
+    pipeline.phase === 'failed';
+
   const blocks = resolvePageBlocks(page);
   const groups = groupEntryBlocks(blocks);
 
@@ -194,6 +214,9 @@ function EntryContent({
 
   return (
     <div className="space-y-4">
+      {showPipeline ? (
+        <DocumentProcessingStatus progress={pipeline} title="Document processing" />
+      ) : null}
       {groups.map((group) =>
         group.kind === 'note' ? (
           <div key={group.block.id} className="rounded-md border bg-muted/20 px-3 py-2.5">

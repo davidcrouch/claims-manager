@@ -606,3 +606,14 @@
   Work orders, proposals, RFQs, invoices, and bills show clearer status and next-step actions from their detail screens.
   Outcome: daily work, ownership, catalogue structure, and quoting sit together in one operational update.
 
+- `2026-08-09` `PENDING` **48 h**
+  `145 files | +19 536 −920 | Tier 2 standard / Tier 3 complex / Tier 4 deep integration | Heavy orchestration`
+  Lay summary: Partner organisations can now pass work requests, jobs, invoices and bills between each other, with clearer printing, templates, and site journals for everyday staff.
+  **Completed partner-to-partner supply chain handoffs plus clearer document printing and filing.** Requests for quote now become jobs at the receiving organisation, and invoices become bills, so work and payment requests move between companies without re-keying.
+  Accepting a proposal can raise a purchase order, and finishing authorised work opens the path to invoice, so the commercial chain keeps moving.
+  Staff see when a partner has issued a newer version, how deep subcontracting has gone, and can compare competing bids before choosing.
+  Document templates can live in a chosen company folder, assessments can be printed from a standard template, and print or download uses a clearer drawer.
+  Site journals are easier to overview and fill in, and create forms show progress while records are saved.
+  An insurance industry API reference was added for integration planning alongside the operational update.
+  Outcome: partner trading, documents, and day-to-day capture work as one operational update.
+

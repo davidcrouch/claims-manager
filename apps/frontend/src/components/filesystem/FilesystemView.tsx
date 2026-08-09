@@ -37,6 +37,7 @@ interface FilesystemViewProps {
   initialOverview?: FilesystemOverviewResponse | null;
   initialDocuments: FSDocument[];
   initialTotal: number;
+  initialCategoryId?: string | null;
   job?: Job | null;
   parentClaim?: Claim | null;
 }
@@ -47,6 +48,7 @@ export function FilesystemView({
   initialOverview = null,
   initialDocuments,
   initialTotal,
+  initialCategoryId = null,
   job,
   parentClaim,
 }: FilesystemViewProps) {
@@ -55,9 +57,13 @@ export function FilesystemView({
   const [documents, setDocuments] = useState<FSDocument[]>(initialDocuments);
   const [total, setTotal] = useState(initialTotal);
   const [loading, setLoading] = useState(false);
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
+    initialCategoryId,
+  );
   /** Overview: filesystem/job for the selected folder (does not change header job). */
-  const [scopeFilesystemId, setScopeFilesystemId] = useState<string | null>(null);
+  const [scopeFilesystemId, setScopeFilesystemId] = useState<string | null>(
+    initialCategoryId && mode === 'overview' ? (initialFilesystem?.id ?? null) : null,
+  );
   const [scopeJobId, setScopeJobId] = useState<string | null>(null);
   const [loadedProjectCategories, setLoadedProjectCategories] = useState<FilesystemCategory[]>([]);
   const [search, setSearch] = useState('');
@@ -123,20 +129,21 @@ export function FilesystemView({
     if (debouncedSearch) params.set('search', debouncedSearch);
     if (selectedCategoryId === '__uncategorised') {
       params.set('uncategorised', 'true');
+      if (isJobMode && jobId) {
+        params.set('jobId', jobId);
+      } else if (isOverview && scopeFilesystemId) {
+        params.set('filesystemId', scopeFilesystemId);
+      } else if (filesystemId && !isOverview) {
+        params.set('filesystemId', filesystemId);
+      }
     } else if (selectedCategoryId) {
+      // Category ids are unique across filesystems. Do not also send filesystemId —
+      // a stale job scope + company folder id returns an empty list.
       params.set('categoryId', selectedCategoryId);
-    }
-    if (isJobMode && jobId) {
+    } else if (isJobMode && jobId) {
       params.set('jobId', jobId);
     } else if (filesystemId && !isOverview) {
       params.set('filesystemId', filesystemId);
-    } else if (
-      isOverview &&
-      scopeFilesystemId &&
-      selectedCategoryId &&
-      selectedCategoryId !== '__uncategorised'
-    ) {
-      params.set('filesystemId', scopeFilesystemId);
     }
 
     try {
@@ -169,7 +176,7 @@ export function FilesystemView({
   useEffect(() => {
     if (page === 1 && !debouncedSearch && selectedCategoryId === null) return;
     fetchDocuments();
-  }, [fetchDocuments, page, debouncedSearch, selectedCategoryId]);
+  }, [fetchDocuments, page, debouncedSearch, selectedCategoryId, scopeFilesystemId]);
 
   const handleJournalSelect = useCallback(async (journal: Journal) => {
     const fetchId = ++journalFetchRef.current;
@@ -218,7 +225,12 @@ export function FilesystemView({
       setScopeJobId(null);
       return;
     }
-    setScopeFilesystemId(context?.filesystemId ?? filesystemId);
+    const known = [...(filesystem?.categories ?? []), ...loadedProjectCategories].find(
+      (cat) => cat.id === id,
+    );
+    setScopeFilesystemId(
+      known?.filesystemId ?? context?.filesystemId ?? filesystemId,
+    );
     setScopeJobId(context?.jobId ?? null);
   };
 

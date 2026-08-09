@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ClipboardList } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { ClipboardList, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -21,6 +22,10 @@ import {
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
 import { JobSelectField } from '@/components/forms/JobSelectField';
+import {
+  CreateSubmitOverlay,
+  useCreateSubmitPhase,
+} from '@/components/forms/CreateSubmitOverlay';
 import type { JobOption } from '@/components/shared/job-label';
 import type { Assessment } from '@/types/api';
 
@@ -52,6 +57,9 @@ export function AssessmentFormDrawer({
   jobId,
   jobs = [],
 }: AssessmentFormDrawerProps) {
+  const router = useRouter();
+  const { phase, busy, startCreating, startOpening, resetPhase } =
+    useCreateSubmitPhase();
   const [selectedJobId, setSelectedJobId] = useState(jobId ?? '');
   const [name, setName] = useState('');
   const [claimRecommendation, setClaimRecommendation] = useState('');
@@ -62,7 +70,6 @@ export function AssessmentFormDrawer({
   const [roofType, setRoofType] = useState('');
   const [buildingType, setBuildingType] = useState('');
   const [comments, setComments] = useState('');
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -83,14 +90,16 @@ export function AssessmentFormDrawer({
     setBuildingType('');
     setComments('');
     setError(null);
+    resetPhase();
   };
 
   const handleOpenChange = (next: boolean) => {
+    if (!next && busy) return;
     if (!next) resetForm();
     onOpenChange(next);
   };
 
-  const canSubmit = Boolean(selectedJobId.trim() && name.trim()) && !submitting;
+  const canSubmit = Boolean(selectedJobId.trim() && name.trim()) && !busy;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,7 +112,7 @@ export function AssessmentFormDrawer({
       return;
     }
 
-    setSubmitting(true);
+    startCreating();
     setError(null);
     try {
       const assessment = await createAssessment({
@@ -121,20 +130,22 @@ export function AssessmentFormDrawer({
 
       if (!assessment) {
         setError('Failed to create assessment');
+        resetPhase();
         return;
       }
 
-      resetForm();
       onCreated?.(assessment);
+      startOpening();
+      router.push(`/assessments/${assessment.id}`);
     } catch (err) {
       console.error('AssessmentFormDrawer.handleSubmit:', err);
       setError(err instanceof Error ? err.message : 'Failed to create assessment');
-    } finally {
-      setSubmitting(false);
+      resetPhase();
     }
   };
 
   return (
+    <>
     <BottomFormDrawer
       open={open}
       onOpenChange={handleOpenChange}
@@ -142,6 +153,7 @@ export function AssessmentFormDrawer({
       description="Create a new site assessment for an insurance claim job."
       icon={<ClipboardList className="h-5 w-5" />}
       widthClassName="w-[60%]"
+      preventClose={busy}
     >
       <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
         <BottomFormDrawerBody>
@@ -265,6 +277,7 @@ export function AssessmentFormDrawer({
             variant="outline"
             size="lg"
             className="min-w-36 px-8"
+            disabled={busy}
             onClick={() => handleOpenChange(false)}
           >
             Cancel
@@ -275,10 +288,19 @@ export function AssessmentFormDrawer({
             className="min-w-36 px-8"
             disabled={!canSubmit}
           >
-            {submitting ? 'Creating...' : 'Submit'}
+            {busy ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {phase === 'opening' ? 'Opening…' : 'Creating…'}
+              </>
+            ) : (
+              'Submit'
+            )}
           </Button>
         </BottomFormDrawerFooter>
       </form>
     </BottomFormDrawer>
+    <CreateSubmitOverlay phase={phase} entityLabel="assessment" />
+    </>
   );
 }

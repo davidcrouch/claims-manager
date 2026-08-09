@@ -152,7 +152,6 @@ export function JournalsPageClient({
 
   const handleCreated = (journal: Journal) => {
     setData((prev) => ({ data: [journal, ...prev.data], total: prev.total + 1 }));
-    setCreateDrawerOpen(false);
   };
 
   const handleColumnSort = (field: JournalSortField) => {

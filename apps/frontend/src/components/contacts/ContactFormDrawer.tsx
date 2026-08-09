@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
-import { Users } from 'lucide-react';
+import { Loader2, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,6 +29,10 @@ import {
   createContactAction,
   fetchContactTypeLookupsAction,
 } from '@/app/(app)/mutations';
+import {
+  CreateSubmitOverlay,
+  useCreateSubmitPhase,
+} from '@/components/forms/CreateSubmitOverlay';
 import type { Contact } from '@/types/api';
 
 const contactFormSchema = z.object({
@@ -70,7 +74,7 @@ export function ContactFormDrawer({
   onSuccess,
 }: ContactFormDrawerProps) {
   const router = useRouter();
-  const [submitting, setSubmitting] = useState(false);
+  const { phase, busy, startCreating, resetPhase } = useCreateSubmitPhase();
   const [error, setError] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [aiContext, setAiContext] = useState<AIContextPayload | undefined>();
@@ -116,7 +120,7 @@ export function ContactFormDrawer({
   }, [open]);
 
   async function onSubmit(values: ContactFormValues) {
-    setSubmitting(true);
+    startCreating();
     setError(null);
     try {
       const result = await createContactAction({
@@ -130,17 +134,18 @@ export function ContactFormDrawer({
         notes: values.notes || undefined,
       });
       if (result.success) {
+        resetPhase();
         onOpenChange(false);
         form.reset();
         if (result.contact) onSuccess?.(result.contact);
         router.refresh();
       } else {
         setError(result.error ?? 'Failed to create contact');
+        resetPhase();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create contact');
-    } finally {
-      setSubmitting(false);
+      resetPhase();
     }
   }
 
@@ -280,19 +285,32 @@ export function ContactFormDrawer({
           <Button
             type="button"
             variant="outline"
+            disabled={busy}
             onClick={() => onOpenChange(false)}
           >
             Cancel
           </Button>
-          <Button type="submit" disabled={submitting}>
-            {submitting ? 'Creating...' : 'Create Contact'}
+          <Button type="submit" disabled={busy}>
+            {busy ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Creating…
+              </>
+            ) : (
+              'Create Contact'
+            )}
           </Button>
         </BottomFormDrawerFooter>
       </form>
   );
 
   if (renderMode === 'canvas') {
-    return formContent;
+    return (
+      <>
+        {formContent}
+        <CreateSubmitOverlay phase={phase} entityLabel="contact" />
+      </>
+    );
   }
 
   return (
@@ -306,9 +324,11 @@ export function ContactFormDrawer({
         aiAssistEnabled={aiAssistEnabled}
         onAIAssist={handleAIAssist}
         companionChatOpen={companionChatOpenProp ?? chatOpen}
+        preventClose={busy}
       >
         {formContent}
       </BottomFormDrawer>
+      <CreateSubmitOverlay phase={phase} entityLabel="contact" />
       {aiAssistEnabled && companionChatOpenProp === undefined && (
         <ChatDrawer
           open={chatOpen}

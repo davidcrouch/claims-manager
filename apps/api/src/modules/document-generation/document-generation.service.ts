@@ -1,8 +1,9 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { GcsStorageService } from '../../common/gcs/gcs-storage.service';
 import { GeneratedDocumentsRepository } from '../../database/repositories';
+import { DocumentsService } from '../filesystem/documents.service';
 import { TenantContext } from '../../tenant/tenant-context';
-import { TemplateRegistryService } from './services/template-registry.service';
+import { SCENARIO_META, TemplateRegistryService } from './services/template-registry.service';
 import { TemplateEngineService } from './services/template-engine.service';
 import { PdfConverterService } from './services/pdf-converter.service';
 import { QuoteMapper } from './data-mappers/quote.mapper';
@@ -21,6 +22,7 @@ import { AppointmentMapper } from './data-mappers/appointment.mapper';
 import { MessageMapper } from './data-mappers/message.mapper';
 import { JournalMapper } from './data-mappers/journal.mapper';
 import { VendorMapper } from './data-mappers/vendor.mapper';
+import { AssessmentMapper } from './data-mappers/assessment.mapper';
 import { JobsListMapper } from './data-mappers/jobs-list.mapper';
 import { QuotesListMapper } from './data-mappers/quotes-list.mapper';
 import { InvoicesListMapper } from './data-mappers/invoices-list.mapper';
@@ -59,6 +61,7 @@ export class DocumentGenerationService {
     private readonly pdfConverter: PdfConverterService,
     private readonly gcsStorage: GcsStorageService,
     private readonly generatedDocsRepo: GeneratedDocumentsRepository,
+    private readonly documentsService: DocumentsService,
     quoteMapper: QuoteMapper,
     invoiceMapper: InvoiceMapper,
     purchaseOrderMapper: PurchaseOrderMapper,
@@ -75,6 +78,7 @@ export class DocumentGenerationService {
     messageMapper: MessageMapper,
     journalMapper: JournalMapper,
     vendorMapper: VendorMapper,
+    assessmentMapper: AssessmentMapper,
     jobsListMapper: JobsListMapper,
     quotesListMapper: QuotesListMapper,
     invoicesListMapper: InvoicesListMapper,
@@ -110,6 +114,7 @@ export class DocumentGenerationService {
       message: messageMapper,
       journal: journalMapper,
       vendor: vendorMapper,
+      assessment: assessmentMapper,
       jobs_list: jobsListMapper,
       quotes_list: quotesListMapper,
       invoices_list: invoicesListMapper,
@@ -131,8 +136,10 @@ export class DocumentGenerationService {
 
   async generate(params: {
     documentType: DocumentType;
-    entityId: string;
+    entityId?: string;
     templateId?: string;
+    filesystemDocumentId?: string;
+    destinationCategoryId?: string;
     trigger?: GenerationTrigger;
     userId?: string;
   }) {
@@ -140,16 +147,24 @@ export class DocumentGenerationService {
     const tenantId = this.tenantContext.getTenantId();
     const entityType = DOCUMENT_TYPE_TO_ENTITY_TYPE[params.documentType];
     const trigger = params.trigger ?? 'manual';
+    const entityId = this.resolveEntityId({
+      documentType: params.documentType,
+      entityId: params.entityId,
+      tenantId,
+    });
 
     this.logger.log(
-      `${logPrefix} — type=${params.documentType} entityId=${params.entityId} trigger=${trigger}`,
+      `${logPrefix} — type=${params.documentType} entityId=${entityId} trigger=${trigger}` +
+        (params.destinationCategoryId
+          ? ` destinationCategoryId=${params.destinationCategoryId}`
+          : ''),
     );
 
     const record = await this.generatedDocsRepo.create({
       data: {
         tenantId,
         documentType: params.documentType,
-        entityId: params.entityId,
+        entityId,
         entityType,
         templateId: params.templateId ?? null,
         s3KeyPdf: '',
@@ -159,20 +174,59 @@ export class DocumentGenerationService {
       },
     });
 
+    setImmediate(() => {
+      void this.runGenerate({
+        recordId: record.id,
+        tenantId,
+        entityId,
+        entityType,
+        documentType: params.documentType,
+        templateId: params.templateId,
+        filesystemDocumentId: params.filesystemDocumentId,
+        destinationCategoryId: params.destinationCategoryId,
+        userId: params.userId,
+      }).catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.error(`${logPrefix} — background failed id=${record.id}: ${message}`);
+      });
+    });
+
+    return record;
+  }
+
+  private async runGenerate(params: {
+    recordId: string;
+    tenantId: string;
+    entityId: string;
+    entityType: string;
+    documentType: DocumentType;
+    templateId?: string;
+    filesystemDocumentId?: string;
+    destinationCategoryId?: string;
+    userId?: string;
+  }) {
+    const logPrefix = 'DocumentGenerationService.runGenerate';
     try {
-      await this.generatedDocsRepo.updateStatus({ id: record.id, status: 'processing' });
+      await this.generatedDocsRepo.updateStatus({
+        id: params.recordId,
+        status: 'processing',
+      });
 
       const mapper = this.mappers[params.documentType];
       if (!mapper) {
         throw new BadRequestException(`No mapper for document type "${params.documentType}"`);
       }
 
-      const data = await mapper.aggregate({ tenantId, entityId: params.entityId });
+      const data = await mapper.aggregate({
+        tenantId: params.tenantId,
+        entityId: params.entityId,
+      });
 
       const { fileBuffer: templateBuffer } = await this.templateRegistry.resolve({
-        tenantId,
+        tenantId: params.tenantId,
         documentType: params.documentType,
         templateId: params.templateId,
+        filesystemDocumentId: params.filesystemDocumentId,
       });
 
       const populatedDocx = this.templateEngine.populate({
@@ -180,54 +234,90 @@ export class DocumentGenerationService {
         data,
       });
 
-      const pdfBuffer = await this.pdfConverter.convertDocxToPdf({
-        docxBuffer: populatedDocx,
-      });
+      const canConvertPdf = this.pdfConverter.isAvailable();
+      let pdfBuffer: Buffer | null = null;
+      if (canConvertPdf) {
+        pdfBuffer = await this.pdfConverter.convertDocxToPdf({
+          docxBuffer: populatedDocx,
+        });
+      } else {
+        this.logger.warn(
+          `${logPrefix} — no PDF converter available; completing with DOCX only id=${params.recordId}`,
+        );
+      }
 
-      const pdfKey = this.buildOutputKey({
-        tenantId,
-        entityType,
-        entityId: params.entityId,
-        ext: 'pdf',
-      });
+      const pdfKey = pdfBuffer
+        ? this.buildOutputKey({
+            tenantId: params.tenantId,
+            entityType: params.entityType,
+            entityId: params.entityId,
+            ext: 'pdf',
+          })
+        : '';
       const docxKey = this.buildOutputKey({
-        tenantId,
-        entityType,
+        tenantId: params.tenantId,
+        entityType: params.entityType,
         entityId: params.entityId,
         ext: 'docx',
       });
 
-      await Promise.all([
-        this.gcsStorage.uploadBuffer({
-          objectPath: pdfKey,
-          buffer: pdfBuffer,
-          contentType: 'application/pdf',
-        }),
+      const uploads: Promise<unknown>[] = [
         this.gcsStorage.uploadBuffer({
           objectPath: docxKey,
           buffer: populatedDocx,
           contentType: DOCX_MIME,
         }),
-      ]);
+      ];
+      if (pdfBuffer && pdfKey) {
+        uploads.push(
+          this.gcsStorage.uploadBuffer({
+            objectPath: pdfKey,
+            buffer: pdfBuffer,
+            contentType: 'application/pdf',
+          }),
+        );
+      }
+      await Promise.all(uploads);
 
-      const updated = await this.generatedDocsRepo.updateStatus({
-        id: record.id,
+      if (params.destinationCategoryId) {
+        const label =
+          SCENARIO_META[params.documentType]?.label ?? params.documentType;
+        const dateStamp = new Date().toISOString().slice(0, 10);
+        const ext = pdfBuffer ? 'pdf' : 'docx';
+        const fileName = `${label.replace(/[^a-zA-Z0-9._-]+/g, '-')}-${dateStamp}.${ext}`;
+        await this.documentsService.createFromBuffer({
+          fileName,
+          mimeType: pdfBuffer ? 'application/pdf' : DOCX_MIME,
+          buffer: pdfBuffer ?? populatedDocx,
+          categoryId: params.destinationCategoryId,
+          relatedRecordType: params.entityType === 'Organization' ? null : params.entityType,
+          relatedRecordId: params.entityType === 'Organization' ? null : params.entityId,
+          userId: params.userId,
+          tenantId: params.tenantId,
+        });
+        this.logger.log(
+          `${logPrefix} — saved ${ext.toUpperCase()} to folder categoryId=${params.destinationCategoryId}`,
+        );
+      }
+
+      await this.generatedDocsRepo.updateStatus({
+        id: params.recordId,
         status: 'completed',
         s3KeyPdf: pdfKey,
         s3KeyDocx: docxKey,
       });
 
-      this.logger.log(`${logPrefix} — completed id=${record.id} pdf=${pdfKey}`);
-      return updated;
+      this.logger.log(
+        `${logPrefix} — completed id=${params.recordId} pdf=${pdfKey || 'none'} docx=${docxKey}`,
+      );
     } catch (error) {
       const err = error as Error;
-      this.logger.error(`${logPrefix} — failed id=${record.id}: ${err.message}`);
+      this.logger.error(`${logPrefix} — failed id=${params.recordId}: ${err.message}`);
       await this.generatedDocsRepo.updateStatus({
-        id: record.id,
+        id: params.recordId,
         status: 'failed',
         errorMessage: err.message,
       });
-      throw error;
     }
   }
 
@@ -237,14 +327,8 @@ export class DocumentGenerationService {
     const doc = await this.generatedDocsRepo.findById({ id: params.id, tenantId });
     if (!doc) throw new NotFoundException('Generated document not found');
 
-    const key = params.format === 'docx' && doc.s3KeyDocx ? doc.s3KeyDocx : doc.s3KeyPdf;
-    if (!key) throw new NotFoundException('Document file not available');
-
-    const format =
-      params.format ??
-      (key.endsWith('.docx') ? 'docx' : 'pdf');
-    const fileName = `${doc.entityType}-${doc.entityId}.${format}`;
-    const mimeType = format === 'docx' ? DOCX_MIME : 'application/pdf';
+    const resolved = this.resolveDownloadTarget(doc, params.format);
+    const { key, format, fileName, mimeType } = resolved;
 
     const url = await this.gcsStorage.getSignedDownloadUrl({ objectPath: key });
     if (!url) {
@@ -268,14 +352,10 @@ export class DocumentGenerationService {
     const doc = await this.generatedDocsRepo.findById({ id: params.id, tenantId });
     if (!doc) throw new NotFoundException('Generated document not found');
 
-    const key = params.format === 'docx' && doc.s3KeyDocx ? doc.s3KeyDocx : doc.s3KeyPdf;
-    if (!key) throw new NotFoundException('Document file not available');
-
-    const format =
-      params.format ??
-      (key.endsWith('.docx') ? 'docx' : 'pdf');
-    const fileName = `${doc.entityType}-${doc.entityId}.${format}`;
-    const mimeType = format === 'docx' ? DOCX_MIME : 'application/pdf';
+    const { key, format, fileName, mimeType } = this.resolveDownloadTarget(
+      doc,
+      params.format,
+    );
 
     this.logger.debug(`${logPrefix} — streaming id=${params.id} path=${key}`);
     return {
@@ -310,6 +390,40 @@ export class DocumentGenerationService {
       templateId: params.templateId ?? existing.templateId ?? undefined,
       trigger: 'manual',
     });
+  }
+
+  private resolveDownloadTarget(
+    doc: { entityType: string; entityId: string; s3KeyPdf: string | null; s3KeyDocx: string | null },
+    requested?: 'pdf' | 'docx',
+  ): { key: string; format: 'pdf' | 'docx'; fileName: string; mimeType: string } {
+    const pdfKey = doc.s3KeyPdf?.trim() ? doc.s3KeyPdf : null;
+    const docxKey = doc.s3KeyDocx?.trim() ? doc.s3KeyDocx : null;
+    const key =
+      requested === 'docx'
+        ? (docxKey ?? pdfKey)
+        : (pdfKey ?? docxKey);
+    if (!key) throw new NotFoundException('Document file not available');
+
+    const format: 'pdf' | 'docx' = key.endsWith('.docx') ? 'docx' : 'pdf';
+    return {
+      key,
+      format,
+      fileName: `${doc.entityType}-${doc.entityId}.${format}`,
+      mimeType: format === 'docx' ? DOCX_MIME : 'application/pdf',
+    };
+  }
+
+  private resolveEntityId(params: {
+    documentType: DocumentType;
+    entityId?: string;
+    tenantId: string;
+  }): string {
+    if (params.entityId) return params.entityId;
+    const entityType = DOCUMENT_TYPE_TO_ENTITY_TYPE[params.documentType];
+    if (entityType === 'Organization') return params.tenantId;
+    throw new BadRequestException(
+      `entityId is required for document type "${params.documentType}"`,
+    );
   }
 
   private buildOutputKey(params: {

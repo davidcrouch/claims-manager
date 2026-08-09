@@ -65,7 +65,13 @@ export function OrgUserSelect({
         disabled={disabled || loading}
       >
         <SelectTrigger id={id} className="w-full">
-          <SelectValue placeholder={loading ? 'Loading users…' : 'Select user'} />
+          <SelectValue placeholder={loading ? 'Loading users…' : 'Select user'}>
+            {(selected: string | null) => {
+              if (loading) return 'Loading users…';
+              if (!selected || selected === UNASSIGNED_USER_VALUE) return 'Unassigned';
+              return items[selected] ?? 'Unassigned';
+            }}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
           <SelectItem value={UNASSIGNED_USER_VALUE}>Unassigned</SelectItem>

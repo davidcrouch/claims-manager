@@ -6,12 +6,16 @@ import {
   WorkOrdersRepository,
   QuotesRepository,
   ProposalsRepository,
+  RfqsRepository,
+  InvoicesRepository,
+  BillsRepository,
+  JobsRepository,
   type PurchaseOrderInsert,
   type WorkOrderInsert,
   type QuoteInsert,
   type ProposalInsert,
 } from '../../../database/repositories';
-import { purchaseOrders, quotes, organizations } from '../../../database/schema';
+import { purchaseOrders, quotes, rfqs, invoices, organizations } from '../../../database/schema';
 import { GhostOrganisationService } from './ghost-organisation.service';
 import { LookupResolutionService } from './lookup-resolution.service';
 
@@ -74,6 +78,56 @@ export interface CaptureEstimateResponse {
   issuerCreated: boolean;
 }
 
+export interface CaptureRfqDto {
+  issuer: {
+    abn?: string;
+    legalName?: string;
+    tradingName?: string;
+    email?: string;
+    phone?: string;
+    organisationId?: string;
+  };
+  rfqNumber?: string;
+  name: string;
+  note?: string;
+  dueDate?: string;
+  jobId?: string;
+  claimId?: string;
+}
+
+export interface CaptureRfqResponse {
+  rfqId: string;
+  issuerOrganisationId: string;
+  issuerCreated: boolean;
+}
+
+export interface CaptureInvoiceDto {
+  issuer: {
+    abn?: string;
+    legalName?: string;
+    tradingName?: string;
+    email?: string;
+    phone?: string;
+    organisationId?: string;
+  };
+  invoiceNumber?: string;
+  purchaseOrderId: string;
+  issueDate?: string;
+  comments?: string;
+  subTotal?: number;
+  totalTax?: number;
+  totalAmount?: number;
+  jobId?: string;
+  claimId?: string;
+}
+
+export interface CaptureInvoiceResponse {
+  invoiceId: string;
+  billId: string;
+  issuerOrganisationId: string;
+  issuerCreated: boolean;
+}
+
 @Injectable()
 export class ManualCaptureService {
   private readonly logger = new Logger('ManualCaptureService');
@@ -84,6 +138,10 @@ export class ManualCaptureService {
     private readonly workOrdersRepo: WorkOrdersRepository,
     private readonly quotesRepo: QuotesRepository,
     private readonly proposalsRepo: ProposalsRepository,
+    private readonly rfqsRepo: RfqsRepository,
+    private readonly invoicesRepo: InvoicesRepository,
+    private readonly billsRepo: BillsRepository,
+    private readonly jobsRepo: JobsRepository,
     private readonly lookupResolution: LookupResolutionService,
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
   ) {}
@@ -369,6 +427,180 @@ export class ManualCaptureService {
       return {
         quoteId: quote.id,
         proposalId: proposal.id,
+        issuerOrganisationId: issuerOrgId,
+        issuerCreated,
+      };
+    });
+  }
+
+  async captureRfq(params: {
+    tenantId: string;
+    userId: string;
+    dto: CaptureRfqDto;
+  }): Promise<CaptureRfqResponse> {
+    const { tenantId, userId, dto } = params;
+
+    this.logger.log(
+      `ManualCaptureService.captureRfq — tenantId=${tenantId} name=${dto.name}`,
+    );
+
+    if (!dto.jobId && !dto.claimId) {
+      throw new BadRequestException('Either jobId or claimId is required');
+    }
+
+    if (!dto.name?.trim()) {
+      throw new BadRequestException('name is required');
+    }
+
+    if (!this.hasIssuerIdentity(dto.issuer)) {
+      throw new BadRequestException(
+        'At least one issuer identifier is required (organisationId, abn, email, or legalName)',
+      );
+    }
+
+    return this.db.transaction(async (tx) => {
+      const { issuerOrgId, issuerCreated } = await this.resolveGhostIssuer({
+        issuer: dto.issuer,
+        activeTenantError:
+          'The specified issuer is an active subscribed tenant. Use the standard RFQ flow instead.',
+        tx,
+      });
+
+      const rfqStatusId = await this.lookupResolution.resolve({
+        tenantId,
+        domain: 'rfq_status',
+        externalReference: 'Received',
+        name: 'Received',
+        autoCreate: true,
+        tx,
+      });
+
+      const rfqData = {
+        tenantId,
+        claimId: dto.claimId ?? null,
+        jobId: dto.jobId ?? null,
+        issuerOrganisationId: issuerOrgId,
+        recipientOrganisationId: tenantId,
+        custodianTenantId: tenantId,
+        captureMethod: 'manual' as const,
+        ownershipStatus: 'externally_captured' as const,
+        rfqNumber: dto.rfqNumber ?? null,
+        name: dto.name,
+        note: dto.note ?? null,
+        dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
+        statusLookupId: rfqStatusId ?? null,
+        receivedDate: new Date(),
+        rfqFrom: this.buildIssuerPartySnapshot(dto.issuer),
+        rfqTo: {},
+        createdByUserId: userId,
+        updatedByUserId: userId,
+      };
+
+      const rfq = await this.rfqsRepo.create({ data: rfqData as any, tx });
+
+      this.logger.log(
+        `ManualCaptureService.captureRfq — created RFQ=${rfq.id} ghost=${issuerOrgId}`,
+      );
+
+      return {
+        rfqId: rfq.id,
+        issuerOrganisationId: issuerOrgId,
+        issuerCreated,
+      };
+    });
+  }
+
+  async captureInvoice(params: {
+    tenantId: string;
+    userId: string;
+    dto: CaptureInvoiceDto;
+  }): Promise<CaptureInvoiceResponse> {
+    const { tenantId, userId, dto } = params;
+
+    this.logger.log(
+      `ManualCaptureService.captureInvoice — tenantId=${tenantId} invoiceNumber=${dto.invoiceNumber}`,
+    );
+
+    if (!dto.purchaseOrderId) {
+      throw new BadRequestException('purchaseOrderId is required');
+    }
+
+    if (!this.hasIssuerIdentity(dto.issuer)) {
+      throw new BadRequestException(
+        'At least one issuer identifier is required (organisationId, abn, email, or legalName)',
+      );
+    }
+
+    return this.db.transaction(async (tx) => {
+      const { issuerOrgId, issuerCreated } = await this.resolveGhostIssuer({
+        issuer: dto.issuer,
+        activeTenantError:
+          'The specified issuer is an active subscribed tenant. Use the standard invoice issuance flow instead.',
+        tx,
+      });
+
+      const billStatusId = await this.lookupResolution.resolve({
+        tenantId,
+        domain: 'bill_status',
+        externalReference: 'Received',
+        name: 'Received',
+        autoCreate: true,
+        tx,
+      });
+
+      const invoiceData = {
+        tenantId,
+        purchaseOrderId: dto.purchaseOrderId,
+        claimId: dto.claimId ?? null,
+        jobId: dto.jobId ?? null,
+        issuerOrganisationId: issuerOrgId,
+        recipientOrganisationId: tenantId,
+        custodianTenantId: tenantId,
+        captureMethod: 'manual',
+        ownershipStatus: 'externally_captured',
+        invoiceNumber: dto.invoiceNumber ?? null,
+        issueDate: dto.issueDate ? new Date(dto.issueDate) : null,
+        receivedDate: new Date(),
+        comments: dto.comments ?? null,
+        subTotal: dto.subTotal != null ? String(dto.subTotal) : null,
+        totalTax: dto.totalTax != null ? String(dto.totalTax) : null,
+        totalAmount: dto.totalAmount != null ? String(dto.totalAmount) : null,
+        createdByUserId: userId,
+        updatedByUserId: userId,
+      };
+
+      const [invoice] = await tx.insert(invoices).values(invoiceData as any).returning();
+
+      const billData = {
+        tenantId,
+        invoiceId: invoice.id,
+        purchaseOrderId: dto.purchaseOrderId,
+        claimId: dto.claimId ?? null,
+        jobId: dto.jobId ?? null,
+        sourceTenantId: null as string | null,
+        sourceOrganisationId: issuerOrgId,
+        billNumber: dto.invoiceNumber ?? null,
+        issueDate: dto.issueDate ? new Date(dto.issueDate) : null,
+        receivedDate: new Date(),
+        comments: dto.comments ?? null,
+        statusLookupId: billStatusId ?? null,
+        subTotal: dto.subTotal != null ? String(dto.subTotal) : null,
+        totalTax: dto.totalTax != null ? String(dto.totalTax) : null,
+        totalAmount: dto.totalAmount != null ? String(dto.totalAmount) : null,
+        versionAcknowledged: true,
+        createdByUserId: userId,
+        updatedByUserId: userId,
+      };
+
+      const bill = await this.billsRepo.create({ data: billData as any, tx });
+
+      this.logger.log(
+        `ManualCaptureService.captureInvoice — created invoice=${invoice.id} bill=${bill.id} ghost=${issuerOrgId}`,
+      );
+
+      return {
+        invoiceId: invoice.id,
+        billId: bill.id,
         issuerOrganisationId: issuerOrgId,
         issuerCreated,
       };

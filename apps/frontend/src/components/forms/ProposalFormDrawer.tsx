@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
-import { FileText } from 'lucide-react';
+import { FileText, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -24,6 +24,10 @@ import {
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
 import { createProposalAction } from '@/app/(app)/mutations';
+import {
+  CreateSubmitOverlay,
+  useCreateSubmitPhase,
+} from '@/components/forms/CreateSubmitOverlay';
 import { fetchJobQuotesAction } from '@/app/(app)/jobs/[id]/actions';
 import { JobSelectField } from '@/components/forms/JobSelectField';
 import type { JobOption } from '@/components/shared/job-label';
@@ -69,7 +73,8 @@ export function ProposalFormDrawer({
   jobs,
 }: ProposalFormDrawerProps) {
   const router = useRouter();
-  const [submitting, setSubmitting] = useState(false);
+  const { phase, busy, startCreating, startOpening, resetPhase } =
+    useCreateSubmitPhase();
   const [error, setError] = useState<string | null>(null);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [pickedJobId, setPickedJobId] = useState('');
@@ -111,7 +116,7 @@ export function ProposalFormDrawer({
       setError('Job is required');
       return;
     }
-    setSubmitting(true);
+    startCreating();
     setError(null);
     try {
       const result = await createProposalAction({
@@ -125,26 +130,33 @@ export function ProposalFormDrawer({
         note: values.note || undefined,
       });
       if (result.success) {
+        if (result.proposal?.id) {
+          startOpening();
+          router.push(`/proposals/${result.proposal.id}`);
+          return;
+        }
+        resetPhase();
         onOpenChange(false);
-        form.reset();
         router.refresh();
       } else {
         setError(result.error ?? 'Failed to create proposal');
+        resetPhase();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create proposal');
-    } finally {
-      setSubmitting(false);
+      resetPhase();
     }
   }
 
   return (
+    <>
     <BottomFormDrawer
       open={open}
       onOpenChange={onOpenChange}
       title="Create Proposal"
       description="Record a vendor proposal linked to an estimate."
       icon={<FileText className="h-5 w-5" />}
+      preventClose={busy}
     >
       <form onSubmit={form.handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col">
         <BottomFormDrawerBody>
@@ -228,10 +240,21 @@ export function ProposalFormDrawer({
         </BottomFormDrawerBody>
 
         <BottomFormDrawerFooter>
-          <Button type="button" variant="outline" size="lg" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button type="submit" size="lg" disabled={submitting}>{submitting ? 'Creating...' : 'Create Proposal'}</Button>
+          <Button type="button" variant="outline" size="lg" disabled={busy} onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button type="submit" size="lg" disabled={busy}>
+            {busy ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {phase === 'opening' ? 'Opening…' : 'Creating…'}
+              </>
+            ) : (
+              'Create Proposal'
+            )}
+          </Button>
         </BottomFormDrawerFooter>
       </form>
     </BottomFormDrawer>
+    <CreateSubmitOverlay phase={phase} entityLabel="proposal" />
+    </>
   );
 }

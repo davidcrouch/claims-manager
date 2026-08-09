@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { ExternalModule } from '../external/external.module';
+import { WorkflowModule } from './workflows/workflow.module';
 
 // Transformers
 import { ClaimTransformer } from './transformers/claim.transformer';
@@ -28,6 +29,9 @@ import { VendorSyncService } from './services/vendor-sync.service';
 import { GhostOrganisationService } from './services/ghost-organisation.service';
 import { ManualCaptureService } from './services/manual-capture.service';
 import { CustodyTransferService } from './services/custody-transfer.service';
+import { LineItemCopyService } from './services/line-item-copy.service';
+import { VersionSyncService } from './services/version-sync.service';
+import { BidComparisonService } from './services/bid-comparison.service';
 
 // Use cases
 import { ProjectClaimUseCase } from './use-cases/project-claim.use-case';
@@ -43,7 +47,10 @@ import { ProjectAttachmentUseCase } from './use-cases/project-attachment.use-cas
 import { UseCaseRegistry } from './use-cases/use-case.registry';
 
 @Module({
-  imports: [forwardRef(() => ExternalModule)],
+  imports: [
+    forwardRef(() => ExternalModule),
+    forwardRef(() => WorkflowModule),
+  ],
   providers: [
     // Transformers
     ClaimTransformer,
@@ -72,6 +79,9 @@ import { UseCaseRegistry } from './use-cases/use-case.registry';
     GhostOrganisationService,
     ManualCaptureService,
     CustodyTransferService,
+    LineItemCopyService,
+    VersionSyncService,
+    BidComparisonService,
 
     // Use cases
     ProjectClaimUseCase,
@@ -102,6 +112,9 @@ import { UseCaseRegistry } from './use-cases/use-case.registry';
     GhostOrganisationService,
     ManualCaptureService,
     CustodyTransferService,
+    LineItemCopyService,
+    VersionSyncService,
+    BidComparisonService,
   ],
 })
 export class DomainModule {}

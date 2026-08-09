@@ -185,6 +185,50 @@ export class WorkflowEngineService {
     return result;
   }
 
+  async initializeState(params: {
+    tenantId: string;
+    entityType: string;
+    entityId: string;
+    workflowName: string;
+    initialStep: string;
+    userId: string;
+    tx: DrizzleDbOrTx;
+  }): Promise<void> {
+    await this.persistStep({
+      tenantId: params.tenantId,
+      entityType: params.entityType,
+      entityId: params.entityId,
+      workflowName: params.workflowName,
+      step: params.initialStep,
+      userId: params.userId,
+      tx: params.tx,
+    });
+  }
+
+  async project(params: {
+    entityType: string;
+    entityId: string;
+    tenantId: string;
+    workflowName: string;
+    targetStep: string;
+    userId: string;
+    tx: DrizzleDbOrTx;
+  }): Promise<void> {
+    await this.persistStep({
+      tenantId: params.tenantId,
+      entityType: params.entityType,
+      entityId: params.entityId,
+      workflowName: params.workflowName,
+      step: params.targetStep,
+      userId: params.userId,
+      tx: params.tx,
+    });
+
+    this.logger.log(
+      `WorkflowEngine.project — ${params.entityType}:${params.entityId} projected to step '${params.targetStep}'`,
+    );
+  }
+
   private findDefinition(entityType: string, workflowName: string): WorkflowDefinition | undefined {
     const definitions = this.definitions.get(entityType);
     return definitions?.find((d) => d.name === workflowName);

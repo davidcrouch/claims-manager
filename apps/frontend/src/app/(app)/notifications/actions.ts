@@ -26,9 +26,14 @@ export async function fetchUnreadCountAction(): Promise<number> {
   const token = await getAccessToken();
   if (!token) return 0;
 
-  const api = createApiClient({ token });
-  const result = await api.getUnreadNotificationCount();
-  return result.count;
+  try {
+    const api = createApiClient({ token });
+    const result = await api.getUnreadNotificationCount();
+    return result.count;
+  } catch (err) {
+    console.error('[notifications/actions.fetchUnreadCountAction]', err);
+    return 0;
+  }
 }
 
 export async function fetchUnreadEntityIdsAction(

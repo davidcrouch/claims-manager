@@ -823,7 +823,7 @@ export function RfqDetail({
             </Button>
           )
         )}
-        <PrintButton documentType="rfq" entityId={rfq.id} />
+        <PrintButton documentType="rfq" entityId={rfq.id} jobId={job?.id} />
         <ArchiveEntityButton
           entityType="rfq"
           entityId={rfq.id}

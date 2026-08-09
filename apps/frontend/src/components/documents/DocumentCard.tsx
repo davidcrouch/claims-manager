@@ -79,6 +79,16 @@ function getThumbSrc(doc: FSDocument): string {
 function hasPossibleThumbnail(doc: FSDocument): boolean {
   if (doc.thumbnailUri) return true;
   if (doc.mimeType?.startsWith('image/') && doc.gcsBucket) return true;
+  if (doc.mimeType === 'application/pdf' || doc.fileName?.toLowerCase().endsWith('.pdf')) {
+    return true;
+  }
+  if (
+    doc.mimeType?.includes('word') ||
+    doc.fileName?.toLowerCase().endsWith('.docx') ||
+    doc.fileName?.toLowerCase().endsWith('.doc')
+  ) {
+    return true;
+  }
   return false;
 }
 

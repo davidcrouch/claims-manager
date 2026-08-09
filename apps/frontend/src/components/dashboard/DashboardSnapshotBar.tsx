@@ -48,14 +48,14 @@ export function DashboardSnapshotBar({ snapshot }: { snapshot: DashboardInbox['s
   ];
 
   return (
-    <>
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
       {cards.map((card) => {
         const Icon = card.icon;
         return (
           <Link
             key={card.label}
             href={card.href}
-            className="group flex h-full min-h-0 flex-col justify-between rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50/80"
+            className="group flex min-h-[5.5rem] flex-col justify-between rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50/80"
           >
             <div className="flex items-start justify-between gap-2">
               <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{card.label}</p>
@@ -72,6 +72,6 @@ export function DashboardSnapshotBar({ snapshot }: { snapshot: DashboardInbox['s
           </Link>
         );
       })}
-    </>
+    </div>
   );
 }

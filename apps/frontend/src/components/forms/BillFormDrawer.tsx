@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
-import { Receipt } from 'lucide-react';
+import { Loader2, Receipt } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -24,6 +24,10 @@ import {
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
 import { createBillAction } from '@/app/(app)/mutations';
+import {
+  CreateSubmitOverlay,
+  useCreateSubmitPhase,
+} from '@/components/forms/CreateSubmitOverlay';
 import { fetchJobInvoicesAction } from '@/app/(app)/jobs/[id]/actions';
 import { JobSelectField } from '@/components/forms/JobSelectField';
 import type { JobOption } from '@/components/shared/job-label';
@@ -60,7 +64,8 @@ export function BillFormDrawer({
   jobs,
 }: BillFormDrawerProps) {
   const router = useRouter();
-  const [submitting, setSubmitting] = useState(false);
+  const { phase, busy, startCreating, startOpening, resetPhase } =
+    useCreateSubmitPhase();
   const [error, setError] = useState<string | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [pickedJobId, setPickedJobId] = useState('');
@@ -102,7 +107,7 @@ export function BillFormDrawer({
       setError('Job is required');
       return;
     }
-    setSubmitting(true);
+    startCreating();
     setError(null);
     try {
       const result = await createBillAction({
@@ -116,26 +121,33 @@ export function BillFormDrawer({
         comments: values.comments || undefined,
       });
       if (result.success) {
+        if (result.bill?.id) {
+          startOpening();
+          router.push(`/bills/${result.bill.id}`);
+          return;
+        }
+        resetPhase();
         onOpenChange(false);
-        form.reset();
         router.refresh();
       } else {
         setError(result.error ?? 'Failed to create bill');
+        resetPhase();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create bill');
-    } finally {
-      setSubmitting(false);
+      resetPhase();
     }
   }
 
   return (
+    <>
     <BottomFormDrawer
       open={open}
       onOpenChange={onOpenChange}
       title="Create Bill"
       description="Record a vendor bill against an invoice."
       icon={<Receipt className="h-5 w-5" />}
+      preventClose={busy}
     >
       <form onSubmit={form.handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col">
         <BottomFormDrawerBody>
@@ -218,10 +230,21 @@ export function BillFormDrawer({
         </BottomFormDrawerBody>
 
         <BottomFormDrawerFooter>
-          <Button type="button" variant="outline" size="lg" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button type="submit" size="lg" disabled={submitting}>{submitting ? 'Creating...' : 'Create Bill'}</Button>
+          <Button type="button" variant="outline" size="lg" disabled={busy} onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button type="submit" size="lg" disabled={busy}>
+            {busy ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {phase === 'opening' ? 'Opening…' : 'Creating…'}
+              </>
+            ) : (
+              'Create Bill'
+            )}
+          </Button>
         </BottomFormDrawerFooter>
       </form>
     </BottomFormDrawer>
+    <CreateSubmitOverlay phase={phase} entityLabel="bill" />
+    </>
   );
 }

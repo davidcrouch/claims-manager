@@ -15,6 +15,15 @@ import type { AppNotification } from '@/types/api';
 const LOG_PREFIX = 'frontend:NotificationBell';
 const POLL_INTERVAL_MS = 30_000;
 
+function isAuthFailure(error: unknown): boolean {
+  const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
+  return (
+    message.includes('unauthorized') ||
+    message.includes('401') ||
+    message.includes('not authenticated')
+  );
+}
+
 const ENTITY_ROUTE_MAP: Record<string, string> = {
   job: 'jobs',
   claim: 'claims',
@@ -81,7 +90,7 @@ export function NotificationBell() {
       console.error(`${LOG_PREFIX}:refreshCount - request failed`, {
         error: error instanceof Error ? error.message : String(error),
       });
-      redirectToLogin();
+      if (isAuthFailure(error)) redirectToLogin();
     }
   }, [redirectToLogin]);
 
@@ -123,7 +132,7 @@ export function NotificationBell() {
       console.error(`${LOG_PREFIX}:handleOpen - request failed`, {
         error: error instanceof Error ? error.message : String(error),
       });
-      redirectToLogin();
+      if (isAuthFailure(error)) redirectToLogin();
     } finally {
       setLoading(false);
     }

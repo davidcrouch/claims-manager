@@ -7,6 +7,10 @@ export class PdfConverterService {
 
   constructor(private readonly officeConverter: OfficeConverterService) {}
 
+  isAvailable(): boolean {
+    return this.officeConverter.isAvailable();
+  }
+
   async convertDocxToPdf(params: { docxBuffer: Buffer }): Promise<Buffer> {
     const logPrefix = 'PdfConverterService.convertDocxToPdf';
     this.logger.debug(`${logPrefix} — converting docx (${params.docxBuffer.length} bytes) to pdf`);

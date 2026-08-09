@@ -4,13 +4,17 @@ import {
   VendorsRepository,
   type VendorInsert,
 } from '../../../database/repositories';
+import { GhostOrganisationService } from './ghost-organisation.service';
 import { asString, isPlainObject } from '../transformers/transform-utils';
 
 @Injectable()
 export class VendorSyncService {
   private readonly logger = new Logger('VendorSyncService');
 
-  constructor(private readonly vendorsRepo: VendorsRepository) {}
+  constructor(
+    private readonly vendorsRepo: VendorsRepository,
+    private readonly ghostOrgService: GhostOrganisationService,
+  ) {}
 
   /**
    * Upsert a vendor from a Crunchwork nested `vendor` object (job/PO payloads).
@@ -40,6 +44,26 @@ export class VendorSyncService {
       asString(params.cwVendor.phone) ??
       asString(params.cwVendor.mobilePhone);
 
+    const email = asString(params.cwVendor.email);
+    const abn = asString(params.cwVendor.abn);
+    const legalName = asString(params.cwVendor.legalName ?? params.cwVendor.companyName);
+    const tradingName = asString(params.cwVendor.tradingName);
+    const emailDomain = email ? this.extractEmailDomain(email) : undefined;
+
+    let organisationId: string | undefined;
+    if (params.tx) {
+      const orgResult = await this.ghostOrgService.resolveOrCreate({
+        abn: abn ?? undefined,
+        legalName: legalName ?? undefined,
+        tradingName: tradingName ?? undefined,
+        primaryEmail: email ?? undefined,
+        emailDomain: emailDomain ?? undefined,
+        phone: phone ?? undefined,
+        tx: params.tx,
+      });
+      organisationId = orgResult.organisationId;
+    }
+
     const vendorData: Omit<VendorInsert, 'tenantId' | 'externalReference'> = {
       name,
       address,
@@ -51,6 +75,7 @@ export class VendorSyncService {
       country: asString(address.country),
       phone: phone ?? undefined,
       afterHoursPhone: asString(params.cwVendor.afterHoursPhone) ?? undefined,
+      organisationId,
       isActive: true,
     };
 
@@ -62,7 +87,7 @@ export class VendorSyncService {
     });
 
     this.logger.debug(
-      `VendorSyncService.syncFromCrunchworkPayload — upserted vendor id=${row.id} externalReference=${externalReference}`,
+      `VendorSyncService.syncFromCrunchworkPayload — upserted vendor id=${row.id} externalReference=${externalReference} orgId=${organisationId}`,
     );
 
     return row.id;
@@ -105,5 +130,10 @@ export class VendorSyncService {
     if (email) details.email = email;
     if (phone) details.phone = phone;
     return details;
+  }
+
+  private extractEmailDomain(email: string): string | undefined {
+    const parts = email.split('@');
+    return parts.length === 2 ? parts[1].toLowerCase() : undefined;
   }
 }

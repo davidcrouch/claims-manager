@@ -8,7 +8,7 @@ export const metadata = { title: 'Documents — EnsureOS' };
 export default async function DocumentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ jobId?: string }>;
+  searchParams: Promise<{ jobId?: string; categoryId?: string }>;
 }) {
   const api = await getServerApiClient();
   if (!api) {
@@ -17,6 +17,7 @@ export default async function DocumentsPage({
 
   const params = await searchParams;
   const jobId = params.jobId;
+  const categoryId = params.categoryId?.trim() || undefined;
 
   let job: Job | null = null;
   let parentClaim: Claim | null = null;
@@ -36,7 +37,7 @@ export default async function DocumentsPage({
   if (jobId) {
     const [filesystemResult, documentsResult] = await Promise.allSettled([
       api.getJobFilesystem(jobId),
-      api.getDocuments({ page: 1, limit: 24, jobId }),
+      api.getDocuments({ page: 1, limit: 24, jobId, categoryId }),
     ]);
 
     const filesystem =
@@ -53,6 +54,7 @@ export default async function DocumentsPage({
           initialFilesystem={filesystem}
           initialDocuments={documentsData.data}
           initialTotal={documentsData.total}
+          initialCategoryId={categoryId ?? null}
           job={job}
           parentClaim={parentClaim}
         />
@@ -62,7 +64,7 @@ export default async function DocumentsPage({
 
   const [overviewResult, documentsResult] = await Promise.allSettled([
     api.getFilesystemOverview(),
-    api.getDocuments({ page: 1, limit: 24 }),
+    api.getDocuments({ page: 1, limit: 24, categoryId }),
   ]);
 
   const overview =
@@ -74,13 +76,14 @@ export default async function DocumentsPage({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
-      <FilesystemView
-        mode="overview"
-        initialOverview={overview}
-        initialFilesystem={overview?.company ?? null}
-        initialDocuments={documentsData.data}
-        initialTotal={documentsData.total}
-      />
+        <FilesystemView
+          mode="overview"
+          initialOverview={overview}
+          initialFilesystem={overview?.company ?? null}
+          initialDocuments={documentsData.data}
+          initialTotal={documentsData.total}
+          initialCategoryId={categoryId ?? null}
+        />
     </div>
   );
 }

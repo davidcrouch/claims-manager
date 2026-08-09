@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
-import { ClipboardList } from 'lucide-react';
+import { ClipboardList, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,6 +17,10 @@ import {
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
 import { createReportAction } from '@/app/(app)/mutations';
+import {
+  CreateSubmitOverlay,
+  useCreateSubmitPhase,
+} from '@/components/forms/CreateSubmitOverlay';
 
 const reportFormSchema = z.object({
   jobId: z.string().min(1, 'Job is required'),
@@ -41,7 +45,8 @@ export function ReportFormDrawer({
   claimId,
 }: ReportFormDrawerProps) {
   const router = useRouter();
-  const [submitting, setSubmitting] = useState(false);
+  const { phase, busy, startCreating, startOpening, resetPhase } =
+    useCreateSubmitPhase();
   const [error, setError] = useState<string | null>(null);
 
   const form = useForm<ReportFormValues>({
@@ -61,7 +66,7 @@ export function ReportFormDrawer({
   }, [open, jobId, claimId, form]);
 
   async function onSubmit(values: ReportFormValues) {
-    setSubmitting(true);
+    startCreating();
     setError(null);
     try {
       const reportData = values.reportData
@@ -80,26 +85,33 @@ export function ReportFormDrawer({
         reportData,
       });
       if (result.success) {
+        if (result.report?.id) {
+          startOpening();
+          router.push(`/reports/${result.report.id}`);
+          return;
+        }
+        resetPhase();
         onOpenChange(false);
-        form.reset({ jobId, claimId: claimId ?? undefined, title: '', reportData: '' });
         router.refresh();
       } else {
         setError(result.error ?? 'Failed to create report');
+        resetPhase();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create report');
-    } finally {
-      setSubmitting(false);
+      resetPhase();
     }
   }
 
   return (
+    <>
     <BottomFormDrawer
       open={open}
       onOpenChange={onOpenChange}
       title="Create Report"
       description="Create a report for this job. Provide a title and attach any notes as JSON or plain text."
       icon={<ClipboardList className="h-5 w-5" />}
+      preventClose={busy}
     >
       <form
         onSubmit={form.handleSubmit(onSubmit)}
@@ -140,15 +152,25 @@ export function ReportFormDrawer({
             type="button"
             variant="outline"
             size="lg"
+            disabled={busy}
             onClick={() => onOpenChange(false)}
           >
             Cancel
           </Button>
-          <Button type="submit" size="lg" disabled={submitting}>
-            {submitting ? 'Creating...' : 'Create Report'}
+          <Button type="submit" size="lg" disabled={busy}>
+            {busy ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {phase === 'opening' ? 'Opening…' : 'Creating…'}
+              </>
+            ) : (
+              'Create Report'
+            )}
           </Button>
         </BottomFormDrawerFooter>
       </form>
     </BottomFormDrawer>
+    <CreateSubmitOverlay phase={phase} entityLabel="report" />
+    </>
   );
 }

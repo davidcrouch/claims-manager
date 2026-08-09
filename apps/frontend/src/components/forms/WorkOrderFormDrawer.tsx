@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
-import { ClipboardList } from 'lucide-react';
+import { ClipboardList, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -24,6 +24,10 @@ import {
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
 import { createWorkOrderAction } from '@/app/(app)/mutations';
+import {
+  CreateSubmitOverlay,
+  useCreateSubmitPhase,
+} from '@/components/forms/CreateSubmitOverlay';
 import { fetchJobPurchaseOrdersAction } from '@/app/(app)/jobs/[id]/actions';
 import { JobSelectField } from '@/components/forms/JobSelectField';
 import type { JobOption } from '@/components/shared/job-label';
@@ -60,7 +64,8 @@ export function WorkOrderFormDrawer({
   jobs,
 }: WorkOrderFormDrawerProps) {
   const router = useRouter();
-  const [submitting, setSubmitting] = useState(false);
+  const { phase, busy, startCreating, startOpening, resetPhase } =
+    useCreateSubmitPhase();
   const [error, setError] = useState<string | null>(null);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [pickedJobId, setPickedJobId] = useState('');
@@ -102,7 +107,7 @@ export function WorkOrderFormDrawer({
       setError('Job is required');
       return;
     }
-    setSubmitting(true);
+    startCreating();
     setError(null);
     try {
       const result = await createWorkOrderAction({
@@ -116,30 +121,33 @@ export function WorkOrderFormDrawer({
         note: values.note || undefined,
       });
       if (result.success) {
-        onOpenChange(false);
-        form.reset();
         if (result.workOrder?.id) {
+          startOpening();
           router.push(`/work-orders/${result.workOrder.id}`);
-        } else {
-          router.refresh();
+          return;
         }
+        resetPhase();
+        onOpenChange(false);
+        router.refresh();
       } else {
         setError(result.error ?? 'Failed to create work order');
+        resetPhase();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create work order');
-    } finally {
-      setSubmitting(false);
+      resetPhase();
     }
   }
 
   return (
+    <>
     <BottomFormDrawer
       open={open}
       onOpenChange={onOpenChange}
       title="Create Work Order"
       description="Create a new work order linked to a purchase order."
       icon={<ClipboardList className="h-5 w-5" />}
+      preventClose={busy}
     >
       <form onSubmit={form.handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col">
         <BottomFormDrawerBody>
@@ -222,10 +230,21 @@ export function WorkOrderFormDrawer({
         </BottomFormDrawerBody>
 
         <BottomFormDrawerFooter>
-          <Button type="button" variant="outline" size="lg" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button type="submit" size="lg" disabled={submitting}>{submitting ? 'Creating...' : 'Create Work Order'}</Button>
+          <Button type="button" variant="outline" size="lg" disabled={busy} onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button type="submit" size="lg" disabled={busy}>
+            {busy ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {phase === 'opening' ? 'Opening…' : 'Creating…'}
+              </>
+            ) : (
+              'Create Work Order'
+            )}
+          </Button>
         </BottomFormDrawerFooter>
       </form>
     </BottomFormDrawer>
+    <CreateSubmitOverlay phase={phase} entityLabel="work order" />
+    </>
   );
 }

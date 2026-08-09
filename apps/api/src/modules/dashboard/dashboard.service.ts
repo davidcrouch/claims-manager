@@ -209,7 +209,6 @@ export class DashboardService {
 
     const [
       woLookups,
-      woLookupsAlt,
       proposalLookups,
       rfqLookups,
       quoteLookups,
@@ -217,7 +216,6 @@ export class DashboardService {
       assignedClaimIds,
     ] = await Promise.all([
       this.lookupsRepo.findByDomain({ tenantId, domain: 'work_order_status' }),
-      this.lookupsRepo.findByDomain({ tenantId, domain: 'wo_status' }),
       this.lookupsRepo.findByDomain({ tenantId, domain: 'proposal_status' }),
       this.lookupsRepo.findByDomain({ tenantId, domain: 'rfq_status' }),
       this.lookupsRepo.findByDomain({ tenantId, domain: 'quote_status' }),
@@ -237,10 +235,7 @@ export class DashboardService {
         : { data: [], total: 0 };
     const scopedToUser = assignedActiveJobs.total > 0;
 
-    const woStatusIds = matchLookupIdsByNames(
-      [...woLookups, ...woLookupsAlt],
-      WO_ACCEPT_STATUS_NAMES,
-    );
+    const woStatusIds = matchLookupIdsByNames(woLookups, WO_ACCEPT_STATUS_NAMES);
     const proposalStatusIds = matchLookupIdsByNames(
       proposalLookups,
       PROPOSAL_REVIEW_STATUS_NAMES,
@@ -360,7 +355,6 @@ export class DashboardService {
     const lookupName = (lookups: Array<{ id: string; name: string | null }>, id?: string | null) =>
       id ? lookups.find((l) => l.id === id)?.name ?? undefined : undefined;
 
-    const woLookupsAll = [...woLookups, ...woLookupsAlt];
     const queues: DashboardInboxQueue[] = [];
 
     if (workOrders.total > 0) {
@@ -374,7 +368,7 @@ export class DashboardService {
           entityType: 'work_order',
           title: humanizeTitle('Work order', row.workOrderNumber, row.name),
           subtitle: jobSubtitle(jobById.get(row.jobId ?? '')),
-          status: lookupName(woLookupsAll, row.statusLookupId),
+          status: lookupName(woLookups, row.statusLookupId),
           dueAt: row.startDate ?? null,
           href: `/work-orders/${row.id}`,
           jobId: row.jobId,

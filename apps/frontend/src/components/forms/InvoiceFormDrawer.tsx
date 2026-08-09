@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
-import { Receipt } from 'lucide-react';
+import { Loader2, Receipt } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -25,6 +25,10 @@ import {
 } from '@/components/forms/BottomFormDrawer';
 import { isArchivedStatus } from '@/components/shared/list-filters';
 import { createInvoiceAction } from '@/app/(app)/mutations';
+import {
+  CreateSubmitOverlay,
+  useCreateSubmitPhase,
+} from '@/components/forms/CreateSubmitOverlay';
 import type { WorkOrder } from '@/types/api';
 
 const invoiceFormSchema = z.object({
@@ -70,7 +74,8 @@ export function InvoiceFormDrawer({
   defaultWorkOrderId,
 }: InvoiceFormDrawerProps) {
   const router = useRouter();
-  const [submitting, setSubmitting] = useState(false);
+  const { phase, busy, startCreating, startOpening, resetPhase } =
+    useCreateSubmitPhase();
   const [error, setError] = useState<string | null>(null);
 
   const activeWorkOrders = useMemo(
@@ -97,21 +102,21 @@ export function InvoiceFormDrawer({
   }, [open, defaultWorkOrderId, form]);
 
   async function onSubmit(values: InvoiceFormValues) {
-    setSubmitting(true);
+    const selected = activeWorkOrders.find((wo) => wo.id === values.workOrderId);
+    if (!selected) {
+      setError('Selected work order was not found');
+      return;
+    }
+    if (!selected.purchaseOrderId) {
+      setError(
+        'This work order is not linked to a purchase order and cannot be invoiced yet',
+      );
+      return;
+    }
+
+    startCreating();
     setError(null);
     try {
-      const selected = activeWorkOrders.find((wo) => wo.id === values.workOrderId);
-      if (!selected) {
-        setError('Selected work order was not found');
-        return;
-      }
-      if (!selected.purchaseOrderId) {
-        setError(
-          'This work order is not linked to a purchase order and cannot be invoiced yet',
-        );
-        return;
-      }
-
       const result = await createInvoiceAction({
         purchaseOrderId: selected.purchaseOrderId,
         invoiceNumber: values.invoiceNumber || undefined,
@@ -125,35 +130,35 @@ export function InvoiceFormDrawer({
         note: values.note || undefined,
       });
       if (result.success) {
+        if (result.invoice?.id) {
+          startOpening();
+          router.push(`/invoices/${result.invoice.id}`);
+          return;
+        }
+        resetPhase();
         onOpenChange(false);
-        form.reset({
-          workOrderId: defaultWorkOrderId ?? '',
-          invoiceNumber: '',
-          totalAmount: undefined,
-          issueDate: todayISO(),
-          dueDate: '',
-          note: '',
-        });
         router.refresh();
       } else {
         setError(result.error ?? 'Failed to submit invoice');
+        resetPhase();
       }
     } catch (err) {
       setError(
         err instanceof Error ? err.message : 'Failed to submit invoice',
       );
-    } finally {
-      setSubmitting(false);
+      resetPhase();
     }
   }
 
   return (
+    <>
     <BottomFormDrawer
       open={open}
       onOpenChange={onOpenChange}
       title="Create Invoice"
       description="Submit an invoice against an active work order. Optionally include your invoice number for reference."
       icon={<Receipt className="h-5 w-5" />}
+      preventClose={busy}
     >
       <form
         onSubmit={form.handleSubmit(onSubmit)}
@@ -248,15 +253,25 @@ export function InvoiceFormDrawer({
             type="button"
             variant="outline"
             size="lg"
+            disabled={busy}
             onClick={() => onOpenChange(false)}
           >
             Cancel
           </Button>
-          <Button type="submit" size="lg" disabled={submitting}>
-            {submitting ? 'Creating...' : 'Create Invoice'}
+          <Button type="submit" size="lg" disabled={busy}>
+            {busy ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {phase === 'opening' ? 'Opening…' : 'Creating…'}
+              </>
+            ) : (
+              'Create Invoice'
+            )}
           </Button>
         </BottomFormDrawerFooter>
       </form>
     </BottomFormDrawer>
+    <CreateSubmitOverlay phase={phase} entityLabel="invoice" />
+    </>
   );
 }

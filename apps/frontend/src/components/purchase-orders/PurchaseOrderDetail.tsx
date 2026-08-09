@@ -109,7 +109,7 @@ export function PurchaseOrderPageHeader({ po, job }: { po: PurchaseOrder; job?: 
   return (
     <>
       <SetHeaderActions>
-        <PrintButton documentType="purchase_order" entityId={po.id} />
+        <PrintButton documentType="purchase_order" entityId={po.id} jobId={job?.id} />
         <ArchiveEntityButton
           entityType="purchase_order"
           entityId={po.id}

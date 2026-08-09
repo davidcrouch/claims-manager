@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDown,
   ArrowUp,
@@ -22,14 +22,36 @@ import {
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
 import { StagedFileTile } from '@/components/documents/DocumentUploadTile';
+import {
+  ProcessingStepsList,
+  rowStateFromStep,
+  type ProcessingRow,
+} from '@/components/documents/DocumentProcessingStatus';
+import { useDocumentPipelineProgress } from '@/hooks/useDocumentPipelineProgress';
 import { validateFile, validateBatch, formatBytes } from '@/lib/upload';
 import { useDocumentUpload } from '@/lib/upload/use-document-upload';
+import type { UploadTask } from '@/lib/upload/types';
 import type { ApiClient } from '@/lib/api-client';
 import type { JournalPage, JournalPageAttachment, JournalPageBlock } from '@/types/api';
 
 type NoteDraft = { id: string; type: 'note'; text: string };
 type UploadDraft = { id: string; type: 'upload'; file: File; documentId?: string };
 type ContentDraft = NoteDraft | UploadDraft;
+
+function findUploadTask(tasks: UploadTask[], block: UploadDraft): UploadTask | undefined {
+  return (
+    tasks.find((t) => t.file === block.file) ??
+    tasks.find((t) => t.fileName === block.file.name && t.fileSizeBytes === block.file.size)
+  );
+}
+
+function isUploadSettled(task: UploadTask | undefined): boolean {
+  return (
+    task?.status === 'completed' ||
+    task?.status === 'completing' ||
+    task?.status === 'failed'
+  );
+}
 
 export interface PageEntryDrawerProps {
   open: boolean;
@@ -50,6 +72,8 @@ export function PageEntryDrawer({
   const [blocks, setBlocks] = useState<ContentDraft[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [pageCreated, setPageCreated] = useState(false);
+  const [attachmentsLinked, setAttachmentsLinked] = useState(false);
   const [location, setLocation] = useState<{
     latitude: number;
     longitude: number;
@@ -59,6 +83,9 @@ export function PageEntryDrawer({
   const pendingPageRef = useRef<JournalPage | null>(null);
   const pendingBlocksRef = useRef<JournalPageBlock[]>([]);
   const uploadSortRef = useRef(0);
+  const finalizingRef = useRef(false);
+  const resultPageRef = useRef<JournalPage | null>(null);
+  const finishRef = useRef(false);
 
   const {
     addFiles,
@@ -70,9 +97,24 @@ export function PageEntryDrawer({
     relatedRecordId: journalId,
   });
 
-  // Track completed upload tasks → create journal page attachments + save page
+  const uploadDocumentIds = useMemo(
+    () => uploadTasks.map((t) => t.documentId).filter(Boolean),
+    [uploadTasks],
+  );
+
+  const pipelineActive = uploadTasks.some(
+    (t) => t.pipelineStatus === 'pending' || t.pipelineStatus === 'running',
+  );
+
+  const pipeline = useDocumentPipelineProgress(uploadDocumentIds, {
+    enabled: submitting && attachmentsLinked && pipelineActive,
+    showIdle: true,
+    assumeNoneAfterMs: 12_000,
+  });
+
+  // Attach files once GCS (+ thumbnail) is in place — do not wait for upload-complete.
   useEffect(() => {
-    if (!submitting || !pendingPageRef.current) return;
+    if (!submitting || !pendingPageRef.current || finalizingRef.current) return;
 
     const page = pendingPageRef.current;
     const allUploadBlocks = blocks.filter(
@@ -80,29 +122,28 @@ export function PageEntryDrawer({
     );
     if (allUploadBlocks.length === 0) return;
 
-    const allDone = allUploadBlocks.every((b) => {
-      const task = uploadTasks.find((t) => t.file === b.file);
-      return task && (task.status === 'completed' || task.status === 'failed');
-    });
+    const allDone = allUploadBlocks.every((b) => isUploadSettled(findUploadTask(uploadTasks, b)));
     if (!allDone) return;
 
     const anyFailed = allUploadBlocks.some((b) => {
-      const task = uploadTasks.find((t) => t.file === b.file);
+      const task = findUploadTask(uploadTasks, b);
       return task?.status === 'failed';
     });
     if (anyFailed) {
       const failedTask = allUploadBlocks
-        .map((b) => uploadTasks.find((t) => t.file === b.file))
+        .map((b) => findUploadTask(uploadTasks, b))
         .find((t) => t?.status === 'failed');
       setError(`Upload failed: ${failedTask?.error ?? 'Unknown error'}`);
       setSubmitting(false);
       return;
     }
 
+    finalizingRef.current = true;
+
     (async () => {
       try {
         for (const block of allUploadBlocks) {
-          const task = uploadTasks.find((t) => t.file === block.file);
+          const task = findUploadTask(uploadTasks, block);
           if (!task) continue;
 
           const attachment = (await api.createJournalPageAttachment(
@@ -147,10 +188,11 @@ export function PageEntryDrawer({
           /* use local blocks */
         }
 
-        onCreated?.(resultPage);
-        handleOpenChange(false);
+        resultPageRef.current = resultPage;
+        setAttachmentsLinked(true);
       } catch (err) {
-        console.error('PageEntryDrawer: finalize failed', err);
+        console.error('[journals/PageEntryDrawer.finalize] failed', err);
+        finalizingRef.current = false;
         setError(
           err instanceof Error ? err.message : 'Failed to finalize entry',
         );
@@ -164,11 +206,16 @@ export function PageEntryDrawer({
     setBlocks([]);
     setError(null);
     setSubmitting(false);
+    setPageCreated(false);
+    setAttachmentsLinked(false);
     setLocation(null);
     setLocationError(null);
     pendingPageRef.current = null;
     pendingBlocksRef.current = [];
     uploadSortRef.current = 0;
+    finalizingRef.current = false;
+    resultPageRef.current = null;
+    finishRef.current = false;
   }, []);
 
   const handleOpenChange = useCallback(
@@ -178,6 +225,27 @@ export function PageEntryDrawer({
     },
     [onOpenChange, resetForm],
   );
+
+  useEffect(() => {
+    if (!submitting || !attachmentsLinked || !resultPageRef.current || finishRef.current) return;
+    const uploadsBusy = uploadTasks.some(
+      (t) => t.status === 'queued' || t.status === 'uploading' || t.status === 'completing',
+    );
+    if (uploadsBusy) return;
+    if (pipelineActive && !pipeline.settled) return;
+
+    finishRef.current = true;
+    onCreated?.(resultPageRef.current);
+    handleOpenChange(false);
+  }, [
+    submitting,
+    attachmentsLinked,
+    uploadTasks,
+    pipelineActive,
+    pipeline.settled,
+    onCreated,
+    handleOpenChange,
+  ]);
 
   const addNoteBlock = () => {
     setBlocks((prev) => [
@@ -306,6 +374,7 @@ export function PageEntryDrawer({
       });
 
       pendingPageRef.current = page;
+      setPageCreated(true);
 
       for (const b of noteBlocks) {
         if (b.text.trim()) {
@@ -352,6 +421,83 @@ export function PageEntryDrawer({
     .filter((b): b is UploadDraft => b.type === 'upload')
     .reduce((sum, b) => sum + b.file.size, 0);
 
+  const submitProgressRows = useMemo((): ProcessingRow[] => {
+    if (!submitting) return [];
+    const rows: ProcessingRow[] = [
+      {
+        id: 'create',
+        label: 'Creating entry',
+        state: pageCreated ? 'done' : 'active',
+      },
+    ];
+
+    for (const task of uploadTasks) {
+      let label = `Upload ${task.fileName}`;
+      let state: ProcessingRow['state'] = 'pending';
+      let hint: string | undefined;
+      if (task.status === 'failed') {
+        label = `Upload failed: ${task.fileName}`;
+        state = 'failed';
+        hint = task.error;
+      } else if (task.status === 'completed') {
+        label = `Uploaded ${task.fileName}`;
+        state = 'done';
+      } else if (task.status === 'completing') {
+        label = `Finishing ${task.fileName}`;
+        state = 'active';
+      } else if (task.status === 'uploading') {
+        label = `Uploading ${task.fileName}`;
+        state = 'active';
+        hint = `${task.progress}%`;
+      } else {
+        label = `Waiting to upload ${task.fileName}`;
+        state = pageCreated ? 'active' : 'pending';
+      }
+      rows.push({ id: task.id, label, state, hint });
+    }
+
+    if (uploadTasks.length > 0) {
+      const uploadsReady = uploadTasks.every(
+        (t) => t.status === 'completed' || t.status === 'completing',
+      );
+      rows.push({
+        id: 'link',
+        label: 'Attaching files to entry',
+        state: attachmentsLinked ? 'done' : uploadsReady ? 'active' : 'pending',
+      });
+    }
+
+    if (attachmentsLinked && pipelineActive && pipeline.phase !== 'none') {
+      if (pipeline.steps.length > 0) {
+        for (const step of pipeline.steps) {
+          rows.push({
+            id: `pipe-${step.agentId}`,
+            label: step.label,
+            state: rowStateFromStep(step),
+          });
+        }
+      } else if (!pipeline.settled) {
+        rows.push({
+          id: 'pipe-start',
+          label: pipeline.headline || 'Starting document processing…',
+          state: 'active',
+        });
+      }
+    }
+
+    return rows;
+  }, [submitting, pageCreated, uploadTasks, attachmentsLinked, pipeline, pipelineActive]);
+
+  const submitLabel = (() => {
+    if (!submitting) return null;
+    if (pipeline.phase === 'running' || pipeline.phase === 'pending' || pipeline.phase === 'idle') {
+      return pipeline.headline || 'Processing…';
+    }
+    if (attachmentsLinked) return 'Finishing…';
+    if (isUploading) return 'Uploading…';
+    return 'Saving…';
+  })();
+
   return (
     <BottomFormDrawer
       open={open}
@@ -395,18 +541,19 @@ export function PageEntryDrawer({
             </p>
           </div>
 
-          {isUploading && uploadTasks.length > 0 && (
-            <div className="mb-4 flex items-center gap-3">
-              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200">
-                <div
-                  className="h-full rounded-full bg-primary transition-all duration-300"
-                  style={{ width: `${overallProgress}%` }}
-                />
-              </div>
-              <span className="text-xs font-medium text-muted-foreground">
-                {uploadTasks.filter((i) => i.status === 'completed').length}/
-                {uploadTasks.length} uploaded
-              </span>
+          {submitting && submitProgressRows.length > 0 && (
+            <div
+              className="mb-4 rounded-lg border bg-muted/30 px-3 py-2.5"
+              role="status"
+              aria-live="polite"
+            >
+              <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                Processing
+              </p>
+              <ProcessingStepsList rows={submitProgressRows} />
+              {pipeline.error ? (
+                <p className="mt-2 text-xs text-destructive">{pipeline.error}</p>
+              ) : null}
             </div>
           )}
 
@@ -529,12 +676,10 @@ export function PageEntryDrawer({
 
         <BottomFormDrawerFooter>
           <div>
-            {submitting && uploadCount > 0 && (
+            {submitting && uploadCount > 0 && overallProgress > 0 && overallProgress < 100 && (
               <span className="text-[11px] text-muted-foreground">
-                Progress:{' '}
-                <strong className="font-semibold text-foreground">
-                  {overallProgress}%
-                </strong>
+                Upload{' '}
+                <strong className="font-semibold text-foreground">{overallProgress}%</strong>
               </span>
             )}
           </div>
@@ -551,7 +696,7 @@ export function PageEntryDrawer({
               {submitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Saving…
+                  {submitLabel}
                 </>
               ) : (
                 <>

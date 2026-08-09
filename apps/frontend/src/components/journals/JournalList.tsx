@@ -121,7 +121,6 @@ export function JournalList({
 
   const handleCreatedAndLinked = (journal: Journal) => {
     setJournals((prev) => [journal, ...prev]);
-    setCreateDrawerOpen(false);
   };
 
   const handleLinked = () => {

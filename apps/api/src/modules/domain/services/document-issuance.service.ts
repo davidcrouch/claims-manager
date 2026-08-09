@@ -14,6 +14,7 @@ import {
   proposalCombos,
   proposalItems,
   invoices,
+  rfqs,
 } from '../../../database/schema';
 import {
   WorkOrdersRepository,
@@ -22,6 +23,8 @@ import {
   type ProposalInsert,
   BillsRepository,
   type BillInsert,
+  JobsRepository,
+  type JobInsert,
 } from '../../../database/repositories';
 import { VersioningService } from './versioning.service';
 import { LineItemSyncService } from './line-item-sync.service';
@@ -40,7 +43,7 @@ const RECIPIENT_TYPE_MAP: Record<string, string> = {
   purchase_order: 'work_order',
   quote: 'proposal',
   invoice: 'bill',
-  rfq: 'rfq',
+  rfq: 'job',
 };
 
 @Injectable()
@@ -56,6 +59,7 @@ export class DocumentIssuanceService {
     private readonly workOrdersRepo: WorkOrdersRepository,
     private readonly proposalsRepo: ProposalsRepository,
     private readonly billsRepo: BillsRepository,
+    private readonly jobsRepo: JobsRepository,
   ) {}
 
   /**
@@ -159,6 +163,8 @@ export class DocumentIssuanceService {
         return this.loadQuote(documentId, tx);
       case 'invoice':
         return this.loadInvoice(documentId, tx);
+      case 'rfq':
+        return this.loadRfq(documentId, tx);
       default:
         throw new Error(`DocumentIssuanceService — unsupported documentType=${documentType}`);
     }
@@ -243,6 +249,15 @@ export class DocumentIssuanceService {
     return { entity: entity as unknown as Record<string, unknown>, lineItems: [] };
   }
 
+  private async loadRfq(
+    id: string,
+    tx: DrizzleDbOrTx,
+  ): Promise<{ entity: Record<string, unknown>; lineItems: unknown[] }> {
+    const [entity] = await tx.select().from(rfqs).where(eq(rfqs.id, id)).limit(1);
+    if (!entity) throw new Error(`DocumentIssuanceService — RFQ ${id} not found`);
+    return { entity: entity as unknown as Record<string, unknown>, lineItems: [] };
+  }
+
   private async createRecipientEntity(params: {
     sourceDocumentType: string;
     sourceDocumentId: string;
@@ -260,6 +275,8 @@ export class DocumentIssuanceService {
         return this.createProposalFromQuote(params);
       case 'invoice':
         return this.createBillFromInvoice(params);
+      case 'rfq':
+        return this.createJobFromRfq(params);
       default:
         throw new Error(
           `DocumentIssuanceService — no recipient creation for type=${params.sourceDocumentType}`,
@@ -503,6 +520,58 @@ export class DocumentIssuanceService {
     };
   }
 
+  private async createJobFromRfq(params: {
+    sourceDocumentId: string;
+    sourceEntity: Record<string, unknown>;
+    sourceTenantId: string;
+    recipientTenantId: string;
+    versionNumber: number;
+    tx: DrizzleDbOrTx;
+  }): Promise<string> {
+    const src = params.sourceEntity;
+    const tx = params.tx;
+
+    const jobTypeLookupId = await this.lookupResolution.resolve({
+      tenantId: params.recipientTenantId,
+      domain: 'job_type',
+      externalReference: 'RFQ',
+      name: 'RFQ',
+      autoCreate: true,
+      tx,
+    });
+
+    const statusLookupId = await this.lookupResolution.resolve({
+      tenantId: params.recipientTenantId,
+      domain: 'job_status',
+      externalReference: 'Received',
+      name: 'Received',
+      autoCreate: true,
+      tx,
+    });
+
+    const jobData: Partial<JobInsert> = {
+      tenantId: params.recipientTenantId,
+      name: src.name as string | undefined,
+      sourceTenantId: params.sourceTenantId,
+      sourceOrganisationId: (src.issuerOrganisationId as string) ?? params.sourceTenantId,
+      sourceExternalReference: src.rfqNumber as string | undefined,
+      jobTypeLookupId: jobTypeLookupId!,
+      statusLookupId: statusLookupId ?? undefined,
+      apiPayload: { rfqPayload: src.rfqPayload, sourceRfqId: params.sourceDocumentId },
+    };
+
+    const created = await this.jobsRepo.create({
+      data: jobData as JobInsert,
+      tx,
+    });
+
+    this.logger.log(
+      `DocumentIssuanceService.createJobFromRfq — created job=${created.id} from rfq=${params.sourceDocumentId}`,
+    );
+
+    return created.id;
+  }
+
   private async createBillFromInvoice(params: {
     sourceDocumentId: string;
     sourceEntity: Record<string, unknown>;
@@ -512,6 +581,16 @@ export class DocumentIssuanceService {
     tx: DrizzleDbOrTx;
   }): Promise<string> {
     const src = params.sourceEntity;
+    const tx = params.tx;
+
+    const statusLookupId = await this.lookupResolution.resolve({
+      tenantId: params.recipientTenantId,
+      domain: 'bill_status',
+      externalReference: 'Received',
+      name: 'Received',
+      autoCreate: true,
+      tx,
+    });
 
     const billData: Partial<BillInsert> = {
       tenantId: params.recipientTenantId,
@@ -521,7 +600,10 @@ export class DocumentIssuanceService {
       issueDate: src.issueDate as Date | undefined,
       receivedDate: new Date(),
       comments: src.comments as string | undefined,
-      statusLookupId: src.statusLookupId as string | undefined,
+      statusLookupId: statusLookupId ?? undefined,
+      sourceTenantId: params.sourceTenantId,
+      sourceOrganisationId: (src.issuerOrganisationId as string) ?? params.sourceTenantId,
+      sourceExternalReference: src.invoiceNumber as string | undefined,
       subTotal: src.subTotal as string | undefined,
       totalTax: src.totalTax as string | undefined,
       totalAmount: src.totalAmount as string | undefined,
@@ -533,8 +615,12 @@ export class DocumentIssuanceService {
 
     const created = await this.billsRepo.create({
       data: billData as BillInsert,
-      tx: params.tx,
+      tx,
     });
+
+    this.logger.log(
+      `DocumentIssuanceService.createBillFromInvoice — created bill=${created.id} from invoice=${params.sourceDocumentId}`,
+    );
 
     return created.id;
   }

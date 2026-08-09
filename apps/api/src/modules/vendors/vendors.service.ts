@@ -43,6 +43,20 @@ export class VendorsService {
     return this.vendorsRepo.findOne({ id: params.id, tenantId });
   }
 
+  async findOnPlatformVendors(params: { limit?: number }) {
+    const tenantId = this.tenantContext.getTenantId();
+    return this.vendorsRepo.findOnPlatformVendors({ tenantId, limit: params.limit });
+  }
+
+  async linkOrganisation(params: { id: string; organisationId: string }) {
+    const tenantId = this.tenantContext.getTenantId();
+    return this.vendorsRepo.linkOrganisation({
+      id: params.id,
+      tenantId,
+      organisationId: params.organisationId,
+    });
+  }
+
   async getAllocation(params: {
     jobType: string;
     account: string;

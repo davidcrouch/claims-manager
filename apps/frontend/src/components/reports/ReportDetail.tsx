@@ -39,7 +39,11 @@ export function ReportPageHeader({ report }: { report: Report }) {
   return (
     <>
       <SetHeaderActions>
-        <PrintButton documentType="report" entityId={report.id} />
+        <PrintButton
+          documentType="report"
+          entityId={report.id}
+          jobId={report.jobId ?? undefined}
+        />
         <ArchiveEntityButton
           entityType="report"
           entityId={report.id}

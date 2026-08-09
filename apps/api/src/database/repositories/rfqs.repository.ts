@@ -1,7 +1,7 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { eq, and, isNull, desc, asc, sql, inArray } from 'drizzle-orm';
 import { DRIZZLE } from '../drizzle.module';
-import type { DrizzleDB } from '../drizzle.module';
+import type { DrizzleDB, DrizzleDbOrTx } from '../drizzle.module';
 import { rfqs } from '../schema';
 
 export type RfqRow = typeof rfqs.$inferSelect;
@@ -122,8 +122,9 @@ export class RfqsRepository {
       .orderBy(desc(rfqs.updatedAt));
   }
 
-  async create(params: { data: RfqInsert }): Promise<RfqRow> {
-    const [created] = await this.db
+  async create(params: { data: RfqInsert; tx?: DrizzleDbOrTx }): Promise<RfqRow> {
+    const db = params.tx ?? this.db;
+    const [created] = await db
       .insert(rfqs)
       .values(params.data)
       .returning();

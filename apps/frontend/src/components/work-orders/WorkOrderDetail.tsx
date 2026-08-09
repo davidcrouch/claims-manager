@@ -162,7 +162,7 @@ export function WorkOrderPageHeader({ wo, job }: { wo: WorkOrder; job?: Job | nu
           <Plus className="h-3.5 w-3.5" />
           Create Invoice
         </Button>
-        <PrintButton documentType="work_order" entityId={wo.id} />
+        <PrintButton documentType="work_order" entityId={wo.id} jobId={job?.id} />
         <ArchiveEntityButton
           entityType="work_order"
           entityId={wo.id}

@@ -12,6 +12,7 @@ import {
   UserPlus,
   Users,
   Globe,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,6 +31,10 @@ import {
   BottomFormDrawerError,
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
+import {
+  CreateSubmitOverlay,
+  useCreateSubmitPhase,
+} from '@/components/forms/CreateSubmitOverlay';
 import { createAppointmentAction, updateAppointmentAction, searchContactsAction } from '@/app/(app)/mutations';
 import { JobSelectField } from '@/components/forms/JobSelectField';
 import type { JobOption } from '@/components/shared/job-label';
@@ -310,7 +315,9 @@ export function AppointmentFormDrawer({
   const router = useRouter();
   const isEdit = !!appointment;
   const [submitting, setSubmitting] = useState(false);
+  const { phase, busy, startCreating, resetPhase } = useCreateSubmitPhase();
   const [error, setError] = useState<string | null>(null);
+  const locked = submitting || busy;
   const [assignees, setAssignees] = useState<PersonRef[]>([]);
   const [selectedParties, setSelectedParties] = useState<JobParty[]>([]);
   const needsJobPicker = !isEdit && (jobs?.length ?? 0) > 0;
@@ -391,7 +398,8 @@ export function AppointmentFormDrawer({
   );
 
   async function onSubmit(values: AppointmentFormValues) {
-    setSubmitting(true);
+    if (isEdit) setSubmitting(true);
+    else startCreating();
     setError(null);
     try {
       const startDate = new Date(`${values.startDate}T${values.startTime}`);
@@ -430,28 +438,33 @@ export function AppointmentFormDrawer({
         : await createAppointmentAction(payload);
 
       if (result.success) {
+        if (!isEdit) resetPhase();
         onSuccess?.(values.startDate);
         onOpenChange(false);
         router.refresh();
       } else {
         setError(result.error ?? (isEdit ? 'Failed to update appointment' : 'Failed to create appointment'));
+        if (!isEdit) resetPhase();
       }
     } catch (err) {
       setError(
         err instanceof Error ? err.message : (isEdit ? 'Failed to update appointment' : 'Failed to create appointment'),
       );
+      if (!isEdit) resetPhase();
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
+    <>
     <BottomFormDrawer
       open={open}
       onOpenChange={onOpenChange}
       title={isEdit ? 'Edit Appointment' : 'Add Appointment'}
       description={isEdit ? 'Update the appointment details below.' : 'Schedule a new appointment. Fill in the details below.'}
       icon={<CalendarClock className="h-5 w-5" />}
+      preventClose={locked}
     >
       <form
         onSubmit={form.handleSubmit(onSubmit)}
@@ -760,17 +773,27 @@ export function AppointmentFormDrawer({
             type="button"
             variant="outline"
             size="lg"
+            disabled={locked}
             onClick={() => onOpenChange(false)}
           >
             Cancel
           </Button>
-          <Button type="submit" size="lg" disabled={submitting}>
-            {submitting
-              ? (isEdit ? 'Saving...' : 'Creating...')
-              : (isEdit ? 'Save Changes' : 'Create Appointment')}
+          <Button type="submit" size="lg" disabled={locked}>
+            {locked ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {isEdit ? 'Saving…' : 'Creating…'}
+              </>
+            ) : isEdit ? (
+              'Save Changes'
+            ) : (
+              'Create Appointment'
+            )}
           </Button>
         </BottomFormDrawerFooter>
       </form>
     </BottomFormDrawer>
+    {!isEdit && <CreateSubmitOverlay phase={phase} entityLabel="appointment" />}
+    </>
   );
 }

@@ -27,13 +27,31 @@ export function useDocumentUpload(options?: UseDocumentUploadOptions) {
 
     engine.on('progress', ({ taskId, progress }) => {
       setTasks((prev) =>
-        prev.map((t) => (t.id === taskId ? { ...t, progress, status: 'uploading' } : t)),
+        prev.map((t) => {
+          if (t.id !== taskId) return t;
+          if (t.status === 'completed' || t.status === 'failed' || t.status === 'completing') {
+            return { ...t, progress: Math.max(t.progress, progress) };
+          }
+          return { ...t, progress, status: 'uploading' as const };
+        }),
       );
     });
 
-    engine.on('complete', ({ taskId }) => {
+    engine.on('uploaded', ({ taskId }) => {
       setTasks((prev) =>
-        prev.map((t) => (t.id === taskId ? { ...t, status: 'completed', progress: 100 } : t)),
+        prev.map((t) =>
+          t.id === taskId ? { ...t, status: 'completing' as const, progress: 100 } : t,
+        ),
+      );
+    });
+
+    engine.on('complete', ({ taskId, pipelineStatus }) => {
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === taskId
+            ? { ...t, status: 'completed', progress: 100, pipelineStatus: pipelineStatus ?? t.pipelineStatus }
+            : t,
+        ),
       );
     });
 

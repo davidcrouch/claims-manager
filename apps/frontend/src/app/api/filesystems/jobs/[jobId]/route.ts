@@ -12,9 +12,13 @@ export async function GET(
   }
 
   const { jobId } = await params;
-  const upstream = await fetch(`${getApiBaseUrl()}/filesystems/jobs/${jobId}`, {
-    headers: auth.headers,
-  });
+  const qs = new URL(_req.url).searchParams.toString();
+  const upstream = await fetch(
+    `${getApiBaseUrl()}/filesystems/jobs/${jobId}${qs ? `?${qs}` : ''}`,
+    {
+      headers: auth.headers,
+    },
+  );
 
   const data = await upstream.json().catch(() => ({}));
   return NextResponse.json(data, { status: upstream.status });

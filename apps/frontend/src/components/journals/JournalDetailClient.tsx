@@ -49,7 +49,7 @@ export function JournalDetailClient({ journal, initialPages, job = null }: Journ
             Add Entry
           </Button>
         )}
-        <PrintButton documentType="journal" entityId={journal.id} />
+        <PrintButton documentType="journal" entityId={journal.id} jobId={job?.id} />
         <ArchiveEntityButton
           entityType="journal"
           entityId={journal.id}

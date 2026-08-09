@@ -9,6 +9,10 @@ export const PUBSUB_CONFIG = {
     organisations: `claims.organisations-${env}`,
     invoices: `claims.invoices-${env}`,
     bills: `claims.bills-${env}`,
+    quotes: `claims.quotes-${env}`,
+    proposals: `claims.proposals-${env}`,
+    rfqs: `claims.rfqs-${env}`,
+    jobs: `claims.jobs-${env}`,
   },
   subscriptions: {
     purchaseOrderEvents: `claims.purchase-orders-api-sub-${env}`,

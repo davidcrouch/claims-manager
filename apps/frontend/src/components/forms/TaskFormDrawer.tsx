@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
-import { CheckSquare } from 'lucide-react';
+import { CheckSquare, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -27,6 +27,10 @@ import { ChatDrawer } from '@/components/chat/ChatDrawer';
 import { buildAIContext, type AIContextPayload } from '@/lib/ai/use-ai-context';
 import { createTaskAction } from '@/app/(app)/mutations';
 import { OrgUserSelect } from '@/components/forms/OrgUserSelect';
+import {
+  CreateSubmitOverlay,
+  useCreateSubmitPhase,
+} from '@/components/forms/CreateSubmitOverlay';
 
 const taskFormSchema = z.object({
   jobId: z.string().optional(),
@@ -61,7 +65,7 @@ export function TaskFormDrawer({
   companionChatOpen: companionChatOpenProp,
 }: TaskFormDrawerProps) {
   const router = useRouter();
-  const [submitting, setSubmitting] = useState(false);
+  const { phase, busy, startCreating, resetPhase } = useCreateSubmitPhase();
   const [error, setError] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [aiContext, setAiContext] = useState<AIContextPayload | undefined>();
@@ -92,7 +96,7 @@ export function TaskFormDrawer({
   }, [jobId, claimId, form]);
 
   async function onSubmit(values: TaskFormValues) {
-    setSubmitting(true);
+    startCreating();
     setError(null);
     try {
       const result = await createTaskAction({
@@ -107,6 +111,7 @@ export function TaskFormDrawer({
           : {}),
       });
       if (result.success) {
+        resetPhase();
         onOpenChange(false);
         form.reset({
           jobId: jobId ?? '',
@@ -120,11 +125,11 @@ export function TaskFormDrawer({
         router.refresh();
       } else {
         setError(result.error ?? 'Failed to create task');
+        resetPhase();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create task');
-    } finally {
-      setSubmitting(false);
+      resetPhase();
     }
   }
 
@@ -236,19 +241,32 @@ export function TaskFormDrawer({
             type="button"
             variant="outline"
             size="lg"
+            disabled={busy}
             onClick={() => onOpenChange(false)}
           >
             Cancel
           </Button>
-          <Button type="submit" size="lg" disabled={submitting}>
-            {submitting ? 'Creating...' : 'Create Task'}
+          <Button type="submit" size="lg" disabled={busy}>
+            {busy ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Creating…
+              </>
+            ) : (
+              'Create Task'
+            )}
           </Button>
         </BottomFormDrawerFooter>
       </form>
   );
 
   if (renderMode === 'canvas') {
-    return formContent;
+    return (
+      <>
+        {formContent}
+        <CreateSubmitOverlay phase={phase} entityLabel="task" />
+      </>
+    );
   }
 
   return (
@@ -262,9 +280,11 @@ export function TaskFormDrawer({
         aiAssistEnabled={aiAssistEnabled}
         onAIAssist={handleAIAssist}
         companionChatOpen={companionChatOpenProp ?? chatOpen}
+        preventClose={busy}
       >
         {formContent}
       </BottomFormDrawer>
+      <CreateSubmitOverlay phase={phase} entityLabel="task" />
       {aiAssistEnabled && companionChatOpenProp === undefined && (
         <ChatDrawer
           open={chatOpen}

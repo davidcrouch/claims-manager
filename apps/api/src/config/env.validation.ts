@@ -162,6 +162,11 @@ export class EnvironmentVariables {
   @IsString()
   @IsOptional()
   AUTH_JWKS_URI?: string;
+
+  /** Absolute path to soffice / soffice.exe for DOCX → PDF conversion. */
+  @IsString()
+  @IsOptional()
+  LIBREOFFICE_PATH?: string;
 }
 
 export function validate(config: Record<string, unknown>) {

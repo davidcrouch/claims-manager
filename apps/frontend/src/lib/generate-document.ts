@@ -3,10 +3,20 @@ import type { GeneratedDocument } from '@/lib/api-client';
 const POLL_INTERVAL_MS = 2_000;
 const MAX_POLL_ATTEMPTS = 90;
 
-async function postGenerate(body: {
+export interface GenerateDocumentParams {
   documentType: string;
-  entityId: string;
-}): Promise<GeneratedDocument> {
+  entityId?: string;
+  templateId?: string;
+  filesystemDocumentId?: string;
+  destinationCategoryId?: string;
+}
+
+export interface GenerateDocumentResult {
+  savedToFolder: boolean;
+  format: 'pdf' | 'docx';
+}
+
+async function postGenerate(body: GenerateDocumentParams): Promise<GeneratedDocument> {
   const res = await fetch('/api/generated-documents/generate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -53,7 +63,9 @@ async function openDownload(id: string): Promise<void> {
   const blobUrl = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = blobUrl;
-  a.download = '';
+  const disposition = res.headers.get('content-disposition') ?? '';
+  const named = /filename\*?=(?:UTF-8''|")?([^\";]+)/i.exec(disposition);
+  a.download = named?.[1] ? decodeURIComponent(named[1].replace(/"/g, '')) : '';
   a.target = '_blank';
   a.rel = 'noopener';
   document.body.appendChild(a);
@@ -66,12 +78,14 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Generate a PDF via the document-templating subsystem, poll until ready, then download. */
-export async function generateAndDownloadDocument(params: {
-  documentType: string;
-  entityId: string;
-}): Promise<void> {
+/** Generate a PDF via the document-templating subsystem, poll until ready, then download or save. */
+export async function generateAndDownloadDocument(
+  params: GenerateDocumentParams,
+): Promise<GenerateDocumentResult> {
   const record = await postGenerate(params);
+  if (!record?.id) {
+    throw new Error('Generation did not return a document id');
+  }
 
   let current = record;
   let attempts = 0;
@@ -81,7 +95,7 @@ export async function generateAndDownloadDocument(params: {
     current.status !== 'failed' &&
     attempts < MAX_POLL_ATTEMPTS
   ) {
-    await sleep(POLL_INTERVAL_MS);
+    if (attempts > 0) await sleep(POLL_INTERVAL_MS);
     current = await pollStatus(current.id);
     attempts++;
   }
@@ -94,5 +108,10 @@ export async function generateAndDownloadDocument(params: {
     throw new Error('Document generation timed out');
   }
 
-  await openDownload(current.id);
+  const savedToFolder = Boolean(params.destinationCategoryId);
+  const format: 'pdf' | 'docx' = current.s3KeyPdf?.trim() ? 'pdf' : 'docx';
+  if (!savedToFolder) {
+    await openDownload(current.id);
+  }
+  return { savedToFolder, format };
 }

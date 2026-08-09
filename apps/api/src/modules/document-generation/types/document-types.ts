@@ -1,3 +1,6 @@
+/** Fallback template used when a scenario has no dedicated assignment. Not a printable type. */
+export const DEFAULT_DOCUMENT_TYPE = 'default' as const;
+
 export const DOCUMENT_TYPES = [
   // Singular (detail) types
   'quote',
@@ -17,6 +20,7 @@ export const DOCUMENT_TYPES = [
   'message',
   'journal',
   'vendor',
+  'assessment',
   // Plural (list) types
   'jobs_list',
   'quotes_list',
@@ -38,6 +42,19 @@ export const DOCUMENT_TYPES = [
 
 export type DocumentType = (typeof DOCUMENT_TYPES)[number];
 
+export const ASSIGNABLE_TEMPLATE_TYPES = [
+  DEFAULT_DOCUMENT_TYPE,
+  ...DOCUMENT_TYPES,
+] as const;
+
+export type AssignableTemplateType = (typeof ASSIGNABLE_TEMPLATE_TYPES)[number];
+
+export function isAssignableTemplateType(
+  value: string,
+): value is AssignableTemplateType {
+  return (ASSIGNABLE_TEMPLATE_TYPES as readonly string[]).includes(value);
+}
+
 export const DOCUMENT_TYPE_TO_ENTITY_TYPE: Record<DocumentType, string> = {
   quote: 'Quote',
   invoice: 'Invoice',
@@ -56,6 +73,7 @@ export const DOCUMENT_TYPE_TO_ENTITY_TYPE: Record<DocumentType, string> = {
   message: 'Message',
   journal: 'Journal',
   vendor: 'Vendor',
+  assessment: 'Assessment',
   jobs_list: 'Organization',
   quotes_list: 'Organization',
   invoices_list: 'Organization',

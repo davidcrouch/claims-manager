@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Package } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Loader2, Package } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   BottomFormDrawer,
@@ -9,6 +10,10 @@ import {
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
 import { CatalogItemForm } from '@/components/catalog/CatalogItemForm';
+import {
+  CreateSubmitOverlay,
+  useCreateSubmitPhase,
+} from '@/components/forms/CreateSubmitOverlay';
 import type { CatalogCategory, CatalogItemType } from '@/types/api';
 
 const FORM_ID = 'catalog-item-form';
@@ -32,14 +37,22 @@ export function CatalogItemFormDrawer({
   unitTypes,
   onCreated,
 }: CatalogItemFormDrawerProps) {
+  const router = useRouter();
   const [pending, setPending] = useState(false);
+  const { phase, busy, startCreating, startOpening, resetPhase } =
+    useCreateSubmitPhase();
 
   function handleOpenChange(next: boolean) {
+    if (!next && busy) return;
     onOpenChange(next);
-    if (!next) setPending(false);
+    if (!next) {
+      setPending(false);
+      resetPhase();
+    }
   }
 
   return (
+    <>
     <BottomFormDrawer
       open={open}
       onOpenChange={handleOpenChange}
@@ -47,6 +60,7 @@ export function CatalogItemFormDrawer({
       description="Add an item to this catalogue"
       icon={<Package className="h-5 w-5" />}
       widthClassName="w-[60%]"
+      preventClose={busy}
     >
       <BottomFormDrawerBody>
         <CatalogItemForm
@@ -56,10 +70,20 @@ export function CatalogItemFormDrawer({
           types={types}
           categories={categories}
           unitTypes={unitTypes}
-          onPendingChange={setPending}
+          onPendingChange={(next) => {
+            setPending(next);
+            if (next) startCreating();
+            else if (phase !== 'opening') resetPhase();
+          }}
           onSuccess={(id) => {
-            handleOpenChange(false);
             onCreated?.(id);
+            if (id) {
+              startOpening();
+              router.push(`/admin/catalog/items/${id}`);
+              return;
+            }
+            resetPhase();
+            handleOpenChange(false);
           }}
           onCancel={() => handleOpenChange(false)}
         />
@@ -67,21 +91,30 @@ export function CatalogItemFormDrawer({
 
       <BottomFormDrawerFooter>
         <div className="flex w-full items-center justify-between gap-3">
-          <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
+          <Button type="button" variant="outline" disabled={busy} onClick={() => handleOpenChange(false)}>
             Cancel
           </Button>
           <Button
             type="button"
-            disabled={pending}
+            disabled={busy || pending}
             onClick={() => {
               const form = document.getElementById(FORM_ID) as HTMLFormElement | null;
               form?.requestSubmit();
             }}
           >
-            {pending ? 'Saving…' : 'Create item'}
+            {busy ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {phase === 'opening' ? 'Opening…' : 'Creating…'}
+              </>
+            ) : (
+              'Create item'
+            )}
           </Button>
         </div>
       </BottomFormDrawerFooter>
     </BottomFormDrawer>
+    <CreateSubmitOverlay phase={phase} entityLabel="catalogue item" />
+    </>
   );
 }

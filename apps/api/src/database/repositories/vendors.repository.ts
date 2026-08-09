@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, or, ilike, asc, sql } from 'drizzle-orm';
+import { eq, and, or, ilike, asc, sql, getTableColumns } from 'drizzle-orm';
 import { DRIZZLE } from '../drizzle.module';
 import type { DrizzleDB, DrizzleDbOrTx } from '../drizzle.module';
-import { vendors } from '../schema';
+import { vendors, organizations } from '../schema';
 
 export type VendorRow = typeof vendors.$inferSelect;
 export type VendorInsert = typeof vendors.$inferInsert;
@@ -139,5 +139,64 @@ export class VendorsRepository {
       })
       .returning();
     return row;
+  }
+
+  async findByOrganisationId(params: {
+    tenantId: string;
+    organisationId: string;
+    tx?: DrizzleDbOrTx;
+  }): Promise<VendorRow | null> {
+    const db = params.tx ?? this.db;
+    const [row] = await db
+      .select()
+      .from(vendors)
+      .where(
+        and(
+          eq(vendors.tenantId, params.tenantId),
+          eq(vendors.organisationId, params.organisationId),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
+  async findOnPlatformVendors(params: {
+    tenantId: string;
+    limit?: number;
+  }): Promise<Array<VendorRow & { organisationName: string; subscriptionStatus: string }>> {
+    const db = this.db;
+    const rows = await db
+      .select({
+        ...getTableColumns(vendors),
+        organisationName: organizations.name,
+        subscriptionStatus: organizations.subscriptionStatus,
+      })
+      .from(vendors)
+      .innerJoin(organizations, eq(vendors.organisationId, organizations.id))
+      .where(
+        and(
+          eq(vendors.tenantId, params.tenantId),
+          eq(vendors.isActive, true),
+        ),
+      )
+      .orderBy(asc(vendors.name))
+      .limit(params.limit ?? 100);
+
+    return rows;
+  }
+
+  async linkOrganisation(params: {
+    id: string;
+    tenantId: string;
+    organisationId: string;
+    tx?: DrizzleDbOrTx;
+  }): Promise<VendorRow | null> {
+    const db = params.tx ?? this.db;
+    const [row] = await db
+      .update(vendors)
+      .set({ organisationId: params.organisationId, updatedAt: new Date() })
+      .where(and(eq(vendors.id, params.id), eq(vendors.tenantId, params.tenantId)))
+      .returning();
+    return row ?? null;
   }
 }

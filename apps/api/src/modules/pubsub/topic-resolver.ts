@@ -6,6 +6,10 @@ const ENTITY_TO_TOPIC: Record<string, PubSubTopicKey> = {
   organisation: 'organisations',
   invoice: 'invoices',
   bill: 'bills',
+  quote: 'quotes',
+  proposal: 'proposals',
+  rfq: 'rfqs',
+  job: 'jobs',
 };
 
 export function resolveTopicForEntity(entityType: string): string | null {

@@ -124,7 +124,6 @@ export function AssessmentsPageClient({
 
   const handleCreated = (assessment: Assessment) => {
     setData((prev) => ({ data: [assessment, ...prev.data], total: prev.total + 1 }));
-    setCreateDrawerOpen(false);
   };
 
   const handleColumnSort = (field: AssessmentSortField) => {

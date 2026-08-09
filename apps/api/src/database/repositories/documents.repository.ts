@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, isNull, desc, sql, ilike } from 'drizzle-orm';
+import { eq, and, or, isNull, desc, sql, ilike } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../drizzle.module';
 import { documents } from '../schema';
 
@@ -12,6 +12,8 @@ export interface DocumentFilters {
   relatedRecordType?: string;
   relatedRecordId?: string;
   filesystemId?: string;
+  /** When set with filesystemId, match either that filesystem or this related record. */
+  orRelatedRecordId?: string;
   search?: string;
   uploadStatus?: string;
 }
@@ -45,7 +47,14 @@ export class DocumentsRepository {
       conditions.push(isNull(documents.filesystemCategoryId));
     }
 
-    if (filters.filesystemId) {
+    if (filters.filesystemId && filters.orRelatedRecordId) {
+      conditions.push(
+        or(
+          eq(documents.filesystemId, filters.filesystemId),
+          eq(documents.relatedRecordId, filters.orRelatedRecordId),
+        ),
+      );
+    } else if (filters.filesystemId) {
       conditions.push(eq(documents.filesystemId, filters.filesystemId));
     }
 

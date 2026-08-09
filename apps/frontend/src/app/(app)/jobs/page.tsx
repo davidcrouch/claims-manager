@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { getSession } from '@/lib/auth';
 import { getServerApiClient } from '@/lib/server-api';
 import { JobsPageClient } from '@/components/jobs/JobsPageClient';
 import type { Job, PaginatedResponse } from '@/types/api';
@@ -20,7 +21,8 @@ export default async function JobsPage({
   const params = await searchParams;
   const emptyJobs: PaginatedResponse<Job> = { data: [], total: 0 };
 
-  const [initialJobs, jobTypesRes, jobTypesAllRes, statusLookupsRes, unreadJobIds] = await Promise.all([
+  const [initialJobs, jobTypesRes, jobTypesAllRes, statusLookupsRes, unreadJobIds, orgUsers, session] =
+    await Promise.all([
     api
       .getJobs({
         page: parseInt(params.page ?? '1', 10),
@@ -46,7 +48,21 @@ export default async function JobsPage({
     api.getLookupsByDomain('job_type').catch(() => []),
     api.getLookupsByDomain('job_status').catch(() => []),
     api.getUnreadEntityIds('job').catch(() => [] as string[]),
+    api.listOrgUsersForSelect().catch((err: unknown) => {
+      console.error(
+        'frontend:JobsPage - listOrgUsersForSelect failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return [] as { id: string; email?: string }[];
+    }),
+    getSession(),
   ]);
+
+  const email = session.identity?.email?.trim().toLowerCase();
+  const sub = session.identity?.sub;
+  const currentUserId =
+    orgUsers.find((u) => email && u.email?.trim().toLowerCase() === email)?.id ??
+    (sub && orgUsers.some((u) => u.id === sub) ? sub : null);
 
   const jobTypes = (Array.isArray(jobTypesRes) ? jobTypesRes : []).map((row) => ({
     id: row.id,
@@ -73,6 +89,7 @@ export default async function JobsPage({
       jobTypeFilterOptions={jobTypeFilterOptions}
       statusOptions={statusOptions}
       unreadJobIds={unreadJobIds}
+      currentUserId={currentUserId}
     />
   );
 }

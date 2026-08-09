@@ -3,18 +3,26 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  Inject,
 } from '@nestjs/common';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
+import { eq } from 'drizzle-orm';
 import { GcsStorageService } from '../../../common/gcs/gcs-storage.service';
+import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
+import { organizations } from '../../../database/schema';
 import {
   DocumentTemplatesRepository,
   type DocumentTemplateRow,
 } from '../../../database/repositories';
 import { DocumentsRepository } from '../../../database/repositories/documents.repository';
+import { FilesystemService } from '../../filesystem/filesystem.service';
 import {
-  DOCUMENT_TYPES,
+  ASSIGNABLE_TEMPLATE_TYPES,
+  DEFAULT_DOCUMENT_TYPE,
   DOCUMENT_TYPE_TO_ENTITY_TYPE,
+  isAssignableTemplateType,
+  type AssignableTemplateType,
   type DocumentType,
 } from '../types/document-types';
 
@@ -38,7 +46,7 @@ function resolveLocalTemplatesDir(): string | null {
   );
 }
 export interface ScenarioTemplateSetting {
-  documentType: DocumentType;
+  documentType: AssignableTemplateType;
   label: string;
   description: string;
   template: DocumentTemplateRow | null;
@@ -50,7 +58,52 @@ export interface ScenarioTemplateSetting {
   } | null;
 }
 
-const SCENARIO_META: Record<DocumentType, { label: string; description: string }> = {
+export interface TemplatesFolderInfo {
+  id: string;
+  displayName: string;
+  slug: string;
+  path: string;
+}
+
+export interface TemplatesFolderSetting {
+  filesystemCategoryId: string | null;
+  folder: TemplatesFolderInfo | null;
+}
+
+interface OrgConfig extends Record<string, unknown> {
+  documentTemplates?: {
+    folderCategoryId?: string | null;
+  };
+}
+
+function categoryPath(
+  categories: Array<{
+    id: string;
+    displayName: string;
+    parentCategoryId: string | null;
+  }>,
+  categoryId: string,
+): string {
+  const byId = new Map(categories.map((cat) => [cat.id, cat]));
+  const parts: string[] = [];
+  let current = byId.get(categoryId);
+  const seen = new Set<string>();
+  while (current && !seen.has(current.id)) {
+    seen.add(current.id);
+    parts.unshift(current.displayName);
+    current = current.parentCategoryId
+      ? byId.get(current.parentCategoryId)
+      : undefined;
+  }
+  return parts.join(' / ');
+}
+
+const SCENARIO_META: Record<AssignableTemplateType, { label: string; description: string }> = {
+  default: {
+    label: 'Default',
+    description:
+      'Used when a scenario has no dedicated template assigned',
+  },
   quote: {
     label: 'Quote',
     description: 'Generated when producing a quote PDF',
@@ -118,6 +171,10 @@ const SCENARIO_META: Record<DocumentType, { label: string; description: string }
   vendor: {
     label: 'Vendor',
     description: 'Generated when printing a single vendor detail PDF',
+  },
+  assessment: {
+    label: 'Assessment',
+    description: 'Generated when printing a single assessment detail PDF',
   },
   jobs_list: {
     label: 'Jobs List',
@@ -193,6 +250,8 @@ export class TemplateRegistryService {
     private readonly templatesRepo: DocumentTemplatesRepository,
     private readonly documentsRepo: DocumentsRepository,
     private readonly gcsStorage: GcsStorageService,
+    private readonly filesystemService: FilesystemService,
+    @Inject(DRIZZLE) private readonly db: DrizzleDB,
   ) {}
 
   async getSettings(params: { tenantId: string }): Promise<ScenarioTemplateSetting[]> {
@@ -200,7 +259,7 @@ export class TemplateRegistryService {
     const byType = new Map(templates.map((t) => [t.documentType, t]));
 
     const settings: ScenarioTemplateSetting[] = [];
-    for (const documentType of DOCUMENT_TYPES) {
+    for (const documentType of ASSIGNABLE_TEMPLATE_TYPES) {
       const template = byType.get(documentType) ?? null;
       let filesystemDocument: ScenarioTemplateSetting['filesystemDocument'] = null;
 
@@ -231,14 +290,73 @@ export class TemplateRegistryService {
     return settings;
   }
 
+  async getFolderSetting(params: { tenantId: string }): Promise<TemplatesFolderSetting> {
+    const logPrefix = 'TemplateRegistryService.getFolderSetting';
+    const folderCategoryId = await this.readFolderCategoryId(params.tenantId);
+    this.logger.debug(`${logPrefix} — tenantId=${params.tenantId} folderCategoryId=${folderCategoryId ?? 'none'}`);
+
+    if (!folderCategoryId) {
+      return { filesystemCategoryId: null, folder: null };
+    }
+
+    const folder = await this.resolveFolderInfo(folderCategoryId);
+    return { filesystemCategoryId: folderCategoryId, folder };
+  }
+
+  async setFolderSetting(params: {
+    tenantId: string;
+    filesystemCategoryId: string | null;
+  }): Promise<TemplatesFolderSetting> {
+    const logPrefix = 'TemplateRegistryService.setFolderSetting';
+    let folder: TemplatesFolderInfo | null = null;
+
+    if (params.filesystemCategoryId) {
+      folder = await this.resolveFolderInfo(params.filesystemCategoryId);
+      if (!folder) {
+        throw new BadRequestException(
+          'Folder not found in the company filesystem',
+        );
+      }
+    }
+
+    const [row] = await this.db
+      .select({ config: organizations.config })
+      .from(organizations)
+      .where(eq(organizations.id, params.tenantId))
+      .limit(1);
+
+    const config = ((row?.config ?? {}) as OrgConfig);
+    const nextConfig: OrgConfig = {
+      ...config,
+      documentTemplates: {
+        ...(config.documentTemplates ?? {}),
+        folderCategoryId: params.filesystemCategoryId,
+      },
+    };
+
+    await this.db
+      .update(organizations)
+      .set({ config: nextConfig })
+      .where(eq(organizations.id, params.tenantId));
+
+    this.logger.log(
+      `${logPrefix} — tenantId=${params.tenantId} folderCategoryId=${params.filesystemCategoryId ?? 'cleared'}`,
+    );
+
+    return {
+      filesystemCategoryId: params.filesystemCategoryId,
+      folder,
+    };
+  }
+
   async assignFilesystemDocument(params: {
     tenantId: string;
-    documentType: DocumentType;
+    documentType: AssignableTemplateType;
     filesystemDocumentId: string;
   }): Promise<DocumentTemplateRow> {
     const logPrefix = 'TemplateRegistryService.assignFilesystemDocument';
 
-    if (!DOCUMENT_TYPES.includes(params.documentType)) {
+    if (!isAssignableTemplateType(params.documentType)) {
       throw new BadRequestException(`Invalid document type "${params.documentType}"`);
     }
 
@@ -278,7 +396,7 @@ export class TemplateRegistryService {
 
   async clearAssignment(params: {
     tenantId: string;
-    documentType: DocumentType;
+    documentType: AssignableTemplateType;
   }): Promise<{ cleared: boolean }> {
     const logPrefix = 'TemplateRegistryService.clearAssignment';
     const cleared = await this.templatesRepo.deleteByType({
@@ -293,8 +411,36 @@ export class TemplateRegistryService {
     tenantId: string;
     documentType: DocumentType;
     templateId?: string;
-  }): Promise<{ template: DocumentTemplateRow; fileBuffer: Buffer }> {
+    filesystemDocumentId?: string;
+  }): Promise<{ template: DocumentTemplateRow | null; fileBuffer: Buffer }> {
     const logPrefix = 'TemplateRegistryService.resolve';
+
+    if (params.filesystemDocumentId) {
+      this.logger.debug(
+        `${logPrefix} — loading override filesystem document id=${params.filesystemDocumentId}`,
+      );
+      const fileBuffer = await this.loadFilesystemDocumentBuffer({
+        tenantId: params.tenantId,
+        documentId: params.filesystemDocumentId,
+        documentType: params.documentType,
+      });
+      let template: DocumentTemplateRow | undefined;
+      if (params.templateId) {
+        template = await this.templatesRepo.findById({
+          id: params.templateId,
+          tenantId: params.tenantId,
+        });
+      } else {
+        template = await this.templatesRepo.findByType({
+          tenantId: params.tenantId,
+          documentType: params.documentType,
+        });
+        if (template?.filesystemDocumentId !== params.filesystemDocumentId) {
+          template = undefined;
+        }
+      }
+      return { template: template ?? null, fileBuffer };
+    }
 
     let template: DocumentTemplateRow | undefined;
     if (params.templateId) {
@@ -307,11 +453,23 @@ export class TemplateRegistryService {
         tenantId: params.tenantId,
         documentType: params.documentType,
       });
+      if (!template?.filesystemDocumentId) {
+        const fallback = await this.templatesRepo.findByType({
+          tenantId: params.tenantId,
+          documentType: DEFAULT_DOCUMENT_TYPE,
+        });
+        if (fallback?.filesystemDocumentId) {
+          this.logger.log(
+            `${logPrefix} — no template for type=${params.documentType}; using default id=${fallback.id}`,
+          );
+          template = fallback;
+        }
+      }
     }
 
     if (!template) {
       throw new NotFoundException(
-        `No template assigned for ${params.documentType} — configure it under Admin → Document Templates.`,
+        `No template assigned for ${params.documentType} and no Default template is configured — configure it under Admin → Document Templates.`,
       );
     }
 
@@ -324,23 +482,36 @@ export class TemplateRegistryService {
     this.logger.debug(
       `${logPrefix} — loading from GCS via filesystem document id=${template.filesystemDocumentId}`,
     );
+    const fileBuffer = await this.loadFilesystemDocumentBuffer({
+      tenantId: params.tenantId,
+      documentId: template.filesystemDocumentId,
+      documentType: params.documentType,
+    });
+    return { template, fileBuffer };
+  }
+
+  private async loadFilesystemDocumentBuffer(params: {
+    tenantId: string;
+    documentId: string;
+    documentType: DocumentType;
+  }): Promise<Buffer> {
+    const logPrefix = 'TemplateRegistryService.loadFilesystemDocumentBuffer';
     try {
-      const fileBuffer = await this.downloadFilesystemDocument({
+      return await this.downloadFilesystemDocument({
         tenantId: params.tenantId,
-        documentId: template.filesystemDocumentId,
+        documentId: params.documentId,
       });
-      return { template, fileBuffer };
     } catch (err) {
       const localBuffer = await this.tryLoadLocalTemplateFallback({
         tenantId: params.tenantId,
-        documentId: template.filesystemDocumentId,
+        documentId: params.documentId,
       });
       if (localBuffer) {
         this.logger.warn(
           `${logPrefix} — GCS download failed; using local data/templates fallback ` +
             `(type=${params.documentType}): ${err instanceof Error ? err.message : err}`,
         );
-        return { template, fileBuffer: localBuffer };
+        return localBuffer;
       }
       throw err;
     }
@@ -358,6 +529,38 @@ export class TemplateRegistryService {
     id: string;
   }): Promise<DocumentTemplateRow | undefined> {
     return this.templatesRepo.findById({ id: params.id, tenantId: params.tenantId });
+  }
+
+  private async readFolderCategoryId(tenantId: string): Promise<string | null> {
+    const [row] = await this.db
+      .select({ config: organizations.config })
+      .from(organizations)
+      .where(eq(organizations.id, tenantId))
+      .limit(1);
+    const config = (row?.config ?? {}) as OrgConfig;
+    const id = config.documentTemplates?.folderCategoryId;
+    return typeof id === 'string' && id.length > 0 ? id : null;
+  }
+
+  private async resolveFolderInfo(
+    categoryId: string,
+  ): Promise<TemplatesFolderInfo | null> {
+    const filesystem = await this.filesystemService.getCompanyFilesystem();
+    if (!filesystem) return null;
+
+    const categories = filesystem.categories ?? [];
+    const cat = categories.find(
+      (c: { id: string; archivedAt?: Date | string | null }) =>
+        c.id === categoryId && !c.archivedAt,
+    );
+    if (!cat) return null;
+
+    return {
+      id: cat.id,
+      displayName: cat.displayName,
+      slug: cat.slug,
+      path: categoryPath(categories, cat.id),
+    };
   }
 
   private async downloadFilesystemDocument(params: {

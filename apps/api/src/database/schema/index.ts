@@ -218,6 +218,7 @@ export const vendors = pgTable(
     country: text('country'),
     phone: text('phone'),
     afterHoursPhone: text('after_hours_phone'),
+    organisationId: uuid('organisation_id').references(() => organizations.id),
     isActive: boolean('is_active').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -225,6 +226,7 @@ export const vendors = pgTable(
   (t) => [
     uniqueIndex('UQ_vendors_tenant_extref').on(t.tenantId, t.externalReference),
     index('idx_vendors_postcode').on(t.tenantId, t.postcode),
+    index('idx_vendors_organisation').on(t.organisationId),
   ],
 );
 
@@ -264,6 +266,9 @@ export const jobs = pgTable(
     jobInstructions: text('job_instructions'),
     syncStatus: text('sync_status'),
     assignedToUserId: text('assigned_to_user_id'),
+    sourceTenantId: uuid('source_tenant_id').references(() => organizations.id),
+    sourceOrganisationId: uuid('source_organisation_id').references(() => organizations.id),
+    sourceExternalReference: text('source_external_reference'),
     apiPayload: jsonb('api_payload').notNull().default({}),
     customData: jsonb('custom_data').notNull().default({}),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -274,6 +279,7 @@ export const jobs = pgTable(
     uniqueIndex('UQ_jobs_tenant_extref').on(t.tenantId, t.externalReference),
     index('idx_jobs_claim').on(t.tenantId, t.claimId),
     index('idx_jobs_assigned').on(t.tenantId, t.assignedToUserId),
+    index('idx_jobs_source_tenant').on(t.sourceTenantId),
   ],
 );
 
@@ -495,6 +501,7 @@ export const purchaseOrders = pgTable(
       scale: 2,
     }),
     purchaseOrderPayload: jsonb('purchase_order_payload').notNull().default({}),
+    supplyChainDepth: integer('supply_chain_depth').notNull().default(0),
     createdByUserId: text('created_by_user_id'),
     updatedByUserId: text('updated_by_user_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -652,6 +659,17 @@ export const invoices = pgTable(
     excessAmount: numeric('excess_amount', { precision: 14, scale: 2 }),
     isDeleted: boolean('is_deleted').notNull().default(false),
     invoicePayload: jsonb('invoice_payload').notNull().default({}),
+    issuerOrganisationId: uuid('issuer_organisation_id').references(() => organizations.id),
+    recipientOrganisationId: uuid('recipient_organisation_id').references(() => organizations.id),
+    sourceTenantId: uuid('source_tenant_id').references(() => organizations.id),
+    sourceOrganisationId: uuid('source_organisation_id').references(() => organizations.id),
+    sourceExternalReference: text('source_external_reference'),
+    custodianTenantId: uuid('custodian_tenant_id').references(() => organizations.id),
+    captureMethod: text('capture_method'),
+    ownershipStatus: text('ownership_status'),
+    sourceVersionNumber: integer('source_version_number'),
+    latestAvailableVersion: integer('latest_available_version'),
+    versionAcknowledged: boolean('version_acknowledged').default(true),
     createdByUserId: text('created_by_user_id'),
     updatedByUserId: text('updated_by_user_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -663,6 +681,7 @@ export const invoices = pgTable(
       t.purchaseOrderId,
       t.invoiceNumber,
     ),
+    index('idx_invoices_source_tenant').on(t.sourceTenantId),
   ],
 );
 
@@ -1383,6 +1402,18 @@ export const rfqs = pgTable(
     rfqToEmail: text('rfq_to_email'),
     rfqToName: text('rfq_to_name'),
     rfqPayload: jsonb('rfq_payload').notNull().default({}),
+    supplyChainDepth: integer('supply_chain_depth').notNull().default(0),
+    issuerOrganisationId: uuid('issuer_organisation_id').references(() => organizations.id),
+    recipientOrganisationId: uuid('recipient_organisation_id').references(() => organizations.id),
+    sourceTenantId: uuid('source_tenant_id').references(() => organizations.id),
+    sourceOrganisationId: uuid('source_organisation_id').references(() => organizations.id),
+    sourceExternalReference: text('source_external_reference'),
+    custodianTenantId: uuid('custodian_tenant_id').references(() => organizations.id),
+    captureMethod: text('capture_method'),
+    ownershipStatus: text('ownership_status'),
+    sourceVersionNumber: integer('source_version_number'),
+    latestAvailableVersion: integer('latest_available_version'),
+    versionAcknowledged: boolean('version_acknowledged').default(true),
     createdByUserId: text('created_by_user_id'),
     updatedByUserId: text('updated_by_user_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -1396,6 +1427,7 @@ export const rfqs = pgTable(
     index('idx_rfq_quote').on(t.tenantId, t.quoteId),
     index('idx_rfq_vendor').on(t.tenantId, t.vendorId),
     index('idx_rfq_number').on(t.tenantId, t.rfqNumber),
+    index('idx_rfq_source_tenant').on(t.sourceTenantId),
   ],
 );
 
@@ -1666,6 +1698,9 @@ export const bills = pgTable(
     totalAmount: numeric('total_amount', { precision: 14, scale: 2 }),
     isDeleted: boolean('is_deleted').notNull().default(false),
     billPayload: jsonb('bill_payload').notNull().default({}),
+    sourceTenantId: uuid('source_tenant_id').references(() => organizations.id),
+    sourceOrganisationId: uuid('source_organisation_id').references(() => organizations.id),
+    sourceExternalReference: text('source_external_reference'),
     sourceVersionNumber: integer('source_version_number').notNull().default(1),
     latestAvailableVersion: integer('latest_available_version').notNull().default(1),
     versionAcknowledged: boolean('version_acknowledged').notNull().default(true),
@@ -1682,6 +1717,7 @@ export const bills = pgTable(
     index('idx_bills_vendor').on(t.tenantId, t.vendorId),
     index('idx_bills_number').on(t.tenantId, t.billNumber),
     index('idx_bills_status').on(t.tenantId, t.statusLookupId),
+    index('idx_bills_source_tenant').on(t.sourceTenantId),
     index('idx_bills_due_date').on(t.tenantId, t.dueDate),
     index('idx_bills_payment_status').on(t.tenantId, t.paymentStatusLookupId),
     unique('UQ_bills_tenant_number').on(t.tenantId, t.purchaseOrderId, t.billNumber),
@@ -2154,6 +2190,12 @@ export interface CategoryConfig {
   icon?: string | null;
   retentionDays?: number | null;
   allowedMimeTypes?: string[] | null;
+  /**
+   * When true, filesystem-root upload pipelines (e.g. Document Classifier) also
+   * run for files already placed in this folder. Default false — an explicit
+   * folder is treated as already filed.
+   */
+  runFilesystemPipelinesOnUpload?: boolean;
   [key: string]: unknown;
 }
 
@@ -2444,7 +2486,7 @@ export const documentTemplates = pgTable(
   (t) => [
     check(
       'chk_doc_template_type',
-      sql`document_type IN ('quote','invoice','purchase_order','work_order','proposal','report','bill','rfq','job_details','scope_of_work','claim','contact','task','appointment','message','journal','vendor','jobs_list','quotes_list','invoices_list','bills_list','work_orders_list','purchase_orders_list','proposals_list','rfqs_list','reports_list','claims_list','contacts_list','tasks_list','appointments_list','messages_list','journals_list','vendors_list')`,
+      sql`document_type IN ('default','quote','invoice','purchase_order','work_order','proposal','report','bill','rfq','job_details','scope_of_work','claim','contact','task','appointment','message','journal','vendor','assessment','jobs_list','quotes_list','invoices_list','bills_list','work_orders_list','purchase_orders_list','proposals_list','rfqs_list','reports_list','claims_list','contacts_list','tasks_list','appointments_list','messages_list','journals_list','vendors_list')`,
     ),
     unique('UQ_doc_template_tenant_type').on(t.tenantId, t.documentType),
     index('idx_doc_templates_tenant_type').on(t.tenantId, t.documentType),
@@ -2477,7 +2519,7 @@ export const generatedDocuments = pgTable(
   (t) => [
     check(
       'chk_gen_doc_type',
-      sql`document_type IN ('quote','invoice','purchase_order','work_order','proposal','report','bill','rfq','job_details','scope_of_work','claim','contact','task','appointment','message','journal','vendor','jobs_list','quotes_list','invoices_list','bills_list','work_orders_list','purchase_orders_list','proposals_list','rfqs_list','reports_list','claims_list','contacts_list','tasks_list','appointments_list','messages_list','journals_list','vendors_list')`,
+      sql`document_type IN ('quote','invoice','purchase_order','work_order','proposal','report','bill','rfq','job_details','scope_of_work','claim','contact','task','appointment','message','journal','vendor','assessment','jobs_list','quotes_list','invoices_list','bills_list','work_orders_list','purchase_orders_list','proposals_list','rfqs_list','reports_list','claims_list','contacts_list','tasks_list','appointments_list','messages_list','journals_list','vendors_list')`,
     ),
     check('chk_gen_doc_trigger', sql`trigger IN ('manual','workflow')`),
     check('chk_gen_doc_status', sql`status IN ('pending','processing','completed','failed')`),

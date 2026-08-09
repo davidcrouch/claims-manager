@@ -217,7 +217,7 @@ export function QuotePageHeader({ quote, job }: { quote: Quote; job?: Job | null
             Received Approval
           </Button>
         )}
-        <PrintButton documentType="quote" entityId={quote.id} />
+        <PrintButton documentType="quote" entityId={quote.id} jobId={job?.id} />
         <ArchiveEntityButton
           entityType="quote"
           entityId={quote.id}

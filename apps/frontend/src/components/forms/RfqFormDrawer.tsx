@@ -15,6 +15,10 @@ import {
 } from '@/components/forms/BottomFormDrawer';
 import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
 import { createRfqAction } from '@/app/(app)/mutations';
+import {
+  CreateSubmitOverlay,
+  useCreateSubmitPhase,
+} from '@/components/forms/CreateSubmitOverlay';
 import { fetchJobQuotesAction } from '@/app/(app)/jobs/[id]/actions';
 import { getQuoteLineItemsAction } from '@/app/(app)/quotes/actions';
 import { JobSelectField } from '@/components/forms/JobSelectField';
@@ -47,7 +51,8 @@ export function RfqFormDrawer({
   const router = useRouter();
 
   const [step, setStep] = useState<WizardStep>('details');
-  const [submitting, setSubmitting] = useState(false);
+  const { phase, busy, startCreating, startOpening, resetPhase } =
+    useCreateSubmitPhase();
   const [error, setError] = useState<string | null>(null);
   const [pickedJobId, setPickedJobId] = useState('');
   const needsJobPicker = (jobs?.length ?? 0) > 0;
@@ -73,9 +78,9 @@ export function RfqFormDrawer({
     setGroups([]);
     setSelectedItemIds(new Set());
     setError(null);
-    setSubmitting(false);
+    resetPhase();
     setPickedJobId('');
-  }, []);
+  }, [resetPhase]);
 
   useEffect(() => {
     if (!open) {
@@ -138,6 +143,7 @@ export function RfqFormDrawer({
   }
 
   function handleOpenChange(next: boolean) {
+    if (!next && busy) return;
     onOpenChange(next);
     if (!next) reset();
   }
@@ -161,7 +167,7 @@ export function RfqFormDrawer({
 
   async function handleSubmit() {
     if (!selectedQuoteId || !effectiveJobId) return;
-    setSubmitting(true);
+    startCreating();
     setError(null);
     try {
       const result = await createRfqAction({
@@ -174,23 +180,31 @@ export function RfqFormDrawer({
         selectedItemIds: Array.from(selectedItemIds),
       });
       if (result.success) {
+        if (result.rfq?.id) {
+          startOpening();
+          router.push(`/rfqs/${result.rfq.id}`);
+          return;
+        }
+        resetPhase();
         handleOpenChange(false);
         router.refresh();
       } else {
         setError(result.error ?? 'Failed to create RFQ');
+        resetPhase();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create RFQ');
-    } finally {
-      setSubmitting(false);
+      resetPhase();
     }
   }
 
   return (
+    <>
     <BottomFormDrawer
       open={open}
       onOpenChange={handleOpenChange}
       title="Create RFQ"
+      preventClose={busy}
       description={
         step === 'scope' && selectedEstimateLabel
           ? `Estimate: ${selectedEstimateLabel}`
@@ -355,6 +369,7 @@ export function RfqFormDrawer({
             variant="outline"
             size="lg"
             className="mr-auto"
+            disabled={busy}
             onClick={handleBack}
           >
             Back
@@ -363,6 +378,7 @@ export function RfqFormDrawer({
         <Button
           variant="outline"
           size="lg"
+          disabled={busy}
           onClick={() => handleOpenChange(false)}
         >
           Cancel
@@ -379,14 +395,23 @@ export function RfqFormDrawer({
             <Button
               size="lg"
               onClick={handleSubmit}
-              disabled={submitting || selectedItemIds.size === 0}
+              disabled={busy || selectedItemIds.size === 0}
             >
-              {submitting ? 'Creating...' : 'Create RFQ'}
+              {busy ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {phase === 'opening' ? 'Opening…' : 'Creating…'}
+                </>
+              ) : (
+                'Create RFQ'
+              )}
             </Button>
           </>
         )}
       </BottomFormDrawerFooter>
     </BottomFormDrawer>
+    <CreateSubmitOverlay phase={phase} entityLabel="RFQ" />
+    </>
   );
 }
 

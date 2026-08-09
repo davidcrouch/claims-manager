@@ -115,7 +115,7 @@ export function ProposalPageHeader({ proposal, job }: { proposal: Proposal; job?
             </Button>
           </>
         )}
-        <PrintButton documentType="proposal" entityId={proposal.id} />
+        <PrintButton documentType="proposal" entityId={proposal.id} jobId={job?.id} />
         <ArchiveEntityButton
           entityType="proposal"
           entityId={proposal.id}

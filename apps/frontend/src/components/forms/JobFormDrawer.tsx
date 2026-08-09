@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
-import { Briefcase, ChevronRight } from 'lucide-react';
+import { Briefcase, ChevronRight, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,6 +31,10 @@ import {
 } from '@/components/forms/JobContactsPicker';
 import { createJobAction } from '@/app/(app)/jobs/mutations';
 import { OrgUserSelect } from '@/components/forms/OrgUserSelect';
+import {
+  CreateSubmitOverlay,
+  useCreateSubmitPhase,
+} from '@/components/forms/CreateSubmitOverlay';
 import type { Contact, Job } from '@/types/api';
 
 type WizardStep = 'details' | 'contacts';
@@ -70,10 +74,55 @@ type DetailsValues = z.infer<typeof detailsSchema>;
 
 const AU_STATES = ['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA'] as const;
 
+type ProjectTemplateOption = { id: string; name: string; isDefault?: boolean };
+
+function normalizeProjectTemplates(payload: unknown): ProjectTemplateOption[] {
+  const rows = Array.isArray(payload)
+    ? payload
+    : payload &&
+        typeof payload === 'object' &&
+        Array.isArray((payload as { data?: unknown }).data)
+      ? (payload as { data: unknown[] }).data
+      : [];
+  return rows.flatMap((row) => {
+    if (!row || typeof row !== 'object') return [];
+    const rec = row as Record<string, unknown>;
+    const id = typeof rec.id === 'string' ? rec.id : '';
+    if (!id) return [];
+    const name =
+      (typeof rec.name === 'string' && rec.name.trim()) ||
+      (typeof rec.displayName === 'string' && rec.displayName.trim()) ||
+      '';
+    return [
+      {
+        id,
+        name,
+        isDefault: rec.isDefault === true,
+      },
+    ];
+  });
+}
+
+function projectTemplateLabel(t: ProjectTemplateOption): string {
+  const name = t.name.trim();
+  if (!name) return t.id;
+  return t.isDefault ? `${name} (default)` : name;
+}
+
+function preferProjectTemplateId(
+  preferred: string | null | undefined,
+  templates: ProjectTemplateOption[],
+): string {
+  if (preferred && templates.some((t) => t.id === preferred)) return preferred;
+  return templates.find((t) => t.isDefault)?.id ?? templates[0]?.id ?? '';
+}
+
 export interface JobFormDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   jobTypes: { id: string; name?: string; providerCode?: string | null }[];
+  /** Signed-in org user — Assigned defaults to this person. */
+  currentUserId?: string | null;
   /** Called after a job is created so the parent list can refetch. */
   onSuccess?: (job: Job) => void;
 }
@@ -82,17 +131,19 @@ export function JobFormDrawer({
   open,
   onOpenChange,
   jobTypes,
+  currentUserId,
   onSuccess,
 }: JobFormDrawerProps) {
   const router = useRouter();
   const [step, setStep] = useState<WizardStep>('details');
-  const [submitting, setSubmitting] = useState(false);
+  const { phase: submitPhase, busy, startCreating, startOpening, resetPhase } =
+    useCreateSubmitPhase();
   const [error, setError] = useState<string | null>(null);
   const [contacts, setContacts] = useState<JobContactRef[]>([]);
   const [contactDrawerOpen, setContactDrawerOpen] = useState(false);
-  const [projectTemplates, setProjectTemplates] = useState<
-    Array<{ id: string; name: string; isDefault?: boolean }>
-  >([]);
+  const [projectTemplates, setProjectTemplates] = useState<ProjectTemplateOption[]>(
+    [],
+  );
 
   const form = useForm<DetailsValues>({
     resolver: standardSchemaResolver(detailsSchema),
@@ -111,12 +162,13 @@ export function JobFormDrawer({
       state: '',
       postcode: '',
       country: 'Australia',
-      assignedToUserId: '',
+      assignedToUserId: currentUserId ?? '',
     },
   });
 
   const provider = form.watch('provider');
   const jobTypeId = form.watch('jobTypeId');
+  const filesystemTemplateId = form.watch('filesystemTemplateId');
   const stateValue = form.watch('state');
 
   const providerApiCode =
@@ -152,14 +204,22 @@ export function JobFormDrawer({
     [],
   );
 
+  const projectTemplateItems = useMemo(
+    () =>
+      Object.fromEntries(
+        projectTemplates.map((t) => [t.id, projectTemplateLabel(t)]),
+      ) as Record<string, string>,
+    [projectTemplates],
+  );
+
   const reset = useCallback(() => {
     setStep('details');
     setError(null);
-    setSubmitting(false);
+    resetPhase();
     setContacts([]);
     setContactDrawerOpen(false);
     form.reset();
-  }, [form]);
+  }, [form, resetPhase]);
 
   useEffect(() => {
     if (!open) reset();
@@ -179,17 +239,12 @@ export function JobFormDrawer({
           : { data: [] };
         const defaultsJson = defaultsRes.ok ? await defaultsRes.json() : {};
         if (cancelled) return;
-        const templates = (templatesJson.data ?? []) as Array<{
-          id: string;
-          name: string;
-          isDefault?: boolean;
-        }>;
+        const templates = normalizeProjectTemplates(templatesJson);
         setProjectTemplates(templates);
-        const preferred =
-          (defaultsJson.defaultProjectTemplateId as string | undefined) ||
-          templates.find((t) => t.isDefault)?.id ||
-          templates[0]?.id ||
-          '';
+        const preferred = preferProjectTemplateId(
+          defaultsJson.defaultProjectTemplateId as string | undefined,
+          templates,
+        );
         if (preferred) {
           form.setValue('filesystemTemplateId', preferred);
         }
@@ -204,8 +259,9 @@ export function JobFormDrawer({
 
   function handleOpenChange(next: boolean) {
     // Keep the job wizard open while the nested contact drawer is visible
-    // (e.g. Escape would otherwise close both).
-    if (!next && contactDrawerOpen) return;
+    // (e.g. Escape would otherwise close both), and while create/navigation
+    // is in progress so the list does not flash underneath.
+    if (!next && (contactDrawerOpen || busy)) return;
     onOpenChange(next);
     if (!next) reset();
   }
@@ -245,7 +301,7 @@ export function JobFormDrawer({
     const values = form.getValues();
     const apiProvider =
       JOB_PROVIDERS.find((p) => p.value === values.provider)?.apiCode ?? 'direct';
-    setSubmitting(true);
+    startCreating();
     setError(null);
 
     const address = {
@@ -288,22 +344,24 @@ export function JobFormDrawer({
         { provider: apiProvider },
       );
       if (result.success) {
-        handleOpenChange(false);
         if (result.job) onSuccess?.(result.job);
-        // Prefer detail navigation. Do not router.refresh()/replace here —
-        // those race with push and can leave the jobs list on stale rows.
+        // Keep the overlay up and the drawer open until the detail page
+        // mounts — closing here flashes the stale jobs list.
         if (result.job?.id) {
+          startOpening();
           router.push(`/jobs/${result.job.id}`);
-        } else {
-          router.refresh();
+          return;
         }
+        resetPhase();
+        handleOpenChange(false);
+        router.refresh();
       } else {
         setError(result.error ?? 'Failed to create job');
+        resetPhase();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create job');
-    } finally {
-      setSubmitting(false);
+      resetPhase();
     }
   }
 
@@ -317,6 +375,7 @@ export function JobFormDrawer({
       title="Create Job"
       description="Add site details first, then optionally attach contacts."
       icon={<Briefcase className="h-5 w-5" />}
+      preventClose={busy}
     >
       <div className="border-b border-slate-200 px-12 py-3">
         <ol className="flex flex-wrap gap-2 text-xs">
@@ -391,24 +450,27 @@ export function JobFormDrawer({
                 <div className="space-y-2">
                   <Label htmlFor="filesystemTemplateId">Document folders</Label>
                   <Select
-                    value={form.watch('filesystemTemplateId') || null}
+                    value={filesystemTemplateId || null}
                     onValueChange={(v) =>
                       form.setValue('filesystemTemplateId', v ?? '', {
                         shouldValidate: true,
                       })
                     }
-                    items={Object.fromEntries(
-                      projectTemplates.map((t) => [t.id, t.name]),
-                    )}
+                    items={projectTemplateItems}
                   >
                     <SelectTrigger id="filesystemTemplateId" className="w-full">
-                      <SelectValue placeholder="Project folder template" />
+                      <SelectValue placeholder="Project folder template">
+                        {(value: string | null) =>
+                          value
+                            ? (projectTemplateItems[value] ?? value)
+                            : 'Project folder template'
+                        }
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {projectTemplates.map((t) => (
                         <SelectItem key={t.id} value={t.id}>
-                          {t.name}
-                          {t.isDefault ? ' (default)' : ''}
+                          {projectTemplateLabel(t)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -566,6 +628,7 @@ export function JobFormDrawer({
             variant="outline"
             size="lg"
             className="mr-auto"
+            disabled={busy}
             onClick={() => {
               setError(null);
               setStep('details');
@@ -578,6 +641,7 @@ export function JobFormDrawer({
           type="button"
           variant="outline"
           size="lg"
+          disabled={busy}
           onClick={() => handleOpenChange(false)}
         >
           Cancel
@@ -588,12 +652,21 @@ export function JobFormDrawer({
             <ChevronRight className="ml-1 h-4 w-4" />
           </Button>
         ) : (
-          <Button type="button" size="lg" disabled={submitting} onClick={handleSubmit}>
-            {submitting ? 'Creating...' : 'Create Job'}
+          <Button type="button" size="lg" disabled={busy} onClick={handleSubmit}>
+            {busy ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {submitPhase === 'opening' ? 'Opening...' : 'Creating...'}
+              </>
+            ) : (
+              'Create Job'
+            )}
           </Button>
         )}
       </BottomFormDrawerFooter>
     </BottomFormDrawer>
+
+    <CreateSubmitOverlay phase={submitPhase} entityLabel="job" />
 
     <ContactFormDrawer
       open={contactDrawerOpen}

@@ -19,8 +19,8 @@ import { seedMcpForTenant } from '../../database/seeds/entries/mcp.seed';
 import { seedAssessmentSkillsForTenant } from '../../database/seeds/entries/assessment-skills.seed';
 import filesystemDefaultSeed from '../../database/seeds/entries/filesystem-default.seed';
 import {
-  DOCUMENT_TYPES,
-  type DocumentType,
+  ASSIGNABLE_TEMPLATE_TYPES,
+  type AssignableTemplateType,
 } from '../document-generation/types/document-types';
 import {
   PROVISIONING_STEPS,
@@ -38,7 +38,8 @@ const DOCX_MIME =
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
 /** Canonical filenames under data/templates/ (spaces, as stored in document.file_name). */
-const DOCUMENT_TYPE_TO_FILE: Record<DocumentType, string> = {
+const DOCUMENT_TYPE_TO_FILE: Record<AssignableTemplateType, string> = {
+  default: 'SCOPE OF WORK.docx',
   invoice: 'TAX INVOICE.docx',
   bill: 'INVOICE.docx',
   rfq: 'REQUEST FOR QUOTATION.docx',
@@ -56,6 +57,7 @@ const DOCUMENT_TYPE_TO_FILE: Record<DocumentType, string> = {
   message: 'SCOPE OF WORK.docx',
   journal: 'SCOPE OF WORK.docx',
   vendor: 'SCOPE OF WORK.docx',
+  assessment: 'SCOPE OF WORK.docx',
   jobs_list: 'SCOPE OF WORK.docx',
   quotes_list: 'SCOPE OF WORK.docx',
   invoices_list: 'SCOPE OF WORK.docx',
@@ -421,6 +423,11 @@ export class ProvisioningService {
     );
     if (!templatesCategory) return;
 
+    await this.templateRegistry.setFolderSetting({
+      tenantId,
+      filesystemCategoryId: templatesCategory.id,
+    });
+
     const allDocs = await this.documentsService.findAll({
       categoryId: templatesCategory.id,
       uploadStatus: 'complete',
@@ -436,7 +443,7 @@ export class ProvisioningService {
       `[${LOG}.stepAssignDocumentTemplates] candidates=${docxDocs.map((d) => d.fileName).join(', ')}`,
     );
 
-    for (const documentType of DOCUMENT_TYPES) {
+    for (const documentType of ASSIGNABLE_TEMPLATE_TYPES) {
       const targetFile = DOCUMENT_TYPE_TO_FILE[documentType];
       const targetKey = normalizeTemplateKey(targetFile);
       const matchingDoc = docxDocs.find((d: { fileName: string }) => {

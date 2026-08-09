@@ -10,17 +10,17 @@ export const proposalStandard: WorkflowDefinition = {
       id: 'received',
       label: 'Received',
       transitions: [
-        { to: 'under_review', action: 'review' },
-        { to: 'accepted', action: 'accept', onEnter: ['publishCrossTenantEvent'] },
-        { to: 'declined', action: 'decline', onEnter: ['publishCrossTenantEvent'] },
+        { to: 'under_review', action: 'review', onEnter: ['syncStatusLookup'] },
+        { to: 'accepted', action: 'accept', onEnter: ['syncStatusLookup', 'createPurchaseOrder', 'publishCrossTenantEvent'] },
+        { to: 'declined', action: 'decline', onEnter: ['syncStatusLookup', 'publishCrossTenantEvent'] },
       ],
     },
     {
       id: 'under_review',
       label: 'Under Review',
       transitions: [
-        { to: 'accepted', action: 'accept', onEnter: ['publishCrossTenantEvent'] },
-        { to: 'declined', action: 'decline', onEnter: ['publishCrossTenantEvent'] },
+        { to: 'accepted', action: 'accept', onEnter: ['syncStatusLookup', 'createPurchaseOrder', 'publishCrossTenantEvent'] },
+        { to: 'declined', action: 'decline', onEnter: ['syncStatusLookup', 'publishCrossTenantEvent'] },
       ],
     },
     {

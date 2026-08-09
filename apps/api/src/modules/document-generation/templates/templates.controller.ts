@@ -12,7 +12,12 @@ import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { TenantContext } from '../../../tenant/tenant-context';
 import { TemplateRegistryService } from '../services/template-registry.service';
 import { AssignTemplateDto } from '../dto/assign-template.dto';
-import { DOCUMENT_TYPES, type DocumentType } from '../types/document-types';
+import { UpdateTemplatesFolderDto } from '../dto/update-templates-folder.dto';
+import {
+  ASSIGNABLE_TEMPLATE_TYPES,
+  isAssignableTemplateType,
+  type AssignableTemplateType,
+} from '../types/document-types';
 
 @ApiTags('Document Templates')
 @Controller('document-templates')
@@ -32,6 +37,27 @@ export class TemplatesController {
     return this.templateRegistry.getSettings({ tenantId });
   }
 
+  @Get('folder')
+  @ApiOperation({ summary: 'Get the company filesystem folder used for templates' })
+  async getFolder() {
+    const tenantId = this.tenantContext.getTenantId();
+    this.logger.debug(`TemplatesController.getFolder — tenantId=${tenantId}`);
+    return this.templateRegistry.getFolderSetting({ tenantId });
+  }
+
+  @Put('folder')
+  @ApiOperation({ summary: 'Set the company filesystem folder used for templates' })
+  async setFolder(@Body() dto: UpdateTemplatesFolderDto) {
+    const tenantId = this.tenantContext.getTenantId();
+    this.logger.debug(
+      `TemplatesController.setFolder — tenantId=${tenantId} folder=${dto.filesystemCategoryId ?? 'cleared'}`,
+    );
+    return this.templateRegistry.setFolderSetting({
+      tenantId,
+      filesystemCategoryId: dto.filesystemCategoryId ?? null,
+    });
+  }
+
   @Put(':documentType')
   @ApiOperation({ summary: 'Assign a filesystem .docx as the template for a scenario' })
   async assign(
@@ -44,13 +70,13 @@ export class TemplatesController {
     if (!dto.filesystemDocumentId) {
       return this.templateRegistry.clearAssignment({
         tenantId,
-        documentType: documentType as DocumentType,
+        documentType,
       });
     }
 
     return this.templateRegistry.assignFilesystemDocument({
       tenantId,
-      documentType: documentType as DocumentType,
+      documentType,
       filesystemDocumentId: dto.filesystemDocumentId,
     });
   }
@@ -62,14 +88,16 @@ export class TemplatesController {
     const tenantId = this.tenantContext.getTenantId();
     return this.templateRegistry.clearAssignment({
       tenantId,
-      documentType: documentType as DocumentType,
+      documentType,
     });
   }
 
-  private assertDocumentType(documentType: string): asserts documentType is DocumentType {
-    if (!(DOCUMENT_TYPES as readonly string[]).includes(documentType)) {
+  private assertDocumentType(
+    documentType: string,
+  ): asserts documentType is AssignableTemplateType {
+    if (!isAssignableTemplateType(documentType)) {
       throw new BadRequestException(
-        `Invalid document type "${documentType}". Expected one of: ${DOCUMENT_TYPES.join(', ')}`,
+        `Invalid document type "${documentType}". Expected one of: ${ASSIGNABLE_TEMPLATE_TYPES.join(', ')}`,
       );
     }
   }

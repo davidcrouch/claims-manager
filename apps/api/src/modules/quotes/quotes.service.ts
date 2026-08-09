@@ -136,12 +136,12 @@ export class QuotesService {
     return (
       (await this.lookupResolver.resolveByName({
         tenantId: params.tenantId,
-        domain: 'wo_status',
+        domain: 'work_order_status',
         name: params.name,
       })) ??
       (await this.lookupResolver.resolve({
         tenantId: params.tenantId,
-        domain: 'wo_status',
+        domain: 'work_order_status',
         externalReference: params.name,
         name: params.name,
         autoCreate: true,

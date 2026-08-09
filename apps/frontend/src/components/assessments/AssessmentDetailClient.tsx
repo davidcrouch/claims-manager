@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/select';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
+import { PrintButton } from '@/components/shared/PrintButton';
 import { updateAssessmentAction } from '@/app/(app)/assessments/actions';
 import type { Assessment } from '@/types/api';
 
@@ -91,15 +92,25 @@ function SelectField({
   options: string[];
   onChange: (v: string) => void;
 }) {
+  const items: Record<string, string> = { [EMPTY_PLACEHOLDER]: '' };
+  for (const opt of options) {
+    items[opt] = opt;
+  }
+
   return (
     <div className="space-y-1.5">
       <Label className="text-xs font-medium text-slate-500">{label}</Label>
       <Select
         value={value || EMPTY_PLACEHOLDER}
         onValueChange={(v) => onChange(!v || v === EMPTY_PLACEHOLDER ? '' : v)}
+        items={items}
       >
         <SelectTrigger className="h-9 w-full">
-          <SelectValue placeholder="Select..." />
+          <SelectValue placeholder="Select...">
+            {(selected: string | null) =>
+              !selected || selected === EMPTY_PLACEHOLDER ? '' : (items[selected] ?? selected)
+            }
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
           <SelectItem value={EMPTY_PLACEHOLDER}>-- None --</SelectItem>
@@ -247,6 +258,11 @@ export function AssessmentDetailClient({ assessment }: AssessmentDetailClientPro
           <Save className="size-4" />
           {saving ? 'Saving...' : saved ? 'Saved' : 'Save'}
         </Button>
+        <PrintButton
+          documentType="assessment"
+          entityId={assessment.id}
+          jobId={assessment.jobId ?? undefined}
+        />
         <ArchiveEntityButton
           entityType="assessment"
           entityId={assessment.id}

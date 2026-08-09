@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, Patch, Query, Body } from '@nestjs/common';
 import { VendorsService } from './vendors.service';
 
 @Controller('vendors')
@@ -15,6 +15,13 @@ export class VendorsController {
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
       search,
+    });
+  }
+
+  @Get('on-platform')
+  async findOnPlatformVendors(@Query('limit') limit?: string) {
+    return this.vendorsService.findOnPlatformVendors({
+      limit: limit ? parseInt(limit, 10) : undefined,
     });
   }
 
@@ -38,5 +45,16 @@ export class VendorsController {
   @Get(':id')
   async findOne(@Param('id') id: string) {
     return this.vendorsService.findOne({ id });
+  }
+
+  @Patch(':id/link-organisation')
+  async linkOrganisation(
+    @Param('id') id: string,
+    @Body() body: { organisationId: string },
+  ) {
+    return this.vendorsService.linkOrganisation({
+      id,
+      organisationId: body.organisationId,
+    });
   }
 }

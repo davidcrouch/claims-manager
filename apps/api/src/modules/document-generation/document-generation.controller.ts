@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import type { Response } from 'express';
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { DocumentGenerationService } from './document-generation.service';
 import { GenerateDocumentDto } from './dto/generate-document.dto';
 
@@ -23,12 +24,18 @@ export class DocumentGenerationController {
 
   @Post('generate')
   @ApiOperation({ summary: 'Generate a PDF document from an entity' })
-  async generate(@Body() dto: GenerateDocumentDto) {
+  async generate(
+    @Body() dto: GenerateDocumentDto,
+    @CurrentUser('sub') userId?: string,
+  ) {
     return this.documentGenService.generate({
       documentType: dto.documentType,
       entityId: dto.entityId,
       templateId: dto.templateId,
+      filesystemDocumentId: dto.filesystemDocumentId,
+      destinationCategoryId: dto.destinationCategoryId,
       trigger: 'manual',
+      userId,
     });
   }
 

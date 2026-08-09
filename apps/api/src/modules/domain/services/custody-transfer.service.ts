@@ -9,6 +9,10 @@ import {
   quoteCombos,
   quoteItems,
   proposals,
+  rfqs,
+  invoices,
+  bills,
+  jobs,
   organizations,
 } from '../../../database/schema';
 import {
@@ -219,6 +223,112 @@ export class CustodyTransferService {
     return {
       transferredCount: transferredIds.length,
       quoteIds: transferredIds,
+    };
+  }
+
+  async transferCustodialRfqs(params: {
+    ghostOrganisationId: string;
+    issuerTenantId: string;
+    transferredByUserId: string;
+    tx: DrizzleDbOrTx;
+  }): Promise<{ transferredCount: number; rfqIds: string[] }> {
+    const { ghostOrganisationId, issuerTenantId, tx } = params;
+
+    this.logger.log(
+      `CustodyTransferService.transferCustodialRfqs — ghostOrg=${ghostOrganisationId} issuerTenant=${issuerTenantId}`,
+    );
+
+    const custodialRfqs = await tx
+      .select()
+      .from(rfqs)
+      .where(
+        and(
+          eq(rfqs.issuerOrganisationId, ghostOrganisationId),
+          eq(rfqs.ownershipStatus, 'externally_captured'),
+        ),
+      );
+
+    const transferredIds: string[] = [];
+
+    for (const rfq of custodialRfqs) {
+      await tx
+        .update(rfqs)
+        .set({
+          tenantId: issuerTenantId,
+          issuerOrganisationId: issuerTenantId,
+          custodianTenantId: null,
+          ownershipStatus: 'transferred',
+          updatedAt: new Date(),
+        })
+        .where(eq(rfqs.id, rfq.id));
+
+      transferredIds.push(rfq.id);
+    }
+
+    this.logger.log(
+      `CustodyTransferService.transferCustodialRfqs — transferred ${transferredIds.length} RFQs`,
+    );
+
+    return {
+      transferredCount: transferredIds.length,
+      rfqIds: transferredIds,
+    };
+  }
+
+  async transferCustodialInvoices(params: {
+    ghostOrganisationId: string;
+    issuerTenantId: string;
+    transferredByUserId: string;
+    tx: DrizzleDbOrTx;
+  }): Promise<{ transferredCount: number; invoiceIds: string[] }> {
+    const { ghostOrganisationId, issuerTenantId, tx } = params;
+
+    this.logger.log(
+      `CustodyTransferService.transferCustodialInvoices — ghostOrg=${ghostOrganisationId} issuerTenant=${issuerTenantId}`,
+    );
+
+    const custodialInvoices = await tx
+      .select()
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.issuerOrganisationId, ghostOrganisationId),
+          eq(invoices.ownershipStatus, 'externally_captured'),
+        ),
+      );
+
+    const transferredIds: string[] = [];
+
+    for (const invoice of custodialInvoices) {
+      await tx
+        .update(invoices)
+        .set({
+          tenantId: issuerTenantId,
+          issuerOrganisationId: issuerTenantId,
+          custodianTenantId: null,
+          ownershipStatus: 'transferred',
+          updatedAt: new Date(),
+        })
+        .where(eq(invoices.id, invoice.id));
+
+      await tx
+        .update(bills)
+        .set({
+          sourceTenantId: issuerTenantId,
+          updatedAt: new Date(),
+        })
+        .where(eq(bills.invoiceId, invoice.id));
+
+      transferredIds.push(invoice.id);
+    }
+
+    this.logger.log(
+      `CustodyTransferService.transferCustodialInvoices — transferred ${transferredIds.length} invoices`,
+    );
+
+    return {
+      transferredCount: transferredIds.length,
+      invoiceIds: transferredIds,
     };
   }
 }

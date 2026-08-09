@@ -1798,7 +1798,10 @@ export function createApiClient(options?: ApiClientOptions) {
 
     generateDocument(params: {
       documentType: string;
-      entityId: string;
+      entityId?: string;
+      templateId?: string;
+      filesystemDocumentId?: string;
+      destinationCategoryId?: string;
     }): Promise<GeneratedDocument> {
       return fetchApi<GeneratedDocument>('/generated-documents/generate', {
         method: 'POST',
@@ -1824,6 +1827,19 @@ export function createApiClient(options?: ApiClientOptions) {
 
     getDocumentTemplateSettings(): Promise<DocumentTemplateSetting[]> {
       return fetchApi<DocumentTemplateSetting[]>('/document-templates');
+    },
+
+    getDocumentTemplatesFolder(): Promise<DocumentTemplatesFolderSetting> {
+      return fetchApi<DocumentTemplatesFolderSetting>('/document-templates/folder');
+    },
+
+    setDocumentTemplatesFolder(
+      filesystemCategoryId: string | null,
+    ): Promise<DocumentTemplatesFolderSetting> {
+      return fetchApi<DocumentTemplatesFolderSetting>('/document-templates/folder', {
+        method: 'PUT',
+        body: JSON.stringify({ filesystemCategoryId }),
+      });
     },
 
     assignDocumentTemplate(
@@ -2136,6 +2152,8 @@ export function createApiClient(options?: ApiClientOptions) {
 export interface CategoryConfig {
   color?: string | null;
   retentionDays?: number | null;
+  /** Opt-in: also run filesystem-root upload pipelines for files already in this folder. */
+  runFilesystemPipelinesOnUpload?: boolean;
   [key: string]: unknown;
 }
 
@@ -2378,6 +2396,18 @@ export interface DocumentTemplateSetting {
     mimeType: string;
     uploadStatus: string;
   } | null;
+}
+
+export interface DocumentTemplatesFolderInfo {
+  id: string;
+  displayName: string;
+  slug: string;
+  path: string;
+}
+
+export interface DocumentTemplatesFolderSetting {
+  filesystemCategoryId: string | null;
+  folder: DocumentTemplatesFolderInfo | null;
 }
 
 export interface GeneratedDocument {

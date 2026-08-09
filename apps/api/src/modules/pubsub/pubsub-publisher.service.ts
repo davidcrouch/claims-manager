@@ -9,6 +9,8 @@ import { resolveTopicForEntity } from './topic-resolver';
 
 const BATCH_SIZE = 50;
 const POLL_INTERVAL_MS = 5_000;
+const MAX_ATTEMPTS = 5;
+const BASE_BACKOFF_MS = 5_000;
 
 @Injectable()
 export class PubSubPublisherService implements OnModuleInit, OnModuleDestroy {
@@ -49,14 +51,15 @@ export class PubSubPublisherService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async processBatch() {
+    const now = new Date();
     const rows = await this.db
       .select()
       .from(outboundSyncQueue)
       .where(
         and(
           eq(outboundSyncQueue.channel, 'pubsub'),
-          eq(outboundSyncQueue.status, 'pending'),
-          lte(outboundSyncQueue.scheduledAt, new Date()),
+          sql`${outboundSyncQueue.status} IN ('pending', 'retry')`,
+          lte(outboundSyncQueue.scheduledAt, now),
         ),
       )
       .orderBy(outboundSyncQueue.priority, outboundSyncQueue.scheduledAt)
@@ -65,7 +68,7 @@ export class PubSubPublisherService implements OnModuleInit, OnModuleDestroy {
     if (rows.length === 0) return;
 
     this.logger.debug(
-      `PubSubPublisherService.processBatch — found ${rows.length} pending pubsub messages`,
+      `PubSubPublisherService.processBatch — found ${rows.length} pending/retry pubsub messages`,
     );
 
     for (const row of rows) {
@@ -124,14 +127,46 @@ export class PubSubPublisherService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async markFailed(id: string, errorMessage: string) {
-    await this.db
-      .update(outboundSyncQueue)
-      .set({
-        status: 'failed',
-        lastAttemptedAt: new Date(),
-        attempts: sql`${outboundSyncQueue.attempts} + 1`,
-        lastError: errorMessage,
-      })
-      .where(eq(outboundSyncQueue.id, id));
+    const [current] = await this.db
+      .select({ attempts: outboundSyncQueue.attempts })
+      .from(outboundSyncQueue)
+      .where(eq(outboundSyncQueue.id, id))
+      .limit(1);
+
+    const newAttempts = (current?.attempts ?? 0) + 1;
+
+    if (newAttempts >= MAX_ATTEMPTS) {
+      await this.db
+        .update(outboundSyncQueue)
+        .set({
+          status: 'dead_letter',
+          lastAttemptedAt: new Date(),
+          attempts: newAttempts,
+          lastError: errorMessage,
+        })
+        .where(eq(outboundSyncQueue.id, id));
+
+      this.logger.warn(
+        `PubSubPublisherService.markFailed — id=${id} moved to dead_letter after ${newAttempts} attempts`,
+      );
+    } else {
+      const backoffMs = BASE_BACKOFF_MS * Math.pow(2, newAttempts - 1);
+      const nextSchedule = new Date(Date.now() + backoffMs);
+
+      await this.db
+        .update(outboundSyncQueue)
+        .set({
+          status: 'retry',
+          lastAttemptedAt: new Date(),
+          attempts: newAttempts,
+          lastError: errorMessage,
+          scheduledAt: nextSchedule,
+        })
+        .where(eq(outboundSyncQueue.id, id));
+
+      this.logger.debug(
+        `PubSubPublisherService.markFailed — id=${id} scheduled retry #${newAttempts} at ${nextSchedule.toISOString()}`,
+      );
+    }
   }
 }

@@ -23,6 +23,7 @@ import { AppointmentMapper } from './data-mappers/appointment.mapper';
 import { MessageMapper } from './data-mappers/message.mapper';
 import { JournalMapper } from './data-mappers/journal.mapper';
 import { VendorMapper } from './data-mappers/vendor.mapper';
+import { AssessmentMapper } from './data-mappers/assessment.mapper';
 import { JobsListMapper } from './data-mappers/jobs-list.mapper';
 import { QuotesListMapper } from './data-mappers/quotes-list.mapper';
 import { InvoicesListMapper } from './data-mappers/invoices-list.mapper';
@@ -66,6 +67,7 @@ import { DocumentsRepository } from '../../database/repositories/documents.repos
     MessageMapper,
     JournalMapper,
     VendorMapper,
+    AssessmentMapper,
     JobsListMapper,
     QuotesListMapper,
     InvoicesListMapper,

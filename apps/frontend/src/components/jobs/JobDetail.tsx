@@ -12,13 +12,13 @@ import {
   Save,
   Pencil,
   Plus,
-  Printer,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { AddJobContactsDrawer } from '@/components/forms/AddJobContactsDrawer';
-import { JobReportWizard } from '@/components/jobs/JobReportWizard';
+import { PrintButton } from '@/components/shared/PrintButton';
+import { JOB_REPORT_TYPES } from '@/components/shared/PrintDocumentDrawer';
 import { JobOverviewTab, type JobOverviewTabHandle } from './tabs/JobOverviewTab';
 import { JobTypeDetailsTab } from './tabs/JobTypeDetailsTab';
 import { JobPartiesTab } from './tabs/JobPartiesTab';
@@ -65,7 +65,6 @@ export function JobDetail({
   const [editing, setEditing] = useState(false);
   const [contactDrawerOpen, setContactDrawerOpen] = useState(false);
   const [reportDrawerOpen, setReportDrawerOpen] = useState(false);
-  const [printWizardOpen, setPrintWizardOpen] = useState(false);
 
   useEffect(() => {
     if (activeTab !== 'overview') setEditing(false);
@@ -135,15 +134,12 @@ export function JobDetail({
   ];
 
   const printButton = (
-    <Button
-      size="default"
-      onClick={() => setPrintWizardOpen(true)}
-      className="h-9 w-9 px-0 bg-blue-600 text-white hover:bg-blue-500"
-      title="Print report"
-      aria-label="Print report"
-    >
-      <Printer className="h-4 w-4" />
-    </Button>
+    <PrintButton
+      documentType="job_details"
+      entityId={job.id}
+      jobId={job.id}
+      reportTypes={JOB_REPORT_TYPES}
+    />
   );
 
   const archiveButton = (
@@ -285,11 +281,6 @@ export function JobDetail({
         jobId={job.id}
         existingContacts={existingContacts}
         aiAssistEnabled
-      />
-      <JobReportWizard
-        open={printWizardOpen}
-        onOpenChange={setPrintWizardOpen}
-        jobId={job.id}
       />
     </div>
   );
