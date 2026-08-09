@@ -606,7 +606,7 @@
   Work orders, proposals, RFQs, invoices, and bills show clearer status and next-step actions from their detail screens.
   Outcome: daily work, ownership, catalogue structure, and quoting sit together in one operational update.
 
-- `2026-08-09` `PENDING` **48 h**
+- `2026-08-09` `69aa3c3` **48 h**
   `145 files | +19 536 −920 | Tier 2 standard / Tier 3 complex / Tier 4 deep integration | Heavy orchestration`
   Lay summary: Partner organisations can now pass work requests, jobs, invoices and bills between each other, with clearer printing, templates, and site journals for everyday staff.
   **Completed partner-to-partner supply chain handoffs plus clearer document printing and filing.** Requests for quote now become jobs at the receiving organisation, and invoices become bills, so work and payment requests move between companies without re-keying.
