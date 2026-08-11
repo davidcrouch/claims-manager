@@ -64,7 +64,10 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
+  // Exclude /api from the matcher: Next 16.2 Turbopack 404s App Router
+  // route handlers when middleware/proxy matches them (vercel/next.js#92921).
+  // Public and cookie-gated /api handlers enforce auth themselves where needed.
   matcher: [
-    '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
+    '/((?!api|_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
   ],
 };
