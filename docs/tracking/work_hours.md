@@ -628,7 +628,7 @@
   Written reviews compare claims, jobs, and estimates against partner system gaps so follow-up work stays focused.
   Outcome: field capture, job ownership, and partner-sourced records work together in one operational update.
 
-- `2026-08-12` `PENDING` **1 h**
+- `2026-08-12` `3b9c62c` **1 h**
   `1 file | +4 −1 | Tier 3 complex | Moderate orchestration`
   Lay summary: Sign-in and other browser API calls work again instead of failing behind the login screen.
   **Fixed login and API routing so staff can sign in again.** Browser requests to the app’s own API routes were being blocked by a framework middleware mismatch.
