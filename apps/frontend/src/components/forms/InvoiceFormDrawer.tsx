@@ -27,6 +27,7 @@ import { isArchivedStatus } from '@/components/shared/list-filters';
 import { createInvoiceAction } from '@/app/(app)/mutations';
 import {
   CreateSubmitOverlay,
+  navigateToCreated,
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
 import type { WorkOrder } from '@/types/api';
@@ -132,7 +133,7 @@ export function InvoiceFormDrawer({
       if (result.success) {
         if (result.invoice?.id) {
           startOpening();
-          router.push(`/invoices/${result.invoice.id}`);
+          navigateToCreated(router, `/invoices/${result.invoice.id}`);
           return;
         }
         resetPhase();

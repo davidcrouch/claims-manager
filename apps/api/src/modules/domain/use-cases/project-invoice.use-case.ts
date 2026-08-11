@@ -77,7 +77,7 @@ export class ProjectInvoiceUseCase implements ProjectionUseCase {
         (result.entity as Record<string, unknown>).purchaseOrderId = '';
       }
       const created = await this.invoicesRepo.create({
-        data: { tenantId, ...result.entity } as InvoiceInsert,
+        data: { tenantId, ...result.entity, originType: 'provider' } as InvoiceInsert,
         tx,
       });
       invoiceId = created.id;

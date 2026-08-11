@@ -26,6 +26,7 @@ import {
 import { createWorkOrderAction } from '@/app/(app)/mutations';
 import {
   CreateSubmitOverlay,
+  navigateToCreated,
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
 import { fetchJobPurchaseOrdersAction } from '@/app/(app)/jobs/[id]/actions';
@@ -123,7 +124,7 @@ export function WorkOrderFormDrawer({
       if (result.success) {
         if (result.workOrder?.id) {
           startOpening();
-          router.push(`/work-orders/${result.workOrder.id}`);
+          navigateToCreated(router, `/work-orders/${result.workOrder.id}`);
           return;
         }
         resetPhase();

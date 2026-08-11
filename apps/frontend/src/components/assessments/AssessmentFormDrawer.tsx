@@ -24,6 +24,7 @@ import {
 import { JobSelectField } from '@/components/forms/JobSelectField';
 import {
   CreateSubmitOverlay,
+  navigateToCreated,
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
 import type { JobOption } from '@/components/shared/job-label';
@@ -118,14 +119,20 @@ export function AssessmentFormDrawer({
       const assessment = await createAssessment({
         name: name.trim(),
         jobId: selectedJobId,
-        claimRecommendation: claimRecommendation || undefined,
-        makeSafe,
-        makeSafeType: makeSafeType || undefined,
-        designType: designType || undefined,
-        construction: construction || undefined,
-        roofType: roofType || undefined,
-        buildingType: buildingType || undefined,
-        comments: comments.trim() || undefined,
+        recommendation: {
+          ...(claimRecommendation ? { claimRecommendation } : {}),
+          ...(comments.trim() ? { specialNotes: comments.trim() } : {}),
+        },
+        makeSafe: {
+          makeSafeRequired: makeSafe,
+          ...(makeSafeType ? { makeSafeType } : {}),
+        },
+        building: {
+          ...(designType ? { designType } : {}),
+          ...(construction ? { constructionType: construction } : {}),
+          ...(roofType ? { roofType } : {}),
+          ...(buildingType ? { buildingType } : {}),
+        },
       });
 
       if (!assessment) {
@@ -136,7 +143,7 @@ export function AssessmentFormDrawer({
 
       onCreated?.(assessment);
       startOpening();
-      router.push(`/assessments/${assessment.id}`);
+      navigateToCreated(router, `/assessments/${assessment.id}`);
     } catch (err) {
       console.error('AssessmentFormDrawer.handleSubmit:', err);
       setError(err instanceof Error ? err.message : 'Failed to create assessment');

@@ -1,25 +1,158 @@
 'use client';
 
+import {
+  forwardRef,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type Ref,
+} from 'react';
 import type { Job } from '@/types/api';
 import { getJobTypeKind } from '../util/jobType';
-import { TemporaryAccommodationPanel } from './JobTypePanels/TemporaryAccommodationPanel';
-import { SpecialistPanel } from './JobTypePanels/SpecialistPanel';
-import { RectificationPanel } from './JobTypePanels/RectificationPanel';
-import { InternalAuditPanel } from './JobTypePanels/InternalAuditPanel';
+import type { JobEditPending, LookupOption } from '../job-edit.types';
+import {
+  TemporaryAccommodationPanel,
+  buildTemporaryAccommodationPending,
+  initialTemporaryAccommodationDraft,
+  type TemporaryAccommodationDraft,
+} from './JobTypePanels/TemporaryAccommodationPanel';
+import {
+  SpecialistPanel,
+  buildSpecialistPending,
+  initialSpecialistDraft,
+  type SpecialistDraft,
+} from './JobTypePanels/SpecialistPanel';
+import {
+  RectificationPanel,
+  buildRectificationPending,
+  initialRectificationDraft,
+  type RectificationDraft,
+} from './JobTypePanels/RectificationPanel';
+import {
+  InternalAuditPanel,
+  buildInternalAuditPending,
+  initialInternalAuditDraft,
+  type InternalAuditDraft,
+} from './JobTypePanels/InternalAuditPanel';
+import { asBool, pick } from '@/components/shared/detail';
 
-export function JobTypeDetailsTab({ job }: { job: Job }) {
+export interface JobTypeDetailsTabHandle {
+  getPendingUpdate: () => Partial<JobEditPending> | null;
+  reset: () => void;
+}
+
+export const JobTypeDetailsTab = forwardRef(function JobTypeDetailsTab(
+  {
+    job,
+    editing = false,
+    saving = false,
+    jobTypeOptions = [],
+  }: {
+    job: Job;
+    editing?: boolean;
+    saving?: boolean;
+    jobTypeOptions?: LookupOption[];
+  },
+  ref: Ref<JobTypeDetailsTabHandle>,
+) {
   const kind = getJobTypeKind(job);
+  const dirtyRef = useRef(false);
+
+  const [taDraft, setTaDraft] = useState(() => initialTemporaryAccommodationDraft(job));
+  const [specialistDraft, setSpecialistDraft] = useState(() => initialSpecialistDraft(job));
+  const [rectDraft, setRectDraft] = useState(() =>
+    initialRectificationDraft(job, jobTypeOptions),
+  );
+  const [auditDraft, setAuditDraft] = useState(() => initialInternalAuditDraft(job));
+
+  useImperativeHandle(ref, () => ({
+    getPendingUpdate: () => {
+      if (!editing || !dirtyRef.current) return null;
+      if (kind === 'temporary-accommodation') {
+        return buildTemporaryAccommodationPending(taDraft);
+      }
+      if (kind === 'specialist') {
+        const src = {
+          ...((job.apiPayload as Record<string, unknown> | undefined) ?? {}),
+          ...((job.specialistDetails as Record<string, unknown> | undefined) ?? {}),
+        };
+        const requiresSpecific = !!asBool(pick(src, 'isSpecificSpecialistRequired'));
+        return buildSpecialistPending(specialistDraft, requiresSpecific);
+      }
+      if (kind === 'rectification') {
+        return buildRectificationPending(rectDraft);
+      }
+      if (kind === 'internal-audit') {
+        return buildInternalAuditPending(auditDraft);
+      }
+      return null;
+    },
+    reset: () => {
+      dirtyRef.current = false;
+      setTaDraft(initialTemporaryAccommodationDraft(job));
+      setSpecialistDraft(initialSpecialistDraft(job));
+      setRectDraft(initialRectificationDraft(job, jobTypeOptions));
+      setAuditDraft(initialInternalAuditDraft(job));
+    },
+  }), [
+    editing,
+    kind,
+    taDraft,
+    specialistDraft,
+    rectDraft,
+    auditDraft,
+    job,
+    jobTypeOptions,
+  ]);
+
+  const markDirty = <T,>(setter: (d: T) => void) => (draft: T) => {
+    dirtyRef.current = true;
+    setter(draft);
+  };
 
   switch (kind) {
     case 'temporary-accommodation':
-      return <TemporaryAccommodationPanel job={job} />;
+      return (
+        <TemporaryAccommodationPanel
+          job={job}
+          editing={editing}
+          saving={saving}
+          draft={taDraft}
+          onDraftChange={markDirty(setTaDraft)}
+        />
+      );
     case 'specialist':
-      return <SpecialistPanel job={job} />;
+      return (
+        <SpecialistPanel
+          job={job}
+          editing={editing}
+          saving={saving}
+          draft={specialistDraft}
+          onDraftChange={markDirty(setSpecialistDraft)}
+        />
+      );
     case 'rectification':
-      return <RectificationPanel job={job} />;
+      return (
+        <RectificationPanel
+          job={job}
+          editing={editing}
+          saving={saving}
+          jobTypeOptions={jobTypeOptions}
+          draft={rectDraft}
+          onDraftChange={markDirty(setRectDraft)}
+        />
+      );
     case 'internal-audit':
-      return <InternalAuditPanel job={job} />;
+      return (
+        <InternalAuditPanel
+          job={job}
+          editing={editing}
+          saving={saving}
+          draft={auditDraft}
+          onDraftChange={markDirty(setAuditDraft)}
+        />
+      );
     default:
       return null;
   }
-}
+});

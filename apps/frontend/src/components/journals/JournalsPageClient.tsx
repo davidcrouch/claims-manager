@@ -136,7 +136,11 @@ export function JournalsPageClient({
     if (statusParam) params.set('status', statusParam); else params.delete('status');
     if (jobId) params.set('jobId', jobId);
     else params.delete('jobId');
-    router.replace(`/journals?${params}`, { scroll: false });
+    const next = params.toString();
+    // Skip no-op replace so create→detail navigation is not cancelled on remount.
+    if (next !== searchParams.toString()) {
+      router.replace(`/journals?${next}`, { scroll: false });
+    }
 
     if (lastFetchKeyRef.current === fetchKey) return;
     lastFetchKeyRef.current = fetchKey;

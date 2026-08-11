@@ -54,12 +54,38 @@ export default async function JobDetailPage({
     });
   }
 
+  const [statusOptions, jobTypeOptions] = await Promise.all([
+    api
+      .getLookupsByDomain('job_status', { providerCode: 'crunchwork' })
+      .catch((err: unknown) => {
+        console.warn(
+          'frontend:JobDetailPage - getLookupsByDomain(job_status) failed:',
+          err instanceof Error ? err.message : err,
+        );
+        return [] as Awaited<ReturnType<typeof api.getLookupsByDomain>>;
+      }),
+    api
+      .getLookupsByDomain('job_type', { providerCode: 'crunchwork' })
+      .catch((err: unknown) => {
+        console.warn(
+          'frontend:JobDetailPage - getLookupsByDomain(job_type) failed:',
+          err instanceof Error ? err.message : err,
+        );
+        return [] as Awaited<ReturnType<typeof api.getLookupsByDomain>>;
+      }),
+  ]);
+
   return (
     <>
       <SetPageHeader>
         <JobPageHeader job={job} parentClaim={parentClaim} />
       </SetPageHeader>
-      <JobDetail job={job} parentClaim={parentClaim} />
+      <JobDetail
+        job={job}
+        parentClaim={parentClaim}
+        statusOptions={statusOptions}
+        jobTypeOptions={jobTypeOptions}
+      />
     </>
   );
 }

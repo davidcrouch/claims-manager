@@ -22,11 +22,13 @@ import {
 } from '../../../database/schema';
 import { TenantContext } from '../../../tenant/tenant-context';
 import {
+  buildComboPayload,
   buildItemSnapshotFields,
   computeLineTotals,
   formatDecimal,
   isCatalogBomParentKind,
   isScopeComboPayload,
+  parentComboIdFromPayload,
   parseDecimal,
 } from '../catalog.utils';
 import { CatalogPricingService } from './catalog-pricing.service';
@@ -95,13 +97,37 @@ export class CatalogSelectionService {
       id: params.catalogItemId,
     });
     if (catalogItem && isCatalogBomParentKind(catalogItem.kind)) {
-      if (!params.quoteGroupId) {
+      let quoteGroupId = params.quoteGroupId;
+      if (params.quoteComboId) {
+        const [parent] = await this.db
+          .select({
+            id: quoteCombos.id,
+            quoteGroupId: quoteCombos.quoteGroupId,
+            comboPayload: quoteCombos.comboPayload,
+          })
+          .from(quoteCombos)
+          .where(
+            and(
+              eq(quoteCombos.id, params.quoteComboId),
+              eq(quoteCombos.tenantId, tenantId),
+              isNull(quoteCombos.deletedAt),
+            ),
+          )
+          .limit(1);
+        if (!parent) throw new NotFoundException('Parent scope not found');
+        if (!isScopeComboPayload(parent.comboPayload)) {
+          throw new BadRequestException('Assemblies can only be nested under a scope');
+        }
+        quoteGroupId = parent.quoteGroupId;
+      }
+      if (!quoteGroupId) {
         throw new BadRequestException('quoteGroupId is required when adding an assembly or scope');
       }
       return this.addAssemblyToQuote({
-        quoteGroupId: params.quoteGroupId,
+        quoteGroupId,
         catalogAssemblyId: catalogItem.id,
         quantity: params.quantity,
+        parentComboId: params.quoteComboId,
       });
     }
 
@@ -131,8 +157,33 @@ export class CatalogSelectionService {
     quoteGroupId: string;
     catalogAssemblyId: string;
     quantity: string;
+    parentComboId?: string;
   }) {
     const tenantId = this.getTenantId();
+    if (params.parentComboId) {
+      const [parent] = await this.db
+        .select({
+          id: quoteCombos.id,
+          quoteGroupId: quoteCombos.quoteGroupId,
+          comboPayload: quoteCombos.comboPayload,
+        })
+        .from(quoteCombos)
+        .where(
+          and(
+            eq(quoteCombos.id, params.parentComboId),
+            eq(quoteCombos.tenantId, tenantId),
+            isNull(quoteCombos.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (!parent) throw new NotFoundException('Parent scope not found');
+      if (!isScopeComboPayload(parent.comboPayload)) {
+        throw new BadRequestException('Assemblies can only be nested under a scope');
+      }
+      if (parent.quoteGroupId !== params.quoteGroupId) {
+        throw new BadRequestException('Parent scope does not belong to this group');
+      }
+    }
     return this.db.transaction(async (tx) => {
       const result = await this.explodeAssembly({
         tenantId,
@@ -140,6 +191,7 @@ export class CatalogSelectionService {
         groupId: params.quoteGroupId,
         assemblyId: params.catalogAssemblyId,
         quantity: params.quantity,
+        parentComboId: params.parentComboId,
         tx,
       });
       return result;
@@ -425,7 +477,7 @@ export class CatalogSelectionService {
   async deleteQuoteCombo(params: { quoteId: string; comboId: string }) {
     const tenantId = this.getTenantId();
     const [combo] = await this.db
-      .select({ id: quoteCombos.id })
+      .select({ id: quoteCombos.id, quoteGroupId: quoteCombos.quoteGroupId })
       .from(quoteCombos)
       .where(
         and(
@@ -435,6 +487,22 @@ export class CatalogSelectionService {
         ),
       );
     if (!combo) throw new NotFoundException('Quote assembly not found');
+
+    const siblingCombos = await this.db
+      .select({ id: quoteCombos.id, comboPayload: quoteCombos.comboPayload })
+      .from(quoteCombos)
+      .where(
+        and(
+          eq(quoteCombos.tenantId, tenantId),
+          eq(quoteCombos.quoteGroupId, combo.quoteGroupId),
+          isNull(quoteCombos.deletedAt),
+        ),
+      );
+    for (const child of siblingCombos) {
+      if (child.id === params.comboId) continue;
+      if (parentComboIdFromPayload(child.comboPayload) !== params.comboId) continue;
+      await this.deleteQuoteCombo({ quoteId: params.quoteId, comboId: child.id });
+    }
 
     await this.db
       .update(quoteCombos)
@@ -652,8 +720,6 @@ export class CatalogSelectionService {
       const dimensions = (group.dimensions as Record<string, unknown>) ?? {};
       const groupTotals = (group.totals as Record<string, unknown>) ?? {};
       const groupCombos = combosByGroup.get(group.id) ?? [];
-      const assemblyCombos = groupCombos.filter((c) => !isScopeComboPayload(c.comboPayload));
-      const scopeCombos = groupCombos.filter((c) => isScopeComboPayload(c.comboPayload));
 
       const lookupValue = group.groupLabelLookupId
         ? lookupMap.get(group.groupLabelLookupId)
@@ -688,6 +754,8 @@ export class CatalogSelectionService {
         };
       };
 
+      const nested = nestCombosUnderScopes(groupCombos, mapCombo);
+
       return {
         id: group.id,
         groupLabel: groupLabelObj,
@@ -702,11 +770,8 @@ export class CatalogSelectionService {
         items: (directItemsByGroup.get(group.id) ?? []).map((item) =>
           this.mapQuoteItemRow(item, lookupMap),
         ),
-        combos: assemblyCombos.map(mapCombo),
-        scopes: scopeCombos.map((combo) => ({
-          ...mapCombo(combo),
-          combos: [],
-        })),
+        combos: nested.combos,
+        scopes: nested.scopes,
       };
     });
   }
@@ -809,8 +874,6 @@ export class CatalogSelectionService {
       const dimensions = (group.dimensions as Record<string, unknown>) ?? {};
       const groupTotals = (group.totals as Record<string, unknown>) ?? {};
       const groupCombos = combosByGroup.get(group.id) ?? [];
-      const assemblyCombos = groupCombos.filter((c) => !isScopeComboPayload(c.comboPayload));
-      const scopeCombos = groupCombos.filter((c) => isScopeComboPayload(c.comboPayload));
 
       const lookupValue = group.groupLabelLookupId
         ? lookupMap.get(group.groupLabelLookupId)
@@ -844,6 +907,8 @@ export class CatalogSelectionService {
         };
       };
 
+      const nested = nestCombosUnderScopes(groupCombos, mapCombo);
+
       return {
         id: group.id,
         groupLabel: groupLabelObj,
@@ -858,11 +923,8 @@ export class CatalogSelectionService {
         items: (directItemsByGroup.get(group.id) ?? []).map((item) =>
           this.mapPurchaseOrderItemRow(item, lookupMap),
         ),
-        combos: assemblyCombos.map(mapCombo),
-        scopes: scopeCombos.map((combo) => ({
-          ...mapCombo(combo),
-          combos: [],
-        })),
+        combos: nested.combos,
+        scopes: nested.scopes,
       };
     });
   }
@@ -965,8 +1027,6 @@ export class CatalogSelectionService {
       const dimensions = (group.dimensions as Record<string, unknown>) ?? {};
       const groupTotals = (group.totals as Record<string, unknown>) ?? {};
       const groupCombos = combosByGroup.get(group.id) ?? [];
-      const assemblyCombos = groupCombos.filter((c) => !isScopeComboPayload(c.comboPayload));
-      const scopeCombos = groupCombos.filter((c) => isScopeComboPayload(c.comboPayload));
 
       const lookupValue = group.groupLabelLookupId
         ? lookupMap.get(group.groupLabelLookupId)
@@ -1000,6 +1060,8 @@ export class CatalogSelectionService {
         };
       };
 
+      const nested = nestCombosUnderScopes(groupCombos, mapCombo);
+
       return {
         id: group.id,
         groupLabel: groupLabelObj,
@@ -1014,11 +1076,8 @@ export class CatalogSelectionService {
         items: (directItemsByGroup.get(group.id) ?? []).map((item) =>
           this.mapWorkOrderItemRow(item, lookupMap),
         ),
-        combos: assemblyCombos.map(mapCombo),
-        scopes: scopeCombos.map((combo) => ({
-          ...mapCombo(combo),
-          combos: [],
-        })),
+        combos: nested.combos,
+        scopes: nested.scopes,
       };
     });
   }
@@ -1354,6 +1413,7 @@ export class CatalogSelectionService {
     groupId: string;
     assemblyId: string;
     quantity: string;
+    parentComboId?: string;
     tx: DrizzleDbOrTx;
   }) {
     const assembly = await this.itemsRepo.findById({
@@ -1363,6 +1423,14 @@ export class CatalogSelectionService {
     if (!assembly || (assembly.kind !== 'assembly' && assembly.kind !== 'scope') || !assembly.isActive) {
       throw new NotFoundException('Active assembly or scope not found');
     }
+    if (assembly.kind === 'scope' && params.parentComboId) {
+      throw new BadRequestException('Scopes cannot be nested inside assemblies or scopes');
+    }
+
+    const comboPayload = buildComboPayload({
+      kind: assembly.kind,
+      parentComboId: params.parentComboId,
+    });
 
     const categoryName = assembly.categoryId
       ? (await this.categoriesRepo.findById({ tenantId: params.tenantId, id: assembly.categoryId }))
@@ -1406,7 +1474,7 @@ export class CatalogSelectionService {
           category: categoryName,
           subCategory: subCategoryName,
           quantity: comboQuantity,
-          comboPayload: { kind: assembly.kind },
+          comboPayload,
         })
         .returning();
       comboRecord = combo;
@@ -1434,7 +1502,7 @@ export class CatalogSelectionService {
           category: categoryName,
           subCategory: subCategoryName,
           quantity: comboQuantity,
-          comboPayload: { kind: assembly.kind },
+          comboPayload,
         })
         .returning();
       comboRecord = combo;
@@ -1462,7 +1530,7 @@ export class CatalogSelectionService {
           category: categoryName,
           subCategory: subCategoryName,
           quantity: comboQuantity,
-          comboPayload: { kind: assembly.kind },
+          comboPayload,
         })
         .returning();
       comboRecord = combo;
@@ -1479,6 +1547,29 @@ export class CatalogSelectionService {
           parseDecimal(line.wasteFactor) *
           parseDecimal(comboQuantity),
       );
+
+      if (assembly.kind === 'scope') {
+        const component = await this.itemsRepo.findById({
+          tenantId: params.tenantId,
+          id: line.componentId,
+        });
+        if (component?.kind === 'assembly') {
+          const nested = await this.explodeAssembly({
+            tenantId: params.tenantId,
+            documentKind: params.documentKind,
+            groupId: params.groupId,
+            assemblyId: line.componentId,
+            quantity: lineQty,
+            parentComboId: comboRecord.id as string,
+            tx: params.tx,
+          });
+          const nestedTotals = (nested.combo.totals as Record<string, unknown> | undefined) ?? {};
+          comboSubTotal += parseDecimal(String(nestedTotals.subTotal ?? 0));
+          comboTax += parseDecimal(String(nestedTotals.totalTax ?? 0));
+          continue;
+        }
+      }
+
       const snapshot = await this.buildSnapshot({
         tenantId: params.tenantId,
         catalogItemId: line.componentId,
@@ -1602,4 +1693,33 @@ function asNumber(value: unknown): number | undefined {
     return Number.isFinite(n) ? n : undefined;
   }
   return undefined;
+}
+
+function nestCombosUnderScopes<TCombo extends { id: string; comboPayload: unknown }>(
+  groupCombos: TCombo[],
+  mapCombo: (combo: TCombo) => Record<string, unknown>,
+): { combos: Record<string, unknown>[]; scopes: Record<string, unknown>[] } {
+  const assemblyCombos = groupCombos.filter((c) => !isScopeComboPayload(c.comboPayload));
+  const scopeCombos = groupCombos.filter((c) => isScopeComboPayload(c.comboPayload));
+  const nestedByParent = new Map<string, TCombo[]>();
+  const topLevelAssemblies: TCombo[] = [];
+
+  for (const combo of assemblyCombos) {
+    const parentId = parentComboIdFromPayload(combo.comboPayload);
+    if (parentId) {
+      const list = nestedByParent.get(parentId) ?? [];
+      list.push(combo);
+      nestedByParent.set(parentId, list);
+    } else {
+      topLevelAssemblies.push(combo);
+    }
+  }
+
+  return {
+    combos: topLevelAssemblies.map(mapCombo),
+    scopes: scopeCombos.map((combo) => ({
+      ...mapCombo(combo),
+      combos: (nestedByParent.get(combo.id) ?? []).map(mapCombo),
+    })),
+  };
 }

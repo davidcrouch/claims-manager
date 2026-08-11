@@ -22,6 +22,30 @@ export function isScopeComboPayload(payload: unknown): boolean {
   return comboKindFromPayload(payload) === 'scope';
 }
 
+export function parentComboIdFromPayload(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const rec = payload as Record<string, unknown>;
+  if (typeof rec.parentComboId === 'string' && rec.parentComboId) {
+    return rec.parentComboId;
+  }
+  const nested = rec.comboPayload;
+  if (nested && typeof nested === 'object') {
+    const id = (nested as Record<string, unknown>).parentComboId;
+    if (typeof id === 'string' && id) return id;
+  }
+  return null;
+}
+
+export function buildComboPayload(params: {
+  kind: 'assembly' | 'scope';
+  parentComboId?: string | null;
+}): Record<string, unknown> {
+  return {
+    kind: params.kind,
+    ...(params.parentComboId ? { parentComboId: params.parentComboId } : {}),
+  };
+}
+
 export interface ResolvedCatalogPrice {
   unitCost: string;
   buyCost: string | null;

@@ -26,6 +26,7 @@ import {
 import { createProposalAction } from '@/app/(app)/mutations';
 import {
   CreateSubmitOverlay,
+  navigateToCreated,
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
 import { fetchJobQuotesAction } from '@/app/(app)/jobs/[id]/actions';
@@ -132,7 +133,7 @@ export function ProposalFormDrawer({
       if (result.success) {
         if (result.proposal?.id) {
           startOpening();
-          router.push(`/proposals/${result.proposal.id}`);
+          navigateToCreated(router, `/proposals/${result.proposal.id}`);
           return;
         }
         resetPhase();

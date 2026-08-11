@@ -16,6 +16,7 @@ import {
 import { createCatalogAction, updateCatalogAction } from '@/app/(app)/admin/catalog/actions';
 import {
   CreateSubmitOverlay,
+  navigateToCreated,
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
 import type { Catalog, CatalogType } from '@/types/api';
@@ -68,7 +69,7 @@ export function CatalogFormDrawer({ open, onOpenChange, catalog }: CatalogFormDr
 
     if (!isEdit && 'id' in res && res.id) {
       startOpening();
-      router.push(`/admin/catalog/${res.id}`);
+      navigateToCreated(router, `/admin/catalog/${res.id}`);
       return;
     }
 

@@ -16,17 +16,19 @@ import {
 import { Button } from '@/components/ui/button';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
+import { DetailAssignee } from '@/components/shared/DetailAssignee';
 import { AddJobContactsDrawer } from '@/components/forms/AddJobContactsDrawer';
 import { PrintButton } from '@/components/shared/PrintButton';
 import { JOB_REPORT_TYPES } from '@/components/shared/PrintDocumentDrawer';
 import { JobOverviewTab, type JobOverviewTabHandle } from './tabs/JobOverviewTab';
-import { JobTypeDetailsTab } from './tabs/JobTypeDetailsTab';
+import { JobTypeDetailsTab, type JobTypeDetailsTabHandle } from './tabs/JobTypeDetailsTab';
 import { JobPartiesTab } from './tabs/JobPartiesTab';
 import { JobCommunicationsTab } from './tabs/JobCommunicationsTab';
 import { JobReportsTab } from './tabs/JobReportsTab';
 import { JobTimelineTab } from './tabs/JobTimelineTab';
 import { hasTypeDetails } from './util/jobType';
-import { updateJobDatesAction } from '@/app/(app)/jobs/[id]/actions';
+import { updateJobFieldsAction } from '@/app/(app)/jobs/[id]/actions';
+import type { LookupOption } from './job-edit.types';
 import type { Job, Claim } from '@/types/api';
 
 const VALID_TABS = [
@@ -51,26 +53,45 @@ function normaliseTab(raw: string | null, showTypeDetails: boolean): TabValue {
 export function JobDetail({
   job,
   parentClaim,
+  statusOptions = [],
+  jobTypeOptions = [],
 }: {
   job: Job;
   parentClaim?: Claim | null;
+  statusOptions?: LookupOption[];
+  jobTypeOptions?: LookupOption[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const showTypeDetails = hasTypeDetails(job);
+  const isCrunchwork = job.provider === 'crunchwork';
   const activeTab = normaliseTab(searchParams.get('tab'), showTypeDetails);
   const overviewRef = useRef<JobOverviewTabHandle>(null);
+  const typeDetailsRef = useRef<JobTypeDetailsTabHandle>(null);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [contactDrawerOpen, setContactDrawerOpen] = useState(false);
   const [reportDrawerOpen, setReportDrawerOpen] = useState(false);
+  const originalAssigned = job.assignedToUserId ?? '';
+  const [assignedToUserId, setAssignedToUserId] = useState(originalAssigned);
 
   useEffect(() => {
-    if (activeTab !== 'overview') setEditing(false);
+    if (editing) return;
+    setAssignedToUserId(job.assignedToUserId ?? '');
+  }, [editing, job.assignedToUserId]);
+
+  useEffect(() => {
+    const staysOnEditableTab =
+      activeTab === 'overview' || (isCrunchwork && activeTab === 'type-details');
+    if (!staysOnEditableTab) {
+      setEditing(false);
+      setAssignedToUserId(job.assignedToUserId ?? '');
+    }
     if (activeTab !== 'parties') setContactDrawerOpen(false);
     if (activeTab !== 'reports') setReportDrawerOpen(false);
-  }, [activeTab]);
+  }, [activeTab, isCrunchwork, job.assignedToUserId]);
 
   const onTabChange = useCallback(
     (value: string | null) => {
@@ -88,25 +109,61 @@ export function JobDetail({
   );
 
   const handleSave = useCallback(async () => {
-    const pending = overviewRef.current?.getPendingDates();
-    if (!pending) {
+    const overviewPending = overviewRef.current?.getPendingUpdate() ?? null;
+    const typePending =
+      isCrunchwork && showTypeDetails
+        ? typeDetailsRef.current?.getPendingUpdate() ?? null
+        : null;
+    const assigneeChanged = assignedToUserId !== originalAssigned;
+
+    if (!overviewPending && !typePending && !assigneeChanged) {
       setEditing(false);
+      setSaveError(null);
       return;
     }
+
     setSaving(true);
+    setSaveError(null);
     try {
-      await updateJobDatesAction(job.id, pending);
+      const mergedTypeDetails = {
+        ...(overviewPending?.typeDetails ?? {}),
+        ...(typePending?.typeDetails ?? {}),
+      };
+      const result = await updateJobFieldsAction(job.id, {
+        ...(overviewPending ?? {}),
+        ...(typePending ?? {}),
+        ...(assigneeChanged
+          ? { assignedToUserId: assignedToUserId || null }
+          : {}),
+        ...(Object.keys(mergedTypeDetails).length > 0
+          ? { typeDetails: mergedTypeDetails }
+          : { typeDetails: undefined }),
+      });
+      if (!result.success) {
+        setSaveError(result.error ?? 'Failed to save job');
+        return;
+      }
       router.refresh();
       setEditing(false);
     } finally {
       setSaving(false);
     }
-  }, [job.id, router]);
+  }, [
+    job.id,
+    router,
+    isCrunchwork,
+    showTypeDetails,
+    assignedToUserId,
+    originalAssigned,
+  ]);
 
   const handleCancel = useCallback(() => {
-    overviewRef.current?.resetDates();
+    overviewRef.current?.reset();
+    typeDetailsRef.current?.reset();
+    setAssignedToUserId(job.assignedToUserId ?? '');
+    setSaveError(null);
     setEditing(false);
-  }, []);
+  }, [job.assignedToUserId]);
 
   const claimId = job.claimId ?? undefined;
   const existingContacts = (
@@ -153,8 +210,11 @@ export function JobDetail({
     />
   );
 
+  const showEditActions =
+    activeTab === 'overview' || (isCrunchwork && activeTab === 'type-details');
+
   let tabActions: ReactNode = null;
-  if (activeTab === 'overview') {
+  if (showEditActions) {
     tabActions = editing ? (
       <>
         <Button
@@ -221,11 +281,16 @@ export function JobDetail({
     </>
   );
 
+  // Keep editable tabs mounted while editing so draft state survives tab switches.
+  const keepOverviewMounted = activeTab === 'overview' || editing;
+  const keepTypeDetailsMounted =
+    showTypeDetails && (activeTab === 'type-details' || (editing && isCrunchwork));
+
   return (
     <div className="flex flex-col">
       <SetHeaderActions>{headerActions}</SetHeaderActions>
-      <div className="flex items-center border-b border-slate-200">
-        <div className="flex flex-wrap gap-0">
+      <div className="flex w-full flex-wrap items-center gap-x-4 border-b border-slate-200">
+        <div className="flex min-w-0 flex-1 flex-wrap gap-0">
           {overviewTabs.map((t) => {
             const Icon = t.icon;
             const active = activeTab === t.id;
@@ -246,19 +311,43 @@ export function JobDetail({
             );
           })}
         </div>
+        <DetailAssignee
+          assigneeName={job.assigneeName}
+          assignedToUserId={assignedToUserId || null}
+          editing={editing && showEditActions}
+          saving={saving}
+          onChange={(userId) => setAssignedToUserId(userId ?? '')}
+          provider={job.provider}
+        />
       </div>
       <div className="pt-4">
-        {activeTab === 'overview' && (
-          <JobOverviewTab
-            ref={overviewRef}
-            job={job}
-            parentClaim={parentClaim}
-            saving={saving}
-            editing={editing}
-          />
+        {saveError && (
+          <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {saveError}
+          </div>
         )}
-        {activeTab === 'type-details' && showTypeDetails && (
-          <JobTypeDetailsTab job={job} />
+        {keepOverviewMounted && (
+          <div className={activeTab === 'overview' ? '' : 'hidden'}>
+            <JobOverviewTab
+              ref={overviewRef}
+              job={job}
+              parentClaim={parentClaim}
+              saving={saving}
+              editing={editing}
+              statusOptions={statusOptions}
+            />
+          </div>
+        )}
+        {keepTypeDetailsMounted && (
+          <div className={activeTab === 'type-details' ? '' : 'hidden'}>
+            <JobTypeDetailsTab
+              ref={typeDetailsRef}
+              job={job}
+              editing={editing && isCrunchwork}
+              saving={saving}
+              jobTypeOptions={jobTypeOptions}
+            />
+          </div>
         )}
         {activeTab === 'parties' && <JobPartiesTab job={job} />}
         {activeTab === 'reports' && (

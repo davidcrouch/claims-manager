@@ -85,7 +85,7 @@ export class ProjectQuoteUseCase implements ProjectionUseCase {
       }
 
       const created = await this.quotesRepo.create({
-        data: { tenantId, ...result.entity } as QuoteInsert,
+        data: { tenantId, ...result.entity, originType: 'provider' } as QuoteInsert,
         tx,
       });
       quoteId = created.id;

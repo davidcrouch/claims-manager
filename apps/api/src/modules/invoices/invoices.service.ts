@@ -65,7 +65,7 @@ export class InvoicesService {
     });
   }
 
-  async create(params: { body: Record<string, unknown> }) {
+  async create(params: { body: Record<string, unknown>; userId?: string }) {
     const tenantId = this.tenantContext.getTenantId();
     const connectionId = await this.resolveConnectionId(tenantId);
     const apiInvoice = await this.crunchworkService.createInvoice({
@@ -85,18 +85,27 @@ export class InvoicesService {
       totalTax: toNum(apiObj.totalTax),
       totalAmount: toNum(apiObj.totalAmount),
       invoicePayload: apiInvoice as Record<string, unknown>,
+      createdByUserId: params.userId ?? null,
+      updatedByUserId: params.userId ?? null,
     };
     return this.invoicesRepo.create({ data: insertData });
   }
 
-  async update(params: { id: string; body: Record<string, unknown> }) {
+  async update(params: {
+    id: string;
+    body: Record<string, unknown>;
+    userId?: string;
+  }) {
     const existing = await this.findOne({ id: params.id });
     if (!existing) return null;
 
     if (typeof params.body.statusLookupId === 'string' && params.body.statusLookupId) {
       return this.invoicesRepo.update({
         id: params.id,
-        data: { statusLookupId: params.body.statusLookupId },
+        data: {
+          statusLookupId: params.body.statusLookupId,
+          ...(params.userId ? { updatedByUserId: params.userId } : {}),
+        },
       });
     }
 
@@ -110,7 +119,10 @@ export class InvoicesService {
 
     return this.invoicesRepo.update({
       id: params.id,
-      data: { invoicePayload: apiInvoice as Record<string, unknown> },
+      data: {
+        invoicePayload: apiInvoice as Record<string, unknown>,
+        ...(params.userId ? { updatedByUserId: params.userId } : {}),
+      },
     });
   }
 }

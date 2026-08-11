@@ -1196,12 +1196,14 @@ export function createApiClient(options?: ApiClientOptions) {
       groupId: string;
       catalogAssemblyId: string;
       quantity: string;
+      quoteComboId?: string;
     }): Promise<unknown> {
       return fetchApi(`/quotes/${params.quoteId}/groups/${params.groupId}/catalog-assemblies`, {
         method: 'POST',
         body: JSON.stringify({
           catalogAssemblyId: params.catalogAssemblyId,
           quantity: params.quantity,
+          quoteComboId: params.quoteComboId,
         }),
       });
     },
@@ -1428,6 +1430,18 @@ export function createApiClient(options?: ApiClientOptions) {
         method: 'PATCH',
         body: JSON.stringify(data),
       });
+    },
+
+    validateAssessment(id: string): Promise<{
+      valid: boolean;
+      errors: string[];
+      customData?: Record<string, unknown>;
+    }> {
+      return fetchApi(`/assessments/${id}/validate`, { method: 'POST' });
+    },
+
+    publishAssessment(id: string): Promise<Assessment> {
+      return fetchApi<Assessment>(`/assessments/${id}/publish`, { method: 'POST' });
     },
 
     deleteAssessment(id: string): Promise<{ deleted: boolean }> {

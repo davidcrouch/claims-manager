@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { TasksService } from './tasks.service';
 
 @Controller('tasks')
@@ -63,8 +64,11 @@ export class TasksController {
   }
 
   @Post()
-  async create(@Body() body: Record<string, unknown>) {
-    return this.tasksService.create({ body });
+  async create(
+    @Body() body: Record<string, unknown>,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.tasksService.create({ body, userId });
   }
 
   @Post(':id')

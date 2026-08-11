@@ -15,6 +15,7 @@ import {
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
 import { updateAssessmentAction } from '@/app/(app)/assessments/actions';
+import { asBool, asStr, isAssessmentLocked, sectionDict } from '../assessment-sections';
 import type { Assessment } from '@/types/api';
 
 export interface AssessmentAccommodationDrawerProps {
@@ -47,13 +48,14 @@ function emptyForm(): AccommodationFormData {
 }
 
 function fromAssessment(data: Partial<Assessment>): AccommodationFormData {
+  const ta = sectionDict(data, 'temporaryAccommodation');
   return {
-    tempAccomRequiredImmediately: data.tempAccomRequiredImmediately ?? false,
-    tempAccomImmediateEstimateDays: data.tempAccomImmediateEstimateDays != null ? String(data.tempAccomImmediateEstimateDays) : '',
-    tempRepairsToMakeLivable: data.tempRepairsToMakeLivable ?? '',
-    tempAccomRequiredDuringRepairs: data.tempAccomRequiredDuringRepairs ?? false,
-    tempAccomRepairsEstimateDays: data.tempAccomRepairsEstimateDays != null ? String(data.tempAccomRepairsEstimateDays) : '',
-    workWhileInAccommodation: data.workWhileInAccommodation ?? '',
+    tempAccomRequiredImmediately: asBool(ta.requiredImmediately),
+    tempAccomImmediateEstimateDays: asStr(ta.immediateEstimateDays),
+    tempRepairsToMakeLivable: asStr(ta.tempRepairsToMakeLivable),
+    tempAccomRequiredDuringRepairs: asBool(ta.requiredDuringRepairs),
+    tempAccomRepairsEstimateDays: asStr(ta.repairsEstimateDays),
+    workWhileInAccommodation: asStr(ta.workWhileInAccommodation),
   };
 }
 
@@ -88,16 +90,34 @@ export function AssessmentAccommodationDrawer({
       setError('No assessment ID provided');
       return;
     }
+    if (isAssessmentLocked(initialData?.status)) {
+      setError('This assessment has been published and cannot be edited');
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
+      const required =
+        form.tempAccomRequiredImmediately || form.tempAccomRequiredDuringRepairs
+          ? 'Yes, Temporary Accommodation'
+          : 'No';
+      const durationDays =
+        form.tempAccomRepairsEstimateDays || form.tempAccomImmediateEstimateDays;
       await updateAssessmentAction(assessmentId, {
-        tempAccomRequiredImmediately: form.tempAccomRequiredImmediately,
-        tempAccomImmediateEstimateDays: form.tempAccomImmediateEstimateDays ? parseInt(form.tempAccomImmediateEstimateDays, 10) : null,
-        tempRepairsToMakeLivable: form.tempRepairsToMakeLivable || null,
-        tempAccomRequiredDuringRepairs: form.tempAccomRequiredDuringRepairs,
-        tempAccomRepairsEstimateDays: form.tempAccomRepairsEstimateDays ? parseInt(form.tempAccomRepairsEstimateDays, 10) : null,
-        workWhileInAccommodation: form.workWhileInAccommodation || null,
+        temporaryAccommodation: {
+          required,
+          requiredImmediately: form.tempAccomRequiredImmediately,
+          immediateEstimateDays: form.tempAccomImmediateEstimateDays
+            ? parseInt(form.tempAccomImmediateEstimateDays, 10)
+            : undefined,
+          tempRepairsToMakeLivable: form.tempRepairsToMakeLivable || undefined,
+          requiredDuringRepairs: form.tempAccomRequiredDuringRepairs,
+          repairsEstimateDays: form.tempAccomRepairsEstimateDays
+            ? parseInt(form.tempAccomRepairsEstimateDays, 10)
+            : undefined,
+          workWhileInAccommodation: form.workWhileInAccommodation || undefined,
+          estimatedDuration: durationDays ? `${durationDays} Days` : undefined,
+        },
       });
       onOpenChange(false);
       router.refresh();
@@ -199,7 +219,7 @@ export function AssessmentAccommodationDrawer({
           <Button type="button" variant="outline" size="lg" className="min-w-36 px-8" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button type="submit" size="lg" className="min-w-36 px-8" disabled={submitting}>
+          <Button type="submit" size="lg" className="min-w-36 px-8" disabled={submitting || isAssessmentLocked(initialData?.status)}>
             {submitting ? 'Saving...' : 'Save Changes'}
           </Button>
         </BottomFormDrawerFooter>

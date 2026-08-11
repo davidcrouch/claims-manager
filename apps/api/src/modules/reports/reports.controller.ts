@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { ReportsService } from './reports.service';
 
 @Controller('reports')
@@ -42,12 +43,19 @@ export class ReportsController {
   }
 
   @Post()
-  async create(@Body() body: Record<string, unknown>) {
-    return this.reportsService.create({ body });
+  async create(
+    @Body() body: Record<string, unknown>,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.reportsService.create({ body, userId });
   }
 
   @Post(':id')
-  async update(@Param('id') id: string, @Body() body: Record<string, unknown>) {
-    return this.reportsService.update({ id, body });
+  async update(
+    @Param('id') id: string,
+    @Body() body: Record<string, unknown>,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.reportsService.update({ id, body, userId });
   }
 }

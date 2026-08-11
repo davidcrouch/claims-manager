@@ -96,7 +96,7 @@ export class ProjectPurchaseOrderUseCase implements ProjectionUseCase {
       }
 
       const created = await this.workOrdersRepo.create({
-        data: { tenantId, ...result.entity } as WorkOrderInsert,
+        data: { tenantId, ...result.entity, originType: 'provider' } as WorkOrderInsert,
         tx,
       });
       woId = created.id;

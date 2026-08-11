@@ -26,6 +26,7 @@ import {
 import { createBillAction } from '@/app/(app)/mutations';
 import {
   CreateSubmitOverlay,
+  navigateToCreated,
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
 import { fetchJobInvoicesAction } from '@/app/(app)/jobs/[id]/actions';
@@ -123,7 +124,7 @@ export function BillFormDrawer({
       if (result.success) {
         if (result.bill?.id) {
           startOpening();
-          router.push(`/bills/${result.bill.id}`);
+          navigateToCreated(router, `/bills/${result.bill.id}`);
           return;
         }
         resetPhase();

@@ -58,20 +58,35 @@ export class PurchaseOrdersService {
     return this.purchaseOrdersRepo.findByJob({ jobId: params.jobId, tenantId });
   }
 
-  async create(params: { body: Record<string, unknown> }) {
+  async create(params: { body: Record<string, unknown>; userId?: string }) {
     const tenantId = this.tenantContext.getTenantId();
     this.logger.log(`api:PurchaseOrdersService.create tenantId=${tenantId}`);
-    return this.purchaseOrdersRepo.create({ data: { ...params.body, tenantId } as any });
+    const { createdByUserId: _c, updatedByUserId: _u, ...rest } = params.body;
+    return this.purchaseOrdersRepo.create({
+      data: {
+        ...rest,
+        tenantId,
+        createdByUserId: params.userId ?? null,
+        updatedByUserId: params.userId ?? null,
+      } as any,
+    });
   }
 
-  async update(params: { id: string; body: Record<string, unknown> }) {
+  async update(params: {
+    id: string;
+    body: Record<string, unknown>;
+    userId?: string;
+  }) {
     const existing = await this.findOne({ id: params.id });
     if (!existing) return null;
 
     if (typeof params.body.statusLookupId === 'string' && params.body.statusLookupId) {
       return this.purchaseOrdersRepo.update({
         id: params.id,
-        data: { statusLookupId: params.body.statusLookupId },
+        data: {
+          statusLookupId: params.body.statusLookupId,
+          ...(params.userId ? { updatedByUserId: params.userId } : {}),
+        },
       });
     }
 
@@ -85,7 +100,10 @@ export class PurchaseOrdersService {
 
     return this.purchaseOrdersRepo.update({
       id: params.id,
-      data: { purchaseOrderPayload: apiPo as Record<string, unknown> },
+      data: {
+        purchaseOrderPayload: apiPo as Record<string, unknown>,
+        ...(params.userId ? { updatedByUserId: params.userId } : {}),
+      },
     });
   }
 }

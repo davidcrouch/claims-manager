@@ -33,6 +33,7 @@ import { createJobAction } from '@/app/(app)/jobs/mutations';
 import { OrgUserSelect } from '@/components/forms/OrgUserSelect';
 import {
   CreateSubmitOverlay,
+  navigateToCreated,
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
 import type { Contact, Job } from '@/types/api';
@@ -349,7 +350,7 @@ export function JobFormDrawer({
         // mounts — closing here flashes the stale jobs list.
         if (result.job?.id) {
           startOpening();
-          router.push(`/jobs/${result.job.id}`);
+          navigateToCreated(router, `/jobs/${result.job.id}`);
           return;
         }
         resetPhase();

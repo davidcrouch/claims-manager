@@ -570,6 +570,12 @@ export class JobsService {
     const data: Partial<JobInsert> = {};
     if (body.claimId !== undefined) data.claimId = (body.claimId as string) || null;
     if (body.name !== undefined) data.name = (body.name as string) || null;
+    if (body.externalReference !== undefined) {
+      data.externalReference =
+        typeof body.externalReference === 'string' && body.externalReference.trim()
+          ? body.externalReference.trim()
+          : null;
+    }
     if (body.vendorId !== undefined) data.vendorId = body.vendorId as string;
     if (body.statusLookupId !== undefined) data.statusLookupId = body.statusLookupId as string;
     if (body.address !== undefined) {
@@ -595,6 +601,39 @@ export class JobsService {
     if (body.customData !== undefined) data.customData = body.customData as Record<string, unknown>;
     if (body.assignedToUserId !== undefined) {
       data.assignedToUserId = parseOptionalUserId(body.assignedToUserId) ?? null;
+    }
+    if (body.vendorSnapshot !== undefined && body.vendorSnapshot && typeof body.vendorSnapshot === 'object') {
+      data.vendorSnapshot = body.vendorSnapshot as Record<string, unknown>;
+    }
+    if (
+      body.temporaryAccommodationDetails !== undefined &&
+      body.temporaryAccommodationDetails &&
+      typeof body.temporaryAccommodationDetails === 'object'
+    ) {
+      data.temporaryAccommodationDetails =
+        body.temporaryAccommodationDetails as Record<string, unknown>;
+    }
+    if (
+      body.specialistDetails !== undefined &&
+      body.specialistDetails &&
+      typeof body.specialistDetails === 'object'
+    ) {
+      data.specialistDetails = body.specialistDetails as Record<string, unknown>;
+    }
+    if (
+      body.rectificationDetails !== undefined &&
+      body.rectificationDetails &&
+      typeof body.rectificationDetails === 'object'
+    ) {
+      data.rectificationDetails = body.rectificationDetails as Record<string, unknown>;
+    }
+    if (body.auditDetails !== undefined && body.auditDetails && typeof body.auditDetails === 'object') {
+      data.auditDetails = body.auditDetails as Record<string, unknown>;
+    }
+    if (body.mobilityConsiderations !== undefined) {
+      data.mobilityConsiderations = Array.isArray(body.mobilityConsiderations)
+        ? body.mobilityConsiderations
+        : [];
     }
     return data;
   }

@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { InvoicesService } from './invoices.service';
 
 @Controller('invoices')
@@ -42,12 +43,19 @@ export class InvoicesController {
   }
 
   @Post()
-  async create(@Body() body: Record<string, unknown>) {
-    return this.invoicesService.create({ body });
+  async create(
+    @Body() body: Record<string, unknown>,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.invoicesService.create({ body, userId });
   }
 
   @Post(':id')
-  async update(@Param('id') id: string, @Body() body: Record<string, unknown>) {
-    return this.invoicesService.update({ id, body });
+  async update(
+    @Param('id') id: string,
+    @Body() body: Record<string, unknown>,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.invoicesService.update({ id, body, userId });
   }
 }

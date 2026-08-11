@@ -87,7 +87,7 @@ export class ProjectTaskUseCase implements ProjectionUseCase {
       taskId = existingLink.internalEntityId;
     } else {
       const created = await this.tasksRepo.create({
-        data: { tenantId, ...result.entity } as TaskInsert,
+        data: { tenantId, ...result.entity, originType: 'provider' } as TaskInsert,
         tx,
       });
       taskId = created.id;

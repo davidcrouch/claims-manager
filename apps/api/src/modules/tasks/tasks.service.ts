@@ -92,7 +92,7 @@ export class TasksService {
     return this.tasksRepo.findOverdue({ tenantId });
   }
 
-  async create(params: { body: Record<string, unknown> }) {
+  async create(params: { body: Record<string, unknown>; userId?: string }) {
     const tenantId = this.tenantContext.getTenantId();
 
     const relatedEntityType = (params.body.relatedEntityType as string) ?? 'Job';
@@ -133,6 +133,7 @@ export class TasksService {
         priority: (apiObj.priority ?? params.body?.priority ?? 'Low') as string,
         status: (apiObj.status ?? 'Open') as string,
         assignedToUserId,
+        createdByUserId: params.userId ?? null,
         taskPayload: apiTask as Record<string, unknown>,
       };
       return this.tasksRepo.create({ data: insertData });
@@ -149,6 +150,7 @@ export class TasksService {
         priority: (params.body.priority as string) ?? 'Low',
         status: 'Open',
         assignedToUserId,
+        createdByUserId: params.userId ?? null,
         taskPayload: {},
       };
       return this.tasksRepo.create({ data: insertData });

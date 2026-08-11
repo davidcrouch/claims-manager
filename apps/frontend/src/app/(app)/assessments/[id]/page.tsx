@@ -4,7 +4,7 @@ import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { AssessmentDetailClient } from '@/components/assessments/AssessmentDetailClient';
 import { AssessmentPageHeader } from '@/components/assessments/AssessmentPageHeader';
 import type { Metadata } from 'next';
-import type { Job } from '@/types/api';
+import type { Claim, Job } from '@/types/api';
 
 export async function generateMetadata({
   params,
@@ -53,6 +53,18 @@ export default async function AssessmentDetailPage({
     });
   }
 
+  let claim: Claim | null = job?.claim ?? null;
+  const claimId = job?.claimId ?? job?.parentClaimId ?? null;
+  if (!claim && claimId) {
+    claim = await api.getClaim(claimId).catch((err: unknown) => {
+      console.error(
+        'frontend:AssessmentDetailPage - getClaim failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return null;
+    });
+  }
+
   const backHref = job ? `/assessments?jobId=${job.id}` : '/assessments';
 
   return (
@@ -60,7 +72,7 @@ export default async function AssessmentDetailPage({
       <SetPageHeader>
         <AssessmentPageHeader assessment={assessment} job={job} backHref={backHref} />
       </SetPageHeader>
-      <AssessmentDetailClient assessment={assessment} />
+      <AssessmentDetailClient assessment={assessment} job={job} claim={claim} />
     </>
   );
 }

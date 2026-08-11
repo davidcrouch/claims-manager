@@ -82,12 +82,24 @@ export class RfqsService {
     return this.rfqsRepo.findByQuote({ quoteId: params.quoteId, tenantId });
   }
 
-  async create(params: { body: Record<string, unknown> }) {
+  async create(params: { body: Record<string, unknown>; userId?: string }) {
     const tenantId = this.tenantContext.getTenantId();
     this.logger.log(`api:RfqsService.create tenantId=${tenantId}`);
 
-    const { selectedItemIds, ...rfqData } = params.body;
-    const rfq = await this.rfqsRepo.create({ data: { ...rfqData, tenantId } as any });
+    const {
+      selectedItemIds,
+      createdByUserId: _c,
+      updatedByUserId: _u,
+      ...rfqData
+    } = params.body;
+    const rfq = await this.rfqsRepo.create({
+      data: {
+        ...rfqData,
+        tenantId,
+        createdByUserId: params.userId ?? null,
+        updatedByUserId: params.userId ?? null,
+      } as any,
+    });
 
     if (
       rfq.quoteId &&
@@ -105,9 +117,20 @@ export class RfqsService {
     return rfq;
   }
 
-  async update(params: { id: string; body: Record<string, unknown> }) {
+  async update(params: {
+    id: string;
+    body: Record<string, unknown>;
+    userId?: string;
+  }) {
     this.logger.log(`api:RfqsService.update id=${params.id}`);
-    return this.rfqsRepo.update({ id: params.id, data: params.body as any });
+    const { createdByUserId: _c, updatedByUserId: _u, ...rest } = params.body;
+    return this.rfqsRepo.update({
+      id: params.id,
+      data: {
+        ...rest,
+        ...(params.userId ? { updatedByUserId: params.userId } : {}),
+      } as any,
+    });
   }
 
   async replaceScopeItems(params: { rfqId: string; selectedItemIds: string[] }) {

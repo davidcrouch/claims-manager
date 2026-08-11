@@ -32,11 +32,13 @@ export function QuoteLineItemsTab({
   drawerOpen,
   onDrawerOpenChange,
   catalogType,
+  readOnly = false,
 }: {
   quote: Quote;
   drawerOpen: boolean;
   onDrawerOpenChange: (open: boolean) => void;
   catalogType?: CatalogType;
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const payloadGroups = getPayloadGroups(quote);
@@ -66,7 +68,11 @@ export function QuoteLineItemsTab({
 
   const groups = dbGroups !== null ? dbGroups : payloadGroups;
 
-  function handleCatalogDrop(payload: CatalogDragPayload, groupId?: string) {
+  function handleCatalogDrop(payload: CatalogDragPayload, groupId?: string, quoteComboId?: string) {
+    if (payload.kind === 'scope' && quoteComboId) {
+      toast.error('Scopes cannot be nested inside other scopes');
+      return;
+    }
     startTransition(async () => {
       const qty = quantity.trim() || '1';
       const result =
@@ -76,12 +82,14 @@ export function QuoteLineItemsTab({
               catalogAssemblyId: payload.id,
               quantity: qty,
               groupId,
+              quoteComboId,
             })
           : await addCatalogItemToQuoteAction({
               quoteId: quote.id,
               catalogItemId: payload.id,
               quantity: qty,
               groupId,
+              quoteComboId,
             });
 
       if (!result.success) {
@@ -90,7 +98,11 @@ export function QuoteLineItemsTab({
         return;
       }
 
-      toast.success(`Added ${payload.code} to estimate`);
+      toast.success(
+        quoteComboId
+          ? `Added ${payload.code} to scope`
+          : `Added ${payload.code} to estimate`,
+      );
       setStructurallyDirty(true);
       await loadLineItems();
       router.refresh();
@@ -288,24 +300,27 @@ export function QuoteLineItemsTab({
 
   return (
     <div className="space-y-4">
-      <CatalogPickerDrawer open={drawerOpen} onOpenChange={onDrawerOpenChange} catalogType={catalogType} />
+      {!readOnly && (
+        <CatalogPickerDrawer open={drawerOpen} onOpenChange={onDrawerOpenChange} catalogType={catalogType} />
+      )}
 
       <QuoteLineItemsTable
         groups={groups}
-        activeDropKey={activeDropKey}
-        setActiveDropKey={setActiveDropKey}
-        onCatalogDrop={handleCatalogDrop}
-        onGroupLabelDrop={handleGroupLabelDrop}
-        onEditGroup={(id) => setEditingGroupId(id)}
-        onDeleteGroup={(id) => setDeletingGroupId(id)}
-        onDeleteItem={handleDeleteItem}
-        onDeleteCombo={handleDeleteCombo}
-        onDeleteScope={handleDeleteScope}
-        onMoveGroupUp={(id) => handleMoveGroup(id, 'up')}
-        onMoveGroupDown={(id) => handleMoveGroup(id, 'down')}
-        onOpenCatalogDrawer={() => onDrawerOpenChange(true)}
-        onSave={handleSaveLineItems}
+        activeDropKey={readOnly ? null : activeDropKey}
+        setActiveDropKey={readOnly ? undefined : setActiveDropKey}
+        onCatalogDrop={readOnly ? undefined : handleCatalogDrop}
+        onGroupLabelDrop={readOnly ? undefined : handleGroupLabelDrop}
+        onEditGroup={readOnly ? undefined : (id) => setEditingGroupId(id)}
+        onDeleteGroup={readOnly ? undefined : (id) => setDeletingGroupId(id)}
+        onDeleteItem={readOnly ? undefined : handleDeleteItem}
+        onDeleteCombo={readOnly ? undefined : handleDeleteCombo}
+        onDeleteScope={readOnly ? undefined : handleDeleteScope}
+        onMoveGroupUp={readOnly ? undefined : (id) => handleMoveGroup(id, 'up')}
+        onMoveGroupDown={readOnly ? undefined : (id) => handleMoveGroup(id, 'down')}
+        onOpenCatalogDrawer={readOnly ? undefined : () => onDrawerOpenChange(true)}
+        onSave={readOnly ? undefined : handleSaveLineItems}
         structurallyDirty={structurallyDirty}
+        readOnly={readOnly}
       />
 
       {editingGroup && (

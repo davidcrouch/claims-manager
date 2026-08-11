@@ -297,4 +297,9 @@ export class AddCatalogAssemblyDto {
 
   @IsString()
   quantity!: string;
+
+  /** When set, nest the assembly under this quote scope (combo id). */
+  @IsOptional()
+  @IsUUID()
+  quoteComboId?: string;
 }

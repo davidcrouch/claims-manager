@@ -3,10 +3,60 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ClaimsApiClient } from '../server.js';
 import { toolError, toolResult } from '../server.js';
 
+type Dict = Record<string, unknown>;
+
+function asDict(value: unknown): Dict {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Dict) : {};
+}
+
+function compact(section: Dict): Dict | undefined {
+  const out: Dict = {};
+  for (const [key, value] of Object.entries(section)) {
+    if (value !== undefined) out[key] = value;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+function additionalStructuresFromFlags(flags: {
+  detachedGarage?: boolean;
+  sheds?: boolean;
+  swimmingPool?: boolean;
+  detachedGrannyFlat?: boolean;
+}): string {
+  return [
+    flags.detachedGarage ? 'Detached Garage' : null,
+    flags.sheds ? 'Sheds' : null,
+    flags.swimmingPool ? 'Swimming Pool' : null,
+    flags.detachedGrannyFlat ? 'Granny Flat' : null,
+  ]
+    .filter(Boolean)
+    .join(', ');
+}
+
+function flagsFromAdditionalStructures(value: unknown): {
+  detachedGarage: boolean;
+  sheds: boolean;
+  swimmingPool: boolean;
+  detachedGrannyFlat: boolean;
+} {
+  const text = value == null ? '' : String(value);
+  return {
+    detachedGarage: text.includes('Garage'),
+    sheds: text.includes('Shed'),
+    swimmingPool: text.includes('Pool'),
+    detachedGrannyFlat: text.includes('Granny'),
+  };
+}
+
+function hazardEntry(details: Dict, key: string): Dict {
+  const entry = details[key];
+  return asDict(entry);
+}
+
 export function registerAssessmentsTools(server: McpServer, api: ClaimsApiClient): void {
   server.tool(
     'get_assessment',
-    '[Category: Assessments] Get a single assessment by ID, returning all fields across every tab.',
+    '[Category: Assessments] Get a single assessment by ID, returning all JSONB section fields across every tab.',
     {
       id: z.string().describe('Assessment UUID'),
     },
@@ -166,9 +216,35 @@ export function registerAssessmentsTools(server: McpServer, api: ClaimsApiClient
     },
     async ({ assessmentId, ...fields }) => {
       try {
+        const body: Dict = {};
+        const building = compact({
+          designType: fields.designType,
+          constructionType: fields.construction,
+          roofType: fields.roofType,
+          buildingType: fields.buildingType,
+          squares: fields.squares,
+          estimatedBuildYear: fields.buildingAge != null ? String(fields.buildingAge) : undefined,
+          houseM2: fields.squareMetres != null ? Number(fields.squareMetres) || fields.squareMetres : undefined,
+          propertyCondition: fields.overallConditionAcceptable,
+        });
+        const recommendation = compact({
+          claimRecommendation: fields.claimRecommendation,
+        });
+        const makeSafe = compact({
+          makeSafeType: fields.makeSafeType,
+          makeSafeRequired: fields.makeSafe,
+        });
+        const attendance = compact({
+          siteAttendanceDate: fields.dateBooked,
+          insuranceAssessorAttended: fields.iagInspectionRequired,
+        });
+        if (building) body.building = building;
+        if (recommendation) body.recommendation = recommendation;
+        if (makeSafe) body.makeSafe = makeSafe;
+        if (attendance) body.attendance = attendance;
         const result = await api.request(`/assessments/${assessmentId}`, {
           method: 'PATCH',
-          body: fields,
+          body,
         });
         return toolResult(result);
       } catch (err) {
@@ -196,9 +272,55 @@ export function registerAssessmentsTools(server: McpServer, api: ClaimsApiClient
     },
     async ({ assessmentId, ...fields }) => {
       try {
+        const existing = asDict(await api.request(`/assessments/${assessmentId}`));
+        const bld = asDict(existing.building);
+        const flags = flagsFromAdditionalStructures(bld.additionalStructures);
+        if (fields.detachedGarage !== undefined) flags.detachedGarage = fields.detachedGarage;
+        if (fields.sheds !== undefined) flags.sheds = fields.sheds;
+        if (fields.swimmingPool !== undefined) flags.swimmingPool = fields.swimmingPool;
+        if (fields.detachedGrannyFlat !== undefined) flags.detachedGrannyFlat = fields.detachedGrannyFlat;
+
+        const body: Dict = {};
+        const makeSafe = compact({
+          dateMakeSafeCompleted: fields.makeSafeCompletionDate,
+          dateMainRoofRepaired: fields.dateMainRoofRepaired,
+        });
+        const building = compact({
+          mainHouseRoofDamage: fields.mainRoofDamage,
+          additionalStructures:
+            fields.detachedGarage !== undefined ||
+            fields.sheds !== undefined ||
+            fields.swimmingPool !== undefined ||
+            fields.detachedGrannyFlat !== undefined
+              ? additionalStructuresFromFlags(flags)
+              : undefined,
+        });
+        const habitability = compact({ habitable: fields.habitable });
+        const extras = compact({
+          mould: fields.mould,
+          asbestosOnSite: fields.asbestosOnSite,
+        });
+        const damage = compact({
+          hasDamageCoveredByPolicy:
+            fields.damageCausedByListedEvent === undefined
+              ? undefined
+              : fields.damageCausedByListedEvent
+                ? 'Yes'
+                : 'No',
+        });
+        const hazards = compact({
+          environmentalHazards: fields.mould === true ? 'Mould' : fields.mould === false ? undefined : undefined,
+          safetyHazards: fields.asbestosOnSite === true ? 'Asbestos' : undefined,
+        });
+        if (makeSafe) body.makeSafe = makeSafe;
+        if (building) body.building = building;
+        if (habitability) body.habitability = habitability;
+        if (extras) body.extras = extras;
+        if (damage) body.damage = damage;
+        if (hazards) body.hazards = hazards;
         const result = await api.request(`/assessments/${assessmentId}`, {
           method: 'PATCH',
-          body: fields,
+          body,
         });
         return toolResult(result);
       } catch (err) {
@@ -224,9 +346,43 @@ export function registerAssessmentsTools(server: McpServer, api: ClaimsApiClient
     },
     async ({ assessmentId, ...fields }) => {
       try {
+        const existing = asDict(await api.request(`/assessments/${assessmentId}`));
+        const haz = asDict(existing.hazards);
+        const details = asDict(haz.hazardDetails);
+        const pool = hazardEntry(details, 'poolFencing');
+        const electrical = hazardEntry(details, 'electrical');
+        const sewerage = hazardEntry(details, 'sewerage');
+        const structural = hazardEntry(details, 'structural');
+        if (fields.hazardPoolFencing !== undefined) pool.flagged = fields.hazardPoolFencing;
+        if (fields.hazardPoolFencingComment !== undefined) pool.comment = fields.hazardPoolFencingComment;
+        if (fields.hazardElectricalGas !== undefined) electrical.flagged = fields.hazardElectricalGas;
+        if (fields.hazardElectricalGasComment !== undefined) electrical.comment = fields.hazardElectricalGasComment;
+        if (fields.hazardSewerage !== undefined) sewerage.flagged = fields.hazardSewerage;
+        if (fields.hazardSewerageComment !== undefined) sewerage.comment = fields.hazardSewerageComment;
+        if (fields.hazardStructural !== undefined) structural.flagged = fields.hazardStructural;
+        if (fields.hazardStructuralComment !== undefined) structural.comment = fields.hazardStructuralComment;
+        if (fields.hazardOther !== undefined) details.other = fields.hazardOther;
+        details.poolFencing = pool;
+        details.electrical = electrical;
+        details.sewerage = sewerage;
+        details.structural = structural;
+
+        const safetyParts = [
+          pool.flagged ? `Pool fencing${pool.comment ? `: ${String(pool.comment)}` : ''}` : null,
+          electrical.flagged ? `Electrical / Gas${electrical.comment ? `: ${String(electrical.comment)}` : ''}` : null,
+          sewerage.flagged ? `Sewerage${sewerage.comment ? `: ${String(sewerage.comment)}` : ''}` : null,
+          structural.flagged ? `Structural${structural.comment ? `: ${String(structural.comment)}` : ''}` : null,
+          details.other ? String(details.other) : null,
+        ].filter(Boolean);
+
         const result = await api.request(`/assessments/${assessmentId}`, {
           method: 'PATCH',
-          body: fields,
+          body: {
+            hazards: {
+              hazardDetails: details,
+              safetyHazards: safetyParts.join('; ') || undefined,
+            },
+          },
         });
         return toolResult(result);
       } catch (err) {
@@ -249,9 +405,30 @@ export function registerAssessmentsTools(server: McpServer, api: ClaimsApiClient
     },
     async ({ assessmentId, ...fields }) => {
       try {
+        const existing = asDict(await api.request(`/assessments/${assessmentId}`));
+        const ta = asDict(existing.temporaryAccommodation);
+        const requiredImmediately = fields.tempAccomRequiredImmediately ?? ta.requiredImmediately === true;
+        const requiredDuringRepairs = fields.tempAccomRequiredDuringRepairs ?? ta.requiredDuringRepairs === true;
+        const immediateDays = fields.tempAccomImmediateEstimateDays ?? ta.immediateEstimateDays;
+        const repairDays = fields.tempAccomRepairsEstimateDays ?? ta.repairsEstimateDays;
+        const duration = repairDays ?? immediateDays;
         const result = await api.request(`/assessments/${assessmentId}`, {
           method: 'PATCH',
-          body: fields,
+          body: {
+            temporaryAccommodation: compact({
+              required:
+                requiredImmediately || requiredDuringRepairs
+                  ? 'Yes, Temporary Accommodation'
+                  : 'No',
+              requiredImmediately: fields.tempAccomRequiredImmediately,
+              immediateEstimateDays: fields.tempAccomImmediateEstimateDays,
+              tempRepairsToMakeLivable: fields.tempRepairsToMakeLivable,
+              requiredDuringRepairs: fields.tempAccomRequiredDuringRepairs,
+              repairsEstimateDays: fields.tempAccomRepairsEstimateDays,
+              workWhileInAccommodation: fields.workWhileInAccommodation,
+              estimatedDuration: duration != null ? `${duration} Days` : undefined,
+            }),
+          },
         });
         return toolResult(result);
       } catch (err) {
@@ -274,9 +451,22 @@ export function registerAssessmentsTools(server: McpServer, api: ClaimsApiClient
     },
     async ({ assessmentId, ...fields }) => {
       try {
+        const body: Dict = {};
+        const recommendation = compact({
+          clientDiscussions: fields.clientDiscussion,
+          specialNotes: fields.comments,
+          conclusion: fields.variancesOfScope,
+        });
+        const damage = compact({
+          damageObserved: fields.resultantDamage,
+          causeOfDamage: fields.causeOfDamage,
+          maintenanceDefectIssues: fields.maintenanceRelatedIssues,
+        });
+        if (recommendation) body.recommendation = recommendation;
+        if (damage) body.damage = damage;
         const result = await api.request(`/assessments/${assessmentId}`, {
           method: 'PATCH',
-          body: fields,
+          body,
         });
         return toolResult(result);
       } catch (err) {

@@ -46,10 +46,12 @@ import {
   asBool,
   type Dict,
 } from '@/components/shared/detail';
+import { LocationMap } from '@/components/shared/LocationMap';
 import type { Claim } from '@/types/api';
 
-function claimAddress(claim: Claim): string {
+function claimAddress(claim: Claim, full = false): string {
   return formatAddress(claim.address as Dict | undefined, {
+    full,
     fallback: {
       suburb: claim.addressSuburb,
       state: claim.addressState,
@@ -57,6 +59,32 @@ function claimAddress(claim: Claim): string {
       country: claim.addressCountry,
     },
   });
+}
+
+function parseCoord(value: unknown): number | undefined {
+  if (value == null || value === '') return undefined;
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function claimCoords(claim: Claim): {
+  latitude?: number;
+  longitude?: number;
+} {
+  const addr = (claim.address as Dict | undefined) ?? {};
+  const apiAddr =
+    ((claim.apiPayload as Dict | undefined)?.address as Dict | undefined) ?? {};
+
+  const latitude =
+    parseCoord(claim.addressLatitude) ??
+    parseCoord(addr.latitude) ??
+    parseCoord(apiAddr.latitude);
+  const longitude =
+    parseCoord(claim.addressLongitude) ??
+    parseCoord(addr.longitude) ??
+    parseCoord(apiAddr.longitude);
+
+  return { latitude, longitude };
 }
 
 function getApi(claim: Claim): Dict {
@@ -86,6 +114,9 @@ function getCustomData(claim: Claim): Dict {
 function OverviewTab({ claim }: { claim: Claim }) {
   const api = getApi(claim);
   const address = claimAddress(claim);
+  const mapAddress = claimAddress(claim, true).trim() || null;
+  const { latitude, longitude } = claimCoords(claim);
+  const hasMapTarget = (latitude != null && longitude != null) || Boolean(mapAddress);
   const status =
     (claim.status as { name?: string })?.name ??
     ((api.status as Dict | undefined)?.name as string | undefined) ??
@@ -160,23 +191,49 @@ function OverviewTab({ claim }: { claim: Claim }) {
           <DefRow label="Country" value={claim.addressCountry ?? '—'} />
           <DefRow
             label="Postal address"
-            value={asString(api.postalAddress) ?? '—'}
+            value={asString(api.postalAddress) ?? claim.postalAddress ?? '—'}
           />
         </SectionCard>
       </div>
 
-      <SectionCard
-        title="People & Assignments"
-        icon={<UserCheck className="h-4 w-4 text-muted-foreground" />}
-      >
-        <DefRow label="Claim consultant" value={asString(pick(api, 'claimConsultant')) ?? '—'} />
-        <DefRow label="Property assessor" value={asString(pick(api, 'propertyAssessor')) ?? '—'} />
-        <DefRow label="Internal auditor" value={asString(pick(api, 'internalAuditor')) ?? '—'} />
-        <DefRow label="Desktop assessor" value={asString(pick(api, 'desktopAssessor')) ?? '—'} />
-        <DefRow label="Technical assessor" value={asString(pick(api, 'technicalAssessor')) ?? '—'} />
-        <DefRow label="Broker reference" value={asString(pick(api, 'brokerReference')) ?? '—'} />
-        <DefRow label="Hazardous waste" value={<BoolPill value={asBool(pick(api, 'hazardousWaste'))} />} />
-      </SectionCard>
+      <div className="grid gap-4 md:grid-cols-2">
+        <SectionCard
+          title="People & Assignments"
+          icon={<UserCheck className="h-4 w-4 text-muted-foreground" />}
+        >
+          <DefRow label="Claim consultant" value={asString(pick(api, 'claimConsultant')) ?? '—'} />
+          <DefRow label="Property assessor" value={asString(pick(api, 'propertyAssessor')) ?? '—'} />
+          <DefRow label="Internal auditor" value={asString(pick(api, 'internalAuditor')) ?? '—'} />
+          <DefRow label="Desktop assessor" value={asString(pick(api, 'desktopAssessor')) ?? '—'} />
+          <DefRow label="Technical assessor" value={asString(pick(api, 'technicalAssessor')) ?? '—'} />
+          <DefRow label="Broker reference" value={asString(pick(api, 'brokerReference')) ?? '—'} />
+          <DefRow label="Hazardous waste" value={<BoolPill value={asBool(pick(api, 'hazardousWaste'))} />} />
+        </SectionCard>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <MapPin className="h-4 w-4 text-muted-foreground" />
+              Location map
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {hasMapTarget ? (
+              <LocationMap
+                title="Claim location map"
+                latitude={latitude}
+                longitude={longitude}
+                address={mapAddress}
+                mapClassName="h-64 w-full border-0"
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No map location available
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {asString(api.incidentDescription) || claim.incidentDescription ? (
         <Card>

@@ -23,6 +23,7 @@ import {
 import { JobSelectField } from '@/components/forms/JobSelectField';
 import {
   CreateSubmitOverlay,
+  navigateToCreated,
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
 import type { JobOption } from '@/components/shared/job-label';
@@ -267,7 +268,7 @@ export function JournalFormDrawer({
       const href = linkedJobId
         ? `/journals/${journal.id}?jobId=${linkedJobId}`
         : `/journals/${journal.id}`;
-      router.push(href);
+      navigateToCreated(router, href);
     } catch (err) {
       console.error('JournalFormDrawer.handleSubmit:', err);
       setError(err instanceof Error ? err.message : 'Failed to create journal');

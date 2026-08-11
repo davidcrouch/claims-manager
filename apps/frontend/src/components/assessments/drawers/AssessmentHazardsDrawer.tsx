@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -15,6 +14,7 @@ import {
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
 import { updateAssessmentAction } from '@/app/(app)/assessments/actions';
+import { asStr, hazardDetailEntry, isAssessmentLocked, sectionDict } from '../assessment-sections';
 import type { Assessment } from '@/types/api';
 
 export interface AssessmentHazardsDrawerProps {
@@ -53,16 +53,25 @@ function emptyForm(): HazardsFormData {
 }
 
 function fromAssessment(data: Partial<Assessment>): HazardsFormData {
+  const haz = sectionDict(data, 'hazards');
+  const details =
+    haz.hazardDetails && typeof haz.hazardDetails === 'object'
+      ? (haz.hazardDetails as Record<string, unknown>)
+      : {};
+  const pool = hazardDetailEntry(details, 'poolFencing');
+  const electrical = hazardDetailEntry(details, 'electrical');
+  const sewerage = hazardDetailEntry(details, 'sewerage');
+  const structural = hazardDetailEntry(details, 'structural');
   return {
-    hazardPoolFencing: data.hazardPoolFencing ?? false,
-    hazardPoolFencingComment: data.hazardPoolFencingComment ?? '',
-    hazardElectricalGas: data.hazardElectricalGas ?? false,
-    hazardElectricalGasComment: data.hazardElectricalGasComment ?? '',
-    hazardSewerage: data.hazardSewerage ?? false,
-    hazardSewerageComment: data.hazardSewerageComment ?? '',
-    hazardStructural: data.hazardStructural ?? false,
-    hazardStructuralComment: data.hazardStructuralComment ?? '',
-    hazardOther: data.hazardOther ?? '',
+    hazardPoolFencing: pool.flagged,
+    hazardPoolFencingComment: pool.comment,
+    hazardElectricalGas: electrical.flagged,
+    hazardElectricalGasComment: electrical.comment,
+    hazardSewerage: sewerage.flagged,
+    hazardSewerageComment: sewerage.comment,
+    hazardStructural: structural.flagged,
+    hazardStructuralComment: structural.comment,
+    hazardOther: asStr(details.other) || asStr(haz.safetyHazards),
   };
 }
 
@@ -143,19 +152,43 @@ export function AssessmentHazardsDrawer({
       setError('No assessment ID provided');
       return;
     }
+    if (isAssessmentLocked(initialData?.status)) {
+      setError('This assessment has been published and cannot be edited');
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
+      const safetyParts = [
+        form.hazardPoolFencing ? `Pool fencing${form.hazardPoolFencingComment ? `: ${form.hazardPoolFencingComment}` : ''}` : null,
+        form.hazardElectricalGas ? `Electrical / Gas${form.hazardElectricalGasComment ? `: ${form.hazardElectricalGasComment}` : ''}` : null,
+        form.hazardSewerage ? `Sewerage${form.hazardSewerageComment ? `: ${form.hazardSewerageComment}` : ''}` : null,
+        form.hazardStructural ? `Structural${form.hazardStructuralComment ? `: ${form.hazardStructuralComment}` : ''}` : null,
+        form.hazardOther || null,
+      ].filter(Boolean);
       await updateAssessmentAction(assessmentId, {
-        hazardPoolFencing: form.hazardPoolFencing,
-        hazardPoolFencingComment: form.hazardPoolFencingComment || null,
-        hazardElectricalGas: form.hazardElectricalGas,
-        hazardElectricalGasComment: form.hazardElectricalGasComment || null,
-        hazardSewerage: form.hazardSewerage,
-        hazardSewerageComment: form.hazardSewerageComment || null,
-        hazardStructural: form.hazardStructural,
-        hazardStructuralComment: form.hazardStructuralComment || null,
-        hazardOther: form.hazardOther || null,
+        hazards: {
+          hazardDetails: {
+            poolFencing: {
+              flagged: form.hazardPoolFencing,
+              comment: form.hazardPoolFencingComment || undefined,
+            },
+            electrical: {
+              flagged: form.hazardElectricalGas,
+              comment: form.hazardElectricalGasComment || undefined,
+            },
+            sewerage: {
+              flagged: form.hazardSewerage,
+              comment: form.hazardSewerageComment || undefined,
+            },
+            structural: {
+              flagged: form.hazardStructural,
+              comment: form.hazardStructuralComment || undefined,
+            },
+            other: form.hazardOther || undefined,
+          },
+          safetyHazards: safetyParts.join('; ') || undefined,
+        },
       });
       onOpenChange(false);
       router.refresh();
@@ -225,7 +258,7 @@ export function AssessmentHazardsDrawer({
           <Button type="button" variant="outline" size="lg" className="min-w-36 px-8" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button type="submit" size="lg" className="min-w-36 px-8" disabled={submitting}>
+          <Button type="submit" size="lg" className="min-w-36 px-8" disabled={submitting || isAssessmentLocked(initialData?.status)}>
             {submitting ? 'Saving...' : 'Save Changes'}
           </Button>
         </BottomFormDrawerFooter>

@@ -44,6 +44,19 @@ export class AssessmentsController {
     return this.assessmentsService.update({ id, dto, userId });
   }
 
+  @Post(':id/validate')
+  async validate(@Param('id', ParseUUIDPipe) id: string) {
+    return this.assessmentsService.validate({ id });
+  }
+
+  @Post(':id/publish')
+  async publish(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.assessmentsService.publish({ id, userId });
+  }
+
   @Delete(':id')
   async softDelete(@Param('id', ParseUUIDPipe) id: string) {
     return this.assessmentsService.softDelete({ id });

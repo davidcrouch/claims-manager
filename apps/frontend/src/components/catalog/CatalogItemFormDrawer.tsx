@@ -12,6 +12,7 @@ import {
 import { CatalogItemForm } from '@/components/catalog/CatalogItemForm';
 import {
   CreateSubmitOverlay,
+  navigateToCreated,
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
 import type { CatalogCategory, CatalogItemType } from '@/types/api';
@@ -79,7 +80,7 @@ export function CatalogItemFormDrawer({
             onCreated?.(id);
             if (id) {
               startOpening();
-              router.push(`/admin/catalog/items/${id}`);
+              navigateToCreated(router, `/admin/catalog/items/${id}`);
               return;
             }
             resetPhase();

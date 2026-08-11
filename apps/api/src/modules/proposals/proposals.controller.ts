@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { ProposalsService } from './proposals.service';
 
 @Controller('proposals')
@@ -52,22 +53,36 @@ export class ProposalsController {
   }
 
   @Post()
-  async create(@Body() body: Record<string, unknown>) {
-    return this.proposalsService.create({ body });
+  async create(
+    @Body() body: Record<string, unknown>,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.proposalsService.create({ body, userId });
   }
 
   @Post(':id/accept')
-  async accept(@Param('id') id: string) {
-    return this.proposalsService.accept({ id });
+  async accept(
+    @Param('id') id: string,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.proposalsService.accept({ id, userId });
   }
 
   @Post(':id/decline')
-  async decline(@Param('id') id: string, @Body() body: { reason?: string }) {
-    return this.proposalsService.decline({ id, reason: body?.reason });
+  async decline(
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.proposalsService.decline({ id, reason: body?.reason, userId });
   }
 
   @Post(':id')
-  async update(@Param('id') id: string, @Body() body: Record<string, unknown>) {
-    return this.proposalsService.update({ id, body });
+  async update(
+    @Param('id') id: string,
+    @Body() body: Record<string, unknown>,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.proposalsService.update({ id, body, userId });
   }
 }

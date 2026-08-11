@@ -6,8 +6,34 @@ import type { DataMapper } from './base.mapper';
 import { formatDate } from './base.mapper';
 import type { TemplateData } from '../types/document-types';
 
-function yn(value: boolean | null | undefined): string {
-  return value ? 'Yes' : 'No';
+function dict(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function str(value: unknown): string {
+  return value == null ? '' : String(value);
+}
+
+function yn(value: unknown): string {
+  return value === true ? 'Yes' : 'No';
+}
+
+function hazardFlag(details: Record<string, unknown>, key: string): boolean {
+  const entry = details[key];
+  if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+    return !!(entry as Record<string, unknown>).flagged;
+  }
+  return false;
+}
+
+function hazardComment(details: Record<string, unknown>, key: string): string {
+  const entry = details[key];
+  if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+    return str((entry as Record<string, unknown>).comment);
+  }
+  return '';
 }
 
 @Injectable()
@@ -43,6 +69,16 @@ export class AssessmentMapper implements DataMapper {
       jobReference = job?.externalReference ?? '';
     }
 
+    const att = dict(assessment.attendance);
+    const bld = dict(assessment.building);
+    const hab = dict(assessment.habitability);
+    const haz = dict(assessment.hazards);
+    const dmg = dict(assessment.damage);
+    const ms = dict(assessment.makeSafe);
+    const ta = dict(assessment.temporaryAccommodation);
+    const rec = dict(assessment.recommendation);
+    const details = dict(haz.hazardDetails);
+
     return {
       company_name: org?.name ?? '',
       assessment_name: assessment.name,
@@ -50,61 +86,55 @@ export class AssessmentMapper implements DataMapper {
       job_name: jobName,
       job_reference: jobReference,
 
-      claim_recommendation: assessment.claimRecommendation ?? '',
-      design_type: assessment.designType ?? '',
-      construction: assessment.construction ?? '',
-      roof_type: assessment.roofType ?? '',
-      building_type: assessment.buildingType ?? '',
-      make_safe: yn(assessment.makeSafe),
-      make_safe_type: assessment.makeSafeType ?? '',
-      squares: assessment.squares ?? '',
-      building_age: assessment.buildingAge != null ? String(assessment.buildingAge) : '',
-      square_metres: assessment.squareMetres ?? '',
-      date_booked: formatDate(assessment.dateBooked),
-      overall_condition_acceptable: yn(assessment.overallConditionAcceptable),
-      iag_inspection_required: yn(assessment.iagInspectionRequired),
+      claim_recommendation: str(rec.claimRecommendation),
+      design_type: str(bld.designType),
+      construction: str(bld.constructionType),
+      roof_type: str(bld.roofType),
+      building_type: str(bld.buildingType),
+      make_safe: yn(ms.makeSafeRequired),
+      make_safe_type: str(ms.makeSafeType),
+      squares: str(bld.squares),
+      building_age: str(bld.estimatedBuildYear),
+      square_metres: str(bld.houseM2),
+      date_booked: formatDate(att.siteAttendanceDate as string | Date | null | undefined),
+      overall_condition_acceptable: yn(bld.propertyCondition),
+      iag_inspection_required: yn(att.insuranceAssessorAttended),
 
-      make_safe_completion_date: formatDate(assessment.makeSafeCompletionDate),
-      main_roof_damage: yn(assessment.mainRoofDamage),
-      date_main_roof_repaired: formatDate(assessment.dateMainRoofRepaired),
-      habitable: yn(assessment.habitable),
-      mould: yn(assessment.mould),
-      asbestos_on_site: yn(assessment.asbestosOnSite),
-      detached_garage: yn(assessment.detachedGarage),
-      sheds: yn(assessment.sheds),
-      swimming_pool: yn(assessment.swimmingPool),
-      detached_granny_flat: yn(assessment.detachedGrannyFlat),
-      damage_caused_by_listed_event: yn(assessment.damageCausedByListedEvent),
+      make_safe_completion_date: formatDate(ms.dateMakeSafeCompleted as string | Date | null | undefined),
+      main_roof_damage: yn(bld.mainHouseRoofDamage),
+      date_main_roof_repaired: formatDate(ms.dateMainRoofRepaired as string | Date | null | undefined),
+      habitable: yn(hab.habitable),
+      mould: yn(String(haz.environmentalHazards ?? '').toLowerCase().includes('mould')),
+      asbestos_on_site: yn(String(haz.safetyHazards ?? '').toLowerCase().includes('asbestos')),
+      detached_garage: yn(String(bld.additionalStructures ?? '').includes('Garage')),
+      sheds: yn(String(bld.additionalStructures ?? '').includes('Shed')),
+      swimming_pool: yn(String(bld.additionalStructures ?? '').includes('Pool')),
+      detached_granny_flat: yn(String(bld.additionalStructures ?? '').includes('Granny')),
+      damage_caused_by_listed_event: str(dmg.hasDamageCoveredByPolicy),
 
-      hazard_pool_fencing: yn(assessment.hazardPoolFencing),
-      hazard_pool_fencing_comment: assessment.hazardPoolFencingComment ?? '',
-      hazard_electrical_gas: yn(assessment.hazardElectricalGas),
-      hazard_electrical_gas_comment: assessment.hazardElectricalGasComment ?? '',
-      hazard_sewerage: yn(assessment.hazardSewerage),
-      hazard_sewerage_comment: assessment.hazardSewerageComment ?? '',
-      hazard_structural: yn(assessment.hazardStructural),
-      hazard_structural_comment: assessment.hazardStructuralComment ?? '',
-      hazard_other: assessment.hazardOther ?? '',
+      hazard_pool_fencing: yn(hazardFlag(details, 'poolFencing')),
+      hazard_pool_fencing_comment: hazardComment(details, 'poolFencing'),
+      hazard_electrical_gas: yn(hazardFlag(details, 'electrical')),
+      hazard_electrical_gas_comment: hazardComment(details, 'electrical'),
+      hazard_sewerage: yn(hazardFlag(details, 'sewerage')),
+      hazard_sewerage_comment: hazardComment(details, 'sewerage'),
+      hazard_structural: yn(hazardFlag(details, 'structural')),
+      hazard_structural_comment: hazardComment(details, 'structural'),
+      hazard_other: str(details.other) || str(haz.safetyHazards),
 
-      temp_accom_required_immediately: yn(assessment.tempAccomRequiredImmediately),
-      temp_accom_immediate_estimate_days:
-        assessment.tempAccomImmediateEstimateDays != null
-          ? String(assessment.tempAccomImmediateEstimateDays)
-          : '',
-      temp_repairs_to_make_livable: assessment.tempRepairsToMakeLivable ?? '',
-      temp_accom_required_during_repairs: yn(assessment.tempAccomRequiredDuringRepairs),
-      temp_accom_repairs_estimate_days:
-        assessment.tempAccomRepairsEstimateDays != null
-          ? String(assessment.tempAccomRepairsEstimateDays)
-          : '',
-      work_while_in_accommodation: assessment.workWhileInAccommodation ?? '',
+      temp_accom_required_immediately: yn(ta.requiredImmediately),
+      temp_accom_immediate_estimate_days: str(ta.immediateEstimateDays),
+      temp_repairs_to_make_livable: str(ta.tempRepairsToMakeLivable),
+      temp_accom_required_during_repairs: yn(ta.requiredDuringRepairs),
+      temp_accom_repairs_estimate_days: str(ta.repairsEstimateDays),
+      work_while_in_accommodation: str(ta.workWhileInAccommodation),
 
-      client_discussion: assessment.clientDiscussion ?? '',
-      resultant_damage: assessment.resultantDamage ?? '',
-      cause_of_damage: assessment.causeOfDamage ?? '',
-      maintenance_related_issues: assessment.maintenanceRelatedIssues ?? '',
-      comments: assessment.comments ?? '',
-      variances_of_scope: assessment.variancesOfScope ?? '',
+      client_discussion: str(rec.clientDiscussions),
+      resultant_damage: str(dmg.damageObserved),
+      cause_of_damage: str(dmg.causeOfDamage),
+      maintenance_related_issues: str(dmg.maintenanceDefectIssues),
+      comments: str(rec.specialNotes),
+      variances_of_scope: str(rec.conclusion),
 
       created_at: formatDate(assessment.createdAt),
       report_date: formatDate(new Date()),

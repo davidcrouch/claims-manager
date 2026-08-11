@@ -22,6 +22,8 @@ export interface AddressPayload {
   postcode?: string;
   state?: string;
   country?: string;
+  latitude?: number | string | null;
+  longitude?: number | string | null;
 }
 
 export interface Claim {
@@ -40,6 +42,8 @@ export interface Claim {
   addressPostcode?: string | null;
   addressState?: string | null;
   addressCountry?: string | null;
+  addressLatitude?: number | string | null;
+  addressLongitude?: number | string | null;
   policyNumber?: string | null;
   policyName?: string | null;
   policyDetails?: Record<string, unknown>;
@@ -1133,62 +1137,36 @@ export interface InviteUserPayload {
 }
 
 // Assessments
+export type AssessmentSectionKey =
+  | 'attendance'
+  | 'building'
+  | 'habitability'
+  | 'hazards'
+  | 'damage'
+  | 'makeSafe'
+  | 'temporaryAccommodation'
+  | 'specialists'
+  | 'recommendation'
+  | 'extras';
+
 export interface Assessment {
   id: string;
   tenantId: string;
   jobId: string | null;
   name: string;
   status: string;
+  reportExternalReference?: string | null;
 
-  claimRecommendation: string | null;
-  makeSafe: boolean;
-  makeSafeType: string | null;
-  designType: string | null;
-  construction: string | null;
-  roofType: string | null;
-  buildingType: string | null;
-  squares: string | null;
-  buildingAge: number | null;
-  squareMetres: string | null;
-  dateBooked: string | null;
-  overallConditionAcceptable: boolean;
-  iagInspectionRequired: boolean;
-
-  makeSafeCompletionDate: string | null;
-  mainRoofDamage: boolean;
-  dateMainRoofRepaired: string | null;
-  habitable: boolean;
-  mould: boolean;
-  asbestosOnSite: boolean;
-  detachedGarage: boolean;
-  sheds: boolean;
-  swimmingPool: boolean;
-  detachedGrannyFlat: boolean;
-  damageCausedByListedEvent: boolean;
-
-  hazardPoolFencing: boolean;
-  hazardPoolFencingComment: string | null;
-  hazardElectricalGas: boolean;
-  hazardElectricalGasComment: string | null;
-  hazardSewerage: boolean;
-  hazardSewerageComment: string | null;
-  hazardStructural: boolean;
-  hazardStructuralComment: string | null;
-  hazardOther: string | null;
-
-  tempAccomRequiredImmediately: boolean;
-  tempAccomImmediateEstimateDays: number | null;
-  tempRepairsToMakeLivable: string | null;
-  tempAccomRequiredDuringRepairs: boolean;
-  tempAccomRepairsEstimateDays: number | null;
-  workWhileInAccommodation: string | null;
-
-  clientDiscussion: string | null;
-  resultantDamage: string | null;
-  causeOfDamage: string | null;
-  maintenanceRelatedIssues: string | null;
-  comments: string | null;
-  variancesOfScope: string | null;
+  attendance: Record<string, unknown>;
+  building: Record<string, unknown>;
+  habitability: Record<string, unknown>;
+  hazards: Record<string, unknown>;
+  damage: Record<string, unknown>;
+  makeSafe: Record<string, unknown>;
+  temporaryAccommodation: Record<string, unknown>;
+  specialists: Record<string, unknown>;
+  recommendation: Record<string, unknown>;
+  extras: Record<string, unknown>;
 
   createdByUserId: string | null;
   updatedByUserId: string | null;

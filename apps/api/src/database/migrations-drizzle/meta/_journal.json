@@ -379,6 +379,20 @@
       "when": 1788400000000,
       "tag": "0054_default_document_template",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1788500000000,
+      "tag": "0055_assessment_jsonb_sections",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1788600000000,
+      "tag": "0056_origin_type",
+      "breakpoints": true
     }
   ]
 }

@@ -86,28 +86,44 @@ export function QuotesListClient({
     return () => clearTimeout(t);
   }, [search]);
 
+  // URL sync — skip no-op replace so a create→detail router.push is not cancelled
+  // when the list remounts after the create server action refreshes the page.
   useEffect(() => {
-    const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
-    const typeKey = quoteTypeParam === null ? '__none__' : (quoteTypeParam ?? '');
-    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${typeKey}|${jobId ?? ''}`;
     const params = new URLSearchParams(searchParams.toString());
     params.set('search', debouncedSearch);
     params.set('tab', tab);
     params.set('page', String(page));
     params.set('sort', sortParam);
-    if (statusParam) params.set('status', statusParam); else params.delete('status');
-    if (quoteTypeParam) params.set('quoteType', quoteTypeParam); else params.delete('quoteType');
+    if (statusParam) params.set('status', statusParam);
+    else params.delete('status');
+    if (quoteTypeParam) params.set('quoteType', quoteTypeParam);
+    else params.delete('quoteType');
     if (jobId) params.set('jobId', jobId);
     else params.delete('jobId');
-    router.replace(`/quotes?${params}`, { scroll: false });
+    const next = params.toString();
+    if (next === searchParams.toString()) return;
+    router.replace(`/quotes?${next}`, { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop: router.replace updates URL -> searchParams changes -> effect re-runs
+  }, [debouncedSearch, sortParam, tab, page, statusParam, quoteTypeParam, jobId]);
+
+  useEffect(() => {
+    const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
+    const typeKey = quoteTypeParam === null ? '__none__' : (quoteTypeParam ?? '');
+    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${typeKey}|${jobId ?? ''}`;
     if (lastFetchKeyRef.current === fetchKey) return;
     lastFetchKeyRef.current = fetchKey;
     if (statusParam === null || quoteTypeParam === null) {
       setData({ data: [], total: 0 });
       return;
     }
-    fetchQuotesAction({ page, limit: PAGE_SIZE, sort: sortParam, status: statusParam, quoteType: quoteTypeParam, jobId: jobId ?? undefined }).then((res) => res && setData(res));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop: router.replace updates URL -> searchParams changes -> effect re-runs
+    fetchQuotesAction({
+      page,
+      limit: PAGE_SIZE,
+      sort: sortParam,
+      status: statusParam,
+      quoteType: quoteTypeParam,
+      jobId: jobId ?? undefined,
+    }).then((res) => res && setData(res));
   }, [debouncedSearch, sortParam, tab, page, statusParam, quoteTypeParam, jobId]);
 
   const handleColumnSort = (field: QuoteSortField) => {

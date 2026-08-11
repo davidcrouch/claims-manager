@@ -241,6 +241,47 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
     if (action === 'status_change') {
       return { status: payload.step ?? payload.status };
     }
-    return payload;
+
+    // Strip internal-only keys; flatten type-detail JSON blobs to CW top-level fields.
+    const omit = new Set([
+      'externalId',
+      'statusLookupId',
+      'jobTypeLookupId',
+      'assignedToUserId',
+      'customData',
+      'temporaryAccommodationDetails',
+      'specialistDetails',
+      'rectificationDetails',
+      'auditDetails',
+      'apiPayload',
+      'vendorSnapshot',
+      'vendorId',
+      'claimId',
+      'name',
+      'parentJobId',
+      'address',
+      'bookedDate',
+      'attendanceDate',
+    ]);
+
+    const out: Record<string, unknown> = {};
+    for (const key of [
+      'temporaryAccommodationDetails',
+      'specialistDetails',
+      'rectificationDetails',
+      'auditDetails',
+    ] as const) {
+      const details = payload[key];
+      if (details && typeof details === 'object' && !Array.isArray(details)) {
+        Object.assign(out, details as Record<string, unknown>);
+      }
+    }
+
+    for (const [key, value] of Object.entries(payload)) {
+      if (omit.has(key) || value === undefined) continue;
+      out[key] = value;
+    }
+
+    return out;
   }
 }

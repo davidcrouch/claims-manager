@@ -7,11 +7,11 @@ import {
   Briefcase,
   ChevronsUpDown,
   MapPin,
-  Tag,
   ExternalLink,
   X,
 } from 'lucide-react';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { TypeBadge } from '@/components/ui/type-badge';
 import { BackButton } from '@/components/layout/BackButton';
 import { JobsPickerDrawer } from '@/components/jobs/JobsPickerDrawer';
 import { formatDate, formatDateTime, formatCurrency, formatAddress } from '@/components/shared/detail';
@@ -101,12 +101,7 @@ export function JobPageHeader({
             </button>
           </div>
           <StatusBadge status={statusName} />
-          {jobTypeName && (
-            <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-              <Tag className="h-3 w-3" />
-              {jobTypeName}
-            </span>
-          )}
+          {jobTypeName && <TypeBadge type={jobTypeName} />}
           {address && (
             <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
               <MapPin className="h-3 w-3" />

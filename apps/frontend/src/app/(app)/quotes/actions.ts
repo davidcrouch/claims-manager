@@ -155,6 +155,7 @@ export async function addCatalogItemToQuoteAction(params: {
   catalogItemId: string;
   quantity: string;
   groupId?: string;
+  quoteComboId?: string;
 }): Promise<{ success: boolean; error?: string }> {
   const api = await getApi();
   if (!api) return { success: false, error: 'Not authenticated' };
@@ -166,6 +167,7 @@ export async function addCatalogItemToQuoteAction(params: {
       groupId,
       catalogItemId: params.catalogItemId,
       quantity: params.quantity,
+      quoteComboId: params.quoteComboId,
     });
     revalidatePath(`/quotes/${params.quoteId}`);
     return { success: true };
@@ -183,6 +185,7 @@ export async function addCatalogAssemblyToQuoteAction(params: {
   catalogAssemblyId: string;
   quantity: string;
   groupId?: string;
+  quoteComboId?: string;
 }): Promise<{ success: boolean; error?: string }> {
   const api = await getApi();
   if (!api) return { success: false, error: 'Not authenticated' };
@@ -194,6 +197,7 @@ export async function addCatalogAssemblyToQuoteAction(params: {
       groupId,
       catalogAssemblyId: params.catalogAssemblyId,
       quantity: params.quantity,
+      quoteComboId: params.quoteComboId,
     });
     revalidatePath(`/quotes/${params.quoteId}`);
     return { success: true };

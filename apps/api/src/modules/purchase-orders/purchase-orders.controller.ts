@@ -58,8 +58,11 @@ export class PurchaseOrdersController {
   }
 
   @Post()
-  async create(@Body() body: Record<string, unknown>) {
-    return this.purchaseOrdersService.create({ body });
+  async create(
+    @Body() body: Record<string, unknown>,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.purchaseOrdersService.create({ body, userId });
   }
 
   @Get(':id')
@@ -73,8 +76,12 @@ export class PurchaseOrdersController {
   }
 
   @Post(':id')
-  async update(@Param('id') id: string, @Body() body: Record<string, unknown>) {
-    return this.purchaseOrdersService.update({ id, body });
+  async update(
+    @Param('id') id: string,
+    @Body() body: Record<string, unknown>,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.purchaseOrdersService.update({ id, body, userId });
   }
 
   @Post(':poId/groups/:groupId/catalog-items')

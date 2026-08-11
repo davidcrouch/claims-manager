@@ -109,16 +109,17 @@ export class JournalsService {
         longitude: dto.longitude != null ? String(dto.longitude) : null,
         metadata: dto.metadata ?? {},
         createdByUserId: userId,
+        updatedByUserId: userId,
       },
     });
   }
 
-  async update(params: { id: string; dto: UpdateJournalDto }) {
+  async update(params: { id: string; dto: UpdateJournalDto; userId: string }) {
     const tenantId = this.tenantContext.getTenantId();
     const existing = await this.journalsRepo.findOne({ id: params.id, tenantId });
     if (!existing) throw new NotFoundException('Journal not found');
 
-    const { dto } = params;
+    const { dto, userId } = params;
     const addressCols =
       dto.address !== undefined ? this.addressColumnsFromPayload(dto.address) : null;
 
@@ -137,6 +138,7 @@ export class JournalsService {
           longitude: dto.longitude != null ? String(dto.longitude) : null,
         }),
         ...(dto.metadata !== undefined && { metadata: dto.metadata }),
+        updatedByUserId: userId,
       },
     });
   }

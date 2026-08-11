@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { MessagesService } from './messages.service';
 
 @Controller('messages')
@@ -28,12 +29,18 @@ export class MessagesController {
   }
 
   @Post()
-  async create(@Body() body: Record<string, unknown>) {
-    return this.messagesService.create({ body });
+  async create(
+    @Body() body: Record<string, unknown>,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.messagesService.create({ body, userId });
   }
 
   @Post(':id/acknowledge')
-  async acknowledge(@Param('id') id: string) {
-    return this.messagesService.acknowledge({ id });
+  async acknowledge(
+    @Param('id') id: string,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.messagesService.acknowledge({ id, userId });
   }
 }

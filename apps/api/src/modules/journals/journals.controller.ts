@@ -68,8 +68,9 @@ export class JournalsController {
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateJournalDto,
+    @CurrentUser('sub') userId: string,
   ) {
-    return this.journalsService.update({ id, dto });
+    return this.journalsService.update({ id, dto, userId });
   }
 
   @Delete(':id')

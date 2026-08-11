@@ -69,7 +69,7 @@ export class ProjectMessageUseCase implements ProjectionUseCase {
       messageId = existingLink.internalEntityId;
     } else {
       const created = await this.messagesRepo.create({
-        data: { tenantId, ...result.entity } as MessageInsert,
+        data: { tenantId, ...result.entity, originType: 'provider' } as MessageInsert,
         tx,
       });
       messageId = created.id;

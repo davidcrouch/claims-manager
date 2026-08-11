@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { ClipboardList, ExternalLink } from 'lucide-react';
+import { ClipboardList, ExternalLink, Lock } from 'lucide-react';
 import { BackButton } from '@/components/layout/BackButton';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { formatDate } from '@/components/shared/list-filters';
 import { jobDisplayName } from '@/components/shared/job-label';
+import { isAssessmentLocked } from '@/components/assessments/assessment-sections';
 import type { Assessment, Job } from '@/types/api';
 
 export function AssessmentPageHeader({
@@ -25,6 +26,12 @@ export function AssessmentPageHeader({
           <ClipboardList className="h-4 w-4 text-slate-600" />
         </span>
         <h1 className="truncate text-lg font-semibold leading-tight">{assessment.name}</h1>
+        {isAssessmentLocked(assessment.status) && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+            <Lock className="h-3 w-3" />
+            Locked
+          </span>
+        )}
         {job && (
           <Link
             href={`/jobs/${job.id}`}

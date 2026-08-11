@@ -59,7 +59,7 @@ export class ReportsService {
     return this.reportsRepo.findByClaim({ claimId: params.claimId, tenantId });
   }
 
-  async create(params: { body: Record<string, unknown> }) {
+  async create(params: { body: Record<string, unknown>; userId?: string }) {
     const tenantId = this.tenantContext.getTenantId();
     const connectionId = await this.resolveConnectionId(tenantId);
     const apiReport = await this.crunchworkService.createReport({
@@ -76,18 +76,27 @@ export class ReportsService {
       reportData: (apiObj.reportData ?? params.body?.reportData ?? {}) as Record<string, unknown>,
       reportMeta: (apiObj.reportMeta ?? {}) as Record<string, unknown>,
       apiPayload: apiReport as Record<string, unknown>,
+      createdByUserId: params.userId ?? null,
+      updatedByUserId: params.userId ?? null,
     };
     return this.reportsRepo.create({ data: insertData });
   }
 
-  async update(params: { id: string; body: Record<string, unknown> }) {
+  async update(params: {
+    id: string;
+    body: Record<string, unknown>;
+    userId?: string;
+  }) {
     const existing = await this.findOne({ id: params.id });
     if (!existing) return null;
 
     if (typeof params.body.statusLookupId === 'string' && params.body.statusLookupId) {
       return this.reportsRepo.update({
         id: params.id,
-        data: { statusLookupId: params.body.statusLookupId },
+        data: {
+          statusLookupId: params.body.statusLookupId,
+          ...(params.userId ? { updatedByUserId: params.userId } : {}),
+        },
       });
     }
 
@@ -101,7 +110,10 @@ export class ReportsService {
 
     return this.reportsRepo.update({
       id: params.id,
-      data: { apiPayload: apiReport as Record<string, unknown> },
+      data: {
+        apiPayload: apiReport as Record<string, unknown>,
+        ...(params.userId ? { updatedByUserId: params.userId } : {}),
+      },
     });
   }
 }

@@ -194,21 +194,113 @@ export async function updateJobDatesAction(
     assignedToUserId?: string | null;
   },
 ): Promise<{ success: boolean; error?: string }> {
+  return updateJobFieldsAction(jobId, dates);
+}
+
+export type UpdateJobFieldsInput = {
+  bookedDate?: string | null;
+  attendanceDate?: string | null;
+  assignedToUserId?: string | null;
+  statusLookupId?: string | null;
+  statusExternalReference?: string | null;
+  externalReference?: string | null;
+  collectExcess?: boolean | null;
+  excess?: string | null;
+  makeSafeRequired?: boolean | null;
+  jobInstructions?: string | null;
+  vendorExternalReference?: string | null;
+  /** Flattened CW type-specific fields + local jsonb mirrors */
+  typeDetails?: Record<string, unknown> | null;
+  temporaryAccommodationDetails?: Record<string, unknown> | null;
+  specialistDetails?: Record<string, unknown> | null;
+  rectificationDetails?: Record<string, unknown> | null;
+  auditDetails?: Record<string, unknown> | null;
+  mobilityConsiderations?: Array<{ name?: string; externalReference?: string }> | null;
+};
+
+export async function updateJobFieldsAction(
+  jobId: string,
+  fields: UpdateJobFieldsInput,
+): Promise<{ success: boolean; error?: string }> {
   const api = await getApi();
   if (!api) return { success: false, error: 'Not authenticated' };
   try {
     const job = await api.getJob(jobId);
-    const existing = (job?.customData as Record<string, unknown>) ?? {};
-    const { assignedToUserId, ...dateFields } = dates;
-    const merged = { ...existing, ...dateFields };
-    await api.updateJob(jobId, {
-      customData: merged,
-      ...(assignedToUserId !== undefined ? { assignedToUserId } : {}),
-    });
+    const existingCustom = (job?.customData as Record<string, unknown>) ?? {};
+    const existingVendorSnapshot =
+      (job?.vendorSnapshot as Record<string, unknown> | undefined) ?? {};
+
+    const body: Record<string, unknown> = {};
+
+    const datePatch: Record<string, unknown> = {};
+    if (fields.bookedDate !== undefined) datePatch.bookedDate = fields.bookedDate;
+    if (fields.attendanceDate !== undefined) datePatch.attendanceDate = fields.attendanceDate;
+    if (Object.keys(datePatch).length > 0) {
+      body.customData = { ...existingCustom, ...datePatch };
+    }
+
+    if (fields.assignedToUserId !== undefined) {
+      body.assignedToUserId = fields.assignedToUserId;
+    }
+    if (fields.statusLookupId !== undefined && fields.statusLookupId) {
+      body.statusLookupId = fields.statusLookupId;
+    }
+    if (fields.statusExternalReference) {
+      body.status = { externalReference: fields.statusExternalReference };
+    }
+    if (fields.externalReference !== undefined) {
+      body.externalReference = fields.externalReference;
+    }
+    if (fields.collectExcess !== undefined) {
+      body.collectExcess = fields.collectExcess;
+    }
+    if (fields.excess !== undefined) {
+      body.excess = fields.excess === '' || fields.excess == null ? null : fields.excess;
+    }
+    if (fields.makeSafeRequired !== undefined) {
+      body.makeSafeRequired = fields.makeSafeRequired;
+    }
+    if (fields.jobInstructions !== undefined) {
+      body.jobInstructions = fields.jobInstructions;
+    }
+    if (fields.vendorExternalReference !== undefined) {
+      const ext = fields.vendorExternalReference?.trim() || null;
+      body.vendor = ext ? { externalReference: ext } : undefined;
+      body.vendorSnapshot = {
+        ...existingVendorSnapshot,
+        externalReference: ext,
+      };
+    }
+
+    const typeDetails = fields.typeDetails ?? {};
+    for (const [key, value] of Object.entries(typeDetails)) {
+      if (value !== undefined) body[key] = value;
+    }
+
+    if (fields.temporaryAccommodationDetails) {
+      body.temporaryAccommodationDetails = fields.temporaryAccommodationDetails;
+    }
+    if (fields.specialistDetails) {
+      body.specialistDetails = fields.specialistDetails;
+    }
+    if (fields.rectificationDetails) {
+      body.rectificationDetails = fields.rectificationDetails;
+    }
+    if (fields.auditDetails) {
+      body.auditDetails = fields.auditDetails;
+    }
+    if (fields.mobilityConsiderations !== undefined) {
+      body.mobilityConsiderations = fields.mobilityConsiderations ?? [];
+    }
+
+    await api.updateJob(jobId, body);
     return { success: true };
   } catch (err) {
-    console.error('[jobs/[id]/actions updateJobDatesAction]', err);
-    return { success: false, error: err instanceof Error ? err.message : 'Failed to update dates' };
+    console.error('[jobs/[id]/actions updateJobFieldsAction]', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to update job',
+    };
   }
 }
 

@@ -27,6 +27,7 @@ import { formatCurrency } from '@/components/shared/detail';
 import {
   getCatalogDragData,
   getGroupLabelDragData,
+  hasCatalogDrag,
   hasGroupLabelDrag,
   type CatalogDragPayload,
   type GroupLabelDragPayload,
@@ -924,6 +925,8 @@ function ScopeBlock({
   showSelect,
   selectedIds,
   onToggleIds,
+  isDropActive = false,
+  dropHint,
 }: {
   scope: ApiScope;
   scopeKey: string;
@@ -950,6 +953,8 @@ function ScopeBlock({
   showSelect?: boolean;
   selectedIds?: Set<string>;
   onToggleIds?: (ids: string[]) => void;
+  isDropActive?: boolean;
+  dropHint?: string;
 }) {
   const scopeName = scope.name ?? 'Scope';
   const scopeCategory =
@@ -1270,6 +1275,17 @@ function ScopeBlock({
         </td>
       </tr>
 
+      {isDropActive && (
+        <tr>
+          <td
+            colSpan={20}
+            className="bg-violet-50 px-4 py-1.5 text-xs font-medium text-violet-700"
+          >
+            {dropHint ?? `Release to add catalogue item to "${scopeName}"`}
+          </td>
+        </tr>
+      )}
+
       {/* Scope children: standalone items + assemblies */}
       {!isCollapsed && (
         <>
@@ -1360,7 +1376,7 @@ export interface QuoteLineItemsTableProps {
   groups: ApiGroup[];
   activeDropKey?: string | null;
   setActiveDropKey?: (key: string | null) => void;
-  onCatalogDrop?: (payload: CatalogDragPayload, groupId?: string) => void;
+  onCatalogDrop?: (payload: CatalogDragPayload, groupId?: string, quoteComboId?: string) => void;
   onGroupLabelDrop?: (payload: GroupLabelDragPayload) => void;
   onEditGroup?: (groupId: string) => void;
   onDeleteGroup?: (groupId: string) => void;
@@ -1379,6 +1395,35 @@ export interface QuoteLineItemsTableProps {
   selection?: LineItemSelection;
   /** Compact layout for drawers / embedded panels (no full-page min-height / sticky offset). */
   compact?: boolean;
+}
+
+function LineItemsColGroup({
+  showSelect,
+  showCategory,
+  showMarkup,
+  showGst,
+}: {
+  showSelect?: boolean;
+  showCategory: boolean;
+  showMarkup: boolean;
+  showGst: boolean;
+}) {
+  return (
+    <colgroup>
+      {showSelect && <col className="w-10" />}
+      <col className={showCategory ? 'w-[28%]' : 'w-[38%]'} />
+      <col className="w-[10%]" />
+      {showCategory && <col className="w-[10%]" />}
+      <col className="w-[7%]" />
+      <col className="w-[6%]" />
+      <col className="w-[9%]" />
+      <col className="w-[10%]" />
+      {showMarkup && <col className="w-[8%]" />}
+      {showGst && <col className="w-[7%]" />}
+      <col className="w-[10%]" />
+      <col className="w-10" />
+    </colgroup>
+  );
 }
 
 function modeLabels(mode: LineItemsMode) {
@@ -2396,7 +2441,8 @@ export function QuoteLineItemsTable({
           standaloneItems.length +
           combos.reduce((cs, c) => cs + (c.items?.length ?? 0), 0) +
           scopes.reduce((ss, s) => ss + (s.items?.length ?? 0) + (s.combos ?? []).reduce((cs, c) => cs + (c.items?.length ?? 0), 0), 0);
-        const hasRows = standaloneItems.length > 0 || combos.length > 0 || scopes.length > 0;
+        const hasTopLevelRows = standaloneItems.length > 0 || combos.length > 0;
+        const hasRows = hasTopLevelRows || scopes.length > 0;
 
         const dropProps = isReadOnly ? {} : {
           onDragOver: (e: React.DragEvent) => {
@@ -2535,22 +2581,16 @@ export function QuoteLineItemsTable({
             {!isCollapsed && (
               <div className="bg-white">
                 {hasRows ? (
+                  <div>
+                  {hasTopLevelRows && (
                   <div className="overflow-x-auto">
                     <table className="w-full table-fixed divide-y divide-slate-100 text-sm">
-                      <colgroup>
-                        {showSelect && <col className="w-10" />}
-                        <col className={showCategory ? 'w-[28%]' : 'w-[38%]'} />
-                        <col className="w-[10%]" />
-                        {showCategory && <col className="w-[10%]" />}
-                        <col className="w-[7%]" />
-                        <col className="w-[6%]" />
-                        <col className="w-[9%]" />
-                        <col className="w-[10%]" />
-                        {showMarkup && <col className="w-[8%]" />}
-                        {showGst && <col className="w-[7%]" />}
-                        <col className="w-[10%]" />
-                        <col className="w-10" />
-                      </colgroup>
+                      <LineItemsColGroup
+                        showSelect={showSelect}
+                        showCategory={showCategory}
+                        showMarkup={showMarkup}
+                        showGst={showGst}
+                      />
                       <thead className="bg-slate-50/50">
                         <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-400">
                           {showSelect && <th scope="col" className="w-10 px-3 py-2" />}
@@ -2635,46 +2675,104 @@ export function QuoteLineItemsTable({
                             />
                           );
                         })}
-
-                        {/* Scope groups */}
-                        {(group.scopes ?? []).map((scope, scopeIdx) => {
-                          const scopeKey = `${gId}-scope-${scope.id ?? scopeIdx}`;
-                          const isScopeCollapsed = searchTerm ? false : collapsedScopes.has(scopeKey);
-
-                          return (
-                            <ScopeBlock
-                              key={scopeKey}
-                              scope={scope}
-                              scopeKey={scopeKey}
-                              isCollapsed={isScopeCollapsed}
-                              onToggle={() => toggleScope(scopeKey)}
-                              showMarkup={showMarkup}
-                              showGst={showGst}
-                              showCategory={showCategory}
-                              editState={isReadOnly ? null : editState}
-                              editInputs={editInputs}
-                              selectedRows={selectedRows}
-                              dirtyRowKeys={dirtyRowKeys}
-                              collapsedCombos={collapsedCombos}
-                              onToggleCombo={toggleCombo}
-                              onItemClick={handleItemClick}
-                              onAssemblyClick={handleAssemblyClick}
-                              onScopeClick={handleScopeClick}
-                              onCellSelect={handleCellSelect}
-                              onInputChange={handleInputChange}
-                              onCellKeyDown={handleCellKeyDown}
-                              onDeleteScope={isReadOnly ? undefined : onDeleteScope}
-                              onDeleteCombo={isReadOnly ? undefined : onDeleteCombo}
-                              onDeleteItem={isReadOnly ? undefined : onDeleteItem}
-                              showSelect={showSelect}
-                              selectedIds={selection?.selectedIds}
-                              onToggleIds={toggleSelectionIds}
-                            />
-                          );
-                        })}
                       </tbody>
                     </table>
                   </div>
+                  )}
+
+                  {scopes.length > 0 && (
+                    <div className={cn('space-y-2 px-3 pb-3', hasTopLevelRows ? 'pt-2' : 'pt-3')}>
+                      {scopes.map((scope, scopeIdx) => {
+                          const scopeKey = `${gId}-scope-${scope.id ?? scopeIdx}`;
+                          const isScopeCollapsed = searchTerm ? false : collapsedScopes.has(scopeKey);
+                          const scopeDropKey = `scope-drop-${scope.id ?? scopeKey}`;
+                          const isScopeDropActive = activeDropKey === scopeDropKey;
+                          const scopeDropProps =
+                            isReadOnly || !onCatalogDrop || !scope.id
+                              ? {}
+                              : {
+                                  onDragOver: (e: React.DragEvent) => {
+                                    if (hasGroupLabelDrag(e.dataTransfer)) return;
+                                    if (!hasCatalogDrag(e.dataTransfer) && !e.dataTransfer.types.includes('text/plain')) {
+                                      return;
+                                    }
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    e.dataTransfer.dropEffect = 'copy';
+                                    setActiveDropKey?.(scopeDropKey);
+                                  },
+                                  onDragLeave: (e: React.DragEvent) => {
+                                    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                                    if (activeDropKey === scopeDropKey) setActiveDropKey?.(null);
+                                  },
+                                  onDrop: (e: React.DragEvent) => {
+                                    if (hasGroupLabelDrag(e.dataTransfer)) return;
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setActiveDropKey?.(null);
+                                    const payload = getCatalogDragData(e.dataTransfer);
+                                    if (!payload) return;
+                                    if (isScopeCollapsed) toggleScope(scopeKey);
+                                    onCatalogDrop(payload, group.id, scope.id);
+                                  },
+                                };
+
+                          return (
+                            <div
+                              key={scopeKey}
+                              {...scopeDropProps}
+                              className={cn(
+                                'overflow-hidden rounded-lg border shadow-sm transition-all',
+                                isScopeDropActive
+                                  ? 'border-violet-400 ring-2 ring-violet-500/30'
+                                  : 'border-violet-200',
+                              )}
+                            >
+                              <table className="w-full table-fixed divide-y divide-slate-100 text-sm">
+                                <LineItemsColGroup
+                                  showSelect={showSelect}
+                                  showCategory={showCategory}
+                                  showMarkup={showMarkup}
+                                  showGst={showGst}
+                                />
+                                <tbody className="divide-y divide-slate-50">
+                                  <ScopeBlock
+                                    scope={scope}
+                                    scopeKey={scopeKey}
+                                    isCollapsed={isScopeCollapsed}
+                                    onToggle={() => toggleScope(scopeKey)}
+                                    showMarkup={showMarkup}
+                                    showGst={showGst}
+                                    showCategory={showCategory}
+                                    editState={isReadOnly ? null : editState}
+                                    editInputs={editInputs}
+                                    selectedRows={selectedRows}
+                                    dirtyRowKeys={dirtyRowKeys}
+                                    collapsedCombos={collapsedCombos}
+                                    onToggleCombo={toggleCombo}
+                                    onItemClick={handleItemClick}
+                                    onAssemblyClick={handleAssemblyClick}
+                                    onScopeClick={handleScopeClick}
+                                    onCellSelect={handleCellSelect}
+                                    onInputChange={handleInputChange}
+                                    onCellKeyDown={handleCellKeyDown}
+                                    onDeleteScope={isReadOnly ? undefined : onDeleteScope}
+                                    onDeleteCombo={isReadOnly ? undefined : onDeleteCombo}
+                                    onDeleteItem={isReadOnly ? undefined : onDeleteItem}
+                                    showSelect={showSelect}
+                                    selectedIds={selection?.selectedIds}
+                                    onToggleIds={toggleSelectionIds}
+                                    isDropActive={isScopeDropActive}
+                                    dropHint={labels.addToDrop(scope.name ?? 'Scope')}
+                                  />
+                                </tbody>
+                              </table>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
+                </div>
                 ) : (
                   <div className="flex items-center justify-center py-8 text-sm text-slate-400">
                     {labels.dragHint}

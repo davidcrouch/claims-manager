@@ -11,37 +11,41 @@ import {
   BottomFormDrawerError,
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
+import { formatCurrency, formatDate } from '@/components/shared/detail';
+import {
+  PublishEntityContext,
+  PublishSummaryCard,
+  PublishSummaryRow,
+} from '@/components/shared/PublishEntityContext';
 import { publishQuoteAction } from '@/app/(app)/mutations';
 import { generateAndDownloadDocument } from '@/lib/generate-document';
+import type { Claim, Job, Quote } from '@/types/api';
 
 export type EstimatePublishMode = 'internal' | 'external';
-
-type WizardStep = 'confirm';
-
-const STEPS: WizardStep[] = ['confirm'];
 
 export interface EstimatePublishWizardProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  quoteId: string;
+  quote: Quote;
+  job?: Job | null;
+  claim?: Claim | null;
   mode: EstimatePublishMode;
 }
 
 export function EstimatePublishWizard({
   open,
   onOpenChange,
-  quoteId,
+  quote,
+  job,
+  claim,
   mode,
 }: EstimatePublishWizardProps) {
   const router = useRouter();
-  const [step, setStep] = useState<WizardStep>('confirm');
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
   const isInternal = mode === 'internal';
 
   const reset = useCallback(() => {
-    setStep('confirm');
     setPublishing(false);
     setError(null);
   }, []);
@@ -60,13 +64,13 @@ export function EstimatePublishWizard({
     setPublishing(true);
     setError(null);
     try {
-      const result = await publishQuoteAction(quoteId);
+      const result = await publishQuoteAction(quote.id);
       if (!result.success) {
         setError(
           result.error ??
             (isInternal
               ? 'Failed to publish estimate'
-              : 'Failed to send estimate to insurance provider'),
+              : 'Failed to send estimate to NRMA'),
         );
         return;
       }
@@ -75,7 +79,7 @@ export function EstimatePublishWizard({
         try {
           await generateAndDownloadDocument({
             documentType: 'quote',
-            entityId: quoteId,
+            entityId: quote.id,
           });
           toast.success('Estimate published and PDF downloaded');
         } catch (err) {
@@ -84,7 +88,7 @@ export function EstimatePublishWizard({
           });
         }
       } else {
-        toast.success('Estimate sent to insurance provider');
+        toast.success('Estimate sent to NRMA');
       }
 
       onOpenChange(false);
@@ -95,19 +99,21 @@ export function EstimatePublishWizard({
     }
   }
 
-  const stepLabels: Record<WizardStep, string> = {
-    confirm: isInternal ? 'Generate PDF' : 'Send to Provider',
-  };
+  const statusName =
+    quote.status?.name ??
+    (quote.externalReference ? 'Unknown' : 'Draft');
+  const title =
+    quote.name ?? quote.quoteNumber ?? quote.externalReference ?? quote.id;
 
   return (
     <BottomFormDrawer
       open={open}
       onOpenChange={handleOpenChange}
-      title={isInternal ? 'Publish estimate' : 'Send to insurance provider'}
+      title={isInternal ? 'Publish estimate' : 'Publish estimate to NRMA'}
       description={
         isInternal
-          ? 'Confirm generating an estimate PDF. Status will be set to Pending.'
-          : 'Confirm sending this estimate to the insurance provider. Status will be set to Pending.'
+          ? 'Review the claim, job, and estimate summary, then publish. It will be locked afterwards.'
+          : 'Review the claim, job, and estimate summary, then send this estimate to NRMA.'
       }
       icon={
         isInternal ? (
@@ -116,48 +122,45 @@ export function EstimatePublishWizard({
           <Shield className="h-5 w-5 text-amber-600" />
         )
       }
+      widthClassName="w-[55%]"
+      preventClose={publishing}
     >
-      <div className="border-b border-slate-200 px-12 py-3">
-        <ol className="flex flex-wrap items-center gap-2 text-sm">
-          {STEPS.map((s, i) => (
-            <li
-              key={s}
-              className={`rounded-full px-3 py-1 font-medium ${
-                step === s
-                  ? 'bg-amber-100 text-amber-800'
-                  : 'bg-slate-100 text-slate-500'
-              }`}
-            >
-              {i + 1}. {stepLabels[s]}
-            </li>
-          ))}
-        </ol>
-      </div>
-
       <BottomFormDrawerBody>
-        {step === 'confirm' && (
-          <div className="mx-auto max-w-xl space-y-4">
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700">
-              {isInternal ? (
-                <>
-                  <p className="font-medium text-foreground">Generate estimate PDF</p>
-                  <p className="mt-2 text-muted-foreground">
-                    A PDF will be created from the assigned estimate document template and
-                    downloaded. The estimate status will change from Draft to Pending.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="font-medium text-foreground">Send to insurance provider</p>
-                  <p className="mt-2 text-muted-foreground">
-                    This estimate will be submitted to the linked insurance provider for this job.
-                    The estimate status will change from Draft to Pending.
-                  </p>
-                </>
-              )}
+        <div className="mx-auto max-w-2xl space-y-4">
+          {isInternal ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-950">
+              <p className="font-medium">This estimate will be locked after publish</p>
+              <p className="mt-2 text-amber-900/80">
+                A PDF will be created from the assigned estimate template and downloaded.
+                Status will change to Pending. Line items and estimate details cannot be
+                edited afterwards.
+              </p>
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-950">
+              <p className="font-medium">This will be pushed to NRMA</p>
+              <p className="mt-2 text-amber-900/80">
+                Submitting creates the estimate in Crunchwork for NRMA. Status will change
+                to Pending and the estimate will be locked. This cannot be undone from this
+                screen.
+              </p>
+            </div>
+          )}
+
+          <PublishEntityContext job={job} claim={claim} />
+
+          <PublishSummaryCard title="Estimate summary">
+            <PublishSummaryRow label="Name" value={title} />
+            <PublishSummaryRow label="Status" value={statusName} />
+            <PublishSummaryRow label="Estimate number" value={quote.quoteNumber ?? '—'} />
+            <PublishSummaryRow label="Reference" value={quote.reference ?? '—'} />
+            <PublishSummaryRow label="Total" value={formatCurrency(quote.totalAmount)} />
+            <PublishSummaryRow
+              label="Estimate date"
+              value={quote.quoteDate ? formatDate(quote.quoteDate) : '—'}
+            />
+          </PublishSummaryCard>
+        </div>
 
         <BottomFormDrawerError error={error} />
       </BottomFormDrawerBody>
@@ -189,10 +192,10 @@ export function EstimatePublishWizard({
           {publishing
             ? isInternal
               ? 'Publishing…'
-              : 'Sending…'
+              : 'Sending to NRMA…'
             : isInternal
-              ? 'Generate PDF'
-              : 'Send to provider'}
+              ? 'Publish estimate'
+              : 'Submit to NRMA'}
         </Button>
       </BottomFormDrawerFooter>
     </BottomFormDrawer>

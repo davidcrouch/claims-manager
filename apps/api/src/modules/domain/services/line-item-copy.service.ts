@@ -105,6 +105,24 @@ export class LineItemCopyService {
       comboIdMap.set(srcCombo.id as string, inserted.id);
     }
 
+    for (const srcCombo of sourceCombos) {
+      const targetId = comboIdMap.get(srcCombo.id as string);
+      if (!targetId) continue;
+      const payload =
+        srcCombo.comboPayload && typeof srcCombo.comboPayload === 'object'
+          ? { ...(srcCombo.comboPayload as Record<string, unknown>) }
+          : null;
+      const parentId =
+        payload && typeof payload.parentComboId === 'string' ? payload.parentComboId : null;
+      if (!parentId) continue;
+      const mappedParent = comboIdMap.get(parentId);
+      if (!mappedParent || mappedParent === parentId) continue;
+      await tx
+        .update(config.targetComboTable)
+        .set({ comboPayload: { ...payload, parentComboId: mappedParent } } as never)
+        .where(eq((config.targetComboTable as any).id, targetId));
+    }
+
     // 5. Load source items
     let sourceItems: Record<string, unknown>[] = [];
     if (sourceGroupIds.length > 0) {

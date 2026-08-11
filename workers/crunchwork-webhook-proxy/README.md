@@ -1,6 +1,9 @@
 # Crunchwork Webhook Proxy
 
-Cloudflare Worker that transparently proxies Crunchwork webhook requests from `ensure-test.more0.dev/api/webhook` to the EnsureOS staging API at `api-staging.branlamie.com/api/webhook`.
+Cloudflare Worker that fans out Crunchwork webhook requests from `ensure-test.more0.dev/api/webhook` to EnsureOS staging and local tunnel:
+
+- **Primary (awaited):** `providers-staging.branlamie.com/api/webhook`
+- **Secondary (fire-and-forget):** `api-dev.branlamie.com/api/webhook` → local `:5001`
 
 ## Architecture
 
@@ -16,13 +19,13 @@ Crunchwork SaaS
 │                                                  │
 │  Preserves: method, headers, body, status        │
 │  Redirects: disabled (manual)                    │
-└──────────────────┬───────────────────────────────┘
-                   │
-                   ▼
-┌──────────────────────────────────────────────────┐
-│  EnsureOS Staging                                │
-│  https://api-staging.branlamie.com/api/webhook   │
-└──────────────────────────────────────────────────┘
+└──────────────┬───────────────────┬───────────────┘
+               │                   │
+               ▼                   ▼
+┌──────────────────────┐  ┌────────────────────────┐
+│ providers-staging    │  │ api-dev (tunnel)       │
+│ .../api/webhook      │  │ → localhost:5001       │
+└──────────────────────┘  └────────────────────────┘
 ```
 
 ## Prerequisites

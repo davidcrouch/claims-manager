@@ -17,6 +17,7 @@ import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
 import { createRfqAction } from '@/app/(app)/mutations';
 import {
   CreateSubmitOverlay,
+  navigateToCreated,
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
 import { fetchJobQuotesAction } from '@/app/(app)/jobs/[id]/actions';
@@ -182,7 +183,7 @@ export function RfqFormDrawer({
       if (result.success) {
         if (result.rfq?.id) {
           startOpening();
-          router.push(`/rfqs/${result.rfq.id}`);
+          navigateToCreated(router, `/rfqs/${result.rfq.id}`);
           return;
         }
         resetPhase();

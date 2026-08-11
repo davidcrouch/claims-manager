@@ -14,6 +14,14 @@ import {
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
 import { updateAssessmentAction } from '@/app/(app)/assessments/actions';
+import {
+  additionalStructuresFromFlags,
+  asBool,
+  asStr,
+  flagsFromAdditionalStructures,
+  isAssessmentLocked,
+  sectionDict,
+} from '../assessment-sections';
 import type { Assessment } from '@/types/api';
 
 export interface AssessmentGeneralDrawerProps {
@@ -56,18 +64,30 @@ function emptyForm(): GeneralFormData {
 }
 
 function fromAssessment(data: Partial<Assessment>): GeneralFormData {
+  const ms = sectionDict(data, 'makeSafe');
+  const bld = sectionDict(data, 'building');
+  const hab = sectionDict(data, 'habitability');
+  const haz = sectionDict(data, 'hazards');
+  const dmg = sectionDict(data, 'damage');
+  const extras = sectionDict(data, 'extras');
+  const structures = flagsFromAdditionalStructures(bld.additionalStructures);
   return {
-    makeSafeCompletionDate: data.makeSafeCompletionDate ?? '',
-    dateMainRoofRepaired: data.dateMainRoofRepaired ?? '',
-    mainRoofDamage: data.mainRoofDamage ?? false,
-    habitable: data.habitable ?? false,
-    mould: data.mould ?? false,
-    asbestosOnSite: data.asbestosOnSite ?? false,
-    detachedGarage: data.detachedGarage ?? false,
-    sheds: data.sheds ?? false,
-    swimmingPool: data.swimmingPool ?? false,
-    detachedGrannyFlat: data.detachedGrannyFlat ?? false,
-    damageCausedByListedEvent: data.damageCausedByListedEvent ?? false,
+    makeSafeCompletionDate: asStr(ms.dateMakeSafeCompleted).slice(0, 10),
+    dateMainRoofRepaired: asStr(ms.dateMainRoofRepaired).slice(0, 10),
+    mainRoofDamage: asBool(bld.mainHouseRoofDamage),
+    habitable: asBool(hab.habitable),
+    mould:
+      extras.mould === true || asStr(haz.environmentalHazards).toLowerCase().includes('mould'),
+    asbestosOnSite:
+      extras.asbestosOnSite === true ||
+      asStr(haz.safetyHazards).toLowerCase().includes('asbestos'),
+    detachedGarage: structures.detachedGarage,
+    sheds: structures.sheds,
+    swimmingPool: structures.swimmingPool,
+    detachedGrannyFlat: structures.detachedGrannyFlat,
+    damageCausedByListedEvent:
+      dmg.hasDamageCoveredByPolicy === true ||
+      asStr(dmg.hasDamageCoveredByPolicy).toLowerCase() === 'yes',
   };
 }
 
@@ -102,21 +122,41 @@ export function AssessmentGeneralDrawer({
       setError('No assessment ID provided');
       return;
     }
+    if (isAssessmentLocked(initialData?.status)) {
+      setError('This assessment has been published and cannot be edited');
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
+      const existingHaz = sectionDict(initialData, 'hazards');
       await updateAssessmentAction(assessmentId, {
-        makeSafeCompletionDate: form.makeSafeCompletionDate || null,
-        dateMainRoofRepaired: form.dateMainRoofRepaired || null,
-        mainRoofDamage: form.mainRoofDamage,
-        habitable: form.habitable,
-        mould: form.mould,
-        asbestosOnSite: form.asbestosOnSite,
-        detachedGarage: form.detachedGarage,
-        sheds: form.sheds,
-        swimmingPool: form.swimmingPool,
-        detachedGrannyFlat: form.detachedGrannyFlat,
-        damageCausedByListedEvent: form.damageCausedByListedEvent,
+        makeSafe: {
+          dateMakeSafeCompleted: form.makeSafeCompletionDate || undefined,
+          dateMainRoofRepaired: form.dateMainRoofRepaired || undefined,
+        },
+        building: {
+          mainHouseRoofDamage: form.mainRoofDamage,
+          additionalStructures: additionalStructuresFromFlags(form) || undefined,
+        },
+        habitability: {
+          habitable: form.habitable,
+        },
+        hazards: {
+          environmentalHazards: form.mould
+            ? [asStr(existingHaz.environmentalHazards), 'Mould'].filter(Boolean).join('; ') || 'Mould'
+            : existingHaz.environmentalHazards,
+          safetyHazards: form.asbestosOnSite
+            ? [asStr(existingHaz.safetyHazards), 'Asbestos'].filter(Boolean).join('; ') || 'Asbestos'
+            : existingHaz.safetyHazards,
+        },
+        damage: {
+          hasDamageCoveredByPolicy: form.damageCausedByListedEvent ? 'Yes' : 'No',
+        },
+        extras: {
+          mould: form.mould,
+          asbestosOnSite: form.asbestosOnSite,
+        },
       });
       onOpenChange(false);
       router.refresh();
@@ -178,7 +218,7 @@ export function AssessmentGeneralDrawer({
           <Button type="button" variant="outline" size="lg" className="min-w-36 px-8" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button type="submit" size="lg" className="min-w-36 px-8" disabled={submitting}>
+          <Button type="submit" size="lg" className="min-w-36 px-8" disabled={submitting || isAssessmentLocked(initialData?.status)}>
             {submitting ? 'Saving...' : 'Save Changes'}
           </Button>
         </BottomFormDrawerFooter>

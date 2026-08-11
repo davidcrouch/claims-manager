@@ -1,4 +1,4 @@
-import { Inject, Injectable, Optional, BadRequestException, Logger } from '@nestjs/common';
+import { Inject, Injectable, Optional, BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import {
   QuotesRepository,
   JobsRepository,
@@ -257,6 +257,18 @@ export class QuotesService {
     return row ? this.shapeQuoteResponse(row) : null;
   }
 
+  async assertQuoteEditable(params: { id: string }): Promise<void> {
+    const tenantId = this.tenantContext.getTenantId();
+    const row = await this.quotesRepo.findOne({ id: params.id, tenantId });
+    if (!row) throw new NotFoundException('Quote not found');
+    const statusName = (row.statusName ?? '').trim().toLowerCase();
+    const locked =
+      !!row.externalReference || (statusName !== '' && statusName !== 'draft');
+    if (locked) {
+      throw new BadRequestException('Published estimates cannot be edited');
+    }
+  }
+
   async findByJob(params: { jobId: string }) {
     const tenantId = this.tenantContext.getTenantId();
     const rows = await this.quotesRepo.findByJob({ jobId: params.jobId, tenantId });
@@ -276,7 +288,7 @@ export class QuotesService {
     };
   }
 
-  async create(params: { body: Record<string, unknown> }) {
+  async create(params: { body: Record<string, unknown>; userId?: string }) {
     const tenantId = this.tenantContext.getTenantId();
     const draftStatusId =
       (await this.lookupResolver.resolveByName({
@@ -316,6 +328,8 @@ export class QuotesService {
       estimatedCompletionDate: (params.body.estimatedCompletion as string) || null,
       customData: { quoteType: params.body.quoteType || null },
       statusLookupId: draftStatusId ?? null,
+      createdByUserId: params.userId ?? null,
+      updatedByUserId: params.userId ?? null,
     };
     return this.quotesRepo.create({ data: insertData });
   }
@@ -347,7 +361,10 @@ export class QuotesService {
       );
       await this.quotesRepo.update({
         id: params.id,
-        data: { statusLookupId: pendingStatus.lookupId },
+        data: {
+          statusLookupId: pendingStatus.lookupId,
+          ...(params.userId ? { updatedByUserId: params.userId } : {}),
+        },
       });
       await this.maybeIssueCrossTenantProposal({
         quoteId: params.id,
@@ -447,6 +464,7 @@ export class QuotesService {
         externalReference: cwQuoteId,
         statusLookupId: pendingStatus.lookupId,
         apiPayload: updateResponse as Record<string, unknown>,
+        ...(params.userId ? { updatedByUserId: params.userId } : {}),
       },
     });
 
@@ -582,7 +600,11 @@ export class QuotesService {
     return { deleted: true, softDeleted: false };
   }
 
-  async update(params: { id: string; body: Record<string, unknown> }) {
+  async update(params: {
+    id: string;
+    body: Record<string, unknown>;
+    userId?: string;
+  }) {
     const existing = await this.findOne({ id: params.id });
     if (!existing) return null;
 
@@ -590,7 +612,10 @@ export class QuotesService {
       const tenantId = this.tenantContext.getTenantId();
       await this.quotesRepo.update({
         id: params.id,
-        data: { statusLookupId: params.body.statusLookupId },
+        data: {
+          statusLookupId: params.body.statusLookupId,
+          ...(params.userId ? { updatedByUserId: params.userId } : {}),
+        },
       });
       const updated = await this.quotesRepo.findOne({ id: params.id, tenantId });
       return updated ? this.shapeQuoteResponse(updated) : null;
@@ -621,6 +646,7 @@ export class QuotesService {
     });
     const updData: Partial<QuoteInsert> = {
       apiPayload: apiQuote as Record<string, unknown>,
+      ...(params.userId ? { updatedByUserId: params.userId } : {}),
     };
     if (updStatusLookupId) updData.statusLookupId = updStatusLookupId;
     if (respObj.quoteNumber) updData.quoteNumber = String(respObj.quoteNumber);
@@ -639,7 +665,7 @@ export class QuotesService {
    * Approve an internal estimate: set status to Approved and create a linked Work Order
    * with all line items (groups → combos → items) copied from the estimate.
    */
-  async approve(params: { id: string }): Promise<{
+  async approve(params: { id: string; userId?: string }): Promise<{
     quote: ReturnType<typeof this.shapeQuoteResponse> | null;
     workOrderId: string;
   }> {
@@ -671,7 +697,10 @@ export class QuotesService {
     const result = await this.db.transaction(async (tx) => {
       await this.quotesRepo.update({
         id: params.id,
-        data: { statusLookupId: approvedStatus.lookupId },
+        data: {
+          statusLookupId: approvedStatus.lookupId,
+          ...(params.userId ? { updatedByUserId: params.userId } : {}),
+        },
         tx,
       });
 
@@ -684,6 +713,8 @@ export class QuotesService {
           totalAmount: existing.totalAmount ?? undefined,
           statusLookupId: woStatusId ?? undefined,
           note: `Created from approved estimate ${existing.quoteNumber ?? existing.name ?? params.id}`,
+          createdByUserId: params.userId ?? null,
+          updatedByUserId: params.userId ?? null,
         },
         tx,
       });
@@ -816,6 +847,23 @@ export class QuotesService {
         })
         .returning();
       comboIdMap.set(c.id, woCombo.id);
+    }
+
+    for (const c of srcCombos) {
+      const woComboId = comboIdMap.get(c.id);
+      if (!woComboId) continue;
+      const payload =
+        c.comboPayload && typeof c.comboPayload === 'object'
+          ? { ...(c.comboPayload as Record<string, unknown>) }
+          : null;
+      const parentId = payload && typeof payload.parentComboId === 'string' ? payload.parentComboId : null;
+      if (!parentId) continue;
+      const mappedParent = comboIdMap.get(parentId);
+      if (!mappedParent || mappedParent === parentId) continue;
+      await tx
+        .update(workOrderCombos)
+        .set({ comboPayload: { ...payload, parentComboId: mappedParent } })
+        .where(eq(workOrderCombos.id, woComboId));
     }
 
     // Copy group-level items

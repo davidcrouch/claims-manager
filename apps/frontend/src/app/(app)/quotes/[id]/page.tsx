@@ -3,7 +3,7 @@ import { getServerApiClient } from '@/lib/server-api';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { QuoteDetail, QuotePageHeader } from '@/components/quotes/QuoteDetail';
 import type { Metadata } from 'next';
-import type { CatalogType, Job } from '@/types/api';
+import type { CatalogType, Claim, Job } from '@/types/api';
 
 export async function generateMetadata({
   params,
@@ -48,12 +48,24 @@ export default async function QuoteDetailPage({
     }
   }
 
+  let claim: Claim | null = job?.claim ?? null;
+  const claimId = quote.claimId ?? job?.claimId ?? job?.parentClaimId ?? null;
+  if (!claim && claimId) {
+    claim = await api.getClaim(claimId).catch((err: unknown) => {
+      console.error(
+        'frontend:QuoteDetailPage - getClaim failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return null;
+    });
+  }
+
   return (
     <>
       <SetPageHeader>
-        <QuotePageHeader quote={quote} job={job} />
+        <QuotePageHeader quote={quote} job={job} claim={claim} />
       </SetPageHeader>
-      <QuoteDetail quote={quote} jobProvider={jobProvider} />
+      <QuoteDetail quote={quote} job={job} jobProvider={jobProvider} />
     </>
   );
 }

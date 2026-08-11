@@ -20,6 +20,7 @@ import {
   Paperclip,
   Send,
   BookOpen,
+  Lock,
 } from 'lucide-react';
 import {
   Card,
@@ -48,6 +49,7 @@ import {
 import type {
   Quote,
   Job,
+  Claim,
   QuotePartyPayload,
   QuoteScheduleInfo,
   QuoteApprovalInfo,
@@ -55,6 +57,11 @@ import type {
 } from '@/types/api';
 import { PrintButton } from '@/components/shared/PrintButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
+import {
+  DetailAssignee,
+  OrgUserLabel,
+  resolveDetailAssignee,
+} from '@/components/shared/DetailAssignee';
 import { jobDisplayName } from '@/components/shared/job-label';
 import { QuoteLineItemsTab } from '@/components/quotes/QuoteLineItemsTab';
 import { JournalList } from '@/components/journals/JournalList';
@@ -170,11 +177,34 @@ function getCustomData(quote: Quote): Dict {
   return (quote.customData as Dict | undefined) ?? {};
 }
 
+export function getEstimateStatusName(quote: Quote): string {
+  const approval = getApprovalInfo(quote);
+  return (
+    quote.status?.name ??
+    approval.statusName ??
+    (quote.externalReference ? 'Unknown' : 'Draft')
+  );
+}
+
+export function isEstimateLocked(quote: Quote): boolean {
+  const name = getEstimateStatusName(quote).trim().toLowerCase();
+  if (quote.externalReference) return true;
+  return name !== '' && name !== 'draft' && name !== 'unknown';
+}
+
 // ---------------------------------------------------------------------------
 // Header
 // ---------------------------------------------------------------------------
 
-export function QuotePageHeader({ quote, job }: { quote: Quote; job?: Job | null }) {
+export function QuotePageHeader({
+  quote,
+  job,
+  claim,
+}: {
+  quote: Quote;
+  job?: Job | null;
+  claim?: Claim | null;
+}) {
   const [publishWizardOpen, setPublishWizardOpen] = useState(false);
   const [approvalWizardOpen, setApprovalWizardOpen] = useState(false);
   const approval = getApprovalInfo(quote);
@@ -183,12 +213,10 @@ export function QuotePageHeader({ quote, job }: { quote: Quote; job?: Job | null
     quote.quoteNumber ??
     quote.externalReference ??
     quote.id;
-  const statusName =
-    quote.status?.name ?? approval.statusName ?? (quote.externalReference ? 'Unknown' : 'Draft');
+  const statusName = getEstimateStatusName(quote);
   const quoteTypeName = quote.quoteType?.name ?? approval.quoteTypeName;
-  const canPublish =
-    statusName === 'Draft' ||
-    (!quote.status?.name && !approval.statusName && !quote.externalReference);
+  const locked = isEstimateLocked(quote);
+  const canPublish = !locked;
   const publishMode: EstimatePublishMode =
     job?.provider === 'crunchwork' ? 'external' : 'internal';
   const isInternal = publishMode === 'internal';
@@ -201,7 +229,7 @@ export function QuotePageHeader({ quote, job }: { quote: Quote; job?: Job | null
           <Button
             size="default"
             onClick={() => setPublishWizardOpen(true)}
-            className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+            className="h-9 gap-1.5 px-4 bg-amber-600 text-white hover:bg-amber-500"
           >
             <Send className="h-3.5 w-3.5" />
             Publish
@@ -229,7 +257,9 @@ export function QuotePageHeader({ quote, job }: { quote: Quote; job?: Job | null
       <EstimatePublishWizard
         open={publishWizardOpen}
         onOpenChange={setPublishWizardOpen}
-        quoteId={quote.id}
+        quote={quote}
+        job={job}
+        claim={claim}
         mode={publishMode}
       />
       <EstimateApprovalWizard
@@ -245,6 +275,12 @@ export function QuotePageHeader({ quote, job }: { quote: Quote; job?: Job | null
           </span>
           <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
           <StatusBadge status={statusName} />
+          {locked && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+              <Lock className="h-3 w-3" />
+              Locked
+            </span>
+          )}
           {quoteTypeName && quoteTypeName !== 'Estimate' && quoteTypeName !== 'Quote' && (
             <TypeBadge type={quoteTypeName} />
           )}
@@ -411,7 +447,7 @@ function OverviewTab({ quote }: { quote: Quote }) {
             value={
               approval.createdByName
                 ? `${approval.createdByName}${approval.createdByExternalReference ? ` (${approval.createdByExternalReference})` : ''}`
-                : (quote.createdByUserId ?? '—')
+                : <OrgUserLabel userId={quote.createdByUserId} />
             }
           />
           <DefRow
@@ -419,7 +455,7 @@ function OverviewTab({ quote }: { quote: Quote }) {
             value={
               approval.updatedByName
                 ? `${approval.updatedByName}${approval.updatedByExternalReference ? ` (${approval.updatedByExternalReference})` : ''}`
-                : (quote.updatedByUserId ?? '—')
+                : <OrgUserLabel userId={quote.updatedByUserId} />
             }
           />
         </SectionCard>
@@ -540,8 +576,8 @@ function TimelineTab({ quote }: { quote: Quote }) {
       >
         <DefRow label="Created" value={formatDateTime(quote.createdAt)} />
         <DefRow label="Updated" value={formatDateTime(quote.updatedAt)} />
-        <DefRow label="Created by (user id)" value={quote.createdByUserId ?? '—'} />
-        <DefRow label="Updated by (user id)" value={quote.updatedByUserId ?? '—'} />
+        <DefRow label="Created by" value={<OrgUserLabel userId={quote.createdByUserId} />} />
+        <DefRow label="Updated by" value={<OrgUserLabel userId={quote.updatedByUserId} />} />
       </SectionCard>
     </div>
   );
@@ -562,9 +598,19 @@ type QuoteTab =
   | 'attachments'
   | 'journals';
 
-export function QuoteDetail({ quote, jobProvider }: { quote: Quote; jobProvider?: CatalogType }) {
+export function QuoteDetail({
+  quote,
+  job,
+  jobProvider,
+}: {
+  quote: Quote;
+  job?: Job | null;
+  jobProvider?: CatalogType;
+}) {
   const [tab, setTab] = useState<QuoteTab>('overview');
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const locked = isEstimateLocked(quote);
+  const assignee = resolveDetailAssignee({ job });
 
   const tabs: Array<{ id: QuoteTab; label: string; icon: typeof Calendar }> = [
     { id: 'overview', label: 'Overview', icon: FileSignature },
@@ -579,8 +625,8 @@ export function QuoteDetail({ quote, jobProvider }: { quote: Quote; jobProvider?
 
   return (
     <div className="flex flex-col">
-      <div className="sticky top-14 z-10 flex items-center gap-0 border-b border-slate-200 bg-white" data-slot="quote-detail-tabs">
-        <div className="flex flex-wrap gap-0">
+      <div className="sticky top-14 z-10 flex w-full flex-wrap items-center gap-x-4 border-b border-slate-200 bg-white" data-slot="quote-detail-tabs">
+        <div className="flex min-w-0 flex-1 flex-wrap gap-0">
           {tabs.map((t) => {
             const Icon = t.icon;
             const active = tab === t.id;
@@ -601,8 +647,21 @@ export function QuoteDetail({ quote, jobProvider }: { quote: Quote; jobProvider?
             );
           })}
         </div>
+        <DetailAssignee
+          assigneeName={assignee.assigneeName}
+          assignedToUserId={assignee.assignedToUserId}
+          fromJob={assignee.fromJob}
+          createdByUserId={quote.createdByUserId}
+          updatedByUserId={quote.updatedByUserId}
+          provider={job?.provider}
+        />
       </div>
       <div className="pt-4">
+        {locked && (
+          <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+            This estimate has been published and can no longer be edited.
+          </div>
+        )}
         {tab === 'overview' && <OverviewTab quote={quote} />}
         {tab === 'line-items' && (
           <QuoteLineItemsTab
@@ -610,6 +669,7 @@ export function QuoteDetail({ quote, jobProvider }: { quote: Quote; jobProvider?
             drawerOpen={drawerOpen}
             onDrawerOpenChange={setDrawerOpen}
             catalogType={jobProvider}
+            readOnly={locked}
           />
         )}
         {tab === 'parties' && <PartiesTab quote={quote} />}

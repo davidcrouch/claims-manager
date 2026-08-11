@@ -13,6 +13,7 @@ import {
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
 import { updateAssessmentAction } from '@/app/(app)/assessments/actions';
+import { asStr, isAssessmentLocked, sectionDict } from '../assessment-sections';
 import type { Assessment } from '@/types/api';
 
 export interface AssessmentOtherDrawerProps {
@@ -45,13 +46,15 @@ function emptyForm(): OtherFormData {
 }
 
 function fromAssessment(data: Partial<Assessment>): OtherFormData {
+  const rec = sectionDict(data, 'recommendation');
+  const dmg = sectionDict(data, 'damage');
   return {
-    clientDiscussion: data.clientDiscussion ?? '',
-    resultantDamage: data.resultantDamage ?? '',
-    causeOfDamage: data.causeOfDamage ?? '',
-    maintenanceRelatedIssues: data.maintenanceRelatedIssues ?? '',
-    comments: data.comments ?? '',
-    variancesOfScope: data.variancesOfScope ?? '',
+    clientDiscussion: asStr(rec.clientDiscussions),
+    resultantDamage: asStr(dmg.damageObserved),
+    causeOfDamage: asStr(dmg.causeOfDamage),
+    maintenanceRelatedIssues: asStr(dmg.maintenanceDefectIssues),
+    comments: asStr(rec.specialNotes),
+    variancesOfScope: asStr(rec.conclusion),
   };
 }
 
@@ -95,16 +98,24 @@ export function AssessmentOtherDrawer({
       setError('No assessment ID provided');
       return;
     }
+    if (isAssessmentLocked(initialData?.status)) {
+      setError('This assessment has been published and cannot be edited');
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
       await updateAssessmentAction(assessmentId, {
-        clientDiscussion: form.clientDiscussion || null,
-        resultantDamage: form.resultantDamage || null,
-        causeOfDamage: form.causeOfDamage || null,
-        maintenanceRelatedIssues: form.maintenanceRelatedIssues || null,
-        comments: form.comments || null,
-        variancesOfScope: form.variancesOfScope || null,
+        recommendation: {
+          clientDiscussions: form.clientDiscussion || undefined,
+          specialNotes: form.comments || undefined,
+          conclusion: form.variancesOfScope || undefined,
+        },
+        damage: {
+          damageObserved: form.resultantDamage || undefined,
+          causeOfDamage: form.causeOfDamage || undefined,
+          maintenanceDefectIssues: form.maintenanceRelatedIssues || undefined,
+        },
       });
       onOpenChange(false);
       router.refresh();
@@ -149,7 +160,7 @@ export function AssessmentOtherDrawer({
           <Button type="button" variant="outline" size="lg" className="min-w-36 px-8" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button type="submit" size="lg" className="min-w-36 px-8" disabled={submitting}>
+          <Button type="submit" size="lg" className="min-w-36 px-8" disabled={submitting || isAssessmentLocked(initialData?.status)}>
             {submitting ? 'Saving...' : 'Save Changes'}
           </Button>
         </BottomFormDrawerFooter>

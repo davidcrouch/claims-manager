@@ -83,7 +83,7 @@ export class ProjectAttachmentUseCase implements ProjectionUseCase {
       attachmentId = existingLink.internalEntityId;
     } else {
       const created = await this.attachmentsRepo.create({
-        data: { tenantId, ...result.entity } as AttachmentInsert,
+        data: { tenantId, ...result.entity, originType: 'provider' } as AttachmentInsert,
         tx,
       });
       attachmentId = created.id;

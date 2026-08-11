@@ -40,42 +40,81 @@ export function comboKindFromRecord(
   return 'assembly';
 }
 
+export function parentComboIdFromRecord(
+  combo: ApiCombo | Record<string, unknown>,
+): string | undefined {
+  const rec = combo as Record<string, unknown>;
+  if (typeof rec.parentComboId === 'string' && rec.parentComboId) return rec.parentComboId;
+  const payload = rec.comboPayload;
+  if (payload && typeof payload === 'object') {
+    const id = (payload as Record<string, unknown>).parentComboId;
+    if (typeof id === 'string' && id) return id;
+  }
+  return undefined;
+}
+
 /** Split combos tagged as scopes into `group.scopes` so every document uses the same UI. */
 export function normalizeLineItemGroups(groups: ApiGroup[]): ApiGroup[] {
   return groups.map((group) => {
     const existingScopes = [...(group.scopes ?? [])];
     const existingIds = new Set(existingScopes.map((s) => s.id).filter(Boolean) as string[]);
-    const assemblyCombos: ApiCombo[] = [];
+    const topLevelAssemblies: ApiCombo[] = [];
+    const nestedAssemblies: ApiCombo[] = [];
 
     for (const combo of group.combos ?? []) {
-      if (comboKindFromRecord(combo) !== 'scope') {
-        assemblyCombos.push(combo);
+      if (comboKindFromRecord(combo) === 'scope') {
+        if (combo.id && existingIds.has(combo.id)) continue;
+        existingScopes.push({
+          id: combo.id,
+          name: combo.name,
+          component: combo.component,
+          description: combo.description,
+          category: combo.category,
+          subCategory: combo.subCategory,
+          index: combo.index,
+          quantity: combo.quantity,
+          catalogScopeId: combo.catalogComboId,
+          lineScopeStatus: combo.lineScopeStatus,
+          items: combo.items,
+          combos: [],
+          subTotal: combo.subTotal,
+          totalTax: combo.totalTax,
+          total: combo.total,
+          allocatedCost: combo.allocatedCost,
+          committedCost: combo.committedCost,
+        });
+        if (combo.id) existingIds.add(combo.id);
         continue;
       }
-      if (combo.id && existingIds.has(combo.id)) continue;
-      existingScopes.push({
-        id: combo.id,
-        name: combo.name,
-        component: combo.component,
-        description: combo.description,
-        category: combo.category,
-        subCategory: combo.subCategory,
-        index: combo.index,
-        quantity: combo.quantity,
-        catalogScopeId: combo.catalogComboId,
-        lineScopeStatus: combo.lineScopeStatus,
-        items: combo.items,
-        combos: [],
-        subTotal: combo.subTotal,
-        totalTax: combo.totalTax,
-        total: combo.total,
-        allocatedCost: combo.allocatedCost,
-        committedCost: combo.committedCost,
-      });
-      if (combo.id) existingIds.add(combo.id);
+      if (parentComboIdFromRecord(combo)) {
+        nestedAssemblies.push(combo);
+      } else {
+        topLevelAssemblies.push(combo);
+      }
     }
 
-    return { ...group, combos: assemblyCombos, scopes: existingScopes };
+    const scopes = existingScopes.map((scope) => {
+      const extras = nestedAssemblies.filter((combo) => parentComboIdFromRecord(combo) === scope.id);
+      if (extras.length === 0) return scope;
+      const seen = new Set((scope.combos ?? []).map((c) => c.id).filter(Boolean) as string[]);
+      const merged = [...(scope.combos ?? [])];
+      for (const extra of extras) {
+        if (extra.id && seen.has(extra.id)) continue;
+        merged.push(extra);
+        if (extra.id) seen.add(extra.id);
+      }
+      return { ...scope, combos: merged };
+    });
+
+    const attachedIds = new Set(
+      scopes.flatMap((scope) => (scope.combos ?? []).map((c) => c.id).filter(Boolean) as string[]),
+    );
+    const combos = [
+      ...topLevelAssemblies,
+      ...nestedAssemblies.filter((combo) => !combo.id || !attachedIds.has(combo.id)),
+    ];
+
+    return { ...group, combos, scopes };
   });
 }
 

@@ -6,7 +6,7 @@
 **Mapper:** `apps/api/src/modules/external/mappers/crunchwork-job.mapper.ts`
 **Last aligned with:** Insurance REST API v17 (exported 2026-03-04)
 
-> **Current implementation status — stub.** The mapper today persists only a handful of fields (see §10). Everything in this doc describes the **target** spec the DB schema is already built for; rows marked *(backlog)* are currently available only through `api_payload`. The spec exists here because the README convention requires every CW §3.3.2 field to be listed explicitly — no silent drops.
+> **Coverage status:** Mapper promotes the full §3.3.2 surface into columns, JSONB buckets, and `job_contacts` (see §10). `appointments[]` remain in `api_payload` and are projected by `CrunchworkAppointmentMapper`. Full CW response is always stored in `api_payload`.
 
 ---
 
@@ -31,7 +31,7 @@ The `api_payload` column **always** contains the full verbatim CW response. Ever
 | CW field | Type | Internal destination | Notes |
 |---|---|---|---|
 | `id` | String (UUID) | `external_reference` (column) | CW's canonical job UUID. Primary external key used by `external_links` dedupe. |
-| `externalReference` | String | `custom_data.insurerExternalReference` *(backlog)* | Insurer's own system ID (e.g. service request ID). Distinct from `jobs.external_reference` which stores the CW UUID. Promote to a dedicated column (`external_job_id`) when the insurer-side lookup is wired up. |
+| `externalReference` | String | `external_job_id` (column) **and** `custom_data.insurerExternalReference` | Insurer's own system ID (e.g. service request ID). Distinct from `jobs.external_reference` which stores the CW UUID. |
 | `claimId` | String (UUID) | `claim_id` (FK, required) | Resolved via `NestedEntityExtractor.extractFromJobPayload` against the CW claim UUID. If no matching claim exists locally, a shallow claim stub is auto-created before the job row. |
 | `parentClaimId` | String (UUID) | `parent_claim_id` (column) | Preserved verbatim; not FK-linked. Present on hierarchical / secondary jobs. |
 | `updatedAtDate` | String (ISO 8601) | `custom_data.cwUpdatedAtDate` | Not a DB column; kept in `custom_data` for audit. |
@@ -127,9 +127,9 @@ Destination: FK resolution plus a denormalised JSONB snapshot.
 | CW field | Internal destination | Notes |
 |---|---|---|
 | `vendor.id` | lookup key for `vendor_id` (current stub) | CW vendor UUID. The stub mapper currently looks up the local `vendors` row by this id via `VendorsRepository.findOne({ id })`. No vendor row is auto-created — when missing the job's `vendor_id` is left null and the vendor is expected to arrive via a separate vendor event. |
-| `vendor.name` | `vendor_snapshot.name` *(backlog)* | Denormalised snapshot for display without a join. |
-| `vendor.externalReference` | `vendor_id` (FK to `vendors`) via the `vendor` external-reference domain *(target spec)* | The CW contract specifies `externalReference` as the Vendor Tenancy write-op key. The current stub resolves by `vendor.id` instead; switch to `externalReference` resolution when the vendor mapper grows beyond stub. |
-| entire `vendor` object | `vendor_snapshot` (JSONB) *(backlog)* | Copied verbatim so stale cases are visible without rehydrating the vendor row. |
+| `vendor.name` | `vendor_snapshot.name` | Denormalised snapshot for display without a join. |
+| `vendor.externalReference` | `vendor_id` (FK to `vendors`) via nested extractor / vendor domain | Nested extractor currently resolves best-effort (often by `vendor.id`); `externalReference` resolution continues to improve with the vendor mapper. |
+| entire `vendor` object | `vendor_snapshot` (JSONB) | Copied verbatim so stale cases are visible without rehydrating the vendor row. |
 
 The whole `vendor` object is *"Just Available on Vendor Tenancy"* per the CW contract; on Insurer tenants the field is absent and `vendor_id` / `vendor_snapshot` remain null / `{}`.
 
@@ -234,38 +234,40 @@ For each element in CW `contacts[]`:
 | CW field | JSONB key | Notes |
 |---|---|---|
 | `updatedAtDate` | `custom_data.cwUpdatedAtDate` | See §2 |
-| `externalReference` | `custom_data.insurerExternalReference` | *(backlog)* — insurer's system ID, see §2 |
+| `externalReference` | `custom_data.insurerExternalReference` | Also promoted to `external_job_id`, see §2 |
 | unknown top-level CW keys | `custom_data.<key>` | Copied verbatim so nothing is silently dropped from the queryable surface. (Also always present in `api_payload`.) |
 
 ---
 
-## 10. Current mapper coverage (stub)
+## 10. Current mapper coverage
 
-`CrunchworkJobMapper` today populates only the columns it absolutely needs to insert a legal `jobs` row and keep external-link projection idempotent. The DB schema already exposes the full field surface documented above, but the mapper is a backlog item to fill it in.
+`CrunchworkJobMapper` promotes the full §3.3.2 surface on create and update.
 
-| Field | Populated today? | Notes |
+| Field | Populated? | Notes |
 |---|---|---|
 | `external_reference` | ✅ | Set to `payload.id` (CW job UUID). |
+| `external_job_id` | ✅ | Set to `payload.externalReference` (insurer system ID). |
 | `claim_id` | ✅ | Resolved via `NestedEntityExtractor.extractFromJobPayload`; shallow claim auto-created when missing. Insertion is refused if no `claimId` can be derived. |
-| `job_type_lookup_id` | ✅ | Resolved via `lookupResolver.resolve({ domain: 'job_type', …, autoCreate: true })`. Insertion is refused if `jobType.externalReference` is absent. |
-| `vendor_id` | ✅ (best-effort) | Via `NestedEntityExtractor.resolveOrCreateVendor` when `payload.vendor.id` is present; left null otherwise. |
+| `parent_claim_id` | ✅ | From `payload.parentClaimId` when it is a valid UUID. |
+| `job_type_lookup_id` | ✅ | Resolved via `lookupResolver.resolve({ domain: 'job_type', …, autoCreate: true })`. Insertion refused if missing. |
+| `status_lookup_id` | ✅ | `job_status` domain; leave null + log on miss. |
+| `request_date`, `collect_excess`, `excess`, `make_safe_required`, `job_instructions` | ✅ | Promoted scalars. |
+| `address`, `address_postcode/suburb/state/country` | ✅ | Full address JSONB + promoted locality columns. |
+| `vendor_id` | ✅ (best-effort) | Via nested extractor; left null when unresolved. |
+| `vendor_snapshot` | ✅ | Full CW `vendor` object. |
+| `temporary_accommodation_details`, `specialist_details`, `rectification_details`, `audit_details`, `mobility_considerations` | ✅ | Job-type conditional JSONB buckets. |
+| `custom_data` | ✅ | Includes `cwUpdatedAtDate`, `insurerExternalReference`, CW `customData`, and unknown top-level keys. |
 | `api_payload` | ✅ | Always written verbatim. |
-| `parent_claim_id` | ❌ *(backlog)* | Column exists; mapper does not populate. |
-| `status_lookup_id` | ❌ *(backlog)* | Column exists. |
-| `request_date`, `collect_excess`, `excess`, `make_safe_required`, `job_instructions` | ❌ *(backlog)* | Columns exist. |
-| `address`, `address_postcode/suburb/state/country` | ❌ *(backlog)* | JSONB + promoted columns exist. |
-| `vendor_snapshot` | ❌ *(backlog)* | JSONB column exists. |
-| `temporary_accommodation_details`, `specialist_details`, `rectification_details`, `audit_details`, `mobility_considerations` | ❌ *(backlog)* | JSONB columns exist. |
-| `custom_data` | ❌ *(backlog)* | JSONB column exists. |
-| `job_contacts` / `contacts[]` sync | ❌ *(backlog)* | Child table exists with `UQ_job_contact`. |
-| `parent_job_id` | N/A — internal-only | Never sourced from CW; only written by in-app services when the builder splits/groups jobs (see §2.2). The mapper must **preserve** any existing value on update; it must **never** write or clear this column from a CW payload. |
+| `job_contacts` / `contacts[]` sync | ✅ | Additive upsert (no prune). |
+| `appointments[]` | via appointment mapper | Kept in `api_payload`; child rows owned by `CrunchworkAppointmentMapper`. |
+| `parent_job_id` | N/A — internal-only | Never sourced from CW; preserved on update. |
 
-Contract write-op rules that only matter when the mapper expands beyond the stub:
+Inbound vs outbound contract rules:
 
-- **`jobType.externalReference` — "Fail API Call" on unknown value.** The contract says outbound `POST /jobs` must fail; the *inbound* mapper currently auto-creates a lookup stub because webhook ingest has no synchronous caller to receive the 4xx. When outbound create is added in `apps/api/src/modules/jobs/jobs.service.ts`, the CW server itself enforces this rule — we don't need to pre-validate.
-- **`status.externalReference` — "Fail API Call" on unknown value.** Same rationale; enforced on the CW side for outbound calls. Inbound mapper should log `UNRESOLVED_LOOKUP` and continue so the job row still lands.
-- **`vendor.externalReference` — "Fail API Call" on unknown value.** Only relevant for outbound; inbound resolves best-effort or leaves `vendor_id` null.
-- **`contacts[].externalReference`, `contacts[].type.externalReference` — "Add Mapping Value and Record" / "Continue API call".** Translate to: auto-create stub lookup rows (when expanding the contacts sync) and never fail ingest for a missing external reference on a contact sub-object.
+- **`jobType.externalReference` — "Fail API Call" on unknown value (outbound).** Inbound auto-creates a lookup stub because webhook ingest has no synchronous 4xx caller.
+- **`status.externalReference` — "Fail API Call" (outbound).** Inbound logs `UNRESOLVED_LOOKUP` and continues.
+- **`vendor.externalReference` — "Fail API Call" (outbound).** Inbound resolves best-effort or leaves `vendor_id` null.
+- **`contacts[]` — "Add Mapping Value and Record" / "Continue API call".** Contacts without `externalReference` are skipped with a warning; type/method lookups leave FK null on miss.
 
 ---
 

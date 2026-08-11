@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, Post, Query, Res, NotFoundException, Logger } from '@nestjs/common';
 import type { Response } from 'express';
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { AttachmentsService } from './attachments.service';
 
 @Controller('attachments')
@@ -57,12 +58,19 @@ export class AttachmentsController {
   }
 
   @Post()
-  async create(@Body() body: Record<string, unknown>) {
-    return this.attachmentsService.create({ body });
+  async create(
+    @Body() body: Record<string, unknown>,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.attachmentsService.create({ body, userId });
   }
 
   @Post(':id')
-  async update(@Param('id') id: string, @Body() body: Record<string, unknown>) {
-    return this.attachmentsService.update({ id, body });
+  async update(
+    @Param('id') id: string,
+    @Body() body: Record<string, unknown>,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.attachmentsService.update({ id, body, userId });
   }
 }

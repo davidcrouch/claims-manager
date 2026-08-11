@@ -29,6 +29,7 @@ import { createQuoteAction } from '@/app/(app)/mutations';
 import { JobSelectField } from '@/components/forms/JobSelectField';
 import {
   CreateSubmitOverlay,
+  navigateToCreated,
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
 import type { JobOption } from '@/components/shared/job-label';
@@ -141,7 +142,7 @@ export function QuoteFormDrawer({
       if (result.success) {
         if (result.quote?.id) {
           startOpening();
-          router.push(`/quotes/${result.quote.id}`);
+          navigateToCreated(router, `/quotes/${result.quote.id}`);
           return;
         }
         resetPhase();

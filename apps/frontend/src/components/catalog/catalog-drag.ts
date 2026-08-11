@@ -61,3 +61,7 @@ export function getGroupLabelDragData(
 export function hasGroupLabelDrag(dataTransfer: DataTransfer): boolean {
   return dataTransfer.types.includes(GROUP_LABEL_DRAG_MIME);
 }
+
+export function hasCatalogDrag(dataTransfer: DataTransfer): boolean {
+  return dataTransfer.types.includes(CATALOG_DRAG_MIME);
+}

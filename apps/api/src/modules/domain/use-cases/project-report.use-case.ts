@@ -60,7 +60,7 @@ export class ProjectReportUseCase implements ProjectionUseCase {
       reportId = existingLink.internalEntityId;
     } else {
       const created = await this.reportsRepo.create({
-        data: { tenantId, ...result.entity } as ReportInsert,
+        data: { tenantId, ...result.entity, originType: 'provider' } as ReportInsert,
         tx,
       });
       reportId = created.id;

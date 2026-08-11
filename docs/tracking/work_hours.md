@@ -617,3 +617,14 @@
   An insurance industry API reference was added for integration planning alongside the operational update.
   Outcome: partner trading, documents, and day-to-day capture work as one operational update.
 
+- `2026-08-11` `PENDING` **26 h**
+  `122 files | +8 410 −1 900 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
+  Lay summary: Site assessments are easier to fill and publish, jobs show clearer location and ownership, and staff can see whether a record was created here or received from a partner.
+  **Structured assessments, clearer job editing, and partner-origin tracking.** Assessments now use clear sections for site findings so teams can complete and publish reports more consistently.
+  Job screens support richer editing, including location on a map and who is assigned, plus clearer type-specific details.
+  Estimates and related commercial documents keep improved line-item and publish behaviour for everyday quoting.
+  Records show whether they were created in this workspace or received from a partner organisation.
+  Integration mapping for jobs is clearer, and inbound partner webhooks are more reliable.
+  Written reviews compare claims, jobs, and estimates against partner system gaps so follow-up work stays focused.
+  Outcome: field capture, job ownership, and partner-sourced records work together in one operational update.
+

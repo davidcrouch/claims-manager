@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { CatalogSelectionService } from '../catalog/services/catalog-selection.service';
 import { AddCatalogAssemblyDto, AddCatalogPrimitiveDto } from '../catalog/dto/catalog.dto';
 import { WorkOrdersService } from './work-orders.service';
@@ -52,13 +53,20 @@ export class WorkOrdersController {
   }
 
   @Post()
-  async create(@Body() body: Record<string, unknown>) {
-    return this.workOrdersService.create({ body });
+  async create(
+    @Body() body: Record<string, unknown>,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.workOrdersService.create({ body, userId });
   }
 
   @Post(':id')
-  async update(@Param('id') id: string, @Body() body: Record<string, unknown>) {
-    return this.workOrdersService.update({ id, body });
+  async update(
+    @Param('id') id: string,
+    @Body() body: Record<string, unknown>,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.workOrdersService.update({ id, body, userId });
   }
 
   @Post(':woId/groups/:groupId/catalog-items')

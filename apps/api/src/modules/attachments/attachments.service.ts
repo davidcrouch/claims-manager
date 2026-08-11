@@ -132,7 +132,7 @@ export class AttachmentsService {
     return `${base}${ext}`;
   }
 
-  async create(params: { body: Record<string, unknown> }) {
+  async create(params: { body: Record<string, unknown>; userId?: string }) {
     const tenantId = this.tenantContext.getTenantId();
     const connectionId = await this.resolveConnectionId(tenantId);
     const apiAttachment = await this.crunchworkService.createAttachment({
@@ -151,11 +151,17 @@ export class AttachmentsService {
       mimeType: apiObj.mimeType as string,
       fileUrl: apiObj.fileUrl as string,
       apiPayload: apiAttachment as Record<string, unknown>,
+      createdByUserId: params.userId ?? null,
+      updatedByUserId: params.userId ?? null,
     };
     return this.attachmentsRepo.create({ data: insertData });
   }
 
-  async update(params: { id: string; body: Record<string, unknown> }) {
+  async update(params: {
+    id: string;
+    body: Record<string, unknown>;
+    userId?: string;
+  }) {
     const existing = await this.findOne({ id: params.id });
     if (!existing) return null;
 
@@ -174,6 +180,7 @@ export class AttachmentsService {
         apiPayload: apiAttachment as Record<string, unknown>,
         title: (apiObj.title as string) ?? existing.title,
         description: (apiObj.description as string) ?? existing.description,
+        ...(params.userId ? { updatedByUserId: params.userId } : {}),
       },
     });
   }

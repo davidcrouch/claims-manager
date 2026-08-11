@@ -283,16 +283,29 @@ export class ProposalsService {
     });
   }
 
-  async create(params: { body: Record<string, unknown> }) {
+  async create(params: { body: Record<string, unknown>; userId?: string }) {
     const tenantId = this.tenantContext.getTenantId();
     const data = coerceProposalWrite(params.body);
+    delete data.createdByUserId;
+    delete data.updatedByUserId;
     this.logger.log(
       `ProposalsService.create tenantId=${tenantId} quoteId=${String(data.quoteId ?? '')} jobId=${String(data.jobId ?? '')}`,
     );
-    return this.proposalsRepo.create({ data: { ...data, tenantId } as any });
+    return this.proposalsRepo.create({
+      data: {
+        ...data,
+        tenantId,
+        createdByUserId: params.userId ?? null,
+        updatedByUserId: params.userId ?? null,
+      } as any,
+    });
   }
 
-  async update(params: { id: string; body: Record<string, unknown> }) {
+  async update(params: {
+    id: string;
+    body: Record<string, unknown>;
+    userId?: string;
+  }) {
     const tenantId = this.tenantContext.getTenantId();
     const existing = await this.proposalsRepo.findOne({ id: params.id, tenantId });
     if (!existing) {
@@ -300,6 +313,8 @@ export class ProposalsService {
     }
 
     const data: Record<string, unknown> = coerceProposalWrite(params.body);
+    delete data.createdByUserId;
+    delete data.updatedByUserId;
 
     // Resolve status by name if provided as { status: { name } }
     const statusObj = params.body.status as { name?: string } | undefined;
@@ -317,10 +332,12 @@ export class ProposalsService {
       delete data.status;
     }
 
+    if (params.userId) data.updatedByUserId = params.userId;
+
     return this.proposalsRepo.update({ id: params.id, data: data as any });
   }
 
-  async accept(params: { id: string }) {
+  async accept(params: { id: string; userId?: string }) {
     const tenantId = this.tenantContext.getTenantId();
     const existing = await this.proposalsRepo.findOne({ id: params.id, tenantId });
     if (!existing) {
@@ -337,14 +354,17 @@ export class ProposalsService {
 
     const updated = await this.proposalsRepo.update({
       id: params.id,
-      data: { statusLookupId: statusLookupId ?? undefined },
+      data: {
+        statusLookupId: statusLookupId ?? undefined,
+        ...(params.userId ? { updatedByUserId: params.userId } : {}),
+      },
     });
 
     this.logger.log(`ProposalsService.accept — proposal=${params.id} accepted`);
     return updated;
   }
 
-  async decline(params: { id: string; reason?: string }) {
+  async decline(params: { id: string; reason?: string; userId?: string }) {
     const tenantId = this.tenantContext.getTenantId();
     const existing = await this.proposalsRepo.findOne({ id: params.id, tenantId });
     if (!existing) {
@@ -369,6 +389,7 @@ export class ProposalsService {
       data: {
         statusLookupId: statusLookupId ?? undefined,
         customData,
+        ...(params.userId ? { updatedByUserId: params.userId } : {}),
       },
     });
 

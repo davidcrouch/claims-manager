@@ -45,6 +45,8 @@ export interface ApiCombo {
   index?: number;
   quantity?: number;
   catalogComboId?: string;
+  parentComboId?: string;
+  comboPayload?: Record<string, unknown>;
   lineScopeStatus?: ApiLookup;
   items?: ApiItem[];
   subTotal?: number;

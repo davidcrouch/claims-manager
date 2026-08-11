@@ -19,6 +19,7 @@ import {
 import { createReportAction } from '@/app/(app)/mutations';
 import {
   CreateSubmitOverlay,
+  navigateToCreated,
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
 
@@ -87,7 +88,7 @@ export function ReportFormDrawer({
       if (result.success) {
         if (result.report?.id) {
           startOpening();
-          router.push(`/reports/${result.report.id}`);
+          navigateToCreated(router, `/reports/${result.report.id}`);
           return;
         }
         resetPhase();

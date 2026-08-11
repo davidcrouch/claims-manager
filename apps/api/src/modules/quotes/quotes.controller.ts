@@ -64,13 +64,20 @@ export class QuotesController {
   }
 
   @Post()
-  async create(@Body() body: Record<string, unknown>) {
-    return this.quotesService.create({ body });
+  async create(
+    @Body() body: Record<string, unknown>,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.quotesService.create({ body, userId });
   }
 
   @Post(':id')
-  async update(@Param('id') id: string, @Body() body: Record<string, unknown>) {
-    return this.quotesService.update({ id, body });
+  async update(
+    @Param('id') id: string,
+    @Body() body: Record<string, unknown>,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.quotesService.update({ id, body, userId });
   }
 
   @Delete(':id')
@@ -87,8 +94,11 @@ export class QuotesController {
   }
 
   @Post(':id/approve')
-  async approve(@Param('id') id: string) {
-    return this.quotesService.approve({ id });
+  async approve(
+    @Param('id') id: string,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.quotesService.approve({ id, userId });
   }
 
   @Post(':id/incorporate-proposal-pricing')
@@ -119,7 +129,8 @@ export class QuotesController {
   }
 
   @Patch(':id/line-items')
-  updateQuoteLineItems(@Param('id') id: string, @Body() body: UpdateQuoteLineItemsDto) {
+  async updateQuoteLineItems(@Param('id') id: string, @Body() body: UpdateQuoteLineItemsDto) {
+    await this.quotesService.assertQuoteEditable({ id });
     return this.catalogSelectionService.updateQuoteLineItems({
       quoteId: id,
       items: body.items,
@@ -128,7 +139,8 @@ export class QuotesController {
   }
 
   @Post(':id/groups')
-  createOrEnsureQuoteGroup(@Param('id') id: string, @Body() body: CreateQuoteGroupDto) {
+  async createOrEnsureQuoteGroup(@Param('id') id: string, @Body() body: CreateQuoteGroupDto) {
+    await this.quotesService.assertQuoteEditable({ id });
     if (body.groupLabelLookupId || body.description) {
       return this.catalogSelectionService.createQuoteGroup({
         quoteId: id,
@@ -142,7 +154,8 @@ export class QuotesController {
   }
 
   @Patch(':id/groups/reorder')
-  reorderQuoteGroups(@Param('id') id: string, @Body() body: ReorderQuoteGroupsDto) {
+  async reorderQuoteGroups(@Param('id') id: string, @Body() body: ReorderQuoteGroupsDto) {
+    await this.quotesService.assertQuoteEditable({ id });
     return this.catalogSelectionService.reorderQuoteGroups({
       quoteId: id,
       groupIds: body.groupIds,
@@ -150,11 +163,12 @@ export class QuotesController {
   }
 
   @Patch(':quoteId/groups/:groupId')
-  updateQuoteGroup(
+  async updateQuoteGroup(
     @Param('quoteId') quoteId: string,
     @Param('groupId') groupId: string,
     @Body() body: UpdateQuoteGroupDto,
   ) {
+    await this.quotesService.assertQuoteEditable({ id: quoteId });
     return this.catalogSelectionService.updateQuoteGroup({
       quoteId,
       groupId,
@@ -165,19 +179,21 @@ export class QuotesController {
   }
 
   @Delete(':quoteId/groups/:groupId')
-  deleteQuoteGroup(
+  async deleteQuoteGroup(
     @Param('quoteId') quoteId: string,
     @Param('groupId') groupId: string,
   ) {
+    await this.quotesService.assertQuoteEditable({ id: quoteId });
     return this.catalogSelectionService.deleteQuoteGroup({ quoteId, groupId });
   }
 
   @Delete(':quoteId/items/:itemId')
-  deleteQuoteItem(
+  async deleteQuoteItem(
     @Param('quoteId') quoteId: string,
     @Param('itemId') itemId: string,
     @Query('removeFromCatalogAssembly') removeFromCatalogAssembly?: string,
   ) {
+    await this.quotesService.assertQuoteEditable({ id: quoteId });
     return this.catalogSelectionService.deleteQuoteItem({
       quoteId,
       itemId,
@@ -186,18 +202,21 @@ export class QuotesController {
   }
 
   @Delete(':quoteId/combos/:comboId')
-  deleteQuoteCombo(
+  async deleteQuoteCombo(
     @Param('quoteId') quoteId: string,
     @Param('comboId') comboId: string,
   ) {
+    await this.quotesService.assertQuoteEditable({ id: quoteId });
     return this.catalogSelectionService.deleteQuoteCombo({ quoteId, comboId });
   }
 
   @Post(':quoteId/groups/:groupId/catalog-items')
-  addCatalogItem(
+  async addCatalogItem(
+    @Param('quoteId') quoteId: string,
     @Param('groupId') groupId: string,
     @Body() body: AddCatalogPrimitiveDto,
   ) {
+    await this.quotesService.assertQuoteEditable({ id: quoteId });
     return this.catalogSelectionService.addPrimitiveToQuote({
       quoteGroupId: body.quoteComboId ? undefined : groupId,
       quoteComboId: body.quoteComboId,
@@ -207,14 +226,17 @@ export class QuotesController {
   }
 
   @Post(':quoteId/groups/:groupId/catalog-assemblies')
-  addCatalogAssembly(
+  async addCatalogAssembly(
+    @Param('quoteId') quoteId: string,
     @Param('groupId') groupId: string,
     @Body() body: AddCatalogAssemblyDto,
   ) {
+    await this.quotesService.assertQuoteEditable({ id: quoteId });
     return this.catalogSelectionService.addAssemblyToQuote({
       quoteGroupId: groupId,
       catalogAssemblyId: body.catalogAssemblyId,
       quantity: body.quantity,
+      parentComboId: body.quoteComboId,
     });
   }
 

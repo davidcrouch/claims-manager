@@ -47,7 +47,7 @@ export class MessagesService {
     return this.messagesRepo.findOne({ id: params.id, tenantId });
   }
 
-  async create(params: { body: Record<string, unknown> }) {
+  async create(params: { body: Record<string, unknown>; userId?: string }) {
     const tenantId = this.tenantContext.getTenantId();
     const connectionId = await this.resolveConnectionId(tenantId);
     const apiMessage = await this.crunchworkService.createMessage({
@@ -64,12 +64,13 @@ export class MessagesService {
       toJobId: apiObj.toJobId as string,
       subject: apiObj.subject as string,
       body: apiObj.body as string,
+      createdByUserId: params.userId ?? null,
       messagePayload: apiMessage as Record<string, unknown>,
     };
     return this.messagesRepo.create({ data: insertData });
   }
 
-  async acknowledge(params: { id: string }) {
+  async acknowledge(params: { id: string; userId?: string }) {
     if (!this.acknowledgeEnabled) {
       throw new NotImplementedException(
         '[MessagesService.acknowledge] Message acknowledgement is Phase 5 - set MESSAGE_ACKNOWLEDGE_ENABLED=true',
@@ -88,7 +89,10 @@ export class MessagesService {
 
     return this.messagesRepo.update({
       id: params.id,
-      data: { acknowledgedAt: new Date() },
+      data: {
+        acknowledgedAt: new Date(),
+        ...(params.userId ? { acknowledgedByUserId: params.userId } : {}),
+      },
     });
   }
 }

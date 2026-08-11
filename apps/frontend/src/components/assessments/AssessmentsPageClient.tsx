@@ -30,6 +30,7 @@ import { ListArchiveButton, LIST_ARCHIVE_TH_CLASS, LIST_ARCHIVE_TD_CLASS, LIST_A
 import type { Assessment, PaginatedResponse, Job, Claim } from '@/types/api';
 import type { JobOption } from '@/components/shared/job-label';
 import { resolveJobName } from '@/components/shared/job-label';
+import { asStr, sectionDict } from './assessment-sections';
 
 type ListTab = 'active' | 'archived' | 'all';
 
@@ -141,7 +142,7 @@ export function AssessmentsPageClient({
   const handlePageChange = (newPage: number) => setPage(newPage);
 
   const uniqueStatuses = useMemo(
-    () => ['draft', 'submitted', 'reviewed', 'archived'],
+    () => ['draft', 'in_progress', 'submitted', 'reviewed', 'published', 'archived'],
     [],
   );
 
@@ -185,7 +186,9 @@ export function AssessmentsPageClient({
       rows = rows.filter(
         (a) =>
           a.name.toLowerCase().includes(q) ||
-          (a.claimRecommendation ?? '').toLowerCase().includes(q),
+          asStr(sectionDict(a, 'recommendation').claimRecommendation)
+            .toLowerCase()
+            .includes(q),
       );
     }
 
@@ -196,8 +199,10 @@ export function AssessmentsPageClient({
 
   const statusColors: Record<string, string> = {
     draft: 'bg-amber-100 text-amber-700',
+    in_progress: 'bg-sky-100 text-sky-700',
     submitted: 'bg-blue-100 text-blue-700',
     reviewed: 'bg-green-100 text-green-700',
+    published: 'bg-emerald-100 text-emerald-700',
     archived: 'bg-slate-100 text-slate-600',
   };
 

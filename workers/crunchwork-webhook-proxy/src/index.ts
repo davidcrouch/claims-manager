@@ -1,11 +1,44 @@
-const PRIMARY_URL = "https://api-staging.branlamie.com/api/webhook";
-const SECONDARY_URLS = ["https://api-dev.branlamie.com/api/webhook"];
+// Temporarily prefer local/dev so Crunchwork gets the tunnel response.
+// Staging fan-out paused — restore providers-staging as PRIMARY when ready.
+const PRIMARY_URL = "https://api-dev.branlamie.com/api/webhook";
+const SECONDARY_URLS: string[] = [];
+// const SECONDARY_URLS = ["https://providers-staging.branlamie.com/api/webhook"];
+
+const HOP_BY_HOP = new Set([
+  "connection",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "te",
+  "trailers",
+  "transfer-encoding",
+  "upgrade",
+  "host",
+  "cf-connecting-ip",
+  "cf-ipcountry",
+  "cf-ray",
+  "cf-visitor",
+  "cdn-loop",
+]);
+
+function forwardHeaders(request: Request): Headers {
+  const headers = new Headers();
+  for (const [key, value] of request.headers.entries()) {
+    if (HOP_BY_HOP.has(key.toLowerCase())) continue;
+    headers.set(key, value);
+  }
+  return headers;
+}
 
 export default {
-  async fetch(request: Request): Promise<Response> {
+  async fetch(
+    request: Request,
+    _env: unknown,
+    ctx: ExecutionContext,
+  ): Promise<Response> {
     try {
       const body = await request.arrayBuffer();
-      const headers = new Headers(request.headers);
+      const headers = forwardHeaders(request);
 
       const primaryPromise = fetch(PRIMARY_URL, {
         method: request.method,
@@ -15,14 +48,26 @@ export default {
       });
 
       for (const url of SECONDARY_URLS) {
-        fetch(url, {
+        const secondary = fetch(url, {
           method: request.method,
           headers,
           body,
           redirect: "manual",
-        }).catch((err) =>
-          console.error(`[WebhookProxy.fetch] secondary target failed: ${url}`, err),
-        );
+        })
+          .then(async (res) => {
+            if (!res.ok) {
+              console.error(
+                `[WebhookProxy.fetch] secondary target non-OK: ${url} status=${res.status}`,
+              );
+            }
+          })
+          .catch((err) =>
+            console.error(
+              `[WebhookProxy.fetch] secondary target failed: ${url}`,
+              err,
+            ),
+          );
+        ctx.waitUntil(secondary);
       }
 
       const response = await primaryPromise;

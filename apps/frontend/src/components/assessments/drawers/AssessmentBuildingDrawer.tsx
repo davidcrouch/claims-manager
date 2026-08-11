@@ -21,14 +21,19 @@ import {
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
 import { updateAssessmentAction } from '@/app/(app)/assessments/actions';
+import {
+  BUILDING_TYPES,
+  CLAIM_RECOMMENDATIONS,
+  CONSTRUCTION_TYPES,
+  DESIGN_TYPES,
+  MAKE_SAFE_TYPES,
+  ROOF_TYPES,
+  asBool,
+  asStr,
+  isAssessmentLocked,
+  sectionDict,
+} from '../assessment-sections';
 import type { Assessment } from '@/types/api';
-
-const CLAIM_RECOMMENDATIONS = ['Approve', 'Decline', 'Refer', 'Pending'];
-const MAKE_SAFE_TYPES = ['Tarp', 'Board Up', 'Temporary Fence', 'Other'];
-const DESIGN_TYPES = ['Standard', 'Custom', 'Heritage', 'Multi-storey'];
-const CONSTRUCTION_TYPES = ['Brick Veneer', 'Double Brick', 'Weatherboard', 'Fibro', 'Concrete', 'Steel Frame', 'Other'];
-const ROOF_TYPES = ['Tile', 'Metal', 'Slate', 'Flat', 'Colorbond', 'Other'];
-const BUILDING_TYPES = ['House', 'Unit', 'Townhouse', 'Duplex', 'Commercial', 'Other'];
 
 export interface AssessmentBuildingDrawerProps {
   open: boolean;
@@ -74,20 +79,24 @@ function emptyForm(): BuildingFormData {
 }
 
 function fromAssessment(data: Partial<Assessment>): BuildingFormData {
+  const bld = sectionDict(data, 'building');
+  const rec = sectionDict(data, 'recommendation');
+  const ms = sectionDict(data, 'makeSafe');
+  const att = sectionDict(data, 'attendance');
   return {
-    claimRecommendation: data.claimRecommendation ?? '',
-    designType: data.designType ?? '',
-    construction: data.construction ?? '',
-    roofType: data.roofType ?? '',
-    buildingType: data.buildingType ?? '',
-    makeSafeType: data.makeSafeType ?? '',
-    squares: data.squares ?? '',
-    buildingAge: data.buildingAge != null ? String(data.buildingAge) : '',
-    squareMetres: data.squareMetres ?? '',
-    dateBooked: data.dateBooked ?? '',
-    makeSafe: data.makeSafe ?? false,
-    overallConditionAcceptable: data.overallConditionAcceptable ?? false,
-    iagInspectionRequired: data.iagInspectionRequired ?? false,
+    claimRecommendation: asStr(rec.claimRecommendation),
+    designType: asStr(bld.designType),
+    construction: asStr(bld.constructionType),
+    roofType: asStr(bld.roofType),
+    buildingType: asStr(bld.buildingType),
+    makeSafeType: asStr(ms.makeSafeType),
+    squares: asStr(bld.squares),
+    buildingAge: asStr(bld.estimatedBuildYear),
+    squareMetres: asStr(bld.houseM2),
+    dateBooked: asStr(att.siteAttendanceDate).slice(0, 10),
+    makeSafe: asBool(ms.makeSafeRequired),
+    overallConditionAcceptable: asBool(bld.propertyCondition),
+    iagInspectionRequired: asBool(att.insuranceAssessorAttended),
   };
 }
 
@@ -122,23 +131,35 @@ export function AssessmentBuildingDrawer({
       setError('No assessment ID provided');
       return;
     }
+    if (isAssessmentLocked(initialData?.status)) {
+      setError('This assessment has been published and cannot be edited');
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
       await updateAssessmentAction(assessmentId, {
-        claimRecommendation: form.claimRecommendation || null,
-        designType: form.designType || null,
-        construction: form.construction || null,
-        roofType: form.roofType || null,
-        buildingType: form.buildingType || null,
-        makeSafeType: form.makeSafeType || null,
-        squares: form.squares || null,
-        buildingAge: form.buildingAge ? parseInt(form.buildingAge, 10) : null,
-        squareMetres: form.squareMetres || null,
-        dateBooked: form.dateBooked || null,
-        makeSafe: form.makeSafe,
-        overallConditionAcceptable: form.overallConditionAcceptable,
-        iagInspectionRequired: form.iagInspectionRequired,
+        recommendation: {
+          claimRecommendation: form.claimRecommendation || undefined,
+        },
+        building: {
+          designType: form.designType || undefined,
+          constructionType: form.construction || undefined,
+          roofType: form.roofType || undefined,
+          buildingType: form.buildingType || undefined,
+          squares: form.squares || undefined,
+          estimatedBuildYear: form.buildingAge || undefined,
+          houseM2: form.squareMetres ? Number(form.squareMetres) : undefined,
+          propertyCondition: form.overallConditionAcceptable,
+        },
+        makeSafe: {
+          makeSafeType: form.makeSafeType || undefined,
+          makeSafeRequired: form.makeSafe,
+        },
+        attendance: {
+          siteAttendanceDate: form.dateBooked || undefined,
+          insuranceAssessorAttended: form.iagInspectionRequired,
+        },
       });
       onOpenChange(false);
       router.refresh();
@@ -277,7 +298,7 @@ export function AssessmentBuildingDrawer({
           <Button type="button" variant="outline" size="lg" className="min-w-36 px-8" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button type="submit" size="lg" className="min-w-36 px-8" disabled={submitting}>
+          <Button type="submit" size="lg" className="min-w-36 px-8" disabled={submitting || isAssessmentLocked(initialData?.status)}>
             {submitting ? 'Saving...' : 'Save Changes'}
           </Button>
         </BottomFormDrawerFooter>

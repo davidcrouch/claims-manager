@@ -1,10 +1,12 @@
 import {
   applyMarkup,
+  buildComboPayload,
   comboKindFromPayload,
   computeLineTotals,
   formatDecimal,
   isCatalogBomParentKind,
   isScopeComboPayload,
+  parentComboIdFromPayload,
   parseDecimal,
 } from './catalog.utils';
 
@@ -59,6 +61,27 @@ describe('catalog.utils', () => {
     it('detects scope combo payloads', () => {
       expect(isScopeComboPayload({ kind: 'scope' })).toBe(true);
       expect(isScopeComboPayload({ kind: 'assembly' })).toBe(false);
+    });
+  });
+
+  describe('parentComboIdFromPayload', () => {
+    it('reads parentComboId from payload or nested comboPayload', () => {
+      expect(parentComboIdFromPayload({ parentComboId: 'scope-1' })).toBe('scope-1');
+      expect(parentComboIdFromPayload({ comboPayload: { parentComboId: 'scope-2' } })).toBe(
+        'scope-2',
+      );
+      expect(parentComboIdFromPayload({ kind: 'assembly' })).toBeNull();
+      expect(parentComboIdFromPayload(null)).toBeNull();
+    });
+  });
+
+  describe('buildComboPayload', () => {
+    it('includes parentComboId only when set', () => {
+      expect(buildComboPayload({ kind: 'scope' })).toEqual({ kind: 'scope' });
+      expect(buildComboPayload({ kind: 'assembly', parentComboId: 'scope-1' })).toEqual({
+        kind: 'assembly',
+        parentComboId: 'scope-1',
+      });
     });
   });
 

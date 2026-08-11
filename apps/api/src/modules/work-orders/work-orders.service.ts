@@ -89,12 +89,31 @@ export class WorkOrdersService {
     });
   }
 
-  async create(params: { body: Record<string, unknown> }) {
+  async create(params: { body: Record<string, unknown>; userId?: string }) {
     const tenantId = this.tenantContext.getTenantId();
-    return this.workOrdersRepo.create({ data: { ...params.body, tenantId } as any });
+    const { createdByUserId: _c, updatedByUserId: _u, ...rest } = params.body;
+    return this.workOrdersRepo.create({
+      data: {
+        ...rest,
+        tenantId,
+        createdByUserId: params.userId ?? null,
+        updatedByUserId: params.userId ?? null,
+      } as any,
+    });
   }
 
-  async update(params: { id: string; body: Record<string, unknown> }) {
-    return this.workOrdersRepo.update({ id: params.id, data: params.body as any });
+  async update(params: {
+    id: string;
+    body: Record<string, unknown>;
+    userId?: string;
+  }) {
+    const { createdByUserId: _c, updatedByUserId: _u, ...rest } = params.body;
+    return this.workOrdersRepo.update({
+      id: params.id,
+      data: {
+        ...rest,
+        ...(params.userId ? { updatedByUserId: params.userId } : {}),
+      } as any,
+    });
   }
 }

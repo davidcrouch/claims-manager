@@ -26,6 +26,7 @@ import {
 import { createPurchaseOrderAction } from '@/app/(app)/mutations';
 import {
   CreateSubmitOverlay,
+  navigateToCreated,
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
 import { fetchJobQuotesAction } from '@/app/(app)/jobs/[id]/actions';
@@ -132,7 +133,7 @@ export function PurchaseOrderFormDrawer({
       if (result.success) {
         if (result.purchaseOrder?.id) {
           startOpening();
-          router.push(`/purchase-orders/${result.purchaseOrder.id}`);
+          navigateToCreated(router, `/purchase-orders/${result.purchaseOrder.id}`);
           return;
         }
         resetPhase();
