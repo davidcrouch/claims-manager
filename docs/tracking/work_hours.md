@@ -617,7 +617,7 @@
   An insurance industry API reference was added for integration planning alongside the operational update.
   Outcome: partner trading, documents, and day-to-day capture work as one operational update.
 
-- `2026-08-11` `PENDING` **26 h**
+- `2026-08-11` `07180a9` **26 h**
   `122 files | +8 410 −1 900 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
   Lay summary: Site assessments are easier to fill and publish, jobs show clearer location and ownership, and staff can see whether a record was created here or received from a partner.
   **Structured assessments, clearer job editing, and partner-origin tracking.** Assessments now use clear sections for site findings so teams can complete and publish reports more consistently.
