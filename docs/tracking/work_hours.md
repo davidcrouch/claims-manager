@@ -637,7 +637,7 @@
   The change is limited to how the web app decides which paths need middleware.
   Outcome: staff can complete login and use the workspace without the previous API failure.
 
-- `2026-08-13` `PENDING` **40 h**
+- `2026-08-13` `5326be7` **40 h**
   `133 files | +4 230 −3 261 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
   Lay summary: Staff only see and change what their role allows, can switch organisation without signing in again, and the product now deploys to the hosted cloud environments.
   **Role-based access, safer sign-in, organisation switching, and hosted deploy updates.** Staff permissions now control who can view and change each area of the product, with an administration screen to manage roles.
