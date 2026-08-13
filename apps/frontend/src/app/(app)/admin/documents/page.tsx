@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { FilesystemSettingsPanel } from '@/components/filesystem/FilesystemSettingsPanel';
 
-export const metadata = { title: 'Document Categories — EnsureOS' };
+export const metadata = { title: 'Filesystem Categories — EnsureOS' };
 
 export default async function DocumentSettingsPage() {
   const api = await getServerApiClient();

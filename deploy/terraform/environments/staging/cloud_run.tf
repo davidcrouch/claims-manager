@@ -166,7 +166,6 @@ module "cloud_run_api" {
     VERTEX_AI_LOCATION     = "us-central1"
     VERTEX_EMBEDDING_MODEL = "text-embedding-005"
     SEED_NEW_TENANTS       = "true"
-    SEED_SAMPLE_DATA       = "true"
     # Documents / provisioning template uploads (CI syncs data/templates → platform/templates/)
     GCS_DOCUMENTS_BUCKET   = module.gcs.documents_bucket_name
     GCS_UPLOAD_CORS_ORIGIN = (
@@ -458,6 +457,59 @@ resource "google_cloud_run_v2_job" "migrate_api" {
           value_source {
             secret_key_ref {
               secret  = "database-url-api"
+              version = "latest"
+            }
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [google_project_service.run]
+}
+
+# Catalogue seed (auth-server image). Run after migrate-api — API owns RBAC DDL.
+resource "google_cloud_run_v2_job" "seed_auth_rbac" {
+  count    = var.enable_cloud_run ? 1 : 0
+  project  = var.project_id
+  name     = "seed-auth-rbac"
+  location = var.region
+
+  template {
+    template {
+      service_account = module.iam.service_account_emails["auth-server"]
+      timeout         = "300s"
+      max_retries     = 1
+
+      vpc_access {
+        egress = "PRIVATE_RANGES_ONLY"
+        network_interfaces {
+          network    = regex("projects/.+$", module.networking.vpc_self_link)
+          subnetwork = regex("projects/.+$", module.networking.subnet_self_link)
+        }
+      }
+
+      containers {
+        image   = var.cloud_run_use_bootstrap_image ? local.bootstrap_image : "${local.artifact_host}/auth-server:${local.image_tag}"
+        command = ["node", "dist/scripts/seed-rbac.js"]
+
+        resources {
+          limits = {
+            cpu    = "1"
+            memory = "512Mi"
+          }
+        }
+
+        env {
+          name  = "NODE_ENV"
+          value = "production"
+        }
+
+        env {
+          name = "DATABASE_URL"
+          value_source {
+            secret_key_ref {
+              secret  = "database-url-auth"
               version = "latest"
             }
           }

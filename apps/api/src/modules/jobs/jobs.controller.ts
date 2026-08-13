@@ -9,12 +9,15 @@ import {
   Query,
 } from '@nestjs/common';
 import { JobsService } from './jobs.service';
+import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 
 @Controller('jobs')
 export class JobsController {
   constructor(private readonly jobsService: JobsService) {}
 
   @Get()
+  @RequirePermission(P.jobs.read)
   async findAll(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -38,11 +41,13 @@ export class JobsController {
   }
 
   @Get(':id')
+  @RequirePermission(P.jobs.read)
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.jobsService.findOne({ id });
   }
 
   @Post()
+  @RequirePermission(P.jobs.create)
   async create(
     @Body() body: Record<string, unknown>,
     @Query('provider') providerOverride?: string,
@@ -51,6 +56,7 @@ export class JobsController {
   }
 
   @Post(':id/contacts')
+  @RequirePermission(P.jobs.update)
   async addContacts(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: { contacts?: Record<string, unknown>[] },
@@ -59,6 +65,7 @@ export class JobsController {
   }
 
   @Delete(':id/contacts/:contactId')
+  @RequirePermission(P.jobs.update)
   async removeContact(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('contactId', ParseUUIDPipe) contactId: string,
@@ -67,6 +74,7 @@ export class JobsController {
   }
 
   @Post(':id')
+  @RequirePermission(P.jobs.update)
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: Record<string, unknown>,

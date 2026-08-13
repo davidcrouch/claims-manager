@@ -1,5 +1,11 @@
 
+import { randomBytes } from 'node:crypto';
 import { getServiceName as getServiceNameUtil, getServiceVersion as getServiceVersionUtil } from '../lib/service-config.js';
+
+// SECURITY (F-19): when OIDC_COOKIES_KEYS is not provided in a non-production
+// environment we generate a single random key ONCE per process rather than
+// using a hard-coded, source-visible string.
+let _ephemeralCookieKey: string | null = null;
 
 /**
  * Validate all environment variables for Auth Server
@@ -30,22 +36,36 @@ export function validateAuthServerEnvironment(): boolean {
       getServerConfig();
       getCorsOrigins();
       getGoogleOAuthConfig();
+      getMicrosoftOAuthConfig();
       getBaseUrl();
       getConsoleSharedSecret();
       getIatSigningKey();
       getApiUrl();
-//      getMcpBaseUrl();
       getRateLimitConfig();
       getTokenTtlConfig();
+      getEmailConfig();
+      getOidcCookieKeys();
+      getJwtExpectedAudience();
 
-      // JWKS validation (optional but recommended for production)
+      // JWKS validation. SECURITY (F-15): required in production.
       try {
          getJwksConfig();
       } catch (error) {
-         console.warn({ 
-            jwksNotFound: true,
-            fallback: 'development_keys'
-         }, 'JWKS configuration not found - using development keys');
+         if (isProduction()) {
+            throw new Error('JWKS signing keys are required in production (JWT_PUBLIC_KEY_N / JWT_PRIVATE_KEY_* must be set)');
+         }
+         console.warn({
+            jwksNotFound: true
+         }, 'JWKS configuration not found (non-production) - signing keys must be set for production');
+      }
+
+      // SECURITY (F-12 / F-11): fail closed in production for at-rest token
+      // encryption and JWT audience enforcement.
+      if (isProduction()) {
+         const redisEncKey = getEnvVar('REDIS_ENCRYPTION_KEY');
+         if (!redisEncKey || Buffer.from(redisEncKey, 'hex').length !== 32) {
+            throw new Error('REDIS_ENCRYPTION_KEY is required in production and must be 32 bytes (64 hex chars)');
+         }
       }
 
       console.info({ 
@@ -702,14 +722,15 @@ export function getOidcCookieKeys(): string[] {
   const keysEnv = getEnvVar('OIDC_COOKIES_KEYS');
   
   if (!keysEnv) {
-    // In development, generate a random key (not recommended for production)
     if (process.env.NODE_ENV !== 'production') {
+      if (!_ephemeralCookieKey) {
+        _ephemeralCookieKey = randomBytes(32).toString('base64');
+      }
       console.warn({
         warning: 'OIDC_COOKIES_KEYS not set',
-        fallback: 'random_development_key'
-      }, 'env-validation:getOidcCookieKeys - Using random development key for OIDC cookies. Set OIDC_COOKIES_KEYS for production.');
-      // Generate a deterministic but unique key based on some stable value
-      return ['development-cookie-key-do-not-use-in-production'];
+        fallback: 'ephemeral_process_key'
+      }, 'env-validation:getOidcCookieKeys - Using ephemeral development key for OIDC cookies. Set OIDC_COOKIES_KEYS for production.');
+      return [_ephemeralCookieKey];
     }
     throw new Error('OIDC_COOKIES_KEYS environment variable is required in production. Generate with: openssl rand -base64 32');
   }

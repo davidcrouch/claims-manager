@@ -7,12 +7,15 @@ import {
   Query,
 } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
+import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 
 @Controller('notifications')
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
   @Get()
+  @RequirePermission(P.messaging.read)
   async findAll(
     @Query('entityType') entityType?: string,
     @Query('isRead') isRead?: string,
@@ -28,22 +31,26 @@ export class NotificationsController {
   }
 
   @Get('unread-count')
+  @RequirePermission(P.messaging.read)
   async getUnreadCount() {
     return this.notificationsService.getUnreadCount();
   }
 
   @Get('unread-entity-ids')
+  @RequirePermission(P.messaging.read)
   async getUnreadEntityIds(@Query('entityType') entityType: string) {
     return this.notificationsService.getUnreadEntityIds(entityType);
   }
 
   @Patch(':id/read')
+  @RequirePermission(P.messaging.send)
   async markAsRead(@Param('id', ParseUUIDPipe) id: string) {
     await this.notificationsService.markAsRead(id);
     return { ok: true };
   }
 
   @Patch('entity/:entityType/:entityId/read')
+  @RequirePermission(P.messaging.send)
   async markEntityAsRead(
     @Param('entityType') entityType: string,
     @Param('entityId', ParseUUIDPipe) entityId: string,

@@ -116,6 +116,11 @@ export interface DashboardInboxDto {
     count: number;
     href: string;
     items: DashboardActiveJobItem[];
+    mine: {
+      count: number;
+      href: string;
+      items: DashboardActiveJobItem[];
+    };
   };
 }
 
@@ -224,15 +229,16 @@ export class DashboardService {
     ]);
 
     const excludeJobStatusIds = inactiveJobStatusIds(jobStatusLookups);
-    const assignedActiveJobs =
-      assignedClaimIds.length > 0
-        ? await this.jobsRepo.findActiveForInbox({
-            tenantId,
-            excludeStatusIds: excludeJobStatusIds,
-            claimIds: assignedClaimIds,
-            limit: ACTIVE_JOBS_LIMIT,
-          })
-        : { data: [], total: 0 };
+    const hasMineScope = Boolean(userId) || assignedClaimIds.length > 0;
+    const assignedActiveJobs = hasMineScope
+      ? await this.jobsRepo.findActiveForInbox({
+          tenantId,
+          excludeStatusIds: excludeJobStatusIds,
+          claimIds: assignedClaimIds,
+          assignedToUserId: userId ?? undefined,
+          limit: ACTIVE_JOBS_LIMIT,
+        })
+      : { data: [], total: 0 };
     const scopedToUser = assignedActiveJobs.total > 0;
 
     const woStatusIds = matchLookupIdsByNames(woLookups, WO_ACCEPT_STATUS_NAMES);
@@ -321,16 +327,14 @@ export class DashboardService {
         to: day.to,
         limit: TODAY_LIMIT,
       }),
-      scopedToUser
-        ? Promise.resolve(assignedActiveJobs)
-        : this.jobsRepo.findActiveForInbox({
-            tenantId,
-            excludeStatusIds: excludeJobStatusIds,
-            limit: ACTIVE_JOBS_LIMIT,
-          }),
+      this.jobsRepo.findActiveForInbox({
+        tenantId,
+        excludeStatusIds: excludeJobStatusIds,
+        limit: ACTIVE_JOBS_LIMIT,
+      }),
     ]);
 
-    const activeJobRows = scopedToUser ? assignedActiveJobs : tenantActiveJobs;
+    const activeJobRows = tenantActiveJobs;
 
     const now = new Date();
     const dueSoon = openTasks.data.filter((task) => {
@@ -498,7 +502,9 @@ export class DashboardService {
     }));
 
     const unreadJobSet = new Set(unreadJobIds);
-    const activeJobItems: DashboardActiveJobItem[] = activeJobRows.data.map((job) => ({
+    const toActiveJobItem = (
+      job: (typeof activeJobRows.data)[number],
+    ): DashboardActiveJobItem => ({
       id: job.id,
       title: humanizeTitle(
         'Job',
@@ -513,7 +519,12 @@ export class DashboardService {
       updatedAt: job.updatedAt ? new Date(job.updatedAt).toISOString() : null,
       unread: unreadJobSet.has(job.id),
       href: `/jobs/${job.id}`,
-    }));
+    });
+    const activeJobItems = activeJobRows.data.map(toActiveJobItem);
+    const myJobItems = assignedActiveJobs.data.map(toActiveJobItem);
+    const myJobsHref = userId
+      ? `/jobs?assignedToUserId=${encodeURIComponent(userId)}`
+      : '/jobs';
 
     const actionRequired = queues
       .filter((q) =>
@@ -543,6 +554,11 @@ export class DashboardService {
         count: activeJobRows.total,
         href: '/jobs',
         items: activeJobItems,
+        mine: {
+          count: assignedActiveJobs.total,
+          href: myJobsHref,
+          items: myJobItems,
+        },
       },
     };
   }

@@ -39,7 +39,7 @@ export function CatalogItemDetailClient({
 
   if (editing) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         <SetPageHeader>
           <ListPageHeader icon={Package} title={`Edit ${item.name}`} total={0} accent="slate" />
         </SetPageHeader>
@@ -72,7 +72,7 @@ export function CatalogItemDetailClient({
         <ListPageHeader icon={Package} title={item.name} total={0} accent="slate" />
       </SetPageHeader>
 
-      <div className="px-6 pb-6">
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
         <div className="mb-4 flex items-center justify-between">
           <Link
             href="/admin/catalog"

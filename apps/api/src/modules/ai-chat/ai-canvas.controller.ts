@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 import { AiCanvasService } from './ai-canvas.service';
 
 @ApiTags('ai-chat')
@@ -21,7 +22,7 @@ export class AiCanvasController {
   constructor(private readonly canvasService: AiCanvasService) {}
 
   @Post()
-  @RequirePermission('ai.manage')
+  @RequirePermission(P.ai.manage)
   @ApiOperation({ summary: 'Create a canvas artifact' })
   async create(
     @Body()
@@ -42,7 +43,7 @@ export class AiCanvasController {
   }
 
   @Get(':id')
-  @RequirePermission('ai.read')
+  @RequirePermission(P.ai.read)
   @ApiOperation({ summary: 'Get a canvas artifact' })
   async get(@Param('id') id: string) {
     this.logger.log(`[AiCanvasController.get] id=${id}`);
@@ -52,7 +53,7 @@ export class AiCanvasController {
   }
 
   @Put(':id')
-  @RequirePermission('ai.manage')
+  @RequirePermission(P.ai.manage)
   @ApiOperation({ summary: 'Update a canvas artifact (creates new version)' })
   async update(@Param('id') id: string, @Body() body: { content: string }) {
     this.logger.log(`[AiCanvasController.update] id=${id}`);
@@ -62,7 +63,7 @@ export class AiCanvasController {
   }
 
   @Delete(':id')
-  @RequirePermission('ai.manage')
+  @RequirePermission(P.ai.manage)
   @ApiOperation({ summary: 'Delete a canvas artifact' })
   async remove(@Param('id') id: string) {
     this.logger.log(`[AiCanvasController.delete] id=${id}`);
@@ -72,7 +73,7 @@ export class AiCanvasController {
   }
 
   @Get('conversation/:conversationId')
-  @RequirePermission('ai.read')
+  @RequirePermission(P.ai.read)
   @ApiOperation({ summary: 'List canvas artifacts for a conversation' })
   async listByConversation(@Param('conversationId') conversationId: string) {
     this.logger.log(

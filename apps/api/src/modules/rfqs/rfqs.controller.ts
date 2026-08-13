@@ -1,12 +1,15 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { RfqsService } from './rfqs.service';
+import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 
 @Controller('rfqs')
 export class RfqsController {
   constructor(private readonly rfqsService: RfqsService) {}
 
   @Get()
+  @RequirePermission(P.procurement.read)
   async findAll(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -28,21 +31,25 @@ export class RfqsController {
   }
 
   @Get('job/:jobId')
+  @RequirePermission(P.procurement.read)
   async findByJob(@Param('jobId') jobId: string) {
     return this.rfqsService.findByJob({ jobId });
   }
 
   @Get('quote/:quoteId')
+  @RequirePermission(P.procurement.read)
   async findByQuote(@Param('quoteId') quoteId: string) {
     return this.rfqsService.findByQuote({ quoteId });
   }
 
   @Get(':id/line-items')
+  @RequirePermission(P.procurement.read)
   async getLineItems(@Param('id') id: string) {
     return this.rfqsService.getRfqLineItems({ rfqId: id });
   }
 
   @Post(':id/line-items')
+  @RequirePermission(P.procurement.manage)
   async replaceLineItems(
     @Param('id') id: string,
     @Body() body: { selectedItemIds?: string[] },
@@ -54,11 +61,13 @@ export class RfqsController {
   }
 
   @Get(':id')
+  @RequirePermission(P.procurement.read)
   async findOne(@Param('id') id: string) {
     return this.rfqsService.findOne({ id });
   }
 
   @Post()
+  @RequirePermission(P.procurement.manage)
   async create(
     @Body() body: Record<string, unknown>,
     @CurrentUser('sub') userId: string,
@@ -67,6 +76,7 @@ export class RfqsController {
   }
 
   @Post(':id')
+  @RequirePermission(P.procurement.manage)
   async update(
     @Param('id') id: string,
     @Body() body: Record<string, unknown>,

@@ -36,7 +36,7 @@ import { inspect } from 'node:util';
 import isEmpty from 'lodash/isEmpty.js';
 import { storeAuthResult, deleteStoredAuthResult, CLAIMS_MANAGER_UI_CLIENT_ID } from '../config/oidc-provider.js';
 import { getStaticClients } from '../config/static-clients.js';
-import { getClientId, getApiUrl, getBaseUrl, getPostLogoutRedirectUrl, getEnvVarWithDefault, getTokenTtlConfig, getMicrosoftOAuthConfig } from '../config/env-validation.js';
+import { getClientId, getApiUrl, getBaseUrl, getCorsOrigins, getPostLogoutRedirectUrl, getEnvVarWithDefault, getTokenTtlConfig, getMicrosoftOAuthConfig } from '../config/env-validation.js';
 import { GlobalCacheManager, type IUnifiedRedisClient } from '../lib/cache/global-cache-manager.js';
 // Local db services for user operations
 import { createUsersService, createUserIdentitiesService } from '../db/services/index.js';
@@ -73,8 +73,9 @@ import { ConsentPage } from '../views/ConsentPage.js';
 import { ResetPasswordPage } from '../views/ResetPasswordPage.js';
 import { OnboardCompanyPage } from '../views/OnboardCompanyPage.js';
 import { AcceptInvitePage } from '../views/AcceptInvitePage.js';
+import { InviteAcceptedPage } from '../views/InviteAcceptedPage.js';
 import { requestPasswordReset, confirmPasswordReset } from '../services/password-reset-service.js';
-import { getInviteTokenPreview, acceptInvite } from '../services/invitation-service.js';
+import { getInviteTokenPreview, acceptInvite, acceptInviteWithoutPassword } from '../services/invitation-service.js';
 
 
 // Type for MCP server resourceInfo (matches RFC 9728 and McpServerResourceInfo schema - snake_case per RFC 9728)
@@ -1212,6 +1213,15 @@ export default function createAuthRoutes(
    // =============================================================================
    // LOGIN SUBMISSION ROUTES
    // =============================================================================
+
+   /**
+    * GET /interaction/:uid/login — the login form POSTs here; GET must not fall through
+    * to oidc-provider (unhandled route → 500 JSON). Send users to the real login page.
+    */
+   app.get('/interaction/:uid/login', setNoCache, (req: Request, res: Response) => {
+      const uid = typeof req.params.uid === 'string' ? req.params.uid : '';
+      res.redirect(303, `${getRequestBaseUrl(req)}/login?interaction=${encodeURIComponent(uid)}`);
+   });
 
    /**
     * POST /interaction/:uid/login - Handles login form submission
@@ -2820,22 +2830,54 @@ export default function createAuthRoutes(
    // INVITATION ACCEPTANCE ROUTES
    // =============================================================================
 
-   app.get('/accept-invite', async (req: Request, res: Response) => {
-      const token = req.query.token as string;
-      if (!token) {
-         return res.status(400).send('Missing invitation token');
-      }
+   function appLoginUrl(): string {
+      const clientOrigin = getCorsOrigins()[0] || 'http://localhost:3000';
+      return `${clientOrigin}/api/auth/login?returnTo=/dashboard`;
+   }
 
+   app.get('/accept-invite', setNoCache, async (req: Request, res: Response, next: NextFunction) => {
       try {
+         const token = (req.query.token as string | undefined)?.trim() ?? '';
+         const error = req.query.error as string | undefined;
+         const loginUrl = appLoginUrl();
+
+         if (!token) {
+            return res.redirect(loginUrl);
+         }
+
          const preview = await getInviteTokenPreview(token);
          if (!preview.valid) {
-            return res.status(400).send(preview.error || 'Invalid or expired invitation');
+            return res.redirect(loginUrl);
+         }
+
+         if (preview.userId) {
+            const identities = await userIdentitiesService.getIdentitiesByUserId(systemContext, preview.userId);
+            const oauthIdentity = identities.find(
+               (id) => id.provider === 'microsoft' || id.provider === 'google',
+            );
+
+            if (oauthIdentity) {
+               await acceptInviteWithoutPassword(token);
+               const providerLabel = oauthIdentity.provider === 'microsoft' ? 'Microsoft' : 'Google';
+               const html = renderPage(
+                  React.createElement(InviteAcceptedPage, {
+                     email: preview.email,
+                     providerLabel,
+                     loginUrl,
+                     nonce: res.locals.cspNonce as string | undefined,
+                  }),
+                  { title: 'EnsureOS — Invitation Accepted' },
+               );
+               return res.send(html);
+            }
          }
 
          const html = renderPage(
             React.createElement(AcceptInvitePage, {
                token,
                email: preview.email || '',
+               error: error ? decodeURIComponent(error) : null,
+               loginUrl,
                nonce: res.locals.cspNonce as string | undefined,
             }),
             { title: 'EnsureOS — Accept Invitation' },
@@ -2846,39 +2888,53 @@ export default function createAuthRoutes(
             { error: error.message },
             'auth-server:auth-routes:getAcceptInvite - Failed to render invite page',
          );
-         res.status(500).send('Something went wrong. Please try again.');
+         return next(error);
       }
    });
 
-   app.post('/accept-invite', async (req: Request, res: Response) => {
-      const { token, password } = req.body;
-      if (!token || !password) {
-         return res.status(400).json({ error: 'Token and password required' });
-      }
-
+   async function handleAcceptInvitePost(req: Request, res: Response): Promise<void> {
+      const baseUrl = getRequestBaseUrl(req);
+      const loginUrl = appLoginUrl();
       try {
-         const result = await acceptInvite({ token, password });
-         if (!result.success) {
-            const html = renderPage(
-               React.createElement(AcceptInvitePage, {
-                  token,
-                  email: result.email || '',
-                  error: result.error,
-                  nonce: res.locals.cspNonce as string | undefined,
-               }),
-               { title: 'EnsureOS — Accept Invitation' },
+         const token = (req.body?.token || '').trim();
+         const password = (req.body?.password || '').trim();
+         const confirmPassword = (req.body?.confirmPassword || '').trim();
+
+         if (!token || !password) {
+            res.redirect(loginUrl);
+            return;
+         }
+         if (password !== confirmPassword) {
+            res.redirect(
+               `${baseUrl}/accept-invite?token=${encodeURIComponent(token)}&error=${encodeURIComponent('Passwords do not match.')}`,
             );
-            return res.status(400).send(html);
+            return;
          }
 
-         res.redirect('/login?invited=true');
+         const result = await acceptInvite({ token, password });
+         if (!result.success) {
+            res.redirect(
+               `${baseUrl}/accept-invite?token=${encodeURIComponent(token)}&error=${encodeURIComponent(result.error || 'Failed to accept invitation.')}`,
+            );
+            return;
+         }
+
+         res.redirect(loginUrl);
       } catch (error: any) {
          log.error(
             { error: error.message },
             'auth-server:auth-routes:postAcceptInvite - Failed to accept invite',
          );
-         res.status(500).json({ error: 'Failed to accept invitation. Please try again.' });
+         res.redirect(loginUrl);
       }
+   }
+
+   app.post('/api/auth/accept-invite', urlencoded({ extended: false }), async (req: Request, res: Response) => {
+      await handleAcceptInvitePost(req, res);
+   });
+
+   app.post('/accept-invite', urlencoded({ extended: false }), async (req: Request, res: Response) => {
+      await handleAcceptInvitePost(req, res);
    });
 
    // =============================================================================

@@ -6,7 +6,8 @@
  * callers (e.g. an event consumer) can reuse it.
  *
  * Primary responsibility: demand-seed a newly-provisioned tenant.
- * Runs catalog-dev (DB-only); sample-data gated by SEED_SAMPLE_DATA.
+ * Always runs catalog-dev, MCP, and lookups. When the tenant is
+ * Ensure Construction, also upserts the Crunchwork staging connection.
  * Document template uploads are handled by first-login provisioning (ProvisioningService).
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
@@ -15,9 +16,13 @@ import { eq } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../database/drizzle.module';
 import { organizations } from '../../database/schema';
 import type { SeedResult } from '../../database/seeds/lib/runner';
-import { seedSampleDataForTenant } from '../../database/seeds/entries/sample-data.seed';
 import { seedCatalogDevForTenant } from '../../database/seeds/entries/catalog-dev.seed';
 import { seedMcpForTenant } from '../../database/seeds/entries/mcp.seed';
+import { seedLookupsForTenant } from '../../database/seeds/entries/lookups.seed';
+import {
+  isEnsureConstructionOrg,
+  seedCrunchworkStagingConnection,
+} from '../../database/seeds/entries/ensure-construction.seed';
 
 const LOG = 'InternalService';
 
@@ -47,14 +52,6 @@ export class InternalService {
     return raw.trim().toLowerCase() === 'true';
   }
 
-  isSampleDataEnabled(): boolean {
-    const raw =
-      this.config.get<string>('SEED_SAMPLE_DATA') ??
-      process.env.SEED_SAMPLE_DATA ??
-      '';
-    return raw.trim().toLowerCase() === 'true';
-  }
-
   async seedTenant(params: { tenantId: string }): Promise<SeedTenantOutcome> {
     const { tenantId } = params;
     const fn = 'seedTenant';
@@ -67,7 +64,11 @@ export class InternalService {
     }
 
     const [org] = await this.db
-      .select({ id: organizations.id, name: organizations.name })
+      .select({
+        id: organizations.id,
+        name: organizations.name,
+        slug: organizations.slug,
+      })
       .from(organizations)
       .where(eq(organizations.id, tenantId))
       .limit(1);
@@ -77,9 +78,12 @@ export class InternalService {
       return { status: 'not-found', tenantId };
     }
 
-    const includeSample = this.isSampleDataEnabled();
+    const attachCrunchwork = isEnsureConstructionOrg({
+      name: org.name,
+      slug: org.slug,
+    });
     this.logger.log(
-      `[${LOG}.${fn}] starting seed tenantId=${tenantId} name="${org.name}" sampleData=${includeSample}`,
+      `[${LOG}.${fn}] starting seed tenantId=${tenantId} name="${org.name}" crunchwork=${attachCrunchwork}`,
     );
 
     const logger = {
@@ -101,33 +105,38 @@ export class InternalService {
         logger,
       });
 
-      let sampleResult: SeedResult | undefined;
-      if (includeSample) {
-        sampleResult = await seedSampleDataForTenant({
+      const lookupsResult = await seedLookupsForTenant({
+        db: this.db,
+        tenantId,
+        logger,
+      });
+
+      let connectionInserted = 0;
+      let connectionSkipped = 0;
+      if (attachCrunchwork) {
+        const conn = await seedCrunchworkStagingConnection({
           db: this.db,
           tenantId,
           logger,
         });
-      } else {
-        this.logger.log(
-          `[${LOG}.${fn}] SEED_SAMPLE_DATA is not enabled — skipping sample-data tenantId=${tenantId}`,
-        );
+        connectionInserted = conn.inserted;
+        connectionSkipped = conn.skipped;
       }
 
       const result: SeedResult = {
         inserted:
           catalogResult.inserted +
           mcpResult.inserted +
-          (sampleResult?.inserted ?? 0),
+          lookupsResult.inserted +
+          connectionInserted,
         updated:
-          catalogResult.updated +
-          mcpResult.updated +
-          (sampleResult?.updated ?? 0),
+          catalogResult.updated + mcpResult.updated + lookupsResult.updated,
         skipped:
           catalogResult.skipped +
           mcpResult.skipped +
-          (sampleResult?.skipped ?? 0),
-        notes: `tenant=${tenantId}; catalog; mcp;${includeSample ? ' sample-data' : ' no-sample'}`,
+          lookupsResult.skipped +
+          connectionSkipped,
+        notes: `tenant=${tenantId}; catalog; mcp; lookups${attachCrunchwork ? '; crunchwork-staging' : ''}`,
       };
 
       this.logger.log(

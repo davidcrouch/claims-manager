@@ -206,6 +206,7 @@ export class JobsRepository {
     tenantId: string;
     excludeStatusIds?: string[];
     claimIds?: string[];
+    assignedToUserId?: string;
     limit?: number;
   }): Promise<{ data: JobViewRow[]; total: number }> {
     const limit = Math.min(params.limit ?? 12, 50);
@@ -213,6 +214,7 @@ export class JobsRepository {
     const jobTypeLookup = aliasedTable(lookupValues, 'job_type_lookup');
     const excludeStatusIds = params.excludeStatusIds?.filter(Boolean) ?? [];
     const claimIds = params.claimIds?.filter(Boolean) ?? [];
+    const assignedToUserId = params.assignedToUserId?.trim() || null;
 
     const whereParts = [
       eq(jobs.tenantId, params.tenantId),
@@ -223,8 +225,17 @@ export class JobsRepository {
         or(isNull(jobs.statusLookupId), notInArray(jobs.statusLookupId, excludeStatusIds))!,
       );
     }
+    const mineParts = [];
     if (claimIds.length > 0) {
-      whereParts.push(inArray(jobs.claimId, claimIds));
+      mineParts.push(inArray(jobs.claimId, claimIds));
+    }
+    if (assignedToUserId) {
+      mineParts.push(eq(jobs.assignedToUserId, assignedToUserId));
+    }
+    if (mineParts.length === 1) {
+      whereParts.push(mineParts[0]);
+    } else if (mineParts.length > 1) {
+      whereParts.push(or(...mineParts)!);
     }
     const whereClause = and(...whereParts);
 

@@ -57,6 +57,15 @@ export interface InviteUserResult {
   status: string;
 }
 
+async function activateUserAndMembership(userId: string, organizationId: string): Promise<void> {
+  const { createUsersRepository } = await import('../db/repositories/users-repository.js');
+  const { createOrganizationUsersRepository } = await import('../db/repositories/organization-users-repository.js');
+  const usersRepo = createUsersRepository(() => getDb(), undefined);
+  const orgUsersRepo = createOrganizationUsersRepository(() => getDb(), undefined);
+  await usersRepo.update(systemContext, userId, { status: 'Active' } as any);
+  await orgUsersRepo.updateStatus(systemContext, userId, organizationId, 'Active');
+}
+
 export async function inviteUser(params: InviteUserParams): Promise<InviteUserResult> {
   const { email: rawEmail, givenName, familyName, roles, organizationId, invitedByUserId } = params;
   const email = rawEmail.trim().toLowerCase();
@@ -84,9 +93,14 @@ export async function inviteUser(params: InviteUserParams): Promise<InviteUserRe
   let userId: string;
 
   if (user) {
+    if (user.status !== 'Invited' && user.status !== 'Active') {
+      throw new Error(
+        `auth-server:invitation:inviteUser - User ${email} has status ${user.status} and cannot be invited`,
+      );
+    }
     userId = user.id;
     log.info(
-      { email, userId },
+      { email, userId, status: user.status },
       'auth-server:invitation:inviteUser - Existing user found',
     );
   } else {
@@ -132,6 +146,8 @@ export async function inviteUser(params: InviteUserParams): Promise<InviteUserRe
 
   const db = getDb();
   await assignUserRoles(db, userId, organizationId, roles);
+
+  await invalidateInviteTokensForEmail(email);
 
   const token = randomBytes(32).toString('hex');
   const tokenData: InviteTokenData = {
@@ -194,14 +210,22 @@ export async function acceptInvite(params: {
 
   if (!raw) {
     log.warn({}, 'auth-server:invitation:acceptInvite - Invalid or expired token');
-    return { success: false, error: 'Invalid or expired invitation token.' };
+    return {
+      success: false,
+      error: 'Invalid or expired invitation. Please ask your admin to send a new invite.',
+    };
   }
 
   const tokenData: InviteTokenData = typeof raw === 'string' ? JSON.parse(raw) : raw;
-  const { email, userId } = tokenData;
+  const { email, userId, organizationId } = tokenData;
 
   if (!password || password.length < 12) {
-    return { success: false, error: 'Password must be at least 12 characters.' };
+    return { success: false, error: 'Password must be at least 12 characters.', email };
+  }
+
+  const user = await usersService.getUser(systemContext, userId);
+  if (!user) {
+    return { success: false, error: 'Account not found. The invitation may be stale.', email };
   }
 
   const existingIdentity = await userIdentitiesService.getByProviderAndProviderUserId({
@@ -210,35 +234,31 @@ export async function acceptInvite(params: {
     providerUserId: email,
   });
 
-  if (existingIdentity) {
+  if (!existingIdentity) {
+    const passwordHash = await bcrypt.hash(password, 12);
+    await userIdentitiesService.createUserIdentity(systemContext, {
+      userId,
+      provider: 'password',
+      providerUserId: email,
+      displayName: null,
+      avatarUrl: null,
+      rawProfile: {
+        passwordHash,
+        passwordSetAt: new Date().toISOString(),
+      },
+      accessToken: null,
+      refreshToken: null,
+      tokenExpiresAt: null,
+    });
+  } else if (existingIdentity.userId !== userId) {
     log.warn(
-      { email },
-      'auth-server:invitation:acceptInvite - Password identity already exists',
+      { email, userId, existingUserId: existingIdentity.userId },
+      'auth-server:invitation:acceptInvite - Password identity belongs to another user',
     );
-    return { success: false, error: 'A password has already been set for this account.' };
+    return { success: false, error: 'An account with this email already exists.', email };
   }
 
-  const passwordHash = await bcrypt.hash(password, 12);
-
-  await userIdentitiesService.createUserIdentity(systemContext, {
-    userId,
-    provider: 'password',
-    providerUserId: email,
-    displayName: null,
-    avatarUrl: null,
-    rawProfile: {
-      passwordHash,
-      passwordSetAt: new Date().toISOString(),
-    },
-    accessToken: null,
-    refreshToken: null,
-    tokenExpiresAt: null,
-  });
-
-  const { createUsersRepository } = await import('../db/repositories/users-repository.js');
-  const usersRepo = createUsersRepository(() => getDb(), undefined);
-  await usersRepo.update(systemContext, userId, { status: 'Active' } as any);
-
+  await activateUserAndMembership(userId, organizationId);
   await redis.del(`${INVITE_TOKEN_PREFIX}${token}`);
 
   log.info(
@@ -259,16 +279,16 @@ export async function acceptInviteWithoutPassword(
 
   if (!raw) {
     log.warn({}, 'auth-server:invitation:acceptInviteWithoutPassword - Invalid or expired token');
-    return { success: false, error: 'Invalid or expired invitation token.' };
+    return {
+      success: false,
+      error: 'Invalid or expired invitation. Please ask your admin to send a new invite.',
+    };
   }
 
   const tokenData: InviteTokenData = typeof raw === 'string' ? JSON.parse(raw) : raw;
-  const { email, userId } = tokenData;
+  const { email, userId, organizationId } = tokenData;
 
-  const { createUsersRepository } = await import('../db/repositories/users-repository.js');
-  const usersRepo = createUsersRepository(() => getDb(), undefined);
-  await usersRepo.update(systemContext, userId, { status: 'Active' } as any);
-
+  await activateUserAndMembership(userId, organizationId);
   await redis.del(`${INVITE_TOKEN_PREFIX}${token}`);
 
   log.info(
@@ -288,7 +308,10 @@ export async function getInviteTokenPreview(
   const raw = await redis.get<string>(`${INVITE_TOKEN_PREFIX}${token}`);
 
   if (!raw) {
-    return { valid: false, error: 'Invalid or expired invitation token.' };
+    return {
+      valid: false,
+      error: 'Invalid or expired invitation. Please ask your admin to send a new invite.',
+    };
   }
 
   const tokenData: InviteTokenData = typeof raw === 'string' ? JSON.parse(raw) : raw;
@@ -296,33 +319,42 @@ export async function getInviteTokenPreview(
 }
 
 export async function invalidateInviteTokensForEmail(email: string): Promise<number> {
+  const normalizedEmail = email.trim().toLowerCase();
   log.info(
-    { email },
+    { email: normalizedEmail },
     'auth-server:invitation:invalidateInviteTokensForEmail - Scanning for tokens',
   );
 
-  const redis = await GlobalCacheManager.getInstance('auth-server');
-  const keys = await redis.keys(`${INVITE_TOKEN_PREFIX}*`);
-  let deleted = 0;
+  try {
+    const redis = await GlobalCacheManager.getInstance('auth-server');
+    const keys = await redis.keys(`${INVITE_TOKEN_PREFIX}*`);
+    let deleted = 0;
 
-  for (const key of keys) {
-    try {
-      const raw = await redis.get<string>(key);
-      if (!raw) continue;
-      const data: InviteTokenData = typeof raw === 'string' ? JSON.parse(raw) : raw;
-      if (data.email === email) {
-        await redis.del(key);
-        deleted++;
+    for (const key of keys) {
+      try {
+        const raw = await redis.get<string>(key);
+        if (!raw) continue;
+        const data: InviteTokenData = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (data.email === normalizedEmail) {
+          await redis.del(key);
+          deleted++;
+        }
+      } catch {
+        // Skip malformed entries
       }
-    } catch {
-      // Skip malformed entries
     }
+
+    log.info(
+      { email: normalizedEmail, deleted },
+      'auth-server:invitation:invalidateInviteTokensForEmail - Cleanup complete',
+    );
+
+    return deleted;
+  } catch (err: any) {
+    log.warn(
+      { email: normalizedEmail, error: err.message },
+      'auth-server:invitation:invalidateInviteTokensForEmail - Failed (non-fatal)',
+    );
+    return 0;
   }
-
-  log.info(
-    { email, deleted },
-    'auth-server:invitation:invalidateInviteTokensForEmail - Cleanup complete',
-  );
-
-  return deleted;
 }

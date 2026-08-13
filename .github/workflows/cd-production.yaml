@@ -135,3 +135,45 @@ jobs:
             --project "${PROD_PROJECT}" \
             --region "${GCP_REGION}" \
             --wait
+
+  seed-rbac:
+    needs: [migrate]
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Set image tag
+        run: |
+          if [ -n "${{ github.event.inputs.image_tag }}" ]; then
+            echo "IMAGE_TAG=${{ github.event.inputs.image_tag }}" >> "$GITHUB_ENV"
+          elif [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "IMAGE_TAG=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+          else
+            echo "IMAGE_TAG=main-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          fi
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ci-deployer@claims-manager-infra-493807.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Run seed-auth-rbac Job
+        run: |
+          if ! gcloud run jobs describe seed-auth-rbac \
+            --project "${PROD_PROJECT}" \
+            --region "${GCP_REGION}" > /dev/null 2>&1; then
+            echo "::warning::seed-auth-rbac job missing; apply production terraform then re-run CD"
+            exit 0
+          fi
+          gcloud run jobs update seed-auth-rbac \
+            --project "${PROD_PROJECT}" \
+            --region "${GCP_REGION}" \
+            --image "${{ env.REGISTRY }}/auth-server:${IMAGE_TAG}"
+          gcloud run jobs execute seed-auth-rbac \
+            --project "${PROD_PROJECT}" \
+            --region "${GCP_REGION}" \
+            --wait

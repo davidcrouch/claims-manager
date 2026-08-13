@@ -105,6 +105,27 @@ export class OrganizationUsersRepository {
     if (!row) throw new Error('Failed to create organization_user');
     return row;
   }
+
+  async updateStatus(
+    context: AccessContext,
+    userId: string,
+    organizationId: string,
+    status: string,
+  ): Promise<void> {
+    await this.db()
+      .update(organizationUsers)
+      .set({
+        status,
+        modified: new Date().toISOString(),
+        modifiedBy: context.userId ?? '00000000-0000-0000-0000-000000000000',
+      })
+      .where(
+        and(
+          eq(organizationUsers.userId, userId),
+          eq(organizationUsers.organizationId, organizationId),
+        ),
+      );
+  }
 }
 
 export function createOrganizationUsersRepository(database: DbGetter, loggerFactory?: unknown) {

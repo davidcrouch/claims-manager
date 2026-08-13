@@ -1,12 +1,15 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { TasksService } from './tasks.service';
+import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 
 @Controller('tasks')
 export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
   @Get()
+  @RequirePermission(P.workflows.read)
   async findAll(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -36,16 +39,19 @@ export class TasksController {
   }
 
   @Get('job/:jobId')
+  @RequirePermission(P.workflows.read)
   async findByJob(@Param('jobId') jobId: string) {
     return this.tasksService.findByJob({ jobId });
   }
 
   @Get('claim/:claimId')
+  @RequirePermission(P.workflows.read)
   async findByClaim(@Param('claimId') claimId: string) {
     return this.tasksService.findByClaim({ claimId });
   }
 
   @Get('entity/:entityType/:entityId')
+  @RequirePermission(P.workflows.read)
   async findByEntity(
     @Param('entityType') entityType: string,
     @Param('entityId') entityId: string,
@@ -54,16 +60,19 @@ export class TasksController {
   }
 
   @Get('overdue')
+  @RequirePermission(P.workflows.read)
   async findOverdue() {
     return this.tasksService.findOverdue();
   }
 
   @Get(':id')
+  @RequirePermission(P.workflows.read)
   async findOne(@Param('id') id: string) {
     return this.tasksService.findOne({ id });
   }
 
   @Post()
+  @RequirePermission(P.workflows.manage)
   async create(
     @Body() body: Record<string, unknown>,
     @CurrentUser('sub') userId: string,
@@ -72,6 +81,7 @@ export class TasksController {
   }
 
   @Post(':id')
+  @RequirePermission(P.workflows.manage)
   async update(@Param('id') id: string, @Body() body: Record<string, unknown>) {
     return this.tasksService.update({ id, body });
   }

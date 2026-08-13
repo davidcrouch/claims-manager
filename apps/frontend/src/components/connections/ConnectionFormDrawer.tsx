@@ -98,16 +98,6 @@ export function ConnectionFormDrawer({
           <div className="space-y-6">
             <div className="grid grid-cols-3 gap-x-4">
               <div className="space-y-1.5">
-                <Label>Connection Name</Label>
-                <Input
-                  value={connectionName}
-                  onChange={(e) => setConnectionName(e.target.value)}
-                  placeholder={entry ? `e.g. ${entry.name} Production` : ''}
-                  disabled={!entry}
-                />
-              </div>
-
-              <div className="space-y-1.5">
                 <Label>
                   Provider <span className="text-rose-500">*</span>
                 </Label>
@@ -115,7 +105,7 @@ export function ConnectionFormDrawer({
                   value={selectedCode}
                   onValueChange={(v) => v && setSelectedCode(v as ProviderCode)}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select a provider..." />
                   </SelectTrigger>
                   <SelectContent>
@@ -135,15 +125,27 @@ export function ConnectionFormDrawer({
               </div>
 
               <div className="space-y-1.5">
+                <Label>Connection Name</Label>
+                <Input
+                  value={connectionName}
+                  onChange={(e) => setConnectionName(e.target.value)}
+                  placeholder={
+                    entry
+                      ? `e.g. ${entry.name} Production`
+                      : 'e.g. Production'
+                  }
+                />
+              </div>
+
+              <div className="space-y-1.5">
                 <Label>Environment</Label>
                 <Select
                   value={environment}
                   onValueChange={(v) =>
                     v && setEnvironment(v as 'staging' | 'production')
                   }
-                  disabled={!entry}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

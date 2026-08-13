@@ -475,7 +475,7 @@ export function FilesystemSettingsPanel({
         <SetPageHeader>
           <ListPageHeader
             icon={FolderOpen}
-            title="Document Categories"
+            title="Filesystem Categories"
             total={0}
             accent="amber"
           />
@@ -493,7 +493,7 @@ export function FilesystemSettingsPanel({
         <SetPageHeader>
           <ListPageHeader
             icon={FolderOpen}
-            title="Document Categories"
+            title="Filesystem Categories"
             total={0}
             accent="amber"
           />
@@ -537,7 +537,7 @@ export function FilesystemSettingsPanel({
                 )}
               </select>
               <p className="text-xs text-slate-500">
-                Applied now for organisation-wide document categories.
+                Applied now for organisation-wide filesystem categories.
               </p>
             </div>
 
@@ -602,7 +602,7 @@ export function FilesystemSettingsPanel({
       <SetPageHeader>
         <ListPageHeader
           icon={FolderOpen}
-          title="Document Categories"
+          title="Filesystem Categories"
           total={0}
           accent="amber"
         />
@@ -639,7 +639,7 @@ export function FilesystemSettingsPanel({
               <div className="min-w-0 space-y-4">
                 <div className="min-w-0">
                   <h3 className="text-base font-semibold text-slate-900">
-                    Company document categories
+                    Company filesystem categories
                   </h3>
                   <p className="mt-1 text-sm text-slate-500">
                     Organisation-wide folders
@@ -735,7 +735,7 @@ export function FilesystemSettingsPanel({
               <div className="min-w-0 space-y-4">
                 <div className="min-w-0">
                   <h3 className="text-base font-semibold text-slate-900">
-                    Project document categories
+                    Project filesystem categories
                   </h3>
                   <p className="mt-1 text-sm text-slate-500">
                     Prefills folder categories and pipelines when creating jobs

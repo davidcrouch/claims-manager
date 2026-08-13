@@ -14,6 +14,8 @@ import {
 import type { Response } from 'express';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { JournalsService } from './journals.service';
+import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 import {
   CreateJournalDto,
   UpdateJournalDto,
@@ -29,6 +31,7 @@ export class JournalsController {
   constructor(private readonly journalsService: JournalsService) {}
 
   @Get()
+  @RequirePermission(P.journals.read)
   async findAll(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -44,6 +47,7 @@ export class JournalsController {
   }
 
   @Get('entity/:entityType/:entityId')
+  @RequirePermission(P.journals.read)
   async findByEntity(
     @Param('entityType') entityType: string,
     @Param('entityId', ParseUUIDPipe) entityId: string,
@@ -52,11 +56,13 @@ export class JournalsController {
   }
 
   @Get(':id')
+  @RequirePermission(P.journals.read)
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.journalsService.findOne({ id });
   }
 
   @Post()
+  @RequirePermission(P.journals.manage)
   async create(
     @Body() dto: CreateJournalDto,
     @CurrentUser('sub') userId: string,
@@ -65,6 +71,7 @@ export class JournalsController {
   }
 
   @Patch(':id')
+  @RequirePermission(P.journals.manage)
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateJournalDto,
@@ -74,6 +81,7 @@ export class JournalsController {
   }
 
   @Delete(':id')
+  @RequirePermission(P.journals.manage)
   async softDelete(@Param('id', ParseUUIDPipe) id: string) {
     return this.journalsService.softDelete({ id });
   }
@@ -81,6 +89,7 @@ export class JournalsController {
   // -- Entity linking --
 
   @Post(':journalId/link')
+  @RequirePermission(P.journals.manage)
   async linkToEntity(
     @Param('journalId', ParseUUIDPipe) journalId: string,
     @Body() dto: LinkJournalDto,
@@ -93,6 +102,7 @@ export class JournalsController {
   }
 
   @Delete(':journalId/link/:entityType/:entityId')
+  @RequirePermission(P.journals.manage)
   async unlinkFromEntity(
     @Param('journalId', ParseUUIDPipe) journalId: string,
     @Param('entityType') entityType: string,
@@ -104,6 +114,7 @@ export class JournalsController {
   // -- Pages --
 
   @Get(':journalId/pages')
+  @RequirePermission(P.journals.read)
   async getPages(
     @Param('journalId', ParseUUIDPipe) journalId: string,
     @Query('limit') limit?: string,
@@ -117,6 +128,7 @@ export class JournalsController {
   }
 
   @Get(':journalId/pages/:pageId')
+  @RequirePermission(P.journals.read)
   async getPage(
     @Param('journalId', ParseUUIDPipe) journalId: string,
     @Param('pageId', ParseUUIDPipe) pageId: string,
@@ -125,6 +137,7 @@ export class JournalsController {
   }
 
   @Post(':journalId/pages')
+  @RequirePermission(P.journals.manage)
   async createPage(
     @Param('journalId', ParseUUIDPipe) journalId: string,
     @Body() dto: CreateJournalPageDto,
@@ -134,6 +147,7 @@ export class JournalsController {
   }
 
   @Patch(':journalId/pages/:pageId')
+  @RequirePermission(P.journals.manage)
   async updatePage(
     @Param('journalId', ParseUUIDPipe) journalId: string,
     @Param('pageId', ParseUUIDPipe) pageId: string,
@@ -143,6 +157,7 @@ export class JournalsController {
   }
 
   @Delete(':journalId/pages/:pageId')
+  @RequirePermission(P.journals.manage)
   async deletePage(
     @Param('journalId', ParseUUIDPipe) journalId: string,
     @Param('pageId', ParseUUIDPipe) pageId: string,
@@ -151,6 +166,7 @@ export class JournalsController {
   }
 
   @Post(':journalId/pages/reorder')
+  @RequirePermission(P.journals.manage)
   async reorderPages(
     @Param('journalId', ParseUUIDPipe) journalId: string,
     @Body() dto: ReorderPagesDto,
@@ -161,6 +177,7 @@ export class JournalsController {
   // -- Attachments --
 
   @Post(':journalId/pages/:pageId/attachments')
+  @RequirePermission(P.journals.manage)
   async createAttachment(
     @Param('journalId', ParseUUIDPipe) journalId: string,
     @Param('pageId', ParseUUIDPipe) pageId: string,
@@ -171,6 +188,7 @@ export class JournalsController {
   }
 
   @Delete(':journalId/pages/:pageId/attachments/:attachmentId')
+  @RequirePermission(P.journals.manage)
   async deleteAttachment(
     @Param('journalId', ParseUUIDPipe) journalId: string,
     @Param('pageId', ParseUUIDPipe) pageId: string,
@@ -182,6 +200,7 @@ export class JournalsController {
   // -- File upload (presigned URL) --
 
   @Post(':journalId/pages/:pageId/upload-url')
+  @RequirePermission(P.journals.manage)
   async getUploadUrl(
     @Param('journalId', ParseUUIDPipe) journalId: string,
     @Param('pageId', ParseUUIDPipe) pageId: string,
@@ -191,6 +210,7 @@ export class JournalsController {
   }
 
   @Get(':journalId/pages/:pageId/attachments/:attachmentId/download')
+  @RequirePermission(P.journals.read)
   async getDownloadUrl(
     @Param('journalId', ParseUUIDPipe) journalId: string,
     @Param('pageId', ParseUUIDPipe) pageId: string,
@@ -201,6 +221,7 @@ export class JournalsController {
 
   /** Stream bytes through the API (local ADC cannot mint signed URLs). */
   @Get(':journalId/pages/:pageId/attachments/:attachmentId/stream')
+  @RequirePermission(P.journals.read)
   async streamAttachment(
     @Param('journalId', ParseUUIDPipe) journalId: string,
     @Param('pageId', ParseUUIDPipe) pageId: string,

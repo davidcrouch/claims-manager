@@ -12,6 +12,7 @@ import {
 import { ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface';
 import { ConversationsService } from './conversations.service';
 
@@ -23,7 +24,7 @@ export class ConversationsController {
   constructor(private readonly service: ConversationsService) {}
 
   @Get()
-  @RequirePermission('ai.read')
+  @RequirePermission(P.ai.read)
   @ApiOperation({ summary: 'List conversations for current user' })
   @ApiQuery({ name: 'search', required: false })
   async list(
@@ -45,7 +46,7 @@ export class ConversationsController {
   }
 
   @Get(':id')
-  @RequirePermission('ai.read')
+  @RequirePermission(P.ai.read)
   @ApiOperation({ summary: 'Get a single conversation with messages' })
   @ApiParam({ name: 'id', description: 'Conversation UUID' })
   async getById(
@@ -56,7 +57,7 @@ export class ConversationsController {
   }
 
   @Post()
-  @RequirePermission('ai.manage')
+  @RequirePermission(P.ai.manage)
   @ApiOperation({ summary: 'Create a new conversation' })
   async create(
     @CurrentUser() user: AuthenticatedUser,
@@ -80,7 +81,7 @@ export class ConversationsController {
   }
 
   @Patch(':id')
-  @RequirePermission('ai.manage')
+  @RequirePermission(P.ai.manage)
   @ApiOperation({ summary: 'Update conversation (title, messages, pin, entity)' })
   @ApiParam({ name: 'id', description: 'Conversation UUID' })
   async update(
@@ -100,7 +101,7 @@ export class ConversationsController {
   }
 
   @Post(':id/share')
-  @RequirePermission('ai.manage')
+  @RequirePermission(P.ai.manage)
   @ApiOperation({ summary: 'Create a shareable link for a conversation' })
   @ApiParam({ name: 'id', description: 'Conversation UUID' })
   async createShare(
@@ -112,7 +113,7 @@ export class ConversationsController {
   }
 
   @Delete(':id')
-  @RequirePermission('ai.manage')
+  @RequirePermission(P.ai.manage)
   @ApiOperation({ summary: 'Delete a conversation' })
   @ApiParam({ name: 'id', description: 'Conversation UUID' })
   async delete(

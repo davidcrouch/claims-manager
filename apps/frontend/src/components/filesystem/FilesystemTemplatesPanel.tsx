@@ -196,7 +196,7 @@ export function FilesystemTemplatesPanel({
             <div className="border-b border-slate-100 px-4 py-3">
               <h3 className="text-sm font-semibold text-slate-900">Company</h3>
               <p className="text-xs text-slate-500">
-                Used for Admin → Document Categories (org filesystem).
+                Used for Admin → Filesystem Categories (org filesystem).
               </p>
             </div>
             {renderList(company, 'No company templates yet.')}

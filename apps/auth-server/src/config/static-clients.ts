@@ -68,7 +68,8 @@ interface ClientTemplate {
 const CLIENT_TEMPLATES: ClientTemplate[] = [
    {
       client_id: CLAIMS_MANAGER_UI_CLIENT_ID,
-      grant_types: ['authorization_code', 'client_credentials', 'refresh_token'],
+      // SECURITY (F-18): browser UI client — no client_credentials grant.
+      grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
       token_endpoint_auth_method: 'client_secret_basic',
       scope: 'openid profile email offline_access',

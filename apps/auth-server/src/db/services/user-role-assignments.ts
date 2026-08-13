@@ -3,7 +3,7 @@
  * Uses Drizzle ORM via getDb().
  */
 
-import { eq, and, isNull } from 'drizzle-orm';
+import { eq, and, isNull, sql } from 'drizzle-orm';
 import type { Db } from '../client.js';
 import { userRoleAssignments } from '../schema.js';
 import { createLogger, LoggerType } from '../../lib/logger.js';
@@ -13,8 +13,7 @@ const baseLogger = createLogger('auth-server:user-role-assignments', LoggerType.
 const log = createTelemetryLogger(baseLogger, 'user-role-assignments', 'UserRoleAssignments', 'auth-server');
 
 /**
- * Assign roles to a user within an organization.
- * Inserts new rows; silently ignores duplicates via ON CONFLICT DO NOTHING.
+ * Grant roles to a user in an organisation. Idempotent — clears revoked_at on conflict.
  */
 export async function assignUserRoles(
   db: Db,
@@ -32,43 +31,42 @@ export async function assignUserRoles(
   await db
     .insert(userRoleAssignments)
     .values(roleNames.map((roleName) => ({ userId, organizationId, roleName })))
-    .onConflictDoNothing({ target: [userRoleAssignments.userId, userRoleAssignments.organizationId, userRoleAssignments.roleName] });
+    .onConflictDoUpdate({
+      target: [userRoleAssignments.userId, userRoleAssignments.organizationId, userRoleAssignments.roleName],
+      // Drizzle's update-set types omit nullable columns when strictNullChecks is off.
+      set: { revokedAt: sql`NULL` } as any,
+    });
 }
 
 /**
- * Atomic replace: revoke all existing roles for (user, org), then assign new set.
+ * Revoke org-level roles from a user. Sets revoked_at rather than deleting.
  */
-export async function setUserRoles(
+export async function revokeUserRoles(
   db: Db,
   userId: string,
   organizationId: string,
   roleNames: string[],
 ): Promise<void> {
+  if (roleNames.length === 0) return;
+
   log.info(
-    { functionName: 'setUserRoles', userId, organizationId, roleNames },
-    'auth-server:user-role-assignments:setUserRoles - Atomic role replacement',
+    { functionName: 'revokeUserRoles', userId, organizationId, roleNames },
+    'auth-server:user-role-assignments:revokeUserRoles - Revoking roles',
   );
 
-  await db.transaction(async (tx) => {
-    // Soft-revoke all active assignments
-    await tx
+  for (const roleName of roleNames) {
+    await db
       .update(userRoleAssignments)
       .set({ revokedAt: new Date() } as any)
       .where(
         and(
           eq(userRoleAssignments.userId, userId),
           eq(userRoleAssignments.organizationId, organizationId),
+          eq(userRoleAssignments.roleName, roleName),
           isNull(userRoleAssignments.revokedAt),
         ),
       );
-
-    if (roleNames.length > 0) {
-      await tx
-        .insert(userRoleAssignments)
-        .values(roleNames.map((roleName) => ({ userId, organizationId, roleName })))
-        .onConflictDoNothing({ target: [userRoleAssignments.userId, userRoleAssignments.organizationId, userRoleAssignments.roleName] });
-    }
-  });
+  }
 }
 
 /**
@@ -96,4 +94,31 @@ export async function listUserRoles(
     );
 
   return rows.map((r) => r.roleName);
+}
+
+/**
+ * Atomically set a user's org roles to exactly the given list.
+ * Grants new roles (un-revoking if needed), revokes removed roles.
+ */
+export async function setUserRoles(
+  db: Db,
+  userId: string,
+  organizationId: string,
+  desiredRoles: string[],
+): Promise<void> {
+  log.info(
+    { functionName: 'setUserRoles', userId, organizationId, desiredRoles },
+    'auth-server:user-role-assignments:setUserRoles - Reconciling roles',
+  );
+
+  const currentRoles = await listUserRoles(db, userId, organizationId);
+  const toGrant = desiredRoles.filter((r) => !currentRoles.includes(r));
+  const toRevoke = currentRoles.filter((r) => !desiredRoles.includes(r));
+
+  if (toRevoke.length > 0) {
+    await revokeUserRoles(db, userId, organizationId, toRevoke);
+  }
+  if (toGrant.length > 0) {
+    await assignUserRoles(db, userId, organizationId, toGrant);
+  }
 }

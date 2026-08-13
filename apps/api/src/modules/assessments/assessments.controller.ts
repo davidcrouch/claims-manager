@@ -2,12 +2,15 @@ import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { AssessmentsService } from './assessments.service';
 import { CreateAssessmentDto, UpdateAssessmentDto } from './dto';
+import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 
 @Controller('assessments')
 export class AssessmentsController {
   constructor(private readonly assessmentsService: AssessmentsService) {}
 
   @Get()
+  @RequirePermission(P.assessments.read)
   async findAll(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -23,11 +26,13 @@ export class AssessmentsController {
   }
 
   @Get(':id')
+  @RequirePermission(P.assessments.read)
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.assessmentsService.findOne({ id });
   }
 
   @Post()
+  @RequirePermission(P.assessments.manage)
   async create(
     @Body() dto: CreateAssessmentDto,
     @CurrentUser('sub') userId: string,
@@ -36,6 +41,7 @@ export class AssessmentsController {
   }
 
   @Patch(':id')
+  @RequirePermission(P.assessments.manage)
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateAssessmentDto,
@@ -45,11 +51,13 @@ export class AssessmentsController {
   }
 
   @Post(':id/validate')
+  @RequirePermission(P.assessments.manage)
   async validate(@Param('id', ParseUUIDPipe) id: string) {
     return this.assessmentsService.validate({ id });
   }
 
   @Post(':id/publish')
+  @RequirePermission(P.assessments.manage)
   async publish(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('sub') userId: string,
@@ -58,6 +66,7 @@ export class AssessmentsController {
   }
 
   @Delete(':id')
+  @RequirePermission(P.assessments.manage)
   async softDelete(@Param('id', ParseUUIDPipe) id: string) {
     return this.assessmentsService.softDelete({ id });
   }

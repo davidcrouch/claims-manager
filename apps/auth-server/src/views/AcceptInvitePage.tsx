@@ -6,10 +6,11 @@ interface AcceptInvitePageProps {
   token: string;
   email: string;
   error?: string | null;
+  loginUrl?: string;
   nonce?: string;
 }
 
-export function AcceptInvitePage({ token, email, error, nonce }: AcceptInvitePageProps) {
+export function AcceptInvitePage({ token, email, error, loginUrl = '/login', nonce }: AcceptInvitePageProps) {
   const submitScript = `
     (function() {
       var form = document.getElementById('acceptForm');
@@ -68,7 +69,7 @@ export function AcceptInvitePage({ token, email, error, nonce }: AcceptInvitePag
 
             <form
               id="acceptForm"
-              action="/accept-invite"
+              action="/api/auth/accept-invite"
               method="POST"
               className="w-full"
             >
@@ -157,7 +158,7 @@ export function AcceptInvitePage({ token, email, error, nonce }: AcceptInvitePag
             <div className="mt-8 text-center text-sm text-slate-500 md:text-left">
               Already have an account?{' '}
               <a
-                href="/login"
+                href={loginUrl}
                 className="font-medium text-brand-600 transition-colors duration-200 hover:text-brand-700 hover:underline"
               >
                 Sign in

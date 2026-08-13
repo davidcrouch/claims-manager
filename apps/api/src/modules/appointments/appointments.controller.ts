@@ -1,11 +1,14 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { AppointmentsService } from './appointments.service';
+import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 
 @Controller('appointments')
 export class AppointmentsController {
   constructor(private readonly appointmentsService: AppointmentsService) {}
 
   @Get()
+  @RequirePermission(P.workflows.read)
   async findAll(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -27,26 +30,31 @@ export class AppointmentsController {
   }
 
   @Get('job/:jobId')
+  @RequirePermission(P.workflows.read)
   async findByJob(@Param('jobId') jobId: string) {
     return this.appointmentsService.findByJob({ jobId });
   }
 
   @Get(':id')
+  @RequirePermission(P.workflows.read)
   async findOne(@Param('id') id: string) {
     return this.appointmentsService.findOne({ id });
   }
 
   @Post()
+  @RequirePermission(P.workflows.manage)
   async create(@Body() body: Record<string, unknown>) {
     return this.appointmentsService.create({ body });
   }
 
   @Post(':id')
+  @RequirePermission(P.workflows.manage)
   async update(@Param('id') id: string, @Body() body: Record<string, unknown>) {
     return this.appointmentsService.update({ id, body });
   }
 
   @Post(':id/cancel')
+  @RequirePermission(P.workflows.manage)
   async cancel(@Param('id') id: string, @Body() body: { reason: string }) {
     return this.appointmentsService.cancel({ id, body });
   }

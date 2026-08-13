@@ -3,6 +3,8 @@ import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { CatalogSelectionService } from '../catalog/services/catalog-selection.service';
 import { AddCatalogAssemblyDto, AddCatalogPrimitiveDto } from '../catalog/dto/catalog.dto';
 import { WorkOrdersService } from './work-orders.service';
+import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 
 @Controller('work-orders')
 export class WorkOrdersController {
@@ -12,6 +14,7 @@ export class WorkOrdersController {
   ) {}
 
   @Get()
+  @RequirePermission(P.procurement.read)
   async findAll(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -33,26 +36,31 @@ export class WorkOrdersController {
   }
 
   @Get('job/:jobId')
+  @RequirePermission(P.procurement.read)
   async findByJob(@Param('jobId') jobId: string) {
     return this.workOrdersService.findByJob({ jobId });
   }
 
   @Get('purchase-order/:purchaseOrderId')
+  @RequirePermission(P.procurement.read)
   async findByPurchaseOrder(@Param('purchaseOrderId') purchaseOrderId: string) {
     return this.workOrdersService.findByPurchaseOrder({ purchaseOrderId });
   }
 
   @Get(':id/line-items')
+  @RequirePermission(P.procurement.read)
   getLineItems(@Param('id') id: string) {
     return this.catalogSelectionService.getWorkOrderLineItems({ workOrderId: id });
   }
 
   @Get(':id')
+  @RequirePermission(P.procurement.read)
   async findOne(@Param('id') id: string) {
     return this.workOrdersService.findOne({ id });
   }
 
   @Post()
+  @RequirePermission(P.procurement.manage)
   async create(
     @Body() body: Record<string, unknown>,
     @CurrentUser('sub') userId: string,
@@ -61,6 +69,7 @@ export class WorkOrdersController {
   }
 
   @Post(':id')
+  @RequirePermission(P.procurement.manage)
   async update(
     @Param('id') id: string,
     @Body() body: Record<string, unknown>,
@@ -70,6 +79,7 @@ export class WorkOrdersController {
   }
 
   @Post(':woId/groups/:groupId/catalog-items')
+  @RequirePermission(P.procurement.manage)
   addCatalogItem(
     @Param('groupId') groupId: string,
     @Body() body: AddCatalogPrimitiveDto,
@@ -83,6 +93,7 @@ export class WorkOrdersController {
   }
 
   @Post(':woId/groups/:groupId/catalog-assemblies')
+  @RequirePermission(P.procurement.manage)
   addCatalogAssembly(
     @Param('groupId') groupId: string,
     @Body() body: AddCatalogAssemblyDto,

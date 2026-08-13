@@ -1,12 +1,15 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { InvoicesService } from './invoices.service';
+import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 
 @Controller('invoices')
 export class InvoicesController {
   constructor(private readonly invoicesService: InvoicesService) {}
 
   @Get()
+  @RequirePermission(P.invoices.read)
   async findAll(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -28,21 +31,25 @@ export class InvoicesController {
   }
 
   @Get('purchase-order/:purchaseOrderId')
+  @RequirePermission(P.invoices.read)
   async findByPurchaseOrder(@Param('purchaseOrderId') purchaseOrderId: string) {
     return this.invoicesService.findByPurchaseOrder({ purchaseOrderId });
   }
 
   @Get('job/:jobId')
+  @RequirePermission(P.invoices.read)
   async findByJob(@Param('jobId') jobId: string) {
     return this.invoicesService.findByJob({ jobId });
   }
 
   @Get(':id')
+  @RequirePermission(P.invoices.read)
   async findOne(@Param('id') id: string) {
     return this.invoicesService.findOne({ id });
   }
 
   @Post()
+  @RequirePermission(P.invoices.create)
   async create(
     @Body() body: Record<string, unknown>,
     @CurrentUser('sub') userId: string,
@@ -51,6 +58,7 @@ export class InvoicesController {
   }
 
   @Post(':id')
+  @RequirePermission(P.invoices.update)
   async update(
     @Param('id') id: string,
     @Body() body: Record<string, unknown>,

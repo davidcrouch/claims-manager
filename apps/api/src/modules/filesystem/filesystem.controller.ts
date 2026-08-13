@@ -20,6 +20,8 @@ import {
 import { GenerateCategoryDescriptionDto } from './dto/generate-category-description.dto';
 import { SetupJobFilesystemDto } from './dto/setup-job-filesystem.dto';
 import { UpdateFilesystemDefaultsDto } from './dto/update-filesystem-defaults.dto';
+import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 import type {
   ArtifactExportScope,
   UpdateArtifactExportSettingsDto,
@@ -31,36 +33,43 @@ export class FilesystemController {
 
   /** @deprecated Prefer GET /filesystems/company */
   @Get()
+  @RequirePermission(P.filesystems.read)
   async getFilesystem() {
     return this.filesystemService.getFilesystem();
   }
 
   @Get('company')
+  @RequirePermission(P.filesystems.read)
   async getCompanyFilesystem() {
     return this.filesystemService.getCompanyFilesystem();
   }
 
   @Get('overview')
+  @RequirePermission(P.filesystems.read)
   async getOverview() {
     return this.filesystemService.getOverview();
   }
 
   @Get('categories/search')
+  @RequirePermission(P.filesystems.read)
   async searchCategories(@Query('q') q?: string) {
     return this.filesystemService.searchCategories(q ?? '');
   }
 
   @Get('defaults')
+  @RequirePermission(P.filesystems.read)
   async getDefaults() {
     return this.filesystemService.getFilesystemDefaults();
   }
 
   @Patch('defaults')
+  @RequirePermission(P.filesystems.manage)
   async updateDefaults(@Body() dto: UpdateFilesystemDefaultsDto) {
     return this.filesystemService.updateFilesystemDefaults(dto);
   }
 
   @Get('jobs/:jobId')
+  @RequirePermission(P.filesystems.read)
   async getJobFilesystem(
     @Param('jobId', ParseUUIDPipe) jobId: string,
     @Query('ensure') ensure?: string,
@@ -71,6 +80,7 @@ export class FilesystemController {
   }
 
   @Post('jobs/:jobId/setup')
+  @RequirePermission(P.filesystems.manage)
   async setupJobFilesystem(
     @Param('jobId', ParseUUIDPipe) jobId: string,
     @Body() dto: SetupJobFilesystemDto,
@@ -79,36 +89,43 @@ export class FilesystemController {
   }
 
   @Post('backfill-project-filesystems')
+  @RequirePermission(P.filesystems.manage)
   async backfillProjectFilesystems() {
     return this.filesystemService.backfillMissingProjectFilesystems();
   }
 
   @Post('setup')
+  @RequirePermission(P.filesystems.manage)
   async setupFromTemplate(@Body() dto: SetupFilesystemDto) {
     return this.filesystemService.setupFromTemplate(dto);
   }
 
   @Post('setup-default')
+  @RequirePermission(P.filesystems.manage)
   async setupFromDefault() {
     return this.filesystemService.setupFromDefault();
   }
 
   @Post('generate-category-description')
+  @RequirePermission(P.filesystems.manage)
   async generateCategoryDescription(@Body() dto: GenerateCategoryDescriptionDto) {
     return this.filesystemService.generateCategoryDescription(dto);
   }
 
   @Get('artifact-export')
+  @RequirePermission(P.filesystems.read)
   async getArtifactExport(@Query('scope') scope?: ArtifactExportScope) {
     return this.filesystemService.getArtifactExportSettings(scope ?? 'company');
   }
 
   @Patch('artifact-export')
+  @RequirePermission(P.filesystems.manage)
   async updateArtifactExport(@Body() body: UpdateArtifactExportSettingsDto) {
     return this.filesystemService.updateArtifactExportSettings(body);
   }
 
   @Put(':id')
+  @RequirePermission(P.filesystems.manage)
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: { name?: string },
@@ -117,6 +134,7 @@ export class FilesystemController {
   }
 
   @Put(':id/categories')
+  @RequirePermission(P.filesystems.manage)
   async replaceCategories(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ReplaceCategoriesDto,
@@ -125,6 +143,7 @@ export class FilesystemController {
   }
 
   @Post(':id/categories')
+  @RequirePermission(P.filesystems.manage)
   async addCategory(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateCategoryDto,
@@ -133,6 +152,7 @@ export class FilesystemController {
   }
 
   @Patch(':id/categories/:categoryId')
+  @RequirePermission(P.filesystems.manage)
   async updateCategory(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('categoryId', ParseUUIDPipe) categoryId: string,
@@ -142,6 +162,7 @@ export class FilesystemController {
   }
 
   @Delete(':id/categories/:categoryId')
+  @RequirePermission(P.filesystems.manage)
   async archiveCategory(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('categoryId', ParseUUIDPipe) categoryId: string,

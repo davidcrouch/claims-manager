@@ -22,7 +22,7 @@ function checkPermission(req: Request, res: Response, ...required: string[]): bo
 
 export default function createAdminUserRoutes(app: Application): void {
   app.post('/admin/users/invite', requireAuth(), async (req, res) => {
-    if (!checkPermission(req, res, 'org.users.manage')) return;
+    if (!checkPermission(req, res, 'org.users.invite', 'org.users.manage')) return;
 
     const userId = req.userId;
     const organizationId = req.organizationId;

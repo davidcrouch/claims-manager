@@ -2,6 +2,8 @@ import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query
 import type { Response } from 'express';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { DocumentsService } from './documents.service';
+import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 import {
   CreateDocumentUploadUrlDto,
   BatchUploadUrlsDto,
@@ -15,6 +17,7 @@ export class DocumentsController {
   constructor(private readonly documentsService: DocumentsService) {}
 
   @Get()
+  @RequirePermission(P.documents.read)
   async findAll(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -44,6 +47,7 @@ export class DocumentsController {
   }
 
   @Get('counts')
+  @RequirePermission(P.documents.read)
   async countByCategory(
     @Query('filesystemId') filesystemId?: string,
   ) {
@@ -51,11 +55,13 @@ export class DocumentsController {
   }
 
   @Get(':id')
+  @RequirePermission(P.documents.read)
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.documentsService.findOne(id);
   }
 
   @Post('upload-url')
+  @RequirePermission(P.documents.manage)
   async generateUploadUrl(
     @Body() dto: CreateDocumentUploadUrlDto,
     @CurrentUser('sub') userId: string,
@@ -64,6 +70,7 @@ export class DocumentsController {
   }
 
   @Post('upload-urls')
+  @RequirePermission(P.documents.manage)
   async generateBatchUploadUrls(
     @Body() dto: BatchUploadUrlsDto,
     @CurrentUser('sub') userId: string,
@@ -72,16 +79,19 @@ export class DocumentsController {
   }
 
   @Post('upload-complete')
+  @RequirePermission(P.documents.manage)
   async markUploadComplete(@Body() dto: UploadCompleteDto) {
     return this.documentsService.markUploadComplete(dto.documentId, dto.thumbnailObjectPath);
   }
 
   @Post('upload-failed')
+  @RequirePermission(P.documents.manage)
   async markUploadFailed(@Body() dto: UploadCompleteDto) {
     return this.documentsService.markUploadFailed(dto.documentId);
   }
 
   @Patch(':id/category')
+  @RequirePermission(P.documents.manage)
   async assignCategory(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: AssignCategoryDto,
@@ -90,21 +100,25 @@ export class DocumentsController {
   }
 
   @Post('bulk-category')
+  @RequirePermission(P.documents.manage)
   async bulkAssignCategory(@Body() dto: BulkAssignCategoryDto) {
     return this.documentsService.bulkAssignCategory(dto.documentIds, dto.categoryId);
   }
 
   @Get(':id/download-url')
+  @RequirePermission(P.documents.read)
   async getDownloadUrl(@Param('id', ParseUUIDPipe) id: string) {
     return this.documentsService.getDownloadUrl(id);
   }
 
   @Get(':id/thumbnail')
+  @RequirePermission(P.documents.read)
   async getThumbnailUrl(@Param('id', ParseUUIDPipe) id: string) {
     return this.documentsService.getThumbnailUrl(id);
   }
 
   @Get(':id/thumbnail/stream')
+  @RequirePermission(P.documents.read)
   async streamThumbnail(
     @Param('id', ParseUUIDPipe) id: string,
     @Res({ passthrough: true }) res: Response,
@@ -118,6 +132,7 @@ export class DocumentsController {
   }
 
   @Get(':id/stream')
+  @RequirePermission(P.documents.read)
   async streamDownload(
     @Param('id', ParseUUIDPipe) id: string,
     @Res({ passthrough: true }) res: Response,
@@ -131,11 +146,13 @@ export class DocumentsController {
   }
 
   @Post(':id/archive')
+  @RequirePermission(P.documents.manage)
   async archive(@Param('id', ParseUUIDPipe) id: string) {
     return this.documentsService.archive(id);
   }
 
   @Delete(':id')
+  @RequirePermission(P.documents.manage)
   async hardDelete(@Param('id', ParseUUIDPipe) id: string) {
     return this.documentsService.hardDelete(id);
   }

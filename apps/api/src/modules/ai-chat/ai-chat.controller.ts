@@ -16,6 +16,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface';
 import { AiChatService } from './ai-chat.service';
 import { AiFileUploadService } from './ai-file-upload.service';
@@ -32,7 +33,7 @@ export class AiChatController {
   ) {}
 
   @Post('stream')
-  @RequirePermission('ai.manage')
+  @RequirePermission(P.ai.manage)
   @ApiOperation({ summary: 'Stream AI chat completion (SSE)' })
   async stream(
     @Req() req: Request,
@@ -75,7 +76,7 @@ export class AiChatController {
   }
 
   @Post('upload')
-  @RequirePermission('ai.manage')
+  @RequirePermission(P.ai.manage)
   @UseInterceptors(FileInterceptor('file'))
   @ApiOperation({ summary: 'Upload a file attachment for chat' })
   async uploadFile(
@@ -104,7 +105,7 @@ export class AiChatController {
   }
 
   @Get('signed-url')
-  @RequirePermission('ai.read')
+  @RequirePermission(P.ai.read)
   @ApiOperation({ summary: 'Get a signed download URL for a chat attachment' })
   async getSignedUrl(@Query('uri') uri: string) {
     if (!uri) {
@@ -115,14 +116,14 @@ export class AiChatController {
   }
 
   @Get('models')
-  @RequirePermission('ai.read')
+  @RequirePermission(P.ai.read)
   @ApiOperation({ summary: 'List supported AI models' })
   getModels() {
     return this.chatService.getModels();
   }
 
   @Get('audit')
-  @RequirePermission('ai.manage')
+  @RequirePermission(P.ai.manage)
   @ApiOperation({ summary: 'List AI message audit records (admin)' })
   async getAudit(
     @Query('userId') userId?: string,

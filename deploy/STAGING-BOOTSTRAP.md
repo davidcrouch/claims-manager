@@ -30,7 +30,7 @@ psql "$DATABASE_URL_ADMIN" -f deploy/scripts/grant-provider-app.sql
 ## First images + deploy
 
 1. CI on `main` (or `workflow_dispatch` with `force_build_all=true`) builds four images.
-2. `cd-staging` updates Cloud Run revisions + runs `migrate-api`.
+2. `cd-staging` updates Cloud Run revisions, runs `migrate-api`, then `seed-auth-rbac`.
 
 ## Cloudflare
 

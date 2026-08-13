@@ -11,6 +11,7 @@ import {
 import { ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface';
 import { SkillService } from './skill.service';
 import type { CreateSkillDto, TestMatchRequest, UpdateSkillDto } from './skill.types';
@@ -21,21 +22,21 @@ export class SkillController {
   constructor(private readonly skillService: SkillService) {}
 
   @Get()
-  @RequirePermission('ai.read')
+  @RequirePermission(P.ai.read)
   @ApiOperation({ summary: 'List skills visible to the current tenant' })
   async list(@CurrentUser() user: AuthenticatedUser) {
     return this.skillService.listVisible(user);
   }
 
   @Post('test-match')
-  @RequirePermission('ai.read')
+  @RequirePermission(P.ai.read)
   @ApiOperation({ summary: 'Test skill matching for a message' })
   async testMatch(@Body() body: TestMatchRequest) {
     return this.skillService.testMatch(body);
   }
 
   @Post(':id/test-invoke')
-  @RequirePermission('ai.read')
+  @RequirePermission(P.ai.read)
   @ApiOperation({ summary: 'Test invoke a skill with a sample message' })
   @ApiParam({ name: 'id', type: 'string' })
   async testInvoke(
@@ -47,7 +48,7 @@ export class SkillController {
   }
 
   @Get(':id')
-  @RequirePermission('ai.read')
+  @RequirePermission(P.ai.read)
   @ApiOperation({ summary: 'Get a skill by ID' })
   @ApiParam({ name: 'id', type: 'string' })
   async getById(@Param('id') id: string) {
@@ -57,14 +58,14 @@ export class SkillController {
   }
 
   @Post()
-  @RequirePermission('ai.manage')
+  @RequirePermission(P.ai.manage)
   @ApiOperation({ summary: 'Create a new skill' })
   async create(@Body() body: CreateSkillDto, @CurrentUser() user: AuthenticatedUser) {
     return this.skillService.create(body, user);
   }
 
   @Put(':id')
-  @RequirePermission('ai.manage')
+  @RequirePermission(P.ai.manage)
   @ApiOperation({ summary: 'Update a skill' })
   @ApiParam({ name: 'id', type: 'string' })
   async update(
@@ -78,7 +79,7 @@ export class SkillController {
   }
 
   @Delete(':id')
-  @RequirePermission('ai.manage')
+  @RequirePermission(P.ai.manage)
   @ApiOperation({ summary: 'Delete a skill' })
   @ApiParam({ name: 'id', type: 'string' })
   async delete(@Param('id') id: string) {

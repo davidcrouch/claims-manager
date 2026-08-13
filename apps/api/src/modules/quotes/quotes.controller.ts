@@ -8,6 +8,8 @@ import { ManualCaptureService, type CaptureEstimateDto } from '../domain/service
 import { TenantContext } from '../../tenant/tenant-context';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface';
+import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 
 @Controller('quotes')
 export class QuotesController {
@@ -20,6 +22,7 @@ export class QuotesController {
   ) {}
 
   @Post('capture')
+  @RequirePermission(P.procurement.manage)
   async capture(
     @Body() body: CaptureEstimateDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -33,6 +36,7 @@ export class QuotesController {
   }
 
   @Get()
+  @RequirePermission(P.procurement.read)
   async findAll(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -54,16 +58,19 @@ export class QuotesController {
   }
 
   @Get('job/:jobId')
+  @RequirePermission(P.procurement.read)
   async findByJob(@Param('jobId') jobId: string) {
     return this.quotesService.findByJob({ jobId });
   }
 
   @Get(':id')
+  @RequirePermission(P.procurement.read)
   async findOne(@Param('id') id: string) {
     return this.quotesService.findOne({ id });
   }
 
   @Post()
+  @RequirePermission(P.procurement.manage)
   async create(
     @Body() body: Record<string, unknown>,
     @CurrentUser('sub') userId: string,
@@ -72,6 +79,7 @@ export class QuotesController {
   }
 
   @Post(':id')
+  @RequirePermission(P.procurement.manage)
   async update(
     @Param('id') id: string,
     @Body() body: Record<string, unknown>,
@@ -81,11 +89,13 @@ export class QuotesController {
   }
 
   @Delete(':id')
+  @RequirePermission(P.procurement.manage)
   async delete(@Param('id') id: string) {
     return this.quotesService.delete({ id });
   }
 
   @Post(':id/publish')
+  @RequirePermission(P.procurement.manage)
   async publish(
     @Param('id') id: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -94,6 +104,7 @@ export class QuotesController {
   }
 
   @Post(':id/approve')
+  @RequirePermission(P.procurement.manage)
   async approve(
     @Param('id') id: string,
     @CurrentUser('sub') userId: string,
@@ -102,6 +113,7 @@ export class QuotesController {
   }
 
   @Post(':id/incorporate-proposal-pricing')
+  @RequirePermission(P.procurement.manage)
   async incorporateProposalPricing(
     @Param('id') id: string,
     @Body()
@@ -119,16 +131,19 @@ export class QuotesController {
   }
 
   @Get(':id/groups')
+  @RequirePermission(P.procurement.read)
   listQuoteGroups(@Param('id') id: string) {
     return this.catalogSelectionService.listQuoteGroups({ quoteId: id });
   }
 
   @Get(':id/line-items')
+  @RequirePermission(P.procurement.read)
   getQuoteLineItems(@Param('id') id: string) {
     return this.catalogSelectionService.getQuoteLineItems({ quoteId: id });
   }
 
   @Patch(':id/line-items')
+  @RequirePermission(P.procurement.manage)
   async updateQuoteLineItems(@Param('id') id: string, @Body() body: UpdateQuoteLineItemsDto) {
     await this.quotesService.assertQuoteEditable({ id });
     return this.catalogSelectionService.updateQuoteLineItems({
@@ -139,6 +154,7 @@ export class QuotesController {
   }
 
   @Post(':id/groups')
+  @RequirePermission(P.procurement.manage)
   async createOrEnsureQuoteGroup(@Param('id') id: string, @Body() body: CreateQuoteGroupDto) {
     await this.quotesService.assertQuoteEditable({ id });
     if (body.groupLabelLookupId || body.description) {
@@ -154,6 +170,7 @@ export class QuotesController {
   }
 
   @Patch(':id/groups/reorder')
+  @RequirePermission(P.procurement.manage)
   async reorderQuoteGroups(@Param('id') id: string, @Body() body: ReorderQuoteGroupsDto) {
     await this.quotesService.assertQuoteEditable({ id });
     return this.catalogSelectionService.reorderQuoteGroups({
@@ -163,6 +180,7 @@ export class QuotesController {
   }
 
   @Patch(':quoteId/groups/:groupId')
+  @RequirePermission(P.procurement.manage)
   async updateQuoteGroup(
     @Param('quoteId') quoteId: string,
     @Param('groupId') groupId: string,
@@ -179,6 +197,7 @@ export class QuotesController {
   }
 
   @Delete(':quoteId/groups/:groupId')
+  @RequirePermission(P.procurement.manage)
   async deleteQuoteGroup(
     @Param('quoteId') quoteId: string,
     @Param('groupId') groupId: string,
@@ -188,6 +207,7 @@ export class QuotesController {
   }
 
   @Delete(':quoteId/items/:itemId')
+  @RequirePermission(P.procurement.manage)
   async deleteQuoteItem(
     @Param('quoteId') quoteId: string,
     @Param('itemId') itemId: string,
@@ -202,6 +222,7 @@ export class QuotesController {
   }
 
   @Delete(':quoteId/combos/:comboId')
+  @RequirePermission(P.procurement.manage)
   async deleteQuoteCombo(
     @Param('quoteId') quoteId: string,
     @Param('comboId') comboId: string,
@@ -211,6 +232,7 @@ export class QuotesController {
   }
 
   @Post(':quoteId/groups/:groupId/catalog-items')
+  @RequirePermission(P.procurement.manage)
   async addCatalogItem(
     @Param('quoteId') quoteId: string,
     @Param('groupId') groupId: string,
@@ -226,6 +248,7 @@ export class QuotesController {
   }
 
   @Post(':quoteId/groups/:groupId/catalog-assemblies')
+  @RequirePermission(P.procurement.manage)
   async addCatalogAssembly(
     @Param('quoteId') quoteId: string,
     @Param('groupId') groupId: string,
@@ -241,11 +264,13 @@ export class QuotesController {
   }
 
   @Get(':id/catalog-mismatches')
+  @RequirePermission(P.procurement.read)
   getCatalogMismatches(@Param('id') id: string) {
     return this.catalogMismatchService.scanQuote({ quoteId: id, apply: false });
   }
 
   @Post(':id/catalog-mismatches/scan')
+  @RequirePermission(P.procurement.manage)
   scanCatalogMismatches(@Param('id') id: string) {
     return this.catalogMismatchService.scanQuote({ quoteId: id, apply: true });
   }

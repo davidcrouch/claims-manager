@@ -411,6 +411,25 @@ export async function createOidcProvider(): Promise<Provider> {
    }, async (span) => {
    const ISSUER = getOidcIssuer();
 
+   // SECURITY (F-33): resource-indicator allowlist. Without this, a client could
+   // request an arbitrary `resource` and have the provider mint a JWT whose `aud`
+   // is attacker-controlled. When OIDC_ALLOWED_RESOURCES is unset, fall back to
+   // legacy permissive behaviour so existing deployments keep working.
+   const normalizeResource = (r: string): string => r.replace(/\/+$/, '');
+   const allowedResources = new Set(
+      (process.env.OIDC_ALLOWED_RESOURCES || '')
+         .split(',')
+         .map((s) => normalizeResource(s.trim()))
+         .filter(Boolean),
+   );
+   allowedResources.add(normalizeResource(ISSUER));
+   const resourceAllowlistEnforced = (process.env.OIDC_ALLOWED_RESOURCES || '').trim().length > 0;
+   const isResourceAllowed = (resource: string | undefined): boolean => {
+      if (!resource) return true;
+      if (!resourceAllowlistEnforced) return true;
+      return allowedResources.has(normalizeResource(resource));
+   };
+
    // Connect to Redis and create adapter
    const redis = await UpstashAdapter.connect();
 
@@ -426,13 +445,23 @@ export async function createOidcProvider(): Promise<Provider> {
       features: {
          devInteractions: { enabled: false }, // Disabled - using custom interactions
          deviceFlow: { enabled: true }, // OAuth 2.0 device authorization for mz CLI (registry-cli client)
-         registration: { 
+         registration: {
             enabled: true,
-            initialAccessToken: false, // Allow public registration without IAT for MCP clients
-            idFactory: undefined, // Use default client ID generation
-            secretFactory: undefined, // Use default secret generation (if needed)
-            // Note: node-oidc-provider automatically validates that requested scopes
-            // during authorization match the client's registered scopes
+            // SECURITY (F-55): open DCR is only tolerated in development/test.
+            initialAccessToken:
+               process.env.OIDC_DCR_REQUIRE_IAT === 'false'
+                  ? (() => {
+                       const env = process.env.NODE_ENV || 'development';
+                       if (env !== 'development' && env !== 'test') {
+                          throw new Error(
+                             `OIDC_DCR_REQUIRE_IAT=false is not permitted when NODE_ENV=${env}; DCR must require an Initial Access Token outside local development`,
+                          );
+                       }
+                       return false;
+                    })()
+                  : true,
+            idFactory: undefined,
+            secretFactory: undefined,
          },
          registrationManagement: { enabled: true },
          introspection: { enabled: false },
@@ -444,11 +473,21 @@ export async function createOidcProvider(): Promise<Provider> {
                   requestedResource,
                   clientId: client?.clientId
                }, 'auth-server:oidc-provider:defaultResource - Resource/audience from client request');
-               if (requestedResource) return requestedResource;
+               if (requestedResource) {
+                  if (!isResourceAllowed(requestedResource as string)) {
+                     log.warn({ functionName: 'defaultResource', requestedResource, clientId: client?.clientId }, 'auth-server:oidc-provider:defaultResource - Rejected resource not on allowlist');
+                     throw new errors.InvalidTarget('requested resource is not allowed');
+                  }
+                  return requestedResource;
+               }
                log.info({ functionName: 'defaultResource', fallback: ISSUER }, 'auth-server:oidc-provider:defaultResource - Using issuer as default audience');
                return ISSUER;
             },
             getResourceServerInfo(ctx, resourceIndicator, client) {
+               if (!isResourceAllowed(resourceIndicator)) {
+                  log.warn({ functionName: 'getResourceServerInfo', resourceIndicator, clientId: client?.clientId }, 'auth-server:oidc-provider:getResourceServerInfo - Rejected resource not on allowlist');
+                  throw new errors.InvalidTarget('requested resource is not allowed');
+               }
                const resolved = resourceIndicator || ISSUER;
                const supportedScopes =
                   'openid profile email offline_access registry:read registry:import registry:admin mcp:invoke mcp:read mcp:write';
@@ -883,21 +922,17 @@ export async function createOidcProvider(): Promise<Provider> {
             entitiesAccountId: ctx.oidc.entities?.Account?.accountId
          }, 'auth-server:oidc-provider:extraTokenClaims - Function called');
 
-
-         // Only add extra claims to access tokens
-         if (token.kind !== 'AccessToken') {
+         // AccessToken = user-delegated; ClientCredentials = M2M.
+         if (token.kind !== 'AccessToken' && token.kind !== 'ClientCredentials') {
             log.debug({ tokenType: token.kind }, 'auth-server:oidc-provider:extraTokenClaims - Skipping non-access token');
             return {};
          }
 
-         // Get account data to include user-specific claims
-         // Priority: select_org result > session accountId > login accountId
-         // Note: sessionAccountId is the OIDC account identifier (userId), used as Redis key
          const selectOrgResult = ctx.oidc.result?.select_org;
          const selectOrgUserId = selectOrgResult?.userId;
          const sessionAccountId = selectOrgUserId || ctx.oidc.session?.accountId || ctx.oidc.entities?.Account?.accountId;
 
-         log.info({ 
+         log.info({
             sessionAccountId,
             selectOrgUserId,
             hasSelectOrgResult: !!selectOrgResult
@@ -913,85 +948,110 @@ export async function createOidcProvider(): Promise<Provider> {
             }, 'auth-server:oidc-provider:extraTokenClaims - Retrieved stored auth result');
 
             if (authResult && authResult.organizationId) {
+               const { createRoleAssignmentService } = await import('../services/role-assignment-service.js');
+               const { resolveFeatures } = await import('../services/feature-resolution-service.js');
+               const roleService = createRoleAssignmentService();
+
+               if (authResult.user?.email) {
+                  await roleService.autoPromotePlatformAdmin(sessionAccountId, authResult.user.email);
+               }
+
+               let orgRoles: string[] = [];
+               try {
+                  orgRoles = await roleService.getActiveRolesForUser(sessionAccountId, authResult.organizationId);
+               } catch (roleErr: any) {
+                  log.warn(
+                     { userId: sessionAccountId, organizationId: authResult.organizationId, error: roleErr.message },
+                     'auth-server:oidc-provider:extraTokenClaims - Org role lookup failed (non-fatal)',
+                  );
+               }
+
+               let resolvedPermissions: string[] = [];
+               try {
+                  resolvedPermissions = await roleService.resolvePermissionsForRoles(orgRoles);
+               } catch (permErr: any) {
+                  log.warn(
+                     { userId: sessionAccountId, orgRoles, error: permErr.message },
+                     'auth-server:oidc-provider:extraTokenClaims - Permission resolution failed (non-fatal)',
+                  );
+               }
+
+               let resolvedFeatures: string[] = [];
+               try {
+                  const featureResult = await resolveFeatures({
+                     organizationId: authResult.organizationId,
+                     userId: sessionAccountId,
+                  });
+                  resolvedFeatures = featureResult.features;
+               } catch (featErr: any) {
+                  log.warn(
+                     { userId: sessionAccountId, error: featErr.message },
+                     'auth-server:oidc-provider:extraTokenClaims - Feature resolution failed (non-fatal)',
+                  );
+               }
+
                const user = authResult.user;
                const claims: any = {
                   organization_id: authResult.organizationId,
                   ...(user?.name && { name: user.name }),
                   ...(user?.email && { email: user.email }),
+                  ...(orgRoles.length > 0 && { org_roles: orgRoles }),
+                  ...(orgRoles.length > 0 && { roles: orgRoles }),
+                  ...(resolvedPermissions.length > 0 && { permissions: resolvedPermissions }),
+                  ...(resolvedFeatures.length > 0 && { features: resolvedFeatures }),
                };
-
-               // Resolve RBAC roles, permissions, and features
-               try {
-                  const { createRoleAssignmentService } = await import('../services/role-assignment-service.js');
-                  const { resolveFeatures } = await import('../services/feature-resolution-service.js');
-
-                  const roleService = createRoleAssignmentService();
-                  const orgRoles = await roleService.getActiveRolesForUser(sessionAccountId, authResult.organizationId);
-                  const resolvedPermissions = await roleService.resolvePermissionsForRoles(orgRoles);
-                  const resolvedFeatures = await resolveFeatures({
-                     organizationId: authResult.organizationId,
-                     userId: sessionAccountId,
-                  });
-
-                  claims.org_roles = orgRoles;
-                  claims.permissions = resolvedPermissions;
-                  claims.features = resolvedFeatures.features;
-
-                  log.info({
-                     userId: sessionAccountId,
-                     organization_id: authResult.organizationId,
-                     rolesCount: orgRoles.length,
-                     permissionsCount: resolvedPermissions.length,
-                     featuresCount: resolvedFeatures.features.length,
-                  }, 'auth-server:oidc-provider:extraTokenClaims - Added RBAC claims');
-               } catch (rbacErr: any) {
-                  log.warn({
-                     error: rbacErr.message,
-                     userId: sessionAccountId,
-                  }, 'auth-server:oidc-provider:extraTokenClaims - RBAC resolution failed, continuing without RBAC claims');
-               }
 
                log.info({
                   userId: sessionAccountId,
                   organization_id: authResult.organizationId,
-               }, 'auth-server:oidc-provider:extraTokenClaims - Adding organization claims from stored auth result');
+                  rolesCount: orgRoles.length,
+                  permissionsCount: resolvedPermissions.length,
+                  featuresCount: resolvedFeatures.length,
+               }, 'auth-server:oidc-provider:extraTokenClaims - Adding organization + RBAC + features claims');
 
                return claims;
-            } else {
-               log.warn({ 
-                  userId: sessionAccountId, 
-                  hasAuthResult: !!authResult, 
-                  hasOrganizationId: !!(authResult?.organizationId) 
-               }, 'auth-server:oidc-provider:extraTokenClaims - No stored auth result or organizationId found, using fallback');
             }
+
+            log.error({
+               userId: sessionAccountId,
+               hasAuthResult: !!authResult,
+               hasOrganizationId: !!(authResult?.organizationId)
+            }, 'auth-server:oidc-provider:extraTokenClaims - No stored auth result or organizationId found for user session');
+            throw new Error(`organization_id is required but missing for user ${sessionAccountId}`);
          }
 
-         // Fallback for client credentials or when no account is found
          const clientId = ctx.oidc.client?.clientId;
          if (clientId) {
-            const clientMetadata = ctx.oidc.client?.metadata();
-            const organizationId = clientMetadata?.organization_id;
+            const clientMetadata = (ctx.oidc.client?.metadata() ?? {}) as Record<string, unknown>;
+            const organizationId = clientMetadata.organization_id as string | undefined;
+
+            if (organizationId) {
+               const allowedApps = normalizeAllowedAppsFromMetadata(clientMetadata);
+               const roles = Array.isArray(clientMetadata.roles) ? clientMetadata.roles : [];
+               const features = Array.isArray(clientMetadata.features) ? clientMetadata.features : [];
+               log.info({
+                  clientId,
+                  organizationId,
+                  flow: 'client_credentials',
+                  kind: 'tenant-scoped',
+               }, 'auth-server:oidc-provider:extraTokenClaims - Tenant-scoped M2M token');
+               return {
+                  organization_id: organizationId,
+                  ...(roles.length > 0 ? { roles } : {}),
+                  ...(features.length > 0 ? { features } : {}),
+                  ...(allowedApps.length > 0 ? { allowed_apps: allowedApps } : {}),
+               };
+            }
 
             log.info({
                clientId,
-               organizationId,
-               flow: 'client_credentials'
-            }, 'auth-server:oidc-provider:extraTokenClaims - Using client metadata as fallback');
-
-            if (organizationId) {
-               const allowedApps = normalizeAllowedAppsFromMetadata(clientMetadata as Record<string, unknown>);
-               const metaObj = clientMetadata as Record<string, unknown> | undefined;
-               return {
-                  organization_id: organizationId,
-                  ...(allowedApps.length > 0 ? { allowed_apps: allowedApps } : {}),
-                  ...(Array.isArray(metaObj?.roles) ? { roles: metaObj.roles } : {}),
-                  ...(Array.isArray(metaObj?.features) ? { features: metaObj.features } : {}),
-               };
-            }
+               flow: 'client_credentials',
+            }, 'auth-server:oidc-provider:extraTokenClaims - Org-less M2M client; issuing token without organization claim');
+            return {};
          }
 
-         log.warn({ sessionAccountId, clientId }, 'auth-server:oidc-provider:extraTokenClaims - No account or client found, no extra claims added');
-         return {};
+         log.error({ sessionAccountId, clientId, tokenKind: token.kind }, 'auth-server:oidc-provider:extraTokenClaims - no account and no client_id; cannot mint token');
+         throw new Error('access token requires either a user session or a client identity');
       },
 
       // Extra claims for ID tokens

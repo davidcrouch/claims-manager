@@ -18,6 +18,8 @@ import {
   InboundWebhookEventsRepository,
 } from '../../database/repositories';
 import { More0Service } from '../../more0/more0.service';
+import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 
 @Controller('api/v1/external')
 export class ExternalController {
@@ -34,6 +36,7 @@ export class ExternalController {
   ) {}
 
   @Get('processing-log')
+  @RequirePermission(P.integrations.read)
   async listProcessingLog(
     @Query('tenantId') tenantId: string,
     @Query('status') status?: string,
@@ -51,6 +54,7 @@ export class ExternalController {
   }
 
   @Get('processing-log/:id')
+  @RequirePermission(P.integrations.read)
   async getProcessingLogEntry(
     @Param('id') id: string,
   ) {
@@ -62,6 +66,7 @@ export class ExternalController {
   }
 
   @Get('objects')
+  @RequirePermission(P.integrations.read)
   async listExternalObjects(
     @Query('tenantId') tenantId: string,
     @Query('normalizedEntityType') normalizedEntityType: string,
@@ -77,6 +82,7 @@ export class ExternalController {
   }
 
   @Get('objects/:id')
+  @RequirePermission(P.integrations.read)
   async getExternalObject(@Param('id') id: string) {
     const obj = await this.externalObjectsRepo.findById({ id });
     if (!obj) return { object: null, versions: [], links: [] };
@@ -94,6 +100,7 @@ export class ExternalController {
   }
 
   @Get('objects/:id/versions')
+  @RequirePermission(P.integrations.read)
   async getExternalObjectVersions(
     @Param('id') id: string,
     @Query('limit') limit?: string,
@@ -105,6 +112,7 @@ export class ExternalController {
   }
 
   @Get('links')
+  @RequirePermission(P.integrations.read)
   async listExternalLinks(
     @Query('internalEntityType') internalEntityType: string,
     @Query('internalEntityId') internalEntityId: string,
@@ -116,6 +124,7 @@ export class ExternalController {
   }
 
   @Get('events')
+  @RequirePermission(P.integrations.read)
   async listEvents(
     @Query('tenantId') tenantId: string,
     @Query('limit') limit?: string,
@@ -127,6 +136,7 @@ export class ExternalController {
   }
 
   @Get('summary')
+  @RequirePermission(P.integrations.read)
   async getSummary(@Query('tenantId') tenantId: string) {
     const [pending, completed, failed, objects] = await Promise.all([
       this.processingLogRepo.findByTenantAndType({
@@ -160,6 +170,7 @@ export class ExternalController {
   }
 
   @Post('backfill')
+  @RequirePermission(P.integrations.manage)
   @HttpCode(HttpStatus.OK)
   async triggerBackfill(
     @Body()
@@ -218,6 +229,7 @@ export class ExternalController {
   }
 
   @Post('backfill/bulk')
+  @RequirePermission(P.integrations.manage)
   @HttpCode(HttpStatus.OK)
   async triggerBulkBackfill(
     @Body()

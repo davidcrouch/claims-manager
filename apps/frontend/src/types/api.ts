@@ -779,6 +779,11 @@ export interface DashboardInbox {
     count: number;
     href: string;
     items: DashboardActiveJobItem[];
+    mine: {
+      count: number;
+      href: string;
+      items: DashboardActiveJobItem[];
+    };
   };
 }
 
@@ -1134,6 +1139,26 @@ export interface InviteUserPayload {
   givenName?: string;
   familyName?: string;
   roles: string[];
+}
+
+export interface RoleDef {
+  id: string;
+  key: string;
+  name: string;
+  scope: string;
+  description: string | null;
+  sortOrder: number;
+  isSystem: boolean;
+}
+
+export interface PermissionDef {
+  id: string;
+  permissionName: string;
+  label: string;
+  description: string | null;
+  category: string | null;
+  resourceGroup: string | null;
+  scope: string;
 }
 
 // Assessments

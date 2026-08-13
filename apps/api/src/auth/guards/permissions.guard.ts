@@ -6,13 +6,21 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PERMISSIONS_KEY } from '../decorators/require-permission.decorator';
+import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { AuthenticatedUser } from '../interfaces/authenticated-user.interface';
+import { matchPermission } from '../permission-match';
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (isPublic) return true;
+
     const requiredPermissions = this.reflector.getAllAndOverride<string[]>(
       PERMISSIONS_KEY,
       [context.getHandler(), context.getClass()],
@@ -21,18 +29,19 @@ export class PermissionsGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest();
     const user = request.user as AuthenticatedUser | undefined;
-    const userPermissions = user?.permissions;
 
-    // Soft-fail for legacy tokens without a permissions claim.
-    if (!userPermissions?.length) return true;
-
-    const hasPermission =
-      userPermissions.includes('*') ||
-      requiredPermissions.some((permission) =>
-        userPermissions.includes(permission),
+    if (!user) {
+      throw new ForbiddenException(
+        '[PermissionsGuard.canActivate] no authenticated user',
       );
+    }
 
-    if (!hasPermission) {
+    const userPermissions = user.permissions;
+    const satisfied = requiredPermissions.every((permission) =>
+      matchPermission(userPermissions, permission),
+    );
+
+    if (!satisfied) {
       throw new ForbiddenException(
         `[PermissionsGuard.canActivate] Required permissions: ${requiredPermissions.join(', ')}`,
       );

@@ -637,3 +637,14 @@
   The change is limited to how the web app decides which paths need middleware.
   Outcome: staff can complete login and use the workspace without the previous API failure.
 
+- `2026-08-13` `PENDING` **40 h**
+  `133 files | +4 230 −3 261 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
+  Lay summary: Staff only see and change what their role allows, can switch organisation without signing in again, and the product now deploys to the hosted cloud environments.
+  **Role-based access, safer sign-in, organisation switching, and hosted deploy updates.** Staff permissions now control who can view and change each area of the product, with an administration screen to manage roles.
+  People who belong to more than one organisation can switch workspace without signing in again.
+  Inviting colleagues is clearer, including a confirmation screen after an invite is accepted.
+  The home dashboard and navigation show active work more clearly and respect what each person is allowed to see.
+  Demo sample data was removed from setup so new environments start cleaner, with standard lookups and construction catalogue data still available.
+  Hosting now deploys the services to Google Cloud on staging and production, and the old Fly.io configuration was removed.
+  Outcome: access control, invitations, and hosted releases work together as one security and operations update.
+

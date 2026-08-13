@@ -8,4 +8,6 @@ export { ConsentPage } from './ConsentPage.js';
 export { LogoutPage } from './LogoutPage.js';
 export { ResetPasswordPage } from './ResetPasswordPage.js';
 export { OnboardCompanyPage } from './OnboardCompanyPage.js';
+export { AcceptInvitePage } from './AcceptInvitePage.js';
+export { InviteAcceptedPage } from './InviteAcceptedPage.js';
 export { Wordmark } from './Wordmark.js';

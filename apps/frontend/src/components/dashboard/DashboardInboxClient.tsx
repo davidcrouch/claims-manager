@@ -71,7 +71,6 @@ export function DashboardInboxClient({
     ...decisionQueues.flatMap((queue) => queue.items),
     ...(overdueTasks?.items ?? []),
   ].slice(0, 8);
-  const jobsTitle = inbox.activeJobs?.scopedToUser ? 'Your active jobs' : 'Active jobs';
 
   const todayPanel = (
     <RailPanel title="Today" href="/schedule" hrefLabel="Schedule">
@@ -102,10 +101,13 @@ export function DashboardInboxClient({
         {todayPanel}
 
         <DashboardActiveJobs
-          title={jobsTitle}
-          count={inbox.activeJobs?.count ?? inbox.snapshot.activeJobs}
-          href={inbox.activeJobs?.href ?? '/jobs'}
-          items={inbox.activeJobs?.items ?? []}
+          allCount={inbox.activeJobs?.count ?? inbox.snapshot.activeJobs}
+          allHref={inbox.activeJobs?.href ?? '/jobs'}
+          allItems={inbox.activeJobs?.items ?? []}
+          mineCount={inbox.activeJobs?.mine?.count ?? 0}
+          mineHref={inbox.activeJobs?.mine?.href ?? '/jobs'}
+          mineItems={inbox.activeJobs?.mine?.items ?? []}
+          defaultMine={Boolean(inbox.activeJobs?.scopedToUser)}
         />
 
         <div className="space-y-4">

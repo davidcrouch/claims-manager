@@ -1,6 +1,10 @@
+'use client';
+
+import { useState } from 'react';
 import Link from 'next/link';
 import { Briefcase, ChevronRight } from 'lucide-react';
 import type { DashboardActiveJobItem } from '@/types/api';
+import { Switch } from '@/components/ui/switch';
 import { DASHBOARD_EMPTY_COPY, formatShortDate } from './dashboard-inbox.copy';
 
 function StatusPill({ status }: { status: string }) {
@@ -19,38 +23,76 @@ function StatusPill({ status }: { status: string }) {
 }
 
 export function DashboardActiveJobs({
-  title,
-  count,
-  href,
-  items,
+  allCount,
+  allHref,
+  allItems,
+  mineCount,
+  mineHref,
+  mineItems,
+  defaultMine,
 }: {
-  title: string;
-  count: number;
-  href: string;
-  items: DashboardActiveJobItem[];
+  allCount: number;
+  allHref: string;
+  allItems: DashboardActiveJobItem[];
+  mineCount: number;
+  mineHref: string;
+  mineItems: DashboardActiveJobItem[];
+  defaultMine: boolean;
 }) {
+  const [mineOnly, setMineOnly] = useState(defaultMine);
+  const count = mineOnly ? mineCount : allCount;
+  const href = mineOnly ? mineHref : allHref;
+  const items = mineOnly ? mineItems : allItems;
+  const title = mineOnly ? 'My jobs' : 'Active jobs';
+
   return (
     <section className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm">
-      <div className="flex min-h-20 items-center justify-between border-b border-slate-100 px-5 py-4">
-        <div>
+      <div className="flex min-h-20 items-center justify-between gap-4 border-b border-slate-100 px-5 py-4">
+        <div className="min-w-0">
           <h2 className="text-base font-semibold text-slate-900">{title}</h2>
           <p className="mt-0.5 text-sm text-slate-500">
             {count === 0 ? 'Nothing currently in progress' : `${count} open ${count === 1 ? 'job' : 'jobs'}`}
           </p>
         </div>
-        <Link
-          href={href}
-          className="inline-flex items-center gap-1 text-sm font-medium text-slate-700 hover:text-slate-900"
-        >
-          View all
-          <ChevronRight className="h-4 w-4" />
-        </Link>
+        <div className="flex shrink-0 items-center gap-4">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setMineOnly(false)}
+              className={`text-xs font-medium transition-colors ${mineOnly ? 'text-slate-400 hover:text-slate-600' : 'text-slate-700'}`}
+            >
+              All
+            </button>
+            <Switch
+              id="dashboard-jobs-scope"
+              checked={mineOnly}
+              onCheckedChange={setMineOnly}
+              aria-label="Show only my jobs"
+            />
+            <button
+              type="button"
+              onClick={() => setMineOnly(true)}
+              className={`text-xs font-medium transition-colors ${mineOnly ? 'text-slate-700' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+              My jobs
+            </button>
+          </div>
+          <Link
+            href={href}
+            className="inline-flex items-center gap-1 text-sm font-medium text-slate-700 hover:text-slate-900"
+          >
+            View all
+            <ChevronRight className="h-4 w-4" />
+          </Link>
+        </div>
       </div>
 
       {items.length === 0 ? (
         <div className="flex flex-col items-center justify-center px-5 py-16 text-center">
           <Briefcase className="h-8 w-8 text-slate-300" />
-          <p className="mt-3 text-sm text-slate-500">{DASHBOARD_EMPTY_COPY.activeJobs}</p>
+          <p className="mt-3 text-sm text-slate-500">
+            {mineOnly ? 'No jobs currently assigned to you.' : DASHBOARD_EMPTY_COPY.activeJobs}
+          </p>
         </div>
       ) : (
         <ul className="divide-y divide-slate-100">
@@ -58,7 +100,9 @@ export function DashboardActiveJobs({
             <li key={job.id}>
               <Link
                 href={job.href}
-                className="grid grid-cols-[minmax(0,1.4fr)_auto_minmax(0,1fr)_auto] items-center gap-4 px-5 py-3.5 transition-colors hover:bg-slate-50"
+                className={`grid grid-cols-[minmax(0,1.4fr)_auto_minmax(0,1fr)_auto] items-center gap-4 px-5 py-3.5 transition-colors hover:bg-slate-50 ${
+                  job.unread ? 'border-l-[3px] border-l-blue-500 bg-blue-100' : ''
+                }`}
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">

@@ -97,11 +97,6 @@ export class EnvironmentVariables {
   @IsOptional()
   SEED_NEW_TENANTS?: string;
 
-  /** When true, /internal/seed-tenant also runs sample-data for the tenant. */
-  @IsString()
-  @IsOptional()
-  SEED_SAMPLE_DATA?: string;
-
   /** Optional Pub/Sub topic for async pipeline dispatch; sync in-process when unset. */
   @IsString()
   @IsOptional()

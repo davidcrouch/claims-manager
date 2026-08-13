@@ -8,7 +8,7 @@
  * Idempotent per (tenant, catalog, code). Safe to re-run.
  *
  * Callers:
- *   - CLI (`pnpm --filter api run db:seed`) → first org
+ *   - CLI (`pnpm --filter api run db:seed`) → Ensure Construction, else first org
  *   - api-server `POST /internal/seed-tenant` → always for new tenants
  */
 import { readFileSync } from 'node:fs';
@@ -18,6 +18,7 @@ import type { SeedDb } from '../lib/db';
 import { parseCsv } from '../lib/csv';
 import { assemblyBomPath, catalogCsvPath } from '../lib/catalog-data-paths';
 import * as schema from '../../schema';
+import { ENSURE_CONSTRUCTION_SLUG } from './ensure-construction.seed';
 
 const LOG = '[seeds/catalog-dev]';
 
@@ -506,10 +507,17 @@ export async function seedCatalogDevForTenant(params: {
 async function run(ctx: SeedContext): Promise<SeedResult> {
   const { db, logger } = ctx;
 
-  const [org] = await db
+  const [named] = await db
     .select({ id: schema.organizations.id })
     .from(schema.organizations)
+    .where(eq(schema.organizations.slug, ENSURE_CONSTRUCTION_SLUG))
     .limit(1);
+  const [org] = named
+    ? [named]
+    : await db
+        .select({ id: schema.organizations.id })
+        .from(schema.organizations)
+        .limit(1);
   if (!org) {
     logger.warn(`${LOG} no organization — skipping`);
     return { inserted: 0, updated: 0, skipped: 0, notes: 'no tenant' };

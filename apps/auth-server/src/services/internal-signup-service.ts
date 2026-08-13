@@ -131,8 +131,8 @@ class InternalSignupService {
          }, 'auth-server:internal-signup:signup - Signup completed successfully');
 
          // Fire-and-forget: when a brand-new organization was just created,
-         // ask api-server to seed it (catalog-dev always; sample-data when
-         // SEED_SAMPLE_DATA=true on api-server). Gated by SEED_NEW_TENANTS
+         // ask api-server to seed it (catalog-dev, MCP, lookups; Crunchwork
+         // staging connection when the org is Ensure Construction). Gated by SEED_NEW_TENANTS
          // on both sides; any failure is logged but never surfaced back
          // to the signup caller.
          //

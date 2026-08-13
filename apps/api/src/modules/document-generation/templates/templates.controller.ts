@@ -13,6 +13,8 @@ import { TenantContext } from '../../../tenant/tenant-context';
 import { TemplateRegistryService } from '../services/template-registry.service';
 import { AssignTemplateDto } from '../dto/assign-template.dto';
 import { UpdateTemplatesFolderDto } from '../dto/update-templates-folder.dto';
+import { RequirePermission } from '../../../auth/decorators/require-permission.decorator';
+import { P } from '../../../auth/permission-constants';
 import {
   ASSIGNABLE_TEMPLATE_TYPES,
   isAssignableTemplateType,
@@ -30,6 +32,7 @@ export class TemplatesController {
   ) {}
 
   @Get()
+  @RequirePermission(P.documents.read)
   @ApiOperation({ summary: 'List template settings for all generation scenarios' })
   async getSettings() {
     const tenantId = this.tenantContext.getTenantId();
@@ -38,6 +41,7 @@ export class TemplatesController {
   }
 
   @Get('folder')
+  @RequirePermission(P.documents.read)
   @ApiOperation({ summary: 'Get the company filesystem folder used for templates' })
   async getFolder() {
     const tenantId = this.tenantContext.getTenantId();
@@ -46,6 +50,7 @@ export class TemplatesController {
   }
 
   @Put('folder')
+  @RequirePermission(P.documents.manage)
   @ApiOperation({ summary: 'Set the company filesystem folder used for templates' })
   async setFolder(@Body() dto: UpdateTemplatesFolderDto) {
     const tenantId = this.tenantContext.getTenantId();
@@ -59,6 +64,7 @@ export class TemplatesController {
   }
 
   @Put(':documentType')
+  @RequirePermission(P.documents.manage)
   @ApiOperation({ summary: 'Assign a filesystem .docx as the template for a scenario' })
   async assign(
     @Param('documentType') documentType: string,
@@ -82,6 +88,7 @@ export class TemplatesController {
   }
 
   @Delete(':documentType')
+  @RequirePermission(P.documents.manage)
   @ApiOperation({ summary: 'Clear the template assignment for a scenario' })
   async clear(@Param('documentType') documentType: string) {
     this.assertDocumentType(documentType);

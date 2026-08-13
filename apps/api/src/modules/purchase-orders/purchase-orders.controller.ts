@@ -6,6 +6,8 @@ import { ManualCaptureService, type CapturePurchaseOrderDto } from '../domain/se
 import { TenantContext } from '../../tenant/tenant-context';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface';
+import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 
 @Controller('purchase-orders')
 export class PurchaseOrdersController {
@@ -17,6 +19,7 @@ export class PurchaseOrdersController {
   ) {}
 
   @Post('capture')
+  @RequirePermission(P.procurement.manage)
   async capture(
     @Body() body: CapturePurchaseOrderDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -30,6 +33,7 @@ export class PurchaseOrdersController {
   }
 
   @Get()
+  @RequirePermission(P.procurement.read)
   async findAll(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -53,11 +57,13 @@ export class PurchaseOrdersController {
   }
 
   @Get('job/:jobId')
+  @RequirePermission(P.procurement.read)
   async findByJob(@Param('jobId') jobId: string) {
     return this.purchaseOrdersService.findByJob({ jobId });
   }
 
   @Post()
+  @RequirePermission(P.procurement.manage)
   async create(
     @Body() body: Record<string, unknown>,
     @CurrentUser('sub') userId: string,
@@ -66,16 +72,19 @@ export class PurchaseOrdersController {
   }
 
   @Get(':id')
+  @RequirePermission(P.procurement.read)
   async findOne(@Param('id') id: string) {
     return this.purchaseOrdersService.findOne({ id });
   }
 
   @Get(':id/line-items')
+  @RequirePermission(P.procurement.read)
   getLineItems(@Param('id') id: string) {
     return this.catalogSelectionService.getPurchaseOrderLineItems({ purchaseOrderId: id });
   }
 
   @Post(':id')
+  @RequirePermission(P.procurement.manage)
   async update(
     @Param('id') id: string,
     @Body() body: Record<string, unknown>,
@@ -85,6 +94,7 @@ export class PurchaseOrdersController {
   }
 
   @Post(':poId/groups/:groupId/catalog-items')
+  @RequirePermission(P.procurement.manage)
   addCatalogItem(
     @Param('groupId') groupId: string,
     @Body() body: AddCatalogPrimitiveDto,
@@ -98,6 +108,7 @@ export class PurchaseOrdersController {
   }
 
   @Post(':poId/groups/:groupId/catalog-assemblies')
+  @RequirePermission(P.procurement.manage)
   addCatalogAssembly(
     @Param('groupId') groupId: string,
     @Body() body: AddCatalogAssemblyDto,

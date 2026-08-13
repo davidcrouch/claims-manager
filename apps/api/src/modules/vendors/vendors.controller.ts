@@ -1,11 +1,14 @@
 import { Controller, Get, Param, Patch, Query, Body } from '@nestjs/common';
 import { VendorsService } from './vendors.service';
+import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 
 @Controller('vendors')
 export class VendorsController {
   constructor(private readonly vendorsService: VendorsService) {}
 
   @Get()
+  @RequirePermission(P.vendors.read)
   async findAll(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -19,6 +22,7 @@ export class VendorsController {
   }
 
   @Get('on-platform')
+  @RequirePermission(P.vendors.read)
   async findOnPlatformVendors(@Query('limit') limit?: string) {
     return this.vendorsService.findOnPlatformVendors({
       limit: limit ? parseInt(limit, 10) : undefined,
@@ -26,6 +30,7 @@ export class VendorsController {
   }
 
   @Get('allocation')
+  @RequirePermission(P.vendors.read)
   async getAllocation(
     @Query('jobType') jobType: string,
     @Query('account') account: string,
@@ -43,11 +48,13 @@ export class VendorsController {
   }
 
   @Get(':id')
+  @RequirePermission(P.vendors.read)
   async findOne(@Param('id') id: string) {
     return this.vendorsService.findOne({ id });
   }
 
   @Patch(':id/link-organisation')
+  @RequirePermission(P.vendors.manage)
   async linkOrganisation(
     @Param('id') id: string,
     @Body() body: { organisationId: string },

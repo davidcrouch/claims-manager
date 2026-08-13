@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface';
 import {
   AiFeedbackService,
@@ -14,7 +15,7 @@ export class AiFeedbackController {
   constructor(private readonly feedbackService: AiFeedbackService) {}
 
   @Post('feedback')
-  @RequirePermission('ai.manage')
+  @RequirePermission(P.ai.manage)
   @ApiOperation({ summary: 'Submit message feedback' })
   async submit(
     @CurrentUser() user: AuthenticatedUser,
@@ -24,7 +25,7 @@ export class AiFeedbackController {
   }
 
   @Get('feedback/:conversationId')
-  @RequirePermission('ai.read')
+  @RequirePermission(P.ai.read)
   @ApiOperation({ summary: 'List feedback for a conversation' })
   async list(
     @CurrentUser() user: AuthenticatedUser,

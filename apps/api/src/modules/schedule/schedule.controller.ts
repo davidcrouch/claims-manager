@@ -1,11 +1,14 @@
 import { Controller, Get, Query, BadRequestException } from '@nestjs/common';
 import { ScheduleService } from './schedule.service';
+import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 
 @Controller('schedule')
 export class ScheduleController {
   constructor(private readonly scheduleService: ScheduleService) {}
 
   @Get('events')
+  @RequirePermission(P.workflows.read)
   async findEvents(
     @Query('from') from?: string,
     @Query('to') to?: string,

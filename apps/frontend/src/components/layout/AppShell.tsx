@@ -26,7 +26,7 @@ export function AppShell({ header, features, orgName, children }: AppShellProps)
       />
       <SidebarInset>
         {header}
-        <div className="flex-1 p-4">{children}</div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">{children}</div>
       </SidebarInset>
       {chatEnabled && (
         <ChatDrawer open={chatOpen} onOpenChange={setChatOpen} />

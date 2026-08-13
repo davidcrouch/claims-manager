@@ -7,7 +7,7 @@ import { Request, Response, NextFunction } from 'express';
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
 import { createLogger, LoggerType } from '../lib/logger.js';
 import { createTelemetryLogger } from '@morezero/telemetry';
-import { getOidcIssuer, getEnvVar, getEnvVarWithDefault } from '../config/env-validation.js';
+import { getOidcIssuer, getEnvVar, getEnvVarWithDefault, getJwtExpectedAudience } from '../config/env-validation.js';
 
 const baseLogger = createLogger('auth-server:jwt-auth', LoggerType.NODEJS);
 const log = createTelemetryLogger(baseLogger, 'jwt-auth', 'JwtAuth', 'auth-server');
@@ -69,7 +69,7 @@ export function jwtAuthForIAT(req: Request, res: Response, next: NextFunction): 
    const issuer = getOidcIssuer().replace(/\/$/, '');
    const jwks = createRemoteJWKSet(new URL(getSelfJwksUrl()));
 
-   const expectedAudiences = parseExpectedAudiences(getEnvVar('JWT_EXPECTED_AUDIENCE'));
+   const expectedAudiences = parseExpectedAudiences(getJwtExpectedAudience());
    const verifyOptions: Parameters<typeof jwtVerify>[2] = {
       issuer,
       algorithms: ['RS256', 'ES256'],

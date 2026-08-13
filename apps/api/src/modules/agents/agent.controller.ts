@@ -12,6 +12,7 @@ import {
 import { ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface';
 import { AgentService } from './agent.service';
 import type { CreateAgentDto, UpdateAgentDto } from './agent.types';
@@ -22,7 +23,7 @@ export class AgentController {
   constructor(private readonly agentService: AgentService) {}
 
   @Get()
-  @RequirePermission('ai.read')
+  @RequirePermission(P.ai.read)
   @ApiOperation({ summary: 'List agents visible to the current user' })
   @ApiQuery({
     name: 'chatEnabled',
@@ -39,7 +40,7 @@ export class AgentController {
   }
 
   @Get(':id')
-  @RequirePermission('ai.read')
+  @RequirePermission(P.ai.read)
   @ApiOperation({ summary: 'Get agent by ID' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   async getById(
@@ -54,7 +55,7 @@ export class AgentController {
   }
 
   @Post()
-  @RequirePermission('ai.manage')
+  @RequirePermission(P.ai.manage)
   @ApiOperation({ summary: 'Create a new chat agent' })
   async create(
     @CurrentUser() user: AuthenticatedUser,
@@ -64,7 +65,7 @@ export class AgentController {
   }
 
   @Put(':id')
-  @RequirePermission('ai.manage')
+  @RequirePermission(P.ai.manage)
   @ApiOperation({ summary: 'Update an existing agent' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   async update(
@@ -80,7 +81,7 @@ export class AgentController {
   }
 
   @Delete(':id')
-  @RequirePermission('ai.manage')
+  @RequirePermission(P.ai.manage)
   @ApiOperation({ summary: 'Delete an agent' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   async remove(

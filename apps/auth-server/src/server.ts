@@ -5,7 +5,6 @@ import express, { Application } from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
-import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -16,7 +15,7 @@ import { createLogger, LoggerType } from './lib/logger.js';
 import { startTelemetry, createTelemetryLogger } from '@morezero/telemetry';
 import { trace, context, SpanStatusCode, propagation } from '@opentelemetry/api';
 import { GlobalCacheManager } from './lib/cache/global-cache-manager.js';
-import { validateAuthServerEnvironment, getServerConfig, getCorsOrigins, getServiceName, getServiceVersion, getRedisConfig, getOidcCookieKeys } from './config/env-validation.js';
+import { validateAuthServerEnvironment, getServerConfig, getCorsOrigins, getServiceName, getServiceVersion, getRedisConfig, getOidcCookieKeys, getOidcIssuer } from './config/env-validation.js';
 import { createOidcProvider } from './config/oidc-provider.js';
 
 // ============================================================================
@@ -84,7 +83,7 @@ async function createServer(): Promise<Application> {
       if (!validateAuthServerEnvironment()) {
          span.setAttributes({ 'server.validation_failed': true });
          span.setStatus({ code: SpanStatusCode.ERROR, message: 'Environment validation failed' });
-         process.exit(1);
+         throw new Error('auth-server:server:createServer - Environment validation failed');
       }
 
       const app = express();
@@ -101,7 +100,7 @@ async function createServer(): Promise<Application> {
          span.recordException(error);
          span.setAttributes({ 'server.oidc_provider_created': false, 'server.oidc_error': error.message });
          span.setStatus({ code: SpanStatusCode.ERROR, message: 'Failed to create OIDC provider' });
-         process.exit(1);
+         throw error;
       }
 
       // ========================================================================
@@ -210,7 +209,8 @@ async function createServer(): Promise<Application> {
       });
 
       app.get('/', (req, res) => {
-         const baseUrl = `${req.protocol}://${req.get('host')}`;
+         // SECURITY (F-25): build links from the configured issuer, not the Host header.
+         const baseUrl = getOidcIssuer().replace(/\/$/, '');
 
          res.render('home', {
             title: 'EnsureOS Auth Server',
@@ -241,6 +241,7 @@ async function createServer(): Promise<Application> {
       // ========================================================================
       app.use('/login/google', oauthRateLimit as any);
       app.use('/login/microsoft', oauthRateLimit as any);
+      app.use('/link-account', authRateLimit as any);
       app.use('/login', authRateLimit as any);
       app.use('/consent', authRateLimit as any);
       app.use('/token', tokenRateLimit as any);
@@ -248,6 +249,9 @@ async function createServer(): Promise<Application> {
       app.use('/interaction', authRateLimit as any);
       app.use('/api/auth/signup', authRateLimit as any);
       app.use('/api/auth/reset-password', authRateLimit as any);
+      app.use('/api/auth/accept-invite', authRateLimit as any);
+      app.use('/api/auth/add-password', authRateLimit as any);
+      app.use('/api/auth/switch-org', authRateLimit as any);
       app.use('/accept-invite', authRateLimit as any);
       app.use('/oauth/initial-access-token', authRateLimit as any);
       app.use('/oauth/validate-iat', authRateLimit as any);
@@ -321,7 +325,7 @@ async function mountRoutes(app: Application, provider: any): Promise<void> {
       // ========================================================================
       // IAT, CLIENT & ADMIN ROUTES (Mount BEFORE OIDC provider so they are not 404'd)
       // ========================================================================
-      createIatRoutes(app);
+      createIatRoutes(app, provider);
       createClientRoutes(app, provider);
 
       const { default: createAdminUserRoutes } = await import('./routes/admin-user-routes.js');
@@ -336,6 +340,9 @@ async function mountRoutes(app: Application, provider: any): Promise<void> {
       const { default: createAdminFeatureRoutes } = await import('./routes/admin-feature-routes.js');
       createAdminFeatureRoutes(app);
 
+      const { default: createSwitchOrgRoutes } = await import('./routes/switch-org-routes.js');
+      createSwitchOrgRoutes(app);
+
       // ========================================================================
       // OIDC PROVIDER MOUNTING (Mount OIDC provider at root after body parsing middleware)
       // ========================================================================
@@ -349,6 +356,35 @@ async function mountRoutes(app: Application, provider: any): Promise<void> {
                origin: req.headers.origin || '(none)',
                referer: req.headers.referer || '(none)',
             }, 'auth-server:server - Request reaching OIDC provider');
+         }
+         // Auto-set application_type to "native" for DCR requests whose
+         // redirect_uris contain non-https URIs (e.g. http://localhost).
+         if (req.method === 'POST' && req.path === '/reg' && req.body) {
+            const uris: unknown[] = req.body.redirect_uris ?? [];
+            const hasNonWebUri = uris.some((u) => {
+               if (typeof u !== 'string') return true;
+               try {
+                  const parsed = new URL(u);
+                  return parsed.protocol !== 'https:';
+               } catch {
+                  return true;
+               }
+            });
+            if (hasNonWebUri) {
+               req.body.application_type = 'native';
+               const cleaned = (uris as string[]).filter((u) => {
+                  try {
+                     const p = new URL(u);
+                     return p.protocol === 'https:' || p.protocol === 'http:';
+                  } catch {
+                     return false;
+                  }
+               });
+               log.info({ original: uris, cleaned }, 'auth-server:server - DCR: native + stripped non-http(s) redirect_uris');
+               if (cleaned.length > 0) {
+                  req.body.redirect_uris = cleaned;
+               }
+            }
          }
          next();
       });

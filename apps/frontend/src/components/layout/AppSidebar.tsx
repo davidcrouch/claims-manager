@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
@@ -27,6 +28,7 @@ import {
   FolderOpen,
   Unplug,
   Settings,
+  ChevronLeft,
   ChevronRight,
   Package,
   BookOpen,
@@ -38,6 +40,7 @@ import {
   Cable,
   Sparkles,
   BarChart3,
+  Shield,
 } from 'lucide-react';
 import { Collapsible } from '@base-ui/react/collapsible';
 import {
@@ -132,25 +135,51 @@ const navGroups: NavGroup[] = [
       { title: 'Reports', href: '/reports', icon: ClipboardList },
     ],
   },
+];
+
+const adminNavGroups: NavGroup[] = [
   {
-    label: 'ADMIN',
+    label: 'ORGANISATION',
+    items: [
+      { title: 'Org Claims', href: '/admin/claims', icon: Building2 },
+      { title: 'Users', href: '/admin/users', icon: UserCog },
+      { title: 'Roles & Permissions', href: '/admin/roles', icon: Shield },
+      { title: 'Settings', href: '/admin/settings', icon: Settings },
+    ],
+  },
+  {
+    label: 'CONTENT',
+    items: [
+      { title: 'Catalogue', href: '/admin/catalog', icon: Package },
+      { title: 'Filesystem Categories', href: '/admin/documents', icon: FolderOpen },
+      { title: 'Document Templates', href: '/admin/document-templates', icon: Files },
+      { title: 'Filesystem Templates', href: '/admin/filesystem-templates', icon: ListTree },
+    ],
+  },
+  {
+    label: 'AI',
+    items: [
+      { title: 'Agents', href: '/admin/agents', icon: Bot, feature: 'ai.agents' },
+      { title: 'Skills', href: '/admin/skills', icon: Sparkles, feature: 'ai.skills' },
+      { title: 'AI Audit', href: '/admin/ai-audit', icon: BarChart3 },
+    ],
+  },
+  {
+    label: 'INTEGRATIONS',
     items: [
       { title: 'Connections', href: '/connections', icon: Unplug },
       { title: 'MCP Connections', href: '/mcp-connections', icon: Cable, feature: 'ai.connections' },
       { title: 'MCP Servers', href: '/admin/mcp-servers', icon: Server, feature: 'ai.connections' },
-      { title: 'Agents', href: '/admin/agents', icon: Bot, feature: 'ai.agents' },
-      { title: 'Skills', href: '/admin/skills', icon: Sparkles, feature: 'ai.skills' },
-      { title: 'AI Audit', href: '/admin/ai-audit', icon: BarChart3 },
-      { title: 'Catalogue', href: '/admin/catalog', icon: Package },
-      { title: 'Document Categories', href: '/admin/documents', icon: FolderOpen },
-      { title: 'Document Templates', href: '/admin/document-templates', icon: Files },
-      { title: 'Filesystem Templates', href: '/admin/filesystem-templates', icon: ListTree },
-      { title: 'Org Claims', href: '/admin/claims', icon: Building2 },
-      { title: 'Users', href: '/admin/users', icon: UserCog },
-      { title: 'Settings', href: '/admin/settings', icon: Settings },
     ],
   },
 ];
+
+const adminHrefs = adminNavGroups.flatMap((group) => group.items.map((item) => item.href));
+
+function isAdminPath(pathname: string): boolean {
+  if (pathname === '/admin' || pathname.startsWith('/admin/')) return true;
+  return adminHrefs.some((href) => pathname === href || pathname.startsWith(`${href}/`));
+}
 
 function resolveHref(item: NavItem, jobId: string | null): string {
   if (!jobId || !item.jobFilterable) return item.href;
@@ -160,12 +189,19 @@ function resolveHref(item: NavItem, jobId: string | null): string {
 export function AppSidebar({ features, orgName, onOpenChat }: AppSidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [menuOverride, setMenuOverride] = useState<'main' | 'admin' | null>(null);
 
   const jobMatch = pathname.match(/^\/jobs\/([^/?]+)/);
   const jobId = jobMatch?.[1] ?? searchParams.get('jobId');
+  const menuView = menuOverride ?? (isAdminPath(pathname) ? 'admin' : 'main');
+
+  useEffect(() => {
+    setMenuOverride(null);
+  }, [pathname]);
 
   const dashboardGroup = navGroups[0];
   const middleGroups = navGroups.filter((g) => g.label !== null);
+  const onAdminPath = isAdminPath(pathname);
 
   function isItemActive(item: NavItem): boolean {
     if (pathname === item.href) return true;
@@ -223,6 +259,21 @@ export function AppSidebar({ features, orgName, onOpenChat }: AppSidebarProps) {
     );
   }
 
+  function renderAdminGroup(group: NavGroup) {
+    const visibleItems = group.items.filter(
+      (item) => !item.feature || hasFeature(features, item.feature),
+    );
+    if (visibleItems.length === 0) return null;
+    return (
+      <SidebarGroup key={group.label}>
+        <SidebarGroupLabel className="text-white/60">{group.label}</SidebarGroupLabel>
+        <SidebarGroupContent className="pl-3 group-data-[collapsible=icon]:pl-0">
+          {renderMenuItems({ ...group, items: visibleItems })}
+        </SidebarGroupContent>
+      </SidebarGroup>
+    );
+  }
+
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className={orgName ? 'pb-2' : 'pb-5'}>
@@ -274,12 +325,53 @@ export function AppSidebar({ features, orgName, onOpenChat }: AppSidebarProps) {
             </span>
           </div>
         ) : null}
-        <SidebarGroup key="top">
-          <SidebarGroupContent>
-            {renderMenuItems(dashboardGroup)}
-          </SidebarGroupContent>
-        </SidebarGroup>
-        {middleGroups.map((group) => renderCollapsibleGroup(group))}
+        {menuView === 'admin' ? (
+          <>
+            <SidebarGroup>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      onClick={() => setMenuOverride('main')}
+                      tooltip="Main menu"
+                    >
+                      <ChevronLeft className="size-4" />
+                      <span>Main menu</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroupContent>
+              <SidebarGroupLabel className="mt-2 text-white/60">ADMIN</SidebarGroupLabel>
+            </SidebarGroup>
+            {adminNavGroups.map((group) => renderAdminGroup(group))}
+          </>
+        ) : (
+          <>
+            <SidebarGroup key="top">
+              <SidebarGroupContent>
+                {renderMenuItems(dashboardGroup)}
+              </SidebarGroupContent>
+            </SidebarGroup>
+            {middleGroups.map((group) => renderCollapsibleGroup(group))}
+            <SidebarGroup>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      onClick={() => setMenuOverride('admin')}
+                      isActive={onAdminPath}
+                      tooltip="Admin"
+                    >
+                      <Shield className="size-4" />
+                      <span>Admin</span>
+                      <ChevronRight className="ml-auto size-3.5" />
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </>
+        )}
       </SidebarContent>
     </Sidebar>
   );

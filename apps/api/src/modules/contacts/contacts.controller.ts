@@ -1,11 +1,14 @@
 import { Controller, Get, Post, Body, Param, Query } from '@nestjs/common';
 import { ContactsService } from './contacts.service';
+import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 
 @Controller('contacts')
 export class ContactsController {
   constructor(private readonly contactsService: ContactsService) {}
 
   @Post()
+  @RequirePermission(P.contacts.manage)
   async create(
     @Body()
     body: {
@@ -23,11 +26,13 @@ export class ContactsController {
   }
 
   @Get('job/:jobId')
+  @RequirePermission(P.contacts.read)
   async findByJob(@Param('jobId') jobId: string) {
     return this.contactsService.findByJob(jobId);
   }
 
   @Get('search-users')
+  @RequirePermission(P.contacts.read)
   async searchUsers(
     @Query('search') search?: string,
     @Query('limit') limit?: string,
@@ -39,6 +44,7 @@ export class ContactsController {
   }
 
   @Get()
+  @RequirePermission(P.contacts.read)
   async findAll(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -56,11 +62,13 @@ export class ContactsController {
   }
 
   @Get(':id/jobs')
+  @RequirePermission(P.contacts.read)
   async findRelatedJobs(@Param('id') id: string) {
     return this.contactsService.findRelatedJobs({ id });
   }
 
   @Get(':id')
+  @RequirePermission(P.contacts.read)
   async findOne(@Param('id') id: string) {
     return this.contactsService.findOne({ id });
   }

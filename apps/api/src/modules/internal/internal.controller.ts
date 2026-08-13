@@ -37,8 +37,9 @@ export class InternalController {
    * Seed a newly provisioned tenant. Intended to be called by auth-server
    * immediately after a new organization is created on signup.
    *
-   * Always runs catalog-dev when enabled. Also runs sample-data when
-   * `SEED_SAMPLE_DATA=true`.
+   * Always runs catalog-dev, MCP, and lookups when enabled. When the
+   * tenant is Ensure Construction, also upserts the Crunchwork staging
+   * connection.
    *
    * Awaits completion before responding so Cloud Run keeps CPU allocated
    * for the whole seed (request-based CPU throttles fire-and-forget work).

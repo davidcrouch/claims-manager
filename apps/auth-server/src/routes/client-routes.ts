@@ -5,14 +5,18 @@
 import { Application, Request, Response } from 'express';
 import { createLogger, LoggerType } from '../lib/logger.js';
 import { createTelemetryLogger } from '@morezero/telemetry';
-import { jwtAuthForIAT } from '../middleware/jwt-auth.js';
+import { requireAuth } from '../middleware/jwt-auth.js';
 
 const baseLogger = createLogger('auth-server:client-routes', LoggerType.NODEJS);
 const log = createTelemetryLogger(baseLogger, 'client-routes', 'ClientRoutes', 'auth-server');
 
 export default function createClientRoutes(app: Application, provider: any): void {
-   // Delete a client (revoke API key). Requires Bearer user JWT; user's org must match client's organization_id.
-   app.delete('/oauth/clients/:clientId', jwtAuthForIAT, async (req: Request, res: Response) => {
+   // SECURITY (F-39): requires integrations.manage (or dcr:register for M2M), and
+   // still enforces org isolation (client's organization_id must match caller).
+   app.delete('/oauth/clients/:clientId', requireAuth({
+      permissions: ['org.integrations.manage', 'platform.integrations.manage'],
+      scopes: ['dcr:register'],
+   }), async (req: Request, res: Response) => {
       const clientId = req.params.clientId;
       const userId = req.userId;
       const organizationId = req.organizationId;

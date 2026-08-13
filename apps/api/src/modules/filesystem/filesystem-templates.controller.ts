@@ -6,32 +6,39 @@ import {
   ReplaceCategoriesDto,
 } from './dto';
 import type { FilesystemTemplateKind } from '../../database/schema';
+import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 
 @Controller('filesystem-templates')
 export class FilesystemTemplatesController {
   constructor(private readonly templatesService: FilesystemTemplatesService) {}
 
   @Get()
+  @RequirePermission(P.filesystems.read)
   async findAll(@Query('kind') kind?: FilesystemTemplateKind) {
     return this.templatesService.findAll(kind);
   }
 
   @Post()
+  @RequirePermission(P.filesystems.manage)
   async create(@Body() dto: CreateFilesystemTemplateDto) {
     return this.templatesService.create(dto);
   }
 
   @Get(':id')
+  @RequirePermission(P.filesystems.read)
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.templatesService.findOne(id);
   }
 
   @Post(':id/clone')
+  @RequirePermission(P.filesystems.manage)
   async clone(@Param('id', ParseUUIDPipe) id: string) {
     return this.templatesService.cloneForTenant(id);
   }
 
   @Put(':id')
+  @RequirePermission(P.filesystems.manage)
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateFilesystemTemplateDto,
@@ -40,11 +47,13 @@ export class FilesystemTemplatesController {
   }
 
   @Delete(':id')
+  @RequirePermission(P.filesystems.manage)
   async archive(@Param('id', ParseUUIDPipe) id: string) {
     return this.templatesService.archive(id);
   }
 
   @Put(':id/categories')
+  @RequirePermission(P.filesystems.manage)
   async replaceCategories(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ReplaceCategoriesDto,
@@ -53,11 +62,13 @@ export class FilesystemTemplatesController {
   }
 
   @Get(':id/pipelines')
+  @RequirePermission(P.filesystems.read)
   async listPipelines(@Param('id', ParseUUIDPipe) id: string) {
     return this.templatesService.listPipelines(id);
   }
 
   @Post(':id/pipelines')
+  @RequirePermission(P.filesystems.manage)
   async createPipeline(
     @Param('id', ParseUUIDPipe) id: string,
     @Body()
@@ -74,6 +85,7 @@ export class FilesystemTemplatesController {
   }
 
   @Get(':id/pipelines/:pipelineId')
+  @RequirePermission(P.filesystems.read)
   async getPipeline(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('pipelineId', ParseUUIDPipe) pipelineId: string,
@@ -82,6 +94,7 @@ export class FilesystemTemplatesController {
   }
 
   @Put(':id/pipelines/:pipelineId')
+  @RequirePermission(P.filesystems.manage)
   async updatePipeline(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('pipelineId', ParseUUIDPipe) pipelineId: string,
@@ -99,6 +112,7 @@ export class FilesystemTemplatesController {
   }
 
   @Delete(':id/pipelines/:pipelineId')
+  @RequirePermission(P.filesystems.manage)
   async deletePipeline(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('pipelineId', ParseUUIDPipe) pipelineId: string,
@@ -107,6 +121,7 @@ export class FilesystemTemplatesController {
   }
 
   @Put(':id/pipelines/:pipelineId/steps')
+  @RequirePermission(P.filesystems.manage)
   async replacePipelineSteps(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('pipelineId', ParseUUIDPipe) pipelineId: string,

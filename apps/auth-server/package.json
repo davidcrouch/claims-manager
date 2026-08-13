@@ -16,7 +16,9 @@
     "test": "jest --config jest.config.mjs",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
-    "clean": "npx rimraf -I .turbo .vercel dist .next tsconfig.tsbuildinfo"
+    "clean": "npx rimraf -I .turbo .vercel dist .next tsconfig.tsbuildinfo",
+    "db:seed-rbac": "node dist/scripts/seed-rbac.js",
+    "db:seed-rbac:dev": "tsx src/scripts/seed-rbac.ts"
   },
   "dependencies": {
     "@morezero/telemetry": "workspace:*",

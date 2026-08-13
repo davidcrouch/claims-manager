@@ -13,6 +13,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface';
 import { UserManagementService } from './user-management.service';
 import type {
@@ -38,21 +39,21 @@ export class UserManagementController {
   constructor(private readonly service: UserManagementService) {}
 
   @Get('roles')
-  @RequirePermission('org.users.manage')
+  @RequirePermission(P.org.roles.read)
   @ApiOperation({ summary: 'List available org roles' })
   async listRoles(@Req() req: Request) {
     return this.service.listAvailableRoles(extractBearerToken(req));
   }
 
   @Get()
-  @RequirePermission('org.users.manage')
+  @RequirePermission(P.org.users.read)
   @ApiOperation({ summary: 'List organization members' })
   async listOrgMembers(@CurrentUser() user: AuthenticatedUser) {
     return this.service.listOrgMembers(user.tenantId);
   }
 
   @Post('invite')
-  @RequirePermission('org.users.manage')
+  @RequirePermission(P.org.users.invite)
   @ApiOperation({ summary: 'Invite a user to the organization' })
   async inviteUser(
     @Req() req: Request,
@@ -63,7 +64,7 @@ export class UserManagementController {
   }
 
   @Patch(':userId/roles')
-  @RequirePermission('org.users.manage')
+  @RequirePermission(P.org.users.manage)
   @ApiOperation({ summary: 'Update user roles in the organization' })
   async assignRoles(
     @Req() req: Request,
@@ -80,7 +81,7 @@ export class UserManagementController {
   }
 
   @Patch(':userId/status')
-  @RequirePermission('org.users.manage')
+  @RequirePermission(P.org.users.manage)
   @ApiOperation({ summary: 'Enable or disable a user' })
   async updateStatus(
     @CurrentUser() user: AuthenticatedUser,
@@ -91,7 +92,7 @@ export class UserManagementController {
   }
 
   @Delete(':userId')
-  @RequirePermission('org.users.manage')
+  @RequirePermission(P.org.users.remove)
   @ApiOperation({ summary: 'Remove a user from the organization' })
   async removeMember(
     @CurrentUser() user: AuthenticatedUser,

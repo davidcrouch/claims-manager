@@ -11,6 +11,7 @@ import {
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface';
 import { TenantContext } from '../../tenant/tenant-context';
 import { AiScheduledTasksService } from './ai-scheduled-tasks.service';
@@ -26,7 +27,7 @@ export class AiScheduledTasksController {
   ) {}
 
   @Get()
-  @RequirePermission('ai.read')
+  @RequirePermission(P.ai.read)
   @ApiOperation({ summary: 'List scheduled tasks for current user' })
   async list(@CurrentUser() user: AuthenticatedUser) {
     const tenantId = this.tenantContext.getTenantId();
@@ -37,7 +38,7 @@ export class AiScheduledTasksController {
   }
 
   @Post()
-  @RequirePermission('ai.manage')
+  @RequirePermission(P.ai.manage)
   @ApiOperation({ summary: 'Create a new scheduled task' })
   async create(
     @CurrentUser() user: AuthenticatedUser,
@@ -70,7 +71,7 @@ export class AiScheduledTasksController {
   }
 
   @Patch(':id')
-  @RequirePermission('ai.manage')
+  @RequirePermission(P.ai.manage)
   @ApiOperation({ summary: 'Update or toggle a scheduled task' })
   async update(
     @CurrentUser() user: AuthenticatedUser,
@@ -101,7 +102,7 @@ export class AiScheduledTasksController {
   }
 
   @Delete(':id')
-  @RequirePermission('ai.manage')
+  @RequirePermission(P.ai.manage)
   @ApiOperation({ summary: 'Delete a scheduled task' })
   async remove(
     @CurrentUser() user: AuthenticatedUser,

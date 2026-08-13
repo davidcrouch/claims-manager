@@ -2,6 +2,8 @@ import { Body, Controller, Get, Param, Post, Query, Res, NotFoundException, Logg
 import type { Response } from 'express';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { AttachmentsService } from './attachments.service';
+import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 
 @Controller('attachments')
 export class AttachmentsController {
@@ -10,6 +12,7 @@ export class AttachmentsController {
   constructor(private readonly attachmentsService: AttachmentsService) {}
 
   @Get()
+  @RequirePermission(P.documents.read)
   async find(
     @Query('relatedRecordType') relatedRecordType?: string,
     @Query('relatedRecordId') relatedRecordId?: string,
@@ -34,6 +37,7 @@ export class AttachmentsController {
   }
 
   @Get(':id/download')
+  @RequirePermission(P.documents.read)
   async download(
     @Param('id') id: string,
     @Query('disposition') disposition: string | undefined,
@@ -53,11 +57,13 @@ export class AttachmentsController {
   }
 
   @Get(':id')
+  @RequirePermission(P.documents.read)
   async findOne(@Param('id') id: string) {
     return this.attachmentsService.findOne({ id });
   }
 
   @Post()
+  @RequirePermission(P.documents.manage)
   async create(
     @Body() body: Record<string, unknown>,
     @CurrentUser('sub') userId: string,
@@ -66,6 +72,7 @@ export class AttachmentsController {
   }
 
   @Post(':id')
+  @RequirePermission(P.documents.manage)
   async update(
     @Param('id') id: string,
     @Body() body: Record<string, unknown>,

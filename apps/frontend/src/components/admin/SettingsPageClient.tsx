@@ -1,19 +1,11 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Settings,
-  Plug,
   Bell,
   CreditCard,
   ToggleLeft,
-  Bot,
-  Sparkles,
-  Server,
-  Cable,
-  BarChart3,
-  ArrowRight,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
@@ -25,43 +17,8 @@ import type { FeatureDef } from '@/app/(app)/admin/settings/features-actions';
 const TABS = [
   { id: 'general', label: 'General', icon: Settings },
   { id: 'features', label: 'Features', icon: ToggleLeft },
-  { id: 'ai', label: 'AI & Integrations', icon: Bot },
-  { id: 'connections', label: 'Connections', icon: Plug },
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'billing', label: 'Billing', icon: CreditCard },
-] as const;
-
-const AI_LINKS = [
-  {
-    title: 'Agents',
-    description: 'Configure AI personas, models, tools, and skills',
-    href: '/admin/agents',
-    icon: Bot,
-  },
-  {
-    title: 'Skills',
-    description: 'Reusable instruction sets with semantic matching',
-    href: '/admin/skills',
-    icon: Sparkles,
-  },
-  {
-    title: 'MCP Servers',
-    description: 'Manage MCP integrations and discovery',
-    href: '/admin/mcp-servers',
-    icon: Server,
-  },
-  {
-    title: 'MCP Connections',
-    description: 'User and org credentials for MCP tools',
-    href: '/mcp-connections',
-    icon: Cable,
-  },
-  {
-    title: 'AI Audit',
-    description: 'Token usage, models, and message audits',
-    href: '/admin/ai-audit',
-    icon: BarChart3,
-  },
 ] as const;
 
 interface Props {
@@ -165,49 +122,6 @@ export function SettingsPageClient({
             initialError={featuresError}
             canManage={canManageFeatures}
           />
-        )}
-
-        {activeTab === 'ai' && (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {AI_LINKS.map((item) => {
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="group rounded-lg border border-slate-200 bg-white p-4 transition hover:border-blue-300 hover:shadow-sm"
-                >
-                  <div className="mb-3 flex items-center justify-between">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-                      <Icon className="h-4 w-4" />
-                    </span>
-                    <ArrowRight className="h-4 w-4 text-slate-300 transition group-hover:text-blue-500" />
-                  </div>
-                  <h3 className="text-sm font-semibold text-slate-800">{item.title}</h3>
-                  <p className="mt-1 text-xs text-slate-500">{item.description}</p>
-                </Link>
-              );
-            })}
-          </div>
-        )}
-
-        {activeTab === 'connections' && (
-          <div className="space-y-4">
-            <Card>
-              <CardContent className="flex flex-col items-center gap-3 py-10">
-                <Plug className="h-8 w-8 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">
-                  Connections have moved to their own page.
-                </p>
-                <a
-                  href="/connections"
-                  className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors"
-                >
-                  Go to Connections
-                </a>
-              </CardContent>
-            </Card>
-          </div>
         )}
 
         {activeTab === 'notifications' && (

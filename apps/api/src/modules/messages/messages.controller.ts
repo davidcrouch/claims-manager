@@ -1,12 +1,15 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { MessagesService } from './messages.service';
+import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 
 @Controller('messages')
 export class MessagesController {
   constructor(private readonly messagesService: MessagesService) {}
 
   @Get()
+  @RequirePermission(P.messaging.read)
   async findAll(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -24,11 +27,13 @@ export class MessagesController {
   }
 
   @Get(':id')
+  @RequirePermission(P.messaging.read)
   async findOne(@Param('id') id: string) {
     return this.messagesService.findOne({ id });
   }
 
   @Post()
+  @RequirePermission(P.messaging.send)
   async create(
     @Body() body: Record<string, unknown>,
     @CurrentUser('sub') userId: string,
@@ -37,6 +42,7 @@ export class MessagesController {
   }
 
   @Post(':id/acknowledge')
+  @RequirePermission(P.messaging.send)
   async acknowledge(
     @Param('id') id: string,
     @CurrentUser('sub') userId: string,

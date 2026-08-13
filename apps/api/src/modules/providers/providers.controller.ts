@@ -11,6 +11,8 @@ import { ProvidersService } from './providers.service';
 import { CreateConnectionDto } from './dto/create-connection.dto';
 import { UpdateConnectionDto } from './dto/update-connection.dto';
 import { TenantContext } from '../../tenant/tenant-context';
+import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 
 @Controller('providers')
 export class ProvidersController {
@@ -20,18 +22,21 @@ export class ProvidersController {
   ) {}
 
   @Get()
+  @RequirePermission(P.integrations.read)
   async findAll() {
     const tenantId = this.tenantContext.getTenantId();
     return this.providersService.findAll(tenantId);
   }
 
   @Get(':code')
+  @RequirePermission(P.integrations.read)
   async findOne(@Param('code') code: string) {
     const tenantId = this.tenantContext.getTenantId();
     return this.providersService.findOne({ code, tenantId });
   }
 
   @Get(':code/connections')
+  @RequirePermission(P.integrations.read)
   async findConnections(@Param('code') code: string) {
     const tenantId = this.tenantContext.getTenantId();
     return this.providersService.findConnections({
@@ -41,6 +46,7 @@ export class ProvidersController {
   }
 
   @Post(':code/connections')
+  @RequirePermission(P.integrations.manage)
   async createConnection(
     @Param('code') code: string,
     @Body() dto: CreateConnectionDto,
@@ -54,6 +60,7 @@ export class ProvidersController {
   }
 
   @Put(':code/connections/:connId')
+  @RequirePermission(P.integrations.manage)
   async updateConnection(
     @Param('code') code: string,
     @Param('connId') connId: string,
@@ -67,6 +74,7 @@ export class ProvidersController {
   }
 
   @Get(':code/webhook-events')
+  @RequirePermission(P.integrations.read)
   async findWebhookEvents(
     @Param('code') code: string,
     @Query('page') page?: string,

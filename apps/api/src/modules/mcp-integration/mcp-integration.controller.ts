@@ -18,6 +18,8 @@ import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user
 import { TenantContext } from '../../tenant/tenant-context';
 import { McpIntegrationService } from './mcp-integration.service';
 import { McpOAuthService } from './mcp-oauth.service';
+import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 import type {
   CreateConnectionDto,
   CreateIntegrationDto,
@@ -33,12 +35,14 @@ export class McpIntegrationController {
   constructor(private readonly service: McpIntegrationService) {}
 
   @Get()
+  @RequirePermission(P.integrations.read)
   @ApiOperation({ summary: 'List MCP integrations visible to caller' })
   async listIntegrations(@CurrentUser() user: AuthenticatedUser) {
     return this.service.listIntegrations(user.sub);
   }
 
   @Post()
+  @RequirePermission(P.integrations.manage)
   @ApiOperation({ summary: 'Create MCP integration' })
   async createIntegration(
     @CurrentUser() user: AuthenticatedUser,
@@ -48,12 +52,14 @@ export class McpIntegrationController {
   }
 
   @Post('discover')
+  @RequirePermission(P.integrations.manage)
   @ApiOperation({ summary: 'Discover MCP server auth requirements' })
   async discoverServer(@Body() body: DiscoverServerDto) {
     return this.service.discoverServerAuth(body);
   }
 
   @Post('test-connection')
+  @RequirePermission(P.integrations.manage)
   @ApiOperation({ summary: 'Test connection to an MCP URL (stateless probe)' })
   async testConnectionStateless(
     @Req() req: Request,
@@ -67,6 +73,7 @@ export class McpIntegrationController {
   }
 
   @Get(':id')
+  @RequirePermission(P.integrations.read)
   @ApiOperation({ summary: 'Get MCP integration details' })
   @ApiParam({ name: 'id', description: 'Integration ID' })
   async getIntegration(
@@ -77,6 +84,7 @@ export class McpIntegrationController {
   }
 
   @Patch(':id')
+  @RequirePermission(P.integrations.manage)
   @ApiOperation({ summary: 'Update MCP integration' })
   @ApiParam({ name: 'id', description: 'Integration ID' })
   async updateIntegration(
@@ -88,6 +96,7 @@ export class McpIntegrationController {
   }
 
   @Delete(':id')
+  @RequirePermission(P.integrations.manage)
   @ApiOperation({ summary: 'Delete MCP integration' })
   @ApiParam({ name: 'id', description: 'Integration ID' })
   async deleteIntegration(
@@ -114,12 +123,14 @@ export class McpConnectionsController {
   ) {}
 
   @Get()
+  @RequirePermission(P.integrations.read)
   @ApiOperation({ summary: 'List MCP connections for tenant' })
   async listConnections(@CurrentUser() user: AuthenticatedUser) {
     return this.service.listConnections(user.sub);
   }
 
   @Post('initiate-oauth')
+  @RequirePermission(P.integrations.manage)
   @ApiOperation({ summary: 'Generate authorize URL and store OAuth state + PKCE' })
   async initiateOAuth(
     @CurrentUser() user: AuthenticatedUser,
@@ -133,6 +144,7 @@ export class McpConnectionsController {
   }
 
   @Post()
+  @RequirePermission(P.integrations.manage)
   @ApiOperation({ summary: 'Create MCP connection' })
   async createConnection(
     @CurrentUser() user: AuthenticatedUser,
@@ -142,6 +154,7 @@ export class McpConnectionsController {
   }
 
   @Post(':id/test')
+  @RequirePermission(P.integrations.manage)
   @ApiOperation({ summary: 'Test existing connection and refresh manifest' })
   @ApiParam({ name: 'id', description: 'Connection ID' })
   async testConnection(
@@ -154,6 +167,7 @@ export class McpConnectionsController {
   }
 
   @Post(':id/disconnect')
+  @RequirePermission(P.integrations.manage)
   @ApiOperation({ summary: 'Disconnect (soft-delete) MCP connection' })
   @ApiParam({ name: 'id', description: 'Connection ID' })
   async disconnectConnection(
@@ -172,12 +186,14 @@ export class McpToolsController {
   constructor(private readonly service: McpIntegrationService) {}
 
   @Get()
+  @RequirePermission(P.integrations.read)
   @ApiOperation({ summary: 'List tools from cached manifests for active connections' })
   async listTools(@CurrentUser() user: AuthenticatedUser) {
     return this.service.listToolsForUser(user.sub);
   }
 
   @Post('refresh')
+  @RequirePermission(P.integrations.manage)
   @ApiOperation({ summary: 'Force re-discovery for a specific connection' })
   async refreshTools(
     @CurrentUser() user: AuthenticatedUser,

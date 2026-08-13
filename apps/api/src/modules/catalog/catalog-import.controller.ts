@@ -2,6 +2,8 @@ import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { CatalogImportService } from './services/catalog-import.service';
 import { CatalogResolutionService } from './services/catalog-resolution.service';
 import { IsOptional, IsString, IsUUID } from 'class-validator';
+import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 
 class ImportCatalogCsvDto {
   @IsString()
@@ -19,11 +21,13 @@ export class CatalogImportController {
   ) {}
 
   @Get('template')
+  @RequirePermission(P.catalogs.read)
   getTemplate(@Query('catalogType') catalogType?: string) {
     return this.importService.getTemplate(catalogType);
   }
 
   @Post('preview')
+  @RequirePermission(P.catalogs.manage)
   previewCsv(@Body() body: ImportCatalogCsvDto) {
     return this.importService.previewCsv({
       csv: body.csv,
@@ -32,6 +36,7 @@ export class CatalogImportController {
   }
 
   @Post('csv')
+  @RequirePermission(P.catalogs.manage)
   importCsv(@Body() body: ImportCatalogCsvDto) {
     return this.importService.importCsv({
       csv: body.csv,
@@ -45,6 +50,7 @@ export class CatalogUnresolvedController {
   constructor(private readonly resolutionService: CatalogResolutionService) {}
 
   @Get()
+  @RequirePermission(P.catalogs.read)
   listUnresolved() {
     return this.resolutionService.listUnresolved({});
   }

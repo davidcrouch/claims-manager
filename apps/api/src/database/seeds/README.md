@@ -1,8 +1,8 @@
 # Database Seeds
 
 Idempotent seed framework for `claims_manager`. Used for first-party
-reference data and demo / sample data that make the app usable in dev
-and staging.
+reference data and the Ensure Construction bootstrap (org + Crunchwork
+staging connection) that make the app usable in dev and staging.
 
 > As of migration `0004_drop_integration_providers`, the provider catalogue
 > is **hardcoded in source** (`src/modules/providers/provider-registry.ts`)
@@ -13,8 +13,9 @@ and staging.
 | Name | Scope | What it does |
 |---|---|---|
 | `filesystem-default` | **Platform** (`tenant_id = NULL`) | Creates Company + Project filesystem templates (`Company` is `is_default=true`). Available to all tenants at FS setup. |
-| `catalog-dev` | **Tenant** | Catalogue types, categories, unit types, Crunchwork v1 + Building Repairs catalogues for the first org (CLI) or a given tenant (signup). |
-| `sample-data` | **Tenant** (optional) | ~8 rows per core business table for the first org / given tenant. Gated by `SEED_SAMPLE_DATA=true`. |
+| `ensure-construction` | **Tenant** | Upserts organisation **Ensure Construction Pty Ltd** and its Crunchwork **staging** integration connection (encrypted credentials). |
+| `catalog-dev` | **Tenant** | Catalogue types, categories, unit types, Crunchwork v1 + Building Repairs catalogues for Ensure Construction (CLI) or a given tenant (signup). |
+| `lookups` | **Tenant** | Status/type lookup values and Crunchwork group labels for Ensure Construction (CLI) or a given tenant (signup). |
 
 > **Document templates** — uploading `.docx` files from `data/templates/` and assigning
 > Admin → Document Templates is handled by the **first-login provisioning flow**
@@ -24,12 +25,14 @@ and staging.
 ### Seeding a specific tenant on demand
 
 `catalog-dev.seed.ts` exports `seedCatalogDevForTenant({ db, tenantId, logger? })`.
-`sample-data.seed.ts` exports `seedSampleDataForTenant({ db, tenantId, logger? })`.
+`lookups.seed.ts` exports `seedLookupsForTenant({ db, tenantId, logger? })`.
+`ensure-construction.seed.ts` exports `seedCrunchworkStagingConnection({ db, tenantId, logger? })`
+(connection only; used when the tenant already is Ensure Construction).
 
 | Caller | How | When |
 |---|---|---|
-| CLI (`pnpm --filter api run db:seed`) | Platform seed + first-org catalog-dev; sample-data if `SEED_SAMPLE_DATA=true` | Manual / bootstrap |
-| `POST /api/v1/internal/seed-tenant` | Always catalog-dev; sample-data if `SEED_SAMPLE_DATA=true` | Invoked by `auth-server` after a new tenant signs up |
+| CLI (`pnpm --filter api run db:seed`) | Platform seed + Ensure Construction org/connection + catalog-dev + lookups | Manual / bootstrap |
+| `POST /api/v1/internal/seed-tenant` | Catalog-dev + MCP + lookups; Crunchwork staging connection if the tenant is Ensure Construction | Invoked by `auth-server` after a new tenant signs up |
 | **First-login provisioning** | `ProvisioningService` → filesystem + template uploads + doc template settings + catalog | Triggered on user's first authenticated request |
 
 The `/internal/seed-tenant` route is guarded by `x-internal-token` (shared
@@ -41,8 +44,8 @@ secret) and gated by `SEED_NEW_TENANTS=true`. See
 
 | Var | Effect |
 |---|---|
-| `SEED_NEW_TENANTS=true` | Enables signup → `/internal/seed-tenant` (catalog-dev always runs when enabled) |
-| `SEED_SAMPLE_DATA=true` | Also run `sample-data` (CLI and signup path) |
+| `SEED_NEW_TENANTS=true` | Enables signup → `/internal/seed-tenant` (catalog-dev, MCP, lookups) |
+| `CREDENTIALS_ENCRYPTION_KEY` | Required by `ensure-construction` to encrypt Crunchwork client secret + HMAC |
 
 ### Seeding a remote environment (e.g. staging)
 
@@ -53,16 +56,16 @@ To seed `app.staging.branlamie.com`:
 # From repo root. Point DATABASE_URL at the staging DB (e.g. via the
 # CloudSQL Auth Proxy running on localhost:5432).
 $env:DATABASE_URL = "postgresql://<user>:<password>@localhost:5432/<dbname>"
-$env:SEED_SAMPLE_DATA = "true"   # optional
+$env:CREDENTIALS_ENCRYPTION_KEY = "<same key the API uses>"
 pnpm --filter api run db:seed
 ```
 
 Alternatively, run it from inside the staging VM / a job container where
 `DATABASE_URL` is already exported; no other config is required.
 
-Because every inserted row is tagged `seed-*` (sample-data) or keyed on
-unique codes (catalog / filesystem), running the seed multiple times against
-the same DB is safe.
+Because every inserted row is keyed on unique codes (catalog / filesystem /
+org slug / connection tenant+provider+env), running the seed multiple times
+against the same DB is safe.
 
 ## Commands
 
@@ -133,10 +136,12 @@ seeds/
 |---|---|---|
 | `filesystem_template` (platform) | Yes — `filesystem-default` | Template for tenant FS setup |
 | Catalogue types/items | Yes — `catalog-dev` | Per-tenant starter catalogue |
+| Lookup values + CW group labels | Yes — `lookups` | Job/claim statuses and Create Job types |
+| `organizations` | Yes — `ensure-construction` only | Bootstrap tenant for staging/dev |
+| `integration_connections` | Yes — Crunchwork staging for Ensure Construction | Encrypted; not applied to other tenants |
 | Word templates + `document_templates` | No — handled by `ProvisioningService` on first login | Uses real API pipeline for thumbnails |
-| Sample claims/jobs/… | Optional — `sample-data` | Demo data; env-gated |
-| `integration_connections` | No — per-tenant config; created via the UI/API | |
-| `organizations`, `users`, `user_identities`, `organization_users` | No — written by `apps/auth-server` on signup/login | |
+| Sample claims/jobs/… | No | Former `sample-data` seed removed |
+| `users`, `user_identities`, `organization_users` | No — written by `apps/auth-server` on signup/login | |
 | Provider catalogue | No — hardcoded in `provider-registry.ts` | |
 
 > The former `integration_providers` table has been removed. Provider

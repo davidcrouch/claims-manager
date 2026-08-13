@@ -23,19 +23,17 @@ import { openDb, getDbHost } from './lib/db';
 import { runSeeds } from './lib/runner';
 import type { Seed } from './lib/runner';
 import filesystemDefaultSeed from './entries/filesystem-default.seed';
-import sampleDataSeed from './entries/sample-data.seed';
+import ensureConstructionSeed from './entries/ensure-construction.seed';
 import catalogDevSeed from './entries/catalog-dev.seed';
-
-function isSampleDataEnabled(): boolean {
-  return (process.env.SEED_SAMPLE_DATA ?? '').trim().toLowerCase() === 'true';
-}
+import lookupsSeed from './entries/lookups.seed';
 
 function buildSeeds(): Seed[] {
-  const seeds: Seed[] = [filesystemDefaultSeed, catalogDevSeed];
-  if (isSampleDataEnabled()) {
-    seeds.push(sampleDataSeed);
-  }
-  return seeds;
+  return [
+    filesystemDefaultSeed,
+    ensureConstructionSeed,
+    catalogDevSeed,
+    lookupsSeed,
+  ];
 }
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);

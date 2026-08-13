@@ -13,9 +13,10 @@
  * Env contract:
  *   - SEED_NEW_TENANTS     "true" to enable (default off). Also enforced
  *                          on the api-server side for defence in depth.
- *                          When enabled, api-server always seeds catalog-dev;
- *                          sample-data is controlled by api-server's
- *                          SEED_SAMPLE_DATA flag (not this client).
+ *                          When enabled, api-server seeds catalog-dev,
+ *                          MCP, and lookups. Crunchwork staging connection
+ *                          is attached only when the tenant is Ensure
+ *                          Construction.
  *   - API_INTERNAL_URL     Base URL of the api-server as reachable from
  *                          the auth-server container (e.g.
  *                          http://api-server:3001 inside compose, or
@@ -36,7 +37,7 @@ const baseLogger = createLogger('auth-server:api-seed-client', LoggerType.NODEJS
 const log = createTelemetryLogger(baseLogger, 'api-seed-client', 'ApiSeedClient', 'auth-server');
 
 const DEFAULT_PREFIX = '/api/v1';
-// Catalog + sample-data seed can take >1m; keep request open so Cloud Run
+// Catalog + lookups seed can take >1m; keep request open so Cloud Run
 // allocates CPU for the full wait (auth signup still fire-and-forgets this).
 const REQUEST_TIMEOUT_MS = 180_000;
 const METADATA_IDENTITY_URL =

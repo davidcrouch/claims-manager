@@ -120,6 +120,50 @@ async function handleResponse<T>(res: Response): Promise<T> {
   );
 }
 
+type RawRole = {
+  id?: string;
+  key?: string;
+  roleName?: string;
+  name?: string;
+  label?: string;
+  scope: string;
+  description?: string | null;
+  sortOrder?: number;
+  isSystem?: boolean;
+};
+
+function mapRole(raw: RawRole | { role?: RawRole }): import('@/types/api').RoleDef {
+  const r = 'role' in raw && raw.role ? raw.role : (raw as RawRole);
+  return {
+    id: r.id ?? '',
+    key: r.key ?? r.roleName ?? '',
+    name: r.name ?? r.label ?? '',
+    scope: r.scope,
+    description: r.description ?? null,
+    sortOrder: r.sortOrder ?? 0,
+    isSystem: Boolean(r.isSystem),
+  };
+}
+
+function mapRoleList(res: unknown): import('@/types/api').RoleDef[] {
+  const rows = Array.isArray(res)
+    ? res
+    : ((res as { roles?: RawRole[]; data?: RawRole[] }).roles ??
+      (res as { data?: RawRole[] }).data ??
+      []);
+  return rows.map(mapRole);
+}
+
+function mapPermissionList(res: unknown): import('@/types/api').PermissionDef[] {
+  const rows = Array.isArray(res)
+    ? res
+    : ((res as { permissions?: import('@/types/api').PermissionDef[]; data?: import('@/types/api').PermissionDef[] })
+        .permissions ??
+      (res as { data?: import('@/types/api').PermissionDef[] }).data ??
+      []);
+  return rows;
+}
+
 export function createApiClient(options?: ApiClientOptions) {
   const baseUrl = getApiBaseUrl();
   const headers = buildHeaders(options);
@@ -2156,6 +2200,62 @@ export function createApiClient(options?: ApiClientOptions) {
 
     removeOrgUser(userId: string): Promise<{ ok: boolean }> {
       return fetchApi(`/admin/users/${userId}`, { method: 'DELETE' });
+    },
+
+    listRoles(scope?: string): Promise<import('@/types/api').RoleDef[]> {
+      const qs = scope ? `?scope=${encodeURIComponent(scope)}` : '';
+      return fetchApi(`/admin/roles${qs}`).then(mapRoleList);
+    },
+
+    createRole(input: {
+      roleName: string;
+      scope: string;
+      label: string;
+      description?: string;
+      sortOrder?: number;
+    }): Promise<import('@/types/api').RoleDef> {
+      return fetchApi('/admin/roles', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }).then(mapRole);
+    },
+
+    deleteRole(roleId: string): Promise<{ ok: boolean }> {
+      return fetchApi(`/admin/roles/${encodeURIComponent(roleId)}`, {
+        method: 'DELETE',
+      });
+    },
+
+    listPermissions(opts?: {
+      category?: string;
+      scope?: string;
+    }): Promise<import('@/types/api').PermissionDef[]> {
+      const params = new URLSearchParams();
+      if (opts?.category) params.set('category', opts.category);
+      if (opts?.scope) params.set('scope', opts.scope);
+      const qs = params.toString() ? `?${params}` : '';
+      return fetchApi(`/admin/permissions${qs}`).then(mapPermissionList);
+    },
+
+    getRolePermissions(
+      roleId: string,
+    ): Promise<import('@/types/api').PermissionDef[]> {
+      return fetchApi(
+        `/admin/roles/${encodeURIComponent(roleId)}/permissions`,
+      ).then(mapPermissionList);
+    },
+
+    setRolePermissions(
+      roleId: string,
+      permissionIds: string[],
+    ): Promise<unknown> {
+      return fetchApi(
+        `/admin/roles/${encodeURIComponent(roleId)}/permissions`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({ permissionIds }),
+        },
+      );
     },
   };
 }

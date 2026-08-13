@@ -64,6 +64,7 @@ import { AiChatModule } from './modules/ai-chat/ai-chat.module';
 import { SkillsModule } from './modules/skills/skills.module';
 import { AuthServerModule } from './modules/auth-server/auth-server.module';
 import { UserManagementModule } from './modules/user-management/user-management.module';
+import { RbacModule } from './modules/rbac/rbac.module';
 import { TenantInterceptor } from './tenant/tenant.interceptor';
 import { AllExceptionsFilter, HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -153,6 +154,7 @@ import { OfficeModule } from './common/office/office.module';
     SkillsModule,
     AuthServerModule,
     UserManagementModule,
+    RbacModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

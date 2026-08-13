@@ -10,6 +10,7 @@ import {
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface';
 import { TenantContext } from '../../tenant/tenant-context';
 import { AiMemoryService } from './ai-memory.service';
@@ -25,7 +26,7 @@ export class AiMemoryController {
   ) {}
 
   @Get()
-  @RequirePermission('ai.read')
+  @RequirePermission(P.ai.read)
   @ApiOperation({ summary: 'List all user memories' })
   async list(@CurrentUser() user: AuthenticatedUser) {
     const tenantId = this.tenantContext.getTenantId();
@@ -36,7 +37,7 @@ export class AiMemoryController {
   }
 
   @Post()
-  @RequirePermission('ai.manage')
+  @RequirePermission(P.ai.manage)
   @ApiOperation({ summary: 'Upsert a user memory (remember)' })
   async upsert(
     @CurrentUser() user: AuthenticatedUser,
@@ -57,7 +58,7 @@ export class AiMemoryController {
   }
 
   @Delete(':id')
-  @RequirePermission('ai.manage')
+  @RequirePermission(P.ai.manage)
   @ApiOperation({ summary: 'Delete a user memory by ID' })
   async remove(
     @CurrentUser() user: AuthenticatedUser,

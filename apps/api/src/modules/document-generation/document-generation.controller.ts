@@ -14,6 +14,8 @@ import type { Response } from 'express';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { DocumentGenerationService } from './document-generation.service';
 import { GenerateDocumentDto } from './dto/generate-document.dto';
+import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 
 @ApiTags('Generated Documents')
 @Controller('generated-documents')
@@ -23,6 +25,7 @@ export class DocumentGenerationController {
   constructor(private readonly documentGenService: DocumentGenerationService) {}
 
   @Post('generate')
+  @RequirePermission(P.documents.manage)
   @ApiOperation({ summary: 'Generate a PDF document from an entity' })
   async generate(
     @Body() dto: GenerateDocumentDto,
@@ -40,6 +43,7 @@ export class DocumentGenerationController {
   }
 
   @Get()
+  @RequirePermission(P.documents.read)
   @ApiOperation({ summary: 'List generated documents for the current tenant' })
   async findAll(
     @Query('documentType') documentType?: string,
@@ -54,12 +58,14 @@ export class DocumentGenerationController {
   }
 
   @Get(':id')
+  @RequirePermission(P.documents.read)
   @ApiOperation({ summary: 'Get a generated document by ID' })
   async findById(@Param('id') id: string) {
     return this.documentGenService.findById({ id });
   }
 
   @Get(':id/download')
+  @RequirePermission(P.documents.read)
   @ApiOperation({ summary: 'Get a presigned download URL for a generated document' })
   async download(
     @Param('id') id: string,
@@ -69,6 +75,7 @@ export class DocumentGenerationController {
   }
 
   @Get(':id/stream')
+  @RequirePermission(P.documents.read)
   @ApiOperation({ summary: 'Stream a generated document (ADC / local fallback)' })
   async stream(
     @Param('id') id: string,
@@ -87,6 +94,7 @@ export class DocumentGenerationController {
   }
 
   @Post(':id/regenerate')
+  @RequirePermission(P.documents.manage)
   @ApiOperation({ summary: 'Regenerate a document with the same or a new template' })
   async regenerate(
     @Param('id') id: string,

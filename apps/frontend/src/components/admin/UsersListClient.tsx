@@ -12,6 +12,12 @@ import {
   UserX,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { ListPageHeader } from '@/components/layout/ListPageHeader';
 import {
@@ -24,6 +30,7 @@ import {
 import type { AvailableRole, OrgMember } from '@/types/api';
 import { InviteUserDrawer } from './InviteUserDrawer';
 import { EditUserRolesDrawer } from './EditUserRolesDrawer';
+import { toast } from 'sonner';
 
 function statusBadgeClass(status: string): string {
   const normalized = status.toLowerCase();
@@ -55,7 +62,6 @@ export function UsersListClient() {
   const [loading, setLoading] = useState(true);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editMember, setEditMember] = useState<OrgMember | null>(null);
-  const [menuUserId, setMenuUserId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const loadData = useCallback(async () => {
@@ -84,7 +90,6 @@ export function UsersListClient() {
   }
 
   function handleResend(member: OrgMember) {
-    setMenuUserId(null);
     startTransition(async () => {
       const result = await resendInviteAction(member);
       if (!result.success) {
@@ -97,7 +102,6 @@ export function UsersListClient() {
   }
 
   function handleToggleStatus(member: OrgMember) {
-    setMenuUserId(null);
     const nextStatus = member.status.toLowerCase() === 'disabled' ? 'Active' : 'Disabled';
     startTransition(async () => {
       const result = await updateOrgUserStatusAction(member.id, nextStatus);
@@ -110,7 +114,6 @@ export function UsersListClient() {
   }
 
   function handleRemove(member: OrgMember) {
-    setMenuUserId(null);
     if (!window.confirm(`Remove ${displayName(member)} from this organisation?`)) {
       return;
     }
@@ -208,61 +211,41 @@ export function UsersListClient() {
                     <td className="px-4 py-3 text-slate-600">
                       {formatDate(member.lastLoginAt)}
                     </td>
-                    <td className="relative px-4 py-3 text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          setMenuUserId((current) =>
-                            current === member.id ? null : member.id,
-                          )
-                        }
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                      {menuUserId === member.id && (
-                        <div className="absolute right-4 z-10 mt-1 w-48 rounded-md border border-slate-200 bg-white py-1 shadow-lg">
-                          <button
-                            type="button"
-                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
-                            onClick={() => {
-                              setMenuUserId(null);
-                              setEditMember(member);
-                            }}
-                          >
+                    <td className="px-4 py-3 text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          render={
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          }
+                        />
+                        <DropdownMenuContent align="end" className="w-48 min-w-48">
+                          <DropdownMenuItem onClick={() => setEditMember(member)}>
                             <Shield className="h-3.5 w-3.5" />
                             Edit roles
-                          </button>
+                          </DropdownMenuItem>
                           {member.status.toLowerCase() === 'invited' && (
-                            <button
-                              type="button"
-                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
-                              onClick={() => handleResend(member)}
-                            >
+                            <DropdownMenuItem onClick={() => handleResend(member)}>
                               <Mail className="h-3.5 w-3.5" />
                               Resend invite
-                            </button>
+                            </DropdownMenuItem>
                           )}
-                          <button
-                            type="button"
-                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
-                            onClick={() => handleToggleStatus(member)}
-                          >
+                          <DropdownMenuItem onClick={() => handleToggleStatus(member)}>
                             <UserX className="h-3.5 w-3.5" />
                             {member.status.toLowerCase() === 'disabled'
                               ? 'Enable user'
                               : 'Disable user'}
-                          </button>
-                          <button
-                            type="button"
-                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            variant="destructive"
                             onClick={() => handleRemove(member)}
                           >
                             <UserMinus className="h-3.5 w-3.5" />
                             Remove
-                          </button>
-                        </div>
-                      )}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </td>
                   </tr>
                 ))}
@@ -276,7 +259,10 @@ export function UsersListClient() {
         open={inviteOpen}
         onOpenChange={setInviteOpen}
         availableRoles={roles}
-        onInvited={(member) => upsertMember(member)}
+        onInvited={(member) => {
+          upsertMember(member);
+          toast.success(`Invitation sent to ${member.email}`);
+        }}
       />
       <EditUserRolesDrawer
         open={!!editMember}

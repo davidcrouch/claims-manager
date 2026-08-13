@@ -61,7 +61,7 @@ export class ApplicationSignupService {
     }
 
     const db = getDb();
-    return db.transaction(async (tx) => {
+    const result = await db.transaction(async (tx) => {
       const txDb: DbGetter = () => tx as unknown as Db;
       const systemUserId = '00000000-0000-0000-0000-000000000000';
       const systemContext: AccessContext = { organizationId: 'public', userId: systemUserId };
@@ -177,6 +177,8 @@ export class ApplicationSignupService {
 
       let organizationUserId: string;
       const existingOU = await organizationUsersRepo.getByUserIdAndOrganizationId(systemContext, userId!, organizationId);
+      const membershipRole =
+        scenario === 'existing_user_existing_organization' ? 'member' : 'admin';
       if (existingOU) {
         organizationUserId = existingOU.id;
       } else {
@@ -184,7 +186,7 @@ export class ApplicationSignupService {
         const createdOU = await organizationUsersRepo.create(systemContext, {
           userId: userId!,
           organizationId,
-          role: 'member',
+          role: membershipRole,
           status: 'Active',
           object: 'organization_user',
           created: now,
@@ -203,6 +205,12 @@ export class ApplicationSignupService {
         userIdentityId: userIdentityId ?? undefined,
       };
     });
+
+    const { assignUserRoles } = await import('./user-role-assignments.js');
+    const rbacRole =
+      result.scenario === 'existing_user_existing_organization' ? 'member' : 'admin';
+    await assignUserRoles(getDb(), result.userId, result.organizationId, [rbacRole]);
+    return result;
   }
 
   private async existsUser(txDb: DbGetter, userId: string): Promise<boolean> {

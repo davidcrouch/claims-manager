@@ -7,12 +7,15 @@ import {
   Query,
 } from '@nestjs/common';
 import { ClaimsService } from './claims.service';
+import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
+import { P } from '../../auth/permission-constants';
 
 @Controller('claims')
 export class ClaimsController {
   constructor(private readonly claimsService: ClaimsService) {}
 
   @Get()
+  @RequirePermission(P.claims.read)
   async findAll(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -32,16 +35,19 @@ export class ClaimsController {
   }
 
   @Get(':id')
+  @RequirePermission(P.claims.read)
   async findOne(@Param('id') id: string) {
     return this.claimsService.findOne({ id });
   }
 
   @Post()
+  @RequirePermission(P.claims.create)
   async create(@Body() body: Record<string, unknown>) {
     return this.claimsService.create({ body });
   }
 
   @Post(':id')
+  @RequirePermission(P.claims.update)
   async update(
     @Param('id') id: string,
     @Body() body: Record<string, unknown>,

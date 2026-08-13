@@ -28,7 +28,7 @@ const EMPTY_INBOX: DashboardInbox = {
   queues: [],
   today: [],
   unread: [],
-  activeJobs: { scopedToUser: false, count: 0, href: '/jobs', items: [] },
+  activeJobs: { scopedToUser: false, count: 0, href: '/jobs', items: [], mine: { count: 0, href: '/jobs', items: [] } },
 };
 
 export default async function DashboardPage() {

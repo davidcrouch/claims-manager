@@ -11,7 +11,7 @@ export default async function McpConnectionsPage() {
   if (!api) redirect('/api/auth/login');
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col px-6 pb-6">
+    <div className="flex flex-col px-6 pb-6">
       <SetPageHeader>
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-500/10">
