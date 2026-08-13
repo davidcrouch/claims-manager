@@ -132,13 +132,14 @@ type RawRole = {
   isSystem?: boolean;
 };
 
-function mapRole(raw: RawRole | { role?: RawRole }): import('@/types/api').RoleDef {
-  const r = 'role' in raw && raw.role ? raw.role : (raw as RawRole);
+function mapRole(raw: unknown): import('@/types/api').RoleDef {
+  const rec = (raw ?? {}) as RawRole & { role?: RawRole };
+  const r = rec.role ?? rec;
   return {
     id: r.id ?? '',
     key: r.key ?? r.roleName ?? '',
     name: r.name ?? r.label ?? '',
-    scope: r.scope,
+    scope: r.scope ?? '',
     description: r.description ?? null,
     sortOrder: r.sortOrder ?? 0,
     isSystem: Boolean(r.isSystem),
