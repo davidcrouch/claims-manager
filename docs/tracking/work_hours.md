@@ -648,7 +648,7 @@
   Hosting now deploys the services to Google Cloud on staging and production, and the old Fly.io configuration was removed.
   Outcome: access control, invitations, and hosted releases work together as one security and operations update.
 
-- `2026-08-13` `PENDING` **0.5 h**
+- `2026-08-13` `caefdc7` **0.5 h**
   `2 files | +13 −3 | Tier 2 standard | Light orchestration`
   Lay summary: The automated product build succeeds again so the latest updates can be released.
   **Fixed the failed website build so the latest update can ship.** Role management responses are read safely when creating a role.
