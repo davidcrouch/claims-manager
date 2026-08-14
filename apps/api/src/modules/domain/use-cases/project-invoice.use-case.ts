@@ -2,13 +2,26 @@ import { Injectable, Logger } from '@nestjs/common';
 import type { ProjectionUseCase, ProjectionResult } from './use-case.interface';
 import type { DrizzleDbOrTx } from '../../../database/drizzle.module';
 import { InvoiceTransformer } from '../transformers/invoice.transformer';
-import { EntityRelationshipService } from '../services/entity-relationship.service';
 import { LookupResolutionService } from '../services/lookup-resolution.service';
+import { ExternalObjectService } from '../../external/external-object.service';
 import {
   InvoicesRepository,
   ExternalLinksRepository,
   type InvoiceInsert,
 } from '../../../database/repositories';
+
+function cwPurchaseOrderExternalId(
+  payload: Record<string, unknown>,
+): string | undefined {
+  const nested = payload.purchaseOrder;
+  if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+    const id = (nested as Record<string, unknown>).id;
+    if (typeof id === 'string' && id) return id;
+  }
+  return typeof payload.purchaseOrderId === 'string' && payload.purchaseOrderId
+    ? payload.purchaseOrderId
+    : undefined;
+}
 
 @Injectable()
 export class ProjectInvoiceUseCase implements ProjectionUseCase {
@@ -16,10 +29,10 @@ export class ProjectInvoiceUseCase implements ProjectionUseCase {
 
   constructor(
     private readonly transformer: InvoiceTransformer,
-    private readonly entityRelationship: EntityRelationshipService,
     private readonly lookupResolution: LookupResolutionService,
     private readonly invoicesRepo: InvoicesRepository,
     private readonly externalLinksRepo: ExternalLinksRepository,
+    private readonly externalObjectService: ExternalObjectService,
   ) {}
 
   async execute(params: {
@@ -34,24 +47,58 @@ export class ProjectInvoiceUseCase implements ProjectionUseCase {
 
     this.logger.log(`ProjectInvoiceUseCase.execute — externalObjectId=${externalObjectId}`);
 
-    // 1. Check for existing entity
-    const existingLinks = await this.externalLinksRepo.findByExternalObjectId({ externalObjectId, tx });
-    const existingLink = existingLinks.find((l) => l.internalEntityType === 'invoice');
-
-    // 2. Transform
-    const result = this.transformer.transform({ payload, tenantId });
-
-    // 3. Resolve parents (purchase_order)
-    const resolvedParents = await this.entityRelationship.resolveParents({
-      parentRefs: result.parentRefs,
-      tenantId,
-      connectionId,
+    const existingLinks = await this.externalLinksRepo.findByExternalObjectId({
+      externalObjectId,
       tx,
     });
-    const purchaseOrderId = resolvedParents.purchase_order;
-    if (purchaseOrderId) (result.entity as Record<string, unknown>).purchaseOrderId = purchaseOrderId;
+    const existingLink = existingLinks.find((l) => l.internalEntityType === 'invoice');
 
-    // 4. Resolve lookups
+    const result = this.transformer.transform({ payload, tenantId });
+
+    // Provider POs project as work_orders; resolve both against the CW PO id.
+    const cwPoId = cwPurchaseOrderExternalId(payload);
+    let purchaseOrderId: string | undefined;
+    let workOrderId: string | undefined;
+
+    if (cwPoId) {
+      purchaseOrderId =
+        (await this.externalObjectService.resolveInternalEntityId({
+          connectionId,
+          providerEntityType: 'purchase_order',
+          providerEntityId: cwPoId,
+          internalEntityType: 'purchase_order',
+          tx,
+        })) ?? undefined;
+
+      workOrderId =
+        (await this.externalObjectService.resolveInternalEntityId({
+          connectionId,
+          providerEntityType: 'purchase_order',
+          providerEntityId: cwPoId,
+          internalEntityType: 'work_order',
+          tx,
+        })) ?? undefined;
+    }
+
+    if (purchaseOrderId) {
+      (result.entity as Record<string, unknown>).purchaseOrderId = purchaseOrderId;
+    }
+    if (workOrderId) {
+      (result.entity as Record<string, unknown>).workOrderId = workOrderId;
+    }
+
+    if (!purchaseOrderId && !workOrderId) {
+      this.logger.warn(
+        `ProjectInvoiceUseCase.execute — invoice has no resolvable PO or WO parent; skipping`,
+      );
+      return {
+        status: 'skipped',
+        internalEntityId: '',
+        internalEntityType: 'invoice',
+        reason: 'skipped_no_parent',
+      };
+    }
+
     const resolvedLookups = await this.lookupResolution.resolveAll({
       lookups: result.lookups,
       tenantId,
@@ -62,7 +109,6 @@ export class ProjectInvoiceUseCase implements ProjectionUseCase {
       (result.entity as Record<string, unknown>)[field] = lookupId;
     }
 
-    // 5. Upsert
     let invoiceId: string;
     if (existingLink) {
       await this.invoicesRepo.update({
@@ -72,10 +118,6 @@ export class ProjectInvoiceUseCase implements ProjectionUseCase {
       });
       invoiceId = existingLink.internalEntityId;
     } else {
-      // purchaseOrderId is required for new invoices
-      if (!purchaseOrderId) {
-        (result.entity as Record<string, unknown>).purchaseOrderId = '';
-      }
       const created = await this.invoicesRepo.create({
         data: { tenantId, ...result.entity, originType: 'provider' } as InvoiceInsert,
         tx,

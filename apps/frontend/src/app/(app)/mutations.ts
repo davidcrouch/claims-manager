@@ -70,6 +70,23 @@ export async function createInvoiceAction(body: Record<string, unknown>): Promis
   }
 }
 
+export async function publishInvoiceAction(id: string): Promise<{ success: boolean; invoice?: Invoice; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const invoice = await api.publishInvoice(id);
+    return { success: true, invoice };
+  } catch (err) {
+    console.error('[publishInvoiceAction]', err);
+    if (err instanceof ApiError) {
+      const body = err.body as { message?: string; details?: string } | undefined;
+      const detail = body?.details ?? body?.message ?? err.message;
+      return { success: false, error: detail };
+    }
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to publish invoice' };
+  }
+}
+
 export async function createReportAction(body: Record<string, unknown>): Promise<{ success: boolean; report?: Report; error?: string }> {
   const api = await getApi();
   if (!api) return { success: false, error: 'Not authenticated' };

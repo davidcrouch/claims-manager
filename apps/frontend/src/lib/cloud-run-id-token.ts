@@ -55,10 +55,35 @@ export function resolveApiAudience(): string {
 /**
  * Headers for frontend (Cloud Run) → api-server (IAM-private) calls.
  * Empty locally where K_SERVICE is unset.
+ * Memoized briefly in-process to avoid metadata round-trips per layout fetch.
  */
+let cachedInvoker:
+  | { token: string; audience: string; expiresAt: number }
+  | null = null;
+
 export async function cloudRunInvokerHeaders(): Promise<Record<string, string>> {
-  const idToken = await fetchCloudRunIdToken(resolveApiAudience());
-  return idToken
-    ? { 'X-Serverless-Authorization': `Bearer ${idToken}` }
-    : {};
+  if (!process.env.K_SERVICE) {
+    return {};
+  }
+
+  const audience = resolveApiAudience();
+  const now = Date.now();
+  if (
+    cachedInvoker &&
+    cachedInvoker.audience === audience &&
+    cachedInvoker.expiresAt > now
+  ) {
+    return { 'X-Serverless-Authorization': `Bearer ${cachedInvoker.token}` };
+  }
+
+  const idToken = await fetchCloudRunIdToken(audience);
+  if (!idToken) return {};
+
+  // ID tokens are typically valid ~1h; refresh a bit early.
+  cachedInvoker = {
+    token: idToken,
+    audience,
+    expiresAt: now + 50 * 60 * 1000,
+  };
+  return { 'X-Serverless-Authorization': `Bearer ${idToken}` };
 }

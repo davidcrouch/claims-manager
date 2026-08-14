@@ -317,7 +317,8 @@ export interface PurchaseOrder {
 export interface Invoice {
   id: string;
   tenantId: string;
-  purchaseOrderId: string;
+  purchaseOrderId?: string | null;
+  workOrderId?: string | null;
   jobId?: string | null;
   invoiceNumber?: string | null;
   statusLookupId?: string | null;
@@ -326,6 +327,7 @@ export interface Invoice {
   tax?: string | null;
   totalAmount?: string | null;
   excessAmount?: string | null;
+  sourceExternalReference?: string | null;
   invoicePayload?: Record<string, unknown> | null;
   apiPayload?: Record<string, unknown> | null;
   createdAt?: string;
@@ -336,7 +338,7 @@ export interface Invoice {
 export interface WorkOrder {
   id: string;
   tenantId: string;
-  purchaseOrderId: string;
+  purchaseOrderId?: string | null;
   jobId?: string | null;
   claimId?: string | null;
   vendorId?: string | null;
@@ -344,6 +346,7 @@ export interface WorkOrder {
   sourceOrganisationId?: string | null;
   sourceExternalReference?: string | null;
   externalId?: string | null;
+  originType?: string | null;
   workOrderNumber?: string | null;
   name?: string | null;
   statusLookupId?: string | null;

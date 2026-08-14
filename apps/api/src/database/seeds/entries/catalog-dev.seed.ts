@@ -12,7 +12,7 @@
  *   - api-server `POST /internal/seed-tenant` → always for new tenants
  */
 import { readFileSync } from 'node:fs';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import type { Seed, SeedContext, SeedLogger, SeedResult } from '../lib/runner';
 import type { SeedDb } from '../lib/db';
 import { parseCsv } from '../lib/csv';
@@ -21,6 +21,17 @@ import * as schema from '../../schema';
 import { ENSURE_CONSTRUCTION_SLUG } from './ensure-construction.seed';
 
 const LOG = '[seeds/catalog-dev]';
+
+/** CW Insurance REST API catalogItemId must be a UUID — never store SKU codes here. */
+const CW_CATALOG_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function cwCatalogExternalReference(raw: string | undefined | null): string | null {
+  const value = (raw || '').trim();
+  if (!value) return null;
+  if (!CW_CATALOG_UUID_RE.test(value)) return null;
+  return value;
+}
 
 const CRUNCHWORK_CATALOG_NAME = 'Crunchwork v1';
 const INTERNAL_CATALOG_NAME = 'Building Repairs';
@@ -316,6 +327,20 @@ export async function seedCatalogDevForTenant(params: {
 
     const existing = await findItemByCode(db, tenantId, cw.id, code);
     if (existing) {
+      // Older seeds stored the SKU code as external_reference; that breaks CW publish
+      // (catalogItemId must be a Crunchwork catalog UUID). Clear non-UUID values.
+      if (
+        existing.externalReference &&
+        !CW_CATALOG_UUID_RE.test(existing.externalReference)
+      ) {
+        await db
+          .update(schema.catalogItems)
+          .set({ externalReference: null, updatedAt: new Date() })
+          .where(eq(schema.catalogItems.id, existing.id));
+        logger.info(
+          `${LOG} cleared non-UUID external_reference on CW item ${code} (was ${existing.externalReference})`,
+        );
+      }
       skipped++;
       continue;
     }
@@ -328,6 +353,8 @@ export async function seedCatalogDevForTenant(params: {
       logger.warn(`${LOG} skip CW ${code}: missing unit type for ${unitRef}`);
       continue;
     }
+
+    const csvExtRef = cwCatalogExternalReference(r.external_reference);
 
     await db.insert(schema.catalogItems).values({
       tenantId,
@@ -346,13 +373,33 @@ export async function seedCatalogDevForTenant(params: {
       taxRate: numOrNull(r.tax_rate) ?? '0.10',
       pricingMode: kind === 'assembly' ? ((r.pricing_mode || 'fixed').trim() as 'fixed') : null,
       fixedUnitCost: kind === 'assembly' ? numOrNull(r.fixed_unit_cost) : null,
-      externalReference: code, // CW sync key
+      // Must be the Crunchwork catalog item UUID when linked — never the SKU/code.
+      externalReference: csvExtRef,
       isActive: true,
       metadata: { source: 'building-repairs-catalog.csv', seededAs: 'crunchwork-v1' },
     });
     inserted++;
   }
   logger.info(`${LOG} Crunchwork v1 items seeded from CSV`);
+
+  // Belt-and-braces: any remaining non-UUID external_reference on this CW catalogue.
+  const cleared = await db
+    .update(schema.catalogItems)
+    .set({ externalReference: null, updatedAt: new Date() })
+    .where(
+      and(
+        eq(schema.catalogItems.tenantId, tenantId),
+        eq(schema.catalogItems.catalogId, cw.id),
+        isNotNull(schema.catalogItems.externalReference),
+        sql`${schema.catalogItems.externalReference} !~* ${'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'}`,
+      ),
+    )
+    .returning({ id: schema.catalogItems.id });
+  if (cleared.length > 0) {
+    logger.info(
+      `${LOG} cleared ${cleared.length} non-UUID external_reference value(s) on Crunchwork v1 catalogue`,
+    );
+  }
 
   // ── Internal Building Repairs (primitives from CSV + computed BOM assemblies) ──
   const internal = await ensureCatalog(

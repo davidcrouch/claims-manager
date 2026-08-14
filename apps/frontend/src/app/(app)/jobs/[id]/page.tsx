@@ -1,5 +1,6 @@
 import { redirect, notFound } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
+import { loadClaim, loadJob } from '@/lib/cached-entity-loaders';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { JobDetail } from '@/components/jobs/JobDetail';
 import { JobPageHeader } from '@/components/jobs/JobHeader';
@@ -12,10 +13,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const api = await getServerApiClient();
-  if (!api) return { title: 'Job | EnsureOS' };
-
-  const job = await api.getJob(id).catch(() => null);
+  const job = await loadJob(id);
   const title = job?.externalReference ?? id;
   return { title: `${title} | EnsureOS` };
 }
@@ -29,13 +27,7 @@ export default async function JobDetailPage({
   const api = await getServerApiClient();
   if (!api) redirect('/api/auth/login');
 
-  const job = await api.getJob(id).catch((err: unknown) => {
-    console.error(
-      'frontend:JobDetailPage - getJob failed:',
-      err instanceof Error ? err.message : err,
-    );
-    return null;
-  });
+  const job = await loadJob(id);
   if (!job) {
     notFound();
   }
@@ -43,18 +35,8 @@ export default async function JobDetailPage({
   // Fire-and-forget: mark any unread notifications for this job as read
   api.markEntityNotificationsRead('job', id).catch(() => {});
 
-  let parentClaim: Claim | null = null;
-  if (job.claimId) {
-    parentClaim = await api.getClaim(job.claimId).catch((err: unknown) => {
-      console.warn(
-        'frontend:JobDetailPage - getClaim (parent) failed:',
-        err instanceof Error ? err.message : err,
-      );
-      return null;
-    });
-  }
-
-  const [statusOptions, jobTypeOptions] = await Promise.all([
+  const [parentClaim, statusOptions, jobTypeOptions] = await Promise.all([
+    job.claimId ? loadClaim(job.claimId) : Promise.resolve(null as Claim | null),
     api
       .getLookupsByDomain('job_status', { providerCode: 'crunchwork' })
       .catch((err: unknown) => {

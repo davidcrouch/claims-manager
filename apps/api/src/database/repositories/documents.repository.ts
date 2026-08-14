@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, or, isNull, desc, sql, ilike } from 'drizzle-orm';
+import { eq, and, or, isNull, desc, sql, ilike, inArray } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../drizzle.module';
 import { documents } from '../schema';
 
@@ -30,7 +30,7 @@ export class DocumentsRepository {
     sort?: string;
   }): Promise<{ data: DocumentRow[]; total: number }> {
     const page = params.page ?? 1;
-    const limit = Math.min(params.limit ?? 20, 100);
+    const limit = Math.min(params.limit ?? 20, 200);
     const skip = (page - 1) * limit;
     const filters = params.filters ?? {};
 
@@ -146,6 +146,20 @@ export class DocumentsRepository {
       )
       .limit(1);
     return row ?? null;
+  }
+
+  async findByIds(ids: string[], tenantId: string): Promise<DocumentRow[]> {
+    const uniqueIds = [...new Set(ids.filter(Boolean))];
+    if (uniqueIds.length === 0) return [];
+    return this.db
+      .select()
+      .from(documents)
+      .where(
+        and(
+          eq(documents.tenantId, tenantId),
+          inArray(documents.id, uniqueIds),
+        ),
+      );
   }
 
   async create(data: DocumentInsert): Promise<DocumentRow> {

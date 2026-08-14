@@ -59,6 +59,25 @@ export class CrunchworkInvoiceMapper implements EntityMapper {
       tx: params.tx,
     });
 
+    const workOrderId = await this.resolveFK({
+      connectionId: params.connectionId,
+      providerEntityType: 'purchase_order',
+      providerEntityId: cwPoId,
+      internalEntityType: 'work_order',
+      tx: params.tx,
+    });
+
+    if (!purchaseOrderId && !workOrderId) {
+      this.logger.warn(
+        `CrunchworkInvoiceMapper.map — invoice ${payload.id ?? externalObjectId} has no resolvable PO or WO parent; skipping`,
+      );
+      return {
+        internalEntityId: '',
+        internalEntityType: 'invoice',
+        skipped: 'skipped_no_parent',
+      } as { internalEntityId: string; internalEntityType: string };
+    }
+
     const statusLookupId = await this.lookupResolver.resolve({
       tenantId: params.tenantId,
       domain: 'invoice_status',
@@ -70,7 +89,8 @@ export class CrunchworkInvoiceMapper implements EntityMapper {
 
     const invoiceData = {
       tenantId: params.tenantId,
-      purchaseOrderId: purchaseOrderId ?? '',
+      purchaseOrderId: purchaseOrderId ?? null,
+      workOrderId: workOrderId ?? null,
       invoiceNumber: (payload.invoiceNumber as string) ?? undefined,
       statusLookupId: statusLookupId ?? undefined,
       issueDate: payload.issueDate

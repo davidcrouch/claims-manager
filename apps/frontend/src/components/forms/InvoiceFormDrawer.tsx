@@ -108,18 +108,15 @@ export function InvoiceFormDrawer({
       setError('Selected work order was not found');
       return;
     }
-    if (!selected.purchaseOrderId) {
-      setError(
-        'This work order is not linked to a purchase order and cannot be invoiced yet',
-      );
-      return;
-    }
 
     startCreating();
     setError(null);
     try {
       const result = await createInvoiceAction({
-        purchaseOrderId: selected.purchaseOrderId,
+        workOrderId: selected.id,
+        ...(selected.purchaseOrderId
+          ? { purchaseOrderId: selected.purchaseOrderId }
+          : {}),
         invoiceNumber: values.invoiceNumber || undefined,
         totalAmount: values.totalAmount ?? undefined,
         issueDate: values.issueDate
@@ -157,7 +154,7 @@ export function InvoiceFormDrawer({
       open={open}
       onOpenChange={onOpenChange}
       title="Create Invoice"
-      description="Submit an invoice against an active work order. Optionally include your invoice number for reference."
+      description="Create a draft invoice against an active work order. Publish it from the invoice page when ready."
       icon={<Receipt className="h-5 w-5" />}
       preventClose={busy}
     >

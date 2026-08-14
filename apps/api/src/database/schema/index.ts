@@ -644,9 +644,8 @@ export const invoices = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
-    purchaseOrderId: uuid('purchase_order_id')
-      .notNull()
-      .references(() => purchaseOrders.id),
+    purchaseOrderId: uuid('purchase_order_id').references(() => purchaseOrders.id),
+    workOrderId: uuid('work_order_id').references(() => workOrders.id),
     claimId: uuid('claim_id').references(() => claims.id, { onDelete: 'set null' }),
     jobId: uuid('job_id').references(() => jobs.id, { onDelete: 'set null' }),
     invoiceNumber: text('invoice_number'),
@@ -679,12 +678,18 @@ export const invoices = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex('UQ_invoices_tenant_po_number').on(
-      t.tenantId,
-      t.purchaseOrderId,
-      t.invoiceNumber,
+    check(
+      'chk_invoice_parent',
+      sql`purchase_order_id IS NOT NULL OR work_order_id IS NOT NULL`,
     ),
+    uniqueIndex('UQ_invoices_tenant_po_number')
+      .on(t.tenantId, t.purchaseOrderId, t.invoiceNumber)
+      .where(sql`purchase_order_id IS NOT NULL`),
+    uniqueIndex('UQ_invoices_tenant_wo_number')
+      .on(t.tenantId, t.workOrderId, t.invoiceNumber)
+      .where(sql`work_order_id IS NOT NULL AND invoice_number IS NOT NULL`),
     index('idx_invoices_source_tenant').on(t.sourceTenantId),
+    index('idx_invoices_work_order').on(t.tenantId, t.workOrderId),
   ],
 );
 

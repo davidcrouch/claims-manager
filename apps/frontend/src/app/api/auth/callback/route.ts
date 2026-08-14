@@ -82,6 +82,8 @@ export async function GET(req: NextRequest) {
 
   let tokenRes: Response;
   try {
+    // Fail fast: a hung exchange (e.g. overloaded Next dev server) used to
+    // wait ~80s and burn the auth code before /token ran.
     tokenRes = await fetch(tokenUrl, {
       method: 'POST',
       headers: {
@@ -90,6 +92,7 @@ export async function GET(req: NextRequest) {
         'x-more0-app-slug': authConfig.appSlug,
       },
       body: body.toString(),
+      signal: AbortSignal.timeout(15_000),
     });
   } catch (err) {
     console.error(`${LOG_PREFIX} - token exchange request failed`, {

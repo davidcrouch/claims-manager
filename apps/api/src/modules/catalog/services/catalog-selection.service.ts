@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, NotFoundException, Inject } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../../../database/drizzle.module';
 import {
@@ -33,6 +39,10 @@ import {
 } from '../catalog.utils';
 import { CatalogPricingService } from './catalog-pricing.service';
 
+/** Crunchwork Insurance REST API requires catalogItemId / catalogComboId as UUIDs. */
+const CW_CATALOG_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 type DocumentKind = 'quote' | 'purchase_order' | 'work_order';
 
 const MARKUP_TYPE_MAP: Record<string, string> = {
@@ -63,6 +73,8 @@ function normaliseCwMarkupType(value: string | null | undefined): string | null 
 
 @Injectable()
 export class CatalogSelectionService {
+  private readonly logger = new Logger(CatalogSelectionService.name);
+
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
     private readonly itemsRepo: CatalogItemsRepository,
@@ -1270,18 +1282,37 @@ export class CatalogSelectionService {
     const seenCatalogItemRefs = new Map<string, number>();
     for (const item of allItems) {
       if (!item.catalogItemId) continue;
-      const ref = catalogExtRefMap.get(item.catalogItemId) ?? item.catalogItemId;
+      const ref = catalogExtRefMap.get(item.catalogItemId);
+      if (!ref || !CW_CATALOG_UUID_RE.test(ref)) continue;
       seenCatalogItemRefs.set(ref, (seenCatalogItemRefs.get(ref) ?? 0) + 1);
     }
+
+    const resolveCwCatalogId = (
+      localCatalogItemId: string | null,
+      field: 'catalogItemId' | 'catalogComboId',
+    ): string | undefined => {
+      if (!localCatalogItemId) return undefined;
+      const extRef = catalogExtRefMap.get(localCatalogItemId);
+      if (!extRef) return undefined;
+      if (!CW_CATALOG_UUID_RE.test(extRef)) {
+        this.logger.warn(
+          `CatalogSelectionService.buildOutboundQuoteGroups — omitting ${field}=${extRef} ` +
+            `(not a Crunchwork catalog UUID; set catalog_items.external_reference to the CW catalog item id)`,
+        );
+        return undefined;
+      }
+      if (field === 'catalogItemId' && (seenCatalogItemRefs.get(extRef) ?? 0) > 1) {
+        return undefined;
+      }
+      return extRef;
+    };
 
     const mapItem = (row: typeof quoteItems.$inferSelect): Record<string, unknown> => {
       const result: Record<string, unknown> = {};
       if (row.externalReference) result.id = row.externalReference;
-      if (row.catalogItemId) {
-        const extRef = catalogExtRefMap.get(row.catalogItemId);
-        if (extRef && (seenCatalogItemRefs.get(extRef) ?? 0) <= 1) {
-          result.catalogItemId = extRef;
-        }
+      const cwCatalogItemId = resolveCwCatalogId(row.catalogItemId, 'catalogItemId');
+      if (cwCatalogItemId) {
+        result.catalogItemId = cwCatalogItemId;
       }
       if (row.name) result.name = row.name;
       if (row.description) result.description = row.description;
@@ -1340,9 +1371,12 @@ export class CatalogSelectionService {
           result.combos = groupCombos.map((combo) => {
             const comboResult: Record<string, unknown> = {};
             if (combo.externalReference) comboResult.id = combo.externalReference;
-            if (combo.catalogComboId) {
-              const extRef = catalogExtRefMap.get(combo.catalogComboId);
-              if (extRef) comboResult.catalogComboId = extRef;
+            const cwCatalogComboId = resolveCwCatalogId(
+              combo.catalogComboId,
+              'catalogComboId',
+            );
+            if (cwCatalogComboId) {
+              comboResult.catalogComboId = cwCatalogComboId;
             }
             if (combo.name) comboResult.name = combo.name;
             if (combo.description) comboResult.description = combo.description;

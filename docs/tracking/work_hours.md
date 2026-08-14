@@ -716,3 +716,13 @@
   Kept the provider backend on the load balancer but omitted providers-staging from the managed certificate while Cloudflare terminates TLS for that hostname.
   Outcome: staging Terraform can complete certificate and routing updates without destroying in-use backends.
 
+- `2026-08-15` `PENDING` **8 h**
+  `42 files | +1623 −319 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  Lay summary: Invoices can now be drafted and published cleanly, document templates are easier to manage, and claim-related pages load more reliably.
+  Delivered create-then-publish invoicing so drafts stay local until ready to send.
+  Linked invoices to work orders and improved how provider invoices are created and mapped.
+  Added an invoice publish wizard so staff can review and confirm before sending.
+  Built a document-template detail screen so admins can configure templates per document type.
+  Improved catalogue selection and outbound sync for more accurate item handling.
+  Speeding up claim, job, quote, and invoice page loads with shared cached data loading.
+

@@ -5,6 +5,7 @@
  */
 
 import 'server-only';
+import { cache } from 'react';
 import { cookies } from 'next/headers';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { NextRequest } from 'next/server';
@@ -93,8 +94,9 @@ function isJWTStructurallyValid(token: string): boolean {
 
 /**
  * Get session from Next.js cookies (Server Components, Server Actions).
+ * Cached per-request so layout + page + generateMetadata share one JWT verify.
  */
-export async function getSession(): Promise<Session> {
+export const getSession = cache(async (): Promise<Session> => {
   const cookieStore = await cookies();
   const token = cookieStore.get(authConfig.cookieNames.authToken)?.value;
 
@@ -107,7 +109,7 @@ export async function getSession(): Promise<Session> {
     authenticated: !!identity,
     identity,
   };
-}
+});
 
 /**
  * Get session from a Request (Route Handlers).
@@ -136,8 +138,9 @@ export async function getSessionFromRequest(
 
 /**
  * Get the raw access token from cookies.
+ * Cached per-request to avoid repeated cookie reads across layout/page.
  */
-export async function getAccessToken(): Promise<string | null> {
+export const getAccessToken = cache(async (): Promise<string | null> => {
   const cookieStore = await cookies();
   const token = cookieStore.get(authConfig.cookieNames.authToken)?.value;
 
@@ -145,4 +148,4 @@ export async function getAccessToken(): Promise<string | null> {
     return null;
   }
   return token;
-}
+});

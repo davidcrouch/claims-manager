@@ -11,11 +11,12 @@ import {
   Files,
   FolderOpen,
   Loader2,
+  Pencil,
   TrendingUp,
   X,
   type LucideIcon,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import {
   Select,
   SelectContent,
@@ -32,6 +33,7 @@ import type {
   FilesystemCategory,
   FSDocument,
 } from '@/lib/api-client';
+import { cn } from '@/lib/utils';
 
 interface DocumentTemplatesSettingsPanelProps {
   initialSettings: DocumentTemplateSetting[];
@@ -594,6 +596,16 @@ function TemplateTable({
                           )}
                         </Button>
                       )}
+                      <Link
+                        href={`/admin/document-templates/${encodeURIComponent(row.documentType)}`}
+                        aria-label={`Edit ${row.label} template`}
+                        className={cn(
+                          buttonVariants({ variant: 'ghost', size: 'icon-sm' }),
+                          'shrink-0',
+                        )}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Link>
                     </div>
                   </td>
                 </tr>

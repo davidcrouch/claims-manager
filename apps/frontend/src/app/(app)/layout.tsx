@@ -5,6 +5,9 @@ import { cloudRunInvokerHeaders } from '@/lib/cloud-run-id-token';
 import { AppLayoutClient } from '@/components/layout/AppLayoutClient';
 import { ProvisioningScreen } from '@/components/provisioning/ProvisioningScreen';
 
+/** Short TTL so nav feels snappy; provisioning/org name rarely change mid-session. */
+const LAYOUT_FETCH_REVALIDATE_SECONDS = 60;
+
 async function checkProvisioningStatus(
   token: string,
   tenantId: string,
@@ -16,7 +19,7 @@ async function checkProvisioningStatus(
         ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
         ...(await cloudRunInvokerHeaders()),
       },
-      next: { revalidate: 0 },
+      next: { revalidate: LAYOUT_FETCH_REVALIDATE_SECONDS },
     });
     if (!res.ok) {
       console.warn(
@@ -47,7 +50,7 @@ async function fetchOrgName(
         ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
         ...(await cloudRunInvokerHeaders()),
       },
-      cache: 'no-store',
+      next: { revalidate: LAYOUT_FETCH_REVALIDATE_SECONDS },
     });
     if (!res.ok) {
       console.warn(`${LOG} — failed status=${res.status} tenantId=${tenantId}`);

@@ -57,6 +57,15 @@ export class InvoicesController {
     return this.invoicesService.create({ body, userId });
   }
 
+  @Post(':id/publish')
+  @RequirePermission(P.invoices.update)
+  async publish(
+    @Param('id') id: string,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.invoicesService.publish({ id, userId });
+  }
+
   @Post(':id')
   @RequirePermission(P.invoices.update)
   async update(

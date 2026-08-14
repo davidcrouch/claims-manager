@@ -6,26 +6,20 @@ import { Loader2 } from 'lucide-react';
 
 export type CreateSubmitPhase = 'idle' | 'creating' | 'opening';
 
-/** Soft-nav can lose to list-page revalidation after a server action; hard-nav if stuck. */
-const OPEN_AFTER_CREATE_FALLBACK_MS = 2500;
-
 /**
- * Navigate to a newly created entity. Uses client soft navigation first, then
- * falls back to a full page load if the URL never changes (common race when a
- * list page remounts and calls router.replace after create).
+ * Navigate to a newly created entity.
+ * Prefer a hard navigation after server-action creates: soft push often loses
+ * to list-page revalidation and can sit behind a cold route compile for a long time.
  */
 export function navigateToCreated(
-  router: { push: (href: string) => void },
+  _router: { push: (href: string) => void },
   href: string,
 ): void {
-  const targetPath = href.split('?')[0] ?? href;
-  router.push(href);
-  if (typeof window === 'undefined') return;
-  window.setTimeout(() => {
-    if (window.location.pathname !== targetPath) {
-      window.location.assign(href);
-    }
-  }, OPEN_AFTER_CREATE_FALLBACK_MS);
+  if (typeof window !== 'undefined') {
+    window.location.assign(href);
+    return;
+  }
+  _router.push(href);
 }
 
 export function useCreateSubmitPhase() {

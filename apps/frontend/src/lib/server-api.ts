@@ -4,10 +4,12 @@
  * Passes organization_id from JWT claims or NEXT_PUBLIC_DEFAULT_TENANT_ID for API tenant context.
  */
 
+import { cache } from 'react';
 import { getSession, getAccessToken } from './auth';
 import { createApiClient } from './api-client';
 
-export async function getServerApiClient() {
+/** Per-request memo so layout/page/generateMetadata share one client. */
+export const getServerApiClient = cache(async () => {
   const session = await getSession();
   if (!session.authenticated || !session.identity) {
     return null;
@@ -24,4 +26,5 @@ export async function getServerApiClient() {
     undefined;
 
   return createApiClient({ token, tenantId });
-}
+});
+

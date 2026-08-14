@@ -21,6 +21,8 @@ export default async function DocumentTemplatesPage() {
     redirect('/api/auth/login');
   }
 
+  // Folder resolve is cheap (org config + category walk). Company filesystem is
+  // still needed for the folder picker tree; documents feed the .docx selects.
   const [settingsResult, documentsResult, folderResult, filesystemResult] =
     await Promise.allSettled([
       api.getDocumentTemplateSettings(),
@@ -43,6 +45,39 @@ export default async function DocumentTemplatesPage() {
   const companyFilesystem =
     filesystemResult.status === 'fulfilled' ? filesystemResult.value : null;
   const companyCategories = companyFilesystem?.categories ?? [];
+
+  if (settingsResult.status === 'rejected') {
+    console.error(
+      'frontend:DocumentTemplatesPage — getDocumentTemplateSettings failed:',
+      settingsResult.reason instanceof Error
+        ? settingsResult.reason.message
+        : settingsResult.reason,
+    );
+  }
+  if (documentsResult.status === 'rejected') {
+    console.error(
+      'frontend:DocumentTemplatesPage — getDocuments failed:',
+      documentsResult.reason instanceof Error
+        ? documentsResult.reason.message
+        : documentsResult.reason,
+    );
+  }
+  if (folderResult.status === 'rejected') {
+    console.error(
+      'frontend:DocumentTemplatesPage — getDocumentTemplatesFolder failed:',
+      folderResult.reason instanceof Error
+        ? folderResult.reason.message
+        : folderResult.reason,
+    );
+  }
+  if (filesystemResult.status === 'rejected') {
+    console.error(
+      'frontend:DocumentTemplatesPage — getCompanyFilesystem failed:',
+      filesystemResult.reason instanceof Error
+        ? filesystemResult.reason.message
+        : filesystemResult.reason,
+    );
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>

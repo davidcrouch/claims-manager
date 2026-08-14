@@ -13,8 +13,8 @@
 | Concept | Internal | Notes |
 |---------|----------|-------|
 | Local catalogue item | `catalog_items.id` (UUID) | Primary key used on document lines |
-| Tenant-scoped code | `catalog_items.code` | Unique per tenant; operator-facing SKU |
-| External / CW reference | `catalog_items.external_reference` | Unique per tenant when set; used for inbound/outbound mapping |
+| Tenant-scoped code | `catalog_items.code` | Unique per tenant; operator-facing SKU (e.g. `LAB-PLU-08`) |
+| External / CW reference | `catalog_items.external_reference` | **Must be the Crunchwork catalog item UUID** when set (Insurance REST API `catalogItemId` format UUID). Never store the SKU/code here. Unique per tenant+catalog when set. |
 | Item kind | `catalog_items.kind` | `primitive` or `assembly` |
 | Assembly BOM | `catalog_assembly_components` | One-level explosion on document insert (v1) |
 
@@ -25,7 +25,7 @@
 When a quote (or other document) payload arrives with `catalogItemId` or `catalogComboId`:
 
 1. If the value is already a UUID matching a local `catalog_items.id`, it is kept as-is.
-2. If the value is a non-UUID string (typically a CW catalogue reference), `CatalogResolutionService.resolveExternalCatalogId` looks up `catalog_items.external_reference`.
+2. Otherwise look up `catalog_items.external_reference` (expected: CW catalog UUID from the Insurance REST API).
 3. On match → replace the payload field with the local UUID before persistence.
 4. On miss → log to `external_reference_resolution_log` with `domain = catalog_item` and `resolution_action = unknown_catalog_id`. The original external reference remains in `api_payload`; no local FK is set.
 
@@ -37,15 +37,17 @@ When a quote (or other document) payload arrives with `catalogItemId` or `catalo
 
 ## 3. Outbound enrichment (claims-manager → CW)
 
-When creating or updating quotes via the CW API, `CatalogOutboundService.enrichPayload` walks line items and combos:
+When creating or updating quotes via the CW API, `CatalogSelectionService.buildOutboundQuoteGroups` and `CatalogOutboundService.enrichPayload` walk line items and combos:
 
 | Internal field | Outbound behaviour |
 |----------------|-------------------|
-| `catalogItemId` (local UUID) | Replaced with linked `catalog_items.external_reference` when present |
+| `catalogItemId` (local UUID) | Replaced with `catalog_items.external_reference` **only when that value is a UUID** (CW catalog item id). Otherwise the field is omitted. |
 | `catalogComboId` (local UUID) | Same for assembly/combo rows |
-| Missing `external_reference` | Field omitted or left as local UUID depending on CW contract tolerance |
+| Missing / non-UUID `external_reference` | Field omitted — line still publishes with name/cost snapshot; no catalogue link on CW until admin sets the CW UUID |
 
-Linked items round-trip; unlinked items continue to work internally only.
+**Contract:** `docs/Insurance REST API-v17-20260304_100318.pdf` / swagger `BaseItemInput.catalogItemId` — type string, format UUID. Sending SKU codes (e.g. `LAB-PLU-08`) causes CW `500 invalid input syntax for type uuid`.
+
+Linked items round-trip; unlinked items continue to work internally and still publish to CW without a catalogue FK.
 
 ---
 
@@ -68,10 +70,11 @@ When a catalogue item is added to a quote, PO, or work order via `CatalogSelecti
 
 | Scenario | Action |
 |----------|--------|
-| CW sends known `external_reference` | Resolve to local UUID |
-| CW sends unknown reference | Log + leave line unlinked |
-| Operator sets `external_reference` on item | Future inbound sync resolves automatically |
-| Operator creates item with matching ref | Same |
+| CW sends known catalog UUID (`external_reference`) | Resolve to local UUID |
+| CW sends unknown UUID | Log + leave line unlinked |
+| Operator sets `external_reference` to CW catalog UUID | Future inbound/outbound sync resolves automatically |
+| Operator creates item with matching CW UUID | Same |
+| Seed / CSV leaves `external_reference` empty | Outbound omits `catalogItemId` until linked |
 
 ---
 

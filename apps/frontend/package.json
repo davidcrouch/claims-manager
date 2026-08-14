@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node -e \"try{require('fs').rmSync('.next/dev/cache/turbopack',{recursive:true,force:true})}catch{}\"",
     "dev": "node ../../scripts/dev-with-port-cleanup.mjs --label frontend --default-port 5000 --resolve next/dist/bin/next -- dev -p 5000",
     "kill": "node ../../scripts/kill-listen-port.mjs --label frontend --default-port 5000",
     "build": "next build",

@@ -632,6 +632,10 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<Invoice>('/invoices', { method: 'POST', body: JSON.stringify(body) });
     },
 
+    publishInvoice(id: string): Promise<Invoice> {
+      return fetchApi<Invoice>(`/invoices/${id}/publish`, { method: 'POST' });
+    },
+
     createMessage(body: Record<string, unknown>): Promise<Message> {
       return fetchApi<Message>('/messages', { method: 'POST', body: JSON.stringify(body) });
     },

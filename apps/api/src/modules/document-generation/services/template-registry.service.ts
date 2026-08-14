@@ -76,28 +76,6 @@ interface OrgConfig extends Record<string, unknown> {
   };
 }
 
-function categoryPath(
-  categories: Array<{
-    id: string;
-    displayName: string;
-    parentCategoryId: string | null;
-  }>,
-  categoryId: string,
-): string {
-  const byId = new Map(categories.map((cat) => [cat.id, cat]));
-  const parts: string[] = [];
-  let current = byId.get(categoryId);
-  const seen = new Set<string>();
-  while (current && !seen.has(current.id)) {
-    seen.add(current.id);
-    parts.unshift(current.displayName);
-    current = current.parentCategoryId
-      ? byId.get(current.parentCategoryId)
-      : undefined;
-  }
-  return parts.join(' / ');
-}
-
 const SCENARIO_META: Record<AssignableTemplateType, { label: string; description: string }> = {
   default: {
     label: 'Default',
@@ -258,16 +236,25 @@ export class TemplateRegistryService {
     const templates = await this.templatesRepo.findByTenant({ tenantId: params.tenantId });
     const byType = new Map(templates.map((t) => [t.documentType, t]));
 
+    const documentIds = [
+      ...new Set(
+        ASSIGNABLE_TEMPLATE_TYPES.map((documentType) => byType.get(documentType)?.filesystemDocumentId)
+          .filter((id): id is string => typeof id === 'string' && id.length > 0),
+      ),
+    ];
+    const docs =
+      documentIds.length > 0
+        ? await this.documentsRepo.findByIds(documentIds, params.tenantId)
+        : [];
+    const docsById = new Map(docs.map((doc) => [doc.id, doc]));
+
     const settings: ScenarioTemplateSetting[] = [];
     for (const documentType of ASSIGNABLE_TEMPLATE_TYPES) {
       const template = byType.get(documentType) ?? null;
       let filesystemDocument: ScenarioTemplateSetting['filesystemDocument'] = null;
 
       if (template?.filesystemDocumentId) {
-        const doc = await this.documentsRepo.findOne(
-          template.filesystemDocumentId,
-          params.tenantId,
-        );
+        const doc = docsById.get(template.filesystemDocumentId);
         if (doc) {
           filesystemDocument = {
             id: doc.id,
@@ -545,22 +532,7 @@ export class TemplateRegistryService {
   private async resolveFolderInfo(
     categoryId: string,
   ): Promise<TemplatesFolderInfo | null> {
-    const filesystem = await this.filesystemService.getCompanyFilesystem();
-    if (!filesystem) return null;
-
-    const categories = filesystem.categories ?? [];
-    const cat = categories.find(
-      (c: { id: string; archivedAt?: Date | string | null }) =>
-        c.id === categoryId && !c.archivedAt,
-    );
-    if (!cat) return null;
-
-    return {
-      id: cat.id,
-      displayName: cat.displayName,
-      slug: cat.slug,
-      path: categoryPath(categories, cat.id),
-    };
+    return this.filesystemService.resolveCompanyCategoryInfo(categoryId);
   }
 
   private async downloadFilesystemDocument(params: {

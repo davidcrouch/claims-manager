@@ -14,7 +14,9 @@ import {
   Paperclip,
   BookOpen,
   Loader2,
+  Send,
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { BackButton } from '@/components/layout/BackButton';
@@ -26,7 +28,7 @@ import {
   formatDateTime,
   formatCurrency,
 } from '@/components/shared/detail';
-import type { Invoice, Job } from '@/types/api';
+import type { Claim, Invoice, Job } from '@/types/api';
 import { PrintButton } from '@/components/shared/PrintButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { jobDisplayName } from '@/components/shared/job-label';
@@ -42,16 +44,43 @@ import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
 import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
 import { groupsFromDocumentPayload } from '@/components/quotes/quote-line-items.utils';
 import { getPurchaseOrderLineItemsAction } from '@/app/(app)/purchase-orders/actions';
+import { getWorkOrderLineItemsAction } from '@/app/(app)/work-orders/actions';
+import {
+  InvoicePublishWizard,
+  type InvoicePublishMode,
+} from '@/components/invoices/InvoicePublishWizard';
 
 // ---------- header ----------------------------------------------------------
 
-export function InvoicePageHeader({ invoice, job }: { invoice: Invoice; job?: Job | null }) {
+export function InvoicePageHeader({
+  invoice,
+  job,
+  claim,
+}: {
+  invoice: Invoice;
+  job?: Job | null;
+  claim?: Claim | null;
+}) {
+  const [publishWizardOpen, setPublishWizardOpen] = useState(false);
   const title = invoice.invoiceNumber ?? invoice.id;
   const statusName = invoice.status?.name ?? 'Unknown';
+  const canPublish = !invoice.sourceExternalReference;
+  const publishMode: InvoicePublishMode =
+    job?.provider === 'crunchwork' ? 'external' : 'internal';
 
   return (
     <>
       <SetHeaderActions>
+        {canPublish && (
+          <Button
+            size="default"
+            onClick={() => setPublishWizardOpen(true)}
+            className="h-9 gap-1.5 px-4 bg-amber-600 text-white hover:bg-amber-500"
+          >
+            <Send className="h-3.5 w-3.5" />
+            Publish
+          </Button>
+        )}
         <PrintButton documentType="invoice" entityId={invoice.id} jobId={job?.id} />
         <ArchiveEntityButton
           entityType="invoice"
@@ -61,6 +90,14 @@ export function InvoicePageHeader({ invoice, job }: { invoice: Invoice; job?: Jo
           redirectTo={job ? `/invoices?jobId=${job.id}` : '/invoices'}
         />
       </SetHeaderActions>
+      <InvoicePublishWizard
+        open={publishWizardOpen}
+        onOpenChange={setPublishWizardOpen}
+        invoice={invoice}
+        job={job}
+        claim={claim}
+        mode={publishMode}
+      />
       <div className="flex w-full min-w-0 flex-col gap-y-1">
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
           <BackButton href={job ? `/invoices?jobId=${job.id}` : '/invoices'} label="Back to invoices" />
@@ -75,6 +112,15 @@ export function InvoicePageHeader({ invoice, job }: { invoice: Invoice; job?: Jo
               className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
             >
               View PO
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
+          {!invoice.purchaseOrderId && invoice.workOrderId && (
+            <Link
+              href={`/work-orders/${invoice.workOrderId}`}
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              View work order
               <ExternalLink className="h-3 w-3" />
             </Link>
           )}
@@ -176,6 +222,22 @@ function OverviewTab({ invoice }: { invoice: Invoice }) {
             }
           />
           <DefRow
+            label="Work order"
+            value={
+              invoice.workOrderId ? (
+                <Link
+                  href={`/work-orders/${invoice.workOrderId}`}
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                >
+                  {invoice.workOrderId}
+                  <ExternalLink className="h-3 w-3" />
+                </Link>
+              ) : (
+                '—'
+              )
+            }
+          />
+          <DefRow
             label="Job"
             value={
               invoice.jobId ? (
@@ -210,20 +272,30 @@ function LineItemsTab({ invoice }: { invoice: Invoice }) {
   const payloadGroups = groupsFromDocumentPayload(payload);
   const lineItems = (payload.lineItems ?? payload.items ?? []) as Array<Record<string, unknown>>;
   const [poGroups, setPoGroups] = useState<ApiGroup[] | null>(null);
-  const [loading, setLoading] = useState(payloadGroups.length === 0 && !!invoice.purchaseOrderId);
+  const [loading, setLoading] = useState(
+    payloadGroups.length === 0 &&
+      (!!invoice.purchaseOrderId || !!invoice.workOrderId),
+  );
 
   const loadPo = useCallback(async () => {
-    if (payloadGroups.length > 0 || !invoice.purchaseOrderId) {
+    if (payloadGroups.length > 0) {
       setLoading(false);
       return;
     }
     setLoading(true);
-    const result = await getPurchaseOrderLineItemsAction(invoice.purchaseOrderId);
-    if (result.success && result.groups) {
-      setPoGroups(result.groups as ApiGroup[]);
+    if (invoice.purchaseOrderId) {
+      const result = await getPurchaseOrderLineItemsAction(invoice.purchaseOrderId);
+      if (result.success && result.groups) {
+        setPoGroups(result.groups as ApiGroup[]);
+      }
+    } else if (invoice.workOrderId) {
+      const result = await getWorkOrderLineItemsAction(invoice.workOrderId);
+      if (result.success && result.groups) {
+        setPoGroups(result.groups as ApiGroup[]);
+      }
     }
     setLoading(false);
-  }, [invoice.purchaseOrderId, payloadGroups.length]);
+  }, [invoice.purchaseOrderId, invoice.workOrderId, payloadGroups.length]);
 
   useEffect(() => {
     void loadPo();

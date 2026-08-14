@@ -72,6 +72,48 @@ export class FilesystemService {
     return { ...filesystem, categories };
   }
 
+  /**
+   * Resolve a single company-filesystem category and its display path without
+   * loading the full category tree (avoids heavy work on Document Templates).
+   */
+  async resolveCompanyCategoryInfo(categoryId: string): Promise<{
+    id: string;
+    displayName: string;
+    slug: string;
+    path: string;
+  } | null> {
+    const tenantId = this.tenantContext.getTenantId();
+    this.logger.debug(
+      `${LOG}.resolveCompanyCategoryInfo tenantId=${tenantId} categoryId=${categoryId}`,
+    );
+
+    const company = await this.filesystemsRepo.findCompanyByTenant(tenantId);
+    if (!company) return null;
+
+    const cat = await this.filesystemsRepo.findCategoryById(categoryId);
+    if (!cat || cat.filesystemId !== company.id || cat.archivedAt) {
+      return null;
+    }
+
+    const parts: string[] = [cat.displayName];
+    let parentId = cat.parentCategoryId;
+    const seen = new Set<string>([cat.id]);
+    while (parentId && !seen.has(parentId)) {
+      seen.add(parentId);
+      const parent = await this.filesystemsRepo.findCategoryById(parentId);
+      if (!parent || parent.archivedAt) break;
+      parts.unshift(parent.displayName);
+      parentId = parent.parentCategoryId;
+    }
+
+    return {
+      id: cat.id,
+      displayName: cat.displayName,
+      slug: cat.slug,
+      path: parts.join(' / '),
+    };
+  }
+
   async getJobFilesystem(jobId: string, options?: { ensure?: boolean }) {
     const tenantId = this.tenantContext.getTenantId();
     this.logger.debug(`${LOG}.getJobFilesystem jobId=${jobId} tenantId=${tenantId}`);
