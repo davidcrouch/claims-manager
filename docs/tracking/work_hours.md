@@ -667,7 +667,7 @@
   The old relay route on the previous domain was removed.
   Outcome: Crunchwork staging webhooks are received and processed on both staging and local development environments via the updated relay.
 
-- `2026-08-14` `PENDING` **0.5 h**
+- `2026-08-14` `3c32b8e` **0.5 h**
   `5 files | +20 −2 | Tier 3 complex | Light orchestration`
   Lay summary: Staging sign-in service can start again after a missing encryption setting was added to hosting.
   **Fixed staging auth deploy by wiring the required Redis encryption secret.** Auth was failing Cloud Run startup checks because a required production encryption key was never mounted.
