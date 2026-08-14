@@ -676,7 +676,7 @@
   The staging secret seed script covers the new key for future rebuilds.
   Outcome: auth-server staging deploys can pass startup checks again.
 
-- `2026-08-14` `PENDING` **0.5 h**
+- `2026-08-14` `826a5d1` **0.5 h**
   `3 files | +10 −6 | Tier 3 complex | Light orchestration`
   Lay summary: The staging API is now reachable on a public hostname so webhook relays and operators can call it.
   **Opened staging API on a public hostname behind the load balancer.** Staging API was previously private to other services only.
@@ -684,4 +684,12 @@
   DNS for that hostname was added to point at the staging load balancer.
   Application authentication still protects normal API routes; only marked public routes stay open.
   Outcome: staging API can be reached at the public staging API hostname.
+
+- `2026-08-14` `PENDING` **0.5 h**
+  `5 files | +40 −15 | Tier 3 complex | Moderate orchestration`
+  Lay summary: Staging hosting was fixed so the public API hostname can finish provisioning without breaking certificates or permissions.
+  **Fixed staging load-balancer certificate rotation and deploy permissions.** Adding the public API hostname required a new TLS certificate without taking down existing ones.
+  Deploy automation was given permission to mark the API service as publicly invokable.
+  Load-balancer routing was stabilized so adding a hostname does not rename sibling routes.
+  Outcome: staging can complete the public API hostname cutover safely.
 

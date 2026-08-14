@@ -210,6 +210,7 @@ module "cloud_run_api" {
     google_project_service.run,
     google_project_service.aiplatform,
     module.secrets,
+    google_project_iam_member.ci_deployer_run_admin,
   ]
 }
 

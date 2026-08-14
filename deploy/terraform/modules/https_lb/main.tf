@@ -9,6 +9,13 @@ terraform {
   }
 }
 
+locals {
+  # Stable key order so adding a service does not rename sibling path_matchers.
+  services_sorted = { for k in sort(keys(var.services)) : k => var.services[k] }
+  # Managed cert domains are immutable — new domain set ⇒ new cert name.
+  cert_domains_fingerprint = substr(sha1(join(",", sort(var.domains))), 0, 8)
+}
+
 resource "google_compute_global_address" "this" {
   project = var.project_id
   name    = "lb-${var.environment}"
@@ -16,15 +23,19 @@ resource "google_compute_global_address" "this" {
 
 resource "google_compute_managed_ssl_certificate" "this" {
   project = var.project_id
-  name    = "lb-cert-${var.environment}"
+  name    = "lb-cert-${var.environment}-${local.cert_domains_fingerprint}"
 
   managed {
     domains = var.domains
   }
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "google_compute_region_network_endpoint_group" "negs" {
-  for_each = var.services
+  for_each = local.services_sorted
 
   project               = var.project_id
   name                  = "neg-${each.key}-${var.environment}"
@@ -37,7 +48,7 @@ resource "google_compute_region_network_endpoint_group" "negs" {
 }
 
 resource "google_compute_backend_service" "backends" {
-  for_each = var.services
+  for_each = local.services_sorted
 
   project     = var.project_id
   name        = "backend-${each.key}-${var.environment}"
@@ -60,7 +71,7 @@ resource "google_compute_url_map" "this" {
   default_service = google_compute_backend_service.backends[var.default_service].id
 
   dynamic "host_rule" {
-    for_each = var.services
+    for_each = local.services_sorted
     content {
       hosts        = host_rule.value.hostnames
       path_matcher = host_rule.key
@@ -68,7 +79,7 @@ resource "google_compute_url_map" "this" {
   }
 
   dynamic "path_matcher" {
-    for_each = var.services
+    for_each = local.services_sorted
     content {
       name            = path_matcher.key
       default_service = google_compute_backend_service.backends[path_matcher.key].id
@@ -81,6 +92,8 @@ resource "google_compute_target_https_proxy" "this" {
   name             = "lb-https-proxy-${var.environment}"
   url_map          = google_compute_url_map.this.id
   ssl_certificates = [google_compute_managed_ssl_certificate.this.id]
+
+  depends_on = [google_compute_managed_ssl_certificate.this]
 }
 
 resource "google_compute_global_forwarding_rule" "this" {

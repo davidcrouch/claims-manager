@@ -187,6 +187,7 @@ locals {
     "roles/compute.osAdminLogin",
     "roles/secretmanager.admin",
     "roles/pubsub.admin",
+    "roles/run.admin",
   ])
 }
 

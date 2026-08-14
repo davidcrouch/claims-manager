@@ -124,6 +124,14 @@ module "pubsub" {
   labels         = local.labels
 }
 
+# ci-deployer (infra) needs run.admin to grant allUsers invoker on public
+# Cloud Run services — roles/editor does not include run.services.setIamPolicy.
+resource "google_project_iam_member" "ci_deployer_run_admin" {
+  project = var.project_id
+  role    = "roles/run.admin"
+  member  = "serviceAccount:${var.ci_deployer_infra_email}"
+}
+
 module "https_lb" {
   source = "../../modules/https_lb"
 
@@ -158,4 +166,6 @@ module "https_lb" {
   }
 
   default_service = "frontend"
+
+  depends_on = [google_project_iam_member.ci_deployer_run_admin]
 }
