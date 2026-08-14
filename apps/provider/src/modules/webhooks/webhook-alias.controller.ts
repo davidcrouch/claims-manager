@@ -1,5 +1,6 @@
 import {
   Controller,
+  Get,
   Headers,
   Post,
   Req,
@@ -25,6 +26,18 @@ export class WebhookAliasController {
     private readonly webhooksService: WebhooksService,
     private readonly hmacService: WebhookHmacService,
   ) {}
+
+  /** Browser / ops probe — ingest is POST-only. */
+  @Get()
+  @Public()
+  describeWebhook() {
+    return {
+      service: 'provider-server',
+      path: '/api/webhook',
+      method: 'POST',
+      status: 'ready',
+    };
+  }
 
   @Post()
   @Public()

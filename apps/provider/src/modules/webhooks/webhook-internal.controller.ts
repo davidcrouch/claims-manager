@@ -1,5 +1,6 @@
 import {
   Controller,
+  Get,
   Headers,
   Post,
   Req,
@@ -32,6 +33,18 @@ export class WebhookInternalController {
     private readonly webhooksService: WebhooksService,
     private readonly hmacService: WebhookHmacService,
   ) {}
+
+  /** Browser / ops probe — ingest is POST-only. */
+  @Get('crunchwork')
+  @Public()
+  describeCrunchwork() {
+    return {
+      service: 'provider-server',
+      path: '/api/v1/internal/webhooks/crunchwork',
+      method: 'POST',
+      status: 'ready',
+    };
+  }
 
   @Post('crunchwork')
   @Public()

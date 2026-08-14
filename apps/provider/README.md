@@ -16,8 +16,11 @@ Heavy fetch/projection/tool endpoints stay on private `api-server`.
 | Method | Path | Notes |
 |--------|------|--------|
 | POST | `/api/v1/webhooks/crunchwork` | Public entry point (intercepted by CF Worker on staging) |
+| GET | `/api/v1/webhooks/crunchwork` | Probe stub — confirms route is mounted (ingest is POST-only) |
 | POST | `/api/v1/internal/webhooks/crunchwork` | Internal ingest — CF Worker fans out here on Cloud Run origin |
+| GET | `/api/v1/internal/webhooks/crunchwork` | Probe stub for internal ingest path |
 | POST | `/api/webhook` | Alias for legacy configs |
+| GET | `/api/webhook` | Probe stub for alias path |
 | GET | `/api/v1/health` | Liveness |
 | GET | `/api/v1/health/ready` | DB readiness |
 
