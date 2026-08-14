@@ -135,6 +135,7 @@ module "https_lb" {
     local.cloud_run_hosts.app,
     local.cloud_run_hosts.auth,
     local.cloud_run_hosts.providers,
+    local.cloud_run_hosts.api,
   ]
 
   services = {
@@ -149,6 +150,10 @@ module "https_lb" {
     provider = {
       cloud_run_service_name = "provider-server"
       hostnames              = [local.cloud_run_hosts.providers]
+    }
+    api = {
+      cloud_run_service_name = "api-server"
+      hostnames              = [local.cloud_run_hosts.api]
     }
   }
 

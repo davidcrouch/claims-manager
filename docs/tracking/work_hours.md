@@ -676,3 +676,12 @@
   The staging secret seed script covers the new key for future rebuilds.
   Outcome: auth-server staging deploys can pass startup checks again.
 
+- `2026-08-14` `PENDING` **0.5 h**
+  `3 files | +10 −6 | Tier 3 complex | Light orchestration`
+  Lay summary: The staging API is now reachable on a public hostname so webhook relays and operators can call it.
+  **Opened staging API on a public hostname behind the load balancer.** Staging API was previously private to other services only.
+  It is now publicly invokable and routed on the staging load balancer hostname.
+  DNS for that hostname was added to point at the staging load balancer.
+  Application authentication still protects normal API routes; only marked public routes stay open.
+  Outcome: staging API can be reached at the public staging API hostname.
+

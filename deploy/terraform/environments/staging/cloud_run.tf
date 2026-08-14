@@ -145,11 +145,10 @@ module "cloud_run_api" {
   timeout               = "900s"
   health_path           = var.cloud_run_use_bootstrap_image ? "/" : "/api/v1/health"
   enable_probes         = !var.cloud_run_use_bootstrap_image
-  # IAM-private (not network-private): Direct VPC with PRIVATE_RANGES_ONLY
-  # cannot reach INTERNAL_ONLY sibling *.run.app URLs. Invoker SA + Google
-  # ID token required; api is not on the public HTTPS LB.
+  # Public on HTTPS LB as api-staging.branlamie.com (webhook fanout + ops).
+  # Nest still enforces JWT / internal-token on non-@Public routes.
   ingress               = "INGRESS_TRAFFIC_ALL"
-  allow_unauthenticated = false
+  allow_unauthenticated = true
   invoker_members = [
     "serviceAccount:${module.iam.service_account_emails["frontend"]}",
     "serviceAccount:${module.iam.service_account_emails["auth-server"]}",
