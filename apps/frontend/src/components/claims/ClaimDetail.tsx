@@ -909,20 +909,9 @@ export function ClaimPageHeader({ claim }: { claim: Claim }) {
   const jobs = claim.jobs ?? [];
 
   return (
-    <>
-      <SetHeaderActions>
-        <PrintButton documentType="claim" entityId={claim.id} />
-        <ArchiveEntityButton
-          entityType="claim"
-          entityId={claim.id}
-          statusName={claim.status?.name}
-          entityLabel={claim.claimNumber ?? claim.externalReference ?? undefined}
-          redirectTo="/claims"
-        />
-      </SetHeaderActions>
-      <div className="flex w-full min-w-0 flex-col gap-y-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-          <BackButton href="/claims" label="Back to claims" />
+    <div className="flex w-full min-w-0 flex-col gap-y-1">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+        <BackButton href="/claims" label="Back to claims" />
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-100">
           <FileText className="h-4 w-4 text-blue-600" />
         </span>
@@ -961,7 +950,6 @@ export function ClaimPageHeader({ claim }: { claim: Claim }) {
         </div>
       </div>
     </div>
-    </>
   );
 }
 
@@ -1006,6 +994,16 @@ export function ClaimDetail({ claim }: { claim: Claim }) {
 
   return (
     <div className="flex flex-col">
+      <SetHeaderActions>
+        <PrintButton documentType="claim" entityId={claim.id} />
+        <ArchiveEntityButton
+          entityType="claim"
+          entityId={claim.id}
+          statusName={claim.status?.name}
+          entityLabel={claim.claimNumber ?? claim.externalReference ?? undefined}
+          redirectTo="/claims"
+        />
+      </SetHeaderActions>
       <div className="flex gap-0 border-b border-slate-200">
         {tabs.map((t) => {
           const Icon = t.icon;

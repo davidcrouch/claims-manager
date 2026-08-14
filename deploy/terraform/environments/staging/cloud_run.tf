@@ -145,8 +145,11 @@ module "cloud_run_api" {
   timeout               = "900s"
   health_path           = var.cloud_run_use_bootstrap_image ? "/" : "/api/v1/health"
   enable_probes         = !var.cloud_run_use_bootstrap_image
-  # Public on HTTPS LB as api-staging.branlamie.com (webhook fanout + ops).
-  # Nest still enforces JWT / internal-token on non-@Public routes.
+  # Public on HTTPS LB as api-staging.branlamie.com.
+  # Security model: application-level guards (JWT on user routes, HMAC on
+  # webhooks, InternalTokenGuard on /internal, ToolAuthGuard on /webhook-tools).
+  # Cloud Run IAM (allUsers invoker) is required for the LB serverless NEG.
+  # MCP services remain IAM-private; api/auth/frontend/provider use app auth.
   ingress               = "INGRESS_TRAFFIC_ALL"
   allow_unauthenticated = true
   invoker_members = [

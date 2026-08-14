@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, type ReactNode } from 'react';
-import { useBreadcrumbs } from './BreadcrumbProvider';
+import { useBreadcrumbsOptional } from './BreadcrumbProvider';
 
 export interface SetHeaderActionsProps {
   children: ReactNode;
@@ -12,12 +12,18 @@ export interface SetHeaderActionsProps {
  * left of the user avatar while the page is mounted.
  */
 export function SetHeaderActions({ children }: SetHeaderActionsProps) {
-  const { setHeaderActions } = useBreadcrumbs();
+  const ctx = useBreadcrumbsOptional();
 
   useEffect(() => {
-    setHeaderActions(children);
-    return () => setHeaderActions(null);
-  }, [children, setHeaderActions]);
+    if (!ctx) {
+      console.error(
+        '[SetHeaderActions] useBreadcrumbs must be used within BreadcrumbProvider',
+      );
+      return;
+    }
+    ctx.setHeaderActions(children);
+    return () => ctx.setHeaderActions(null);
+  }, [children, ctx]);
 
   return null;
 }

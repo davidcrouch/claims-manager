@@ -32,6 +32,9 @@ import {
   navigateToCreated,
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
+import {
+  QUOTE_TYPES,
+} from '@/components/quotes/quote-edit.types';
 import type { JobOption } from '@/components/shared/job-label';
 
 function todayISO(): string {
@@ -44,6 +47,7 @@ const quoteFormSchema = z.object({
   claimId: z.string().optional(),
   quoteType: z.string().min(1, 'Type is required'),
   name: z.string().min(1, 'Name is required'),
+  reference: z.string().optional(),
   note: z.string().optional(),
   estimateDate: z.string().min(1, 'Estimate date is required'),
   expiresInDays: z.string().min(1, 'Expires in days is required'),
@@ -52,16 +56,6 @@ const quoteFormSchema = z.object({
 });
 
 type QuoteFormValues = z.infer<typeof quoteFormSchema>;
-
-const QUOTE_TYPES = [
-  'Validation',
-  'Variation',
-  'Tender Quote',
-  'Variation - PC/PS',
-  'Liability Quote',
-  'Scope Of Work',
-  'Quote',
-] as const;
 
 export interface QuoteFormDrawerProps {
   open: boolean;
@@ -106,6 +100,7 @@ export function QuoteFormDrawer({
       claimId: claimId ?? undefined,
       quoteType: '',
       name: '',
+      reference: '',
       note: '',
       estimateDate: todayISO(),
       expiresInDays: '30',
@@ -133,6 +128,7 @@ export function QuoteFormDrawer({
         ...(values.claimId ? { claimId: values.claimId } : {}),
         quoteType: values.quoteType || undefined,
         name: values.name || undefined,
+        reference: values.reference || undefined,
         note: values.note || undefined,
         estimateDate: values.estimateDate || undefined,
         expiresInDays: values.expiresInDays ? Number(values.expiresInDays) : undefined,
@@ -227,6 +223,15 @@ export function QuoteFormDrawer({
                   {form.formState.errors.name.message}
                 </p>
               )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="reference">Reference</Label>
+              <Input
+                id="reference"
+                {...form.register('reference')}
+                placeholder="Optional reference"
+              />
             </div>
 
             <div className="space-y-2">

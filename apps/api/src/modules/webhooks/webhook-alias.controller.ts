@@ -1,4 +1,4 @@
-import { Controller, Headers, Post, Req, HttpCode, HttpStatus, Logger } from '@nestjs/common';
+import { Controller, Get, Headers, Post, Req, HttpCode, HttpStatus, Logger } from '@nestjs/common';
 import { Request } from 'express';
 import { Public } from '../../auth/decorators/public.decorator';
 import { WebhooksService } from './webhooks.service';
@@ -16,6 +16,19 @@ export class WebhookAliasController {
     private readonly webhooksService: WebhooksService,
     private readonly hmacService: WebhookHmacService,
   ) {}
+
+  /** Browser / ops / fanout probe — ingest is POST-only. */
+  @Get()
+  @Public()
+  describeWebhook() {
+    this.logger.log('WebhookAliasController.describeWebhook — GET probe');
+    return {
+      service: 'api-server',
+      path: '/api/webhook',
+      method: 'POST',
+      status: 'ready',
+    };
+  }
 
   @Post()
   @Public()

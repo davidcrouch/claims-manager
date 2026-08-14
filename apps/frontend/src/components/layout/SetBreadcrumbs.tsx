@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useBreadcrumbs } from './BreadcrumbProvider';
+import { useBreadcrumbsOptional } from './BreadcrumbProvider';
 import type { BreadcrumbItem } from '@/components/ui/breadcrumbs';
 
 export interface SetBreadcrumbsProps {
@@ -13,12 +13,18 @@ export interface SetBreadcrumbsProps {
  * Use at the top of each page to provide page-specific breadcrumbs.
  */
 export function SetBreadcrumbs({ items }: SetBreadcrumbsProps) {
-  const { setItems } = useBreadcrumbs();
+  const ctx = useBreadcrumbsOptional();
 
   useEffect(() => {
-    setItems(items);
-    return () => setItems([]);
-  }, [items, setItems]);
+    if (!ctx) {
+      console.error(
+        '[SetBreadcrumbs] useBreadcrumbs must be used within BreadcrumbProvider',
+      );
+      return;
+    }
+    ctx.setItems(items);
+    return () => ctx.setItems([]);
+  }, [items, ctx]);
 
   return null;
 }

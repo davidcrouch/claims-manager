@@ -120,3 +120,51 @@ module "pubsub" {
   env            = var.environment
   labels         = local.labels
 }
+
+# ci-deployer (infra) needs run.admin to grant allUsers invoker on public
+# Cloud Run services — roles/editor does not include run.services.setIamPolicy.
+resource "google_project_iam_member" "ci_deployer_run_admin" {
+  project = var.project_id
+  role    = "roles/run.admin"
+  member  = "serviceAccount:${var.ci_deployer_infra_email}"
+}
+
+module "https_lb" {
+  source = "../../modules/https_lb"
+
+  project_id  = var.project_id
+  region      = var.region
+  environment = var.environment
+
+  # All production domains on the LB — no Cloudflare Worker fanout in prod.
+  # providers.branlamie.com routes directly to provider-server (grey-cloud DNS).
+  domains = [
+    local.cloud_run_hosts.app,
+    local.cloud_run_hosts.auth,
+    local.cloud_run_hosts.providers,
+    local.cloud_run_hosts.api,
+  ]
+
+  services = {
+    frontend = {
+      cloud_run_service_name = "frontend"
+      hostnames              = [local.cloud_run_hosts.app]
+    }
+    auth = {
+      cloud_run_service_name = "auth-server"
+      hostnames              = [local.cloud_run_hosts.auth]
+    }
+    provider = {
+      cloud_run_service_name = "provider-server"
+      hostnames              = [local.cloud_run_hosts.providers]
+    }
+    api = {
+      cloud_run_service_name = "api-server"
+      hostnames              = [local.cloud_run_hosts.api]
+    }
+  }
+
+  default_service = "frontend"
+
+  depends_on = [google_project_iam_member.ci_deployer_run_admin]
+}

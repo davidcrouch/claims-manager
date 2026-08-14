@@ -140,11 +140,13 @@ module "cloud_run_api" {
   timeout               = "900s"
   health_path           = var.cloud_run_use_bootstrap_image ? "/" : "/api/v1/health"
   enable_probes         = !var.cloud_run_use_bootstrap_image
-  # IAM-private (not network-private): Direct VPC with PRIVATE_RANGES_ONLY
-  # cannot reach INTERNAL_ONLY sibling *.run.app URLs. Invoker SA + Google
-  # ID token required; api is not on the public HTTPS LB.
+  # Public on HTTPS LB as api.branlamie.com.
+  # Security model: application-level guards (JWT on user routes, HMAC on
+  # webhooks, InternalTokenGuard on /internal, ToolAuthGuard on /webhook-tools).
+  # Cloud Run IAM (allUsers invoker) is required for the LB serverless NEG.
+  # MCP services remain IAM-private; api/auth/frontend/provider use app auth.
   ingress               = "INGRESS_TRAFFIC_ALL"
-  allow_unauthenticated = false
+  allow_unauthenticated = true
   invoker_members = [
     "serviceAccount:${module.iam.service_account_emails["frontend"]}",
     "serviceAccount:${module.iam.service_account_emails["auth-server"]}",
@@ -206,6 +208,7 @@ module "cloud_run_api" {
     google_project_service.run,
     google_project_service.aiplatform,
     module.secrets,
+    google_project_iam_member.ci_deployer_run_admin,
   ]
 }
 

@@ -139,10 +139,12 @@ module "https_lb" {
   region      = var.region
   environment = var.environment
 
+  # providers-staging is NOT on the LB — its DNS is Cloudflare-proxied
+  # (orange-cloud) so the crunchwork-webhook-proxy Worker can intercept
+  # webhook POSTs and fan out to api-staging + api-dev.
   domains = [
     local.cloud_run_hosts.app,
     local.cloud_run_hosts.auth,
-    local.cloud_run_hosts.providers,
     local.cloud_run_hosts.api,
   ]
 
@@ -154,10 +156,6 @@ module "https_lb" {
     auth = {
       cloud_run_service_name = "auth-server"
       hostnames              = [local.cloud_run_hosts.auth]
-    }
-    provider = {
-      cloud_run_service_name = "provider-server"
-      hostnames              = [local.cloud_run_hosts.providers]
     }
     api = {
       cloud_run_service_name = "api-server"

@@ -1,8 +1,8 @@
 # Crunchwork Webhook Proxy
 
-Cloudflare Worker that intercepts Crunchwork staging webhooks at `providers-staging.branlamie.com/api/v1/webhooks/crunchwork` and fans out to both staging Cloud Run and the local dev tunnel:
+Cloudflare Worker that intercepts Crunchwork staging webhooks at `providers-staging.branlamie.com/api/v1/webhooks/crunchwork` and fans out to both the staging HTTPS LB and the local dev tunnel:
 
-- **Primary (awaited):** `provider-server-….run.app/api/v1/internal/webhooks/crunchwork` (Cloud Run origin, bypasses Cloudflare)
+- **Primary (awaited):** `api-staging.branlamie.com/api/v1/webhooks/crunchwork` (grey-cloud DNS → GCP HTTPS LB → `api-server` Cloud Run)
 - **Secondary (fire-and-forget):** `api-dev.branlamie.com/api/v1/webhooks/crunchwork` → local `:5001`
 
 ## Architecture
@@ -13,12 +13,9 @@ Crunchwork SaaS
        │  POST /api/v1/webhooks/crunchwork (HMAC-signed payload)
        ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│  Cloudflare Edge                                                │
+│  Cloudflare Edge (orange-cloud: providers-staging.branlamie.com) │
 │  Worker: crunchwork-webhook-proxy                               │
 │  Route: providers-staging.branlamie.com/api/v1/webhooks/crunchwork │
-│                                                                 │
-│  More specific than cloudrun-hostname-proxy's /* wildcard,      │
-│  so this Worker wins for the webhook path only.                 │
 │                                                                 │
 │  Preserves: method, headers, body, status                       │
 │  Redirects: disabled (manual)                                   │
@@ -26,24 +23,25 @@ Crunchwork SaaS
                    │                       │
                    ▼                       ▼
 ┌─────────────────────────────────┐  ┌────────────────────────────┐
-│ Cloud Run (direct origin)       │  │ api-dev (tunnel)           │
-│ .../api/v1/internal/webhooks/   │  │ .../api/v1/webhooks/       │
-│ crunchwork                      │  │ crunchwork                 │
+│ GCP HTTPS LB (grey-cloud DNS)  │  │ api-dev (tunnel)           │
+│ api-staging.branlamie.com       │  │ api-dev.branlamie.com      │
+│ → api-server Cloud Run          │  │ → local :5001              │
+│ /api/v1/webhooks/crunchwork    │  │ /api/v1/webhooks/crunchwork│
 └─────────────────────────────────┘  └────────────────────────────┘
 ```
 
-### Why the internal path?
+### DNS setup
 
-The public `/api/v1/webhooks/crunchwork` is now intercepted by this Worker on the Cloudflare edge. A same-zone `fetch()` from a Worker bypasses other Workers and hits the raw DNS origin — but `providers-staging.branlamie.com` resolves to a Google LB that needs the Host rewrite performed by `cloudrun-hostname-proxy`. To avoid that dependency, this Worker fetches the Cloud Run `.run.app` URL directly on the `/api/v1/internal/webhooks/crunchwork` path.
+`providers-staging.branlamie.com` is **orange-cloud** (Cloudflare-proxied) so the Worker can intercept. `api-staging.branlamie.com` is **grey-cloud** (DNS-only) pointing to the GCP HTTPS LB IP so Google can validate the managed SSL certificate.
 
-### Production endpoints
+### Production
 
-When production is live, Crunchwork will post directly to the provider host (no proxy needed):
+Production does not use a Worker. Crunchwork posts directly to the provider host via the GCP HTTPS LB:
 
-| Environment | URL |
-|---|---|
-| Staging | `https://providers-staging.branlamie.com/api/v1/webhooks/crunchwork` (→ this Worker) |
-| Production | `https://providers.branlamie.com/api/v1/webhooks/crunchwork` (direct) |
+| Environment | URL | Routing |
+|---|---|---|
+| Staging | `providers-staging.branlamie.com/…` | CF Worker → LB (`api-staging`) + dev tunnel |
+| Production | `providers.branlamie.com/…` | Grey-cloud → LB → `provider-server` (direct) |
 
 ## Prerequisites
 
@@ -99,7 +97,7 @@ curl -X POST \
   -d '{"test": true}'
 ```
 
-The response should come from Cloud Run staging (`provider-server`), with the original status code and body intact.
+The response should come from `api-server` via the staging HTTPS LB, with the original status code and body intact.
 
 ## Monitoring
 

@@ -685,11 +685,21 @@
   Application authentication still protects normal API routes; only marked public routes stay open.
   Outcome: staging API can be reached at the public staging API hostname.
 
-- `2026-08-14` `PENDING` **0.5 h**
+- `2026-08-14` `f10adfa` **0.5 h**
   `5 files | +40 −15 | Tier 3 complex | Moderate orchestration`
   Lay summary: Staging hosting was fixed so the public API hostname can finish provisioning without breaking certificates or permissions.
   **Fixed staging load-balancer certificate rotation and deploy permissions.** Adding the public API hostname required a new TLS certificate without taking down existing ones.
   Deploy automation was given permission to mark the API service as publicly invokable.
   Load-balancer routing was stabilized so adding a hostname does not rename sibling routes.
   Outcome: staging can complete the public API hostname cutover safely.
+
+- `2026-08-14` `bea593d` **1 h**
+  `19 files | +603 −394 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
+  Lay summary: Webhook and hosting infrastructure was hardened for commercial-grade staging and production deployment, and the quote editing interface was improved.
+  **Hardened webhook routing and load-balancer configuration for commercial deployment.**
+  Audited all public API endpoints and documented the application-level security model (JWT, HMAC, internal-token guards).
+  Moved staging webhook fanout from direct Cloud Run access to the HTTPS load balancer, with Cloudflare Worker interception on the provider hostname.
+  Prepared production Terraform with HTTPS load balancer, IAM permissions, and public API service configuration matching staging.
+  Refactored quote detail view into tabbed layout with overview and parties tabs, and improved quote editing actions.
+  Updated deployment documentation with the security model and per-service authentication strategy.
 

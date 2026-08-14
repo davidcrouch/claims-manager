@@ -56,6 +56,15 @@ export function useBreadcrumbs() {
 }
 
 /**
+ * Non-throwing variant for register helpers (`SetPageHeader`, etc.).
+ * Returns null when the provider is missing (e.g. Turbopack first-compile /
+ * HMR context identity mismatch) so pages degrade instead of hard-crashing.
+ */
+export function useBreadcrumbsOptional() {
+  return useContext(BreadcrumbContext);
+}
+
+/**
  * Renders the active page-header content. When a page registers a rich header
  * node via `SetPageHeader`, that node replaces the breadcrumbs. Otherwise, the
  * standard breadcrumbs trail (set via `SetBreadcrumbs`) is rendered.

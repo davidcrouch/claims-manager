@@ -2,18 +2,11 @@
 
 import { useCallback, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   FileSpreadsheet,
   ExternalLink,
   FileSignature,
-  Calculator,
-  CalendarClock,
-  CheckCircle2,
-  ShieldCheck,
-  Users,
-  Building2,
-  Layers,
-  StickyNote,
   Calendar,
   ClipboardList,
   MessageSquare,
@@ -23,6 +16,9 @@ import {
   Send,
   BookOpen,
   Lock,
+  Layers,
+  Users,
+  CheckCircle2,
 } from 'lucide-react';
 import {
   Card,
@@ -38,12 +34,9 @@ import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import {
   DefRow,
   SectionCard,
-  BoolPill,
   formatDate,
   formatDateTime,
   formatCurrency,
-  formatAddress,
-  pick,
   asString,
   asBool,
   type Dict,
@@ -52,8 +45,6 @@ import type {
   Quote,
   Job,
   Claim,
-  QuotePartyPayload,
-  QuoteScheduleInfo,
   QuoteApprovalInfo,
   CatalogType,
 } from '@/types/api';
@@ -66,6 +57,14 @@ import {
 } from '@/components/shared/DetailAssignee';
 import { jobDisplayName } from '@/components/shared/job-label';
 import { QuoteLineItemsTab } from '@/components/quotes/QuoteLineItemsTab';
+import {
+  QuoteOverviewTab,
+  type QuoteOverviewTabHandle,
+} from '@/components/quotes/QuoteOverviewTab';
+import {
+  QuotePartiesTab,
+  type QuotePartiesTabHandle,
+} from '@/components/quotes/QuotePartiesTab';
 import { JournalList } from '@/components/journals/JournalList';
 import {
   fetchJournalsByEntityAction,
@@ -80,69 +79,14 @@ import {
   type EstimatePublishMode,
 } from '@/components/quotes/EstimatePublishWizard';
 import { EstimateApprovalWizard } from '@/components/quotes/EstimateApprovalWizard';
+import { updateQuoteFieldsAction } from '@/app/(app)/quotes/actions';
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 function getApi(quote: Quote): Dict {
   return (quote.apiPayload as Dict | undefined) ?? {};
-}
-
-function getParty(
-  quote: Quote,
-  bucket: 'quoteTo' | 'quoteFor' | 'quoteFrom',
-): QuotePartyPayload {
-  const base = (quote[bucket] as Dict | undefined) ?? {};
-  const api = getApi(quote);
-  const prefix = bucket === 'quoteTo' ? 'to' : bucket === 'quoteFor' ? 'for' : 'from';
-  const prefixed = (key: string): unknown =>
-    api[`${prefix}${key[0].toUpperCase()}${key.slice(1)}`];
-  const fromApi = (k: string): string | undefined => asString(prefixed(k));
-  const fromBucket = (k: string): string | undefined => asString(base[k]);
-  return {
-    name: fromBucket('name') ?? fromApi('name'),
-    companyRegistrationNumber:
-      fromBucket('companyRegistrationNumber') ??
-      fromApi('companyRegistrationNumber'),
-    contactName: fromBucket('contactName') ?? fromApi('contactName'),
-    clientReference:
-      fromBucket('clientReference') ?? fromApi('clientReference'),
-    phoneNumber: fromBucket('phoneNumber') ?? fromApi('phoneNumber'),
-    email: fromBucket('email') ?? fromApi('email'),
-    unitNumber: fromBucket('unitNumber') ?? fromApi('unitNumber'),
-    streetNumber: fromBucket('streetNumber') ?? fromApi('streetNumber'),
-    streetName: fromBucket('streetName') ?? fromApi('streetName'),
-    suburb: fromBucket('suburb') ?? fromApi('suburb'),
-    postCode: fromBucket('postCode') ?? fromApi('postCode'),
-    state: fromBucket('state') ?? fromApi('state'),
-    country: fromBucket('country') ?? fromApi('country'),
-  };
-}
-
-function formatPartyAddress(p: QuotePartyPayload): string {
-  return formatAddress({
-    unitNumber: p.unitNumber,
-    streetNumber: p.streetNumber,
-    streetName: p.streetName,
-    suburb: p.suburb,
-    state: p.state,
-    postCode: p.postCode,
-    country: p.country,
-  });
-}
-
-function getScheduleInfo(quote: Quote): QuoteScheduleInfo {
-  const bucket = (quote.scheduleInfo as Dict | undefined) ?? {};
-  const api = getApi(quote);
-  return {
-    estimatedStartDate:
-      asString(bucket.estimatedStartDate) ?? asString(api.estimatedStartDate),
-    estimatedCompletionDate:
-      asString(bucket.estimatedCompletionDate) ??
-      asString(api.estimatedCompletionDate),
-    reasonForVariation:
-      asString(bucket.reasonForVariation) ?? asString(api.reasonForVariation),
-  };
 }
 
 function getApprovalInfo(quote: Quote): QuoteApprovalInfo {
@@ -173,10 +117,6 @@ function getApprovalInfo(quote: Quote): QuoteApprovalInfo {
       asString(bucket.updatedByExternalReference) ??
       asString(apiUpdatedBy.externalReference),
   };
-}
-
-function getCustomData(quote: Quote): Dict {
-  return (quote.customData as Dict | undefined) ?? {};
 }
 
 export function getEstimateStatusName(quote: Quote): string {
@@ -272,215 +212,6 @@ export function QuotePageHeader({
 }
 
 // ---------------------------------------------------------------------------
-// Overview Tab
-// ---------------------------------------------------------------------------
-
-function OverviewTab({ quote }: { quote: Quote }) {
-  const approval = getApprovalInfo(quote);
-  const statusName = quote.status?.name ?? approval.statusName ?? 'Unknown';
-  const quoteTypeName = quote.quoteType?.name ?? approval.quoteTypeName ?? '—';
-  const schedule = getScheduleInfo(quote);
-  const custom = getCustomData(quote);
-  const insurerRef = asString(pick(custom, 'cwExternalReference'));
-  const cwCreated = asString(pick(custom, 'cwCreatedAtDate'));
-  const cwUpdated = asString(pick(custom, 'cwUpdatedAtDate'));
-  const autoApproved = asBool(quote.isAutoApproved) ?? approval.isAutoApproved;
-
-  return (
-    <div className="space-y-4">
-      {/* KPI Row */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card size="sm">
-          <CardContent className="px-4">
-            <p className="text-xs text-muted-foreground">Status</p>
-            <div className="mt-1">
-              <StatusBadge status={statusName} />
-            </div>
-          </CardContent>
-        </Card>
-        <Card size="sm">
-          <CardContent className="px-4">
-            <p className="text-xs text-muted-foreground">Estimate type</p>
-            <div className="mt-1">
-              <TypeBadge type={quoteTypeName} />
-            </div>
-          </CardContent>
-        </Card>
-        <Card size="sm">
-          <CardContent className="px-4">
-            <p className="text-xs text-muted-foreground">Total</p>
-            <p className="mt-1 text-sm font-medium">{formatCurrency(quote.totalAmount)}</p>
-          </CardContent>
-        </Card>
-        <Card size="sm">
-          <CardContent className="px-4">
-            <p className="text-xs text-muted-foreground">Estimate date</p>
-            <p className="mt-1 text-sm font-medium">{formatDate(quote.quoteDate)}</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        {/* Identifiers */}
-        <SectionCard
-          title="Identifiers"
-          icon={<FileSignature className="h-4 w-4 text-muted-foreground" />}
-        >
-          <DefRow label="Name" value={quote.name ?? '—'} />
-          <DefRow label="Estimate number" value={quote.quoteNumber ?? '—'} />
-          <DefRow label="Reference" value={quote.reference ?? '—'} />
-          <DefRow
-            label="CW ID"
-            value={
-              quote.externalReference ? (
-                <span className="font-mono text-xs">{quote.externalReference}</span>
-              ) : (
-                '—'
-              )
-            }
-          />
-          {insurerRef && <DefRow label="Insurer reference" value={insurerRef} />}
-          <DefRow label="Status type" value={approval.statusType ?? '—'} />
-          <DefRow label="Created" value={formatDateTime(quote.createdAt)} />
-          <DefRow label="Updated" value={formatDateTime(quote.updatedAt)} />
-          {cwCreated && <DefRow label="CW created" value={formatDateTime(cwCreated)} />}
-          {cwUpdated && <DefRow label="CW updated" value={formatDateTime(cwUpdated)} />}
-        </SectionCard>
-
-        {/* Financials */}
-        <SectionCard
-          title="Financials"
-          icon={<Calculator className="h-4 w-4 text-muted-foreground" />}
-        >
-          <DefRow label="Sub total (ex. tax)" value={formatCurrency(quote.subTotal)} />
-          <DefRow label="Total tax" value={formatCurrency(quote.totalTax)} />
-          <DefRow label="Total (incl. tax)" value={formatCurrency(quote.totalAmount)} />
-          <DefRow
-            label="Expires in"
-            value={
-              typeof quote.expiresInDays === 'number'
-                ? `${quote.expiresInDays} day${quote.expiresInDays === 1 ? '' : 's'}`
-                : '—'
-            }
-          />
-        </SectionCard>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        {/* Schedule */}
-        <SectionCard
-          title="Schedule"
-          icon={<CalendarClock className="h-4 w-4 text-muted-foreground" />}
-        >
-          <DefRow
-            label="Estimated start"
-            value={formatDate(quote.estimatedStartDate ?? schedule.estimatedStartDate ?? null)}
-          />
-          <DefRow
-            label="Estimated completion"
-            value={formatDate(quote.estimatedCompletionDate ?? schedule.estimatedCompletionDate ?? null)}
-          />
-          <DefRow label="Reason for variation" value={schedule.reasonForVariation ?? '—'} />
-        </SectionCard>
-
-        {/* Approval */}
-        <SectionCard
-          title="Approval"
-          icon={<ShieldCheck className="h-4 w-4 text-muted-foreground" />}
-        >
-          <DefRow label="Auto-approved" value={<BoolPill value={autoApproved} />} />
-          <DefRow label="Status name" value={approval.statusName ?? '—'} />
-          <DefRow label="Estimate type" value={<TypeBadge type={approval.quoteTypeName} />} />
-          <DefRow
-            label="Created by"
-            value={
-              approval.createdByName
-                ? `${approval.createdByName}${approval.createdByExternalReference ? ` (${approval.createdByExternalReference})` : ''}`
-                : <OrgUserLabel userId={quote.createdByUserId} />
-            }
-          />
-          <DefRow
-            label="Updated by"
-            value={
-              approval.updatedByName
-                ? `${approval.updatedByName}${approval.updatedByExternalReference ? ` (${approval.updatedByExternalReference})` : ''}`
-                : <OrgUserLabel userId={quote.updatedByUserId} />
-            }
-          />
-        </SectionCard>
-      </div>
-
-      {quote.note ? (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <StickyNote className="h-4 w-4 text-muted-foreground" />
-              Note
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="whitespace-pre-wrap text-sm">{quote.note}</p>
-          </CardContent>
-        </Card>
-      ) : null}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Parties Tab
-// ---------------------------------------------------------------------------
-
-function PartyCard({
-  title,
-  party,
-  icon,
-}: {
-  title: string;
-  party: QuotePartyPayload;
-  icon: React.ReactNode;
-}) {
-  const address = formatPartyAddress(party);
-  return (
-    <SectionCard title={title} icon={icon}>
-      <DefRow label="Name" value={party.name ?? '—'} />
-      <DefRow label="Contact" value={party.contactName ?? '—'} />
-      <DefRow label="Email" value={party.email ?? '—'} />
-      <DefRow label="Phone" value={party.phoneNumber ?? '—'} />
-      <DefRow label="Company reg. #" value={party.companyRegistrationNumber ?? '—'} />
-      <DefRow label="Client reference" value={party.clientReference ?? '—'} />
-      <DefRow label="Address" value={address || '—'} />
-    </SectionCard>
-  );
-}
-
-function PartiesTab({ quote }: { quote: Quote }) {
-  const to = getParty(quote, 'quoteTo');
-  const forParty = getParty(quote, 'quoteFor');
-  const from = getParty(quote, 'quoteFrom');
-
-  return (
-    <div className="grid gap-4 md:grid-cols-3">
-      <PartyCard
-        title="Estimate From (vendor)"
-        party={from}
-        icon={<Building2 className="h-4 w-4 text-muted-foreground" />}
-      />
-      <PartyCard
-        title="Estimate For (customer)"
-        party={forParty}
-        icon={<Users className="h-4 w-4 text-muted-foreground" />}
-      />
-      <PartyCard
-        title="Estimate To (recipient)"
-        party={to}
-        icon={<Users className="h-4 w-4 text-muted-foreground" />}
-      />
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Placeholder Tabs
 // ---------------------------------------------------------------------------
 
@@ -532,7 +263,6 @@ function TimelineTab({ quote }: { quote: Quote }) {
   );
 }
 
-
 // ---------------------------------------------------------------------------
 // Container with tabs
 // ---------------------------------------------------------------------------
@@ -558,14 +288,22 @@ export function QuoteDetail({
   claim?: Claim | null;
   jobProvider?: CatalogType;
 }) {
+  const router = useRouter();
   const [tab, setTab] = useState<QuoteTab>('overview');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [publishWizardOpen, setPublishWizardOpen] = useState(false);
   const [approvalWizardOpen, setApprovalWizardOpen] = useState(false);
   const [lineItemsDirty, setLineItemsDirty] = useState(false);
+  const [overviewDirty, setOverviewDirty] = useState(false);
+  const [partiesDirty, setPartiesDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const saveLineItemsRef = useRef<(() => void) | null>(null);
+  const overviewRef = useRef<QuoteOverviewTabHandle>(null);
+  const partiesRef = useRef<QuotePartiesTabHandle>(null);
   const locked = isEstimateLocked(quote);
   const assignee = resolveDetailAssignee({ job });
+  const pageDirty = overviewDirty || partiesDirty;
 
   const title =
     quote.name ??
@@ -579,11 +317,45 @@ export function QuoteDetail({
   const isInternal = publishMode === 'internal';
   const canApprove = statusName === 'Pending' && isInternal;
   const showTakeOffActions = tab === 'line-items' && !locked;
+  const showFieldEditActions =
+    !locked && (tab === 'overview' || tab === 'parties');
 
   const handleLineItemsDirtyChange = useCallback((dirty: boolean, save: () => void) => {
     setLineItemsDirty(dirty);
     saveLineItemsRef.current = save;
   }, []);
+
+  const handleCancel = useCallback(() => {
+    overviewRef.current?.reset();
+    partiesRef.current?.reset();
+    setSaveError(null);
+  }, []);
+
+  const handleSave = useCallback(async () => {
+    const overviewPending = overviewRef.current?.getPendingUpdate() ?? null;
+    const partiesPending = partiesRef.current?.getPendingUpdate() ?? null;
+    if (!overviewPending && !partiesPending) {
+      setSaveError(null);
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const result = await updateQuoteFieldsAction(quote.id, {
+        ...(overviewPending ?? {}),
+        ...(partiesPending ?? {}),
+      });
+      if (!result.success) {
+        setSaveError(result.error ?? 'Failed to save estimate');
+        return;
+      }
+      overviewRef.current?.markClean();
+      partiesRef.current?.markClean();
+      router.refresh();
+    } finally {
+      setSaving(false);
+    }
+  }, [quote.id, router]);
 
   const tabs: Array<{ id: QuoteTab; label: string; icon: typeof Calendar }> = [
     { id: 'overview', label: 'Overview', icon: FileSignature },
@@ -599,6 +371,28 @@ export function QuoteDetail({
   return (
     <div className="flex flex-col">
       <SetHeaderActions>
+        {showFieldEditActions && (
+          <>
+            <Button
+              size="default"
+              variant="outline"
+              onClick={handleCancel}
+              disabled={saving || !pageDirty}
+              className="h-9 gap-1.5 px-4"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="default"
+              onClick={handleSave}
+              disabled={saving || !pageDirty}
+              className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+            >
+              <Save className="h-3.5 w-3.5" />
+              {saving ? 'Saving...' : 'Save'}
+            </Button>
+          </>
+        )}
         {showTakeOffActions && (
           <>
             <Button
@@ -708,7 +502,21 @@ export function QuoteDetail({
             This estimate has been published and can no longer be edited.
           </div>
         )}
-        {tab === 'overview' && <OverviewTab quote={quote} />}
+        {saveError && (
+          <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {saveError}
+          </div>
+        )}
+        {/* Keep editable tabs mounted so draft state survives tab switches. */}
+        <div className={tab === 'overview' ? '' : 'hidden'}>
+          <QuoteOverviewTab
+            ref={overviewRef}
+            quote={quote}
+            editing={!locked}
+            saving={saving}
+            onDirtyChange={setOverviewDirty}
+          />
+        </div>
         {tab === 'line-items' && (
           <QuoteLineItemsTab
             quote={quote}
@@ -720,7 +528,15 @@ export function QuoteDetail({
             hideToolbarActions
           />
         )}
-        {tab === 'parties' && <PartiesTab quote={quote} />}
+        <div className={tab === 'parties' ? '' : 'hidden'}>
+          <QuotePartiesTab
+            ref={partiesRef}
+            quote={quote}
+            editing={!locked}
+            saving={saving}
+            onDirtyChange={setPartiesDirty}
+          />
+        </div>
         {tab === 'activities' && <ActivitiesTab />}
         {tab === 'communications' && <CommunicationsTab />}
         {tab === 'timeline' && <TimelineTab quote={quote} />}

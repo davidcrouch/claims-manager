@@ -1,8 +1,8 @@
-// Primary: Cloud Run origin directly (bypasses Cloudflare Workers on same zone).
-// The public path /api/v1/webhooks/crunchwork is intercepted by this Worker,
-// so staging receives on the internal path instead.
+// Primary: api-server via GCP HTTPS LB (grey-cloud DNS → LB → Cloud Run).
+// The CF Worker intercepts providers-staging.branlamie.com/api/v1/webhooks/crunchwork
+// (orange-cloud DNS) and forwards through the LB to api-server's webhook endpoint.
 const PRIMARY_URL =
-  "https://provider-server-981956656190.australia-southeast1.run.app/api/v1/internal/webhooks/crunchwork";
+  "https://api-staging.branlamie.com/api/v1/webhooks/crunchwork";
 
 // Secondary: dev tunnel for local dual-delivery during development.
 const SECONDARY_URLS = [
@@ -35,6 +35,11 @@ function forwardHeaders(request: Request): Headers {
   return headers;
 }
 
+function hasRequestBody(method: string): boolean {
+  const m = method.toUpperCase();
+  return m !== "GET" && m !== "HEAD";
+}
+
 export default {
   async fetch(
     request: Request,
@@ -42,27 +47,32 @@ export default {
     ctx: ExecutionContext,
   ): Promise<Response> {
     try {
-      const body = await request.arrayBuffer();
       const headers = forwardHeaders(request);
+      const body = hasRequestBody(request.method)
+        ? await request.arrayBuffer()
+        : undefined;
 
-      const primaryPromise = fetch(PRIMARY_URL, {
+      const init: RequestInit = {
         method: request.method,
         headers,
-        body,
         redirect: "manual",
-      });
+      };
+      if (body !== undefined) {
+        init.body = body;
+      }
+
+      const primaryPromise = fetch(PRIMARY_URL, init);
 
       for (const url of SECONDARY_URLS) {
-        const secondary = fetch(url, {
-          method: request.method,
-          headers,
-          body,
-          redirect: "manual",
-        })
+        const secondary = fetch(url, init)
           .then(async (res) => {
             if (!res.ok) {
               console.error(
                 `[WebhookProxy.fetch] secondary target non-OK: ${url} status=${res.status}`,
+              );
+            } else {
+              console.log(
+                `[WebhookProxy.fetch] secondary ok: ${url} status=${res.status}`,
               );
             }
           })

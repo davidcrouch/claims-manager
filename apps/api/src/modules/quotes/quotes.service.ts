@@ -269,6 +269,39 @@ export class QuotesService {
     }
   }
 
+  /** Map quote_to / quote_for / quote_from JSONB into CW to/for/from body fields. */
+  private flattenPartyForOutbound(
+    prefix: 'to' | 'for' | 'from',
+    party: unknown,
+  ): Record<string, unknown> {
+    if (!party || typeof party !== 'object') return {};
+    const p = party as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    const map: Array<[string, string]> = [
+      ['name', 'Name'],
+      ['companyRegistrationNumber', 'CompanyRegistrationNumber'],
+      ['contactName', 'ContactName'],
+      ['clientReference', 'ClientReference'],
+      ['phoneNumber', 'PhoneNumber'],
+      ['email', 'Email'],
+      ['unitNumber', 'UnitNumber'],
+      ['streetNumber', 'StreetNumber'],
+      ['streetName', 'StreetName'],
+      ['suburb', 'Suburb'],
+      ['postCode', 'PostCode'],
+      ['state', 'State'],
+      ['country', 'Country'],
+    ];
+    for (const [src, suffix] of map) {
+      if (prefix === 'from' && src === 'clientReference') continue;
+      const val = p[src];
+      if (val !== undefined && val !== null && val !== '') {
+        out[`${prefix}${suffix}`] = val;
+      }
+    }
+    return out;
+  }
+
   async findByJob(params: { jobId: string }) {
     const tenantId = this.tenantContext.getTenantId();
     const rows = await this.quotesRepo.findByJob({ jobId: params.jobId, tenantId });
@@ -309,6 +342,19 @@ export class QuotesService {
         ? params.body.recipientOrganisationId
         : null;
 
+    const scheduleInfo: Record<string, unknown> = {};
+    if (params.body.estimatedStart || params.body.estimatedStartDate) {
+      scheduleInfo.estimatedStartDate =
+        params.body.estimatedStart ?? params.body.estimatedStartDate;
+    }
+    if (params.body.estimatedCompletion || params.body.estimatedCompletionDate) {
+      scheduleInfo.estimatedCompletionDate =
+        params.body.estimatedCompletion ?? params.body.estimatedCompletionDate;
+    }
+    if (params.body.reasonForVariation != null) {
+      scheduleInfo.reasonForVariation = params.body.reasonForVariation;
+    }
+
     const insertData: QuoteInsert = {
       tenantId,
       jobId: params.body.jobId as string,
@@ -317,20 +363,49 @@ export class QuotesService {
       recipientOrganisationId,
       ownershipStatus: 'owned',
       name: (params.body.name as string) || null,
+      reference: (params.body.reference as string) || null,
       note: (params.body.note as string) || null,
       quoteDate: params.body.estimateDate
         ? new Date(params.body.estimateDate as string)
-        : null,
+        : params.body.date
+          ? new Date(params.body.date as string)
+          : null,
       expiresInDays: params.body.expiresInDays
         ? Number(params.body.expiresInDays)
         : null,
-      estimatedStartDate: (params.body.estimatedStart as string) || null,
-      estimatedCompletionDate: (params.body.estimatedCompletion as string) || null,
+      estimatedStartDate:
+        ((params.body.estimatedStart ?? params.body.estimatedStartDate) as string) ||
+        null,
+      estimatedCompletionDate:
+        ((params.body.estimatedCompletion ??
+          params.body.estimatedCompletionDate) as string) || null,
+      scheduleInfo,
+      quoteTo:
+        params.body.quoteTo && typeof params.body.quoteTo === 'object'
+          ? (params.body.quoteTo as Record<string, unknown>)
+          : {},
+      quoteFor:
+        params.body.quoteFor && typeof params.body.quoteFor === 'object'
+          ? (params.body.quoteFor as Record<string, unknown>)
+          : {},
+      quoteFrom:
+        params.body.quoteFrom && typeof params.body.quoteFrom === 'object'
+          ? (params.body.quoteFrom as Record<string, unknown>)
+          : {},
       customData: { quoteType: params.body.quoteType || null },
       statusLookupId: draftStatusId ?? null,
       createdByUserId: params.userId ?? null,
       updatedByUserId: params.userId ?? null,
     };
+    const to = insertData.quoteTo as Record<string, unknown> | undefined;
+    if (to) {
+      if (typeof to.name === 'string') insertData.quoteToName = to.name;
+      if (typeof to.email === 'string') insertData.quoteToEmail = to.email;
+    }
+    const forParty = insertData.quoteFor as Record<string, unknown> | undefined;
+    if (forParty && typeof forParty.name === 'string') {
+      insertData.quoteForName = forParty.name;
+    }
     return this.quotesRepo.create({ data: insertData });
   }
 
@@ -392,6 +467,7 @@ export class QuotesService {
     const custom = (existing.customData ?? {}) as Record<string, unknown>;
     const jobApiPayload = (job?.apiPayload ?? {}) as Record<string, unknown>;
     const claimApiPayload = (claim?.apiPayload ?? {}) as Record<string, unknown>;
+    const schedule = (existing.scheduleInfo ?? {}) as Record<string, unknown>;
     const outboundBody: Record<string, unknown> = {
       jobId: (jobApiPayload.id as string) ?? job?.externalReference ?? null,
       claimId: (claimApiPayload.id as string) ?? claim?.externalReference ?? null,
@@ -402,10 +478,18 @@ export class QuotesService {
       expiresInDays: existing.expiresInDays ?? undefined,
       estimatedStartDate: existing.estimatedStartDate ?? undefined,
       estimatedCompletionDate: existing.estimatedCompletionDate ?? undefined,
+      reasonForVariation:
+        (schedule.reasonForVariation as string | undefined) ?? undefined,
+      ...this.flattenPartyForOutbound('to', existing.quoteTo),
+      ...this.flattenPartyForOutbound('for', existing.quoteFor),
+      ...this.flattenPartyForOutbound('from', existing.quoteFrom),
     };
     if (custom.quoteType) {
+      const qt = custom.quoteType;
       outboundBody.quoteType =
-        typeof custom.quoteType === 'object' ? custom.quoteType : { id: custom.quoteType };
+        typeof qt === 'object' && qt !== null
+          ? qt
+          : { externalReference: String(qt), name: String(qt) };
     }
 
     const groups = await this.catalogSelectionService.buildOutboundQuoteGroups({
@@ -600,6 +684,124 @@ export class QuotesService {
     return { deleted: true, softDeleted: false };
   }
 
+  /**
+   * Apply editable Quote fields from Insurance REST API §3.3.6 Create/Update
+   * (POST Create Optional/Required + POST Update Optional) onto a local draft.
+   */
+  private buildLocalDraftUpdate(params: {
+    existing: NonNullable<Awaited<ReturnType<QuotesService['findOne']>>>;
+    body: Record<string, unknown>;
+    userId?: string;
+  }): Partial<QuoteInsert> {
+    const { existing, body, userId } = params;
+    const data: Partial<QuoteInsert> = {
+      ...(userId ? { updatedByUserId: userId } : {}),
+    };
+
+    if (typeof body.name === 'string' || body.name === null) {
+      data.name = (body.name as string | null) || null;
+    }
+    if (typeof body.reference === 'string' || body.reference === null) {
+      data.reference = (body.reference as string | null) || null;
+    }
+    if (typeof body.note === 'string' || body.note === null) {
+      data.note = (body.note as string | null) || null;
+    }
+    if (body.date !== undefined || body.estimateDate !== undefined || body.quoteDate !== undefined) {
+      const raw = (body.date ?? body.estimateDate ?? body.quoteDate) as string | null;
+      data.quoteDate = raw ? new Date(raw) : null;
+    }
+    if (body.expiresInDays !== undefined) {
+      data.expiresInDays =
+        body.expiresInDays === null || body.expiresInDays === ''
+          ? null
+          : Number(body.expiresInDays);
+    }
+    if (body.estimatedStartDate !== undefined || body.estimatedStart !== undefined) {
+      const raw = (body.estimatedStartDate ?? body.estimatedStart) as string | null;
+      data.estimatedStartDate = raw || null;
+    }
+    if (body.estimatedCompletionDate !== undefined || body.estimatedCompletion !== undefined) {
+      const raw = (body.estimatedCompletionDate ?? body.estimatedCompletion) as string | null;
+      data.estimatedCompletionDate = raw || null;
+    }
+
+    const existingSchedule = (existing.scheduleInfo ?? {}) as Record<string, unknown>;
+    if (body.reasonForVariation !== undefined || body.scheduleInfo) {
+      const fromBody =
+        body.scheduleInfo && typeof body.scheduleInfo === 'object'
+          ? (body.scheduleInfo as Record<string, unknown>)
+          : {};
+      const reason =
+        body.reasonForVariation !== undefined
+          ? (body.reasonForVariation as string | null)
+          : (fromBody.reasonForVariation as string | null | undefined);
+      data.scheduleInfo = {
+        ...existingSchedule,
+        ...fromBody,
+        ...(reason !== undefined ? { reasonForVariation: reason || null } : {}),
+        ...(data.estimatedStartDate !== undefined
+          ? { estimatedStartDate: data.estimatedStartDate }
+          : {}),
+        ...(data.estimatedCompletionDate !== undefined
+          ? { estimatedCompletionDate: data.estimatedCompletionDate }
+          : {}),
+      };
+    } else if (
+      data.estimatedStartDate !== undefined ||
+      data.estimatedCompletionDate !== undefined
+    ) {
+      data.scheduleInfo = {
+        ...existingSchedule,
+        ...(data.estimatedStartDate !== undefined
+          ? { estimatedStartDate: data.estimatedStartDate }
+          : {}),
+        ...(data.estimatedCompletionDate !== undefined
+          ? { estimatedCompletionDate: data.estimatedCompletionDate }
+          : {}),
+      };
+    }
+
+    const partyKeys = ['quoteTo', 'quoteFor', 'quoteFrom'] as const;
+    for (const key of partyKeys) {
+      if (body[key] && typeof body[key] === 'object') {
+        data[key] = body[key] as Record<string, unknown>;
+      }
+    }
+    if (data.quoteTo && typeof data.quoteTo === 'object') {
+      const to = data.quoteTo as Record<string, unknown>;
+      if (typeof to.name === 'string' || to.name === null) data.quoteToName = (to.name as string | null) || null;
+      if (typeof to.email === 'string' || to.email === null) data.quoteToEmail = (to.email as string | null) || null;
+    }
+    if (data.quoteFor && typeof data.quoteFor === 'object') {
+      const forParty = data.quoteFor as Record<string, unknown>;
+      if (typeof forParty.name === 'string' || forParty.name === null) {
+        data.quoteForName = (forParty.name as string | null) || null;
+      }
+    }
+
+    if (typeof body.statusLookupId === 'string' && body.statusLookupId) {
+      data.statusLookupId = body.statusLookupId;
+    }
+
+    if (body.quoteType !== undefined) {
+      const existingCustom = (existing.customData ?? {}) as Record<string, unknown>;
+      let quoteTypeVal: unknown = body.quoteType;
+      if (typeof body.quoteType === 'string') {
+        quoteTypeVal = body.quoteType;
+      } else if (body.quoteType && typeof body.quoteType === 'object') {
+        const qt = body.quoteType as Record<string, unknown>;
+        quoteTypeVal =
+          (qt.externalReference as string | undefined) ??
+          (qt.name as string | undefined) ??
+          qt;
+      }
+      data.customData = { ...existingCustom, quoteType: quoteTypeVal ?? null };
+    }
+
+    return data;
+  }
+
   async update(params: {
     id: string;
     body: Record<string, unknown>;
@@ -608,8 +810,29 @@ export class QuotesService {
     const existing = await this.findOne({ id: params.id });
     if (!existing) return null;
 
+    const tenantId = this.tenantContext.getTenantId();
+
+    // Local drafts (no CW id): apply §3.3.6 creatable/editable fields in-DB.
+    if (!existing.externalReference) {
+      await this.assertQuoteEditable({ id: params.id });
+      const data = this.buildLocalDraftUpdate({
+        existing,
+        body: params.body,
+        userId: params.userId,
+      });
+      const keys = Object.keys(data).filter((k) => k !== 'updatedByUserId');
+      if (keys.length === 0 && typeof params.body.statusLookupId === 'string' && params.body.statusLookupId) {
+        data.statusLookupId = params.body.statusLookupId;
+      }
+      if (Object.keys(data).filter((k) => k !== 'updatedByUserId').length === 0) {
+        return existing;
+      }
+      await this.quotesRepo.update({ id: params.id, data });
+      const updated = await this.quotesRepo.findOne({ id: params.id, tenantId });
+      return updated ? this.shapeQuoteResponse(updated) : null;
+    }
+
     if (typeof params.body.statusLookupId === 'string' && params.body.statusLookupId) {
-      const tenantId = this.tenantContext.getTenantId();
       await this.quotesRepo.update({
         id: params.id,
         data: {
@@ -621,11 +844,6 @@ export class QuotesService {
       return updated ? this.shapeQuoteResponse(updated) : null;
     }
 
-    if (!existing.externalReference) {
-      throw new BadRequestException('Quote has no external reference — publish it first');
-    }
-
-    const tenantId = this.tenantContext.getTenantId();
     const job = existing.jobId
       ? await this.jobsRepo.findOne({ id: existing.jobId, tenantId })
       : null;

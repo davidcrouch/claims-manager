@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, type ReactNode } from 'react';
-import { useBreadcrumbs } from './BreadcrumbProvider';
+import { useBreadcrumbsOptional } from './BreadcrumbProvider';
 
 export interface SetPageHeaderProps {
   children: ReactNode;
@@ -14,12 +14,18 @@ export interface SetPageHeaderProps {
  * header (title, status, context chips, etc.) in the bar.
  */
 export function SetPageHeader({ children }: SetPageHeaderProps) {
-  const { setHeaderNode } = useBreadcrumbs();
+  const ctx = useBreadcrumbsOptional();
 
   useEffect(() => {
-    setHeaderNode(children);
-    return () => setHeaderNode(null);
-  }, [children, setHeaderNode]);
+    if (!ctx) {
+      console.error(
+        '[SetPageHeader] useBreadcrumbs must be used within BreadcrumbProvider',
+      );
+      return;
+    }
+    ctx.setHeaderNode(children);
+    return () => ctx.setHeaderNode(null);
+  }, [children, ctx]);
 
   return null;
 }

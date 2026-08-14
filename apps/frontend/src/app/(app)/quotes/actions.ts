@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { getSession, getAccessToken } from '@/lib/auth';
 import { createApiClient, ApiError } from '@/lib/api-client';
-import type { PaginatedResponse, Quote, Attachment } from '@/types/api';
+import type { PaginatedResponse, Quote, Attachment, QuotePartyPayload } from '@/types/api';
 
 async function getApi() {
   const session = await getSession();
@@ -399,6 +399,63 @@ function isNotImplemented(err: unknown): boolean {
     return err.status === 404 || err.status === 501;
   }
   return false;
+}
+
+export type UpdateQuoteFieldsInput = {
+  name?: string | null;
+  reference?: string | null;
+  note?: string | null;
+  quoteType?: string | null;
+  estimateDate?: string | null;
+  expiresInDays?: number | null;
+  estimatedStartDate?: string | null;
+  estimatedCompletionDate?: string | null;
+  reasonForVariation?: string | null;
+  quoteTo?: QuotePartyPayload;
+  quoteFor?: QuotePartyPayload;
+  quoteFrom?: QuotePartyPayload;
+};
+
+/** Persist §3.3.6 creatable/editable quote fields for a local draft estimate. */
+export async function updateQuoteFieldsAction(
+  quoteId: string,
+  fields: UpdateQuoteFieldsInput,
+): Promise<{ success: boolean; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+
+  try {
+    const body: Record<string, unknown> = {};
+    if (fields.name !== undefined) body.name = fields.name;
+    if (fields.reference !== undefined) body.reference = fields.reference;
+    if (fields.note !== undefined) body.note = fields.note;
+    if (fields.quoteType !== undefined) body.quoteType = fields.quoteType;
+    if (fields.estimateDate !== undefined) body.estimateDate = fields.estimateDate;
+    if (fields.expiresInDays !== undefined) body.expiresInDays = fields.expiresInDays;
+    if (fields.estimatedStartDate !== undefined) {
+      body.estimatedStartDate = fields.estimatedStartDate;
+    }
+    if (fields.estimatedCompletionDate !== undefined) {
+      body.estimatedCompletionDate = fields.estimatedCompletionDate;
+    }
+    if (fields.reasonForVariation !== undefined) {
+      body.reasonForVariation = fields.reasonForVariation;
+    }
+    if (fields.quoteTo !== undefined) body.quoteTo = fields.quoteTo;
+    if (fields.quoteFor !== undefined) body.quoteFor = fields.quoteFor;
+    if (fields.quoteFrom !== undefined) body.quoteFrom = fields.quoteFrom;
+
+    await api.updateQuote(quoteId, body);
+    revalidatePath(`/quotes/${quoteId}`);
+    revalidatePath('/quotes');
+    return { success: true };
+  } catch (err) {
+    console.error('[quotes/actions.updateQuoteFieldsAction]', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to update estimate',
+    };
+  }
 }
 
 export async function fetchQuoteAttachmentsAction(

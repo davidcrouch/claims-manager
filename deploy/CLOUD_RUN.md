@@ -2,22 +2,24 @@
 
 Claims Manager runs **Cloud Run only** (staging and production). No GKE, no Compose VM.
 
-| Service | Exposure | Staging | Production |
-|---------|----------|---------|------------|
-| `provider-server` | Public | 1 vCPU / 512Mi | same |
-| `api-server` | Public on staging (`api-staging…`); IAM-private on production | 2 vCPU / 2Gi | same |
-| `auth-server` | Public | 1 vCPU / 768Mi | same |
-| `frontend` | Public | 1 vCPU / 768Mi | **2 vCPU / 1Gi** |
-| `claims-mcp` | IAM-private | 1 vCPU / 512Mi | same |
-| `ms-graph-mcp` | IAM-private | 1 vCPU / 512Mi | same |
-| `migrate-api` | Job | 1 vCPU / 1Gi | same |
-| `seed-auth-rbac` | Job | 1 vCPU / 512Mi | same |
+| Service | Exposure | Auth model | Staging | Production |
+|---------|----------|------------|---------|------------|
+| `provider-server` | Public (LB) | HMAC on webhooks | 1 vCPU / 512Mi | same |
+| `api-server` | Public (LB) | JWT on user routes, HMAC on webhooks, InternalTokenGuard on `/internal`, ToolAuthGuard on `/webhook-tools` | 2 vCPU / 2Gi | same |
+| `auth-server` | Public (LB) | OIDC (self-issued) | 1 vCPU / 768Mi | same |
+| `frontend` | Public (LB) | Session cookie → BFF proxy | 1 vCPU / 768Mi | **2 vCPU / 1Gi** |
+| `claims-mcp` | IAM-private | Cloud Run IAM (invoker SA) | 1 vCPU / 512Mi | same |
+| `ms-graph-mcp` | IAM-private | Cloud Run IAM (invoker SA) | 1 vCPU / 512Mi | same |
+| `migrate-api` | Job | — | 1 vCPU / 1Gi | same |
+| `seed-auth-rbac` | Job | — | 1 vCPU / 512Mi | same |
 
 **Data plane:** Cloud SQL Postgres + Memorystore Redis + GCS + Pub/Sub.
 
 **Same database:** `provider-server` and `api-server` share `claims_manager`. Prefer SQL user `provider_app` ([`scripts/grant-provider-app.sql`](scripts/grant-provider-app.sql)).
 
-**Hostnames:** GCP HTTPS Load Balancer with serverless NEGs terminates TLS (Google-managed cert) and routes by hostname to Cloud Run. Cloudflare DNS is grey-cloud A records to the LB IP (except where a Worker must intercept, e.g. providers-staging webhook fanout). Staging public hosts: `app-staging`, `auth-staging`, `providers-staging`, `api-staging`. MCP services remain IAM-private.
+**Security model:** Public services (`api-server`, `auth-server`, `frontend`, `provider-server`) use `allow_unauthenticated = true` on Cloud Run so the HTTPS LB serverless NEGs can route traffic. Authentication is enforced at the **application level** — NestJS JWT guards on user routes, HMAC verification on webhook endpoints, shared-secret guards on internal/tool routes. Only MCP services use Cloud Run IAM (`allow_unauthenticated = false`) since they are never accessed from the public internet. This matches standard SaaS practice: the infrastructure routes traffic, the application authenticates callers.
+
+**Hostnames:** GCP HTTPS Load Balancer with serverless NEGs terminates TLS (Google-managed cert) and routes by hostname to Cloud Run. Cloudflare DNS is grey-cloud A records to the LB IP. Exception: `providers-staging.branlamie.com` is **orange-cloud** (Cloudflare-proxied) so the `crunchwork-webhook-proxy` Worker can intercept staging webhooks and fan out to `api-staging` + `api-dev`. Staging LB hosts: `app-staging`, `auth-staging`, `api-staging`. Production LB hosts: `app`, `auth`, `api`, `providers`.
 
 **New-org seeding:**
 - Signup creates org → auth-server `SEED_NEW_TENANTS=true` + `API_INTERNAL_URL` → `POST /internal/seed-tenant` (catalog, MCP, lookups; Crunchwork staging connection when the org is Ensure Construction).
