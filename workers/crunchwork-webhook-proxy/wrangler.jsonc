@@ -1,12 +1,13 @@
 {
   "name": "crunchwork-webhook-proxy",
+  "account_id": "d1d4fab7d68e78805c2fc13c1a14c4ae",
   "main": "src/index.ts",
   "compatibility_date": "2026-06-14",
 
   "routes": [
     {
-      "pattern": "ensure-test.more0.dev/api/webhook",
-      "zone_name": "more0.dev"
+      "pattern": "providers-staging.branlamie.com/api/v1/webhooks/crunchwork",
+      "zone_name": "branlamie.com"
     }
   ]
 }

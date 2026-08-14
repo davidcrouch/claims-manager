@@ -15,8 +15,9 @@ Heavy fetch/projection/tool endpoints stay on private `api-server`.
 
 | Method | Path | Notes |
 |--------|------|--------|
-| POST | `/api/v1/webhooks/crunchwork` | Primary |
-| POST | `/api/webhook` | Alias for CF Worker / legacy configs |
+| POST | `/api/v1/webhooks/crunchwork` | Public entry point (intercepted by CF Worker on staging) |
+| POST | `/api/v1/internal/webhooks/crunchwork` | Internal ingest — CF Worker fans out here on Cloud Run origin |
+| POST | `/api/webhook` | Alias for legacy configs |
 | GET | `/api/v1/health` | Liveness |
 | GET | `/api/v1/health/ready` | DB readiness |
 

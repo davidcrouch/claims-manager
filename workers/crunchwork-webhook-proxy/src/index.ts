@@ -1,8 +1,13 @@
-// Temporarily prefer local/dev so Crunchwork gets the tunnel response.
-// Staging fan-out paused — restore providers-staging as PRIMARY when ready.
-const PRIMARY_URL = "https://api-dev.branlamie.com/api/webhook";
-const SECONDARY_URLS: string[] = [];
-// const SECONDARY_URLS = ["https://providers-staging.branlamie.com/api/webhook"];
+// Primary: Cloud Run origin directly (bypasses Cloudflare Workers on same zone).
+// The public path /api/v1/webhooks/crunchwork is intercepted by this Worker,
+// so staging receives on the internal path instead.
+const PRIMARY_URL =
+  "https://provider-server-981956656190.australia-southeast1.run.app/api/v1/internal/webhooks/crunchwork";
+
+// Secondary: dev tunnel for local dual-delivery during development.
+const SECONDARY_URLS = [
+  "https://api-dev.branlamie.com/api/v1/webhooks/crunchwork",
+];
 
 const HOP_BY_HOP = new Set([
   "connection",

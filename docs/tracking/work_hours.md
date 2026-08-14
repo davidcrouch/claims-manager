@@ -657,3 +657,13 @@
   No change to how staff use roles or permissions day to day.
   Outcome: the release pipeline is unblocked after the role-management build failure.
 
+- `2026-08-14` `PENDING` **0.5 h**
+  `6 files | +170 −64 | Tier 3 complex | Moderate orchestration`
+  Lay summary: Crunchwork staging webhooks now reach both the hosted staging server and the local development environment through an updated relay on Cloudflare.
+  **Rewired Crunchwork staging webhook delivery through updated Cloudflare relay.** Crunchwork's staging webhook destination changed from an older proxy address to the provider's public staging URL.
+  The Cloudflare relay Worker was updated to intercept at the new public address and forward payloads to both the hosted staging server and the local development tunnel.
+  A new internal webhook endpoint was added on the provider service so the relay can deliver without conflicting with its own interception point.
+  The relay was redeployed to Cloudflare with the updated route on the staging domain.
+  The old relay route on the previous domain was removed.
+  Outcome: Crunchwork staging webhooks are received and processed on both staging and local development environments via the updated relay.
+
