@@ -19,6 +19,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { ListPageHeader } from '@/components/layout/ListPageHeader';
 import {
   listOrgRolesAction,
@@ -138,21 +139,19 @@ export function UsersListClient() {
         />
       </SetPageHeader>
 
-      <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-end">
-          <Button
-            size="sm"
-            className="shrink-0"
-            onClick={() => setInviteOpen(true)}
-            disabled={isPending}
-          >
-            <Plus className="mr-1 h-4 w-4" />
-            Invite User
-          </Button>
-        </div>
-      </div>
+      <SetHeaderActions>
+        <Button
+          size="default"
+          onClick={() => setInviteOpen(true)}
+          disabled={isPending}
+          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Invite User
+        </Button>
+      </SetHeaderActions>
 
-      <div className="flex-1 px-6 pb-6" style={{ minHeight: 0, overflow: 'auto' }}>
+      <div className="flex-1 px-6 pb-6 pt-1" style={{ minHeight: 0, overflow: 'auto' }}>
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="h-6 w-6 animate-spin text-slate-400" />

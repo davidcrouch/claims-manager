@@ -2,6 +2,7 @@
 
 import {
   forwardRef,
+  useEffect,
   useImperativeHandle,
   useRef,
   useState,
@@ -14,31 +15,29 @@ import {
   TemporaryAccommodationPanel,
   buildTemporaryAccommodationPending,
   initialTemporaryAccommodationDraft,
-  type TemporaryAccommodationDraft,
 } from './JobTypePanels/TemporaryAccommodationPanel';
 import {
   SpecialistPanel,
   buildSpecialistPending,
   initialSpecialistDraft,
-  type SpecialistDraft,
 } from './JobTypePanels/SpecialistPanel';
 import {
   RectificationPanel,
   buildRectificationPending,
   initialRectificationDraft,
-  type RectificationDraft,
 } from './JobTypePanels/RectificationPanel';
 import {
   InternalAuditPanel,
   buildInternalAuditPending,
   initialInternalAuditDraft,
-  type InternalAuditDraft,
 } from './JobTypePanels/InternalAuditPanel';
 import { asBool, pick } from '@/components/shared/detail';
 
 export interface JobTypeDetailsTabHandle {
   getPendingUpdate: () => Partial<JobEditPending> | null;
   reset: () => void;
+  markClean: () => void;
+  isDirty: () => boolean;
 }
 
 export const JobTypeDetailsTab = forwardRef(function JobTypeDetailsTab(
@@ -47,16 +46,19 @@ export const JobTypeDetailsTab = forwardRef(function JobTypeDetailsTab(
     editing = false,
     saving = false,
     jobTypeOptions = [],
+    onDirtyChange,
   }: {
     job: Job;
     editing?: boolean;
     saving?: boolean;
     jobTypeOptions?: LookupOption[];
+    onDirtyChange?: (dirty: boolean) => void;
   },
   ref: Ref<JobTypeDetailsTabHandle>,
 ) {
   const kind = getJobTypeKind(job);
   const dirtyRef = useRef(false);
+  const jobIdRef = useRef(job.id);
 
   const [taDraft, setTaDraft] = useState(() => initialTemporaryAccommodationDraft(job));
   const [specialistDraft, setSpecialistDraft] = useState(() => initialSpecialistDraft(job));
@@ -64,6 +66,30 @@ export const JobTypeDetailsTab = forwardRef(function JobTypeDetailsTab(
     initialRectificationDraft(job, jobTypeOptions),
   );
   const [auditDraft, setAuditDraft] = useState(() => initialInternalAuditDraft(job));
+
+  const setDirty = (next: boolean) => {
+    dirtyRef.current = next;
+    onDirtyChange?.(next);
+  };
+
+  const reseed = (nextJob: Job, nextJobTypeOptions: LookupOption[]) => {
+    setTaDraft(initialTemporaryAccommodationDraft(nextJob));
+    setSpecialistDraft(initialSpecialistDraft(nextJob));
+    setRectDraft(initialRectificationDraft(nextJob, nextJobTypeOptions));
+    setAuditDraft(initialInternalAuditDraft(nextJob));
+  };
+
+  useEffect(() => {
+    if (job.id !== jobIdRef.current) {
+      jobIdRef.current = job.id;
+      setDirty(false);
+      reseed(job, jobTypeOptions);
+      return;
+    }
+    if (dirtyRef.current) return;
+    reseed(job, jobTypeOptions);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync when clean or job changes
+  }, [job, jobTypeOptions]);
 
   useImperativeHandle(ref, () => ({
     getPendingUpdate: () => {
@@ -88,12 +114,13 @@ export const JobTypeDetailsTab = forwardRef(function JobTypeDetailsTab(
       return null;
     },
     reset: () => {
-      dirtyRef.current = false;
-      setTaDraft(initialTemporaryAccommodationDraft(job));
-      setSpecialistDraft(initialSpecialistDraft(job));
-      setRectDraft(initialRectificationDraft(job, jobTypeOptions));
-      setAuditDraft(initialInternalAuditDraft(job));
+      setDirty(false);
+      reseed(job, jobTypeOptions);
     },
+    markClean: () => {
+      setDirty(false);
+    },
+    isDirty: () => dirtyRef.current,
   }), [
     editing,
     kind,
@@ -106,7 +133,7 @@ export const JobTypeDetailsTab = forwardRef(function JobTypeDetailsTab(
   ]);
 
   const markDirty = <T,>(setter: (d: T) => void) => (draft: T) => {
-    dirtyRef.current = true;
+    setDirty(true);
     setter(draft);
   };
 

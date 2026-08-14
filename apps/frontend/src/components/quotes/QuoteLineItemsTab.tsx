@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import type { Quote, CatalogType } from '@/types/api';
@@ -33,12 +33,16 @@ export function QuoteLineItemsTab({
   onDrawerOpenChange,
   catalogType,
   readOnly = false,
+  onDirtyChange,
+  hideToolbarActions = false,
 }: {
   quote: Quote;
   drawerOpen: boolean;
   onDrawerOpenChange: (open: boolean) => void;
   catalogType?: CatalogType;
   readOnly?: boolean;
+  onDirtyChange?: (dirty: boolean, save: () => void) => void;
+  hideToolbarActions?: boolean;
 }) {
   const router = useRouter();
   const payloadGroups = getPayloadGroups(quote);
@@ -46,6 +50,8 @@ export function QuoteLineItemsTab({
   const [quantity, setQuantity] = useState('1');
   const [activeDropKey, setActiveDropKey] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const saveRef = useRef<((edits: Record<string, Record<string, string>>) => void) | null>(null);
+  const latestEditsRef = useRef<Record<string, Record<string, string>>>({});
 
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [deletingGroupId, setDeletingGroupId] = useState<string | null>(null);
@@ -273,6 +279,16 @@ export function QuoteLineItemsTab({
     });
   }
 
+  saveRef.current = handleSaveLineItems;
+
+  const handleTableDirtyChange = useCallback(
+    (dirty: boolean, edits: Record<string, Record<string, string>>) => {
+      latestEditsRef.current = edits;
+      onDirtyChange?.(dirty, () => saveRef.current?.(edits));
+    },
+    [onDirtyChange],
+  );
+
   function handleMoveGroup(groupId: string, direction: 'up' | 'down') {
     const currentIds = groups.map((g) => g.id).filter(Boolean) as string[];
     const idx = currentIds.indexOf(groupId);
@@ -319,6 +335,8 @@ export function QuoteLineItemsTab({
         onMoveGroupDown={readOnly ? undefined : (id) => handleMoveGroup(id, 'down')}
         onOpenCatalogDrawer={readOnly ? undefined : () => onDrawerOpenChange(true)}
         onSave={readOnly ? undefined : handleSaveLineItems}
+        onDirtyChange={readOnly ? undefined : handleTableDirtyChange}
+        hideToolbarActions={hideToolbarActions}
         structurallyDirty={structurallyDirty}
         readOnly={readOnly}
       />

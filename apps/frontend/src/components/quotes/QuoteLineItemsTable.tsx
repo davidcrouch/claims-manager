@@ -1388,6 +1388,8 @@ export interface QuoteLineItemsTableProps {
   onOpenCatalogDrawer?: () => void;
   onSave?: (edits: Record<string, Record<EditableFieldKey, string>>) => void;
   onDirtyChange?: (dirty: boolean, edits: Record<string, Record<EditableFieldKey, string>>) => void;
+  /** When true, omit Catalogue/Save from the sticky toolbar (actions live in the layout header). */
+  hideToolbarActions?: boolean;
   structurallyDirty?: boolean;
   readOnly?: boolean;
   mode?: LineItemsMode;
@@ -1475,6 +1477,7 @@ export function QuoteLineItemsTable({
   onOpenCatalogDrawer,
   onSave,
   onDirtyChange,
+  hideToolbarActions = false,
   structurallyDirty,
   readOnly,
   mode = 'estimate',
@@ -2136,7 +2139,7 @@ export function QuoteLineItemsTable({
         )}
         {...tableDropProps}
       >
-        {onOpenCatalogDrawer && (
+        {!hideToolbarActions && onOpenCatalogDrawer && (
           <div className="flex justify-end gap-2">
             <Button size="sm" variant="outline" onClick={onOpenCatalogDrawer} title="Open catalogue">
               <Package className="h-4 w-4" />
@@ -2193,7 +2196,7 @@ export function QuoteLineItemsTable({
         data-slot="quote-line-items-toolbar"
         className={cn(
           'sticky z-[9] flex cursor-pointer items-center justify-between rounded-lg border-2 border-slate-400 bg-slate-100 px-5 py-4 shadow-md transition-colors hover:bg-slate-200',
-          compact ? 'top-0' : mode === 'catalog' ? 'top-[100px]' : 'top-[105px]',
+          'top-0',
         )}
         onClick={toggleAll}
       >
@@ -2304,12 +2307,12 @@ export function QuoteLineItemsTable({
               )}
             </div>
           )}
-          {onOpenCatalogDrawer && (
+          {!hideToolbarActions && onOpenCatalogDrawer && (
             <Button size="sm" variant="outline" onClick={onOpenCatalogDrawer} title="Open catalogue">
               <Package className="h-4 w-4" />
             </Button>
           )}
-          {onSave && mode !== 'catalog' && (
+          {!hideToolbarActions && onSave && mode !== 'catalog' && (
             <Button
               size="sm"
               variant="outline"

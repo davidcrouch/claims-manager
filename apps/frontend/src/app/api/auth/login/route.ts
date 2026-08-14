@@ -76,6 +76,8 @@ async function startLogin(req: NextRequest) {
     }
 
     const returnTo = req.nextUrl.searchParams.get('returnTo')?.trim();
+    const idp = req.nextUrl.searchParams.get('idp')?.trim()?.toLowerCase();
+    const loginHint = req.nextUrl.searchParams.get('login_hint')?.trim();
     const safeReturnTo =
       returnTo &&
       returnTo.startsWith('/') &&
@@ -105,10 +107,17 @@ async function startLogin(req: NextRequest) {
       params.resource = authConfig.oidcAudience;
       params.audience = authConfig.oidcAudience;
     }
+    if (idp === 'google' || idp === 'microsoft') {
+      params.idp = idp;
+    }
+    if (loginHint) {
+      params.login_hint = loginHint;
+    }
 
     console.info(`${LOG_PREFIX} - redirecting to authorize`, {
       redirect_uri: redirectUri,
       audience: params.audience,
+      idp: params.idp,
     });
 
     const res = NextResponse.redirect(

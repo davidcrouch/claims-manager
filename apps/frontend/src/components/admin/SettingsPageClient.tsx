@@ -1,164 +1,183 @@
 'use client';
 
-import { useRouter, useSearchParams } from 'next/navigation';
-import {
-  Settings,
-  Bell,
-  CreditCard,
-  ToggleLeft,
-} from 'lucide-react';
+import { useMemo, useState, useTransition } from 'react';
+import { Building2, Save } from 'lucide-react';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AddressAutocompleteInput } from '@/components/shared/AddressAutocompleteInput';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { ListPageHeader } from '@/components/layout/ListPageHeader';
-import { cn } from '@/lib/utils';
-import { FeaturesSettingsPanel } from './FeaturesSettingsPanel';
-import type { FeatureDef } from '@/app/(app)/admin/settings/features-actions';
+import { updateOrganisationAction } from '@/app/(app)/admin/settings/actions';
+import type { OrganisationProfile } from '@/types/api';
 
-const TABS = [
-  { id: 'general', label: 'General', icon: Settings },
-  { id: 'features', label: 'Features', icon: ToggleLeft },
-  { id: 'notifications', label: 'Notifications', icon: Bell },
-  { id: 'billing', label: 'Billing', icon: CreditCard },
-] as const;
-
-interface Props {
-  initialTab: string;
-  features: FeatureDef[];
-  featuresError?: string | null;
-  canManageFeatures: boolean;
+interface FormState {
+  name: string;
+  abn: string;
+  primaryEmail: string;
+  phone: string;
+  address: string;
 }
 
-export function SettingsPageClient({
-  initialTab,
-  features,
-  featuresError,
-  canManageFeatures,
-}: Props) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const activeTab = searchParams.get('tab') ?? initialTab;
+function toForm(org: OrganisationProfile): FormState {
+  return {
+    name: org.name ?? '',
+    abn: org.abn ?? '',
+    primaryEmail: org.primaryEmail ?? '',
+    phone: org.phone ?? '',
+    address: org.address ?? '',
+  };
+}
 
-  function switchTab(tabId: string) {
-    router.push(`/admin/settings?tab=${tabId}`);
-  }
+export interface SettingsPageClientProps {
+  organisation: OrganisationProfile;
+}
+
+export function SettingsPageClient({ organisation }: SettingsPageClientProps) {
+  const [saved, setSaved] = useState<FormState>(() => toForm(organisation));
+  const [form, setForm] = useState<FormState>(() => toForm(organisation));
+  const [isPending, startTransition] = useTransition();
+
+  const isDirty = useMemo(
+    () =>
+      form.name !== saved.name ||
+      form.abn !== saved.abn ||
+      form.primaryEmail !== saved.primaryEmail ||
+      form.phone !== saved.phone ||
+      form.address !== saved.address,
+    [form, saved],
+  );
+
+  const updateField = (field: keyof FormState, value: string) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleCancel = () => {
+    setForm(saved);
+  };
+
+  const handleSave = () => {
+    if (!form.name.trim()) {
+      toast.error('Company name is required');
+      return;
+    }
+    startTransition(async () => {
+      const result = await updateOrganisationAction({
+        name: form.name,
+        abn: form.abn,
+        primaryEmail: form.primaryEmail,
+        phone: form.phone,
+        address: form.address,
+      });
+      if (!result.success || !result.organisation) {
+        toast.error(result.error ?? 'Failed to save company details');
+        return;
+      }
+      const next = toForm(result.organisation);
+      setSaved(next);
+      setForm(next);
+      toast.success('Company details saved');
+    });
+  };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
       <SetPageHeader>
         <ListPageHeader
-          icon={Settings}
-          title="Settings"
+          icon={Building2}
+          title="Company"
           total={0}
           accent="slate"
         />
       </SetPageHeader>
-
-      <div className="px-6 pt-1">
-        <div className="flex flex-wrap gap-0 border-b border-slate-200">
-          {TABS.map((tab) => {
-            const Icon = tab.icon;
-            const active = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => switchTab(tab.id)}
-                className={cn(
-                  'inline-flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t-md',
-                  active
-                    ? 'border-slate-600 bg-slate-50 text-slate-800'
-                    : 'border-transparent bg-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700',
-                )}
-              >
-                <Icon className="h-3.5 w-3.5" />
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      <SetHeaderActions>
+        <Button
+          size="default"
+          variant="outline"
+          onClick={handleCancel}
+          disabled={!isDirty || isPending}
+          className="h-9 gap-1.5 px-4"
+        >
+          Cancel
+        </Button>
+        <Button
+          size="default"
+          onClick={handleSave}
+          disabled={!isDirty || isPending}
+          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          <Save className="h-3.5 w-3.5" />
+          {isPending ? 'Saving…' : 'Save'}
+        </Button>
+      </SetHeaderActions>
 
       <div className="flex-1 px-6 pb-6 pt-4" style={{ minHeight: 0, overflow: 'auto' }}>
-        {activeTab === 'general' && (
-          <div className="space-y-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Organisation</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted-foreground">Organisation Name</label>
-                    <input type="text" disabled placeholder="Your organisation name" className="w-full rounded-md border border-input bg-muted/30 px-3 py-2 text-sm text-muted-foreground" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted-foreground">ABN / Business Number</label>
-                    <input type="text" disabled placeholder="Business registration number" className="w-full rounded-md border border-input bg-muted/30 px-3 py-2 text-sm text-muted-foreground" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted-foreground">Contact Email</label>
-                    <input type="email" disabled placeholder="admin@example.com" className="w-full rounded-md border border-input bg-muted/30 px-3 py-2 text-sm text-muted-foreground" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted-foreground">Phone</label>
-                    <input type="tel" disabled placeholder="+61 ..." className="w-full rounded-md border border-input bg-muted/30 px-3 py-2 text-sm text-muted-foreground" />
-                  </div>
+        <div className="space-y-4">
+          <Card className="overflow-visible">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Company details</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="company-name">Company name</Label>
+                  <Input
+                    id="company-name"
+                    value={form.name}
+                    onChange={(e) => updateField('name', e.target.value)}
+                    placeholder="Your company name"
+                    disabled={isPending}
+                  />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-muted-foreground">Address</label>
-                  <input type="text" disabled placeholder="Organisation address" className="w-full rounded-md border border-input bg-muted/30 px-3 py-2 text-sm text-muted-foreground" />
+                  <Label htmlFor="company-abn">ABN / Business number</Label>
+                  <Input
+                    id="company-abn"
+                    value={form.abn}
+                    onChange={(e) => updateField('abn', e.target.value)}
+                    placeholder="Business registration number"
+                    disabled={isPending}
+                  />
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Organisation settings will be editable once the settings API is connected.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        {activeTab === 'features' && (
-          <FeaturesSettingsPanel
-            initialFeatures={features}
-            initialError={featuresError}
-            canManage={canManageFeatures}
-          />
-        )}
-
-        {activeTab === 'notifications' && (
-          <div className="space-y-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Email Notifications</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {['New claim received', 'Job status changed', 'Invoice submitted', 'Work order issued', 'Task overdue'].map((item) => (
-                  <div key={item} className="flex items-center justify-between rounded-md border border-border/50 px-3 py-2">
-                    <span className="text-sm">{item}</span>
-                    <div className="h-5 w-9 rounded-full bg-muted/50" title="Toggle will be functional once the notifications API is connected" />
-                  </div>
-                ))}
-                <p className="text-xs text-muted-foreground">
-                  Notification preferences will be configurable once the notifications API is connected.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        {activeTab === 'billing' && (
-          <div className="space-y-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Current Plan</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Subscription details will appear here once billing is configured.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        )}
+                <div className="space-y-2">
+                  <Label htmlFor="company-email">Contact email</Label>
+                  <Input
+                    id="company-email"
+                    type="email"
+                    value={form.primaryEmail}
+                    onChange={(e) => updateField('primaryEmail', e.target.value)}
+                    placeholder="admin@example.com"
+                    disabled={isPending}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="company-phone">Phone</Label>
+                  <Input
+                    id="company-phone"
+                    type="tel"
+                    value={form.phone}
+                    onChange={(e) => updateField('phone', e.target.value)}
+                    placeholder="+61 ..."
+                    disabled={isPending}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="company-location">Address</Label>
+                <AddressAutocompleteInput
+                  id="company-location"
+                  value={form.address}
+                  onChange={(value) => updateField('address', value)}
+                  placeholder="Start typing a street address…"
+                  disabled={isPending}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

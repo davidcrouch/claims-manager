@@ -6,6 +6,12 @@ interface RegisterPageProps {
   uid: string;
   error?: string | null;
   email?: string;
+  /** When accepting an org invite, hide Company and join the inviting org. */
+  inviteMode?: boolean;
+  inviteToken?: string;
+  organizationName?: string;
+  givenName?: string;
+  familyName?: string;
   googleAuthUrl: string;
   registerActionUrl: string;
   loginUrl: string;
@@ -19,6 +25,11 @@ export function RegisterPage({
   uid,
   error,
   email,
+  inviteMode = false,
+  inviteToken,
+  organizationName,
+  givenName = '',
+  familyName = '',
   googleAuthUrl,
   registerActionUrl,
   loginUrl,
@@ -121,6 +132,15 @@ export function RegisterPage({
               <h1 className="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
                 Create your account
               </h1>
+              {inviteMode && (
+                <p className="mt-2 text-sm text-slate-500">
+                  You&apos;ve been invited to join{' '}
+                  <span className="font-medium text-slate-700">
+                    {organizationName || 'your organisation'}
+                  </span>
+                  . Complete your details to finish joining.
+                </p>
+              )}
             </div>
 
             {isSessionExpired && (
@@ -142,6 +162,7 @@ export function RegisterPage({
               className="w-full"
             >
               <input type="hidden" id="name" name="name" />
+              {inviteToken ? <input type="hidden" name="inviteToken" value={inviteToken} /> : null}
               <div className="space-y-5">
                 {error && !isSessionExpired && (
                   <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
@@ -161,6 +182,7 @@ export function RegisterPage({
                       placeholder="First name"
                       required
                       autoComplete="given-name"
+                      defaultValue={givenName}
                     />
                   </div>
                   <div>
@@ -175,6 +197,7 @@ export function RegisterPage({
                       placeholder="Last name"
                       required
                       autoComplete="family-name"
+                      defaultValue={familyName}
                     />
                   </div>
                 </div>
@@ -186,24 +209,27 @@ export function RegisterPage({
                     id="email"
                     name="email"
                     type="email"
-                    className="form-input w-full"
+                    className={`form-input w-full${inviteMode ? ' bg-slate-50 text-slate-600' : ''}`}
                     placeholder="you@example.com"
                     required
                     defaultValue={email || ''}
+                    readOnly={inviteMode}
                   />
                 </div>
-                <div>
-                  <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500" htmlFor="company">
-                    Company (optional)
-                  </label>
-                  <input
-                    id="company"
-                    name="company"
-                    type="text"
-                    className="form-input w-full"
-                    placeholder="Your company"
-                  />
-                </div>
+                {!inviteMode && (
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500" htmlFor="company">
+                      Company (optional)
+                    </label>
+                    <input
+                      id="company"
+                      name="company"
+                      type="text"
+                      className="form-input w-full"
+                      placeholder="Your company"
+                    />
+                  </div>
+                )}
                 <div>
                   <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500" htmlFor="password">
                     Password
@@ -213,9 +239,9 @@ export function RegisterPage({
                     name="password"
                     type="password"
                     className="form-input w-full"
-                    placeholder="Choose a strong password"
+                    placeholder={inviteMode ? 'Choose a strong password (min 12 chars)' : 'Choose a strong password'}
                     required
-                    minLength={8}
+                    minLength={inviteMode ? 12 : 8}
                   />
                 </div>
                 <div>
@@ -229,7 +255,7 @@ export function RegisterPage({
                     className="form-input w-full"
                     placeholder="Re-enter your password"
                     required
-                    minLength={8}
+                    minLength={inviteMode ? 12 : 8}
                   />
                 </div>
                 <div className="flex items-start gap-3">
@@ -271,7 +297,7 @@ export function RegisterPage({
                   type="submit"
                   className="group inline-flex w-full items-center justify-center rounded-lg bg-brand-700 px-5 py-3 text-sm font-medium text-white shadow-md transition-all duration-300 hover:-translate-y-0.5 hover:bg-brand-800 hover:shadow-xl"
                 >
-                  Create account
+                  {inviteMode ? 'Create account & join' : 'Create account'}
                   <svg
                     className="ml-2 size-4 transition-transform duration-300 group-hover:translate-x-1"
                     viewBox="0 0 24 24"
@@ -303,11 +329,12 @@ export function RegisterPage({
                     <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
                     <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
                   </svg>
-                  Sign up with Google
+                  {inviteMode ? 'Continue with Google' : 'Sign up with Google'}
                 </a>
               </div>
             </form>
 
+            {!inviteMode && (
             <div className="mt-8 text-center text-sm text-slate-500 md:text-left">
               Already have an account?{' '}
               <a
@@ -317,6 +344,7 @@ export function RegisterPage({
                 Sign in
               </a>
             </div>
+            )}
           </div>
         </div>
       </div>

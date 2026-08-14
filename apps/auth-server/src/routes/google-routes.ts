@@ -113,8 +113,22 @@ export default function createGoogleRoutes(app: Application, provider?: any): vo
             scope: 'openid email profile',
             state: csrfState, // Use CSRF state for Google OAuth
             access_type: 'offline', // Request refresh token
-            prompt: 'consent' // Force consent screen to get refresh token
+            prompt: 'consent', // Force consent screen to get refresh token
          });
+
+         // Prefer the invited / expected email when present on the OIDC interaction.
+         if (interactionUid) {
+            try {
+               const redis = await GlobalCacheManager.getInstance('auth-server');
+               const interactionData = await redis.get<Record<string, any>>(`oidc:Interaction:${interactionUid}`);
+               const loginHint = interactionData?.params?.login_hint;
+               if (typeof loginHint === 'string' && loginHint.trim()) {
+                  params.set('login_hint', loginHint.trim());
+               }
+            } catch {
+               // non-fatal
+            }
+         }
 
          const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 

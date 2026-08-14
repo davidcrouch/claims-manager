@@ -1019,6 +1019,16 @@ export interface AppNotification {
   createdAt: string;
 }
 
+export interface OrganisationProfile {
+  id: string;
+  name: string;
+  tradingName?: string | null;
+  abn?: string | null;
+  primaryEmail?: string | null;
+  phone?: string | null;
+  address?: string | null;
+}
+
 export interface GhostOrganisation {
   id: string;
   name: string;

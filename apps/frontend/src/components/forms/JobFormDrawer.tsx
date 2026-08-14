@@ -36,6 +36,10 @@ import {
   navigateToCreated,
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
+import {
+  AddressAutocompleteInput,
+  type AddressSuggestion,
+} from '@/components/shared/AddressAutocompleteInput';
 import type { Contact, Job } from '@/types/api';
 
 type WizardStep = 'details' | 'contacts';
@@ -140,6 +144,7 @@ export function JobFormDrawer({
   const { phase: submitPhase, busy, startCreating, startOpening, resetPhase } =
     useCreateSubmitPhase();
   const [error, setError] = useState<string | null>(null);
+  const [addressSearch, setAddressSearch] = useState('');
   const [contacts, setContacts] = useState<JobContactRef[]>([]);
   const [contactDrawerOpen, setContactDrawerOpen] = useState(false);
   const [projectTemplates, setProjectTemplates] = useState<ProjectTemplateOption[]>(
@@ -561,6 +566,27 @@ export function JobFormDrawer({
 
             <div className="md:col-span-2">
               <p className="mb-3 text-sm font-medium text-foreground">Site address</p>
+              <div className="mb-4 space-y-2">
+                <Label htmlFor="job-address-search">Search address</Label>
+                <AddressAutocompleteInput
+                  id="job-address-search"
+                  value={addressSearch}
+                  onChange={setAddressSearch}
+                  onSelect={(suggestion: AddressSuggestion) => {
+                    const p = suggestion.parts ?? {};
+                    form.setValue('unitNumber', p.unitNumber ?? '');
+                    form.setValue('streetNumber', p.streetNumber ?? '');
+                    form.setValue('streetName', p.streetName ?? '');
+                    form.setValue('suburb', p.suburb ?? '');
+                    form.setValue('state', p.state ?? '');
+                    form.setValue('postcode', p.postcode ?? '');
+                    form.setValue('country', p.country ?? 'Australia');
+                    setAddressSearch(suggestion.label);
+                  }}
+                  placeholder="Search Australian address to fill fields…"
+                  name="job-address-search"
+                />
+              </div>
               <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-6">
                 <div className="space-y-2 md:col-span-1">
                   <Label htmlFor="unitNumber">Unit</Label>

@@ -65,7 +65,7 @@ export default async function QuoteDetailPage({
       <SetPageHeader>
         <QuotePageHeader quote={quote} job={job} claim={claim} />
       </SetPageHeader>
-      <QuoteDetail quote={quote} job={job} jobProvider={jobProvider} />
+      <QuoteDetail quote={quote} job={job} claim={claim} jobProvider={jobProvider} />
     </>
   );
 }

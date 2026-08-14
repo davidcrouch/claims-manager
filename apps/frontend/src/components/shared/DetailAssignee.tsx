@@ -171,7 +171,7 @@ export function DetailAssignee({
         <User className="h-4 w-4 shrink-0 text-muted-foreground" />
         <MetaLabel>Assigned</MetaLabel>
         {canEdit ? (
-          <div className="min-w-56 w-64 max-w-72">
+          <div className="min-w-56 w-64 max-w-80">
             <OrgUserSelect
               id={id}
               showLabel={false}

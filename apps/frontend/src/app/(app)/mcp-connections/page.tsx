@@ -18,8 +18,8 @@ export default async function McpConnectionsPage() {
             <Cable className="h-5 w-5 text-violet-600" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-slate-900">MCP Connections</h1>
-            <p className="text-sm text-slate-500">
+            <h1 className="text-xl font-semibold text-sidebar-foreground">MCP Connections</h1>
+            <p className="text-sm text-sidebar-foreground/65">
               Connect to MCP servers and manage discovered tools.
             </p>
           </div>

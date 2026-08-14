@@ -10,7 +10,6 @@ import {
   FileBarChart,
   Info,
   Save,
-  Pencil,
   Plus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -70,28 +69,29 @@ export function JobDetail({
   const overviewRef = useRef<JobOverviewTabHandle>(null);
   const typeDetailsRef = useRef<JobTypeDetailsTabHandle>(null);
   const [saving, setSaving] = useState(false);
-  const [editing, setEditing] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [contactDrawerOpen, setContactDrawerOpen] = useState(false);
   const [reportDrawerOpen, setReportDrawerOpen] = useState(false);
-  const originalAssigned = job.assignedToUserId ?? '';
-  const [assignedToUserId, setAssignedToUserId] = useState(originalAssigned);
+  const [assignedToUserId, setAssignedToUserId] = useState(job.assignedToUserId ?? '');
+  const [overviewDirty, setOverviewDirty] = useState(false);
+  const [typeDetailsDirty, setTypeDetailsDirty] = useState(false);
+
+  const assigneeDirty = assignedToUserId !== (job.assignedToUserId ?? '');
+  const pageDirty = overviewDirty || typeDetailsDirty || assigneeDirty;
 
   useEffect(() => {
-    if (editing) return;
     setAssignedToUserId(job.assignedToUserId ?? '');
-  }, [editing, job.assignedToUserId]);
+  }, [job.id, job.assignedToUserId]);
 
   useEffect(() => {
-    const staysOnEditableTab =
-      activeTab === 'overview' || (isCrunchwork && activeTab === 'type-details');
-    if (!staysOnEditableTab) {
-      setEditing(false);
-      setAssignedToUserId(job.assignedToUserId ?? '');
-    }
+    setOverviewDirty(false);
+    setTypeDetailsDirty(false);
+  }, [job.id]);
+
+  useEffect(() => {
     if (activeTab !== 'parties') setContactDrawerOpen(false);
     if (activeTab !== 'reports') setReportDrawerOpen(false);
-  }, [activeTab, isCrunchwork, job.assignedToUserId]);
+  }, [activeTab]);
 
   const onTabChange = useCallback(
     (value: string | null) => {
@@ -114,10 +114,9 @@ export function JobDetail({
       isCrunchwork && showTypeDetails
         ? typeDetailsRef.current?.getPendingUpdate() ?? null
         : null;
-    const assigneeChanged = assignedToUserId !== originalAssigned;
+    const assigneeChanged = assignedToUserId !== (job.assignedToUserId ?? '');
 
     if (!overviewPending && !typePending && !assigneeChanged) {
-      setEditing(false);
       setSaveError(null);
       return;
     }
@@ -143,18 +142,18 @@ export function JobDetail({
         setSaveError(result.error ?? 'Failed to save job');
         return;
       }
+      typeDetailsRef.current?.markClean();
       router.refresh();
-      setEditing(false);
     } finally {
       setSaving(false);
     }
   }, [
     job.id,
+    job.assignedToUserId,
     router,
     isCrunchwork,
     showTypeDetails,
     assignedToUserId,
-    originalAssigned,
   ]);
 
   const handleCancel = useCallback(() => {
@@ -162,7 +161,6 @@ export function JobDetail({
     typeDetailsRef.current?.reset();
     setAssignedToUserId(job.assignedToUserId ?? '');
     setSaveError(null);
-    setEditing(false);
   }, [job.assignedToUserId]);
 
   const claimId = job.claimId ?? undefined;
@@ -215,13 +213,13 @@ export function JobDetail({
 
   let tabActions: ReactNode = null;
   if (showEditActions) {
-    tabActions = editing ? (
+    tabActions = (
       <>
         <Button
           size="default"
           variant="outline"
           onClick={handleCancel}
-          disabled={saving}
+          disabled={saving || !pageDirty}
           className="h-9 gap-1.5 px-4"
         >
           Cancel
@@ -229,23 +227,11 @@ export function JobDetail({
         <Button
           size="default"
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || !pageDirty}
           className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
         >
           <Save className="h-3.5 w-3.5" />
           {saving ? 'Saving...' : 'Save'}
-        </Button>
-        {printButton}
-      </>
-    ) : (
-      <>
-        <Button
-          size="default"
-          onClick={() => setEditing(true)}
-          className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
-        >
-          <Pencil className="h-3.5 w-3.5" />
-          Edit
         </Button>
         {printButton}
       </>
@@ -281,10 +267,9 @@ export function JobDetail({
     </>
   );
 
-  // Keep editable tabs mounted while editing so draft state survives tab switches.
-  const keepOverviewMounted = activeTab === 'overview' || editing;
-  const keepTypeDetailsMounted =
-    showTypeDetails && (activeTab === 'type-details' || (editing && isCrunchwork));
+  // Keep editable tabs mounted so draft state survives tab switches.
+  const keepOverviewMounted = true;
+  const keepTypeDetailsMounted = showTypeDetails;
 
   return (
     <div className="flex flex-col">
@@ -314,7 +299,7 @@ export function JobDetail({
         <DetailAssignee
           assigneeName={job.assigneeName}
           assignedToUserId={assignedToUserId || null}
-          editing={editing && showEditActions}
+          editing={showEditActions}
           saving={saving}
           onChange={(userId) => setAssignedToUserId(userId ?? '')}
           provider={job.provider}
@@ -333,8 +318,9 @@ export function JobDetail({
               job={job}
               parentClaim={parentClaim}
               saving={saving}
-              editing={editing}
+              editing
               statusOptions={statusOptions}
+              onDirtyChange={setOverviewDirty}
             />
           </div>
         )}
@@ -343,9 +329,10 @@ export function JobDetail({
             <JobTypeDetailsTab
               ref={typeDetailsRef}
               job={job}
-              editing={editing && isCrunchwork}
+              editing={isCrunchwork}
               saving={saving}
               jobTypeOptions={jobTypeOptions}
+              onDirtyChange={setTypeDetailsDirty}
             />
           </div>
         )}

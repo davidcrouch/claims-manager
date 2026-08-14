@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from 'react';
 import { Globe, Loader2, Lock, Pencil, Plus, Server, Trash2, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { cn } from '@/lib/utils';
 import type { McpIntegration } from '@/types/api';
 import {
@@ -85,37 +86,41 @@ export function McpIntegrationsPanel() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
-      </div>
-    );
-  }
-
-  if (loadError) {
-    return (
-      <div className="rounded-lg border border-red-200 bg-white px-5 py-12 text-center">
-        <Server className="mx-auto h-10 w-10 text-red-300" />
-        <p className="mt-3 text-sm font-medium text-slate-700">Failed to load MCP servers</p>
-        <p className="mt-1 text-xs text-slate-500">{loadError}</p>
-        <Button type="button" size="sm" onClick={loadData} className="mt-4">
-          Retry
-        </Button>
-      </div>
-    );
-  }
-
   return (
     <>
-      <div className="mb-4 flex justify-end">
-        <Button type="button" size="sm" onClick={handleAdd} className="gap-1.5">
-          <Plus className="h-4 w-4" />
+      <SetHeaderActions>
+        <Button
+          type="button"
+          size="default"
+          onClick={handleAdd}
+          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          <Plus className="h-3.5 w-3.5" />
           Add MCP Server
         </Button>
-      </div>
+      </SetHeaderActions>
 
-      {integrations.length === 0 ? (
+      <AddIntegrationDrawer
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        onCreated={loadData}
+        editing={editing}
+      />
+
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+        </div>
+      ) : loadError ? (
+        <div className="rounded-lg border border-red-200 bg-white px-5 py-12 text-center">
+          <Server className="mx-auto h-10 w-10 text-red-300" />
+          <p className="mt-3 text-sm font-medium text-slate-700">Failed to load MCP servers</p>
+          <p className="mt-1 text-xs text-slate-500">{loadError}</p>
+          <Button type="button" size="sm" onClick={loadData} className="mt-4">
+            Retry
+          </Button>
+        </div>
+      ) : integrations.length === 0 ? (
         <div className="rounded-lg border border-slate-200 bg-white px-5 py-12 text-center">
           <Server className="mx-auto h-10 w-10 text-slate-300" />
           <p className="mt-3 text-sm font-medium text-slate-600">No MCP servers registered</p>
@@ -210,12 +215,6 @@ export function McpIntegrationsPanel() {
         </div>
       )}
 
-      <AddIntegrationDrawer
-        open={drawerOpen}
-        onOpenChange={setDrawerOpen}
-        onCreated={loadData}
-        editing={editing}
-      />
     </>
   );
 }

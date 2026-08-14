@@ -18,8 +18,8 @@ export default async function McpServersPage() {
             <Server className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-slate-900">MCP Servers</h1>
-            <p className="text-sm text-slate-500">
+            <h1 className="text-xl font-semibold text-sidebar-foreground">MCP Servers</h1>
+            <p className="text-sm text-sidebar-foreground/65">
               Register MCP integrations available to your organisation.
             </p>
           </div>

@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { Building2, Check, X, Clock, ShieldCheck, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { Input } from '@/components/ui/input';
 import { approveClaimAction, rejectClaimAction } from './actions';
 import type { GhostOrganisation, OrganisationClaim } from '@/types/api';
@@ -78,14 +79,23 @@ export function ClaimsAdminPanel({ initialClaims, initialGhosts }: ClaimsAdminPa
   const resolvedClaims = claims.filter((c) => c.status === 'approved' || c.status === 'rejected');
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-lg font-semibold text-slate-900">Organisation Claims</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          Review and approve ownership claims from organisations wanting to take custody of
-          their ghost profiles and associated purchase orders.
-        </p>
-      </div>
+    <>
+      <SetPageHeader>
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+            <Building2 className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl font-semibold text-sidebar-foreground">Organisation Claims</h1>
+            <p className="text-sm text-sidebar-foreground/65">
+              Review and approve ownership claims from organisations wanting to take custody of
+              their ghost profiles and associated purchase orders.
+            </p>
+          </div>
+        </div>
+      </SetPageHeader>
+
+      <div className="space-y-8">
 
       {actionError && (
         <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -211,6 +221,7 @@ export function ClaimsAdminPanel({ initialClaims, initialGhosts }: ClaimsAdminPa
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }

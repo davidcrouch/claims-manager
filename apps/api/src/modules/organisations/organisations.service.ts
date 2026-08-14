@@ -4,10 +4,37 @@ import { DRIZZLE, type DrizzleDB } from '../../database/drizzle.module';
 import { organizations } from '../../database/schema';
 import {
   OrganisationClaimsRepository,
-  PoCustodyTransfersRepository,
 } from '../../database/repositories';
 import { GhostOrganisationService } from '../domain/services/ghost-organisation.service';
 import { CustodyTransferService } from '../domain/services/custody-transfer.service';
+import type { UpdateOrganisationDto } from './dto/update-organisation.dto';
+
+export type OrganisationProfile = {
+  id: string;
+  name: string;
+  abn: string | null;
+  primaryEmail: string | null;
+  phone: string | null;
+  address: string | null;
+  tradingName: string | null;
+};
+
+function blankToNull(value: string | undefined): string | null | undefined {
+  if (value === undefined) return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function addressFromConfig(config: unknown): string | null {
+  if (!config || typeof config !== 'object' || Array.isArray(config)) return null;
+  const address = (config as Record<string, unknown>).address;
+  return typeof address === 'string' && address.trim() ? address.trim() : null;
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  const e = err as { code?: string; cause?: { code?: string } };
+  return e?.code === '23505' || e?.cause?.code === '23505';
+}
 
 @Injectable()
 export class OrganisationsService {
@@ -20,13 +47,17 @@ export class OrganisationsService {
     private readonly orgClaimsRepo: OrganisationClaimsRepository,
   ) {}
 
-  async getMe(tenantId: string): Promise<{ id: string; name: string; tradingName: string | null }> {
+  async getMe(tenantId: string): Promise<OrganisationProfile> {
     const LOG = 'OrganisationsService.getMe';
     const [org] = await this.db
       .select({
         id: organizations.id,
         name: organizations.name,
         tradingName: organizations.tradingName,
+        abn: organizations.abn,
+        primaryEmail: organizations.primaryEmail,
+        phone: organizations.phone,
+        config: organizations.config,
       })
       .from(organizations)
       .where(eq(organizations.id, tenantId))
@@ -34,10 +65,94 @@ export class OrganisationsService {
 
     if (!org) {
       this.logger.warn(`${LOG} — org not found tenantId=${tenantId}`);
-      return { id: tenantId, name: '', tradingName: null };
+      return {
+        id: tenantId,
+        name: '',
+        tradingName: null,
+        abn: null,
+        primaryEmail: null,
+        phone: null,
+        address: null,
+      };
     }
 
-    return org;
+    return {
+      id: org.id,
+      name: org.name,
+      tradingName: org.tradingName,
+      abn: org.abn,
+      primaryEmail: org.primaryEmail,
+      phone: org.phone,
+      address: addressFromConfig(org.config),
+    };
+  }
+
+  async updateMe(params: {
+    tenantId: string;
+    userId: string;
+    dto: UpdateOrganisationDto;
+  }): Promise<OrganisationProfile> {
+    const LOG = 'OrganisationsService.updateMe';
+    const { tenantId, userId, dto } = params;
+
+    const [existing] = await this.db
+      .select({
+        id: organizations.id,
+        name: organizations.name,
+        config: organizations.config,
+      })
+      .from(organizations)
+      .where(eq(organizations.id, tenantId))
+      .limit(1);
+
+    if (!existing) {
+      this.logger.warn(`${LOG} — org not found tenantId=${tenantId}`);
+      throw new BadRequestException('Organisation not found');
+    }
+
+    const name = blankToNull(dto.name);
+    if (name === null) {
+      throw new BadRequestException('Company name is required');
+    }
+
+    const updates: Record<string, unknown> = {
+      modified: new Date().toISOString(),
+      modifiedBy: userId,
+    };
+
+    if (name !== undefined) {
+      updates.name = name;
+      updates.tradingName = name;
+    }
+    if (dto.abn !== undefined) updates.abn = blankToNull(dto.abn);
+    if (dto.primaryEmail !== undefined) updates.primaryEmail = blankToNull(dto.primaryEmail);
+    if (dto.phone !== undefined) updates.phone = blankToNull(dto.phone);
+    if (dto.address !== undefined) {
+      const currentConfig =
+        existing.config && typeof existing.config === 'object' && !Array.isArray(existing.config)
+          ? { ...(existing.config as Record<string, unknown>) }
+          : {};
+      const nextAddress = blankToNull(dto.address);
+      if (nextAddress) currentConfig.address = nextAddress;
+      else delete currentConfig.address;
+      updates.config = currentConfig;
+    }
+
+    try {
+      await this.db
+        .update(organizations)
+        .set(updates)
+        .where(eq(organizations.id, tenantId));
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        this.logger.warn(`${LOG} — duplicate ABN tenantId=${tenantId}`);
+        throw new BadRequestException('An organisation with this ABN already exists');
+      }
+      throw err;
+    }
+
+    this.logger.log(`${LOG} — updated tenantId=${tenantId}`);
+    return this.getMe(tenantId);
   }
 
   async listGhosts(params: { tenantId: string }) {

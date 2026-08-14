@@ -75,9 +75,33 @@ export async function tryAutoLinkInvitedUser(input: AutoLinkInput): Promise<Auto
   });
 
   const { createUsersRepository } = await import('../db/repositories/users-repository.js');
+  const { createOrganizationUsersRepository } = await import('../db/repositories/organization-users-repository.js');
+  const { createOrganizationUsersService } = await import('../db/services/index.js');
   const { getDb } = await import('../db/client.js');
   const usersRepo = createUsersRepository(() => getDb(), undefined);
   await usersRepo.update(systemContext, user.id, { status: 'Active' } as any);
+
+  // Activate every Invited org membership so social login finishes the invite join.
+  try {
+    const orgUsersService = createOrganizationUsersService();
+    const memberships = await orgUsersService.getOrganizationsByUserId(systemContext, user.id);
+    const orgUsersRepo = createOrganizationUsersRepository(() => getDb(), undefined);
+    for (const membership of memberships) {
+      if (membership.status === 'Invited') {
+        await orgUsersRepo.updateStatus(
+          systemContext,
+          user.id,
+          membership.organizationId,
+          'Active',
+        );
+      }
+    }
+  } catch (err: any) {
+    log.warn(
+      { email, userId: user.id, error: err?.message },
+      'auth-server:auto-link:tryAutoLinkInvitedUser - Failed to activate org memberships',
+    );
+  }
 
   try {
     await invalidateInviteTokensForEmail(email);

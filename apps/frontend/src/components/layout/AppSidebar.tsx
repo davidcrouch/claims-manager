@@ -41,6 +41,8 @@ import {
   Sparkles,
   BarChart3,
   Shield,
+  Bell,
+  ToggleLeft,
 } from 'lucide-react';
 import { Collapsible } from '@base-ui/react/collapsible';
 import {
@@ -141,18 +143,18 @@ const adminNavGroups: NavGroup[] = [
   {
     label: 'ORGANISATION',
     items: [
-      { title: 'Org Claims', href: '/admin/claims', icon: Building2 },
       { title: 'Users', href: '/admin/users', icon: UserCog },
       { title: 'Roles & Permissions', href: '/admin/roles', icon: Shield },
-      { title: 'Settings', href: '/admin/settings', icon: Settings },
+      { title: 'Company', href: '/admin/settings', icon: Settings },
+      { title: 'Organisation Claims', href: '/admin/claims', icon: Building2 },
     ],
   },
   {
     label: 'CONTENT',
     items: [
       { title: 'Catalogue', href: '/admin/catalog', icon: Package },
-      { title: 'Filesystem Categories', href: '/admin/documents', icon: FolderOpen },
       { title: 'Document Templates', href: '/admin/document-templates', icon: Files },
+      { title: 'Filesystem Categories', href: '/admin/documents', icon: FolderOpen },
       { title: 'Filesystem Templates', href: '/admin/filesystem-templates', icon: ListTree },
     ],
   },
@@ -170,6 +172,13 @@ const adminNavGroups: NavGroup[] = [
       { title: 'Connections', href: '/connections', icon: Unplug },
       { title: 'MCP Connections', href: '/mcp-connections', icon: Cable, feature: 'ai.connections' },
       { title: 'MCP Servers', href: '/admin/mcp-servers', icon: Server, feature: 'ai.connections' },
+    ],
+  },
+  {
+    label: 'ADMIN',
+    items: [
+      { title: 'Features', href: '/admin/features', icon: ToggleLeft },
+      { title: 'Notifications', href: '/admin/notifications', icon: Bell },
     ],
   },
 ];
@@ -341,7 +350,6 @@ export function AppSidebar({ features, orgName, onOpenChat }: AppSidebarProps) {
                   </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
-              <SidebarGroupLabel className="mt-2 text-white/60">ADMIN</SidebarGroupLabel>
             </SidebarGroup>
             {adminNavGroups.map((group) => renderAdminGroup(group))}
           </>

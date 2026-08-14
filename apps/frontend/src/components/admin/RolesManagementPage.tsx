@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { ListPageHeader } from '@/components/layout/ListPageHeader';
 import {
   createRoleAction,
@@ -191,24 +192,22 @@ export function RolesManagementPage() {
         />
       </SetPageHeader>
 
-      <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
-        <div className="flex justify-end">
-          <Button
-            size="sm"
-            className="shrink-0"
-            onClick={() => {
-              setShowCreateForm(true);
-              setSelectedRole(null);
-            }}
-            disabled={isPending}
-          >
-            <Plus className="mr-1 h-4 w-4" />
-            Add Role
-          </Button>
-        </div>
-      </div>
+      <SetHeaderActions>
+        <Button
+          size="default"
+          onClick={() => {
+            setShowCreateForm(true);
+            setSelectedRole(null);
+          }}
+          disabled={isPending}
+          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Add Role
+        </Button>
+      </SetHeaderActions>
 
-      <div className="flex min-h-0 flex-1 gap-6 overflow-hidden px-6 pb-6">
+      <div className="flex min-h-0 flex-1 gap-6 overflow-hidden px-6 pb-6 pt-1">
         <div className="w-80 shrink-0 space-y-4 overflow-y-auto">
           {SCOPE_ORDER.map((scope) => {
             const scopeRoles = groupedRoles[scope];

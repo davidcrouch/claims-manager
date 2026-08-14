@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   Building2, MapPin, FileSignature, Briefcase, ExternalLink,
-  ScrollText, FileText, Phone, Clock, CalendarPlus, ChevronDown, ChevronUp,
+  ScrollText, FileText, Phone, Clock, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -16,8 +16,6 @@ import { LocationMap } from '@/components/shared/LocationMap';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { TypeBadge } from '@/components/ui/type-badge';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { AppointmentFormDrawer, type JobParty } from '@/components/forms/AppointmentFormDrawer';
 import {
   EditLookupSelect,
   EditSwitch,
@@ -35,6 +33,7 @@ export interface JobOverviewTabHandle {
   getPendingDates: () => JobEditPending | null;
   reset: () => void;
   resetDates: () => void;
+  isDirty: () => boolean;
 }
 
 function getApi(job: Job): Dict {
@@ -91,12 +90,14 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     saving,
     editing = false,
     statusOptions = [],
+    onDirtyChange,
   }: {
     job: Job;
     parentClaim?: Claim | null;
     saving?: boolean;
     editing?: boolean;
     statusOptions?: LookupOption[];
+    onDirtyChange?: (dirty: boolean) => void;
   },
   ref: Ref<JobOverviewTabHandle>,
 ) {
@@ -144,13 +145,11 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
 
   const [bookedDate, setBookedDate] = useState(bookedDateRaw ?? '');
   const [attendanceDate, setAttendanceDate] = useState(attendanceDateRaw ?? '');
-  const [scheduleTarget, setScheduleTarget] = useState<'booked' | 'attendance' | null>(null);
 
   const [statusLookupId, setStatusLookupId] = useState(job.statusLookupId ?? job.status?.id ?? '');
   const [statusExternalReference, setStatusExternalReference] = useState(
     job.status?.externalReference ?? '',
   );
-  const [externalReference, setExternalReference] = useState(job.externalReference ?? '');
   const [makeSafeRequired, setMakeSafeRequired] = useState(!!job.makeSafeRequired);
   const [collectExcess, setCollectExcess] = useState(!!job.collectExcess);
   const [excess, setExcess] = useState(job.excess != null ? String(job.excess) : '');
@@ -158,47 +157,35 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
   const [vendorExtRef, setVendorExtRef] = useState(vendorExtRefInitial ?? '');
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  const jobParties = ((job.apiPayload as Record<string, unknown>)?.contacts as JobParty[]) ?? [];
-
+  // Re-seed only when navigating to a different job so in-progress edits survive refresh/tab switches.
   useEffect(() => {
-    if (editing) return;
     setBookedDate(bookedDateRaw ?? '');
     setAttendanceDate(attendanceDateRaw ?? '');
     setStatusLookupId(job.statusLookupId ?? job.status?.id ?? '');
     setStatusExternalReference(job.status?.externalReference ?? '');
-    setExternalReference(job.externalReference ?? '');
     setMakeSafeRequired(!!job.makeSafeRequired);
     setCollectExcess(!!job.collectExcess);
     setExcess(job.excess != null ? String(job.excess) : '');
     setJobInstructions(job.jobInstructions ?? '');
     setVendorExtRef(vendorExtRefInitial ?? '');
-  }, [
-    editing,
-    bookedDateRaw,
-    attendanceDateRaw,
-    job.statusLookupId,
-    job.status?.id,
-    job.status?.externalReference,
-    job.externalReference,
-    job.makeSafeRequired,
-    job.collectExcess,
-    job.excess,
-    job.jobInstructions,
-    vendorExtRefInitial,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keep drafts across same-job updates
+  }, [job.id]);
 
   const isDirty =
     bookedDate !== (bookedDateRaw ?? '') ||
     attendanceDate !== (attendanceDateRaw ?? '') ||
     (isCrunchwork && (
       statusLookupId !== (job.statusLookupId ?? job.status?.id ?? '') ||
-      externalReference !== (job.externalReference ?? '') ||
       makeSafeRequired !== !!job.makeSafeRequired ||
       collectExcess !== !!job.collectExcess ||
       excess !== (job.excess != null ? String(job.excess) : '') ||
       jobInstructions !== (job.jobInstructions ?? '') ||
       vendorExtRef !== (vendorExtRefInitial ?? '')
     ));
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
 
   const buildPending = (): JobEditPending | null => {
     if (!isDirty) return null;
@@ -209,7 +196,6 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     if (isCrunchwork) {
       pending.statusLookupId = statusLookupId || null;
       pending.statusExternalReference = statusExternalReference || null;
-      pending.externalReference = externalReference || null;
       pending.makeSafeRequired = makeSafeRequired;
       pending.collectExcess = collectExcess;
       pending.excess = excess;
@@ -222,10 +208,8 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
   const reset = () => {
     setBookedDate(bookedDateRaw ?? '');
     setAttendanceDate(attendanceDateRaw ?? '');
-    setScheduleTarget(null);
     setStatusLookupId(job.statusLookupId ?? job.status?.id ?? '');
     setStatusExternalReference(job.status?.externalReference ?? '');
-    setExternalReference(job.externalReference ?? '');
     setMakeSafeRequired(!!job.makeSafeRequired);
     setCollectExcess(!!job.collectExcess);
     setExcess(job.excess != null ? String(job.excess) : '');
@@ -238,13 +222,13 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     getPendingDates: buildPending,
     reset,
     resetDates: reset,
+    isDirty: () => isDirty,
   }), [
     isDirty,
     bookedDate,
     attendanceDate,
     statusLookupId,
     statusExternalReference,
-    externalReference,
     makeSafeRequired,
     collectExcess,
     excess,
@@ -252,15 +236,6 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     vendorExtRef,
     isCrunchwork,
   ]);
-
-  const handleAppointmentSuccess = (startDate: string) => {
-    if (scheduleTarget === 'booked') {
-      setBookedDate(startDate);
-    } else if (scheduleTarget === 'attendance') {
-      setAttendanceDate(startDate);
-    }
-    setScheduleTarget(null);
-  };
 
   const claimFields = (
     <>
@@ -306,11 +281,11 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
               type="button"
               onClick={() => setShowAdvanced((open) => !open)}
               className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
-              aria-expanded={showAdvanced || cwEditing}
-              aria-label={showAdvanced || cwEditing ? 'Hide advanced details' : 'Show advanced details'}
-              title={showAdvanced || cwEditing ? 'Hide advanced details' : 'Show advanced details'}
+              aria-expanded={showAdvanced}
+              aria-label={showAdvanced ? 'Hide advanced details' : 'Show advanced details'}
+              title={showAdvanced ? 'Hide advanced details' : 'Show advanced details'}
             >
-              {showAdvanced || cwEditing ? (
+              {showAdvanced ? (
                 <ChevronUp className="h-4 w-4" />
               ) : (
                 <ChevronDown className="h-4 w-4" />
@@ -390,7 +365,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
             }
           />
           <AnimatePresence initial={false}>
-            {(showAdvanced || cwEditing) && (
+            {showAdvanced && (
               <motion.div
                 key="core-details-advanced"
                 initial={{ height: 0, opacity: 0 }}
@@ -399,20 +374,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
                 transition={{ duration: 0.25, ease: 'easeInOut' }}
                 className="overflow-hidden"
               >
-                <DefRow
-                  label="External reference"
-                  value={
-                    cwEditing ? (
-                      <EditText
-                        value={externalReference}
-                        onChange={setExternalReference}
-                        disabled={saving}
-                      />
-                    ) : (
-                      job.externalReference ?? '—'
-                    )
-                  }
-                />
+                <DefRow label="External reference" value={job.externalReference ?? '—'} />
                 <DefRow label="Provider" value={
                   <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
                     job.provider === 'crunchwork'
@@ -438,25 +400,13 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
           <DefRow label="Contact date" value={formatDate(contactDate)} />
           <DefRow label="Booked date" value={
             editing ? (
-              <div className="flex items-center gap-2">
-                <Input
-                  type="date"
-                  value={toInputDate(bookedDate)}
-                  onChange={(e) => setBookedDate(e.target.value)}
-                  disabled={saving}
-                  className="h-7 w-40 text-sm"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-7 gap-1 text-xs"
-                  onClick={() => setScheduleTarget('booked')}
-                >
-                  <CalendarPlus className="h-3.5 w-3.5" />
-                  Schedule
-                </Button>
-              </div>
+              <Input
+                type="date"
+                value={toInputDate(bookedDate)}
+                onChange={(e) => setBookedDate(e.target.value)}
+                disabled={saving}
+                className="h-7 w-40 text-sm"
+              />
             ) : (
               formatDate(bookedDate || bookedDateRaw)
             )
@@ -464,25 +414,13 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
           <DefRow label="Attendance due date" value={formatDate(attendanceDueDate)} />
           <DefRow label="Attendance date" value={
             editing ? (
-              <div className="flex items-center gap-2">
-                <Input
-                  type="date"
-                  value={toInputDate(attendanceDate)}
-                  onChange={(e) => setAttendanceDate(e.target.value)}
-                  disabled={saving}
-                  className="h-7 w-40 text-sm"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-7 gap-1 text-xs"
-                  onClick={() => setScheduleTarget('attendance')}
-                >
-                  <CalendarPlus className="h-3.5 w-3.5" />
-                  Schedule
-                </Button>
-              </div>
+              <Input
+                type="date"
+                value={toInputDate(attendanceDate)}
+                onChange={(e) => setAttendanceDate(e.target.value)}
+                disabled={saving}
+                className="h-7 w-40 text-sm"
+              />
             ) : (
               formatDate(attendanceDate || attendanceDateRaw)
             )
@@ -595,14 +533,6 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
           </SectionCard>
         </div>
       </div>
-
-      <AppointmentFormDrawer
-        open={scheduleTarget !== null}
-        onOpenChange={(open) => { if (!open) setScheduleTarget(null); }}
-        jobId={job.id}
-        jobParties={jobParties}
-        onSuccess={handleAppointmentSuccess}
-      />
 
     </div>
   );

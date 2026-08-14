@@ -74,8 +74,14 @@ import { ResetPasswordPage } from '../views/ResetPasswordPage.js';
 import { OnboardCompanyPage } from '../views/OnboardCompanyPage.js';
 import { AcceptInvitePage } from '../views/AcceptInvitePage.js';
 import { InviteAcceptedPage } from '../views/InviteAcceptedPage.js';
+import { InviteInvalidPage } from '../views/InviteInvalidPage.js';
 import { requestPasswordReset, confirmPasswordReset } from '../services/password-reset-service.js';
-import { getInviteTokenPreview, acceptInvite, acceptInviteWithoutPassword } from '../services/invitation-service.js';
+import {
+   getInviteTokenPreview,
+   acceptInvite,
+   acceptInviteWithoutPassword,
+   findInviteTokenByEmail,
+} from '../services/invitation-service.js';
 
 
 // Type for MCP server resourceInfo (matches RFC 9728 and McpServerResourceInfo schema - snake_case per RFC 9728)
@@ -448,11 +454,46 @@ export default function createAuthRoutes(
             const loginUrl = `${baseUrl}/login?interaction=${uid}`;
             const startOverUrl = error ? await getStartOverUrl(uid, req, res) : undefined;
 
+            const inviteTokenParam = (req.query.inviteToken as string | undefined)?.trim() || '';
+            const emailParam = (req.query.email as string | undefined)?.trim() || '';
+            let inviteMode = false;
+            let inviteToken = inviteTokenParam;
+            let organizationName: string | undefined;
+            let givenName: string | undefined;
+            let familyName: string | undefined;
+            let registerEmail = emailParam || undefined;
+
+            if (inviteTokenParam) {
+               const preview = await getInviteTokenPreview(inviteTokenParam);
+               if (preview.valid) {
+                  inviteMode = true;
+                  organizationName = preview.organizationName;
+                  givenName = preview.givenName;
+                  familyName = preview.familyName;
+                  registerEmail = preview.email || registerEmail;
+               }
+            } else if (emailParam) {
+               const pendingInvite = await findInviteTokenByEmail(emailParam);
+               if (pendingInvite?.token) {
+                  inviteMode = true;
+                  inviteToken = pendingInvite.token;
+                  organizationName = pendingInvite.preview.organizationName;
+                  givenName = pendingInvite.preview.givenName;
+                  familyName = pendingInvite.preview.familyName;
+                  registerEmail = pendingInvite.preview.email || registerEmail;
+               }
+            }
+
             const html = renderPage(
                React.createElement(RegisterPage, {
                   uid,
                   error: error ? decodeURIComponent(error as string) : null,
-                  email: (req.query.email as string) || undefined,
+                  email: registerEmail,
+                  inviteMode,
+                  inviteToken: inviteMode ? inviteToken : undefined,
+                  organizationName,
+                  givenName,
+                  familyName,
                   googleAuthUrl,
                   registerActionUrl,
                   loginUrl,
@@ -898,6 +939,26 @@ export default function createAuthRoutes(
          // Handle different interaction types
          switch (prompt.name) {
             case 'login': {
+               const idp = typeof params.idp === 'string' ? params.idp.toLowerCase() : '';
+               if (idp === 'google') {
+                  log.info(
+                     { functionName: 'interaction', uid: interactionUid, idp },
+                     'auth-server:auth-routes:interaction - IdP hint google, redirecting to Google OAuth',
+                  );
+                  return res.redirect(
+                     `${getRequestBaseUrl(req)}/login/google/start?interaction=${encodeURIComponent(interactionUid)}`,
+                  );
+               }
+               if (idp === 'microsoft' && getMicrosoftOAuthConfig()) {
+                  log.info(
+                     { functionName: 'interaction', uid: interactionUid, idp },
+                     'auth-server:auth-routes:interaction - IdP hint microsoft, redirecting to Microsoft OAuth',
+                  );
+                  return res.redirect(
+                     `${getRequestBaseUrl(req)}/login/microsoft/start?interaction=${encodeURIComponent(interactionUid)}`,
+                  );
+               }
+
                log.info({ 
                   functionName: 'interaction', 
                   uid: interactionUid, 
@@ -1295,11 +1356,22 @@ export default function createAuthRoutes(
                errorCode: verifyResult.errorCode 
             }, 'auth-server:auth-routes:login-submit - Password verification failed');
             
-            // If user not found, redirect to registration with the interaction
-            // This allows seamless "try to login → user doesn't exist → register" flow.
-            // Always use auth-server's /register so the user sees the form (apps like admin-ui
-            // may not have a /register route; same-origin redirect also works with fetch+redirect:manual).
+            // If user not found (no password identity), check for a pending org invite first.
+            // Invitees should finish registration via accept-invite (no Company / new-org signup).
             if (verifyResult.errorCode === 'USER_NOT_FOUND') {
+               const pendingInvite = await findInviteTokenByEmail(email);
+               if (pendingInvite?.token) {
+                  log.info(
+                     { functionName: 'login-submit', email },
+                     'auth-server:auth-routes:login-submit - Pending invite found, redirecting to accept-invite',
+                  );
+                  const acceptUrl = `/accept-invite?token=${encodeURIComponent(pendingInvite.token)}`;
+                  if (req.headers['x-more0-app-slug']) {
+                     return res.json({ returnTo: acceptUrl });
+                  }
+                  return res.redirect(acceptUrl);
+               }
+
                log.info({ 
                   functionName: 'login-submit', 
                   email 
@@ -1994,6 +2066,99 @@ export default function createAuthRoutes(
          if (password.length < 8) {
             log.warn({ functionName: 'register-submit', email }, 'Password too short');
             return res.redirect(`/register?interaction=${uid}&error=${encodeURIComponent('Password must be at least 8 characters long.')}`);
+         }
+
+         const inviteTokenFromBody =
+            typeof req.body.inviteToken === 'string' ? req.body.inviteToken.trim() : '';
+         let resolvedInviteToken = inviteTokenFromBody;
+         if (!resolvedInviteToken) {
+            const pendingInvite = await findInviteTokenByEmail(email);
+            resolvedInviteToken = pendingInvite?.token || '';
+         }
+
+         // =====================================================================
+         // INVITE ACCEPTANCE VIA REGISTER FORM
+         // Join the inviting organisation — do not create a new company/org.
+         // =====================================================================
+         if (resolvedInviteToken) {
+            log.info(
+               { functionName: 'register-submit', email },
+               'auth-server:auth-routes:register-submit - Completing org invite via register form',
+            );
+
+            if (password.length < 12) {
+               return res.redirect(
+                  `/register?interaction=${uid}&email=${encodeURIComponent(email)}&inviteToken=${encodeURIComponent(resolvedInviteToken)}&error=${encodeURIComponent('Password must be at least 12 characters.')}`,
+               );
+            }
+
+            const invitePreviewBefore = await getInviteTokenPreview(resolvedInviteToken);
+
+            const inviteResult = await acceptInvite({
+               token: resolvedInviteToken,
+               password,
+               givenName: typeof firstName === 'string' ? firstName : undefined,
+               familyName: typeof lastName === 'string' ? lastName : undefined,
+            });
+
+            if (!inviteResult.success) {
+               log.warn(
+                  { functionName: 'register-submit', email, error: inviteResult.error },
+                  'auth-server:auth-routes:register-submit - Invite acceptance failed',
+               );
+               return res.redirect(
+                  `/register?interaction=${uid}&email=${encodeURIComponent(email)}&inviteToken=${encodeURIComponent(resolvedInviteToken)}&error=${encodeURIComponent(inviteResult.error || 'Failed to accept invitation.')}`,
+               );
+            }
+
+            const organizationResult = await resolveOrganization({
+               provider: 'password',
+               providerSubject: email,
+            });
+
+            if (!organizationResult.success || !organizationResult.organizationId || !organizationResult.userId) {
+               log.error(
+                  {
+                     functionName: 'register-submit',
+                     email,
+                     errorCode: organizationResult.errorCode,
+                  },
+                  'auth-server:auth-routes:register-submit - Invite accepted but org resolution failed',
+               );
+               return res.redirect(
+                  `/register?interaction=${uid}&email=${encodeURIComponent(email)}&error=${encodeURIComponent('Account created but organisation lookup failed. Please sign in.')}`,
+               );
+            }
+
+            const authResult = createAuthResult({
+               userId: organizationResult.userId,
+               email,
+               name: userName,
+               provider: 'password',
+               organizationId: organizationResult.organizationId,
+            });
+            await storeAuthResult(organizationResult.userId, authResult);
+
+            const result = {
+               register: {
+                  userId: organizationResult.userId,
+                  email,
+                  name: userName,
+                  completed: true,
+                  organizationId: organizationResult.organizationId,
+                  organizationName: invitePreviewBefore.organizationName,
+               },
+               login: {
+                  accountId: organizationResult.userId,
+                  acr: '1',
+                  amr: ['password'],
+                  remember: true,
+                  ts: Math.floor(Date.now() / 1000),
+               },
+            };
+
+            await provider.interactionFinished(req, res, result, { mergeWithLastSubmission: false });
+            return;
          }
 
          // =====================================================================
@@ -2842,45 +3007,89 @@ export default function createAuthRoutes(
          const loginUrl = appLoginUrl();
 
          if (!token) {
-            return res.redirect(loginUrl);
+            const html = renderPage(
+               React.createElement(InviteInvalidPage, {
+                  message: 'This invitation link is missing a token. Please use the link from your invite email.',
+                  loginUrl,
+                  nonce: res.locals.cspNonce as string | undefined,
+               }),
+               { title: 'EnsureOS — Invitation Unavailable' },
+            );
+            return res.send(html);
          }
 
          const preview = await getInviteTokenPreview(token);
          if (!preview.valid) {
-            return res.redirect(loginUrl);
+            log.warn(
+               { error: preview.error },
+               'auth-server:auth-routes:getAcceptInvite - Invalid or expired invite token',
+            );
+            const html = renderPage(
+               React.createElement(InviteInvalidPage, {
+                  message: preview.error,
+                  loginUrl,
+                  nonce: res.locals.cspNonce as string | undefined,
+               }),
+               { title: 'EnsureOS — Invitation Unavailable' },
+            );
+            return res.send(html);
          }
 
-         if (preview.userId) {
-            const identities = await userIdentitiesService.getIdentitiesByUserId(systemContext, preview.userId);
+         // Existing OAuth users: activate membership and send them to login.
+         if (preview.hasOauthIdentity) {
+            await acceptInviteWithoutPassword(token);
+            const identities = preview.userId
+               ? await userIdentitiesService.getIdentitiesByUserId(systemContext, preview.userId)
+               : [];
             const oauthIdentity = identities.find(
                (id) => id.provider === 'microsoft' || id.provider === 'google',
             );
-
-            if (oauthIdentity) {
-               await acceptInviteWithoutPassword(token);
-               const providerLabel = oauthIdentity.provider === 'microsoft' ? 'Microsoft' : 'Google';
-               const html = renderPage(
-                  React.createElement(InviteAcceptedPage, {
-                     email: preview.email,
-                     providerLabel,
-                     loginUrl,
-                     nonce: res.locals.cspNonce as string | undefined,
-                  }),
-                  { title: 'EnsureOS — Invitation Accepted' },
-               );
-               return res.send(html);
-            }
+            const providerLabel = oauthIdentity?.provider === 'microsoft' ? 'Microsoft' : 'Google';
+            const html = renderPage(
+               React.createElement(InviteAcceptedPage, {
+                  email: preview.email,
+                  providerLabel,
+                  loginUrl,
+                  nonce: res.locals.cspNonce as string | undefined,
+               }),
+               { title: 'EnsureOS — Invitation Accepted' },
+            );
+            return res.send(html);
          }
+
+         // Existing password users: activate and send them to login.
+         if (preview.hasPasswordIdentity) {
+            await acceptInviteWithoutPassword(token);
+            return res.redirect(loginUrl);
+         }
+
+         // New invitees: registration-style setup (name + password). Company is
+         // intentionally omitted — they are joining the inviting organisation.
+         const clientOrigin = getCorsOrigins()[0] || 'http://localhost:3000';
+         const googleParams = new URLSearchParams({ returnTo: '/dashboard', idp: 'google' });
+         const microsoftParams = new URLSearchParams({ returnTo: '/dashboard', idp: 'microsoft' });
+         if (preview.email) {
+            googleParams.set('login_hint', preview.email);
+            microsoftParams.set('login_hint', preview.email);
+         }
+         const googleAuthUrl = `${clientOrigin}/api/auth/login?${googleParams.toString()}`;
+         const microsoftAuthUrl = getMicrosoftOAuthConfig()
+            ? `${clientOrigin}/api/auth/login?${microsoftParams.toString()}`
+            : undefined;
 
          const html = renderPage(
             React.createElement(AcceptInvitePage, {
                token,
                email: preview.email || '',
+               givenName: preview.givenName,
+               familyName: preview.familyName,
+               organizationName: preview.organizationName,
                error: error ? decodeURIComponent(error) : null,
-               loginUrl,
+               googleAuthUrl,
+               microsoftAuthUrl,
                nonce: res.locals.cspNonce as string | undefined,
             }),
-            { title: 'EnsureOS — Accept Invitation' },
+            { title: 'EnsureOS — Create Account' },
          );
          res.send(html);
       } catch (error: any) {
@@ -2899,9 +3108,19 @@ export default function createAuthRoutes(
          const token = (req.body?.token || '').trim();
          const password = (req.body?.password || '').trim();
          const confirmPassword = (req.body?.confirmPassword || '').trim();
+         const firstName = typeof req.body?.firstName === 'string' ? req.body.firstName.trim() : '';
+         const lastName = typeof req.body?.lastName === 'string' ? req.body.lastName.trim() : '';
 
          if (!token || !password) {
-            res.redirect(loginUrl);
+            const html = renderPage(
+               React.createElement(InviteInvalidPage, {
+                  message: 'Missing invitation token or password. Please use the link from your invite email.',
+                  loginUrl,
+                  nonce: res.locals.cspNonce as string | undefined,
+               }),
+               { title: 'EnsureOS — Invitation Unavailable' },
+            );
+            res.send(html);
             return;
          }
          if (password !== confirmPassword) {
@@ -2910,8 +3129,19 @@ export default function createAuthRoutes(
             );
             return;
          }
+         if (!firstName || !lastName) {
+            res.redirect(
+               `${baseUrl}/accept-invite?token=${encodeURIComponent(token)}&error=${encodeURIComponent('Please enter your first and last name.')}`,
+            );
+            return;
+         }
 
-         const result = await acceptInvite({ token, password });
+         const result = await acceptInvite({
+            token,
+            password,
+            givenName: firstName,
+            familyName: lastName,
+         });
          if (!result.success) {
             res.redirect(
                `${baseUrl}/accept-invite?token=${encodeURIComponent(token)}&error=${encodeURIComponent(result.error || 'Failed to accept invitation.')}`,

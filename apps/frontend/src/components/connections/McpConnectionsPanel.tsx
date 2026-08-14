@@ -5,11 +5,13 @@ import {
   Cable,
   Loader2,
   Plug2,
+  Plus,
   RefreshCw,
   Unplug,
   Wrench,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -165,27 +167,28 @@ export function McpConnectionsPanel() {
     return () => window.removeEventListener('message', onOAuthMessage);
   }, [loadData]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
-      </div>
-    );
-  }
-
   const detailConnection = connections.find((c) => c.id === detailId);
   const detailTools = detailId ? toolsByConnection.get(detailId) : null;
 
   return (
     <>
-      <div className="mb-4 flex justify-end">
-        <Button type="button" size="sm" onClick={() => setConnectOpen(true)} className="gap-1.5">
-          <Plug2 className="h-4 w-4" />
+      <SetHeaderActions>
+        <Button
+          type="button"
+          size="default"
+          onClick={() => setConnectOpen(true)}
+          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          <Plus className="h-3.5 w-3.5" />
           Connect Server
         </Button>
-      </div>
+      </SetHeaderActions>
 
-      {connections.length === 0 ? (
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+        </div>
+      ) : connections.length === 0 ? (
         <div className="rounded-lg border border-slate-200 bg-white px-5 py-12 text-center">
           <Cable className="mx-auto h-10 w-10 text-slate-300" />
           <p className="mt-3 text-sm font-medium text-slate-600">No MCP connections yet</p>

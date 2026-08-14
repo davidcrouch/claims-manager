@@ -1,17 +1,19 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
-import { getSession } from '@/lib/auth';
 import { SettingsPageClient } from '@/components/admin/SettingsPageClient';
-import { listFeaturesAction } from './features-actions';
+import type { OrganisationProfile } from '@/types/api';
 
-export const metadata = { title: 'Settings — EnsureOS' };
+export const metadata = { title: 'Company — EnsureOS' };
 
-function hasPermission(permissions: string[] | undefined, key: string): boolean {
-  if (!permissions || permissions.length === 0) return false;
-  return permissions.some(
-    (p) => p === '*' || p === key || (p.endsWith('.*') && key.startsWith(p.slice(0, -1))),
-  );
-}
+const EMPTY_ORG: OrganisationProfile = {
+  id: '',
+  name: '',
+  tradingName: null,
+  abn: null,
+  primaryEmail: null,
+  phone: null,
+  address: null,
+};
 
 export default async function SettingsPage({
   searchParams,
@@ -20,19 +22,17 @@ export default async function SettingsPage({
 }) {
   const api = await getServerApiClient();
   if (!api) redirect('/api/auth/login');
+
   const params = await searchParams;
-  const session = await getSession();
-  const permissions = session.identity?.permissions ?? [];
-  const canManageFeatures = hasPermission(permissions, 'features.manage');
+  if (params.tab === 'features') redirect('/admin/features');
+  if (params.tab === 'notifications') redirect('/admin/notifications');
 
-  const { features, error } = await listFeaturesAction();
+  let organisation = EMPTY_ORG;
+  try {
+    organisation = await api.getOrganisation();
+  } catch (err) {
+    console.error('[frontend:admin/settings/page] getOrganisation failed', err);
+  }
 
-  return (
-    <SettingsPageClient
-      initialTab={params.tab ?? 'general'}
-      features={features}
-      featuresError={error}
-      canManageFeatures={canManageFeatures}
-    />
-  );
+  return <SettingsPageClient organisation={organisation} />;
 }

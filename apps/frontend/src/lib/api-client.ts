@@ -48,6 +48,7 @@ import type {
   Journal,
   JournalPage,
   Assessment,
+  OrganisationProfile,
 } from '@/types/api';
 
 export interface ApiClientOptions {
@@ -406,6 +407,23 @@ export function createApiClient(options?: ApiClientOptions) {
     capturePurchaseOrder(body: CapturePoRequest): Promise<CapturePoResponse> {
       return fetchApi<CapturePoResponse>('/purchase-orders/capture', {
         method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+
+    getOrganisation(): Promise<OrganisationProfile> {
+      return fetchApi<OrganisationProfile>('/organisations/me');
+    },
+
+    updateOrganisation(body: {
+      name?: string;
+      abn?: string;
+      primaryEmail?: string;
+      phone?: string;
+      address?: string;
+    }): Promise<OrganisationProfile> {
+      return fetchApi<OrganisationProfile>('/organisations/me', {
+        method: 'PATCH',
         body: JSON.stringify(body),
       });
     },

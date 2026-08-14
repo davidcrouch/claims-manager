@@ -27,6 +27,10 @@ import {
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
 import type { JobOption } from '@/components/shared/job-label';
+import {
+  AddressAutocompleteInput,
+  type AddressSuggestion,
+} from '@/components/shared/AddressAutocompleteInput';
 import type { AddressPayload, Journal } from '@/types/api';
 
 const AU_STATES = ['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA'] as const;
@@ -127,6 +131,7 @@ export function JournalFormDrawer({
   const [description, setDescription] = useState('');
   const [visitDate, setVisitDate] = useState(todayLocalDateInputValue);
   const [address, setAddress] = useState<SiteAddressForm>(EMPTY_ADDRESS);
+  const [addressSearch, setAddressSearch] = useState('');
   const [location, setLocation] = useState<{
     latitude: number;
     longitude: number;
@@ -338,6 +343,29 @@ export function JournalFormDrawer({
 
             <div className="md:col-span-2">
               <p className="mb-3 text-sm font-medium text-foreground">Site address</p>
+              <div className="mb-4 space-y-2">
+                <Label htmlFor="journal-address-search">Search address</Label>
+                <AddressAutocompleteInput
+                  id="journal-address-search"
+                  value={addressSearch}
+                  onChange={setAddressSearch}
+                  onSelect={(suggestion: AddressSuggestion) => {
+                    const p = suggestion.parts ?? {};
+                    setAddress({
+                      unitNumber: p.unitNumber ?? '',
+                      streetNumber: p.streetNumber ?? '',
+                      streetName: p.streetName ?? '',
+                      suburb: p.suburb ?? '',
+                      state: p.state ?? '',
+                      postcode: p.postcode ?? '',
+                      country: p.country ?? 'Australia',
+                    });
+                    setAddressSearch(suggestion.label);
+                  }}
+                  placeholder="Search Australian address to fill fields…"
+                  name="journal-address-search"
+                />
+              </div>
               <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-6">
                 <div className="space-y-2 md:col-span-1">
                   <Label htmlFor="journal-unit">Unit</Label>

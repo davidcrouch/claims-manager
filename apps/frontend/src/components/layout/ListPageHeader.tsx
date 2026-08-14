@@ -145,7 +145,7 @@ export function ListPageHeader({
         >
           <Icon className={`h-4 w-4 ${accentCls.iconText}`} />
         </span>
-        <h1 className="truncate text-lg font-semibold leading-tight">
+        <h1 className="truncate text-lg font-semibold leading-tight text-sidebar-foreground">
           {title}
         </h1>
         <span
@@ -154,7 +154,7 @@ export function ListPageHeader({
           {total.toLocaleString()} total
         </span>
         {showShowing && (
-          <span className="text-xs text-muted-foreground">
+          <span className="text-xs text-sidebar-foreground/65">
             Showing {showing!.toLocaleString()}
           </span>
         )}
@@ -193,8 +193,8 @@ export function ListPageHeader({
         <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pl-10 text-xs">
           {stats.map((s) => (
             <div key={s.label} className="flex items-baseline gap-1">
-              <span className="text-muted-foreground">{s.label}:</span>
-              <span className="font-medium">{s.value}</span>
+              <span className="text-sidebar-foreground/65">{s.label}:</span>
+              <span className="font-medium text-sidebar-foreground">{s.value}</span>
             </div>
           ))}
         </div>

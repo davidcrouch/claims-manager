@@ -18,8 +18,8 @@ export default async function AgentsPage() {
             <Bot className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-slate-900">AI Agents</h1>
-            <p className="text-sm text-slate-500">
+            <h1 className="text-xl font-semibold text-sidebar-foreground">AI Agents</h1>
+            <p className="text-sm text-sidebar-foreground/65">
               Configure chat agents, models, and tool access.
             </p>
           </div>

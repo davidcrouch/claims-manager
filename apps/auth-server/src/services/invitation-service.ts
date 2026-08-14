@@ -36,6 +36,21 @@ interface InviteTokenData {
   roles: string[];
   invitedByUserId: string;
   createdAt: number;
+  givenName?: string;
+  familyName?: string;
+}
+
+export interface InviteTokenPreview {
+  valid: boolean;
+  email?: string;
+  userId?: string;
+  organizationId?: string;
+  organizationName?: string;
+  givenName?: string;
+  familyName?: string;
+  hasPasswordIdentity?: boolean;
+  hasOauthIdentity?: boolean;
+  error?: string;
 }
 
 export interface InviteUserParams {
@@ -157,6 +172,8 @@ export async function inviteUser(params: InviteUserParams): Promise<InviteUserRe
     roles,
     invitedByUserId,
     createdAt: Date.now(),
+    givenName: givenName?.trim() || undefined,
+    familyName: familyName?.trim() || undefined,
   };
   await redis.set(`${INVITE_TOKEN_PREFIX}${token}`, JSON.stringify(tokenData), {
     ex: INVITE_TOKEN_TTL_SECONDS,
@@ -200,8 +217,10 @@ export async function inviteUser(params: InviteUserParams): Promise<InviteUserRe
 export async function acceptInvite(params: {
   token: string;
   password: string;
+  givenName?: string;
+  familyName?: string;
 }): Promise<{ success: boolean; error?: string; email?: string }> {
-  const { token, password } = params;
+  const { token, password, givenName, familyName } = params;
 
   log.info({}, 'auth-server:invitation:acceptInvite - Processing invite acceptance');
 
@@ -228,6 +247,16 @@ export async function acceptInvite(params: {
     return { success: false, error: 'Account not found. The invitation may be stale.', email };
   }
 
+  const resolvedGiven = (givenName ?? tokenData.givenName ?? '').trim();
+  const resolvedFamily = (familyName ?? tokenData.familyName ?? '').trim();
+  const displayName = [resolvedGiven, resolvedFamily].filter(Boolean).join(' ');
+
+  if (displayName && displayName !== (user.name || '').trim()) {
+    const { createUsersRepository } = await import('../db/repositories/users-repository.js');
+    const usersRepo = createUsersRepository(() => getDb(), undefined);
+    await usersRepo.update(systemContext, userId, { name: displayName } as any);
+  }
+
   const existingIdentity = await userIdentitiesService.getByProviderAndProviderUserId({
     context: systemContext,
     provider: 'password',
@@ -240,7 +269,7 @@ export async function acceptInvite(params: {
       userId,
       provider: 'password',
       providerUserId: email,
-      displayName: null,
+      displayName: displayName || null,
       avatarUrl: null,
       rawProfile: {
         passwordHash,
@@ -299,9 +328,7 @@ export async function acceptInviteWithoutPassword(
   return { success: true, email };
 }
 
-export async function getInviteTokenPreview(
-  token: string,
-): Promise<{ valid: boolean; email?: string; userId?: string; error?: string }> {
+export async function getInviteTokenPreview(token: string): Promise<InviteTokenPreview> {
   log.debug({}, 'auth-server:invitation:getInviteTokenPreview - Peeking at token');
 
   const redis = await GlobalCacheManager.getInstance('auth-server');
@@ -315,7 +342,102 @@ export async function getInviteTokenPreview(
   }
 
   const tokenData: InviteTokenData = typeof raw === 'string' ? JSON.parse(raw) : raw;
-  return { valid: true, email: tokenData.email, userId: tokenData.userId };
+
+  let organizationName: string | undefined;
+  try {
+    const org = await orgsService.getOrganization(systemContext, tokenData.organizationId);
+    organizationName = org?.name || undefined;
+  } catch {
+    // non-fatal
+  }
+
+  let hasPasswordIdentity = false;
+  let hasOauthIdentity = false;
+  let givenName = tokenData.givenName;
+  let familyName = tokenData.familyName;
+
+  if (tokenData.userId) {
+    try {
+      const identities = await userIdentitiesService.getIdentitiesByUserId(
+        systemContext,
+        tokenData.userId,
+      );
+      hasPasswordIdentity = identities.some((id) => id.provider === 'password');
+      hasOauthIdentity = identities.some(
+        (id) => id.provider === 'microsoft' || id.provider === 'google',
+      );
+
+      if (!givenName && !familyName) {
+        const user = await usersService.getUser(systemContext, tokenData.userId);
+        const parts = (user?.name || '').trim().split(/\s+/).filter(Boolean);
+        if (parts.length === 1) {
+          givenName = parts[0];
+        } else if (parts.length > 1) {
+          givenName = parts[0];
+          familyName = parts.slice(1).join(' ');
+        }
+      }
+    } catch (err: any) {
+      log.warn(
+        { userId: tokenData.userId, error: err?.message },
+        'auth-server:invitation:getInviteTokenPreview - Failed to load identity flags',
+      );
+    }
+  }
+
+  return {
+    valid: true,
+    email: tokenData.email,
+    userId: tokenData.userId,
+    organizationId: tokenData.organizationId,
+    organizationName,
+    givenName,
+    familyName,
+    hasPasswordIdentity,
+    hasOauthIdentity,
+  };
+}
+
+export async function findInviteTokenByEmail(
+  email: string,
+): Promise<{ token: string; preview: InviteTokenPreview } | null> {
+  const normalizedEmail = email.trim().toLowerCase();
+  log.debug(
+    { email: normalizedEmail },
+    'auth-server:invitation:findInviteTokenByEmail - Scanning for invite token',
+  );
+
+  try {
+    const redis = await GlobalCacheManager.getInstance('auth-server');
+    const keys = await redis.keys(`${INVITE_TOKEN_PREFIX}*`);
+
+    for (const key of keys) {
+      try {
+        const raw = await redis.get<string>(key);
+        if (!raw) continue;
+        const data: InviteTokenData = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (data.email === normalizedEmail) {
+          const token = key.startsWith(INVITE_TOKEN_PREFIX)
+            ? key.slice(INVITE_TOKEN_PREFIX.length)
+            : key;
+          const preview = await getInviteTokenPreview(token);
+          if (preview.valid) {
+            return { token, preview };
+          }
+        }
+      } catch {
+        // Skip malformed entries
+      }
+    }
+
+    return null;
+  } catch (err: any) {
+    log.warn(
+      { email: normalizedEmail, error: err.message },
+      'auth-server:invitation:findInviteTokenByEmail - Failed (non-fatal)',
+    );
+    return null;
+  }
 }
 
 export async function invalidateInviteTokensForEmail(email: string): Promise<number> {

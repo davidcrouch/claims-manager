@@ -43,12 +43,30 @@ function resolveRedirectUri(req: NextRequest): string {
 export async function GET(req: NextRequest) {
   try {
     const interaction = req.nextUrl.searchParams.get('interaction');
+    const inviteToken = req.nextUrl.searchParams.get('inviteToken')?.trim();
+    const email = req.nextUrl.searchParams.get('email')?.trim();
+
     if (interaction) {
-      const registerUrl = `${authConfig.authServerUrl}/register?interaction=${encodeURIComponent(interaction)}`;
+      const registerQuery = new URLSearchParams({ interaction });
+      if (inviteToken) registerQuery.set('inviteToken', inviteToken);
+      if (email) registerQuery.set('email', email);
+      const registerUrl = `${authConfig.authServerUrl}/register?${registerQuery.toString()}`;
       console.debug(`${LOG_PREFIX} - redirecting to provider register`, {
         interaction,
+        inviteMode: Boolean(inviteToken),
       });
       return NextResponse.redirect(registerUrl);
+    }
+
+    // Org invites should use the accept-invite registration form (no Company field),
+    // not greenfield signup that provisions a new organisation.
+    if (inviteToken) {
+      const acceptUrl = new URL('/accept-invite', authConfig.authServerUrl);
+      acceptUrl.searchParams.set('token', inviteToken);
+      console.info(`${LOG_PREFIX} - redirecting invitee to accept-invite`, {
+        hasToken: true,
+      });
+      return NextResponse.redirect(acceptUrl);
     }
 
     const returnTo = req.nextUrl.searchParams.get('returnTo')?.trim();

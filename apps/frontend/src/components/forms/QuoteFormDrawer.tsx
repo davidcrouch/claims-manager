@@ -204,9 +204,10 @@ export function QuoteFormDrawer({
                     const selected = jobs.find((j) => j.id === id);
                     form.setValue('claimId', selected?.claimId ?? undefined);
                   }}
+                  className="space-y-2"
                 />
                 {form.formState.errors.jobId && (
-                  <p className="-mt-3 text-sm text-destructive md:col-span-2">
+                  <p className="-mt-3 text-sm text-destructive">
                     {form.formState.errors.jobId.message}
                   </p>
                 )}

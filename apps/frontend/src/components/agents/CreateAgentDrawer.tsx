@@ -26,6 +26,8 @@ import { ConnectionSelectionStep } from '@/components/agents/ConnectionSelection
 import { ToolSelectionPanel } from '@/components/agents/ToolSelectionPanel';
 
 export interface CreateAgentDrawerProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onCreated?: (agent: Agent) => void;
 }
 
@@ -69,8 +71,7 @@ const INITIAL_DRAFT: DraftAgent = {
   enabledTools: undefined,
 };
 
-export function CreateAgentDrawer({ onCreated }: CreateAgentDrawerProps) {
-  const [open, setOpen] = useState(false);
+export function CreateAgentDrawer({ open, onOpenChange, onCreated }: CreateAgentDrawerProps) {
   const [stepIndex, setStepIndex] = useState(0);
   const [draft, setDraft] = useState<DraftAgent>({ ...INITIAL_DRAFT });
   const [modelOptions, setModelOptions] = useState<Record<string, Array<{ id: string; label: string }>>>({});
@@ -137,7 +138,7 @@ export function CreateAgentDrawer({ onCreated }: CreateAgentDrawerProps) {
         return;
       }
       onCreated?.(result.agent);
-      setOpen(false);
+      onOpenChange(false);
       resetForm();
     });
   }
@@ -165,18 +166,12 @@ export function CreateAgentDrawer({ onCreated }: CreateAgentDrawerProps) {
   const isLastStep = stepIndex === STEPS.length - 1;
 
   return (
-    <>
-      <Button type="button" size="sm" className="gap-1.5" onClick={() => setOpen(true)}>
-        <Plus className="h-4 w-4" />
-        Create Agent
-      </Button>
-
-      <BottomFormDrawer
-        open={open}
-        onOpenChange={(next) => {
-          setOpen(next);
-          if (!next) resetForm();
-        }}
+    <BottomFormDrawer
+      open={open}
+      onOpenChange={(next) => {
+        onOpenChange(next);
+        if (!next) resetForm();
+      }}
         title="Create Agent"
         description={STEPS[stepIndex].description}
         icon={<Plus className="h-5 w-5" />}
@@ -275,7 +270,7 @@ export function CreateAgentDrawer({ onCreated }: CreateAgentDrawerProps) {
               <Button
                 type="button"
                 variant="secondary"
-                onClick={() => setOpen(false)}
+                onClick={() => onOpenChange(false)}
                 disabled={isPending}
               >
                 Cancel
@@ -294,7 +289,6 @@ export function CreateAgentDrawer({ onCreated }: CreateAgentDrawerProps) {
           </div>
         </BottomFormDrawerFooter>
       </BottomFormDrawer>
-    </>
   );
 }
 

@@ -4,6 +4,8 @@ import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import { Briefcase, Building2, ListTree, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { SetPageHeader } from '@/components/layout/SetPageHeader';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { Card } from '@/components/ui/card';
 import { FilesystemTemplateDrawer } from './FilesystemTemplateDrawer';
 import type { FilesystemTemplate } from '@/lib/api-client';
@@ -171,19 +173,30 @@ export function FilesystemTemplatesPanel({
 
   return (
     <>
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900">Filesystem Templates</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Company templates set up the organisation document library. Project templates define the
-            folder structure for each job.
-          </p>
+      <SetPageHeader>
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+            <ListTree className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl font-semibold text-sidebar-foreground">Filesystem Templates</h1>
+            <p className="text-sm text-sidebar-foreground/65">
+              Company templates set up the organisation document library. Project templates define
+              the folder structure for each job.
+            </p>
+          </div>
         </div>
-        <Button type="button" onClick={handleCreate} className="gap-1.5">
-          <Plus className="h-4 w-4" />
+      </SetPageHeader>
+      <SetHeaderActions>
+        <Button
+          size="default"
+          onClick={handleCreate}
+          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          <Plus className="h-3.5 w-3.5" />
           New Template
         </Button>
-      </div>
+      </SetHeaderActions>
 
       {templates.length === 0 ? (
         <Card className="flex flex-col items-center gap-2 p-12 text-center">

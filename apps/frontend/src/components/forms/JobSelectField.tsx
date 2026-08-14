@@ -17,16 +17,18 @@ export function JobSelectField({
   value,
   onValueChange,
   id = 'jobId',
+  className = 'space-y-2 md:col-span-2',
 }: {
   jobs: JobOption[];
   value: string;
   onValueChange: (jobId: string) => void;
   id?: string;
+  className?: string;
 }) {
   const items = Object.fromEntries(jobs.map((j) => [j.id, j.label]));
 
   return (
-    <div className="space-y-2 md:col-span-2">
+    <div className={className}>
       <Label htmlFor={id}>
         Job <span className="text-destructive">*</span>
       </Label>

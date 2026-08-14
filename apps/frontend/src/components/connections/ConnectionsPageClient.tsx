@@ -19,6 +19,7 @@ import {
 } from '@/components/shared/list-filters';
 import { ConnectionFormDrawer } from './ConnectionFormDrawer';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { ListPageHeader } from '@/components/layout/ListPageHeader';
 import type { ConnectionSummary } from '@/types/api';
 
@@ -163,6 +164,18 @@ export function ConnectionsPageClient({ connections }: ConnectionsPageClientProp
           accent="violet"
         />
       </SetPageHeader>
+
+      <SetHeaderActions>
+        <Button
+          size="default"
+          onClick={() => setCreateOpen(true)}
+          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Add Connection
+        </Button>
+      </SetHeaderActions>
+
       <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
           <SortTabs
@@ -185,15 +198,6 @@ export function ConnectionsPageClient({ connections }: ConnectionsPageClientProp
             onClearAll={clearStatuses}
             onSelectAll={selectAllStatuses}
           />
-
-          <Button
-            onClick={() => setCreateOpen(true)}
-            size="sm"
-            className="gap-1"
-          >
-            <Plus className="h-4 w-4" />
-            Add Connection
-          </Button>
         </div>
       </div>
 

@@ -10,4 +10,5 @@ export { ResetPasswordPage } from './ResetPasswordPage.js';
 export { OnboardCompanyPage } from './OnboardCompanyPage.js';
 export { AcceptInvitePage } from './AcceptInvitePage.js';
 export { InviteAcceptedPage } from './InviteAcceptedPage.js';
+export { InviteInvalidPage } from './InviteInvalidPage.js';
 export { Wordmark } from './Wordmark.js';

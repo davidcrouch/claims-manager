@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   FileSpreadsheet,
@@ -18,6 +18,8 @@ import {
   ClipboardList,
   MessageSquare,
   Paperclip,
+  Package,
+  Save,
   Send,
   BookOpen,
   Lock,
@@ -199,14 +201,11 @@ export function isEstimateLocked(quote: Quote): boolean {
 export function QuotePageHeader({
   quote,
   job,
-  claim,
 }: {
   quote: Quote;
   job?: Job | null;
   claim?: Claim | null;
 }) {
-  const [publishWizardOpen, setPublishWizardOpen] = useState(false);
-  const [approvalWizardOpen, setApprovalWizardOpen] = useState(false);
   const approval = getApprovalInfo(quote);
   const title =
     quote.name ??
@@ -216,109 +215,59 @@ export function QuotePageHeader({
   const statusName = getEstimateStatusName(quote);
   const quoteTypeName = quote.quoteType?.name ?? approval.quoteTypeName;
   const locked = isEstimateLocked(quote);
-  const canPublish = !locked;
-  const publishMode: EstimatePublishMode =
-    job?.provider === 'crunchwork' ? 'external' : 'internal';
-  const isInternal = publishMode === 'internal';
-  const canApprove = statusName === 'Pending' && isInternal;
 
   return (
-    <>
-      <SetHeaderActions>
-        {canPublish && (
-          <Button
-            size="default"
-            onClick={() => setPublishWizardOpen(true)}
-            className="h-9 gap-1.5 px-4 bg-amber-600 text-white hover:bg-amber-500"
-          >
-            <Send className="h-3.5 w-3.5" />
-            Publish
-          </Button>
-        )}
-        {canApprove && (
-          <Button
-            size="default"
-            onClick={() => setApprovalWizardOpen(true)}
-            className="h-9 gap-1.5 px-4 bg-emerald-600 text-white hover:bg-emerald-500"
-          >
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            Received Approval
-          </Button>
-        )}
-        <PrintButton documentType="quote" entityId={quote.id} jobId={job?.id} />
-        <ArchiveEntityButton
-          entityType="quote"
-          entityId={quote.id}
-          statusName={statusName}
-          entityLabel={title}
-          redirectTo={job ? `/quotes?jobId=${job.id}` : '/quotes'}
-        />
-      </SetHeaderActions>
-      <EstimatePublishWizard
-        open={publishWizardOpen}
-        onOpenChange={setPublishWizardOpen}
-        quote={quote}
-        job={job}
-        claim={claim}
-        mode={publishMode}
-      />
-      <EstimateApprovalWizard
-        open={approvalWizardOpen}
-        onOpenChange={setApprovalWizardOpen}
-        quoteId={quote.id}
-      />
-      <div className="flex w-full min-w-0 flex-col gap-y-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-          <BackButton href={job ? `/quotes?jobId=${job.id}` : '/quotes'} label="Back to estimates" />
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100">
-            <FileSpreadsheet className="h-4 w-4 text-amber-600" />
+    <div className="flex w-full min-w-0 flex-col gap-y-1">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+        <BackButton href={job ? `/quotes?jobId=${job.id}` : '/quotes'} label="Back to estimates" />
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100">
+          <FileSpreadsheet className="h-4 w-4 text-amber-600" />
+        </span>
+        <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
+        <StatusBadge status={statusName} />
+        {locked && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+            <Lock className="h-3 w-3" />
+            Locked
           </span>
-          <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
-          <StatusBadge status={statusName} />
-          {locked && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-              <Lock className="h-3 w-3" />
-              Locked
-            </span>
-          )}
-          {quoteTypeName && quoteTypeName !== 'Estimate' && quoteTypeName !== 'Quote' && (
-            <TypeBadge type={quoteTypeName} />
-          )}
-          {job && (
-            <Link
-              href={`/jobs/${job.id}`}
-              className="inline-flex items-center gap-1 text-xs uppercase text-primary hover:underline"
-            >
-              {jobDisplayName(job)}
-              <ExternalLink className="h-3 w-3" />
-            </Link>
-          )}
-          {quote.claimId && (
-            <Link
-              href={`/claims/${quote.claimId}`}
-              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-            >
-              View Claim
-              <ExternalLink className="h-3 w-3" />
-            </Link>
-          )}
+        )}
+        {quoteTypeName && quoteTypeName !== 'Estimate' && quoteTypeName !== 'Quote' && (
+          <TypeBadge type={quoteTypeName} />
+        )}
+        {job && (
+          <Link
+            href={`/jobs/${job.id}`}
+            className="inline-flex items-center gap-1 text-xs uppercase text-primary hover:underline"
+          >
+            {jobDisplayName(job)}
+            <ExternalLink className="h-3 w-3" />
+          </Link>
+        )}
+        {quote.claimId && (
+          <Link
+            href={`/claims/${quote.claimId}`}
+            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+          >
+            View Claim
+            <ExternalLink className="h-3 w-3" />
+          </Link>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pl-20 text-xs">
+        <div className="flex items-baseline gap-1">
+          <span className="text-muted-foreground">Total:</span>
+          <span className="font-medium">{formatCurrency(quote.totalAmount)}</span>
         </div>
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pl-20 text-xs">
-          <div className="flex items-baseline gap-1">
-            <span className="text-muted-foreground">Total:</span>
-            <span className="font-medium">{formatCurrency(quote.totalAmount)}</span>
-          </div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-muted-foreground">Estimate date:</span>
-            <span className="font-medium">{formatDate(quote.quoteDate)}</span>
-          </div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-muted-foreground">Updated:</span>
-            <span className="font-medium">{formatDateTime(quote.updatedAt)}</span>
-          </div>
+        <div className="flex items-baseline gap-1">
+          <span className="text-muted-foreground">Estimate date:</span>
+          <span className="font-medium">{formatDate(quote.quoteDate)}</span>
+        </div>
+        <div className="flex items-baseline gap-1">
+          <span className="text-muted-foreground">Updated:</span>
+          <span className="font-medium">{formatDateTime(quote.updatedAt)}</span>
         </div>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -601,16 +550,40 @@ type QuoteTab =
 export function QuoteDetail({
   quote,
   job,
+  claim,
   jobProvider,
 }: {
   quote: Quote;
   job?: Job | null;
+  claim?: Claim | null;
   jobProvider?: CatalogType;
 }) {
   const [tab, setTab] = useState<QuoteTab>('overview');
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [publishWizardOpen, setPublishWizardOpen] = useState(false);
+  const [approvalWizardOpen, setApprovalWizardOpen] = useState(false);
+  const [lineItemsDirty, setLineItemsDirty] = useState(false);
+  const saveLineItemsRef = useRef<(() => void) | null>(null);
   const locked = isEstimateLocked(quote);
   const assignee = resolveDetailAssignee({ job });
+
+  const title =
+    quote.name ??
+    quote.quoteNumber ??
+    quote.externalReference ??
+    quote.id;
+  const statusName = getEstimateStatusName(quote);
+  const canPublish = !locked;
+  const publishMode: EstimatePublishMode =
+    job?.provider === 'crunchwork' ? 'external' : 'internal';
+  const isInternal = publishMode === 'internal';
+  const canApprove = statusName === 'Pending' && isInternal;
+  const showTakeOffActions = tab === 'line-items' && !locked;
+
+  const handleLineItemsDirtyChange = useCallback((dirty: boolean, save: () => void) => {
+    setLineItemsDirty(dirty);
+    saveLineItemsRef.current = save;
+  }, []);
 
   const tabs: Array<{ id: QuoteTab; label: string; icon: typeof Calendar }> = [
     { id: 'overview', label: 'Overview', icon: FileSignature },
@@ -625,7 +598,73 @@ export function QuoteDetail({
 
   return (
     <div className="flex flex-col">
-      <div className="sticky top-14 z-10 flex w-full flex-wrap items-center gap-x-4 border-b border-slate-200 bg-white" data-slot="quote-detail-tabs">
+      <SetHeaderActions>
+        {showTakeOffActions && (
+          <>
+            <Button
+              size="default"
+              variant="outline"
+              className="h-9 gap-1.5 px-4"
+              onClick={() => setDrawerOpen(true)}
+            >
+              <Package className="h-3.5 w-3.5" />
+              Catalogue
+            </Button>
+            <Button
+              size="default"
+              variant="outline"
+              disabled={!lineItemsDirty}
+              className="h-9 gap-1.5 px-4"
+              onClick={() => saveLineItemsRef.current?.()}
+            >
+              <Save className="h-3.5 w-3.5" />
+              Save
+            </Button>
+          </>
+        )}
+        {canPublish && (
+          <Button
+            size="default"
+            onClick={() => setPublishWizardOpen(true)}
+            className="h-9 gap-1.5 px-4 bg-amber-600 text-white hover:bg-amber-500"
+          >
+            <Send className="h-3.5 w-3.5" />
+            Publish
+          </Button>
+        )}
+        {canApprove && (
+          <Button
+            size="default"
+            onClick={() => setApprovalWizardOpen(true)}
+            className="h-9 gap-1.5 px-4 bg-emerald-600 text-white hover:bg-emerald-500"
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            Received Approval
+          </Button>
+        )}
+        <PrintButton documentType="quote" entityId={quote.id} jobId={job?.id} />
+        <ArchiveEntityButton
+          entityType="quote"
+          entityId={quote.id}
+          statusName={statusName}
+          entityLabel={title}
+          redirectTo={job ? `/quotes?jobId=${job.id}` : '/quotes'}
+        />
+      </SetHeaderActions>
+      <EstimatePublishWizard
+        open={publishWizardOpen}
+        onOpenChange={setPublishWizardOpen}
+        quote={quote}
+        job={job}
+        claim={claim}
+        mode={publishMode}
+      />
+      <EstimateApprovalWizard
+        open={approvalWizardOpen}
+        onOpenChange={setApprovalWizardOpen}
+        quoteId={quote.id}
+      />
+      <div className="flex w-full flex-wrap items-center gap-x-4 border-b border-slate-200" data-slot="quote-detail-tabs">
         <div className="flex min-w-0 flex-1 flex-wrap gap-0">
           {tabs.map((t) => {
             const Icon = t.icon;
@@ -634,7 +673,14 @@ export function QuoteDetail({
               <button
                 key={t.id}
                 type="button"
-                onClick={() => setTab(t.id)}
+                onClick={() => {
+                  if (t.id !== 'line-items') {
+                    setLineItemsDirty(false);
+                    saveLineItemsRef.current = null;
+                    setDrawerOpen(false);
+                  }
+                  setTab(t.id);
+                }}
                 className={`inline-flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t-md ${
                   active
                     ? 'border-amber-600 bg-amber-50 text-amber-600'
@@ -670,6 +716,8 @@ export function QuoteDetail({
             onDrawerOpenChange={setDrawerOpen}
             catalogType={jobProvider}
             readOnly={locked}
+            onDirtyChange={handleLineItemsDirtyChange}
+            hideToolbarActions
           />
         )}
         {tab === 'parties' && <PartiesTab quote={quote} />}

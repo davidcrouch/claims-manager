@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { BookOpen, FolderPlus, Library, Package } from 'lucide-react';
+import { BookOpen, FolderPlus, Library, Package, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { ListPageHeader } from '@/components/layout/ListPageHeader';
 import { CatalogFormDrawer } from '@/components/catalog/CatalogFormDrawer';
 import type { Catalog } from '@/types/api';
@@ -33,12 +34,16 @@ export function CatalogListPageClient({ catalogs }: CatalogListPageClientProps) 
         <ListPageHeader icon={Library} title="Catalogues" total={catalogs.length} />
       </SetPageHeader>
 
-      <div className="flex items-center justify-end px-6 py-3">
-        <Button size="sm" onClick={() => setDrawerOpen(true)}>
-          <FolderPlus className="mr-1 h-4 w-4" />
+      <SetHeaderActions>
+        <Button
+          size="default"
+          onClick={() => setDrawerOpen(true)}
+          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          <Plus className="h-3.5 w-3.5" />
           New Catalogue
         </Button>
-      </div>
+      </SetHeaderActions>
 
       {catalogs.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-center">

@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
+import { AddressAutocompleteInput } from '@/components/shared/AddressAutocompleteInput';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import {
   DetailAssignee,
@@ -393,11 +394,16 @@ export function AssessmentDetailClient({ assessment, job, claim }: AssessmentDet
                 checked={asBool(att.addressAttended)}
                 onChange={(v) => setKey('attendance', 'addressAttended', v)}
               />
-              <TextField
-                label="Other address"
-                value={asStr(att.otherAddress)}
-                onChange={(v) => setKey('attendance', 'otherAddress', v)}
-              />
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-slate-500">Other address</Label>
+                  <AddressAutocompleteInput
+                    id="assessment-other-address"
+                    value={asStr(att.otherAddress)}
+                    onChange={(v) => setKey('attendance', 'otherAddress', v)}
+                    placeholder="Search or enter address…"
+                    name="assessment-other-address"
+                  />
+                </div>
               <TextField
                 label="Site attendance date"
                 value={asStr(att.siteAttendanceDate).slice(0, 16)}

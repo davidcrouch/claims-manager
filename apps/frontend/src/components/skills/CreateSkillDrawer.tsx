@@ -15,11 +15,12 @@ import type { Skill, SkillVisibility } from '@/lib/ai/types';
 import { createSkillAction } from '@/app/(app)/admin/skills/actions';
 
 export interface CreateSkillDrawerProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onCreated?: (skill: Skill) => void;
 }
 
-export function CreateSkillDrawer({ onCreated }: CreateSkillDrawerProps) {
-  const [open, setOpen] = useState(false);
+export function CreateSkillDrawer({ open, onOpenChange, onCreated }: CreateSkillDrawerProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [triggerHints, setTriggerHints] = useState('');
@@ -67,24 +68,18 @@ export function CreateSkillDrawer({ onCreated }: CreateSkillDrawerProps) {
         return;
       }
       onCreated?.(result.skill);
-      setOpen(false);
+      onOpenChange(false);
       resetForm();
     });
   }
 
   return (
-    <>
-      <Button type="button" size="sm" className="gap-1.5" onClick={() => setOpen(true)}>
-        <Plus className="h-4 w-4" />
-        Create Skill
-      </Button>
-
-      <BottomFormDrawer
-        open={open}
-        onOpenChange={(next) => {
-          setOpen(next);
-          if (!next) resetForm();
-        }}
+    <BottomFormDrawer
+      open={open}
+      onOpenChange={(next) => {
+        onOpenChange(next);
+        if (!next) resetForm();
+      }}
         title="Create Skill"
         description="Define instructions injected when trigger keywords match user messages."
         icon={<Plus className="h-5 w-5" />}
@@ -165,7 +160,7 @@ export function CreateSkillDrawer({ onCreated }: CreateSkillDrawerProps) {
           </div>
         </BottomFormDrawerBody>
         <BottomFormDrawerFooter>
-          <Button type="button" variant="secondary" onClick={() => setOpen(false)} disabled={isPending}>
+          <Button type="button" variant="secondary" onClick={() => onOpenChange(false)} disabled={isPending}>
             Cancel
           </Button>
           <Button type="button" onClick={handleSubmit} disabled={isPending}>
@@ -173,6 +168,5 @@ export function CreateSkillDrawer({ onCreated }: CreateSkillDrawerProps) {
           </Button>
         </BottomFormDrawerFooter>
       </BottomFormDrawer>
-    </>
   );
 }

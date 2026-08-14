@@ -3,6 +3,7 @@
 import { useCallback, useState, useTransition } from 'react';
 import { Loader2, Plus, Search, ToggleLeft, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { cn } from '@/lib/utils';
 import {
   createFeatureAction,
@@ -131,27 +132,29 @@ export function FeaturesSettingsPanel({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <ToggleLeft className="h-5 w-5 text-slate-500" />
-          <h2 className="text-lg font-semibold text-slate-800">Features</h2>
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
-            {features.length}
-          </span>
-        </div>
+      <SetHeaderActions>
         {canManage && (
           <Button
-            size="sm"
+            size="default"
             onClick={() => {
               resetForm();
               setShowAddForm(true);
             }}
             disabled={isPending}
+            className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
           >
-            <Plus className="mr-1 h-4 w-4" />
+            <Plus className="h-3.5 w-3.5" />
             Add Feature
           </Button>
         )}
+      </SetHeaderActions>
+
+      <div className="flex items-center gap-2">
+        <ToggleLeft className="h-5 w-5 text-slate-500" />
+        <h2 className="text-lg font-semibold text-slate-800">Features</h2>
+        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+          {features.length}
+        </span>
       </div>
 
       <p className="text-xs text-slate-500">

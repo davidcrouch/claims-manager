@@ -14,6 +14,7 @@ import {
   Globe,
   Loader2,
 } from 'lucide-react';
+import { AddressAutocompleteInput } from '@/components/shared/AddressAutocompleteInput';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -746,10 +747,18 @@ export function AppointmentFormDrawer({
             {/* Address */}
             <div className="space-y-2 md:col-span-2">
               <Label htmlFor="appt-address">Address</Label>
-              <Input
-                id="appt-address"
-                {...form.register('address')}
-                placeholder="e.g. 123 Nicholson Parade, Cronulla, NSW 2230, Australia"
+              <Controller
+                control={form.control}
+                name="address"
+                render={({ field }) => (
+                  <AddressAutocompleteInput
+                    id="appt-address"
+                    value={field.value ?? ''}
+                    onChange={field.onChange}
+                    placeholder="e.g. 123 Nicholson Parade, Cronulla, NSW 2230"
+                    name="appt-address"
+                  />
+                )}
               />
             </div>
 

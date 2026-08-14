@@ -736,7 +736,7 @@ export async function createOidcProvider(): Promise<Provider> {
 
       // Adapter configuration
       adapter: adapterFunction,
-      extraParams: ['resource', 'audience', 'app_slug'],
+      extraParams: ['resource', 'audience', 'app_slug', 'idp', 'login_hint'],
 
       // Cookie configuration for secure sessions
       // IMPORTANT: keys are REQUIRED for signing cookies - without them, cookies fail

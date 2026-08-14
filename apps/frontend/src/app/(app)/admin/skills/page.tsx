@@ -18,8 +18,8 @@ export default async function SkillsPage() {
             <Sparkles className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-slate-900">AI Skills</h1>
-            <p className="text-sm text-slate-500">
+            <h1 className="text-xl font-semibold text-sidebar-foreground">AI Skills</h1>
+            <p className="text-sm text-sidebar-foreground/65">
               Define reusable instruction prompts triggered by keywords or agent pins.
             </p>
           </div>

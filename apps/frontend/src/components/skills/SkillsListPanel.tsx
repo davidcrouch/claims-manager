@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Loader2, Sparkles, Trash2 } from 'lucide-react';
+import { Loader2, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import type { Skill } from '@/lib/ai/types';
 import { listSkillsAction, deleteSkillAction } from '@/app/(app)/admin/skills/actions';
 import { CreateSkillDrawer } from './CreateSkillDrawer';
@@ -13,6 +14,7 @@ export function SkillsListPanel() {
   const [loading, setLoading] = useState(true);
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -45,21 +47,30 @@ export function SkillsListPanel() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
-      </div>
-    );
-  }
-
   return (
     <>
-      <div className="mb-4 flex justify-end">
-        <CreateSkillDrawer onCreated={(skill) => setSkills((c) => [skill, ...c])} />
-      </div>
+      <SetHeaderActions>
+        <Button
+          size="default"
+          onClick={() => setCreateOpen(true)}
+          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Create Skill
+        </Button>
+      </SetHeaderActions>
 
-      {skills.length === 0 ? (
+      <CreateSkillDrawer
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={(skill) => setSkills((c) => [skill, ...c])}
+      />
+
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+        </div>
+      ) : skills.length === 0 ? (
         <div className="rounded-lg border border-slate-200 bg-white px-5 py-12 text-center text-sm text-slate-500">
           No skills configured yet.
         </div>

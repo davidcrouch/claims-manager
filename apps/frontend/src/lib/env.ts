@@ -38,4 +38,12 @@ export const env = {
   get authServerUrl() {
     return readEnv('AUTH_SERVER_URL') ?? 'http://localhost:3280';
   },
+  /** Server-only Google Maps/Places key for address autocomplete. */
+  get googleMapsApiKey() {
+    return (
+      readEnv('GOOGLE_MAPS_API_KEY') ??
+      readEnv('GOOGLE_PLACES_API_KEY') ??
+      readEnv('MAPS_API_KEY')
+    );
+  },
 };
