@@ -260,6 +260,7 @@ module "cloud_run_auth" {
     { name = "DATABASE_URL", secret = "database-url-auth" },
     { name = "INTERNAL_API_TOKEN", secret = "internal-api-token" },
     { name = "JWT_SECRET", secret = "auth-jwt-secret" },
+    { name = "REDIS_ENCRYPTION_KEY", secret = "auth-redis-encryption-key" },
     { name = "OIDC_CLIENT_SECRET", secret = "auth-oidc-client-secret" },
     { name = "OIDC_COOKIES_KEYS", secret = "auth-oidc-cookies-keys" },
     { name = "DYNAMIC_REGISTRATION_SECRET", secret = "auth-dcr-secret" },
@@ -279,6 +280,7 @@ module "cloud_run_auth" {
   depends_on = [
     google_project_service.run,
     module.secrets,
+    google_secret_manager_secret_version.auth_redis_encryption_key,
   ]
 }
 

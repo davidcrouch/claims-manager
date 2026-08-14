@@ -657,7 +657,7 @@
   No change to how staff use roles or permissions day to day.
   Outcome: the release pipeline is unblocked after the role-management build failure.
 
-- `2026-08-14` `PENDING` **0.5 h**
+- `2026-08-14` `7de1686` **0.5 h**
   `6 files | +170 −64 | Tier 3 complex | Moderate orchestration`
   Lay summary: Crunchwork staging webhooks now reach both the hosted staging server and the local development environment through an updated relay on Cloudflare.
   **Rewired Crunchwork staging webhook delivery through updated Cloudflare relay.** Crunchwork's staging webhook destination changed from an older proxy address to the provider's public staging URL.
@@ -666,4 +666,13 @@
   The relay was redeployed to Cloudflare with the updated route on the staging domain.
   The old relay route on the previous domain was removed.
   Outcome: Crunchwork staging webhooks are received and processed on both staging and local development environments via the updated relay.
+
+- `2026-08-14` `PENDING` **0.5 h**
+  `5 files | +20 −2 | Tier 3 complex | Light orchestration`
+  Lay summary: Staging sign-in service can start again after a missing encryption setting was added to hosting.
+  **Fixed staging auth deploy by wiring the required Redis encryption secret.** Auth was failing Cloud Run startup checks because a required production encryption key was never mounted.
+  Hosting config now creates and attaches that secret for the auth service on staging.
+  The same mount is prepared for production when that environment is enabled.
+  The staging secret seed script covers the new key for future rebuilds.
+  Outcome: auth-server staging deploys can pass startup checks again.
 

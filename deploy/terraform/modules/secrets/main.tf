@@ -17,6 +17,9 @@ locals {
     "redis-url",
     "nats-url",
     "credentials-encryption-key",
+    # Auth-server Redis session/token encryption (32-byte hex). Required when
+    # NODE_ENV=production — see apps/auth-server/src/config/env-validation.ts.
+    "auth-redis-encryption-key",
     "auth-jwt-secret",
     "auth-oidc-client-secret",
     "auth-dcr-secret",

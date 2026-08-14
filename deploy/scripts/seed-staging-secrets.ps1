@@ -11,10 +11,10 @@
 #   1. Derived from terraform output
 #      database-url-api, database-url-auth, database-url-provider, redis-url, gcs-hmac-*
 #   2. Randomly generated
-#      credentials-encryption-key, auth-jwt-secret, auth-oidc-client-secret,
-#      auth-dcr-secret, auth-dcr-iat-key, auth-oidc-cookies-keys,
-#      auth-jwks-rsa-* (7 components), auth-jwks-ec-* (3 components),
-#      frontend-oidc-cookie-secret
+#      credentials-encryption-key, auth-redis-encryption-key, auth-jwt-secret,
+#      auth-oidc-client-secret, auth-dcr-secret, auth-dcr-iat-key,
+#      auth-oidc-cookies-keys, auth-jwks-rsa-* (7 components),
+#      auth-jwks-ec-* (3 components), frontend-oidc-cookie-secret
 #   3. External placeholders (must be replaced by a human before staging
 #      can serve real traffic)
 #      auth-google-client-id, auth-google-client-secret, openai-api-key,
@@ -179,6 +179,7 @@ Set-SecretValue -Name 'redis-url'             -Value $redisUrl            -Label
 
 # ── 2. Randomly generated ──────────────────────────────────────────
 Set-SecretValue -Name 'credentials-encryption-key'  -Value (New-Random-Hex    32) -Label '(random 32B hex)'
+Set-SecretValue -Name 'auth-redis-encryption-key'   -Value (New-Random-Hex    32) -Label '(random 32B hex, REDIS_ENCRYPTION_KEY)'
 Set-SecretValue -Name 'auth-jwt-secret'             -Value (New-Random-Hex    48) -Label '(random 48B hex)'
 Set-SecretValue -Name 'auth-oidc-client-secret'     -Value (New-Random-Base64 48) -Label '(random 48B base64)'
 Set-SecretValue -Name 'auth-dcr-secret'             -Value (New-Random-Base64 32) -Label '(random 32B base64)'
