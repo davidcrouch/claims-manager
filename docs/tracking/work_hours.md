@@ -726,3 +726,12 @@
   Improved catalogue selection and outbound sync for more accurate item handling.
   Speeding up claim, job, quote, and invoice page loads with shared cached data loading.
 
+- `2026-08-15` `PENDING` **0.5 h**
+  `1 files | +1 −1 | Tier 2 standard | Light orchestration`
+  Lay summary: Fixed a build error that blocked deploying the latest invoice page updates.
+  Corrected invoice detail claim lookup to use the related job instead of a missing invoice field.
+  Restored a clean production build so staging deployment can proceed.
+  No change to invoice publishing behaviour for end users.
+  Outcome: continuous integration can complete successfully again.
+  Prevents the invoice detail page from failing type checks during release.
+

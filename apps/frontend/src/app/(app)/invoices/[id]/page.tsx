@@ -32,7 +32,7 @@ export default async function InvoiceDetailPage({
   const job = invoice.jobId ? await loadJob(invoice.jobId) : null;
 
   let claim: Claim | null = job?.claim ?? null;
-  const claimId = invoice.claimId ?? job?.claimId ?? job?.parentClaimId ?? null;
+  const claimId = job?.claimId ?? job?.parentClaimId ?? null;
   if (!claim && claimId) {
     claim = await loadClaim(claimId);
   }
