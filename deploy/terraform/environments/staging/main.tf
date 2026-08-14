@@ -139,9 +139,12 @@ module "https_lb" {
   region      = var.region
   environment = var.environment
 
-  # providers-staging is NOT on the LB — its DNS is Cloudflare-proxied
-  # (orange-cloud) so the crunchwork-webhook-proxy Worker can intercept
-  # webhook POSTs and fan out to api-staging + api-dev.
+  # providers-staging stays on the LB backend/URL map so Terraform does not
+  # attempt to destroy a backend still referenced mid-apply (GCP rejects that).
+  # It is intentionally omitted from managed-cert domains: DNS is orange-clouded
+  # so the crunchwork-webhook-proxy Worker intercepts webhook POSTs and fans
+  # out to api-staging + api-dev. Google cert validation for that hostname is
+  # not required while Cloudflare terminates client TLS.
   domains = [
     local.cloud_run_hosts.app,
     local.cloud_run_hosts.auth,
@@ -156,6 +159,10 @@ module "https_lb" {
     auth = {
       cloud_run_service_name = "auth-server"
       hostnames              = [local.cloud_run_hosts.auth]
+    }
+    provider = {
+      cloud_run_service_name = "provider-server"
+      hostnames              = [local.cloud_run_hosts.providers]
     }
     api = {
       cloud_run_service_name = "api-server"

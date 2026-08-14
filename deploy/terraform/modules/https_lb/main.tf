@@ -14,10 +14,6 @@ locals {
   services_sorted = { for k in sort(keys(var.services)) : k => var.services[k] }
   # Managed cert domains are immutable — new domain set ⇒ new cert name.
   cert_domains_fingerprint = substr(sha1(join(",", sort(var.domains))), 0, 8)
-  # URL map fingerprint: when a service is removed, create a new URL map
-  # (without that backend) before destroying the old map + backend. GCP
-  # rejects destroying a backend still referenced by a URL map.
-  url_map_fingerprint = substr(sha1(join(",", sort(keys(var.services)))), 0, 8)
 }
 
 resource "google_compute_global_address" "this" {
@@ -71,7 +67,7 @@ resource "google_compute_backend_service" "backends" {
 
 resource "google_compute_url_map" "this" {
   project         = var.project_id
-  name            = "lb-urlmap-${var.environment}-${local.url_map_fingerprint}"
+  name            = "lb-urlmap-${var.environment}"
   default_service = google_compute_backend_service.backends[var.default_service].id
 
   dynamic "host_rule" {
@@ -88,10 +84,6 @@ resource "google_compute_url_map" "this" {
       name            = path_matcher.key
       default_service = google_compute_backend_service.backends[path_matcher.key].id
     }
-  }
-
-  lifecycle {
-    create_before_destroy = true
   }
 }
 
