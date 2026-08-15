@@ -746,7 +746,7 @@
   Database updates back the new assignee and note fields.
   Outcome: clearer ownership on quotes and better context on RFQ line items.
 
-- `2026-08-16` `PENDING` **78.5 h**
+- `2026-08-16` `5813ec6` **78.5 h**
   `224 files | +18269 −2990 | Tier 1 mechanical / Tier 2 standard / Tier 3 complex | Heavy orchestration`
   Lay summary: Staff can install capability packs, reshape document templates with live transforms, and use a broader assistant toolkit—including field assessment skills—across the product.
   Delivered installable capability packs so organisations can turn on agents and skills as packaged features.
