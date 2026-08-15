@@ -10,7 +10,7 @@ import { EditGroupDialog } from '@/components/quotes/EditGroupDialog';
 import { DeleteGroupDialog } from '@/components/quotes/DeleteGroupDialog';
 import { DeleteItemDialog } from '@/components/quotes/DeleteItemDialog';
 import type { CatalogDragPayload, GroupLabelDragPayload } from '@/components/catalog/catalog-drag';
-import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
+import type { ApiGroup, GroupDimensions } from '@/components/quotes/quote-line-items.types';
 import { getPayloadGroups } from '@/components/quotes/quote-line-items.utils';
 import {
   addCatalogAssemblyToQuoteAction,
@@ -133,20 +133,54 @@ export function QuoteLineItemsTab({
   }
 
 
-  function handleUpdateGroup(groupId: string, params: { groupLabelLookupId?: string; description?: string }) {
+  function handleUpdateGroup(groupId: string, params: {
+    groupLabelLookupId?: string;
+    description?: string;
+    dimensions?: GroupDimensions;
+  }) {
     startTransition(async () => {
       const result = await updateQuoteGroupAction({
         quoteId: quote.id,
         groupId,
         groupLabelLookupId: params.groupLabelLookupId,
         description: params.description,
+        dimensions: params.dimensions,
       });
       if (!result.success) {
+        console.error(`${PREFIX}.handleUpdateGroup — ${result.error}`);
         toast.error(result.error ?? 'Failed to update group');
         return;
       }
       setEditingGroupId(null);
       toast.success('Group updated');
+      await loadLineItems();
+      router.refresh();
+    });
+  }
+
+  function handleUpdateGroupDimensions(groupId: string, dimensions: GroupDimensions) {
+    startTransition(async () => {
+      // Optimistic local update so inputs stay responsive while the PATCH settles
+      setDbGroups((prev) =>
+        prev
+          ? prev.map((g) =>
+              g.id === groupId
+                ? { ...g, length: dimensions.length, width: dimensions.width, height: dimensions.height }
+                : g,
+            )
+          : prev,
+      );
+      const result = await updateQuoteGroupAction({
+        quoteId: quote.id,
+        groupId,
+        dimensions,
+      });
+      if (!result.success) {
+        console.error(`${PREFIX}.handleUpdateGroupDimensions — ${result.error}`);
+        toast.error(result.error ?? 'Failed to update dimensions');
+        await loadLineItems();
+        return;
+      }
       await loadLineItems();
       router.refresh();
     });
@@ -328,6 +362,7 @@ export function QuoteLineItemsTab({
         onGroupLabelDrop={readOnly ? undefined : handleGroupLabelDrop}
         onEditGroup={readOnly ? undefined : (id) => setEditingGroupId(id)}
         onDeleteGroup={readOnly ? undefined : (id) => setDeletingGroupId(id)}
+        onUpdateGroupDimensions={readOnly ? undefined : handleUpdateGroupDimensions}
         onDeleteItem={readOnly ? undefined : handleDeleteItem}
         onDeleteCombo={readOnly ? undefined : handleDeleteCombo}
         onDeleteScope={readOnly ? undefined : handleDeleteScope}

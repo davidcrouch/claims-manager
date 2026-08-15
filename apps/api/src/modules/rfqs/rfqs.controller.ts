@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { RfqsService } from './rfqs.service';
 import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
@@ -57,6 +57,25 @@ export class RfqsController {
     return this.rfqsService.replaceScopeItems({
       rfqId: id,
       selectedItemIds: Array.isArray(body?.selectedItemIds) ? body.selectedItemIds : [],
+    });
+  }
+
+  @Patch(':id/line-notes')
+  @RequirePermission(P.procurement.manage)
+  async updateLineNote(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      targetType?: 'group' | 'combo' | 'item';
+      targetId?: string;
+      note?: string | null;
+    },
+  ) {
+    return this.rfqsService.updateLineNote({
+      rfqId: id,
+      targetType: body?.targetType as 'group' | 'combo' | 'item',
+      targetId: body?.targetId ?? '',
+      note: body?.note ?? null,
     });
   }
 

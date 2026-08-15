@@ -45,6 +45,11 @@ export function OrgUserSelect({
   onChange,
   disabled,
   showLabel = true,
+  unassignedLabel = 'Unassigned',
+  /** Closed-trigger label when value is null (e.g. inherited job assignee). */
+  unassignedDisplayName,
+  /** Optional secondary hint next to unassignedDisplayName (e.g. "from job"). */
+  unassignedDisplayHint,
   className,
 }: {
   id?: string;
@@ -53,6 +58,10 @@ export function OrgUserSelect({
   onChange: (userId: string | null) => void;
   disabled?: boolean;
   showLabel?: boolean;
+  /** Label for the clear/null option in the menu (default: Unassigned). */
+  unassignedLabel?: string;
+  unassignedDisplayName?: string | null;
+  unassignedDisplayHint?: string | null;
   className?: string;
 }) {
   const [users, setUsers] = useState<OrgUserOption[]>([]);
@@ -71,17 +80,20 @@ export function OrgUserSelect({
   }, []);
 
   const items = useMemo(() => {
-    const map: Record<string, string> = { [UNASSIGNED_USER_VALUE]: 'Unassigned' };
+    const map: Record<string, string> = { [UNASSIGNED_USER_VALUE]: unassignedLabel };
     for (const user of users) {
       map[user.id] = user.name;
     }
     return map;
-  }, [users]);
+  }, [users, unassignedLabel]);
 
   const selectedUser = useMemo(
     () => users.find((user) => user.id === value) ?? null,
     [users, value],
   );
+
+  const fallbackName = unassignedDisplayName?.trim() || null;
+  const fallbackHint = unassignedDisplayHint?.trim() || null;
 
   return (
     <div className={cn('space-y-2', className)}>
@@ -99,9 +111,21 @@ export function OrgUserSelect({
             {(selected: string | null) => {
               if (loading) return 'Loading users…';
               if (!selected || selected === UNASSIGNED_USER_VALUE) {
-                return 'Unassigned';
+                if (fallbackName) {
+                  return (
+                    <span className="inline-flex min-w-0 items-baseline gap-1.5">
+                      <span className="truncate">{fallbackName}</span>
+                      {fallbackHint ? (
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                          {fallbackHint}
+                        </span>
+                      ) : null}
+                    </span>
+                  );
+                }
+                return unassignedLabel;
               }
-              return selectedUser?.name ?? items[selected] ?? 'Unassigned';
+              return selectedUser?.name ?? items[selected] ?? unassignedLabel;
             }}
           </SelectValue>
         </SelectTrigger>
@@ -118,7 +142,14 @@ export function OrgUserSelect({
               <span>Email</span>
             </SelectLabel>
             <SelectItem value={UNASSIGNED_USER_VALUE} className="py-2">
-              <UserOptionRow name="Unassigned" email={null} />
+              <UserOptionRow
+                name={unassignedLabel}
+                email={
+                  fallbackName
+                    ? `Uses ${fallbackName}${fallbackHint ? ` (${fallbackHint})` : ''}`
+                    : null
+                }
+              />
             </SelectItem>
             {users.map((user) => (
               <SelectItem key={user.id} value={user.id} className="py-2">

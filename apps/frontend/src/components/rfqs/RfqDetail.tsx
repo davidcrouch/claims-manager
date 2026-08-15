@@ -40,8 +40,14 @@ import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
 import {
   fetchRfqLineItemsAction,
   replaceRfqLineItemsAction,
+  updateRfqLineNoteAction,
 } from '@/app/(app)/rfqs/[id]/actions';
 import { getQuoteLineItemsAction } from '@/app/(app)/quotes/actions';
+import {
+  LineItemNoteDrawer,
+  type LineNoteTarget,
+} from '@/components/rfqs/LineItemNoteDrawer';
+import type { LineNoteEditRequest } from '@/components/quotes/QuoteLineItemsTable';
 
 // ---------- helpers ---------------------------------------------------------
 
@@ -310,6 +316,8 @@ function ScopeItemsTab({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [noteTarget, setNoteTarget] = useState<LineNoteTarget | null>(null);
+  const [noteDrawerOpen, setNoteDrawerOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -482,11 +490,38 @@ function ScopeItemsTab({
       <QuoteLineItemsTable
         groups={displayGroups ?? []}
         readOnly
+        showColumnToggles
+        enableLineNotes={!editing}
+        onEditLineNote={(request: LineNoteEditRequest) => {
+          setNoteTarget(request);
+          setNoteDrawerOpen(true);
+        }}
         selection={
           editing && estimateGroups
             ? { selectedIds, onChange: setSelectedIds }
             : undefined
         }
+      />
+      <LineItemNoteDrawer
+        open={noteDrawerOpen}
+        onOpenChange={(open) => {
+          setNoteDrawerOpen(open);
+          if (!open) setNoteTarget(null);
+        }}
+        target={noteTarget}
+        onSave={async (note) => {
+          if (!noteTarget) return { success: false, error: 'No line selected' };
+          const result = await updateRfqLineNoteAction(rfqId, {
+            targetType: noteTarget.targetType,
+            targetId: noteTarget.targetId,
+            note,
+          });
+          if (!result.success) {
+            return { success: false, error: result.error ?? 'Failed to save note' };
+          }
+          await load();
+          return { success: true };
+        }}
       />
     </div>
   );

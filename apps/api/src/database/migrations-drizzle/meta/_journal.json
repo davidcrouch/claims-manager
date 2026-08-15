@@ -400,6 +400,20 @@
       "when": 1788700000000,
       "tag": "0057_invoice_work_order_link",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1788800000000,
+      "tag": "0058_quote_assigned_to_user",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1788900000000,
+      "tag": "0059_rfq_line_notes",
+      "breakpoints": true
     }
   ]
 }

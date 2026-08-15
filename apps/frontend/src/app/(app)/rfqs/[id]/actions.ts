@@ -69,3 +69,32 @@ export async function replaceRfqLineItemsAction(
     };
   }
 }
+
+export async function updateRfqLineNoteAction(
+  rfqId: string,
+  body: {
+    targetType: 'group' | 'combo' | 'item';
+    targetId: string;
+    note: string | null;
+  },
+): Promise<{
+  success: boolean;
+  note?: string | null;
+  error?: string;
+}> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const result = await api.updateRfqLineNote(rfqId, body);
+    return { success: true, note: result.note };
+  } catch (err) {
+    console.error(
+      'frontend:updateRfqLineNoteAction - updateRfqLineNote failed:',
+      err instanceof Error ? err.message : err,
+    );
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to save note',
+    };
+  }
+}

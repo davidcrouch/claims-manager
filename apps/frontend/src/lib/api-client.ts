@@ -820,6 +820,20 @@ export function createApiClient(options?: ApiClientOptions) {
       });
     },
 
+    updateRfqLineNote(
+      rfqId: string,
+      body: {
+        targetType: 'group' | 'combo' | 'item';
+        targetId: string;
+        note: string | null;
+      },
+    ): Promise<{ success: boolean; targetType: string; targetId: string; note: string | null }> {
+      return fetchApi(`/rfqs/${rfqId}/line-notes`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      });
+    },
+
     // Proposals
     getProposals(params?: {
       page?: number;

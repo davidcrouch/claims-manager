@@ -414,6 +414,7 @@ export type UpdateQuoteFieldsInput = {
   quoteTo?: QuotePartyPayload;
   quoteFor?: QuotePartyPayload;
   quoteFrom?: QuotePartyPayload;
+  assignedToUserId?: string | null;
 };
 
 /** Persist §3.3.6 creatable/editable quote fields for a local draft estimate. */
@@ -444,6 +445,9 @@ export async function updateQuoteFieldsAction(
     if (fields.quoteTo !== undefined) body.quoteTo = fields.quoteTo;
     if (fields.quoteFor !== undefined) body.quoteFor = fields.quoteFor;
     if (fields.quoteFrom !== undefined) body.quoteFrom = fields.quoteFrom;
+    if (fields.assignedToUserId !== undefined) {
+      body.assignedToUserId = fields.assignedToUserId;
+    }
 
     await api.updateQuote(quoteId, body);
     revalidatePath(`/quotes/${quoteId}`);

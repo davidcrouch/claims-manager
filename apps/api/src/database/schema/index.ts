@@ -326,6 +326,7 @@ export const quotes = pgTable(
     originType: text('origin_type').notNull().default('user'),
     createdByUserId: text('created_by_user_id'),
     updatedByUserId: text('updated_by_user_id'),
+    assignedToUserId: text('assigned_to_user_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -338,6 +339,7 @@ export const quotes = pgTable(
     index('idx_quotes_status').on(t.tenantId, t.statusLookupId),
     index('idx_quotes_issuer_org').on(t.issuerOrganisationId),
     index('idx_quotes_ownership').on(t.ownershipStatus),
+    index('idx_quotes_assigned').on(t.tenantId, t.assignedToUserId),
     uniqueIndex('UQ_quotes_issuer_org_number')
       .on(t.issuerOrganisationId, t.quoteNumber)
       .where(
@@ -1457,6 +1459,7 @@ export const rfqGroups = pgTable(
     sourceQuoteGroupId: uuid('source_quote_group_id').references(() => quoteGroups.id),
     groupLabelLookupId: uuid('group_label_lookup_id').references(() => lookupValues.id),
     description: text('description'),
+    note: text('note'),
     dimensions: jsonb('dimensions').notNull().default({}),
     sortIndex: integer('sort_index').notNull().default(0),
     totals: jsonb('totals').notNull().default({}),
@@ -1481,6 +1484,7 @@ export const rfqCombos = pgTable(
     sourceQuoteComboId: uuid('source_quote_combo_id').references(() => quoteCombos.id),
     name: text('name'),
     description: text('description'),
+    note: text('note'),
     category: text('category'),
     subCategory: text('sub_category'),
     quantity: numeric('quantity', { precision: 14, scale: 4 }),

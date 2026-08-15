@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
 import { eq, and, isNull, desc, asc, sql, inArray, aliasedTable, getTableColumns } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
-import { quotes, lookupValues } from '../schema';
+import { quotes, lookupValues, users } from '../schema';
 
 export type QuoteRow = typeof quotes.$inferSelect;
 export type QuoteInsert = typeof quotes.$inferInsert;
@@ -12,7 +12,10 @@ export interface QuoteViewRow extends QuoteRow {
   statusExternalReference: string | null;
   quoteTypeName: string | null;
   quoteTypeExternalReference: string | null;
+  assigneeName: string | null;
 }
+
+const assigneeJoinOn = sql`${quotes.assignedToUserId} = ${users.id}::text`;
 
 function buildQuotesOrderBy(sort?: string) {
   switch (sort) {
@@ -113,10 +116,12 @@ export class QuotesRepository {
           statusExternalReference: statusLookup.externalReference,
           quoteTypeName: quoteTypeLookup.name,
           quoteTypeExternalReference: quoteTypeLookup.externalReference,
+          assigneeName: users.name,
         })
         .from(quotes)
         .leftJoin(statusLookup, eq(quotes.statusLookupId, statusLookup.id))
         .leftJoin(quoteTypeLookup, eq(quotes.quoteTypeLookupId, quoteTypeLookup.id))
+        .leftJoin(users, assigneeJoinOn)
         .where(whereClause)
         .orderBy(...orderBy)
         .limit(limit)
@@ -145,10 +150,12 @@ export class QuotesRepository {
         statusExternalReference: statusLookup.externalReference,
         quoteTypeName: quoteTypeLookup.name,
         quoteTypeExternalReference: quoteTypeLookup.externalReference,
+        assigneeName: users.name,
       })
       .from(quotes)
       .leftJoin(statusLookup, eq(quotes.statusLookupId, statusLookup.id))
       .leftJoin(quoteTypeLookup, eq(quotes.quoteTypeLookupId, quoteTypeLookup.id))
+      .leftJoin(users, assigneeJoinOn)
       .where(
         and(eq(quotes.id, params.id), eq(quotes.tenantId, params.tenantId)),
       )
@@ -170,10 +177,12 @@ export class QuotesRepository {
         statusExternalReference: statusLookup.externalReference,
         quoteTypeName: quoteTypeLookup.name,
         quoteTypeExternalReference: quoteTypeLookup.externalReference,
+        assigneeName: users.name,
       })
       .from(quotes)
       .leftJoin(statusLookup, eq(quotes.statusLookupId, statusLookup.id))
       .leftJoin(quoteTypeLookup, eq(quotes.quoteTypeLookupId, quoteTypeLookup.id))
+      .leftJoin(users, assigneeJoinOn)
       .where(
         and(
           eq(quotes.jobId, params.jobId),

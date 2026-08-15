@@ -231,6 +231,8 @@ export interface Quote {
   apiPayload?: Record<string, unknown>;
   createdByUserId?: string | null;
   updatedByUserId?: string | null;
+  assignedToUserId?: string | null;
+  assigneeName?: string | null;
   createdAt?: string;
   updatedAt?: string;
   status?: LookupRef;

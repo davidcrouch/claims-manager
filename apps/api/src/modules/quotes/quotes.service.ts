@@ -309,9 +309,17 @@ export class QuotesService {
   }
 
   private shapeQuoteResponse(row: QuoteViewRow) {
-    const { statusName, statusExternalReference, quoteTypeName, quoteTypeExternalReference, ...rest } = row;
+    const {
+      statusName,
+      statusExternalReference,
+      quoteTypeName,
+      quoteTypeExternalReference,
+      assigneeName,
+      ...rest
+    } = row;
     return {
       ...rest,
+      assigneeName: assigneeName ?? null,
       status: row.statusLookupId
         ? { id: row.statusLookupId, name: statusName ?? undefined, externalReference: statusExternalReference ?? undefined }
         : undefined,
@@ -799,6 +807,10 @@ export class QuotesService {
       data.customData = { ...existingCustom, quoteType: quoteTypeVal ?? null };
     }
 
+    if (body.assignedToUserId !== undefined) {
+      data.assignedToUserId = parseOptionalUserId(body.assignedToUserId) ?? null;
+    }
+
     return data;
   }
 
@@ -1143,4 +1155,13 @@ export class QuotesService {
       `${srcGroupItems.length + srcComboItems.length} items from quote ${quoteId} to WO ${workOrderId}`,
     );
   }
+}
+
+function parseOptionalUserId(value: unknown): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === '__unassigned__') return null;
+  return trimmed;
 }

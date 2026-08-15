@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -302,8 +302,22 @@ export function QuoteDetail({
   const overviewRef = useRef<QuoteOverviewTabHandle>(null);
   const partiesRef = useRef<QuotePartiesTabHandle>(null);
   const locked = isEstimateLocked(quote);
-  const assignee = resolveDetailAssignee({ job });
-  const pageDirty = overviewDirty || partiesDirty;
+  const quoteAssigneeId = quote.assignedToUserId ?? '';
+  const [assignedToUserId, setAssignedToUserId] = useState(quoteAssigneeId);
+  const assigneeDirty = assignedToUserId !== quoteAssigneeId;
+  const pageDirty = overviewDirty || partiesDirty || assigneeDirty;
+  const resolvedAssignee = resolveDetailAssignee({
+    entityAssigneeName:
+      assignedToUserId && assignedToUserId === quoteAssigneeId
+        ? quote.assigneeName
+        : null,
+    entityAssignedToUserId: assignedToUserId || null,
+    job,
+  });
+
+  useEffect(() => {
+    setAssignedToUserId(quote.assignedToUserId ?? '');
+  }, [quote.id, quote.assignedToUserId]);
 
   const title =
     quote.name ??
@@ -319,6 +333,7 @@ export function QuoteDetail({
   const showTakeOffActions = tab === 'line-items' && !locked;
   const showFieldEditActions =
     !locked && (tab === 'overview' || tab === 'parties');
+  const canEditAssignee = showFieldEditActions;
 
   const handleLineItemsDirtyChange = useCallback((dirty: boolean, save: () => void) => {
     setLineItemsDirty(dirty);
@@ -328,13 +343,16 @@ export function QuoteDetail({
   const handleCancel = useCallback(() => {
     overviewRef.current?.reset();
     partiesRef.current?.reset();
+    setAssignedToUserId(quote.assignedToUserId ?? '');
     setSaveError(null);
-  }, []);
+  }, [quote.assignedToUserId]);
 
   const handleSave = useCallback(async () => {
     const overviewPending = overviewRef.current?.getPendingUpdate() ?? null;
     const partiesPending = partiesRef.current?.getPendingUpdate() ?? null;
-    if (!overviewPending && !partiesPending) {
+    const assigneeChanged = assignedToUserId !== (quote.assignedToUserId ?? '');
+
+    if (!overviewPending && !partiesPending && !assigneeChanged) {
       setSaveError(null);
       return;
     }
@@ -344,6 +362,9 @@ export function QuoteDetail({
       const result = await updateQuoteFieldsAction(quote.id, {
         ...(overviewPending ?? {}),
         ...(partiesPending ?? {}),
+        ...(assigneeChanged
+          ? { assignedToUserId: assignedToUserId || null }
+          : {}),
       });
       if (!result.success) {
         setSaveError(result.error ?? 'Failed to save estimate');
@@ -355,7 +376,7 @@ export function QuoteDetail({
     } finally {
       setSaving(false);
     }
-  }, [quote.id, router]);
+  }, [quote.id, quote.assignedToUserId, assignedToUserId, router]);
 
   const tabs: Array<{ id: QuoteTab; label: string; icon: typeof Calendar }> = [
     { id: 'overview', label: 'Overview', icon: FileSignature },
@@ -488,9 +509,15 @@ export function QuoteDetail({
           })}
         </div>
         <DetailAssignee
-          assigneeName={assignee.assigneeName}
-          assignedToUserId={assignee.assignedToUserId}
-          fromJob={assignee.fromJob}
+          assigneeName={resolvedAssignee.assigneeName}
+          assignedToUserId={assignedToUserId || null}
+          fromJob={resolvedAssignee.fromJob}
+          editing={canEditAssignee}
+          saving={saving}
+          onChange={(userId) => setAssignedToUserId(userId ?? '')}
+          unassignedLabel="Not assigned"
+          fallbackAssigneeName={job?.assigneeName}
+          fallbackAssignedToUserId={job?.assignedToUserId}
           createdByUserId={quote.createdByUserId}
           updatedByUserId={quote.updatedByUserId}
           provider={job?.provider}

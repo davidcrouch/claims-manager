@@ -115,6 +115,9 @@ export function DetailAssignee({
   editing = false,
   saving = false,
   onChange,
+  unassignedLabel = 'Unassigned',
+  fallbackAssigneeName,
+  fallbackAssignedToUserId,
   createdByName,
   createdByUserId,
   updatedByName,
@@ -129,6 +132,11 @@ export function DetailAssignee({
   editing?: boolean;
   saving?: boolean;
   onChange?: (userId: string | null) => void;
+  /** Clear option label in the user dropdown. */
+  unassignedLabel?: string;
+  /** Job assignee shown on the closed control when estimate has no explicit assignee. */
+  fallbackAssigneeName?: string | null;
+  fallbackAssignedToUserId?: string | null;
   createdByName?: string | null;
   createdByUserId?: string | null;
   updatedByName?: string | null;
@@ -141,6 +149,11 @@ export function DetailAssignee({
   const canEdit = Boolean(editing && onChange);
   const displayName = assigneeName?.trim() || null;
   const nameById = useOrgUserNameMap();
+  const fallbackName = useMemo(
+    () =>
+      resolveUserLabel(fallbackAssigneeName, fallbackAssignedToUserId, nameById),
+    [fallbackAssigneeName, fallbackAssignedToUserId, nameById],
+  );
 
   const hasCreatedUser = Boolean(
     createdByName?.trim() || createdByUserId?.trim(),
@@ -178,14 +191,17 @@ export function DetailAssignee({
               value={assignedToUserId || null}
               onChange={onChange!}
               disabled={saving}
+              unassignedLabel={unassignedLabel}
+              unassignedDisplayName={fallbackName}
+              unassignedDisplayHint={fallbackName ? 'from job' : null}
             />
           </div>
         ) : (
           <span className="inline-flex min-w-0 items-baseline gap-1.5">
             <span className="truncate font-medium text-foreground">
-              {displayName ?? '—'}
+              {displayName ?? fallbackName ?? '—'}
             </span>
-            {fromJob && displayName ? (
+            {(fromJob || (!assignedToUserId && fallbackName)) && (displayName ?? fallbackName) ? (
               <span className="shrink-0 text-xs text-muted-foreground">
                 from job
               </span>

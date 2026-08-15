@@ -40,6 +40,7 @@ export interface ApiCombo {
   name?: string;
   component?: string;
   description?: string;
+  note?: string | null;
   category?: string;
   subCategory?: string | null;
   index?: number;
@@ -61,6 +62,7 @@ export interface ApiScope {
   name?: string;
   component?: string;
   description?: string;
+  note?: string | null;
   category?: string;
   subCategory?: string | null;
   index?: number;
@@ -80,6 +82,7 @@ export interface ApiGroup {
   id?: string;
   groupLabel?: ApiLookup;
   description?: string;
+  note?: string | null;
   length?: number;
   width?: number;
   height?: number;
@@ -91,6 +94,12 @@ export interface ApiGroup {
   combos?: ApiCombo[];
   scopes?: ApiScope[];
 }
+
+export type GroupDimensions = {
+  length?: number;
+  width?: number;
+  height?: number;
+};
 
 export interface FlatLineItemRow {
   rowKey: string;

@@ -161,15 +161,35 @@ export class RfqsService {
     }
 
     // Clear optional lineage FKs so cascade delete of RFQ groups cannot violate refs.
+    // Also capture existing RFQ notes so we can re-apply them after rebuild.
     const existingGroups = await this.db
-      .select({ id: rfqGroups.id })
+      .select({
+        id: rfqGroups.id,
+        sourceQuoteGroupId: rfqGroups.sourceQuoteGroupId,
+        note: rfqGroups.note,
+      })
       .from(rfqGroups)
       .where(and(eq(rfqGroups.tenantId, tenantId), eq(rfqGroups.rfqId, rfqId)));
     const existingGroupIds = existingGroups.map((g) => g.id);
 
+    const preservedNotes = {
+      groups: new Map<string, string | null>(),
+      combos: new Map<string, string | null>(),
+      items: new Map<string, string | null>(),
+    };
+    for (const g of existingGroups) {
+      if (g.sourceQuoteGroupId && g.note != null && g.note !== '') {
+        preservedNotes.groups.set(g.sourceQuoteGroupId, g.note);
+      }
+    }
+
     if (existingGroupIds.length > 0) {
       const existingCombos = await this.db
-        .select({ id: rfqCombos.id })
+        .select({
+          id: rfqCombos.id,
+          sourceQuoteComboId: rfqCombos.sourceQuoteComboId,
+          note: rfqCombos.note,
+        })
         .from(rfqCombos)
         .where(
           and(
@@ -178,9 +198,18 @@ export class RfqsService {
           ),
         );
       const existingComboIds = existingCombos.map((c) => c.id);
+      for (const c of existingCombos) {
+        if (c.sourceQuoteComboId && c.note != null && c.note !== '') {
+          preservedNotes.combos.set(c.sourceQuoteComboId, c.note);
+        }
+      }
 
       const groupItems = await this.db
-        .select({ id: rfqItems.id })
+        .select({
+          id: rfqItems.id,
+          sourceQuoteItemId: rfqItems.sourceQuoteItemId,
+          note: rfqItems.note,
+        })
         .from(rfqItems)
         .where(
           and(
@@ -191,7 +220,11 @@ export class RfqsService {
       const comboItems =
         existingComboIds.length > 0
           ? await this.db
-              .select({ id: rfqItems.id })
+              .select({
+                id: rfqItems.id,
+                sourceQuoteItemId: rfqItems.sourceQuoteItemId,
+                note: rfqItems.note,
+              })
               .from(rfqItems)
               .where(
                 and(
@@ -200,6 +233,11 @@ export class RfqsService {
                 ),
               )
           : [];
+      for (const item of [...groupItems, ...comboItems]) {
+        if (item.sourceQuoteItemId && item.note != null && item.note !== '') {
+          preservedNotes.items.set(item.sourceQuoteItemId, item.note);
+        }
+      }
       const existingItemIds = [...groupItems, ...comboItems].map((i) => i.id);
 
       if (existingItemIds.length > 0) {
@@ -229,6 +267,7 @@ export class RfqsService {
       quoteId: rfq.quoteId,
       tenantId,
       selectedItemIds,
+      preservedNotes,
     });
 
     return this.getRfqLineItems({ rfqId });
@@ -353,6 +392,7 @@ export class RfqsService {
         sourceQuoteComboId: combo.sourceQuoteComboId ?? undefined,
         name: combo.name,
         description: combo.description,
+        note: combo.note,
         category: combo.category,
         subCategory: combo.subCategory,
         index: combo.sortIndex,
@@ -371,6 +411,7 @@ export class RfqsService {
       sourceQuoteGroupId: group.sourceQuoteGroupId ?? undefined,
       groupLabel: groupLabelObj,
       description: group.description,
+      note: group.note,
       length: asNumber(dimensions.length),
       width: asNumber(dimensions.width),
       height: asNumber(dimensions.height),
@@ -427,8 +468,13 @@ export class RfqsService {
     quoteId: string;
     tenantId: string;
     selectedItemIds: string[];
+    preservedNotes?: {
+      groups: Map<string, string | null>;
+      combos: Map<string, string | null>;
+      items: Map<string, string | null>;
+    };
   }) {
-    const { rfqId, quoteId, tenantId, selectedItemIds } = params;
+    const { rfqId, quoteId, tenantId, selectedItemIds, preservedNotes } = params;
     const selectedSet = new Set(selectedItemIds);
 
     this.logger.log(
@@ -509,6 +555,7 @@ export class RfqsService {
           sourceQuoteGroupId: group.id,
           groupLabelLookupId: group.groupLabelLookupId,
           description: group.description,
+          note: preservedNotes?.groups.get(group.id) ?? null,
           dimensions: group.dimensions,
           sortIndex: group.sortIndex,
           totals: group.totals,
@@ -532,7 +579,7 @@ export class RfqsService {
           unitCost: item.unitCost,
           buyCost: item.buyCost,
           sortIndex: item.sortIndex,
-          note: item.note,
+          note: preservedNotes?.items.get(item.id) ?? item.note,
           totals: item.totals,
           itemPayload: item.itemPayload,
         });
@@ -547,6 +594,7 @@ export class RfqsService {
             sourceQuoteComboId: combo.id,
             name: combo.name,
             description: combo.description,
+            note: preservedNotes?.combos.get(combo.id) ?? null,
             category: combo.category,
             subCategory: combo.subCategory,
             quantity: combo.quantity,
@@ -576,12 +624,130 @@ export class RfqsService {
             unitCost: item.unitCost,
             buyCost: item.buyCost,
             sortIndex: item.sortIndex,
-            note: item.note,
+            note: preservedNotes?.items.get(item.id) ?? item.note,
             totals: item.totals,
             itemPayload: item.itemPayload,
           });
         }
       }
     }
+  }
+
+  async updateLineNote(params: {
+    rfqId: string;
+    targetType: 'group' | 'combo' | 'item';
+    targetId: string;
+    note: string | null;
+  }) {
+    const tenantId = this.tenantContext.getTenantId();
+    const { rfqId, targetType, targetId } = params;
+    const note = params.note?.trim() ? params.note : null;
+
+    this.logger.log(
+      `api:RfqsService.updateLineNote rfqId=${rfqId} targetType=${targetType} targetId=${targetId}`,
+    );
+
+    if (!targetType || !['group', 'combo', 'item'].includes(targetType)) {
+      throw new BadRequestException('targetType must be group, combo, or item');
+    }
+    if (!targetId) {
+      throw new BadRequestException('targetId is required');
+    }
+
+    const rfq = await this.rfqsRepo.findOne({ id: rfqId, tenantId });
+    if (!rfq) throw new NotFoundException(`RFQ ${rfqId} not found`);
+
+    if (targetType === 'group') {
+      const [group] = await this.db
+        .select({ id: rfqGroups.id })
+        .from(rfqGroups)
+        .where(
+          and(
+            eq(rfqGroups.tenantId, tenantId),
+            eq(rfqGroups.rfqId, rfqId),
+            eq(rfqGroups.id, targetId),
+          ),
+        )
+        .limit(1);
+      if (!group) throw new NotFoundException(`RFQ group ${targetId} not found`);
+      await this.db
+        .update(rfqGroups)
+        .set({ note, updatedAt: new Date() })
+        .where(eq(rfqGroups.id, targetId));
+      return { success: true, targetType, targetId, note };
+    }
+
+    if (targetType === 'combo') {
+      const [combo] = await this.db
+        .select({ id: rfqCombos.id, rfqGroupId: rfqCombos.rfqGroupId })
+        .from(rfqCombos)
+        .innerJoin(rfqGroups, eq(rfqCombos.rfqGroupId, rfqGroups.id))
+        .where(
+          and(
+            eq(rfqCombos.tenantId, tenantId),
+            eq(rfqCombos.id, targetId),
+            eq(rfqGroups.rfqId, rfqId),
+          ),
+        )
+        .limit(1);
+      if (!combo) throw new NotFoundException(`RFQ combo ${targetId} not found`);
+      await this.db
+        .update(rfqCombos)
+        .set({ note, updatedAt: new Date() })
+        .where(eq(rfqCombos.id, targetId));
+      return { success: true, targetType, targetId, note };
+    }
+
+    if (targetType === 'item') {
+      const [item] = await this.db
+        .select({
+          id: rfqItems.id,
+          rfqGroupId: rfqItems.rfqGroupId,
+          rfqComboId: rfqItems.rfqComboId,
+        })
+        .from(rfqItems)
+        .where(and(eq(rfqItems.tenantId, tenantId), eq(rfqItems.id, targetId)))
+        .limit(1);
+      if (!item) throw new NotFoundException(`RFQ item ${targetId} not found`);
+
+      let belongsToRfq = false;
+      if (item.rfqGroupId) {
+        const [g] = await this.db
+          .select({ id: rfqGroups.id })
+          .from(rfqGroups)
+          .where(
+            and(
+              eq(rfqGroups.id, item.rfqGroupId),
+              eq(rfqGroups.rfqId, rfqId),
+              eq(rfqGroups.tenantId, tenantId),
+            ),
+          )
+          .limit(1);
+        belongsToRfq = !!g;
+      } else if (item.rfqComboId) {
+        const [c] = await this.db
+          .select({ id: rfqCombos.id })
+          .from(rfqCombos)
+          .innerJoin(rfqGroups, eq(rfqCombos.rfqGroupId, rfqGroups.id))
+          .where(
+            and(
+              eq(rfqCombos.id, item.rfqComboId),
+              eq(rfqGroups.rfqId, rfqId),
+              eq(rfqCombos.tenantId, tenantId),
+            ),
+          )
+          .limit(1);
+        belongsToRfq = !!c;
+      }
+      if (!belongsToRfq) throw new NotFoundException(`RFQ item ${targetId} not found on RFQ ${rfqId}`);
+
+      await this.db
+        .update(rfqItems)
+        .set({ note, updatedAt: new Date() })
+        .where(eq(rfqItems.id, targetId));
+      return { success: true, targetType, targetId, note };
+    }
+
+    throw new BadRequestException(`Invalid targetType: ${targetType}`);
   }
 }

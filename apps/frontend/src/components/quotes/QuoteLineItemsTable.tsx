@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
   CheckSquare,
@@ -22,6 +23,7 @@ import {
   EyeOff,
   X,
   Boxes,
+  StickyNote,
 } from 'lucide-react';
 import { formatCurrency } from '@/components/shared/detail';
 import {
@@ -32,7 +34,7 @@ import {
   type CatalogDragPayload,
   type GroupLabelDragPayload,
 } from '@/components/catalog/catalog-drag';
-import type { ApiCombo, ApiGroup, ApiItem, ApiScope } from '@/components/quotes/quote-line-items.types';
+import type { ApiCombo, ApiGroup, ApiItem, ApiScope, GroupDimensions } from '@/components/quotes/quote-line-items.types';
 import { groupLabel, normalizeLineItemGroups } from '@/components/quotes/quote-line-items.utils';
 import { cn } from '@/lib/utils';
 import {
@@ -45,6 +47,111 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+
+export type LineNoteTargetType = 'group' | 'combo' | 'item';
+
+export interface LineNoteEditRequest {
+  targetType: LineNoteTargetType;
+  targetId: string;
+  label: string;
+  note?: string | null;
+}
+
+function hasLineNote(note?: string | null): boolean {
+  return !!note && note.trim().length > 0;
+}
+
+function LineNoteButton({
+  hasNote,
+  onClick,
+  label,
+}: {
+  hasNote: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className={cn('h-7 w-7 p-0', hasNote && 'text-amber-600 hover:text-amber-700')}
+      title={hasNote ? `Edit notes for ${label}` : `Add notes for ${label}`}
+      aria-label={hasNote ? `Edit notes for ${label}` : `Add notes for ${label}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+    >
+      <StickyNote className={cn('h-3.5 w-3.5', hasNote && 'fill-amber-100')} />
+    </Button>
+  );
+}
+
+/** Portal tooltip for row-level note hover (avoids table overflow clipping). */
+function useLineNoteHover(note?: string | null, enabled?: boolean) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const active = !!enabled && hasLineNote(note);
+
+  const handlers = active
+    ? {
+        onMouseEnter: (e: React.MouseEvent) => {
+          setPos({ x: e.clientX, y: e.clientY });
+          setOpen(true);
+        },
+        onMouseMove: (e: React.MouseEvent) => {
+          setPos({ x: e.clientX, y: e.clientY });
+        },
+        onMouseLeave: () => setOpen(false),
+      }
+    : {};
+
+  const popup =
+    open && active && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            role="tooltip"
+            className="pointer-events-none fixed z-[100] max-w-md whitespace-pre-wrap break-words rounded-md bg-slate-900 px-3 py-2 text-left text-xs leading-relaxed text-white shadow-lg"
+            style={{
+              left: Math.min(pos.x + 14, window.innerWidth - 320),
+              top: Math.min(pos.y + 16, window.innerHeight - 120),
+            }}
+          >
+            {note}
+          </div>,
+          document.body,
+        )
+      : null;
+
+  return { handlers, popup };
+}
+
+function GroupNoteHoverBar({
+  note,
+  enabled,
+  className,
+  onClick,
+  children,
+}: {
+  note?: string | null;
+  enabled?: boolean;
+  className?: string;
+  onClick?: () => void;
+  children: React.ReactNode;
+}) {
+  const noteHover = useLineNoteHover(note, enabled);
+  return (
+    <>
+      {noteHover.popup}
+      <div className={className} {...noteHover.handlers} onClick={onClick}>
+        {children}
+      </div>
+    </>
+  );
+}
 
 function lookupDisplay(l?: { name?: string; externalReference?: string }): string {
   if (!l) return '—';
@@ -66,10 +173,21 @@ const UNIT_TYPE_OPTIONS = [
   { value: 'M2', label: 'M²' },
 ] as const;
 
-function getEditableFields(showMarkup: boolean, showGst: boolean): EditableFieldKey[] {
-  const fields: EditableFieldKey[] = ['name', 'component', 'description', 'quantity', 'unitType', 'unitCost'];
-  if (showMarkup) fields.push('markupValue');
-  if (showGst) fields.push('tax');
+function getEditableFields(
+  showMarkup: boolean,
+  showGst: boolean,
+  showQuantities = true,
+  showPricing = true,
+): EditableFieldKey[] {
+  const fields: EditableFieldKey[] = ['name', 'component', 'description'];
+  if (showQuantities) {
+    fields.push('quantity', 'unitType');
+  }
+  if (showPricing) {
+    fields.push('unitCost');
+    if (showMarkup) fields.push('markupValue');
+    if (showGst) fields.push('tax');
+  }
   return fields;
 }
 
@@ -79,14 +197,20 @@ function nearestEditableField(
   clicked: ColumnKey,
   showMarkup: boolean,
   showGst: boolean,
+  showQuantities = true,
+  showPricing = true,
 ): EditableFieldKey {
-  const editableFields = getEditableFields(showMarkup, showGst);
+  const editableFields = getEditableFields(showMarkup, showGst, showQuantities, showPricing);
   if ((editableFields as string[]).includes(clicked)) return clicked as EditableFieldKey;
 
-  const allCols: ColumnKey[] = ['name', 'type', 'category', 'quantity', 'unitType', 'unitCost', 'extended'];
-  if (showMarkup) allCols.push('markupValue');
-  if (showGst) allCols.push('tax');
-  allCols.push('total');
+  const allCols: ColumnKey[] = ['name', 'type', 'category'];
+  if (showQuantities) allCols.push('quantity', 'unitType');
+  if (showPricing) {
+    allCols.push('unitCost', 'extended');
+    if (showMarkup) allCols.push('markupValue');
+    if (showGst) allCols.push('tax');
+    allCols.push('total');
+  }
 
   const idx = allCols.indexOf(clicked);
   for (let dist = 1; dist < allCols.length; dist++) {
@@ -158,6 +282,8 @@ function ItemRow({
   indented,
   showMarkup,
   showGst,
+  showQuantities = true,
+  showPricing = true,
   showCategory = true,
   isEditing,
   selectedField,
@@ -173,12 +299,17 @@ function ItemRow({
   showSelect,
   isPicked,
   onTogglePick,
+  contentDisabled,
+  enableLineNotes,
+  onEditLineNote,
 }: {
   item: ApiItem;
   rowKey: string;
   indented?: boolean;
   showMarkup: boolean;
   showGst: boolean;
+  showQuantities?: boolean;
+  showPricing?: boolean;
   showCategory?: boolean;
   isEditing: boolean;
   selectedField: EditableFieldKey | null;
@@ -194,7 +325,15 @@ function ItemRow({
   showSelect?: boolean;
   isPicked?: boolean;
   onTogglePick?: () => void;
+  contentDisabled?: { quantities?: boolean; pricing?: boolean };
+  enableLineNotes?: boolean;
+  onEditLineNote?: (request: LineNoteEditRequest) => void;
 }) {
+  const qtyDisabled = contentDisabled?.quantities ?? false;
+  const priceDisabled = contentDisabled?.pricing ?? false;
+  const itemNote = item.note;
+  const itemLabel = item.name ?? 'Item';
+  const noteHover = useLineNoteHover(itemNote, enableLineNotes);
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const mismatches = item.mismatches ?? [];
 
@@ -254,6 +393,8 @@ function ItemRow({
   };
 
   return (
+    <>
+    {noteHover.popup}
     <tr
       data-item-row
       className={cn(
@@ -267,6 +408,7 @@ function ItemRow({
             ? 'bg-emerald-100 hover:bg-emerald-200 hover:ring-2 hover:ring-inset hover:ring-emerald-400'
             : 'hover:bg-amber-50/40 hover:ring-2 hover:ring-inset hover:ring-amber-300',
       )}
+      {...noteHover.handlers}
       onClick={(e) => {
         if (showSelect) {
           e.preventDefault();
@@ -380,68 +522,84 @@ function ItemRow({
       )}
 
       {/* Qty (editable) */}
-      <td data-col="quantity" className={cn(editCellCls('quantity'), 'text-right')} onClick={cellClick('quantity')}>
-        {isEditing && editInputs ? (
-          <input
-            ref={(el) => { inputRefs.current.quantity = el; }}
-            value={editInputs.quantity}
-            onChange={(e) => onInputChange(rowKey, 'quantity', e.target.value)}
-            onKeyDown={onCellKeyDown}
-            className={inputCls('right')}
-          />
-        ) : (
-          <span className="font-mono text-slate-700">{qty}</span>
-        )}
-      </td>
+      {showQuantities && (
+        <td data-col="quantity" className={cn(qtyDisabled ? cn(roCellCls, 'opacity-30') : editCellCls('quantity'), 'text-right')} onClick={qtyDisabled ? undefined : cellClick('quantity')}>
+          {qtyDisabled ? (
+            <span className="font-mono text-slate-400">—</span>
+          ) : isEditing && editInputs ? (
+            <input
+              ref={(el) => { inputRefs.current.quantity = el; }}
+              value={editInputs.quantity}
+              onChange={(e) => onInputChange(rowKey, 'quantity', e.target.value)}
+              onKeyDown={onCellKeyDown}
+              className={inputCls('right')}
+            />
+          ) : (
+            <span className="font-mono text-slate-700">{qty}</span>
+          )}
+        </td>
+      )}
 
       {/* Unit (editable dropdown, e.g. M2, EA) */}
-      <td data-col="unitType" className={cn(editCellCls('unitType'), 'text-left')} onClick={cellClick('unitType')}>
-        {isEditing && editInputs ? (
-          <select
-            ref={(el) => { inputRefs.current.unitType = el as unknown as HTMLInputElement; }}
-            value={editInputs.unitType}
-            onChange={(e) => onInputChange(rowKey, 'unitType', e.target.value)}
-            onKeyDown={onCellKeyDown}
-            className="w-full bg-transparent px-4 py-2.5 text-sm text-slate-700 outline-none"
-          >
-            <option value="">—</option>
-            {UNIT_TYPE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
-        ) : (
-          <span className="text-slate-700">
-            {editInputs?.unitType
-              ? (UNIT_TYPE_OPTIONS.find((o) => o.value === editInputs.unitType)?.label ?? editInputs.unitType)
-              : item.unitType ? lookupDisplay(item.unitType) : '—'}
-          </span>
-        )}
-      </td>
+      {showQuantities && (
+        <td data-col="unitType" className={cn(qtyDisabled ? cn(roCellCls, 'opacity-30') : editCellCls('unitType'), 'text-left')} onClick={qtyDisabled ? undefined : cellClick('unitType')}>
+          {qtyDisabled ? (
+            <span className="text-slate-400">—</span>
+          ) : isEditing && editInputs ? (
+            <select
+              ref={(el) => { inputRefs.current.unitType = el as unknown as HTMLInputElement; }}
+              value={editInputs.unitType}
+              onChange={(e) => onInputChange(rowKey, 'unitType', e.target.value)}
+              onKeyDown={onCellKeyDown}
+              className="w-full bg-transparent px-4 py-2.5 text-sm text-slate-700 outline-none"
+            >
+              <option value="">—</option>
+              {UNIT_TYPE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          ) : (
+            <span className="text-slate-700">
+              {editInputs?.unitType
+                ? (UNIT_TYPE_OPTIONS.find((o) => o.value === editInputs.unitType)?.label ?? editInputs.unitType)
+                : item.unitType ? lookupDisplay(item.unitType) : '—'}
+            </span>
+          )}
+        </td>
+      )}
 
       {/* Unit Price (editable) */}
-      <td data-col="unitCost" className={cn(editCellCls('unitCost'), 'text-right')} onClick={cellClick('unitCost')}>
-        {isEditing && editInputs ? (
-          <input
-            ref={(el) => { inputRefs.current.unitCost = el; }}
-            value={editInputs.unitCost}
-            onChange={(e) => onInputChange(rowKey, 'unitCost', e.target.value)}
-            onKeyDown={onCellKeyDown}
-            className={inputCls('right')}
-          />
-        ) : (
-          <span className="font-mono text-slate-700">{formatCurrency(unitCost)}</span>
-        )}
-      </td>
+      {showPricing && (
+        <td data-col="unitCost" className={cn(priceDisabled ? cn(roCellCls, 'opacity-30') : editCellCls('unitCost'), 'text-right')} onClick={priceDisabled ? undefined : cellClick('unitCost')}>
+          {priceDisabled ? (
+            <span className="font-mono text-slate-400">—</span>
+          ) : isEditing && editInputs ? (
+            <input
+              ref={(el) => { inputRefs.current.unitCost = el; }}
+              value={editInputs.unitCost}
+              onChange={(e) => onInputChange(rowKey, 'unitCost', e.target.value)}
+              onKeyDown={onCellKeyDown}
+              className={inputCls('right')}
+            />
+          ) : (
+            <span className="font-mono text-slate-700">{formatCurrency(unitCost)}</span>
+          )}
+        </td>
+      )}
 
       {/* Extended (computed) */}
-      <td data-col="extended" className={cn(roCellCls, 'text-right font-mono text-slate-700')}>
-        {formatCurrency(extended)}
-      </td>
+      {showPricing && (
+        <td data-col="extended" className={cn(roCellCls, 'text-right font-mono', priceDisabled ? 'opacity-30 text-slate-400' : 'text-slate-700')}>
+          {priceDisabled ? '—' : formatCurrency(extended)}
+        </td>
+      )}
 
       {/* Markup (editable, conditional) */}
-      {showMarkup && (
-        <td data-col="markupValue" className={cn(editCellCls('markupValue'), 'text-right')} onClick={cellClick('markupValue')}>
-          {isEditing && editInputs ? (
+      {showPricing && showMarkup && (
+        <td data-col="markupValue" className={cn(priceDisabled ? cn(roCellCls, 'opacity-30') : editCellCls('markupValue'), 'text-right')} onClick={priceDisabled ? undefined : cellClick('markupValue')}>
+          {priceDisabled ? (
+            <span className="font-mono text-slate-400">—</span>
+          ) : isEditing && editInputs ? (
             <input
               ref={(el) => { inputRefs.current.markupValue = el; }}
               value={editInputs.markupValue}
@@ -458,9 +616,11 @@ function ItemRow({
       )}
 
       {/* GST (editable, conditional) */}
-      {showGst && (
-        <td data-col="tax" className={cn(editCellCls('tax'), 'text-right')} onClick={cellClick('tax')}>
-          {isEditing && editInputs ? (
+      {showPricing && showGst && (
+        <td data-col="tax" className={cn(priceDisabled ? cn(roCellCls, 'opacity-30') : editCellCls('tax'), 'text-right')} onClick={priceDisabled ? undefined : cellClick('tax')}>
+          {priceDisabled ? (
+            <span className="font-mono text-slate-400">—</span>
+          ) : isEditing && editInputs ? (
             <input
               ref={(el) => { inputRefs.current.tax = el; }}
               value={editInputs.tax}
@@ -477,39 +637,63 @@ function ItemRow({
       )}
 
       {/* Total (computed) */}
-      <td data-col="total" className={cn(roCellCls, 'text-right font-medium text-slate-900')}>
-        {formatCurrency(total)}
-      </td>
+      {showPricing && (
+        <td data-col="total" className={cn(roCellCls, 'text-right', priceDisabled ? 'opacity-30 font-mono text-slate-400' : 'font-medium text-slate-900')}>
+          {priceDisabled ? '—' : formatCurrency(total)}
+        </td>
+      )}
 
       {/* Actions */}
       <td className="w-10 px-1 py-2.5 text-center">
-        {onDelete && item.id && (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 p-0"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
+        <div className="flex items-center justify-center gap-0.5">
+          {enableLineNotes && item.id && onEditLineNote && (
+            <LineNoteButton
+              hasNote={hasLineNote(itemNote)}
+              label={itemLabel}
+              onClick={() =>
+                onEditLineNote({
+                  targetType: 'item',
+                  targetId: item.id!,
+                  label: itemLabel,
+                  note: itemNote,
+                })
               }
             />
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onClick={() => onDelete({ itemId: item.id!, itemName: item.name, isAssemblyChild: !!indented })}
-                className="text-destructive focus:text-destructive"
-              >
-                <Trash2 className="mr-2 h-3.5 w-3.5" />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+          )}
+          {onDelete && item.id && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                }
+              />
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => onDelete({ itemId: item.id!, itemName: item.name, isAssemblyChild: !!indented })}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="mr-2 h-3.5 w-3.5" />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
       </td>
+      <LineNotesColumnCell
+        show={!!enableLineNotes && !showPricing}
+        note={itemNote}
+        className={isEditing ? (isMultiSelected ? 'bg-blue-50/30' : 'bg-amber-50/40') : undefined}
+      />
     </tr>
+    </>
   );
 }
 
@@ -522,6 +706,8 @@ function AssemblyBlock({
   onToggle,
   showMarkup,
   showGst,
+  showQuantities = true,
+  showPricing = true,
   showCategory = true,
   editState,
   editInputs,
@@ -537,6 +723,15 @@ function AssemblyBlock({
   showSelect,
   selectedIds,
   onToggleIds,
+  showColumnToggles,
+  contentShowQuantities,
+  contentShowPricing,
+  isOverridden,
+  onToggleOverride,
+  onToggleQuantities,
+  onTogglePricing,
+  enableLineNotes,
+  onEditLineNote,
 }: {
   combo: ApiCombo;
   comboKey: string;
@@ -546,6 +741,8 @@ function AssemblyBlock({
   onToggle: () => void;
   showMarkup: boolean;
   showGst: boolean;
+  showQuantities?: boolean;
+  showPricing?: boolean;
   showCategory?: boolean;
   editState: { rowKey: string; field: EditableFieldKey } | null;
   editInputs: Record<string, Record<EditableFieldKey, string>>;
@@ -561,7 +758,25 @@ function AssemblyBlock({
   showSelect?: boolean;
   selectedIds?: Set<string>;
   onToggleIds?: (ids: string[]) => void;
+  showColumnToggles?: boolean;
+  contentShowQuantities?: boolean;
+  contentShowPricing?: boolean;
+  isOverridden?: boolean;
+  onToggleOverride?: () => void;
+  onToggleQuantities?: () => void;
+  onTogglePricing?: () => void;
+  enableLineNotes?: boolean;
+  onEditLineNote?: (request: LineNoteEditRequest) => void;
 }) {
+  const effectiveContentQty = contentShowQuantities ?? (showQuantities ?? true);
+  const effectiveContentPrice = contentShowPricing ?? (showPricing ?? true);
+  const assemblyContentDisabled = {
+    quantities: (showQuantities ?? true) && !effectiveContentQty,
+    pricing: (showPricing ?? true) && !effectiveContentPrice,
+  };
+  const comboNote = combo.note;
+  const comboLabel = combo.name ?? 'Assembly';
+  const noteHover = useLineNoteHover(comboNote, enableLineNotes);
   const comboName = combo.name ?? 'Assembly';
   const comboCategory =
     [combo.category, combo.subCategory].filter(Boolean).join(' / ') || '—';
@@ -633,11 +848,12 @@ function AssemblyBlock({
 
   return (
     <>
+      {noteHover.popup}
       {/* Assembly header row */}
       <tr
         data-item-row
         className={cn(
-          'cursor-pointer transition-colors',
+          'relative cursor-pointer transition-colors',
           showSelect && !comboPicked && 'opacity-40',
           isEditing
             ? comboRing
@@ -645,6 +861,7 @@ function AssemblyBlock({
               ? 'bg-emerald-200 hover:bg-emerald-300'
               : 'bg-slate-200 hover:bg-slate-300',
         )}
+        {...noteHover.handlers}
         onClick={(e) => {
           if (showSelect) {
             onToggleIds?.(comboPickIds);
@@ -790,77 +1007,119 @@ function AssemblyBlock({
               </div>
             </div>
           )}
+          {showColumnToggles && onToggleQuantities && onTogglePricing && onToggleOverride && (
+            <div className="absolute left-3/4 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
+              <HeaderVisibilityToggles
+                isOverridden={isOverridden ?? false}
+                onToggleOverride={onToggleOverride}
+                showQuantities={effectiveContentQty}
+                showPricing={effectiveContentPrice}
+                onToggleQuantities={onToggleQuantities}
+                onTogglePricing={onTogglePricing}
+              />
+            </div>
+          )}
         </td>
         <td className={cn('px-4 py-2.5 text-xs text-slate-600', isEditing && comboBg)}>Assembly</td>
         {showCategory && (
           <td className={cn('px-4 py-2.5 text-xs text-slate-600', isEditing && comboBg)}>{comboCategory}</td>
         )}
-        <td
-          data-col="quantity"
-          data-assembly-field="quantity"
-          className={cn(
-            'whitespace-nowrap text-right',
-            isEditing
-              ? cn(
-                  'p-0 transition-shadow',
-                  editState?.field === 'quantity'
-                    ? 'shadow-[inset_0_0_0_2px_#2563eb] bg-white relative z-[1]'
-                    : isComboMultiSelected
-                      ? 'shadow-[inset_0_0_0_1px_#93c5fd33] bg-blue-50/30'
-                      : 'shadow-[inset_0_0_0_1px_#d4a84733] bg-amber-50/40',
-                )
-              : 'px-4 py-2.5 hover:bg-amber-50 hover:shadow-[inset_0_0_0_2px_#d97706]',
-          )}
-          onClick={isEditing ? (e) => { e.stopPropagation(); onCellSelect(comboKey, 'quantity'); } : undefined}
-        >
-          {isEditing && comboInputs ? (
-            <input
-              ref={qtyInputRef}
-              value={comboInputs.quantity}
-              onChange={(e) => onInputChange(comboKey, 'quantity', e.target.value)}
-              onKeyDown={onCellKeyDown}
-              className="w-full bg-transparent px-4 py-2.5 text-right font-mono text-slate-700 outline-none"
-            />
-          ) : (
-            <span className="font-mono text-slate-700">{combo.quantity ?? '—'}</span>
-          )}
-        </td>
-        <td className={cn('px-4 py-2.5', isEditing && comboBg)} />
-        <td className={cn('px-4 py-2.5', isEditing && comboBg)} />
-        {showMarkup && <td className={cn('px-4 py-2.5', isEditing && comboBg)} />}
-        {showGst && <td className={cn('px-4 py-2.5', isEditing && comboBg)} />}
-        <td className={cn('whitespace-nowrap px-4 py-2.5 text-right font-semibold text-slate-900', isEditing && comboBg)}>
-          {formatCurrency(comboTotal)}
-        </td>
+        {showQuantities && (
+          <td
+            data-col="quantity"
+            data-assembly-field="quantity"
+            className={cn(
+              'whitespace-nowrap text-right',
+              assemblyContentDisabled.quantities
+                ? cn('px-4 py-2.5 opacity-30')
+                : isEditing
+                  ? cn(
+                      'p-0 transition-shadow',
+                      editState?.field === 'quantity'
+                        ? 'shadow-[inset_0_0_0_2px_#2563eb] bg-white relative z-[1]'
+                        : isComboMultiSelected
+                          ? 'shadow-[inset_0_0_0_1px_#93c5fd33] bg-blue-50/30'
+                          : 'shadow-[inset_0_0_0_1px_#d4a84733] bg-amber-50/40',
+                    )
+                  : 'px-4 py-2.5 hover:bg-amber-50 hover:shadow-[inset_0_0_0_2px_#d97706]',
+            )}
+            onClick={assemblyContentDisabled.quantities ? undefined : isEditing ? (e) => { e.stopPropagation(); onCellSelect(comboKey, 'quantity'); } : undefined}
+          >
+            {assemblyContentDisabled.quantities ? (
+              <span className="font-mono text-slate-400">—</span>
+            ) : isEditing && comboInputs ? (
+              <input
+                ref={qtyInputRef}
+                value={comboInputs.quantity}
+                onChange={(e) => onInputChange(comboKey, 'quantity', e.target.value)}
+                onKeyDown={onCellKeyDown}
+                className="w-full bg-transparent px-4 py-2.5 text-right font-mono text-slate-700 outline-none"
+              />
+            ) : (
+              <span className="font-mono text-slate-700">{combo.quantity ?? '—'}</span>
+            )}
+          </td>
+        )}
+        {showQuantities && <td className={cn('px-4 py-2.5', assemblyContentDisabled.quantities && 'opacity-30', isEditing && comboBg)} />}
+        {showPricing && <td className={cn('px-4 py-2.5', assemblyContentDisabled.pricing && 'opacity-30', isEditing && comboBg)} />}
+        {showPricing && <td className={cn('px-4 py-2.5', assemblyContentDisabled.pricing && 'opacity-30', isEditing && comboBg)} />}
+        {showPricing && showMarkup && <td className={cn('px-4 py-2.5', assemblyContentDisabled.pricing && 'opacity-30', isEditing && comboBg)} />}
+        {showPricing && showGst && <td className={cn('px-4 py-2.5', assemblyContentDisabled.pricing && 'opacity-30', isEditing && comboBg)} />}
+        {showPricing && (
+          <td className={cn('whitespace-nowrap px-4 py-2.5 text-right', assemblyContentDisabled.pricing ? 'opacity-30 font-mono text-slate-400' : 'font-semibold text-slate-900', isEditing && comboBg)}>
+            {assemblyContentDisabled.pricing ? '—' : formatCurrency(comboTotal)}
+          </td>
+        )}
 
         {/* Actions */}
         <td className="w-10 px-1 py-2.5 text-center">
-          {onDeleteCombo && combo.id && (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
+          <div className="flex items-center justify-center gap-0.5">
+            {enableLineNotes && combo.id && onEditLineNote && (
+              <LineNoteButton
+                hasNote={hasLineNote(comboNote)}
+                label={comboLabel}
+                onClick={() =>
+                  onEditLineNote({
+                    targetType: 'combo',
+                    targetId: combo.id!,
+                    label: comboLabel,
+                    note: comboNote,
+                  })
                 }
               />
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={() => onDeleteCombo(combo.id!)}
-                  className="text-destructive focus:text-destructive"
-                >
-                  <Trash2 className="mr-2 h-3.5 w-3.5" />
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+            )}
+            {onDeleteCombo && combo.id && (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() => onDeleteCombo(combo.id!)}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <Trash2 className="mr-2 h-3.5 w-3.5" />
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
         </td>
+        <LineNotesColumnCell
+          show={!!enableLineNotes && !showPricing}
+          note={comboNote}
+          className={isEditing ? comboBg : undefined}
+        />
       </tr>
 
       {/* Assembly child items */}
@@ -877,6 +1136,8 @@ function AssemblyBlock({
               indented
               showMarkup={showMarkup}
               showGst={showGst}
+              showQuantities={showQuantities}
+              showPricing={showPricing}
               showCategory={showCategory}
               isEditing={itemEditing}
               selectedField={itemEditing ? (editState?.field ?? null) : null}
@@ -892,6 +1153,9 @@ function AssemblyBlock({
               showSelect={showSelect}
               isPicked={!showSelect || (!!item.id && !!selectedIds?.has(item.id))}
               onTogglePick={() => item.id && onToggleIds?.([item.id])}
+              contentDisabled={assemblyContentDisabled}
+              enableLineNotes={enableLineNotes}
+              onEditLineNote={onEditLineNote}
             />
           );
         })}
@@ -906,6 +1170,8 @@ function ScopeBlock({
   onToggle,
   showMarkup,
   showGst,
+  showQuantities = true,
+  showPricing = true,
   showCategory = true,
   editState,
   editInputs,
@@ -927,6 +1193,17 @@ function ScopeBlock({
   onToggleIds,
   isDropActive = false,
   dropHint,
+  showColumnToggles,
+  isOverridden,
+  onToggleOverride,
+  onToggleQuantities,
+  onTogglePricing,
+  resolveChildVisibility,
+  toggleChildField,
+  isChildOverridden,
+  toggleChildOverride,
+  enableLineNotes,
+  onEditLineNote,
 }: {
   scope: ApiScope;
   scopeKey: string;
@@ -934,6 +1211,8 @@ function ScopeBlock({
   onToggle: () => void;
   showMarkup: boolean;
   showGst: boolean;
+  showQuantities?: boolean;
+  showPricing?: boolean;
   showCategory?: boolean;
   editState: { rowKey: string; field: EditableFieldKey } | null;
   editInputs: Record<string, Record<EditableFieldKey, string>>;
@@ -955,8 +1234,21 @@ function ScopeBlock({
   onToggleIds?: (ids: string[]) => void;
   isDropActive?: boolean;
   dropHint?: string;
+  showColumnToggles?: boolean;
+  isOverridden?: boolean;
+  onToggleOverride?: () => void;
+  onToggleQuantities?: () => void;
+  onTogglePricing?: () => void;
+  resolveChildVisibility?: (key: string, parentQty: boolean, parentPrice: boolean) => { showQuantities: boolean; showPricing: boolean };
+  toggleChildField?: (key: string, field: 'showQuantities' | 'showPricing', current: boolean) => void;
+  isChildOverridden?: (key: string) => boolean;
+  toggleChildOverride?: (key: string, parentQty: boolean, parentPrice: boolean) => void;
+  enableLineNotes?: boolean;
+  onEditLineNote?: (request: LineNoteEditRequest) => void;
 }) {
   const scopeName = scope.name ?? 'Scope';
+  const scopeNote = scope.note;
+  const noteHover = useLineNoteHover(scopeNote, enableLineNotes);
   const scopeCategory =
     [scope.category, scope.subCategory].filter(Boolean).join(' / ') || '—';
   const isEditing = editState?.rowKey === scopeKey || (selectedRows.has(scopeKey) && editState !== null);
@@ -1050,11 +1342,12 @@ function ScopeBlock({
 
   return (
     <>
+      {noteHover.popup}
       {/* Scope header row */}
       <tr
         data-item-row
         className={cn(
-          'cursor-pointer transition-colors',
+          'relative cursor-pointer transition-colors',
           showSelect && !scopePicked && 'opacity-40',
           isEditing
             ? scopeRing
@@ -1062,6 +1355,7 @@ function ScopeBlock({
               ? 'bg-emerald-200 hover:bg-emerald-300'
               : 'bg-violet-100 hover:bg-violet-200',
         )}
+        {...noteHover.handlers}
         onClick={(e) => {
           if (showSelect) {
             onToggleIds?.(allChildIds);
@@ -1193,10 +1487,6 @@ function ScopeBlock({
                       </span>
                     )}
                   </span>
-                  <span className="shrink-0 rounded-full bg-violet-200 px-2 py-0.5 text-[10px] font-medium text-violet-800">
-                    {totalChildLineCount} item{totalChildLineCount !== 1 ? 's' : ''}
-                    {scopeCombos.length > 0 && ` · ${scopeCombos.length} assembl${scopeCombos.length !== 1 ? 'ies' : 'y'}`}
-                  </span>
                 </div>
                 <p className="mt-0.5 line-clamp-1 min-h-4 text-xs text-violet-500">
                   {scopeInputs?.description ?? scope.description ?? '\u00a0'}
@@ -1204,75 +1494,136 @@ function ScopeBlock({
               </div>
             </div>
           )}
+          {showColumnToggles && onToggleQuantities && onTogglePricing && onToggleOverride && (
+            <div className="absolute left-3/4 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
+              <HeaderVisibilityToggles
+                isOverridden={isOverridden ?? false}
+                onToggleOverride={onToggleOverride}
+                showQuantities={showQuantities ?? true}
+                showPricing={showPricing ?? true}
+                onToggleQuantities={onToggleQuantities}
+                onTogglePricing={onTogglePricing}
+                colorScheme="violet"
+              />
+            </div>
+          )}
         </td>
         <td className={cn('px-4 py-2.5 text-xs text-violet-700', isEditing && (isScopeMultiSelected ? 'bg-blue-50/30' : scopeBg))}>Scope</td>
         {showCategory && (
           <td className={cn('px-4 py-2.5 text-xs text-violet-700', isEditing && (isScopeMultiSelected ? 'bg-blue-50/30' : scopeBg))}>{scopeCategory}</td>
         )}
-        <td
-          data-col="quantity"
-          data-scope-field="quantity"
-          className={cn(
-            'whitespace-nowrap text-right',
-            isEditing
-              ? cn('p-0 transition-shadow', editState?.field === 'quantity'
-                  ? 'shadow-[inset_0_0_0_2px_#2563eb] bg-white relative z-[1]'
-                  : isScopeMultiSelected ? 'bg-blue-50/30' : scopeBg)
-              : 'px-4 py-2.5 hover:bg-violet-50 hover:shadow-[inset_0_0_0_2px_#7c3aed]',
-          )}
-          onClick={isEditing ? (e) => { e.stopPropagation(); onCellSelect(scopeKey, 'quantity'); } : undefined}
-        >
-          {isEditing && scopeInputs ? (
-            <input
-              ref={qtyInputRef}
-              value={scopeInputs.quantity}
-              onChange={(e) => onInputChange(scopeKey, 'quantity', e.target.value)}
-              onKeyDown={onCellKeyDown}
-              onFocus={() => onCellSelect(scopeKey, 'quantity')}
-              className="w-full bg-transparent px-4 py-2.5 text-right font-mono text-sm text-violet-700 outline-none"
-            />
-          ) : (
-            <span className="font-mono text-sm text-violet-700">{scope.quantity ?? '—'}</span>
-          )}
-        </td>
-        <td className={cn('px-4 py-2.5', isEditing && (isScopeMultiSelected ? 'bg-blue-50/30' : scopeBg))} />
-        <td className={cn('px-4 py-2.5', isEditing && (isScopeMultiSelected ? 'bg-blue-50/30' : scopeBg))} />
-        {showMarkup && (
+        {showQuantities && (
+          <td
+            data-col="quantity"
+            data-scope-field="quantity"
+            className={cn(
+              'whitespace-nowrap text-right',
+              isEditing
+                ? cn('p-0 transition-shadow', editState?.field === 'quantity'
+                    ? 'shadow-[inset_0_0_0_2px_#2563eb] bg-white relative z-[1]'
+                    : isScopeMultiSelected ? 'bg-blue-50/30' : scopeBg)
+                : 'px-4 py-2.5 hover:bg-violet-50 hover:shadow-[inset_0_0_0_2px_#7c3aed]',
+            )}
+            onClick={isEditing ? (e) => { e.stopPropagation(); onCellSelect(scopeKey, 'quantity'); } : undefined}
+          >
+            {isEditing && scopeInputs ? (
+              <input
+                ref={qtyInputRef}
+                value={scopeInputs.quantity}
+                onChange={(e) => onInputChange(scopeKey, 'quantity', e.target.value)}
+                onKeyDown={onCellKeyDown}
+                onFocus={() => onCellSelect(scopeKey, 'quantity')}
+                className="w-full bg-transparent px-4 py-2.5 text-right font-mono text-sm text-violet-700 outline-none"
+              />
+            ) : (
+              <span className="font-mono text-sm text-violet-700">{scope.quantity ?? '—'}</span>
+            )}
+          </td>
+        )}
+        {showQuantities && (
           <td className={cn('px-4 py-2.5', isEditing && (isScopeMultiSelected ? 'bg-blue-50/30' : scopeBg))} />
         )}
-        {showGst && (
+        {showPricing && (
           <td className={cn('px-4 py-2.5', isEditing && (isScopeMultiSelected ? 'bg-blue-50/30' : scopeBg))} />
         )}
-        <td className={cn('whitespace-nowrap px-4 py-2.5 text-right font-semibold text-violet-900', isEditing && (isScopeMultiSelected ? 'bg-blue-50/30' : scopeBg))}>
-          {formatCurrency(scopeTotal)}
-        </td>
-        <td className={cn('w-10 px-2', isEditing && (isScopeMultiSelected ? 'bg-blue-50/30' : scopeBg))}>
-          {onDeleteScope && scope.id && (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
+        {showPricing && (
+          <td className={cn('px-4 py-2.5', isEditing && (isScopeMultiSelected ? 'bg-blue-50/30' : scopeBg))} />
+        )}
+        {showPricing && showMarkup && (
+          <td className={cn('px-4 py-2.5', isEditing && (isScopeMultiSelected ? 'bg-blue-50/30' : scopeBg))} />
+        )}
+        {showPricing && showGst && (
+          <td className={cn('px-4 py-2.5', isEditing && (isScopeMultiSelected ? 'bg-blue-50/30' : scopeBg))} />
+        )}
+        {showPricing && (
+          <td className={cn('whitespace-nowrap px-4 py-2.5 text-right', isEditing && (isScopeMultiSelected ? 'bg-blue-50/30' : scopeBg))}>
+            <div className="flex items-center justify-end gap-3">
+              <span className="text-xs tabular-nums text-violet-700">
+                {totalChildLineCount} item{totalChildLineCount !== 1 ? 's' : ''}
+                {scopeCombos.length > 0 && ` · ${scopeCombos.length} assembl${scopeCombos.length !== 1 ? 'ies' : 'y'}`}
+              </span>
+              <span className="font-semibold text-violet-900">{formatCurrency(scopeTotal)}</span>
+            </div>
+          </td>
+        )}
+        <td className={cn(
+          'px-2',
+          !showPricing ? 'whitespace-nowrap text-right' : 'w-10',
+          isEditing && (isScopeMultiSelected ? 'bg-blue-50/30' : scopeBg),
+        )}>
+          <div className="flex items-center justify-end gap-0.5">
+            {!showPricing && (
+              <span className="mr-2 text-xs tabular-nums text-violet-700">
+                {totalChildLineCount} item{totalChildLineCount !== 1 ? 's' : ''}
+                {scopeCombos.length > 0 && ` · ${scopeCombos.length} assembl${scopeCombos.length !== 1 ? 'ies' : 'y'}`}
+              </span>
+            )}
+            {enableLineNotes && scope.id && onEditLineNote && (
+              <LineNoteButton
+                hasNote={hasLineNote(scopeNote)}
+                label={scopeName}
+                onClick={() =>
+                  onEditLineNote({
+                    targetType: 'combo',
+                    targetId: scope.id!,
+                    label: scopeName,
+                    note: scopeNote,
+                  })
                 }
               />
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={() => onDeleteScope(scope.id!)}
-                  className="text-destructive focus:text-destructive"
-                >
-                  <Trash2 className="mr-2 h-3.5 w-3.5" />
-                  Delete scope
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+            )}
+            {onDeleteScope && scope.id && (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() => onDeleteScope(scope.id!)}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <Trash2 className="mr-2 h-3.5 w-3.5" />
+                    Delete scope
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
         </td>
+        <LineNotesColumnCell
+          show={!!enableLineNotes && !showPricing}
+          note={scopeNote}
+          className={isEditing ? (isScopeMultiSelected ? 'bg-blue-50/30' : scopeBg) : undefined}
+        />
       </tr>
 
       {isDropActive && (
@@ -1301,6 +1652,8 @@ function ScopeBlock({
                 indented
                 showMarkup={showMarkup}
                 showGst={showGst}
+                showQuantities={showQuantities}
+                showPricing={showPricing}
                 showCategory={showCategory}
                 isEditing={itemEditing}
                 selectedField={itemEditing ? (editState?.field ?? null) : null}
@@ -1316,6 +1669,8 @@ function ScopeBlock({
                 showSelect={showSelect}
                 isPicked={!showSelect || (!!item.id && !!selectedIds?.has(item.id))}
                 onTogglePick={() => item.id && onToggleIds?.([item.id])}
+                enableLineNotes={enableLineNotes}
+                onEditLineNote={onEditLineNote}
               />
             );
           })}
@@ -1324,6 +1679,9 @@ function ScopeBlock({
             const isComboCollapsed = collapsedCombos.has(comboKey);
             const comboItems = combo.items ?? [];
             const comboItemCount = comboItems.length;
+            const resolvedScopeAssembly = resolveChildVisibility
+              ? resolveChildVisibility(comboKey, showQuantities ?? true, showPricing ?? true)
+              : { showQuantities: showQuantities ?? true, showPricing: showPricing ?? true };
             return (
               <AssemblyBlock
                 key={comboKey}
@@ -1335,6 +1693,8 @@ function ScopeBlock({
                 onToggle={() => onToggleCombo(comboKey)}
                 showMarkup={showMarkup}
                 showGst={showGst}
+                showQuantities={showQuantities}
+                showPricing={showPricing}
                 showCategory={showCategory}
                 editState={editState}
                 editInputs={editInputs}
@@ -1350,6 +1710,15 @@ function ScopeBlock({
                 showSelect={showSelect}
                 selectedIds={selectedIds}
                 onToggleIds={onToggleIds}
+                showColumnToggles={showColumnToggles}
+                contentShowQuantities={resolvedScopeAssembly.showQuantities}
+                contentShowPricing={resolvedScopeAssembly.showPricing}
+                isOverridden={isChildOverridden ? isChildOverridden(comboKey) : false}
+                onToggleOverride={toggleChildOverride ? () => toggleChildOverride(comboKey, showQuantities ?? true, showPricing ?? true) : undefined}
+                onToggleQuantities={toggleChildField ? () => toggleChildField(comboKey, 'showQuantities', resolvedScopeAssembly.showQuantities) : undefined}
+                onTogglePricing={toggleChildField ? () => toggleChildField(comboKey, 'showPricing', resolvedScopeAssembly.showPricing) : undefined}
+                enableLineNotes={enableLineNotes}
+                onEditLineNote={onEditLineNote}
               />
             );
           })}
@@ -1372,6 +1741,8 @@ export interface LineItemSelection {
   onChange: (ids: Set<string>) => void;
 }
 
+export type { GroupDimensions };
+
 export interface QuoteLineItemsTableProps {
   groups: ApiGroup[];
   activeDropKey?: string | null;
@@ -1380,6 +1751,7 @@ export interface QuoteLineItemsTableProps {
   onGroupLabelDrop?: (payload: GroupLabelDragPayload) => void;
   onEditGroup?: (groupId: string) => void;
   onDeleteGroup?: (groupId: string) => void;
+  onUpdateGroupDimensions?: (groupId: string, dimensions: GroupDimensions) => void;
   onDeleteItem?: (request: DeleteItemRequest) => void;
   onDeleteCombo?: (comboId: string) => void;
   onDeleteScope?: (scopeId: string) => void;
@@ -1397,18 +1769,131 @@ export interface QuoteLineItemsTableProps {
   selection?: LineItemSelection;
   /** Compact layout for drawers / embedded panels (no full-page min-height / sticky offset). */
   compact?: boolean;
+  /** When true, show Quantities/Pricing toggles on toolbar and per-header. RFQ detail only. */
+  showColumnToggles?: boolean;
+  /** When true, show per-row notes edit icon and hover preview. RFQ detail view mode only. */
+  enableLineNotes?: boolean;
+  onEditLineNote?: (request: LineNoteEditRequest) => void;
+}
+
+function dimToInput(value?: number): string {
+  return value === undefined || value === null || Number.isNaN(value) ? '' : String(value);
+}
+
+function parseDimInput(raw: string): number | undefined {
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  const n = Number(trimmed);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function GroupDimensionFields({
+  groupId,
+  length,
+  width,
+  height,
+  disabled,
+  onSave,
+}: {
+  groupId: string;
+  length?: number;
+  width?: number;
+  height?: number;
+  disabled?: boolean;
+  onSave?: (groupId: string, dimensions: GroupDimensions) => void;
+}) {
+  const [draft, setDraft] = useState({
+    length: dimToInput(length),
+    width: dimToInput(width),
+    height: dimToInput(height),
+  });
+
+  useEffect(() => {
+    setDraft({
+      length: dimToInput(length),
+      width: dimToInput(width),
+      height: dimToInput(height),
+    });
+  }, [groupId, length, width, height]);
+
+  function commit() {
+    if (!onSave || disabled) return;
+    const next: GroupDimensions = {};
+    const parsedLength = parseDimInput(draft.length);
+    const parsedWidth = parseDimInput(draft.width);
+    const parsedHeight = parseDimInput(draft.height);
+    if (parsedLength !== undefined) next.length = parsedLength;
+    if (parsedWidth !== undefined) next.width = parsedWidth;
+    if (parsedHeight !== undefined) next.height = parsedHeight;
+
+    const same =
+      dimToInput(length) === dimToInput(next.length) &&
+      dimToInput(width) === dimToInput(next.width) &&
+      dimToInput(height) === dimToInput(next.height);
+    if (same) return;
+    onSave(groupId, next);
+  }
+
+  const fields: Array<{ key: 'length' | 'width' | 'height'; label: string; short: string }> = [
+    { key: 'length', label: 'Length', short: 'L' },
+    { key: 'width', label: 'Width', short: 'W' },
+    { key: 'height', label: 'Height', short: 'H' },
+  ];
+
+  return (
+    <div
+      className="ml-8 flex shrink-0 items-center gap-2"
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
+      {fields.map(({ key, label, short }) => (
+        <label
+          key={key}
+          title={label}
+          className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-blue-700"
+        >
+          <span aria-hidden>{short}</span>
+          <Input
+            type="number"
+            inputMode="decimal"
+            step="any"
+            min={0}
+            disabled={disabled || !onSave}
+            value={draft[key]}
+            aria-label={label}
+            placeholder="—"
+            className="h-8 w-24 border-blue-200 bg-white/80 px-2 text-sm tabular-nums text-blue-950 placeholder:text-blue-300 focus-visible:border-blue-400 focus-visible:ring-blue-400/30"
+            onChange={(e) => setDraft((prev) => ({ ...prev, [key]: e.target.value }))}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                (e.target as HTMLInputElement).blur();
+              }
+            }}
+          />
+        </label>
+      ))}
+    </div>
+  );
 }
 
 function LineItemsColGroup({
   showSelect,
   showCategory,
+  showQuantities,
+  showPricing,
   showMarkup,
   showGst,
+  showNotesColumn,
 }: {
   showSelect?: boolean;
   showCategory: boolean;
+  showQuantities: boolean;
+  showPricing: boolean;
   showMarkup: boolean;
   showGst: boolean;
+  showNotesColumn?: boolean;
 }) {
   return (
     <colgroup>
@@ -1416,15 +1901,83 @@ function LineItemsColGroup({
       <col className={showCategory ? 'w-[28%]' : 'w-[38%]'} />
       <col className="w-[10%]" />
       {showCategory && <col className="w-[10%]" />}
-      <col className="w-[7%]" />
-      <col className="w-[6%]" />
-      <col className="w-[9%]" />
-      <col className="w-[10%]" />
-      {showMarkup && <col className="w-[8%]" />}
-      {showGst && <col className="w-[7%]" />}
-      <col className="w-[10%]" />
+      {showQuantities && <col className="w-[7%]" />}
+      {showQuantities && <col className="w-[6%]" />}
+      {showPricing && <col className="w-[9%]" />}
+      {showPricing && <col className="w-[10%]" />}
+      {showPricing && showMarkup && <col className="w-[8%]" />}
+      {showPricing && showGst && <col className="w-[7%]" />}
+      {showPricing && <col className="w-[10%]" />}
       <col className="w-10" />
+      {showNotesColumn && <col className="w-[16%]" />}
     </colgroup>
+  );
+}
+
+function LineNotesColumnCell({
+  show,
+  note,
+  className,
+}: {
+  show: boolean;
+  note?: string | null;
+  className?: string;
+}) {
+  if (!show) return null;
+  return (
+    <td className={cn('max-w-[14rem] px-3 py-2.5 text-left text-xs text-slate-600', className)}>
+      {hasLineNote(note) ? (
+        <p className="line-clamp-2 whitespace-pre-wrap break-words" title={note ?? undefined}>
+          {note}
+        </p>
+      ) : (
+        <span className="text-slate-300">—</span>
+      )}
+    </td>
+  );
+}
+
+function HeaderVisibilityToggles({
+  isOverridden,
+  onToggleOverride,
+  showQuantities,
+  showPricing,
+  onToggleQuantities,
+  onTogglePricing,
+  colorScheme = 'slate',
+}: {
+  isOverridden: boolean;
+  onToggleOverride: () => void;
+  showQuantities: boolean;
+  showPricing: boolean;
+  onToggleQuantities: () => void;
+  onTogglePricing: () => void;
+  colorScheme?: 'slate' | 'blue' | 'violet';
+}) {
+  const labelCls = {
+    slate: 'text-slate-600',
+    blue: 'text-blue-700',
+    violet: 'text-violet-700',
+  }[colorScheme];
+  return (
+    <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
+      <label className={cn('flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide', labelCls)}>
+        <Switch checked={isOverridden} onCheckedChange={onToggleOverride} />
+        Override
+      </label>
+      {isOverridden && (
+        <>
+          <label className={cn('flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide', labelCls)}>
+            <Switch checked={showQuantities} onCheckedChange={onToggleQuantities} />
+            Qty
+          </label>
+          <label className={cn('flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide', labelCls)}>
+            <Switch checked={showPricing} onCheckedChange={onTogglePricing} />
+            Price
+          </label>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -1469,6 +2022,7 @@ export function QuoteLineItemsTable({
   onGroupLabelDrop,
   onEditGroup,
   onDeleteGroup,
+  onUpdateGroupDimensions,
   onDeleteItem,
   onDeleteCombo,
   onDeleteScope,
@@ -1483,6 +2037,9 @@ export function QuoteLineItemsTable({
   mode = 'estimate',
   selection,
   compact,
+  showColumnToggles = false,
+  enableLineNotes = false,
+  onEditLineNote,
 }: QuoteLineItemsTableProps) {
   const groups = useMemo(() => normalizeLineItemGroups(rawGroups), [rawGroups]);
   const labels = modeLabels(mode);
@@ -1495,11 +2052,50 @@ export function QuoteLineItemsTable({
   const [searchTerm, setSearchTerm] = useState('');
   const [showMarkup, setShowMarkup] = useState(true);
   const [showGst, setShowGst] = useState(true);
+  const [showQuantities, setShowQuantities] = useState(true);
+  const [showPricing, setShowPricing] = useState(true);
   const [suppressMarkupIcon, setSuppressMarkupIcon] = useState(false);
   const [suppressGstIcon, setSuppressGstIcon] = useState(false);
+  const [headerVisibility, setHeaderVisibility] = useState<
+    Record<string, { override?: boolean; showQuantities?: boolean; showPricing?: boolean }>
+  >({});
   const [hiddenGroupIds, setHiddenGroupIds] = useState<Set<string>>(new Set());
   const [groupFilterOpen, setGroupFilterOpen] = useState(false);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+
+  function resolveVisibility(key: string, parentQty: boolean, parentPrice: boolean) {
+    if (!showColumnToggles) return { showQuantities: true, showPricing: true };
+    const o = headerVisibility[key];
+    if (!o?.override) return { showQuantities: parentQty, showPricing: parentPrice };
+    return {
+      showQuantities: o.showQuantities ?? parentQty,
+      showPricing: o.showPricing ?? parentPrice,
+    };
+  }
+
+  function isHeaderOverridden(key: string): boolean {
+    return !!headerVisibility[key]?.override;
+  }
+
+  function toggleHeaderOverride(key: string, parentQty: boolean, parentPrice: boolean) {
+    setHeaderVisibility(prev => {
+      const cur = prev[key];
+      if (cur?.override) {
+        return { ...prev, [key]: { override: false } };
+      }
+      return {
+        ...prev,
+        [key]: { override: true, showQuantities: parentQty, showPricing: parentPrice },
+      };
+    });
+  }
+
+  function toggleHeaderField(key: string, field: 'showQuantities' | 'showPricing', current: boolean) {
+    setHeaderVisibility(prev => ({
+      ...prev,
+      [key]: { ...prev[key], [field]: !current },
+    }));
+  }
 
   // Inline edit state
   const [editState, setEditState] = useState<{ rowKey: string; field: EditableFieldKey } | null>(null);
@@ -1746,7 +2342,7 @@ export function QuoteLineItemsTable({
     if (isReadOnly) return;
     const td = (e.target as HTMLElement).closest('td');
     const col = (td?.dataset.col as ColumnKey) ?? null;
-    const field = col ? nearestEditableField(col, showMarkup, showGst) : 'name';
+    const field = col ? nearestEditableField(col, showMarkup, showGst, showQuantities, showPricing) : 'name';
 
     setEditInputs((prev) => {
       if (prev[rowKey]) return prev;
@@ -1778,7 +2374,8 @@ export function QuoteLineItemsTable({
     const target = e.target as HTMLElement;
     const fieldEl = target.closest('[data-assembly-field]');
     const assemblyField = fieldEl?.getAttribute('data-assembly-field');
-    const field: EditableFieldKey = assemblyField === 'quantity' ? 'quantity' : 'name';
+    const field: EditableFieldKey =
+      assemblyField === 'quantity' && showQuantities ? 'quantity' : 'name';
 
     setEditInputs((prev) => {
       if (prev[rowKey]) return prev;
@@ -1810,7 +2407,8 @@ export function QuoteLineItemsTable({
     const target = e.target as HTMLElement;
     const fieldEl = target.closest('[data-scope-field]');
     const scopeField = fieldEl?.getAttribute('data-scope-field');
-    const field: EditableFieldKey = scopeField === 'quantity' ? 'quantity' : 'name';
+    const field: EditableFieldKey =
+      scopeField === 'quantity' && showQuantities ? 'quantity' : 'name';
 
     setEditInputs((prev) => {
       if (prev[rowKey]) return prev;
@@ -1858,11 +2456,17 @@ export function QuoteLineItemsTable({
   function navigateToRow(rowIdx: number, field: EditableFieldKey) {
     if (rowIdx < 0 || rowIdx >= visibleRowIndex.length) return;
     const target = visibleRowIndex[rowIdx];
+    const assemblyFields = showQuantities
+      ? ASSEMBLY_EDITABLE_FIELDS
+      : ASSEMBLY_EDITABLE_FIELDS.filter((f) => f !== 'quantity');
+    const scopeFields = showQuantities
+      ? SCOPE_EDITABLE_FIELDS
+      : SCOPE_EDITABLE_FIELDS.filter((f) => f !== 'quantity');
     let effectiveField = field;
     if (target.kind === 'assembly') {
-      effectiveField = ASSEMBLY_EDITABLE_FIELDS.includes(field) ? field : 'name';
+      effectiveField = assemblyFields.includes(field) ? field : 'name';
     } else if (target.kind === 'scope') {
-      effectiveField = SCOPE_EDITABLE_FIELDS.includes(field) ? field : 'name';
+      effectiveField = scopeFields.includes(field) ? field : 'name';
     }
     setEditInputs((prev) => {
       if (prev[target.key]) return prev;
@@ -1879,11 +2483,17 @@ export function QuoteLineItemsTable({
   function handleCellKeyDown(e: React.KeyboardEvent) {
     if (!editState) return;
     const currentRow = visibleRowIndex.find((r) => r.key === editState.rowKey);
-    const fields = currentRow?.kind === 'assembly'
+    const assemblyFields = showQuantities
       ? ASSEMBLY_EDITABLE_FIELDS
+      : ASSEMBLY_EDITABLE_FIELDS.filter((f) => f !== 'quantity');
+    const scopeFields = showQuantities
+      ? SCOPE_EDITABLE_FIELDS
+      : SCOPE_EDITABLE_FIELDS.filter((f) => f !== 'quantity');
+    const fields = currentRow?.kind === 'assembly'
+      ? assemblyFields
       : currentRow?.kind === 'scope'
-        ? SCOPE_EDITABLE_FIELDS
-        : getEditableFields(showMarkup, showGst);
+        ? scopeFields
+        : getEditableFields(showMarkup, showGst, showQuantities, showPricing);
     const colIdx = fields.indexOf(editState.field);
     const inNameCol = NAME_COL_FIELDS.includes(editState.field);
 
@@ -1904,8 +2514,8 @@ export function QuoteLineItemsTable({
         if (editState.field === 'name') {
           setEditState({ ...editState, field: 'component' });
         } else if (editState.field === 'component' || editState.field === 'description') {
-          const qtyIdx = fields.indexOf('quantity');
-          if (qtyIdx >= 0) setEditState({ ...editState, field: 'quantity' });
+          const nextField = fields.find((f) => !NAME_COL_FIELDS.includes(f));
+          if (nextField) setEditState({ ...editState, field: nextField });
         } else if (colIdx < fields.length - 1) {
           setEditState({ ...editState, field: fields[colIdx + 1] });
         }
@@ -2323,68 +2933,98 @@ export function QuoteLineItemsTable({
               <Save className="h-4 w-4" />
             </Button>
           )}
+          {showColumnToggles && (
+            <div className="flex items-center gap-4 border-l border-slate-300 pl-3">
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="line-items-show-quantities"
+                  checked={showQuantities}
+                  onCheckedChange={setShowQuantities}
+                  aria-label="Show quantities"
+                />
+                <Label htmlFor="line-items-show-quantities" className="cursor-pointer text-xs font-medium text-slate-700">
+                  Quantities
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="line-items-show-pricing"
+                  checked={showPricing}
+                  onCheckedChange={setShowPricing}
+                  aria-label="Show pricing"
+                />
+                <Label htmlFor="line-items-show-pricing" className="cursor-pointer text-xs font-medium text-slate-700">
+                  Pricing
+                </Label>
+              </div>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-6" onClick={(e) => e.stopPropagation()}>
-          <div className="text-sm text-slate-600">
-            Subtotal{' '}
-            <span className="text-base font-semibold tabular-nums text-slate-900">
-              {formatCurrency(grandTotals.subTotal)}
-            </span>
-          </div>
-          <div
-            className="group/markup flex !cursor-default select-none items-center gap-1 text-sm text-slate-600 transition-opacity hover:opacity-70"
-            onClick={() => {
-              setShowMarkup((v) => !v);
-              setSuppressMarkupIcon(true);
-            }}
-            onMouseLeave={() => setSuppressMarkupIcon(false)}
-            title={showMarkup ? 'Hide markup column' : 'Show markup column'}
-          >
-            <span className="relative inline-flex items-center">
-              {showMarkup ? (
-                <EyeOff className={cn('h-3.5 w-3.5 text-red-500 transition-opacity', suppressMarkupIcon ? 'opacity-0' : 'opacity-0 group-hover/markup:opacity-100')} />
-              ) : (
-                <>
-                  <EyeOff className={cn('h-3.5 w-3.5 text-red-400 transition-opacity', suppressMarkupIcon ? 'opacity-100' : 'group-hover/markup:opacity-0')} />
-                  <Eye className={cn('absolute inset-0 h-3.5 w-3.5 text-green-500 transition-opacity', suppressMarkupIcon ? 'opacity-0' : 'opacity-0 group-hover/markup:opacity-100')} />
-                </>
-              )}
-            </span>
-            Markup{' '}
-            <span className={cn('text-base font-semibold tabular-nums text-slate-900', !showMarkup && 'opacity-40')}>
-              {formatCurrency(grandTotals.markup)}
-            </span>
-          </div>
-          <div
-            className="group/gst flex !cursor-default select-none items-center gap-1 text-sm text-slate-600 transition-opacity hover:opacity-70"
-            onClick={() => {
-              setShowGst((v) => !v);
-              setSuppressGstIcon(true);
-            }}
-            onMouseLeave={() => setSuppressGstIcon(false)}
-            title={showGst ? 'Hide GST column' : 'Show GST column'}
-          >
-            <span className="relative inline-flex items-center">
-              {showGst ? (
-                <EyeOff className={cn('h-3.5 w-3.5 text-red-500 transition-opacity', suppressGstIcon ? 'opacity-0' : 'opacity-0 group-hover/gst:opacity-100')} />
-              ) : (
-                <>
-                  <EyeOff className={cn('h-3.5 w-3.5 text-red-400 transition-opacity', suppressGstIcon ? 'opacity-100' : 'group-hover/gst:opacity-0')} />
-                  <Eye className={cn('absolute inset-0 h-3.5 w-3.5 text-green-500 transition-opacity', suppressGstIcon ? 'opacity-0' : 'opacity-0 group-hover/gst:opacity-100')} />
-                </>
-              )}
-            </span>
-            GST{' '}
-            <span className={cn('text-base font-semibold tabular-nums text-slate-900', !showGst && 'opacity-40')}>
-              {formatCurrency(grandTotals.totalTax)}
-            </span>
-          </div>
-          <div className="text-sm text-slate-600">
-            Total{' '}
-            <span className="text-xl font-bold tabular-nums text-slate-950">
-              {formatCurrency(grandTotals.total)}
-            </span>
-          </div>
+          {(showColumnToggles ? showPricing : true) && (
+            <>
+              <div className="text-sm text-slate-600">
+                Subtotal{' '}
+                <span className="text-base font-semibold tabular-nums text-slate-900">
+                  {formatCurrency(grandTotals.subTotal)}
+                </span>
+              </div>
+              <div
+                className="group/markup flex !cursor-default select-none items-center gap-1 text-sm text-slate-600 transition-opacity hover:opacity-70"
+                onClick={() => {
+                  setShowMarkup((v) => !v);
+                  setSuppressMarkupIcon(true);
+                }}
+                onMouseLeave={() => setSuppressMarkupIcon(false)}
+                title={showMarkup ? 'Hide markup column' : 'Show markup column'}
+              >
+                <span className="relative inline-flex items-center">
+                  {showMarkup ? (
+                    <EyeOff className={cn('h-3.5 w-3.5 text-red-500 transition-opacity', suppressMarkupIcon ? 'opacity-0' : 'opacity-0 group-hover/markup:opacity-100')} />
+                  ) : (
+                    <>
+                      <EyeOff className={cn('h-3.5 w-3.5 text-red-400 transition-opacity', suppressMarkupIcon ? 'opacity-100' : 'group-hover/markup:opacity-0')} />
+                      <Eye className={cn('absolute inset-0 h-3.5 w-3.5 text-green-500 transition-opacity', suppressMarkupIcon ? 'opacity-0' : 'opacity-0 group-hover/markup:opacity-100')} />
+                    </>
+                  )}
+                </span>
+                Markup{' '}
+                <span className={cn('text-base font-semibold tabular-nums text-slate-900', !showMarkup && 'opacity-40')}>
+                  {formatCurrency(grandTotals.markup)}
+                </span>
+              </div>
+              <div
+                className="group/gst flex !cursor-default select-none items-center gap-1 text-sm text-slate-600 transition-opacity hover:opacity-70"
+                onClick={() => {
+                  setShowGst((v) => !v);
+                  setSuppressGstIcon(true);
+                }}
+                onMouseLeave={() => setSuppressGstIcon(false)}
+                title={showGst ? 'Hide GST column' : 'Show GST column'}
+              >
+                <span className="relative inline-flex items-center">
+                  {showGst ? (
+                    <EyeOff className={cn('h-3.5 w-3.5 text-red-500 transition-opacity', suppressGstIcon ? 'opacity-0' : 'opacity-0 group-hover/gst:opacity-100')} />
+                  ) : (
+                    <>
+                      <EyeOff className={cn('h-3.5 w-3.5 text-red-400 transition-opacity', suppressGstIcon ? 'opacity-100' : 'group-hover/gst:opacity-0')} />
+                      <Eye className={cn('absolute inset-0 h-3.5 w-3.5 text-green-500 transition-opacity', suppressGstIcon ? 'opacity-0' : 'opacity-0 group-hover/gst:opacity-100')} />
+                    </>
+                  )}
+                </span>
+                GST{' '}
+                <span className={cn('text-base font-semibold tabular-nums text-slate-900', !showGst && 'opacity-40')}>
+                  {formatCurrency(grandTotals.totalTax)}
+                </span>
+              </div>
+              <div className="text-sm text-slate-600">
+                Total{' '}
+                <span className="text-xl font-bold tabular-nums text-slate-950">
+                  {formatCurrency(grandTotals.total)}
+                </span>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -2410,6 +3050,8 @@ export function QuoteLineItemsTable({
         const standaloneItems = group.items ?? [];
         const combos = group.combos ?? [];
         const scopes = group.scopes ?? [];
+
+        const resolvedGroup = resolveVisibility(gId, showQuantities, showPricing);
 
         function computeItemTotal(item: ApiItem, rowKey: string): number {
           const inputs = editInputs[rowKey];
@@ -2480,9 +3122,11 @@ export function QuoteLineItemsTable({
             )}
           >
             {/* Group header */}
-            <div
+            <GroupNoteHoverBar
+              note={group.note}
+              enabled={enableLineNotes}
               className={cn(
-                'flex cursor-pointer items-center gap-2 bg-blue-100 px-4 py-3 transition-colors hover:bg-blue-200',
+                'relative flex cursor-pointer items-center gap-2 bg-blue-100 px-4 py-3 transition-colors hover:bg-blue-200',
                 selectedKey === `group-${gId}` && 'ring-2 ring-inset ring-amber-300 bg-amber-50/60',
               )}
               onClick={() => {
@@ -2510,10 +3154,20 @@ export function QuoteLineItemsTable({
 
               <GripVertical className="h-4 w-4 text-blue-400" />
 
-              <div className="flex-1">
-                <span className="text-sm font-semibold text-blue-950">{label}</span>
+              <div className="flex min-w-0 flex-1 items-center">
+                <span className="truncate text-sm font-semibold text-blue-950">{label}</span>
                 {group.description && label !== group.description && (
-                  <span className="ml-2 text-xs text-blue-700">{group.description}</span>
+                  <span className="ml-2 truncate text-xs text-blue-700">{group.description}</span>
+                )}
+                {mode !== 'catalog' && group.id && (
+                  <GroupDimensionFields
+                    groupId={group.id}
+                    length={group.length}
+                    width={group.width}
+                    height={group.height}
+                    disabled={isReadOnly}
+                    onSave={onUpdateGroupDimensions}
+                  />
                 )}
               </div>
 
@@ -2522,9 +3176,39 @@ export function QuoteLineItemsTable({
                 {scopes.length > 0 && ` · ${scopes.length} scope${scopes.length !== 1 ? 's' : ''}`}
                 {combos.length > 0 && ` · ${combos.length} assembl${combos.length !== 1 ? 'ies' : 'y'}`}
               </span>
-              <span className="text-sm font-medium tabular-nums text-blue-900">
-                {formatCurrency(groupTotal)}
-              </span>
+              {showColumnToggles && (
+                <div className="absolute left-3/4 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
+                  <HeaderVisibilityToggles
+                    isOverridden={isHeaderOverridden(gId)}
+                    onToggleOverride={() => toggleHeaderOverride(gId, showQuantities, showPricing)}
+                    showQuantities={resolvedGroup.showQuantities}
+                    showPricing={resolvedGroup.showPricing}
+                    onToggleQuantities={() => toggleHeaderField(gId, 'showQuantities', resolvedGroup.showQuantities)}
+                    onTogglePricing={() => toggleHeaderField(gId, 'showPricing', resolvedGroup.showPricing)}
+                    colorScheme="blue"
+                  />
+                </div>
+              )}
+              {(showColumnToggles ? resolvedGroup.showPricing : showPricing) && (
+                <span className="text-sm font-medium tabular-nums text-blue-900">
+                  {formatCurrency(groupTotal)}
+                </span>
+              )}
+
+              {enableLineNotes && group.id && onEditLineNote && (
+                <LineNoteButton
+                  hasNote={hasLineNote(group.note)}
+                  label={label}
+                  onClick={() =>
+                    onEditLineNote({
+                      targetType: 'group',
+                      targetId: group.id!,
+                      label,
+                      note: group.note,
+                    })
+                  }
+                />
+              )}
 
               {(onEditGroup || onDeleteGroup || onMoveGroupUp || onMoveGroupDown) && (
                 <DropdownMenu>
@@ -2571,7 +3255,7 @@ export function QuoteLineItemsTable({
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
-            </div>
+            </GroupNoteHoverBar>
 
             {/* Drop indicator */}
             {isDropActive && (
@@ -2591,8 +3275,11 @@ export function QuoteLineItemsTable({
                       <LineItemsColGroup
                         showSelect={showSelect}
                         showCategory={showCategory}
+                        showQuantities={resolvedGroup.showQuantities}
+                        showPricing={resolvedGroup.showPricing}
                         showMarkup={showMarkup}
                         showGst={showGst}
+                        showNotesColumn={enableLineNotes && !resolvedGroup.showPricing}
                       />
                       <thead className="bg-slate-50/50">
                         <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-400">
@@ -2600,14 +3287,17 @@ export function QuoteLineItemsTable({
                           <th scope="col" className="px-4 py-2">Name</th>
                           <th scope="col" className="px-4 py-2">Type</th>
                           {showCategory && <th scope="col" className="px-4 py-2">Category</th>}
-                          <th scope="col" className="px-4 py-2 text-right">Qty</th>
-                          <th scope="col" className="px-4 py-2">Unit</th>
-                          <th scope="col" className="px-4 py-2 text-right">Unit Price</th>
-                          <th scope="col" className="px-4 py-2 text-right">Extended</th>
-                          {showMarkup && <th scope="col" className="px-4 py-2 text-right">Markup</th>}
-                          {showGst && <th scope="col" className="px-4 py-2 text-right">GST</th>}
-                          <th scope="col" className="px-4 py-2 text-right">Total</th>
+                          {resolvedGroup.showQuantities && <th scope="col" className="px-4 py-2 text-right">Qty</th>}
+                          {resolvedGroup.showQuantities && <th scope="col" className="px-4 py-2">Unit</th>}
+                          {resolvedGroup.showPricing && <th scope="col" className="px-4 py-2 text-right">Unit Price</th>}
+                          {resolvedGroup.showPricing && <th scope="col" className="px-4 py-2 text-right">Extended</th>}
+                          {resolvedGroup.showPricing && showMarkup && <th scope="col" className="px-4 py-2 text-right">Markup</th>}
+                          {resolvedGroup.showPricing && showGst && <th scope="col" className="px-4 py-2 text-right">GST</th>}
+                          {resolvedGroup.showPricing && <th scope="col" className="px-4 py-2 text-right">Total</th>}
                           <th scope="col" className="w-10" />
+                          {enableLineNotes && !resolvedGroup.showPricing && (
+                            <th scope="col" className="px-3 py-2">Notes</th>
+                          )}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50">
@@ -2623,6 +3313,8 @@ export function QuoteLineItemsTable({
                               rowKey={itemKey}
                               showMarkup={showMarkup}
                               showGst={showGst}
+                              showQuantities={resolvedGroup.showQuantities}
+                              showPricing={resolvedGroup.showPricing}
                               showCategory={showCategory}
                               isEditing={itemEditing}
                               selectedField={itemEditing ? (editState?.field ?? null) : null}
@@ -2638,6 +3330,8 @@ export function QuoteLineItemsTable({
                               showSelect={showSelect}
                               isPicked={!showSelect || (!!item.id && selection!.selectedIds.has(item.id))}
                               onTogglePick={() => item.id && toggleSelectionIds([item.id])}
+                              enableLineNotes={enableLineNotes}
+                              onEditLineNote={onEditLineNote}
                             />
                           );
                         })}
@@ -2648,6 +3342,7 @@ export function QuoteLineItemsTable({
                           const isComboCollapsed = searchTerm ? false : collapsedCombos.has(comboKey);
                           const comboItems = combo.items ?? [];
                           const comboItemCount = comboItems.length;
+                          const resolvedAssembly = resolveVisibility(comboKey, resolvedGroup.showQuantities, resolvedGroup.showPricing);
 
                           return (
                             <AssemblyBlock
@@ -2660,6 +3355,8 @@ export function QuoteLineItemsTable({
                               onToggle={() => toggleCombo(comboKey)}
                               showMarkup={showMarkup}
                               showGst={showGst}
+                              showQuantities={resolvedGroup.showQuantities}
+                              showPricing={resolvedGroup.showPricing}
                               showCategory={showCategory}
                               editState={isReadOnly ? null : editState}
                               editInputs={editInputs}
@@ -2675,6 +3372,15 @@ export function QuoteLineItemsTable({
                               showSelect={showSelect}
                               selectedIds={selection?.selectedIds}
                               onToggleIds={toggleSelectionIds}
+                              showColumnToggles={showColumnToggles}
+                              contentShowQuantities={resolvedAssembly.showQuantities}
+                              contentShowPricing={resolvedAssembly.showPricing}
+                              isOverridden={isHeaderOverridden(comboKey)}
+                              onToggleOverride={() => toggleHeaderOverride(comboKey, resolvedGroup.showQuantities, resolvedGroup.showPricing)}
+                              onToggleQuantities={() => toggleHeaderField(comboKey, 'showQuantities', resolvedAssembly.showQuantities)}
+                              onTogglePricing={() => toggleHeaderField(comboKey, 'showPricing', resolvedAssembly.showPricing)}
+                              enableLineNotes={enableLineNotes}
+                              onEditLineNote={onEditLineNote}
                             />
                           );
                         })}
@@ -2688,6 +3394,7 @@ export function QuoteLineItemsTable({
                       {scopes.map((scope, scopeIdx) => {
                           const scopeKey = `${gId}-scope-${scope.id ?? scopeIdx}`;
                           const isScopeCollapsed = searchTerm ? false : collapsedScopes.has(scopeKey);
+                          const resolvedScope = resolveVisibility(scopeKey, resolvedGroup.showQuantities, resolvedGroup.showPricing);
                           const scopeDropKey = `scope-drop-${scope.id ?? scopeKey}`;
                           const isScopeDropActive = activeDropKey === scopeDropKey;
                           const scopeDropProps =
@@ -2735,8 +3442,11 @@ export function QuoteLineItemsTable({
                                 <LineItemsColGroup
                                   showSelect={showSelect}
                                   showCategory={showCategory}
+                                  showQuantities={resolvedScope.showQuantities}
+                                  showPricing={resolvedScope.showPricing}
                                   showMarkup={showMarkup}
                                   showGst={showGst}
+                                  showNotesColumn={enableLineNotes && !resolvedScope.showPricing}
                                 />
                                 <tbody className="divide-y divide-slate-50">
                                   <ScopeBlock
@@ -2746,6 +3456,8 @@ export function QuoteLineItemsTable({
                                     onToggle={() => toggleScope(scopeKey)}
                                     showMarkup={showMarkup}
                                     showGst={showGst}
+                                    showQuantities={resolvedScope.showQuantities}
+                                    showPricing={resolvedScope.showPricing}
                                     showCategory={showCategory}
                                     editState={isReadOnly ? null : editState}
                                     editInputs={editInputs}
@@ -2767,6 +3479,17 @@ export function QuoteLineItemsTable({
                                     onToggleIds={toggleSelectionIds}
                                     isDropActive={isScopeDropActive}
                                     dropHint={labels.addToDrop(scope.name ?? 'Scope')}
+                                    showColumnToggles={showColumnToggles}
+                                    isOverridden={isHeaderOverridden(scopeKey)}
+                                    onToggleOverride={() => toggleHeaderOverride(scopeKey, resolvedGroup.showQuantities, resolvedGroup.showPricing)}
+                                    onToggleQuantities={() => toggleHeaderField(scopeKey, 'showQuantities', resolvedScope.showQuantities)}
+                                    onTogglePricing={() => toggleHeaderField(scopeKey, 'showPricing', resolvedScope.showPricing)}
+                                    resolveChildVisibility={resolveVisibility}
+                                    toggleChildField={toggleHeaderField}
+                                    isChildOverridden={isHeaderOverridden}
+                                    toggleChildOverride={toggleHeaderOverride}
+                                    enableLineNotes={enableLineNotes}
+                                    onEditLineNote={onEditLineNote}
                                   />
                                 </tbody>
                               </table>
