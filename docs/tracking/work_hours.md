@@ -736,8 +736,8 @@
   Prevents the invoice detail page from failing type checks during release.
 
 
-- `2026-08-15` `PENDING` **5 h**
-  `22 files | +1707 −339 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+- `2026-08-15` `bd5634d` **5 h**
+  `22 files | +1747 −379 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Quotes can be assigned to a person, and staff can add notes on RFQ line items while reviewing scope.
   Added assignee support on quotes so ownership is clear on the quote itself.
   Quote detail shows who is assigned and can fall back to the job assignee when needed.
