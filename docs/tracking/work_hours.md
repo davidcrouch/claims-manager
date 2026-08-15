@@ -745,3 +745,14 @@
   Improved the quote line-items table and group editing for clearer day-to-day use.
   Database updates back the new assignee and note fields.
   Outcome: clearer ownership on quotes and better context on RFQ line items.
+
+- `2026-08-16` `PENDING` **78.5 h**
+  `224 files | +18269 −2990 | Tier 1 mechanical / Tier 2 standard / Tier 3 complex | Heavy orchestration`
+  Lay summary: Staff can install capability packs, reshape document templates with live transforms, and use a broader assistant toolkit—including field assessment skills—across the product.
+  Delivered installable capability packs so organisations can turn on agents and skills as packaged features.
+  Added an admin screen to browse, inspect, and install packs without engineering changes.
+  Built document-template transforms with preview, versioning, and merge-tag support so output can be shaped per document type.
+  Expanded the assistant tool surface so chat can act across claims, finance, documents, and related workflows.
+  Refreshed field assessment screens and skills so assessors complete tabs with clearer guided assistance.
+  Improved how chat uses page context and skills so help stays relevant to the screen in use.
+  Outcome: packs, document transforms, and a wider assistant toolkit ready for day-to-day claims operations.

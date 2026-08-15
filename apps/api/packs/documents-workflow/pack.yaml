@@ -1,0 +1,12 @@
+id: documents-workflow
+version: 1.0.0
+name: Documents Workflow
+description: Document templates, transforms, and generation operations.
+integrationRefs:
+  - Claims Documents
+agents:
+  - file: agents/doc-ops.yaml
+skills:
+  - file: skills/transform-preview.yaml
+  - file: skills/template-assign.yaml
+prompts: []

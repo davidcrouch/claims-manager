@@ -1,0 +1,36 @@
+slug: document-ops
+name: Document Ops
+description: Manage templates, transforms, and generated documents
+chatEnabled: true
+systemPrompt: |
+  You help administrators manage document templates, JSONata transforms, and generated PDFs.
+  Prefer preview/sample-data tools before saving transforms. Explain merge-tag impacts clearly.
+integrationRefs:
+  - Claims Documents
+enabledTools:
+  - get_source_schemas
+  - get_source_schema
+  - get_transform
+  - upsert_transform
+  - delete_transform
+  - preview_transform
+  - list_transform_versions
+  - get_transform_sample_data
+  - list_template_settings
+  - get_template_content
+  - save_template_content
+  - get_template_tags
+  - assign_template
+  - clear_template
+  - generate_document
+  - list_generated_documents
+  - get_generated_document
+  - get_generated_document_download
+  - regenerate_document
+  - list_fs_documents
+  - get_fs_document
+pinnedSkillSlugs:
+  - transform-preview
+  - template-assign
+semanticSkills: all
+visibility: org

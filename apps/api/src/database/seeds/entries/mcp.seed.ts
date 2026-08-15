@@ -1,6 +1,9 @@
 /**
  * Seed trusted Claims Tools + Microsoft 365 MCP integrations for a tenant.
  * Idempotent. Used by provisioning and the db:seed:mcp CLI.
+ *
+ * Also seeds coarse category integrations (operations/documents/
+ * filesystem/ai/organisation) pointing at `/{category}/mcp` mounts on claims-mcp.
  */
 import { and, eq, isNull } from 'drizzle-orm';
 import type { SeedLogger, SeedResult } from '../lib/runner';
@@ -9,16 +12,145 @@ import * as schema from '../../schema';
 
 const LOG = '[seeds/mcp]';
 
+/** Must stay aligned with apps/claims-mcp/src/categories.ts SEEDED_CATEGORY_INTEGRATIONS. */
+const SEEDED_CATEGORY_INTEGRATIONS = [
+  {
+    slug: 'operations',
+    name: 'Claims Operations',
+    description:
+      'Main-menu domains: claims, jobs, commercial docs, finance, tasks, schedule, contacts, journals, reports',
+  },
+  {
+    slug: 'documents',
+    name: 'Claims Documents',
+    description: 'Documents runtime plus templates, transforms, and attachments',
+  },
+  {
+    slug: 'filesystem',
+    name: 'Claims Filesystem',
+    description: 'Filesystems, templates, pipelines, and catalogue',
+  },
+  {
+    slug: 'ai',
+    name: 'Claims AI',
+    description: 'Messages/chat plus agents, skills, AI settings, MCP admin, and providers',
+  },
+  {
+    slug: 'organisation',
+    name: 'Claims Organisation',
+    description: 'Users, organisations, roles, and notifications',
+  },
+] as const;
+
+function resolveClaimsMcpBaseUrl(): string {
+  const raw = (process.env.CLAIMS_MCP_URL ?? '').trim() || 'http://localhost:4601';
+  return raw.replace(/\/+$/, '').replace(/\/mcp$/i, '');
+}
+
 function resolveClaimsMcpUrl(): string {
-  const raw = (process.env.CLAIMS_MCP_URL ?? '').trim();
-  if (!raw) return 'http://localhost:4601/mcp';
-  return raw.endsWith('/mcp') ? raw : `${raw.replace(/\/+$/, '')}/mcp`;
+  return `${resolveClaimsMcpBaseUrl()}/mcp`;
+}
+
+function resolveClaimsMcpCategoryUrl(slug: string): string {
+  return `${resolveClaimsMcpBaseUrl()}/${slug}/mcp`;
 }
 
 function resolveMsGraphMcpUrl(): string {
   const raw = (process.env.MS_GRAPH_MCP_URL ?? '').trim();
   if (!raw) return 'http://localhost:4602/mcp';
   return raw.endsWith('/mcp') ? raw : `${raw.replace(/\/+$/, '')}/mcp`;
+}
+
+async function upsertTrustedIntegration(params: {
+  db: SeedDb;
+  tenantId: string;
+  name: string;
+  description: string;
+  url: string;
+  logger: SeedLogger;
+  counters: { inserted: number; updated: number; skipped: number };
+  createOrgConnection: boolean;
+}): Promise<string | undefined> {
+  const { db, tenantId, name, description, url, logger, counters, createOrgConnection } =
+    params;
+
+  const [existing] = await db
+    .select()
+    .from(schema.mcpIntegration)
+    .where(
+      and(eq(schema.mcpIntegration.tenantId, tenantId), eq(schema.mcpIntegration.name, name)),
+    )
+    .limit(1);
+
+  let integrationId = existing?.id;
+  if (!existing) {
+    const [created] = await db
+      .insert(schema.mcpIntegration)
+      .values({
+        tenantId,
+        name,
+        description,
+        url,
+        transportType: 'http',
+        supportedAuthTypes: ['bearer_passthrough'],
+        authConfig: {},
+        visibility: 'org',
+        status: 'active',
+        trustedServer: true,
+        sharedConnectionPolicy: 'org_shared',
+      })
+      .returning();
+    integrationId = created.id;
+    counters.inserted += 1;
+    logger.info(`${LOG} created ${name} integration id=${integrationId}`);
+  } else {
+    await db
+      .update(schema.mcpIntegration)
+      .set({
+        url,
+        description,
+        status: 'active',
+        trustedServer: true,
+        supportedAuthTypes: ['bearer_passthrough'],
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.mcpIntegration.id, existing.id));
+    counters.updated += 1;
+    logger.info(`${LOG} updated ${name} integration id=${existing.id}`);
+  }
+
+  if (createOrgConnection && integrationId) {
+    const [conn] = await db
+      .select()
+      .from(schema.mcpConnection)
+      .where(
+        and(
+          eq(schema.mcpConnection.tenantId, tenantId),
+          eq(schema.mcpConnection.integrationId, integrationId),
+          isNull(schema.mcpConnection.deletedAt),
+          isNull(schema.mcpConnection.userId),
+        ),
+      )
+      .limit(1);
+
+    if (!conn) {
+      await db.insert(schema.mcpConnection).values({
+        integrationId,
+        tenantId,
+        userId: null,
+        authType: 'bearer_passthrough',
+        status: 'connected',
+        visibility: 'org',
+        enabled: true,
+      });
+      counters.inserted += 1;
+      logger.info(`${LOG} created org-shared ${name} connection`);
+    } else {
+      counters.skipped += 1;
+    }
+  }
+
+  return integrationId;
 }
 
 export async function seedMcpForTenant(params: {
@@ -34,89 +166,32 @@ export async function seedMcpForTenant(params: {
   const { db, tenantId } = params;
   const claimsUrl = resolveClaimsMcpUrl();
   const graphUrl = resolveMsGraphMcpUrl();
-
-  let inserted = 0;
-  let updated = 0;
-  let skipped = 0;
+  const counters = { inserted: 0, updated: 0, skipped: 0 };
 
   logger.info(`${LOG} seeding MCP integrations tenant=${tenantId} claims=${claimsUrl}`);
 
-  const [existingClaims] = await db
-    .select()
-    .from(schema.mcpIntegration)
-    .where(
-      and(
-        eq(schema.mcpIntegration.tenantId, tenantId),
-        eq(schema.mcpIntegration.name, 'Claims Tools'),
-      ),
-    )
-    .limit(1);
+  await upsertTrustedIntegration({
+    db,
+    tenantId,
+    name: 'Claims Tools',
+    description: 'First-party claims-manager domain tools (trusted, all categories)',
+    url: claimsUrl,
+    logger,
+    counters,
+    createOrgConnection: true,
+  });
 
-  let claimsIntegrationId = existingClaims?.id;
-  if (!existingClaims) {
-    const [created] = await db
-      .insert(schema.mcpIntegration)
-      .values({
-        tenantId,
-        name: 'Claims Tools',
-        description: 'First-party claims-manager domain tools (trusted)',
-        url: claimsUrl,
-        transportType: 'http',
-        supportedAuthTypes: ['bearer_passthrough'],
-        authConfig: {},
-        visibility: 'org',
-        status: 'active',
-        trustedServer: true,
-        sharedConnectionPolicy: 'org_shared',
-      })
-      .returning();
-    claimsIntegrationId = created.id;
-    inserted += 1;
-    logger.info(`${LOG} created Claims Tools integration id=${claimsIntegrationId}`);
-  } else {
-    await db
-      .update(schema.mcpIntegration)
-      .set({
-        url: claimsUrl,
-        status: 'active',
-        trustedServer: true,
-        supportedAuthTypes: ['bearer_passthrough'],
-        updatedAt: new Date(),
-      })
-      .where(eq(schema.mcpIntegration.id, existingClaims.id));
-    updated += 1;
-    logger.info(`${LOG} updated Claims Tools integration id=${existingClaims.id}`);
-  }
-
-  if (claimsIntegrationId) {
-    const [conn] = await db
-      .select()
-      .from(schema.mcpConnection)
-      .where(
-        and(
-          eq(schema.mcpConnection.tenantId, tenantId),
-          eq(schema.mcpConnection.integrationId, claimsIntegrationId),
-          isNull(schema.mcpConnection.deletedAt),
-          isNull(schema.mcpConnection.userId),
-        ),
-      )
-      .limit(1);
-
-    if (!conn) {
-      await db.insert(schema.mcpConnection).values({
-        integrationId: claimsIntegrationId,
-        tenantId,
-        userId: null,
-        authType: 'bearer_passthrough',
-        status: 'connected',
-        visibility: 'org',
-        enabled: true,
-      });
-      inserted += 1;
-      logger.info(`${LOG} created org-shared Claims Tools connection`);
-    } else {
-      skipped += 1;
-    }
+  for (const cat of SEEDED_CATEGORY_INTEGRATIONS) {
+    await upsertTrustedIntegration({
+      db,
+      tenantId,
+      name: cat.name,
+      description: cat.description,
+      url: resolveClaimsMcpCategoryUrl(cat.slug),
+      logger,
+      counters,
+      createOrgConnection: true,
+    });
   }
 
   const [existingGraph] = await db
@@ -156,7 +231,7 @@ export async function seedMcpForTenant(params: {
       trustedServer: false,
       sharedConnectionPolicy: 'user_required',
     });
-    inserted += 1;
+    counters.inserted += 1;
     logger.info(`${LOG} created Microsoft 365 integration`);
   } else {
     await db
@@ -167,14 +242,14 @@ export async function seedMcpForTenant(params: {
         updatedAt: new Date(),
       })
       .where(eq(schema.mcpIntegration.id, existingGraph.id));
-    updated += 1;
+    counters.updated += 1;
     logger.info(`${LOG} updated Microsoft 365 integration id=${existingGraph.id}`);
   }
 
   return {
-    inserted,
-    updated,
-    skipped,
+    inserted: counters.inserted,
+    updated: counters.updated,
+    skipped: counters.skipped,
     notes: `mcp tenant=${tenantId}`,
   };
 }

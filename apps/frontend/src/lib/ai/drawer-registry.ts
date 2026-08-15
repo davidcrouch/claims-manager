@@ -43,39 +43,75 @@ export const drawerRegistry: Record<string, DrawerRegistryEntry> = {
         default: m.ContactFormDrawer as unknown as ComponentType<CanvasDrawerProps>,
       })),
   },
-  AssessmentBuildingDrawer: {
-    title: 'Building Structure',
+  AssessmentCreateDrawer: {
+    title: 'Create Assessment',
+    defaultProps: { jobId: '' },
     loader: () =>
-      import('@/components/assessments/drawers/AssessmentBuildingDrawer').then((m) => ({
-        default: m.AssessmentBuildingDrawer as unknown as ComponentType<CanvasDrawerProps>,
+      import('@/components/assessments/drawers/AssessmentCreateDrawer').then((m) => ({
+        default: m.AssessmentCreateDrawer as unknown as ComponentType<CanvasDrawerProps>,
       })),
   },
-  AssessmentGeneralDrawer: {
-    title: 'General Questions',
+  AssessmentAttendanceDrawer: {
+    title: 'Attendance',
     loader: () =>
-      import('@/components/assessments/drawers/AssessmentGeneralDrawer').then((m) => ({
-        default: m.AssessmentGeneralDrawer as unknown as ComponentType<CanvasDrawerProps>,
+      import('@/components/assessments/drawers/tab-drawers').then((m) => ({
+        default: m.AssessmentAttendanceDrawer as unknown as ComponentType<CanvasDrawerProps>,
       })),
   },
-  AssessmentHazardsDrawer: {
+  AssessmentBuildingTabDrawer: {
+    title: 'Building',
+    loader: () =>
+      import('@/components/assessments/drawers/tab-drawers').then((m) => ({
+        default: m.AssessmentBuildingTabDrawer as unknown as ComponentType<CanvasDrawerProps>,
+      })),
+  },
+  AssessmentHabitabilityDrawer: {
+    title: 'Habitability',
+    loader: () =>
+      import('@/components/assessments/drawers/tab-drawers').then((m) => ({
+        default: m.AssessmentHabitabilityDrawer as unknown as ComponentType<CanvasDrawerProps>,
+      })),
+  },
+  AssessmentHazardsTabDrawer: {
     title: 'Hazards',
     loader: () =>
-      import('@/components/assessments/drawers/AssessmentHazardsDrawer').then((m) => ({
-        default: m.AssessmentHazardsDrawer as unknown as ComponentType<CanvasDrawerProps>,
+      import('@/components/assessments/drawers/tab-drawers').then((m) => ({
+        default: m.AssessmentHazardsTabDrawer as unknown as ComponentType<CanvasDrawerProps>,
       })),
   },
-  AssessmentAccommodationDrawer: {
-    title: 'Temporary Accommodation',
+  AssessmentDamageDrawer: {
+    title: 'Damage & Cause',
     loader: () =>
-      import('@/components/assessments/drawers/AssessmentAccommodationDrawer').then((m) => ({
-        default: m.AssessmentAccommodationDrawer as unknown as ComponentType<CanvasDrawerProps>,
+      import('@/components/assessments/drawers/tab-drawers').then((m) => ({
+        default: m.AssessmentDamageDrawer as unknown as ComponentType<CanvasDrawerProps>,
       })),
   },
-  AssessmentOtherDrawer: {
-    title: 'Other Details',
+  AssessmentMakeSafeDrawer: {
+    title: 'Make Safe',
     loader: () =>
-      import('@/components/assessments/drawers/AssessmentOtherDrawer').then((m) => ({
-        default: m.AssessmentOtherDrawer as unknown as ComponentType<CanvasDrawerProps>,
+      import('@/components/assessments/drawers/tab-drawers').then((m) => ({
+        default: m.AssessmentMakeSafeDrawer as unknown as ComponentType<CanvasDrawerProps>,
+      })),
+  },
+  AssessmentTempAccommodationDrawer: {
+    title: 'Temp Accommodation',
+    loader: () =>
+      import('@/components/assessments/drawers/tab-drawers').then((m) => ({
+        default: m.AssessmentTempAccommodationDrawer as unknown as ComponentType<CanvasDrawerProps>,
+      })),
+  },
+  AssessmentSpecialistsDrawer: {
+    title: 'Specialists',
+    loader: () =>
+      import('@/components/assessments/drawers/tab-drawers').then((m) => ({
+        default: m.AssessmentSpecialistsDrawer as unknown as ComponentType<CanvasDrawerProps>,
+      })),
+  },
+  AssessmentRecommendationDrawer: {
+    title: 'Recommendation',
+    loader: () =>
+      import('@/components/assessments/drawers/tab-drawers').then((m) => ({
+        default: m.AssessmentRecommendationDrawer as unknown as ComponentType<CanvasDrawerProps>,
       })),
   },
 };

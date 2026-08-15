@@ -37,6 +37,16 @@ export interface AssessmentFormDrawerProps {
   onCreated?: (assessment: Assessment) => void;
   jobId?: string | null;
   jobs?: JobOption[];
+  /** Live values pushed from AI fill_create_assessment tool. */
+  name?: string;
+  claimRecommendation?: string;
+  makeSafe?: boolean;
+  makeSafeType?: string;
+  designType?: string;
+  construction?: string;
+  roofType?: string;
+  buildingType?: string;
+  comments?: string;
 }
 
 const CLAIM_RECOMMENDATIONS = ['Approve', 'Decline', 'Refer', 'Pending'];
@@ -57,27 +67,63 @@ export function AssessmentFormDrawer({
   onCreated,
   jobId,
   jobs = [],
+  name: nameProp,
+  claimRecommendation: claimRecommendationProp,
+  makeSafe: makeSafeProp,
+  makeSafeType: makeSafeTypeProp,
+  designType: designTypeProp,
+  construction: constructionProp,
+  roofType: roofTypeProp,
+  buildingType: buildingTypeProp,
+  comments: commentsProp,
 }: AssessmentFormDrawerProps) {
   const router = useRouter();
   const { phase, busy, startCreating, startOpening, resetPhase } =
     useCreateSubmitPhase();
   const [selectedJobId, setSelectedJobId] = useState(jobId ?? '');
-  const [name, setName] = useState('');
-  const [claimRecommendation, setClaimRecommendation] = useState('');
-  const [makeSafe, setMakeSafe] = useState(false);
-  const [makeSafeType, setMakeSafeType] = useState('');
-  const [designType, setDesignType] = useState('');
-  const [construction, setConstruction] = useState('');
-  const [roofType, setRoofType] = useState('');
-  const [buildingType, setBuildingType] = useState('');
-  const [comments, setComments] = useState('');
+  const [name, setName] = useState(nameProp ?? '');
+  const [claimRecommendation, setClaimRecommendation] = useState(
+    claimRecommendationProp ?? '',
+  );
+  const [makeSafe, setMakeSafe] = useState(makeSafeProp ?? false);
+  const [makeSafeType, setMakeSafeType] = useState(makeSafeTypeProp ?? '');
+  const [designType, setDesignType] = useState(designTypeProp ?? '');
+  const [construction, setConstruction] = useState(constructionProp ?? '');
+  const [roofType, setRoofType] = useState(roofTypeProp ?? '');
+  const [buildingType, setBuildingType] = useState(buildingTypeProp ?? '');
+  const [comments, setComments] = useState(commentsProp ?? '');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (open) {
-      setSelectedJobId(jobId ?? '');
-    }
+    if (!open) return;
+    if (jobId) setSelectedJobId(jobId);
   }, [open, jobId]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (nameProp !== undefined) setName(nameProp);
+    if (claimRecommendationProp !== undefined) {
+      setClaimRecommendation(claimRecommendationProp);
+    }
+    if (makeSafeProp !== undefined) setMakeSafe(makeSafeProp);
+    if (makeSafeTypeProp !== undefined) setMakeSafeType(makeSafeTypeProp);
+    if (designTypeProp !== undefined) setDesignType(designTypeProp);
+    if (constructionProp !== undefined) setConstruction(constructionProp);
+    if (roofTypeProp !== undefined) setRoofType(roofTypeProp);
+    if (buildingTypeProp !== undefined) setBuildingType(buildingTypeProp);
+    if (commentsProp !== undefined) setComments(commentsProp);
+  }, [
+    open,
+    nameProp,
+    claimRecommendationProp,
+    makeSafeProp,
+    makeSafeTypeProp,
+    designTypeProp,
+    constructionProp,
+    roofTypeProp,
+    buildingTypeProp,
+    commentsProp,
+  ]);
 
   const resetForm = () => {
     setSelectedJobId(jobId ?? '');

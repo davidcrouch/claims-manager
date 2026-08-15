@@ -1,9 +1,16 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { eq, and, asc, isNull } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
-import { quotes, quoteGroups, quoteItems, organizations } from '../../../database/schema';
+import {
+  quotes,
+  quoteGroups,
+  quoteCombos,
+  quoteItems,
+  organizations,
+} from '../../../database/schema';
 import type { DataMapper } from './base.mapper';
-import { formatCurrency, formatDate, formatQuantity } from './base.mapper';
+import { formatCurrency, formatDate } from './base.mapper';
+import { buildTemplateGroups } from './line-items.helper';
 import type { TemplateData } from '../types/document-types';
 
 @Injectable()
@@ -28,6 +35,12 @@ export class QuoteMapper implements DataMapper {
       .where(and(eq(quoteGroups.quoteId, params.entityId), eq(quoteGroups.tenantId, params.tenantId)))
       .orderBy(asc(quoteGroups.sortIndex));
 
+    const combos = await this.db
+      .select()
+      .from(quoteCombos)
+      .where(and(eq(quoteCombos.tenantId, params.tenantId), isNull(quoteCombos.deletedAt)))
+      .orderBy(asc(quoteCombos.sortIndex));
+
     const items = await this.db
       .select()
       .from(quoteItems)
@@ -38,28 +51,14 @@ export class QuoteMapper implements DataMapper {
     const quoteFrom = quote.quoteFrom as Record<string, unknown>;
     const quoteFor = quote.quoteFor as Record<string, unknown>;
 
-    const groupData = groups.map((g) => {
-      const groupItems = items
-        .filter((i) => i.quoteGroupId === g.id)
-        .map((i) => ({
-          item_name: i.name ?? '',
-          item_description: i.description ?? '',
-          item_category: i.category ?? '',
-          item_quantity: formatQuantity(i.quantity),
-          item_unit_cost: formatCurrency(i.unitCost),
-          item_tax: formatCurrency(i.tax),
-          item_total: formatCurrency(i.unitCost && i.quantity
-            ? parseFloat(i.unitCost) * parseFloat(i.quantity)
-            : 0),
-        }));
-
-      return {
-        group_name: g.description ?? '',
-        group_subtotal: formatCurrency(
-          (g.totals as Record<string, unknown>)?.subTotal as string ?? '0',
-        ),
-        items: groupItems,
-      };
+    const groupData = buildTemplateGroups({
+      groups,
+      combos: combos.map((c) => ({ ...c, groupId: c.quoteGroupId })),
+      items: items.map((i) => ({
+        ...i,
+        groupId: i.quoteGroupId,
+        comboId: i.quoteComboId,
+      })),
     });
 
     return {

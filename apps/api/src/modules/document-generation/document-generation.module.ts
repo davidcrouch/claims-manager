@@ -24,6 +24,7 @@ import { MessageMapper } from './data-mappers/message.mapper';
 import { JournalMapper } from './data-mappers/journal.mapper';
 import { VendorMapper } from './data-mappers/vendor.mapper';
 import { AssessmentMapper } from './data-mappers/assessment.mapper';
+import { DocumentMapper } from './data-mappers/document.mapper';
 import { JobsListMapper } from './data-mappers/jobs-list.mapper';
 import { QuotesListMapper } from './data-mappers/quotes-list.mapper';
 import { InvoicesListMapper } from './data-mappers/invoices-list.mapper';
@@ -40,7 +41,11 @@ import { AppointmentsListMapper } from './data-mappers/appointments-list.mapper'
 import { MessagesListMapper } from './data-mappers/messages-list.mapper';
 import { JournalsListMapper } from './data-mappers/journals-list.mapper';
 import { VendorsListMapper } from './data-mappers/vendors-list.mapper';
+import { AssessmentsListMapper } from './data-mappers/assessments-list.mapper';
+import { DocumentsListMapper } from './data-mappers/documents-list.mapper';
+import { ScheduleListMapper } from './data-mappers/schedule-list.mapper';
 import { DocumentsRepository } from '../../database/repositories/documents.repository';
+import { TransformService } from './services/transform.service';
 
 @Module({
   imports: [TenantModule, FilesystemModule],
@@ -50,6 +55,7 @@ import { DocumentsRepository } from '../../database/repositories/documents.repos
     TemplateEngineService,
     PdfConverterService,
     TemplateRegistryService,
+    TransformService,
     DocumentsRepository,
     QuoteMapper,
     InvoiceMapper,
@@ -68,6 +74,7 @@ import { DocumentsRepository } from '../../database/repositories/documents.repos
     JournalMapper,
     VendorMapper,
     AssessmentMapper,
+    DocumentMapper,
     JobsListMapper,
     QuotesListMapper,
     InvoicesListMapper,
@@ -84,7 +91,10 @@ import { DocumentsRepository } from '../../database/repositories/documents.repos
     MessagesListMapper,
     JournalsListMapper,
     VendorsListMapper,
+    AssessmentsListMapper,
+    DocumentsListMapper,
+    ScheduleListMapper,
   ],
-  exports: [DocumentGenerationService, TemplateRegistryService],
+  exports: [DocumentGenerationService, TemplateRegistryService, TransformService],
 })
 export class DocumentGenerationModule {}

@@ -269,3 +269,9 @@ export {
   type AssessmentRow,
   type AssessmentInsert,
 } from './assessments.repository';
+export {
+  DocumentTemplateTransformsRepository,
+  type DocumentTemplateTransformRow,
+  type DocumentTemplateTransformInsert,
+  type DocumentTemplateTransformVersionRow,
+} from './document-template-transforms.repository';

@@ -1,0 +1,20 @@
+slug: template-assign
+name: Template Assign
+description: Assign or clear a filesystem DOCX template for a document scenario.
+triggerHints:
+  - assign template
+  - change template
+  - template settings
+instructionPrompt: |
+  Confirm document type and filesystem document id. Show current template settings,
+  then assign or clear as requested. Verify tags after assignment when useful.
+requiredToolRefs:
+  - integration: Claims Documents
+    tool: list_template_settings
+  - integration: Claims Documents
+    tool: assign_template
+  - integration: Claims Documents
+    tool: get_template_tags
+category: documents
+invocationMode: inline
+visibility: org

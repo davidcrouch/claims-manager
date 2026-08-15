@@ -1,0 +1,20 @@
+slug: rfq-scope
+name: RFQ Scope Check
+description: Validate RFQ line-item scope against the related quote.
+triggerHints:
+  - rfq scope
+  - check rfq
+  - vendor request
+instructionPrompt: |
+  Load the RFQ and line items. Compare against the linked quote when available.
+  Flag missing items and unclear notes before sending to vendors.
+requiredToolRefs:
+  - integration: Claims Operations
+    tool: get_rfq
+  - integration: Claims Operations
+    tool: get_rfq_line_items
+  - integration: Claims Operations
+    tool: get_quote
+category: rfqs
+invocationMode: inline
+visibility: org

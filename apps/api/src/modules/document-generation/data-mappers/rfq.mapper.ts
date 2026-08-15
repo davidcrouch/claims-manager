@@ -1,9 +1,16 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { eq, and, asc } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
-import { rfqs, rfqGroups, rfqItems, organizations } from '../../../database/schema';
+import {
+  rfqs,
+  rfqGroups,
+  rfqCombos,
+  rfqItems,
+  organizations,
+} from '../../../database/schema';
 import type { DataMapper } from './base.mapper';
-import { formatCurrency, formatDate, formatQuantity } from './base.mapper';
+import { formatDate } from './base.mapper';
+import { buildTemplateGroups } from './line-items.helper';
 import type { TemplateData } from '../types/document-types';
 
 @Injectable()
@@ -30,6 +37,12 @@ export class RfqMapper implements DataMapper {
       )
       .orderBy(asc(rfqGroups.sortIndex));
 
+    const combos = await this.db
+      .select()
+      .from(rfqCombos)
+      .where(eq(rfqCombos.tenantId, params.tenantId))
+      .orderBy(asc(rfqCombos.sortIndex));
+
     const items = await this.db
       .select()
       .from(rfqItems)
@@ -39,28 +52,14 @@ export class RfqMapper implements DataMapper {
     const rfqTo = rfq.rfqTo as Record<string, unknown>;
     const rfqFrom = rfq.rfqFrom as Record<string, unknown>;
 
-    const groupData = groups.map((g) => {
-      const groupItems = items
-        .filter((i) => i.rfqGroupId === g.id)
-        .map((i) => ({
-          item_name: i.name ?? '',
-          item_description: i.description ?? '',
-          item_category: i.category ?? '',
-          item_quantity: formatQuantity(i.quantity),
-          item_unit_cost: formatCurrency(i.unitCost),
-          item_tax: formatCurrency(i.tax),
-          item_total: formatCurrency(
-            i.unitCost && i.quantity ? parseFloat(i.unitCost) * parseFloat(i.quantity) : 0,
-          ),
-        }));
-
-      return {
-        group_name: g.description ?? '',
-        group_subtotal: formatCurrency(
-          (g.totals as Record<string, unknown>)?.subTotal as string ?? '0',
-        ),
-        items: groupItems,
-      };
+    const groupData = buildTemplateGroups({
+      groups,
+      combos: combos.map((c) => ({ ...c, groupId: c.rfqGroupId })),
+      items: items.map((i) => ({
+        ...i,
+        groupId: i.rfqGroupId,
+        comboId: i.rfqComboId,
+      })),
     });
 
     return {

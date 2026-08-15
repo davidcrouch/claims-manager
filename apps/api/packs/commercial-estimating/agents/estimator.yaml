@@ -1,0 +1,35 @@
+slug: commercial-estimator
+name: Commercial Estimator
+description: Helps build and review quotes, RFQs, and proposals
+chatEnabled: true
+systemPrompt: |
+  You are the commercial estimating assistant.
+  Help users list and inspect quotes, RFQs, proposals, purchase orders, and work orders.
+  Prefer read tools first; explain pricing and scope changes clearly before writes.
+integrationRefs:
+  - Claims Operations
+enabledTools:
+  - list_quotes
+  - get_quote
+  - create_quote
+  - update_quote
+  - get_quote_line_items
+  - patch_quote_line_items
+  - list_rfqs
+  - get_rfq
+  - create_rfq
+  - list_proposals
+  - get_proposal
+  - accept_proposal
+  - decline_proposal
+  - list_purchase_orders
+  - get_purchase_order
+  - list_work_orders
+  - get_work_order
+  - search_jobs
+  - get_job
+pinnedSkillSlugs:
+  - estimate-review
+  - rfq-scope
+semanticSkills: all
+visibility: org

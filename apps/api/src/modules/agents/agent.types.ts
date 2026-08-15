@@ -48,6 +48,9 @@ export interface CreateAgentDto {
   maxSteps?: number;
   pinnedSkills?: string[];
   semanticSkills?: 'all' | 'none' | 'pinned_only';
+  /** Set when materializing from a capability pack install. */
+  packInstallId?: string;
+  slug?: string;
 }
 
 export interface UpdateAgentDto extends Partial<CreateAgentDto> {

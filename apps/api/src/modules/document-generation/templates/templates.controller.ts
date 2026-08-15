@@ -11,6 +11,7 @@ import {
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { TenantContext } from '../../../tenant/tenant-context';
 import { TemplateRegistryService } from '../services/template-registry.service';
+import { TemplateEngineService } from '../services/template-engine.service';
 import { AssignTemplateDto } from '../dto/assign-template.dto';
 import { UpdateTemplatesFolderDto } from '../dto/update-templates-folder.dto';
 import { RequirePermission } from '../../../auth/decorators/require-permission.decorator';
@@ -20,6 +21,8 @@ import {
   isAssignableTemplateType,
   type AssignableTemplateType,
 } from '../types/document-types';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const HTMLtoDOCX = require('html-to-docx');
 
 @ApiTags('Document Templates')
 @Controller('document-templates')
@@ -28,6 +31,7 @@ export class TemplatesController {
 
   constructor(
     private readonly templateRegistry: TemplateRegistryService,
+    private readonly templateEngine: TemplateEngineService,
     private readonly tenantContext: TenantContext,
   ) {}
 
@@ -60,6 +64,66 @@ export class TemplatesController {
     return this.templateRegistry.setFolderSetting({
       tenantId,
       filesystemCategoryId: dto.filesystemCategoryId ?? null,
+    });
+  }
+
+  @Get(':documentType/content')
+  @RequirePermission(P.documents.read)
+  @ApiOperation({ summary: 'Get the assigned template content as base64 DOCX' })
+  async getContent(@Param('documentType') documentType: string) {
+    this.assertDocumentType(documentType);
+    const tenantId = this.tenantContext.getTenantId();
+    this.logger.debug(
+      `TemplatesController.getContent — tenantId=${tenantId} documentType=${documentType}`,
+    );
+    return this.templateRegistry.getTemplateContent({
+      tenantId,
+      documentType,
+    });
+  }
+
+  @Put(':documentType/content')
+  @RequirePermission(P.documents.manage)
+  @ApiOperation({ summary: 'Save template content from HTML (converts to DOCX)' })
+  async saveContent(
+    @Param('documentType') documentType: string,
+    @Body() body: { html: string },
+  ) {
+    this.assertDocumentType(documentType);
+    const tenantId = this.tenantContext.getTenantId();
+    const logPrefix = 'TemplatesController.saveContent';
+
+    if (!body.html) {
+      throw new BadRequestException('html body is required');
+    }
+
+    this.logger.debug(`${logPrefix} — converting HTML to DOCX for ${documentType}`);
+    const docxBuffer = await HTMLtoDOCX(body.html, null, {
+      table: { row: { cantSplit: true } },
+      footer: true,
+      pageNumber: true,
+    }) as Buffer;
+
+    return this.templateRegistry.saveTemplateContent({
+      tenantId,
+      documentType,
+      docxBuffer: Buffer.from(docxBuffer),
+    });
+  }
+
+  @Get(':documentType/tags')
+  @RequirePermission(P.documents.read)
+  @ApiOperation({ summary: 'Extract merge tags from the assigned template' })
+  async getTags(@Param('documentType') documentType: string) {
+    this.assertDocumentType(documentType);
+    const tenantId = this.tenantContext.getTenantId();
+    this.logger.debug(
+      `TemplatesController.getTags — tenantId=${tenantId} documentType=${documentType}`,
+    );
+    return this.templateRegistry.getTemplateTags({
+      tenantId,
+      documentType,
+      templateEngineService: this.templateEngine,
     });
   }
 

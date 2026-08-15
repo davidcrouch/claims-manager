@@ -5,6 +5,7 @@ import { DrizzleModule } from '../../database/drizzle.module';
 import { TenantModule } from '../../tenant/tenant.module';
 import { AgentsModule } from '../agents/agents.module';
 import { ConversationsModule } from '../conversations/conversations.module';
+import { DocumentGenerationModule } from '../document-generation/document-generation.module';
 import { McpIntegrationModule } from '../mcp-integration/mcp-integration.module';
 import { SkillsModule } from '../skills/skills.module';
 import { AiCanvasController } from './ai-canvas.controller';
@@ -28,6 +29,7 @@ import { AiSettingsService } from './ai-settings.service';
     TenantModule,
     AgentsModule,
     ConversationsModule,
+    DocumentGenerationModule,
     McpIntegrationModule,
     SkillsModule,
     MulterModule.register({ limits: { fileSize: 20 * 1024 * 1024 } }),

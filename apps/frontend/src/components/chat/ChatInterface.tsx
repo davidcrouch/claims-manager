@@ -13,12 +13,14 @@ import { MessageAuditDrawer } from './MessageAuditDrawer';
 import { useAuditInspector } from './hooks/use-audit-inspector';
 import { useFileUpload } from './hooks/useFileUpload';
 import { useSpeechRecognition } from './use-speech-recognition';
+import type { PageContext } from '@/lib/ai/use-page-context';
 import type { AgentAvatarInfo } from './MessageRenderer';
 
 interface ChatInterfaceProps {
   conversationId?: string;
   initialMessages?: ChatMessage[];
   agents: Agent[];
+  pageContext?: PageContext;
   onMessagesChange?: (messages: ChatMessage[]) => void;
   onOpenCanvas?: (artifact: CanvasArtifact) => void;
   onOpenCanvasComponent?: (event: {
@@ -38,6 +40,7 @@ export function ChatInterface({
   conversationId,
   initialMessages,
   agents,
+  pageContext,
   onMessagesChange,
   onOpenCanvas,
   onOpenCanvasComponent,
@@ -129,6 +132,7 @@ export function ChatInterface({
           ? selectedAgentIdRef.current
           : undefined,
       conversationId,
+      pageContext: pageContext ?? undefined,
     }),
     onCanvasAction: handleCanvasAction,
     onCanvasComponent: handleCanvasComponent,

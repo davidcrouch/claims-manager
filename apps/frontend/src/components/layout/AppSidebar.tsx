@@ -43,6 +43,7 @@ import {
   Shield,
   Bell,
   ToggleLeft,
+  PackageOpen,
 } from 'lucide-react';
 import { Collapsible } from '@base-ui/react/collapsible';
 import {
@@ -163,6 +164,7 @@ const adminNavGroups: NavGroup[] = [
     items: [
       { title: 'Agents', href: '/admin/agents', icon: Bot, feature: 'ai.agents' },
       { title: 'Skills', href: '/admin/skills', icon: Sparkles, feature: 'ai.skills' },
+      { title: 'Capability Packs', href: '/admin/capability-packs', icon: PackageOpen, feature: 'ai.agents' },
       { title: 'AI Audit', href: '/admin/ai-audit', icon: BarChart3 },
     ],
   },

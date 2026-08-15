@@ -3060,6 +3060,10 @@ export const capabilityPackInstall = pgTable(
     packId: text('pack_id').notNull(),
     packVersion: text('pack_version').notNull(),
     status: text('status').notNull().default('active'),
+    source: text('source').notNull().default('builtin'),
+    displayName: text('display_name'),
+    errorMessage: text('error_message'),
+    uploadId: uuid('upload_id'),
     installedAt: timestamp('installed_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -3068,7 +3072,14 @@ export const capabilityPackInstall = pgTable(
       'capability_pack_install_status_check',
       sql`status IN ('active', 'disabled', 'upgrading', 'error')`,
     ),
+    check(
+      'capability_pack_install_source_check',
+      sql`source IN ('builtin', 'upload')`,
+    ),
     index('capability_pack_install_tenant_idx').on(t.tenantId),
+    uniqueIndex('capability_pack_install_tenant_pack_active_uidx')
+      .on(t.tenantId, t.packId)
+      .where(sql`status IN ('active', 'upgrading')`),
   ],
 );
 
@@ -3082,6 +3093,7 @@ export const capabilityPackArtefact = pgTable(
     artefactType: text('artefact_type').notNull(),
     artefactId: uuid('artefact_id').notNull(),
     sourceHash: text('source_hash'),
+    sourceKey: text('source_key'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -3094,6 +3106,29 @@ export const capabilityPackArtefact = pgTable(
       t.artefactType,
       t.artefactId,
     ),
+  ],
+);
+
+export const capabilityPackUpload = pgTable(
+  'capability_pack_upload',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    packId: text('pack_id').notNull(),
+    packVersion: text('pack_version').notNull(),
+    displayName: text('display_name'),
+    description: text('description'),
+    bundleJson: jsonb('bundle_json').notNull(),
+    manifestJson: jsonb('manifest_json').notNull(),
+    createdBy: uuid('created_by'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('capability_pack_upload_tenant_idx').on(t.tenantId),
+    index('capability_pack_upload_pack_idx').on(t.tenantId, t.packId),
   ],
 );
 
@@ -3255,3 +3290,48 @@ export const jobsRelations = relations(jobs, ({ one }) => ({
     references: [lookupValues.id],
   }),
 }));
+
+// ---------------------------------------------------------------------------
+// Document Template Transforms (per-tenant JSONata source → target mapping)
+// ---------------------------------------------------------------------------
+export const documentTemplateTransforms = pgTable(
+  'document_template_transforms',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    documentType: text('document_type').notNull(),
+    jsonataRules: text('jsonata_rules'),
+    targetSchema: jsonb('target_schema'),
+    testData: jsonb('test_data'),
+    version: integer('version').notNull().default(1),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedBy: uuid('updated_by'),
+  },
+  (t) => [
+    unique('UQ_doc_transform_tenant_type').on(t.tenantId, t.documentType),
+    index('idx_doc_transforms_tenant_type').on(t.tenantId, t.documentType),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Document Template Transform Versions (history / audit trail)
+// ---------------------------------------------------------------------------
+export const documentTemplateTransformVersions = pgTable(
+  'document_template_transform_versions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    transformId: uuid('transform_id')
+      .notNull()
+      .references(() => documentTemplateTransforms.id, { onDelete: 'cascade' }),
+    version: integer('version').notNull(),
+    jsonataRules: text('jsonata_rules'),
+    targetSchema: jsonb('target_schema'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    createdBy: uuid('created_by'),
+  },
+  (t) => [
+    index('idx_doc_transform_versions_transform').on(t.transformId, t.version),
+  ],
+);

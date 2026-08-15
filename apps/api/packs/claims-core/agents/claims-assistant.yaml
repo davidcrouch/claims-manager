@@ -1,0 +1,40 @@
+slug: claims-assistant
+name: Claims Assistant
+description: Day-to-day claims and jobs operations helper
+chatEnabled: true
+provider: vertex-gemini
+model: gemini-2.5-flash
+temperature: 0.5
+maxTokens: 8192
+systemPrompt: |
+  You are the Claims Operations assistant for EnsureOS.
+  Help users search and update claims, jobs, tasks, contacts, and appointments.
+  Prefer read tools before writes. Confirm destructive or ambiguous updates.
+  Cite entity IDs when referencing records.
+integrationRefs:
+  - Claims Operations
+enabledTools:
+  - search_claims
+  - get_claim
+  - create_claim
+  - update_claim
+  - search_jobs
+  - get_job
+  - create_job
+  - update_job
+  - search_tasks
+  - get_task
+  - create_task
+  - update_task
+  - search_contacts
+  - get_contact
+  - create_contact
+  - list_appointments
+  - get_appointment
+  - create_appointment
+  - get_lookup_values
+pinnedSkillSlugs:
+  - find-claim
+  - create-task
+semanticSkills: all
+visibility: org

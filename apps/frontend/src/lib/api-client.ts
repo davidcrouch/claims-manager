@@ -56,6 +56,84 @@ export interface ApiClientOptions {
   tenantId?: string;
 }
 
+export interface CapabilityPackCatalogEntry {
+  packId: string;
+  version: string;
+  name: string;
+  description: string;
+  source: 'builtin' | 'upload';
+  uploadId?: string;
+  integrationRefs: string[];
+  agentCount: number;
+  skillCount: number;
+  promptCount: number;
+  installed?: {
+    installId: string;
+    version: string;
+    status: string;
+  } | null;
+}
+
+export interface CapabilityPackInstall {
+  id: string;
+  packId: string;
+  packVersion: string;
+  status: string;
+  source?: string;
+  displayName?: string | null;
+  errorMessage?: string | null;
+}
+
+export interface CapabilityPackUploadSummary {
+  id: string;
+  packId: string;
+  packVersion: string;
+  displayName?: string | null;
+  description?: string | null;
+  createdAt: string;
+}
+
+export interface CapabilityPackDriftItem {
+  artefactType: 'agent' | 'skill' | 'prompt_template';
+  artefactId: string;
+  sourceKey: string | null;
+  status: 'match' | 'modified' | 'missing' | 'orphan';
+  expectedHash: string | null;
+  actualHash: string | null;
+}
+
+export interface CapabilityPackPreview {
+  packId: string;
+  version: string;
+  name: string;
+  description: string;
+  source: 'builtin' | 'upload';
+  uploadId?: string;
+  integrationRefs: string[];
+  agents: Array<{
+    slug: string;
+    name: string;
+    description?: string;
+    enabledTools: string[];
+    pinnedSkillSlugs: string[];
+    integrationRefs: string[];
+  }>;
+  skills: Array<{
+    slug: string;
+    name: string;
+    description?: string;
+    category: string;
+    triggerHints: string[];
+    requiredTools: string[];
+  }>;
+  prompts: Array<{
+    slug: string;
+    name: string;
+    description?: string;
+    category: string;
+  }>;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -2164,6 +2242,78 @@ export function createApiClient(options?: ApiClientOptions) {
       searchTimeMs: number;
     }> {
       return fetchApi('/skills/test-match', { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    // ── Capability packs ──
+
+    listCapabilityPacks(): Promise<CapabilityPackCatalogEntry[]> {
+      return fetchApi('/capability-packs');
+    },
+
+    listInstalledCapabilityPacks(): Promise<CapabilityPackInstall[]> {
+      return fetchApi('/capability-packs/installed');
+    },
+
+    listCapabilityPackUploads(): Promise<CapabilityPackUploadSummary[]> {
+      return fetchApi('/capability-packs/uploads');
+    },
+
+    installCapabilityPack(body: {
+      packId?: string;
+      version?: string;
+      uploadId?: string;
+    }): Promise<{ installId: string }> {
+      return fetchApi('/capability-packs/install', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+
+    upgradeCapabilityPack(installId: string): Promise<{ installId: string }> {
+      return fetchApi(`/capability-packs/upgrade/${installId}`, { method: 'POST' });
+    },
+
+    uninstallCapabilityPack(
+      installId: string,
+      opts?: { force?: boolean },
+    ): Promise<{ ok: boolean }> {
+      const qs = opts?.force ? '?force=true' : '';
+      return fetchApi(`/capability-packs/${installId}${qs}`, { method: 'DELETE' });
+    },
+
+    getCapabilityPackDrift(installId: string): Promise<CapabilityPackDriftItem[]> {
+      return fetchApi(`/capability-packs/drift/${installId}`);
+    },
+
+    previewCapabilityPack(params: {
+      packId?: string;
+      version?: string;
+      uploadId?: string;
+    }): Promise<CapabilityPackPreview> {
+      const sp = new URLSearchParams();
+      if (params.packId) sp.set('packId', params.packId);
+      if (params.version) sp.set('version', params.version);
+      if (params.uploadId) sp.set('uploadId', params.uploadId);
+      return fetchApi(`/capability-packs/preview?${sp.toString()}`);
+    },
+
+    async uploadCapabilityPack(file: File): Promise<{
+      uploadId: string;
+      packId: string;
+      version: string;
+    }> {
+      const form = new FormData();
+      form.append('file', file);
+      const headers: Record<string, string> = {};
+      if (options?.token) headers.Authorization = `Bearer ${options.token}`;
+      if (options?.tenantId) headers['x-tenant-id'] = options.tenantId;
+      const base = getApiBaseUrl().replace(/\/$/, '');
+      const res = await fetch(`${base}/capability-packs/upload`, {
+        method: 'POST',
+        headers,
+        body: form,
+      });
+      return handleResponse(res);
     },
 
     // ── AI Audit ──

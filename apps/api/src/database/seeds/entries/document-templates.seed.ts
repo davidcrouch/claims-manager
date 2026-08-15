@@ -68,6 +68,7 @@ const DOCUMENT_TYPE_TO_FILE: Record<AssignableTemplateType, (typeof TEMPLATE_FIL
   journal: 'SCOPE OF WORK.docx',
   vendor: 'SCOPE OF WORK.docx',
   assessment: 'SCOPE OF WORK.docx',
+  document: 'SCOPE OF WORK.docx',
   jobs_list: 'SCOPE OF WORK.docx',
   quotes_list: 'SCOPE OF WORK.docx',
   invoices_list: 'SCOPE OF WORK.docx',
@@ -84,6 +85,9 @@ const DOCUMENT_TYPE_TO_FILE: Record<AssignableTemplateType, (typeof TEMPLATE_FIL
   messages_list: 'SCOPE OF WORK.docx',
   journals_list: 'SCOPE OF WORK.docx',
   vendors_list: 'SCOPE OF WORK.docx',
+  assessments_list: 'SCOPE OF WORK.docx',
+  documents_list: 'SCOPE OF WORK.docx',
+  schedule_list: 'SCOPE OF WORK.docx',
 };
 
 function safeGcsFileName(fileName: string): string {

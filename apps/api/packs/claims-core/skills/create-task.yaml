@@ -1,0 +1,19 @@
+slug: create-task
+name: Create Follow-up Task
+description: Create a task linked to a claim or job with clear ownership and due context.
+triggerHints:
+  - create task
+  - follow up
+  - remind me
+  - action item
+instructionPrompt: |
+  Collect task name, related claim/job, assignee if known, and priority.
+  Call create_task with a concise description. Confirm the created task id.
+requiredToolRefs:
+  - integration: Claims Operations
+    tool: create_task
+  - integration: Claims Operations
+    tool: search_tasks
+category: tasks
+invocationMode: inline
+visibility: org

@@ -217,7 +217,7 @@ export class AgentService {
 
     const created = await this.repo.create({
       tenantId,
-      slug,
+      slug: dto.slug?.trim() || slug,
       name: dto.name.trim(),
       type: dto.type ?? 'chat',
       chatEnabled: dto.chatEnabled ?? dto.type !== 'system',
@@ -231,7 +231,11 @@ export class AgentService {
       visibility: dto.visibility ?? 'org',
       avatarUrl: dto.avatarUrl ?? null,
       supportsVision: dto.supportsVision ?? false,
+      enabledToolRefs: dto.enabledTools ?? [],
+      pinnedSkills: dto.pinnedSkills ?? [],
+      semanticSkills: dto.semanticSkills ?? 'all',
       ...(dto.maxSteps !== undefined && { maxSteps: dto.maxSteps }),
+      ...(dto.packInstallId !== undefined && { packInstallId: dto.packInstallId }),
     });
 
     this.logger.log(

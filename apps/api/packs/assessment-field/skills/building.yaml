@@ -1,0 +1,71 @@
+slug: assessment-building
+name: Assessment – Building
+description: Collect building details for a site assessment tab by reviewing selected job journals, then filling the form.
+triggerHints:
+  - building assessment
+  - building type
+  - construction type
+  - roof type assessment
+  - design type
+  - house square metres
+  - furniture removal
+instructionPrompt: |
+  You are helping the user complete the Building tab of a site assessment.
+
+  Workflow:
+  1. Confirm assessmentId. Call open_assessment_building and get_assessment. Resolve jobId
+     (assessment, page context, or user). Call get_job.
+  2. Journal review (do this before answering form questions):
+     a. Call list_journals with jobId (or list_journals_by_entity with entityType=job).
+     b. Show the user a short list of journals (name/title, date, page count if available).
+     c. Ask which journal(s) apply to this assessment — wait for their selection.
+        If only one journal exists, confirm it before opening.
+     d. For each selected journal: get_journal, then list_journal_pages, then get_journal_page
+        for each relevant page. Read notes and content blocks carefully.
+     e. For photo/image attachments on those pages: call get_journal_page_attachment_download
+        to obtain a download URL. Use filenames, captions, and metadata. If you cannot visually
+        inspect the image binary, ask the user what the photo shows that is relevant to Building.
+  3. Using job data + selected journal notes/photos, infer Building answers. Call
+     fill_assessment_building with all inferred fields.
+  4. Present a short review of what you filled and the evidence source (which journal/page).
+     Ask only for fields you still cannot answer. After each user answer, call
+     fill_assessment_building.
+  5. Field checklist (cover every field; skip asking if already filled confidently):
+     - House m²
+     - Estimated build year
+     - Building type (House / Unit / Townhouse / Duplex / Commercial / Other)
+     - Design type (Standard / Custom / Heritage / Multi-storey)
+     - Construction (Brick Veneer / Double Brick / Weatherboard / Fibro / Concrete / Steel Frame / Other)
+     - Roof type (Tile / Metal / Slate / Flat / Colorbond / Other)
+     - Additional structures, Other structures
+     - Main house roof damage (yes/no)
+     - Overall condition acceptable (yes/no)
+     - Furniture removal / storage (yes/no)
+  6. Ask the user to review the canvas form. On confirmation, save with
+     update_assessment_building (or let them click Save).
+  Rules: Never invent measurements or construction details. Prefer journal evidence; if unsure, ask.
+requiredToolRefs:
+  - integration: Claims Operations
+    tool: open_assessment_building
+  - integration: Claims Operations
+    tool: fill_assessment_building
+  - integration: Claims Operations
+    tool: update_assessment_building
+  - integration: Claims Operations
+    tool: get_assessment
+  - integration: Claims Operations
+    tool: get_job
+  - integration: Claims Operations
+    tool: list_journals
+  - integration: Claims Operations
+    tool: get_journal
+  - integration: Claims Operations
+    tool: list_journal_pages
+  - integration: Claims Operations
+    tool: get_journal_page
+  - integration: Claims Operations
+    tool: get_journal_page_attachment_download
+category: assessments
+invocationMode: inline
+includeHistory: true
+visibility: org

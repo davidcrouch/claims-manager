@@ -52,6 +52,7 @@ import {
   AiMessageFeedbackRepository,
   AiUserMemoryRepository,
   AssessmentsRepository,
+  DocumentTemplateTransformsRepository,
 } from './repositories';
 
 const repositories = [
@@ -106,6 +107,7 @@ const repositories = [
   AiMessageFeedbackRepository,
   AiUserMemoryRepository,
   AssessmentsRepository,
+  DocumentTemplateTransformsRepository,
 ];
 
 @Global()

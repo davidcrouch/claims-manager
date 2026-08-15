@@ -21,6 +21,7 @@ export const DOCUMENT_TYPES = [
   'journal',
   'vendor',
   'assessment',
+  'document',
   // Plural (list) types
   'jobs_list',
   'quotes_list',
@@ -38,6 +39,9 @@ export const DOCUMENT_TYPES = [
   'messages_list',
   'journals_list',
   'vendors_list',
+  'assessments_list',
+  'documents_list',
+  'schedule_list',
 ] as const;
 
 export type DocumentType = (typeof DOCUMENT_TYPES)[number];
@@ -74,6 +78,7 @@ export const DOCUMENT_TYPE_TO_ENTITY_TYPE: Record<DocumentType, string> = {
   journal: 'Journal',
   vendor: 'Vendor',
   assessment: 'Assessment',
+  document: 'Document',
   jobs_list: 'Organization',
   quotes_list: 'Organization',
   invoices_list: 'Organization',
@@ -90,6 +95,9 @@ export const DOCUMENT_TYPE_TO_ENTITY_TYPE: Record<DocumentType, string> = {
   messages_list: 'Organization',
   journals_list: 'Organization',
   vendors_list: 'Organization',
+  assessments_list: 'Organization',
+  documents_list: 'Organization',
+  schedule_list: 'Organization',
 };
 
 export const ENTITY_TYPE_TO_DOCUMENT_TYPE: Record<string, DocumentType> = Object.fromEntries(

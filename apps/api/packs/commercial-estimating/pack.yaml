@@ -1,0 +1,12 @@
+id: commercial-estimating
+version: 1.0.0
+name: Commercial Estimating
+description: Quote, RFQ, and proposal workflow agents and skills.
+integrationRefs:
+  - Claims Operations
+agents:
+  - file: agents/estimator.yaml
+skills:
+  - file: skills/estimate-review.yaml
+  - file: skills/rfq-scope.yaml
+prompts: []

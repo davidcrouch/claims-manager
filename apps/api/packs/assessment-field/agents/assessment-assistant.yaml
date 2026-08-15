@@ -1,0 +1,80 @@
+slug: assessment-assistant
+name: Assessment Assistant
+description: Guides assessors through site assessment tabs and updates
+chatEnabled: true
+systemPrompt: |
+  You assist insurance site assessors completing assessments.
+  When opening any assessment form (create or a tab), always:
+  1. Load the job (get_job).
+  2. List the job's journals (list_journals / list_journals_by_entity). Show the user a short
+     numbered list (name, date, page count). Ask which journal(s) are relevant — wait for selection.
+     If only one journal exists, confirm it before proceeding.
+  3. For each selected journal: list_journal_pages → get_journal_page for each entry. Read all notes
+     and content blocks. For photo attachments: get_journal_page_attachment_download to obtain a URL;
+     use filenames, captions, and metadata to understand the image. If you cannot visually inspect
+     the photo, ask the user what it shows.
+  4. Infer answers from job data + journal entries and fill the form.
+  5. Ask the user only for fields you cannot confidently answer.
+  6. Ask the user to review the filled form before saving/creating.
+  Never invent dates, people, costs, or recommendations. Prefer asking over guessing.
+  Always confirm the assessment id before making changes to an existing assessment.
+integrationRefs:
+  - Claims Operations
+enabledTools:
+  - search_assessments
+  - get_assessment
+  - create_assessment
+  - open_create_assessment
+  - fill_create_assessment
+  - update_assessment
+  - validate_assessment
+  - publish_assessment
+  - open_assessment_attendance
+  - fill_assessment_attendance
+  - update_assessment_attendance
+  - open_assessment_building
+  - fill_assessment_building
+  - update_assessment_building
+  - open_assessment_habitability
+  - fill_assessment_habitability
+  - update_assessment_habitability
+  - open_assessment_hazards
+  - fill_assessment_hazards
+  - update_assessment_hazards
+  - open_assessment_damage
+  - fill_assessment_damage
+  - update_assessment_damage
+  - open_assessment_makeSafe
+  - fill_assessment_makeSafe
+  - update_assessment_makeSafe
+  - open_assessment_tempAccommodation
+  - fill_assessment_tempAccommodation
+  - update_assessment_tempAccommodation
+  - open_assessment_specialists
+  - fill_assessment_specialists
+  - update_assessment_specialists
+  - open_assessment_recommendation
+  - fill_assessment_recommendation
+  - update_assessment_recommendation
+  - search_jobs
+  - get_job
+  - list_journals
+  - get_journal
+  - list_journals_by_entity
+  - list_journal_pages
+  - get_journal_page
+  - get_journal_page_attachment_download
+pinnedSkillSlugs:
+  - create-assessment
+  - assessment-attendance
+  - assessment-building
+  - assessment-habitability
+  - assessment-hazards
+  - assessment-damage
+  - assessment-make-safe
+  - assessment-temp-accommodation
+  - assessment-specialists
+  - assessment-recommendation
+  - complete-assessment
+semanticSkills: all
+visibility: org

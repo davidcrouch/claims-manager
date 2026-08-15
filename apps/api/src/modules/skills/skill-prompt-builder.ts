@@ -14,7 +14,8 @@ export function buildSkillPromptBlock(matches: SkillMatchResult[]): string {
   lines.push('\n\n## Available Skills');
   lines.push(
     'You have access to specialized AI skills that can help you with specific tasks. ' +
-      'When a skill is relevant to the user request, follow its instructions carefully.',
+      'When a skill is relevant, call the `activate_skill` tool with its ID before doing the work. ' +
+      'Do not invent skill IDs — only use IDs listed below.',
   );
 
   if (pinnedSkills.length > 0) {

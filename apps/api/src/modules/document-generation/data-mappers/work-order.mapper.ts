@@ -4,11 +4,13 @@ import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
 import {
   workOrders,
   workOrderGroups,
+  workOrderCombos,
   workOrderItems,
   organizations,
 } from '../../../database/schema';
 import type { DataMapper } from './base.mapper';
-import { formatCurrency, formatDate, formatQuantity } from './base.mapper';
+import { formatCurrency, formatDate } from './base.mapper';
+import { buildTemplateGroups } from './line-items.helper';
 import type { TemplateData } from '../types/document-types';
 
 @Injectable()
@@ -41,6 +43,14 @@ export class WorkOrderMapper implements DataMapper {
       )
       .orderBy(asc(workOrderGroups.sortIndex));
 
+    const combos = await this.db
+      .select()
+      .from(workOrderCombos)
+      .where(
+        and(eq(workOrderCombos.tenantId, params.tenantId), isNull(workOrderCombos.deletedAt)),
+      )
+      .orderBy(asc(workOrderCombos.sortIndex));
+
     const items = await this.db
       .select()
       .from(workOrderItems)
@@ -53,28 +63,14 @@ export class WorkOrderMapper implements DataMapper {
     const woFrom = wo.woFrom as Record<string, unknown>;
     const woFor = wo.woFor as Record<string, unknown>;
 
-    const groupData = groups.map((g) => {
-      const groupItems = items
-        .filter((i) => i.workOrderGroupId === g.id)
-        .map((i) => ({
-          item_name: i.name ?? '',
-          item_description: i.description ?? '',
-          item_category: i.category ?? '',
-          item_quantity: formatQuantity(i.quantity),
-          item_unit_cost: formatCurrency(i.unitCost),
-          item_tax: formatCurrency(i.tax),
-          item_total: formatCurrency(
-            i.unitCost && i.quantity ? parseFloat(i.unitCost) * parseFloat(i.quantity) : 0,
-          ),
-        }));
-
-      return {
-        group_name: g.description ?? '',
-        group_subtotal: formatCurrency(
-          (g.totals as Record<string, unknown>)?.subTotal as string ?? '0',
-        ),
-        items: groupItems,
-      };
+    const groupData = buildTemplateGroups({
+      groups,
+      combos: combos.map((c) => ({ ...c, groupId: c.workOrderGroupId })),
+      items: items.map((i) => ({
+        ...i,
+        groupId: i.workOrderGroupId,
+        comboId: i.workOrderComboId,
+      })),
     });
 
     return {

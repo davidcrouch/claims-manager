@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   Logger,
+  Param,
   Post,
   Query,
   Req,
@@ -143,5 +144,12 @@ export class AiChatController {
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
     });
+  }
+
+  @Get('audit/conversation/:conversationId')
+  @RequirePermission(P.ai.manage)
+  @ApiOperation({ summary: 'List AI message audit records for a conversation' })
+  async getConversationAudit(@Param('conversationId') conversationId: string) {
+    return this.chatService.listConversationAudit(conversationId);
   }
 }

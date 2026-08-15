@@ -56,6 +56,9 @@
     "express": "5.2.1",
     "google-auth-library": "^9.15.1",
     "helmet": "^8.1.0",
+    "html-to-docx": "^1.8.0",
+    "jsonata": "^2.2.2",
+    "jszip": "^3.10.1",
     "jwks-rsa": "^4.0.1",
     "libreoffice-convert": "^1.8.2",
     "passport": "^0.7.0",
@@ -65,7 +68,9 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "swagger-ui-express": "^5.0.1",
-    "uuid": "^13.0.0"
+    "uuid": "^13.0.0",
+    "yaml": "^2.9.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -78,6 +83,7 @@
     "@types/ejs": "^3.1.5",
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
+    "@types/jszip": "^3.4.1",
     "@types/multer": "^2.2.0",
     "@types/node": "^22.10.7",
     "@types/passport-jwt": "^4.0.1",

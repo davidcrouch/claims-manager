@@ -5,7 +5,7 @@ import {
   resolveModelLocation,
   type ChatProviderId,
 } from '../providers/model-router';
-import type { ProviderToolDefinition, TokenUsage } from '../providers/types';
+import type { ProviderMessage, ProviderToolDefinition, TokenUsage } from '../providers/types';
 import { streamCompletion } from './stream-completion';
 
 const LOG_PREFIX = 'SkillIsolatedRunner';
@@ -30,7 +30,10 @@ export interface IsolatedRunContext {
   parentModel: string;
   parentProvider: string;
   tools: Record<string, ProviderToolDefinition>;
+  /** Optional prior turns when skill.includeHistory is true. */
+  historyMessages?: ProviderMessage[];
 }
+
 
 /**
  * Runs a skill in isolation as a separate sub-completion.
@@ -67,11 +70,19 @@ export async function runSkillIsolated(
   const instructions = buildIsolatedPrompt(skill, input);
   const messageId = `skill_${skill.id}_${Date.now()}`;
 
-  const messages: Array<{ role: 'user' | 'assistant'; content: Array<{ type: 'text'; text: string }> }> = [];
+  const messages: ProviderMessage[] = [];
+  if (context.historyMessages?.length) {
+    messages.push(...context.historyMessages);
+  }
   if (input.message) {
     messages.push({ role: 'user', content: [{ type: 'text', text: input.message }] });
   } else if (input.reason) {
     messages.push({ role: 'user', content: [{ type: 'text', text: input.reason }] });
+  } else if (messages.length === 0) {
+    messages.push({
+      role: 'user',
+      content: [{ type: 'text', text: `Execute the "${skill.name}" skill.` }],
+    });
   }
 
   const relevantTools = resolveSkillTools(skill, context.tools);
@@ -80,28 +91,41 @@ export async function runSkillIsolated(
     let resultText = '';
     let totalUsage: TokenUsage = { inputTokens: 0, outputTokens: 0 };
 
-    const events = streamCompletion({
-      provider,
-      request: {
-        model,
-        instructions,
-        messages,
-        temperature: 0.3,
-        maxOutputTokens: MAX_ISOLATED_TOKENS,
-      },
-      tools: relevantTools,
-      maxSteps: 5,
-      messageId,
-    });
+    const run = (async () => {
+      const events = streamCompletion({
+        provider,
+        request: {
+          model,
+          instructions,
+          messages,
+          temperature: 0.3,
+          maxOutputTokens: MAX_ISOLATED_TOKENS,
+        },
+        tools: relevantTools,
+        maxSteps: 5,
+        messageId,
+        maxDurationMs: ISOLATED_TIMEOUT_MS,
+      });
 
-    for await (const event of events) {
-      if (event.type === 'text-delta') {
-        resultText += event.delta;
+      for await (const event of events) {
+        if (event.type === 'text-delta') {
+          resultText += event.delta;
+        }
+        if (event.type === 'finish') {
+          totalUsage = event.totalUsage;
+        }
       }
-      if (event.type === 'finish') {
-        totalUsage = event.totalUsage;
-      }
-    }
+    })();
+
+    await Promise.race([
+      run,
+      new Promise<never>((_, reject) => {
+        setTimeout(
+          () => reject(new Error(`Isolated skill timed out after ${ISOLATED_TIMEOUT_MS}ms`)),
+          ISOLATED_TIMEOUT_MS + 1_000,
+        );
+      }),
+    ]);
 
     const timeMs = Date.now() - startTime;
 
@@ -185,19 +209,27 @@ function resolveSkillTools(
   if (skill.requiredToolRefs.length === 0) return {};
 
   const resolved: Record<string, ProviderToolDefinition> = {};
-  const requiredToolNames = skill.requiredToolRefs.map((ref: { integration: string; tool: string }) => ref.tool);
+  const requiredToolNames = skill.requiredToolRefs.map(
+    (ref: { integration: string; tool: string }) => ref.tool,
+  );
+  const seenNames = new Set<string>();
 
   for (const toolName of requiredToolNames) {
+    let matchedKey: string | undefined;
     if (availableTools[toolName]) {
-      resolved[toolName] = availableTools[toolName];
+      matchedKey = toolName;
     } else {
-      const fallbackKey = Object.keys(availableTools).find(
-        (k) => k.endsWith(`__${toolName}`) || k.includes(`_${toolName}`),
+      matchedKey = Object.keys(availableTools).find(
+        (k) => k === toolName || k.endsWith(`__${toolName}`),
       );
-      if (fallbackKey) {
-        resolved[toolName] = availableTools[fallbackKey];
-      }
     }
+    if (!matchedKey) continue;
+
+    const tool = availableTools[matchedKey];
+    const declarationName = tool.name || matchedKey;
+    if (seenNames.has(declarationName)) continue;
+    seenNames.add(declarationName);
+    resolved[matchedKey] = tool;
   }
   return resolved;
 }

@@ -414,6 +414,20 @@
       "when": 1788900000000,
       "tag": "0059_rfq_line_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1789000000000,
+      "tag": "0060_document_template_transforms",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1789100000000,
+      "tag": "0061_capability_pack_uploads",
+      "breakpoints": true
     }
   ]
 }

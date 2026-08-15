@@ -33,12 +33,32 @@ export async function fetchAssessmentsAction(params?: {
   }
 }
 
+export async function fetchAssessmentByIdAction(
+  id: string,
+): Promise<Assessment | null> {
+  const api = await getApi();
+  if (!api) return null;
+  try {
+    return await api.getAssessment(id);
+  } catch (err) {
+    console.error('[assessments/actions.fetchAssessmentByIdAction]', err);
+    return null;
+  }
+}
+
 export async function createAssessmentAction(
   data: Partial<Assessment> & { name: string },
 ): Promise<Assessment | null> {
   const api = await getApi();
-  if (!api) return null;
-  return api.createAssessment(data);
+  if (!api) {
+    throw new Error('Not authenticated');
+  }
+  try {
+    return await api.createAssessment(data);
+  } catch (err) {
+    console.error('[assessments/actions.createAssessmentAction]', err);
+    throw err instanceof Error ? err : new Error('Failed to create assessment');
+  }
 }
 
 export async function updateAssessmentAction(

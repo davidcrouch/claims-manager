@@ -1,0 +1,21 @@
+slug: transform-preview
+name: Transform Preview
+description: Preview a document-type JSONata transform against sample entity data.
+triggerHints:
+  - preview transform
+  - jsonata
+  - merge fields
+  - sample data
+instructionPrompt: |
+  Ask for document type and entity id. Load sample data, then preview the current or proposed JSONata rules.
+  Summarize output keys and any evaluation errors before suggesting an upsert.
+requiredToolRefs:
+  - integration: Claims Documents
+    tool: get_transform_sample_data
+  - integration: Claims Documents
+    tool: get_transform
+  - integration: Claims Documents
+    tool: preview_transform
+category: documents
+invocationMode: inline
+visibility: org

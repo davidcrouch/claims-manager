@@ -4,11 +4,13 @@ import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
 import {
   purchaseOrders,
   purchaseOrderGroups,
+  purchaseOrderCombos,
   purchaseOrderItems,
   organizations,
 } from '../../../database/schema';
 import type { DataMapper } from './base.mapper';
-import { formatCurrency, formatDate, formatQuantity } from './base.mapper';
+import { formatCurrency, formatDate } from './base.mapper';
+import { buildTemplateGroups } from './line-items.helper';
 import type { TemplateData } from '../types/document-types';
 
 @Injectable()
@@ -41,6 +43,17 @@ export class PurchaseOrderMapper implements DataMapper {
       )
       .orderBy(asc(purchaseOrderGroups.sortIndex));
 
+    const combos = await this.db
+      .select()
+      .from(purchaseOrderCombos)
+      .where(
+        and(
+          eq(purchaseOrderCombos.tenantId, params.tenantId),
+          isNull(purchaseOrderCombos.deletedAt),
+        ),
+      )
+      .orderBy(asc(purchaseOrderCombos.sortIndex));
+
     const items = await this.db
       .select()
       .from(purchaseOrderItems)
@@ -53,28 +66,14 @@ export class PurchaseOrderMapper implements DataMapper {
     const poFrom = po.poFrom as Record<string, unknown>;
     const poFor = po.poFor as Record<string, unknown>;
 
-    const groupData = groups.map((g) => {
-      const groupItems = items
-        .filter((i) => i.purchaseOrderGroupId === g.id)
-        .map((i) => ({
-          item_name: i.name ?? '',
-          item_description: i.description ?? '',
-          item_category: i.category ?? '',
-          item_quantity: formatQuantity(i.quantity),
-          item_unit_cost: formatCurrency(i.unitCost),
-          item_tax: formatCurrency(i.tax),
-          item_total: formatCurrency(
-            i.unitCost && i.quantity ? parseFloat(i.unitCost) * parseFloat(i.quantity) : 0,
-          ),
-        }));
-
-      return {
-        group_name: g.description ?? '',
-        group_subtotal: formatCurrency(
-          (g.totals as Record<string, unknown>)?.subTotal as string ?? '0',
-        ),
-        items: groupItems,
-      };
+    const groupData = buildTemplateGroups({
+      groups,
+      combos: combos.map((c) => ({ ...c, groupId: c.purchaseOrderGroupId })),
+      items: items.map((i) => ({
+        ...i,
+        groupId: i.purchaseOrderGroupId,
+        comboId: i.purchaseOrderComboId,
+      })),
     });
 
     return {

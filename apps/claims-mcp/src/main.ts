@@ -11,8 +11,18 @@ import type { Request, Response, NextFunction } from 'express';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { loadConfig } from './config.js';
-import { createClaimsMcpServer, type RequestContext } from './server.js';
+import {
+  createClaimsMcpServer,
+  implementedCategories,
+  type RequestContext,
+} from './server.js';
 import { catalogFromServer } from './tool-catalog.js';
+import {
+  MCP_CATEGORIES,
+  isCategoryId,
+  parseCategoryList,
+  type CategoryId,
+} from './categories.js';
 
 const LOG_PREFIX = 'claims-mcp.main';
 const AUTH_TOKEN_KEY = '__claims_mcp_token';
@@ -61,6 +71,7 @@ function readContext(req: Request): RequestContext {
 function buildMcpHandler(
   getContext: () => RequestContext,
   transports: Map<string, StreamableHTTPServerTransport>,
+  categories?: CategoryId[],
 ) {
   const config = loadConfig();
 
@@ -93,13 +104,16 @@ function buildMcpHandler(
 
     if (req.method === 'POST') {
       if (!sessionId || !transports.has(sessionId)) {
-        const server = createClaimsMcpServer(config, getContext);
+        const server = createClaimsMcpServer(config, getContext, { categories });
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => crypto.randomUUID(),
           enableJsonResponse: true,
           onsessioninitialized: (sid) => {
             transports.set(sid, transport);
-            log('info', 'buildMcpHandler', 'session created', { sessionId: sid });
+            log('info', 'buildMcpHandler', 'session created', {
+              sessionId: sid,
+              categories: categories?.join(',') ?? 'all',
+            });
           },
         });
         transport.onclose = () => {
@@ -145,23 +159,60 @@ async function startHttp(): Promise<void> {
 
   app.use(createAuthMiddleware());
 
-  const transports = new Map<string, StreamableHTTPServerTransport>();
-  const catalogServer = createClaimsMcpServer(config, () => ({
-    token: 'catalog',
-    tenantId: undefined,
-  }));
+  /** Separate transport maps per mount so session IDs never collide across categories. */
+  const transportsByMount = new Map<string, Map<string, StreamableHTTPServerTransport>>();
+
+  function transportsFor(mountKey: string): Map<string, StreamableHTTPServerTransport> {
+    let map = transportsByMount.get(mountKey);
+    if (!map) {
+      map = new Map();
+      transportsByMount.set(mountKey, map);
+    }
+    return map;
+  }
+
+  const catalogCtx = () => ({ token: 'catalog', tenantId: undefined });
+  const implemented = implementedCategories();
+  const categoryCatalogs = MCP_CATEGORIES.map((id) => {
+    const server = createClaimsMcpServer(config, catalogCtx, { categories: [id] });
+    const tools = catalogFromServer(server);
+    return { id, tools: tools.length, toolNames: tools.map((t) => t.name) };
+  });
+  const aggregateServer = createClaimsMcpServer(config, catalogCtx);
+  const aggregateTools = catalogFromServer(aggregateServer);
 
   app.get('/healthz', (_req, res) => {
     res.json({
       status: 'ok',
       server: config.MCP_SERVER_NAME,
       version: config.MCP_SERVER_VERSION,
-      tools: catalogFromServer(catalogServer).length,
+      tools: aggregateTools.length,
+      implementedCategories: implemented,
+      categories: categoryCatalogs,
     });
   });
 
   app.all('/mcp', (req, res) => {
-    const handler = buildMcpHandler(() => readContext(req), transports);
+    const handler = buildMcpHandler(() => readContext(req), transportsFor('aggregate'));
+    void handler(req, res);
+  });
+
+  app.all('/:category/mcp', (req, res) => {
+    const category = req.params.category;
+    if (!isCategoryId(category)) {
+      res.status(404).json({
+        error: 'unknown_category',
+        message: `Unknown MCP category "${category}"`,
+        categories: [...MCP_CATEGORIES],
+      });
+      return;
+    }
+
+    const handler = buildMcpHandler(
+      () => readContext(req),
+      transportsFor(category),
+      [category],
+    );
     void handler(req, res);
   });
 
@@ -170,6 +221,8 @@ async function startHttp(): Promise<void> {
       host: config.CLAIMS_MCP_HOST,
       port: config.CLAIMS_MCP_PORT,
       apiUrl: config.CLAIMS_API_URL,
+      mounts: ['/mcp', ...MCP_CATEGORIES.map((c) => `/${c}/mcp`)],
+      tools: aggregateTools.length,
     });
   });
 }
@@ -181,13 +234,20 @@ async function startStdio(): Promise<void> {
     log('warn', 'startStdio', 'CLAIMS_API_TOKEN not set — API calls will fail');
   }
 
-  const server = createClaimsMcpServer(config, () => ({
-    token: token ?? '',
-    tenantId: process.env.CLAIMS_API_TENANT_ID,
-  }));
+  const categories = parseCategoryList(process.env.CLAIMS_MCP_CATEGORIES);
+  const server = createClaimsMcpServer(
+    config,
+    () => ({
+      token: token ?? '',
+      tenantId: process.env.CLAIMS_API_TENANT_ID,
+    }),
+    { categories },
+  );
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  log('info', 'startStdio', 'stdio transport ready');
+  log('info', 'startStdio', 'stdio transport ready', {
+    categories: categories?.join(',') ?? 'all',
+  });
 }
 
 async function main(): Promise<void> {

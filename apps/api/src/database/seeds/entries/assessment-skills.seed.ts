@@ -20,253 +20,253 @@ interface SkillDef {
   requiredToolRefs: Array<{ integration: string; tool: string }>;
 }
 
+const JOURNAL_TOOL_REFS: Array<{ integration: string; tool: string }> = [
+  { integration: 'Claims Operations', tool: 'get_job' },
+  { integration: 'Claims Operations', tool: 'list_journals' },
+  { integration: 'Claims Operations', tool: 'get_journal' },
+  { integration: 'Claims Operations', tool: 'list_journal_pages' },
+  { integration: 'Claims Operations', tool: 'get_journal_page' },
+  { integration: 'Claims Operations', tool: 'get_journal_page_attachment_download' },
+];
+
+const JOURNAL_REVIEW_BLOCK = `Journal review (do this before answering form questions):
+  a. Call list_journals with jobId (or list_journals_by_entity with entityType=job).
+  b. Show the user a short list of journals (name/title, date, page count).
+  c. Ask which journal(s) apply — wait for their selection. If only one, confirm first.
+  d. For each selected journal: call list_journal_pages, then get_journal_page for each entry.
+     Read body/notes and content blocks.
+  e. For photo attachments: call get_journal_page_attachment_download. Use filenames, captions,
+     and metadata. If you cannot visually inspect the image, ask the user what it shows.`;
+
 const ASSESSMENT_SKILLS: SkillDef[] = [
   {
-    name: 'Assessment – Building Structure',
-    description:
-      'Gathers building structure details for an insurance claim site assessment: construction type, roof type, building type, design, make-safe requirements, dimensions, and overall condition.',
+    name: 'Assessment – Attendance',
+    description: 'Collect attendance details by reviewing job journals (entries, notes, photos), then filling the form.',
     category: 'assessments',
-    triggerHints: [
-      'building structure assessment',
-      'construction type',
-      'roof type assessment',
-      'building inspection details',
-      'make safe assessment',
-      'building age squares',
-      'claim recommendation',
-      'design type',
-      'IAG inspection',
-    ],
-    instructionPrompt: `You are an insurance claims assessor assistant helping to complete the Building Structure section of a site assessment.
+    triggerHints: ['attendance assessment', 'site attendance', 'who attended', 'occupancy type'],
+    instructionPrompt: `You are helping the user complete the Attendance tab of a site assessment.
 
-Your goal is to collect the following information through natural conversation with the assessor:
-
-**Required Fields:**
-1. **Claim Recommendation** – one of: Approve, Decline, Refer, Pending
-2. **Design Type** – one of: Standard, Custom, Heritage, Multi-storey
-3. **Construction Type** – one of: Brick Veneer, Double Brick, Weatherboard, Fibro, Concrete, Steel Frame, Other
-4. **Roof Type** – one of: Tile, Metal, Slate, Flat, Colorbond, Other
-5. **Building Type** – one of: House, Unit, Townhouse, Duplex, Commercial, Other
-
-**Optional Fields:**
-6. **Make Safe Type** – one of: Tarp, Board Up, Temporary Fence, Other (only if make-safe is required)
-7. **Squares** – numeric value
-8. **Building Age** – in years
-9. **Square Metres** – numeric value
-10. **Date Booked** – the assessment booking date
-
-**Boolean Flags:**
-- Make Safe (is make-safe work required?)
-- Overall Condition Acceptable
-- IAG Inspection Required
-
-**Approach:**
-- Ask questions naturally, grouping related items (e.g. ask about construction and roof together)
-- If the user provides information proactively, acknowledge and move on
-- Validate selections against the allowed values listed above
-- Once you have enough information, use the \`open_assessment_building\` tool to open the drawer with the current assessment ID
-- Use \`update_assessment_building\` to save collected data
-
-**Context:** The assessment ID will be available from the current page context or provided by the user. Always confirm the assessment before updating.`,
+Workflow:
+1. Confirm assessmentId. Call open_assessment_attendance and get_assessment. Resolve jobId. Call get_job.
+2. ${JOURNAL_REVIEW_BLOCK}
+3. Using job data + journal entries/notes/photos, infer Attendance answers. Call
+   fill_assessment_attendance with all inferred fields.
+4. Present a short review of what you filled and the evidence source. Ask only for unknowns.
+   After each user answer, call fill_assessment_attendance.
+5. Field checklist: Risk address attended, Other address, Site attendance date, Persons attending,
+   Builder/estimator name+phone, Insurance assessor attended+name+phone, Occupancy type.
+6. Ask user to review canvas form. Save with update_assessment_attendance on confirmation.
+Rules: Never invent people, phones, or dates. Prefer journal evidence; if unsure, ask.`,
     requiredToolRefs: [
-      { integration: 'Claims Tools', tool: 'open_assessment_building' },
-      { integration: 'Claims Tools', tool: 'update_assessment_building' },
-      { integration: 'Claims Tools', tool: 'get_assessment' },
+      { integration: 'Claims Operations', tool: 'open_assessment_attendance' },
+      { integration: 'Claims Operations', tool: 'fill_assessment_attendance' },
+      { integration: 'Claims Operations', tool: 'update_assessment_attendance' },
+      { integration: 'Claims Operations', tool: 'get_assessment' },
+      ...JOURNAL_TOOL_REFS,
     ],
   },
   {
-    name: 'Assessment – General Questions',
-    description:
-      'Gathers general inspection findings for an insurance claim site assessment: roof damage, habitability, asbestos presence, outbuildings, and damage event details.',
+    name: 'Assessment – Building',
+    description: 'Collect building details by reviewing job journals (entries, notes, photos), then filling the form.',
     category: 'assessments',
-    triggerHints: [
-      'general questions assessment',
-      'habitability check',
-      'asbestos inspection',
-      'roof damage assessment',
-      'outbuildings',
-      'granny flat sheds pool',
-      'damage event',
-      'mould assessment',
-      'make safe completion',
-    ],
-    instructionPrompt: `You are an insurance claims assessor assistant helping to complete the General Questions section of a site assessment.
+    triggerHints: ['building assessment', 'construction type', 'roof type assessment', 'design type'],
+    instructionPrompt: `You are helping the user complete the Building tab of a site assessment.
 
-Your goal is to collect the following information through natural conversation:
-
-**Date Fields:**
-1. **Make-safe Completion Date** – when was make-safe work completed
-2. **Date Main Roof Repaired** – when was the main roof repaired
-
-**Inspection Flags (true/false):**
-3. **Main Roof Damage** – is there damage to the main roof?
-4. **Habitable** – is the property currently habitable?
-5. **Mould** – is mould present on site?
-6. **Asbestos on Site** – has asbestos been identified?
-7. **Detached Garage** – is there a detached garage on the property?
-8. **Sheds** – are there sheds on the property?
-9. **Swimming Pool** – is there a swimming pool?
-10. **Detached Granny Flat** – is there a detached granny flat?
-11. **Damage Caused by Listed Event** – was the damage caused by an insured event?
-
-**Approach:**
-- Start with the critical safety questions (habitability, asbestos, mould)
-- Group outbuilding questions together (garage, sheds, pool, granny flat)
-- Ask about dates in relation to the timeline of events
-- Use the \`open_assessment_general\` tool to open the drawer
-- Use \`update_assessment_general\` to save data
-
-**Context:** Always verify the assessment ID before proceeding with updates.`,
+Workflow:
+1. Confirm assessmentId. Call open_assessment_building and get_assessment. Resolve jobId. Call get_job.
+2. ${JOURNAL_REVIEW_BLOCK}
+3. Using job data + journal entries/notes/photos, infer Building answers. Call
+   fill_assessment_building with all inferred fields.
+4. Present a short review. Ask only for unknowns. After each user answer, call fill_assessment_building.
+5. Field checklist: House m², Estimated build year, Building type, Design type, Construction,
+   Roof type, Additional structures, Other structures, Main house roof damage, Overall condition,
+   Furniture removal/storage.
+6. Ask user to review canvas form. Save with update_assessment_building on confirmation.
+Rules: Never invent measurements or construction details. Prefer journal evidence; if unsure, ask.`,
     requiredToolRefs: [
-      { integration: 'Claims Tools', tool: 'open_assessment_general' },
-      { integration: 'Claims Tools', tool: 'update_assessment_general' },
-      { integration: 'Claims Tools', tool: 'get_assessment' },
+      { integration: 'Claims Operations', tool: 'open_assessment_building' },
+      { integration: 'Claims Operations', tool: 'fill_assessment_building' },
+      { integration: 'Claims Operations', tool: 'update_assessment_building' },
+      { integration: 'Claims Operations', tool: 'get_assessment' },
+      ...JOURNAL_TOOL_REFS,
+    ],
+  },
+  {
+    name: 'Assessment – Habitability',
+    description: 'Collect habitability details by reviewing job journals (entries, notes, photos), then filling the form.',
+    category: 'assessments',
+    triggerHints: ['habitability assessment', 'habitable', 'uninhabitable'],
+    instructionPrompt: `You are helping the user complete the Habitability tab of a site assessment.
+
+Workflow:
+1. Confirm assessmentId. Call open_assessment_habitability and get_assessment. Resolve jobId. Call get_job.
+2. ${JOURNAL_REVIEW_BLOCK}
+3. Using job data + journal entries/notes/photos, infer Habitability answers. Call
+   fill_assessment_habitability with all inferred fields.
+4. Present a short review. Ask only for unknowns. After each answer, call fill_assessment_habitability.
+5. Field checklist: Habitable (yes/no), Uninhabitable reason, Other uninhabitable reason.
+6. Ask user to review canvas form. Save with update_assessment_habitability on confirmation.
+Rules: Prefer journal evidence. If unsure whether habitable, ask.`,
+    requiredToolRefs: [
+      { integration: 'Claims Operations', tool: 'open_assessment_habitability' },
+      { integration: 'Claims Operations', tool: 'fill_assessment_habitability' },
+      { integration: 'Claims Operations', tool: 'update_assessment_habitability' },
+      { integration: 'Claims Operations', tool: 'get_assessment' },
+      ...JOURNAL_TOOL_REFS,
     ],
   },
   {
     name: 'Assessment – Hazards',
-    description:
-      'Records site hazards identified during an insurance claim assessment: pool fencing compliance, electrical/gas safety, sewerage issues, structural concerns, and other hazards.',
+    description: 'Collect hazards by reviewing job journals (entries, notes, photos), then filling the form.',
     category: 'assessments',
-    triggerHints: [
-      'hazard assessment',
-      'site hazards',
-      'pool fencing compliance',
-      'electrical hazard',
-      'gas hazard',
-      'sewerage hazard',
-      'structural hazard',
-      'safety assessment',
-      'hazard identification',
-    ],
-    instructionPrompt: `You are an insurance claims assessor assistant helping to complete the Hazards section of a site assessment.
+    triggerHints: ['hazard assessment', 'site hazards', 'pool fencing', 'electrical hazard', 'structural hazard'],
+    instructionPrompt: `You are helping the user complete the Hazards tab of a site assessment.
 
-Your goal is to identify and record all site hazards through conversation:
-
-**Standard Hazard Categories (true/false + optional comment):**
-1. **Pool Fencing** – non-compliant or damaged pool fencing (with comment)
-2. **Electrical / Gas** – electrical or gas safety concerns (with comment)
-3. **Sewerage** – sewerage-related hazards (with comment)
-4. **Structural** – structural integrity concerns (with comment)
-
-**Free-Text Field:**
-5. **Other Hazards** – any additional hazards not covered above
-
-**Approach:**
-- Treat this as a safety checklist — systematically go through each category
-- For each hazard identified, ask for brief details and save them in the matching comment field
-- Encourage the assessor to describe any "other" hazards in detail
-- Pool fencing issues should reference compliance with local regulations
-- Electrical/gas hazards should note if services have been isolated
-- Structural hazards should note if engineering assessment is needed
-- Use the \`open_assessment_hazards\` tool to open the drawer
-- Use \`update_assessment_hazards\` to save data (include comment fields when details are provided)
-
-**Safety Note:** If any critical/immediate hazards are reported, flag the urgency clearly in your response.`,
+Workflow:
+1. Confirm assessmentId. Call open_assessment_hazards and get_assessment. Resolve jobId. Call get_job.
+2. ${JOURNAL_REVIEW_BLOCK}
+3. Using job data + journal entries/notes/photos, infer Hazards answers. Call
+   fill_assessment_hazards with all inferred fields.
+4. Present a short review. Ask only for unknowns. After each answer, call fill_assessment_hazards.
+5. Field checklist: Pool fencing (flagged+comment), Electrical/Gas (flagged+comment),
+   Sewerage (flagged+comment), Structural (flagged+comment), Safety hazards summary,
+   Environmental hazards.
+6. Ask user to review canvas form. Save with update_assessment_hazards on confirmation.
+Rules: Do not invent hazards. If journals are silent on a category, ask.`,
     requiredToolRefs: [
-      { integration: 'Claims Tools', tool: 'open_assessment_hazards' },
-      { integration: 'Claims Tools', tool: 'update_assessment_hazards' },
-      { integration: 'Claims Tools', tool: 'get_assessment' },
+      { integration: 'Claims Operations', tool: 'open_assessment_hazards' },
+      { integration: 'Claims Operations', tool: 'fill_assessment_hazards' },
+      { integration: 'Claims Operations', tool: 'update_assessment_hazards' },
+      { integration: 'Claims Operations', tool: 'get_assessment' },
+      ...JOURNAL_TOOL_REFS,
     ],
   },
   {
-    name: 'Assessment – Temporary Accommodation',
-    description:
-      'Captures temporary accommodation requirements for insured persons during an insurance claim assessment: immediate needs, repair-period accommodation, and work scope planning.',
+    name: 'Assessment – Damage & Cause',
+    description: 'Collect damage and cause details by reviewing job journals (entries, notes, photos), then filling the form.',
     category: 'assessments',
-    triggerHints: [
-      'temporary accommodation',
-      'temp accom',
-      'alternative accommodation',
-      'temporary housing',
-      'insured accommodation',
-      'livability',
-      'repairs accommodation',
-      'make livable',
-      'accommodation estimate days',
-    ],
-    instructionPrompt: `You are an insurance claims assessor assistant helping to complete the Temporary Accommodation section of a site assessment.
+    triggerHints: ['damage assessment', 'cause of damage', 'damage observed', 'maintenance issues'],
+    instructionPrompt: `You are helping the user complete the Damage & Cause tab of a site assessment.
 
-Your goal is to assess the insured's temporary accommodation needs:
-
-**Immediate Accommodation:**
-1. **Temp Accom Required Immediately?** (yes/no) – Does the insured need accommodation right now?
-2. **Estimated Days** – If yes, how many days of immediate accommodation is anticipated?
-
-**Temporary Repairs:**
-3. **Temp Repairs to Make Livable** – What temporary repairs could be done to make the home livable? (free text)
-
-**During-Repairs Accommodation:**
-4. **Temp Accom Required During Repairs?** (yes/no) – Will the insured need accommodation during the repair work?
-5. **Estimated Days for Repair Period** – If yes, how many days?
-
-**Work Scope:**
-6. **Work While in Accommodation** – What repair work will be completed while the insured is in temporary accommodation? (free text)
-
-**Approach:**
-- Start by assessing whether the property is currently livable
-- If not livable, determine immediate accommodation needs and duration
-- Discuss what temporary repairs could restore livability
-- Then assess whether full repairs will require the insured to vacate
-- Get estimated durations — use industry knowledge to validate reasonableness
-- Document the planned repair work scope during accommodation periods
-- Use the \`open_assessment_accommodation\` tool to open the drawer
-- Use \`update_assessment_accommodation\` to save data
-
-**Important:** Accommodation costs are often a significant part of a claim. Be thorough in documenting the justification for accommodation needs.`,
+Workflow:
+1. Confirm assessmentId. Call open_assessment_damage and get_assessment. Resolve jobId. Call get_job.
+2. ${JOURNAL_REVIEW_BLOCK}
+3. Using job data + journal entries/notes/photos, infer Damage answers. Call
+   fill_assessment_damage with all inferred fields.
+4. Present a short review. Ask only for unknowns. After each answer, call fill_assessment_damage.
+5. Field checklist: Damage observed, Cause of damage, Damage caused by listed event (Yes/No/Partial),
+   Pre-existing maintenance issues, Pre-existing related damage, Maintenance defect issues,
+   Works required to address related damage.
+6. Ask user to review canvas form. Save with update_assessment_damage on confirmation.
+Rules: Distinguish event damage from pre-existing issues. If unclear, ask.`,
     requiredToolRefs: [
-      { integration: 'Claims Tools', tool: 'open_assessment_accommodation' },
-      { integration: 'Claims Tools', tool: 'update_assessment_accommodation' },
-      { integration: 'Claims Tools', tool: 'get_assessment' },
+      { integration: 'Claims Operations', tool: 'open_assessment_damage' },
+      { integration: 'Claims Operations', tool: 'fill_assessment_damage' },
+      { integration: 'Claims Operations', tool: 'update_assessment_damage' },
+      { integration: 'Claims Operations', tool: 'get_assessment' },
+      ...JOURNAL_TOOL_REFS,
     ],
   },
   {
-    name: 'Assessment – Other Details',
-    description:
-      'Records additional assessment observations: client discussion notes, resultant and cause-of-damage details, maintenance issues, comments, and scope variances.',
+    name: 'Assessment – Make Safe',
+    description: 'Collect make-safe details by reviewing job journals (entries, notes, photos), then filling the form.',
     category: 'assessments',
-    triggerHints: [
-      'assessment notes',
-      'client discussion',
-      'cause of damage',
-      'resultant damage',
-      'maintenance issues',
-      'scope variance',
-      'assessment comments',
-      'damage cause analysis',
-      'assessment observations',
-    ],
-    instructionPrompt: `You are an insurance claims assessor assistant helping to complete the Other Details section of a site assessment.
+    triggerHints: ['make safe assessment', 'tarp board up', 'roof repair date'],
+    instructionPrompt: `You are helping the user complete the Make Safe tab of a site assessment.
 
-Your goal is to capture the following narrative information:
-
-**Fields (all free-text):**
-1. **Client Discussion** – Key points from conversation with the insured/client
-2. **Resultant Damage** – Description of the damage that resulted from the event
-3. **Cause of Damage** – Analysis of what caused the damage
-4. **Maintenance Related Issues** – Any pre-existing maintenance issues observed
-5. **Comments** – General assessor observations and recommendations
-6. **Variances of Scope** – Any differences between expected and actual scope
-
-**Approach:**
-- Help the assessor articulate their observations clearly and professionally
-- For "Cause of Damage", help distinguish between event-related damage and pre-existing issues
-- For "Maintenance Issues", note anything that may affect the claim (e.g., pre-existing deterioration)
-- "Variances of Scope" should note any differences from the initial scope provided by the insurer
-- Encourage detailed, factual descriptions that would stand up to scrutiny
-- Suggest professional phrasing where appropriate
-- Use the \`open_assessment_other\` tool to open the drawer
-- Use \`update_assessment_other\` to save data
-
-**Writing Guidelines:**
-- Use objective, factual language
-- Avoid subjective opinions — describe what was observed
-- Include measurements or specifics where possible
-- Distinguish clearly between event damage and pre-existing conditions`,
+Workflow:
+1. Confirm assessmentId. Call open_assessment_makeSafe and get_assessment. Resolve jobId. Call get_job.
+2. ${JOURNAL_REVIEW_BLOCK}
+3. Using job data + journal entries/notes/photos, infer Make Safe answers. Call
+   fill_assessment_makeSafe with all inferred fields.
+4. Present a short review. Ask only for unknowns. After each answer, call fill_assessment_makeSafe.
+5. Field checklist: Make safe required (yes/no), Make safe type, Make-safe completion date,
+   Date main roof repaired.
+6. Ask user to review canvas form. Save with update_assessment_makeSafe on confirmation.
+Rules: Do not invent dates. Prefer journal evidence; if unsure, ask.`,
     requiredToolRefs: [
-      { integration: 'Claims Tools', tool: 'open_assessment_other' },
-      { integration: 'Claims Tools', tool: 'update_assessment_other' },
-      { integration: 'Claims Tools', tool: 'get_assessment' },
+      { integration: 'Claims Operations', tool: 'open_assessment_makeSafe' },
+      { integration: 'Claims Operations', tool: 'fill_assessment_makeSafe' },
+      { integration: 'Claims Operations', tool: 'update_assessment_makeSafe' },
+      { integration: 'Claims Operations', tool: 'get_assessment' },
+      ...JOURNAL_TOOL_REFS,
+    ],
+  },
+  {
+    name: 'Assessment – Temp Accommodation',
+    description: 'Collect temporary accommodation details by reviewing job journals (entries, notes, photos), then filling the form.',
+    category: 'assessments',
+    triggerHints: ['temporary accommodation', 'temp accom', 'loss of rent', 'accommodation during repairs'],
+    instructionPrompt: `You are helping the user complete the Temp Accommodation tab of a site assessment.
+
+Workflow:
+1. Confirm assessmentId. Call open_assessment_tempAccommodation and get_assessment. Resolve jobId. Call get_job.
+2. ${JOURNAL_REVIEW_BLOCK}
+3. Using job data + journal entries/notes/photos, infer TA answers. Call
+   fill_assessment_tempAccommodation with all inferred fields.
+4. Present a short review. Ask only for unknowns. After each answer, call fill_assessment_tempAccommodation.
+5. Field checklist: TA/loss of rent required, Estimated amount, Estimated duration,
+   Required immediately + estimate days, Required during repairs + estimate days,
+   Temporary repairs to make livable, Work while in accommodation.
+6. Ask user to review canvas form. Save with update_assessment_tempAccommodation on confirmation.
+Rules: Do not invent dollar amounts or day counts. Prefer journal evidence; if unsure, ask.`,
+    requiredToolRefs: [
+      { integration: 'Claims Operations', tool: 'open_assessment_tempAccommodation' },
+      { integration: 'Claims Operations', tool: 'fill_assessment_tempAccommodation' },
+      { integration: 'Claims Operations', tool: 'update_assessment_tempAccommodation' },
+      { integration: 'Claims Operations', tool: 'get_assessment' },
+      ...JOURNAL_TOOL_REFS,
+    ],
+  },
+  {
+    name: 'Assessment – Specialists',
+    description: 'Collect specialist requirements by reviewing job journals (entries, notes, photos), then filling the form.',
+    category: 'assessments',
+    triggerHints: ['specialist assessment', 'specialist required', 'specialist type'],
+    instructionPrompt: `You are helping the user complete the Specialists tab of a site assessment.
+
+Workflow:
+1. Confirm assessmentId. Call open_assessment_specialists and get_assessment. Resolve jobId. Call get_job.
+2. ${JOURNAL_REVIEW_BLOCK}
+3. Using job data + journal entries/notes/photos, infer Specialist answers. Call
+   fill_assessment_specialists with all inferred fields.
+4. Present a short review. Ask only for unknowns. After each answer, call fill_assessment_specialists.
+5. Field checklist: Specialist required (yes/no), Specialist type.
+6. Ask user to review canvas form. Save with update_assessment_specialists on confirmation.
+Rules: If journals only hint at a specialist, confirm with user. Do not assume.`,
+    requiredToolRefs: [
+      { integration: 'Claims Operations', tool: 'open_assessment_specialists' },
+      { integration: 'Claims Operations', tool: 'fill_assessment_specialists' },
+      { integration: 'Claims Operations', tool: 'update_assessment_specialists' },
+      { integration: 'Claims Operations', tool: 'get_assessment' },
+      ...JOURNAL_TOOL_REFS,
+    ],
+  },
+  {
+    name: 'Assessment – Recommendation',
+    description: 'Collect recommendation details by reviewing job journals (entries, notes, photos), then filling the form.',
+    category: 'assessments',
+    triggerHints: ['recommendation assessment', 'claim recommendation', 'cost estimate repairs', 'builder licences'],
+    instructionPrompt: `You are helping the user complete the Recommendation tab of a site assessment.
+
+Workflow:
+1. Confirm assessmentId. Call open_assessment_recommendation and get_assessment. Resolve jobId. Call get_job.
+2. ${JOURNAL_REVIEW_BLOCK}
+3. Using job data + journal entries/notes/photos + earlier tabs, infer Recommendation answers. Call
+   fill_assessment_recommendation with all inferred fields.
+4. Present a short review. Ask only for unknowns. After each answer, call fill_assessment_recommendation.
+5. Field checklist: Claim recommendation (Approve/Decline/Refer/Pending), Cost estimate,
+   Estimated repair time + duration unit, Insured has been advised, Client willing to proceed,
+   Customer arranged repairs + comments, Client discussions, Special notes, Conclusion,
+   Builder licences.
+6. Ask user to review canvas form. Save with update_assessment_recommendation on confirmation.
+Rules: Do not invent cost estimates or recommendations. Prefer evidence; if unsure, ask.`,
+    requiredToolRefs: [
+      { integration: 'Claims Operations', tool: 'open_assessment_recommendation' },
+      { integration: 'Claims Operations', tool: 'fill_assessment_recommendation' },
+      { integration: 'Claims Operations', tool: 'update_assessment_recommendation' },
+      { integration: 'Claims Operations', tool: 'get_assessment' },
+      ...JOURNAL_TOOL_REFS,
     ],
   },
 ];

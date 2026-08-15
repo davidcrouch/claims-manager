@@ -1,9 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { SkillRepository } from '../../database/repositories/skill.repository';
 import { TenantContext } from '../../tenant/tenant-context';
 import { EmbeddingService } from '../ai-chat/embedding.service';
+import { injectSkillInline } from '../ai-chat/stream/skill-inline-injector';
+import { runSkillIsolated } from '../ai-chat/stream/skill-isolated-runner';
 import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface';
 import { SkillMatcherService } from './skill-matcher.service';
+import { resolveInvocationMode } from './skill-router';
 import type {
   CreateSkillDto,
   SkillConfig,
@@ -23,6 +27,7 @@ export class SkillService {
     private readonly matcher: SkillMatcherService,
     private readonly tenantContext: TenantContext,
     private readonly embeddingService: EmbeddingService,
+    private readonly configService: ConfigService,
   ) {}
 
   private getTenantId(): string {
@@ -140,19 +145,54 @@ export class SkillService {
     };
   }
 
-  async testInvoke(skillId: string, message: string): Promise<{ result: string; timeMs: number }> {
+  async testInvoke(
+    skillId: string,
+    message: string,
+  ): Promise<{ result: string; timeMs: number; mode?: string }> {
     const skill = await this.findById(skillId);
     if (!skill) {
       return { result: 'Skill not found', timeMs: 0 };
     }
 
     const startTime = Date.now();
-    const prompt = `${skill.instructionPrompt}\n\nUser message: ${message}`;
-    const timeMs = Date.now() - startTime;
+    const mode = resolveInvocationMode(skill);
 
+    if (mode === 'isolated') {
+      const aiConfig = this.configService.get('ai', { infer: true });
+      const project = aiConfig?.vertexProject ?? '';
+      const location = aiConfig?.vertexLocation ?? 'us-central1';
+      const parentModel = skill.modelOverride ?? 'gemini-2.5-flash';
+
+      const isolated = await runSkillIsolated(
+        skill,
+        { message, reason: 'test-invoke' },
+        {
+          gcpProjectId: project,
+          vertexLocation: location,
+          parentModel,
+          parentProvider: parentModel.startsWith('claude')
+            ? 'vertex-anthropic'
+            : 'vertex-gemini',
+          tools: {},
+        },
+      );
+
+      return {
+        result:
+          typeof isolated.result === 'string'
+            ? isolated.result
+            : JSON.stringify(isolated.result, null, 2),
+        timeMs: isolated.timeMs,
+        mode: 'isolated',
+      };
+    }
+
+    const { result } = injectSkillInline(skill, 'You are a test harness.');
+    const timeMs = Date.now() - startTime;
     return {
-      result: `[Test] Skill "${skill.name}" would be invoked with prompt length: ${prompt.length} chars`,
+      result: `[Inline] Skill "${skill.name}" activated. Instructions would be injected (${result.injectedInstructions}). Sample user message length: ${message.length}.`,
       timeMs,
+      mode: 'inline',
     };
   }
 

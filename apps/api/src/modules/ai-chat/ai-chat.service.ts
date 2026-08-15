@@ -20,6 +20,7 @@ import type { AgentConfig } from '../agents/agent.types';
 import { ConversationsService } from '../conversations/conversations.service';
 import { SkillMatcherService } from '../skills/skill-matcher.service';
 import { buildSkillPromptBlock } from '../skills/skill-prompt-builder.js';
+import type { SkillConfig, SkillMatchResult } from '../skills/skill.types';
 import {
   createNativeMCPClient,
   splitMCPAppTools,
@@ -38,11 +39,17 @@ import {
   resolveModelLocation,
   type ChatProviderId,
 } from './providers/model-router';
-import type { ProviderOptions, ToolCall, TokenUsage } from './providers/types';
+import type { ProviderOptions, ProviderToolDefinition, ToolCall, TokenUsage } from './providers/types';
 import { streamCompletion } from './stream/stream-completion';
 import { toProviderMessages } from './stream/message-converter';
+import {
+  ACTIVATE_SKILL_TOOL_NAME,
+  createActivateSkillTool,
+} from './stream/skill-activation';
 import type { SSEEvent } from './stream/types';
-import type { ChatMessage, StreamChatParams } from './ai-chat.types';
+import type { ChatMessage, PageContext, StreamChatParams } from './ai-chat.types';
+import { resolvePageContextBlock, type PageDataFetcher } from './page-context';
+import { DocumentGenerationService } from '../document-generation/document-generation.service';
 
 const LOG_PREFIX = 'AiChatService';
 
@@ -51,11 +58,26 @@ const CANVAS_TOOL_MAP: Record<string, string> = {
   create_quote: 'QuoteFormDrawer',
   create_task: 'TaskFormDrawer',
   create_contact: 'ContactFormDrawer',
-  open_assessment_building: 'AssessmentBuildingDrawer',
-  open_assessment_general: 'AssessmentGeneralDrawer',
-  open_assessment_hazards: 'AssessmentHazardsDrawer',
-  open_assessment_accommodation: 'AssessmentAccommodationDrawer',
-  open_assessment_other: 'AssessmentOtherDrawer',
+  open_create_assessment: 'AssessmentCreateDrawer',
+  fill_create_assessment: 'AssessmentCreateDrawer',
+  open_assessment_attendance: 'AssessmentAttendanceDrawer',
+  fill_assessment_attendance: 'AssessmentAttendanceDrawer',
+  open_assessment_building: 'AssessmentBuildingTabDrawer',
+  fill_assessment_building: 'AssessmentBuildingTabDrawer',
+  open_assessment_habitability: 'AssessmentHabitabilityDrawer',
+  fill_assessment_habitability: 'AssessmentHabitabilityDrawer',
+  open_assessment_hazards: 'AssessmentHazardsTabDrawer',
+  fill_assessment_hazards: 'AssessmentHazardsTabDrawer',
+  open_assessment_damage: 'AssessmentDamageDrawer',
+  fill_assessment_damage: 'AssessmentDamageDrawer',
+  open_assessment_makeSafe: 'AssessmentMakeSafeDrawer',
+  fill_assessment_makeSafe: 'AssessmentMakeSafeDrawer',
+  open_assessment_tempAccommodation: 'AssessmentTempAccommodationDrawer',
+  fill_assessment_tempAccommodation: 'AssessmentTempAccommodationDrawer',
+  open_assessment_specialists: 'AssessmentSpecialistsDrawer',
+  fill_assessment_specialists: 'AssessmentSpecialistsDrawer',
+  open_assessment_recommendation: 'AssessmentRecommendationDrawer',
+  fill_assessment_recommendation: 'AssessmentRecommendationDrawer',
 };
 
 interface ResolvedMcpTools {
@@ -77,6 +99,7 @@ export class AiChatService {
     private readonly memoryRepo: AiUserMemoryRepository,
     private readonly tenantContext: TenantContext,
     private readonly configService: ConfigService,
+    private readonly documentGenService: DocumentGenerationService,
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
   ) {}
 
@@ -105,6 +128,15 @@ export class AiChatService {
     const tenantId = this.tenantContext.getTenantId();
     const row = await this.auditRepo.findById({ tenantId, id });
     return row ? this.toAuditRecord(row) : null;
+  }
+
+  async listConversationAudit(conversationId: string) {
+    const tenantId = this.tenantContext.getTenantId();
+    const rows = await this.auditRepo.findByConversation({
+      tenantId,
+      conversationId,
+    });
+    return rows.map((row) => this.toAuditRecord(row));
   }
 
   private toAuditRecord(row: AiMessageAuditRow) {
@@ -176,14 +208,14 @@ export class AiChatService {
 
     const adaptedTools = adaptMCPTools(mcpTools);
     const allowlist = agent.enabledTools ?? [];
-    const tools =
+    const tools: Record<string, ProviderToolDefinition> =
       allowlist.length > 0
         ? Object.fromEntries(
             Object.entries(adaptedTools).filter(([name]) =>
               allowlist.includes(name),
             ),
           )
-        : adaptedTools;
+        : { ...adaptedTools };
     if (allowlist.length > 0) {
       this.logger.log(
         `[${LOG_PREFIX}.streamChat] tool allowlist active: ${Object.keys(tools).length}/${Object.keys(adaptedTools).length}`,
@@ -191,11 +223,51 @@ export class AiChatService {
     }
     const rawMessages = (params.dto.messages ?? []) as ChatMessage[];
     const providerMessages = toProviderMessages(rawMessages);
-    const systemPrompt = await this.buildSystemInstructions(
+
+    const pageContext = params.dto.pageContext;
+    const skillMatches = await this.matchSkillsForTurn(
       agent,
       rawMessages,
       params.user,
+      pageContext?.entityType,
     );
+    let systemPrompt = await this.buildSystemInstructions(
+      agent,
+      rawMessages,
+      params.user,
+      skillMatches,
+      pageContext,
+    );
+
+    if (skillMatches.length > 0) {
+      const skillsById = new Map<string, SkillConfig>();
+      for (const match of skillMatches) {
+        skillsById.set(match.skill.id, match.skill);
+      }
+      tools[ACTIVATE_SKILL_TOOL_NAME] = createActivateSkillTool({
+        skillsById,
+        parentModel: modelName,
+        getInstructions: () => systemPrompt,
+        setInstructions: (next) => {
+          systemPrompt = next;
+        },
+        parentTools: tools,
+        allTools: adaptedTools,
+        isolated: {
+          gcpProjectId: project,
+          vertexLocation: resolvedLocation,
+          parentModel: modelName,
+          parentProvider: agent.provider,
+          tools: adaptedTools,
+        },
+        historyMessages: providerMessages,
+        extractLastUserMessage: () => extractLastUserMessage(rawMessages),
+      });
+      this.logger.log(
+        `[${LOG_PREFIX}.streamChat] activate_skill enabled for ${skillsById.size} matched skill(s)`,
+      );
+    }
+
     const messageId =
       params.dto.messageId ??
       `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -230,6 +302,7 @@ export class AiChatService {
         tools,
         maxSteps: agent.maxSteps ?? 10,
         messageId,
+        getInstructions: () => systemPrompt,
         onToolCall: (toolCall: ToolCall) => {
           toolNamesInvoked.add(resolveOriginalToolName(toolCall.name));
           toolCallArgs.set(toolCall.id, {
@@ -257,6 +330,7 @@ export class AiChatService {
             event.toolCallId,
             event.toolName,
             toolCallArgs,
+            pageContext,
           );
           if (canvasEvent) {
             yield canvasEvent;
@@ -332,6 +406,7 @@ export class AiChatService {
     toolCallId: string,
     namespacedToolName: string,
     toolCallArgs: Map<string, { args: Record<string, unknown>; originalName: string }>,
+    pageContext?: PageContext,
   ): SSEEvent | null {
     const tracked = toolCallArgs.get(toolCallId);
     const originalName =
@@ -339,7 +414,12 @@ export class AiChatService {
     const component = resolveCanvasComponent(originalName);
     if (!component) return null;
 
-    const args = tracked?.args ?? {};
+    const args = { ...(tracked?.args ?? {}) };
+    const argJobId = typeof args.jobId === 'string' ? args.jobId.trim() : '';
+    if (!argJobId && pageContext?.jobId) {
+      args.jobId = pageContext.jobId;
+    }
+
     return {
       type: 'canvas-component',
       component,
@@ -349,30 +429,46 @@ export class AiChatService {
     };
   }
 
-  private async buildSystemInstructions(
+  private async matchSkillsForTurn(
     agent: AgentConfig,
     messages: ChatMessage[],
     user: AuthenticatedUser,
+    pageEntityType?: string,
+  ): Promise<SkillMatchResult[]> {
+    const lastUserMessage = extractLastUserMessage(messages);
+    if (!lastUserMessage.trim()) return [];
+    try {
+      return await this.skillMatcher.findMatches(lastUserMessage, agent, user, pageEntityType);
+    } catch (err) {
+      this.logger.warn(
+        `[${LOG_PREFIX}.matchSkillsForTurn] skill matching failed: ${String(err)}`,
+      );
+      return [];
+    }
+  }
+
+  private async buildSystemInstructions(
+    agent: AgentConfig,
+    _messages: ChatMessage[],
+    user: AuthenticatedUser,
+    skillMatches: SkillMatchResult[] = [],
+    pageContext?: PageContext,
   ): Promise<string> {
     const basePrompt = agent.systemPrompt;
-    const lastUserMessage = extractLastUserMessage(messages);
     let enrichedPrompt = basePrompt;
 
-    if (lastUserMessage.trim()) {
-      try {
-        const matches = await this.skillMatcher.findMatches(
-          lastUserMessage,
-          agent,
-          user,
-        );
-        if (matches.length > 0) {
-          enrichedPrompt = basePrompt + buildSkillPromptBlock(matches);
-        }
-      } catch (err) {
-        this.logger.warn(
-          `[${LOG_PREFIX}.buildSystemInstructions] skill matching failed: ${String(err)}`,
-        );
-      }
+    const fetcher: PageDataFetcher = (docType, entityId) =>
+      this.fetchPageData(docType, entityId);
+
+    const { contextBlock } = await resolvePageContextBlock(pageContext, fetcher, {
+      tenantId: this.tenantContext.getTenantId(),
+    });
+    if (contextBlock) {
+      enrichedPrompt += contextBlock;
+    }
+
+    if (skillMatches.length > 0) {
+      enrichedPrompt += buildSkillPromptBlock(skillMatches);
     }
 
     try {
@@ -393,6 +489,24 @@ export class AiChatService {
     }
 
     return enrichedPrompt;
+  }
+
+  private async fetchPageData(
+    documentType: string,
+    entityId: string,
+  ): Promise<Record<string, unknown> | null> {
+    try {
+      const data = await this.documentGenService.getSampleData({
+        documentType: documentType as import('../document-generation/types/document-types').DocumentType,
+        entityId,
+      });
+      return data;
+    } catch (err) {
+      this.logger.debug(
+        `[${LOG_PREFIX}.fetchPageData] mapper not available for ${documentType}/${entityId}: ${String(err)}`,
+      );
+      return null;
+    }
   }
 
   private async persistConversationMessages(

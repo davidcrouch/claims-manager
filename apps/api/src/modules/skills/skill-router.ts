@@ -19,6 +19,10 @@ export function resolveInvocationMode(
     return 'isolated';
   }
 
+  if (skill.invocationMode === 'inline') {
+    return 'inline';
+  }
+
   if (skill.modelOverride && skill.modelOverride !== parentModel) {
     return 'isolated';
   }

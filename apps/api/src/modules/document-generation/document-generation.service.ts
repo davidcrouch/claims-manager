@@ -6,6 +6,7 @@ import { TenantContext } from '../../tenant/tenant-context';
 import { SCENARIO_META, TemplateRegistryService } from './services/template-registry.service';
 import { TemplateEngineService } from './services/template-engine.service';
 import { PdfConverterService } from './services/pdf-converter.service';
+import { TransformService } from './services/transform.service';
 import { QuoteMapper } from './data-mappers/quote.mapper';
 import { InvoiceMapper } from './data-mappers/invoice.mapper';
 import { PurchaseOrderMapper } from './data-mappers/purchase-order.mapper';
@@ -23,6 +24,7 @@ import { MessageMapper } from './data-mappers/message.mapper';
 import { JournalMapper } from './data-mappers/journal.mapper';
 import { VendorMapper } from './data-mappers/vendor.mapper';
 import { AssessmentMapper } from './data-mappers/assessment.mapper';
+import { DocumentMapper } from './data-mappers/document.mapper';
 import { JobsListMapper } from './data-mappers/jobs-list.mapper';
 import { QuotesListMapper } from './data-mappers/quotes-list.mapper';
 import { InvoicesListMapper } from './data-mappers/invoices-list.mapper';
@@ -39,12 +41,17 @@ import { AppointmentsListMapper } from './data-mappers/appointments-list.mapper'
 import { MessagesListMapper } from './data-mappers/messages-list.mapper';
 import { JournalsListMapper } from './data-mappers/journals-list.mapper';
 import { VendorsListMapper } from './data-mappers/vendors-list.mapper';
+import { AssessmentsListMapper } from './data-mappers/assessments-list.mapper';
+import { DocumentsListMapper } from './data-mappers/documents-list.mapper';
+import { ScheduleListMapper } from './data-mappers/schedule-list.mapper';
 import type { DataMapper } from './data-mappers/base.mapper';
 import {
   DOCUMENT_TYPE_TO_ENTITY_TYPE,
   type DocumentType,
   type GenerationTrigger,
+  type TemplateData,
 } from './types/document-types';
+import { SOURCE_SCHEMAS } from './schemas';
 
 const DOCX_MIME =
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -59,6 +66,7 @@ export class DocumentGenerationService {
     private readonly templateRegistry: TemplateRegistryService,
     private readonly templateEngine: TemplateEngineService,
     private readonly pdfConverter: PdfConverterService,
+    private readonly transformService: TransformService,
     private readonly gcsStorage: GcsStorageService,
     private readonly generatedDocsRepo: GeneratedDocumentsRepository,
     private readonly documentsService: DocumentsService,
@@ -79,6 +87,7 @@ export class DocumentGenerationService {
     journalMapper: JournalMapper,
     vendorMapper: VendorMapper,
     assessmentMapper: AssessmentMapper,
+    documentMapper: DocumentMapper,
     jobsListMapper: JobsListMapper,
     quotesListMapper: QuotesListMapper,
     invoicesListMapper: InvoicesListMapper,
@@ -95,6 +104,9 @@ export class DocumentGenerationService {
     messagesListMapper: MessagesListMapper,
     journalsListMapper: JournalsListMapper,
     vendorsListMapper: VendorsListMapper,
+    assessmentsListMapper: AssessmentsListMapper,
+    documentsListMapper: DocumentsListMapper,
+    scheduleListMapper: ScheduleListMapper,
   ) {
     this.mappers = {
       quote: quoteMapper,
@@ -115,6 +127,7 @@ export class DocumentGenerationService {
       journal: journalMapper,
       vendor: vendorMapper,
       assessment: assessmentMapper,
+      document: documentMapper,
       jobs_list: jobsListMapper,
       quotes_list: quotesListMapper,
       invoices_list: invoicesListMapper,
@@ -131,7 +144,28 @@ export class DocumentGenerationService {
       messages_list: messagesListMapper,
       journals_list: journalsListMapper,
       vendors_list: vendorsListMapper,
+      assessments_list: assessmentsListMapper,
+      documents_list: documentsListMapper,
+      schedule_list: scheduleListMapper,
     };
+  }
+
+  async getSampleData(params: {
+    documentType: DocumentType;
+    entityId: string;
+  }): Promise<TemplateData> {
+    const logPrefix = 'DocumentGenerationService.getSampleData';
+    const tenantId = this.tenantContext.getTenantId();
+    const mapper = this.mappers[params.documentType];
+    if (!mapper) {
+      throw new NotFoundException(
+        `No mapper registered for document type "${params.documentType}"`,
+      );
+    }
+    this.logger.log(
+      `${logPrefix} — type=${params.documentType} entityId=${params.entityId}`,
+    );
+    return mapper.aggregate({ tenantId, entityId: params.entityId });
   }
 
   async generate(params: {
@@ -222,6 +256,24 @@ export class DocumentGenerationService {
         entityId: params.entityId,
       });
 
+      const sourceSchema = SOURCE_SCHEMAS[params.documentType];
+      if (sourceSchema) {
+        const result = sourceSchema.safeParse(data);
+        if (!result.success) {
+          const issues = result.error.issues.map(
+            (issue) => `${issue.path.join('.')}: ${issue.message}`,
+          );
+          this.logger.warn(
+            `${logPrefix} — source schema validation failed for type=${params.documentType}: ${issues.join('; ')}`,
+          );
+        }
+      }
+
+      const mergeData = await this.transformService.applyTransform({
+        documentType: params.documentType,
+        sourceData: data,
+      });
+
       const { fileBuffer: templateBuffer } = await this.templateRegistry.resolve({
         tenantId: params.tenantId,
         documentType: params.documentType,
@@ -231,7 +283,7 @@ export class DocumentGenerationService {
 
       const populatedDocx = this.templateEngine.populate({
         templateBuffer,
-        data,
+        data: mergeData,
       });
 
       const canConvertPdf = this.pdfConverter.isAvailable();

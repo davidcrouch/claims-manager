@@ -1,0 +1,68 @@
+slug: create-assessment
+name: Assessment – Create New
+description: Open the Create Assessment form, review job journals (entries, notes, photos), pre-fill, then ask unknowns.
+triggerHints:
+  - create assessment
+  - new assessment
+  - start assessment
+  - add assessment
+  - begin assessment
+  - open assessment form
+  - make a new assessment
+instructionPrompt: |
+  You are helping the user create a new site assessment for a job.
+
+  Workflow:
+  1. Call open_create_assessment immediately (pass jobId from active job context when available).
+     Resolve jobId, then call get_job.
+  2. Journal review (do this before filling the creation form):
+     a. Call list_journals with jobId (or list_journals_by_entity with entityType=job).
+     b. Show the user a short list of journals (name/title, date, page count if available).
+     c. Ask which journal(s) apply to this assessment — wait for their selection.
+        If only one journal exists, confirm it before opening.
+     d. For each selected journal: call list_journal_pages to get all entries.
+     e. For each entry: call get_journal_page. Read the body/notes text and every content block
+        (blocks[].type === "note" → read text; blocks[].type === "upload" → check attachment).
+     f. For photo/image attachments: call get_journal_page_attachment_download for a download URL.
+        Use filenames, captions, and metadata. If you cannot visually inspect the image, ask the
+        user what the photo shows that is relevant.
+  3. Using job data + journal entries/notes/photos, infer create-form fields. Suggest a sensible
+     assessment name. Call fill_create_assessment with all inferred fields.
+  4. Present a short review of what you filled and evidence sources. Ask only for unknowns.
+     After each user answer, call fill_create_assessment.
+  5. Field checklist:
+     - Assessment name (required)
+     - Confirm job if not already set (required)
+     - Claim recommendation (Approve / Decline / Refer / Pending) — only if supported by evidence
+     - Design type, construction, roof type, building type — only if supported by evidence
+     - Make safe required? If yes, make safe type
+     - Comments / special notes (optional)
+  6. Ask the user to review the canvas form. When ready, create with create_assessment
+     or let them click Submit.
+  7. After creation, confirm the assessment id and offer to continue with tab skills.
+  Rules: Do not invent recommendations or building details. Prefer evidence; if unsure, ask.
+requiredToolRefs:
+  - integration: Claims Operations
+    tool: open_create_assessment
+  - integration: Claims Operations
+    tool: fill_create_assessment
+  - integration: Claims Operations
+    tool: create_assessment
+  - integration: Claims Operations
+    tool: get_assessment
+  - integration: Claims Operations
+    tool: get_job
+  - integration: Claims Operations
+    tool: list_journals
+  - integration: Claims Operations
+    tool: get_journal
+  - integration: Claims Operations
+    tool: list_journal_pages
+  - integration: Claims Operations
+    tool: get_journal_page
+  - integration: Claims Operations
+    tool: get_journal_page_attachment_download
+category: assessments
+invocationMode: inline
+includeHistory: true
+visibility: org

@@ -1,8 +1,17 @@
+export interface PageContext {
+  pathname: string;
+  entityType?: string;
+  entityId?: string;
+  jobId?: string;
+  pageLabel?: string;
+}
+
 export interface StreamChatDto {
   conversationId?: string;
   agentId?: string;
   messageId?: string;
   messages: unknown[];
+  pageContext?: PageContext;
 }
 
 export interface StreamChatParams {

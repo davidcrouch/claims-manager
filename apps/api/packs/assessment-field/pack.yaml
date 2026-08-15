@@ -1,0 +1,21 @@
+id: assessment-field
+version: 2.2.0
+name: Assessment Field
+description: Field assessment agent with per-tab skills that review journal entries/notes/photos, then pre-fill forms.
+integrationRefs:
+  - Claims Operations
+agents:
+  - file: agents/assessment-assistant.yaml
+skills:
+  - file: skills/create-assessment.yaml
+  - file: skills/attendance.yaml
+  - file: skills/building.yaml
+  - file: skills/habitability.yaml
+  - file: skills/hazards-tab.yaml
+  - file: skills/damage.yaml
+  - file: skills/make-safe.yaml
+  - file: skills/temp-accommodation.yaml
+  - file: skills/specialists.yaml
+  - file: skills/recommendation.yaml
+  - file: skills/complete-assessment.yaml
+prompts: []

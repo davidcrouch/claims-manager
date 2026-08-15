@@ -1,0 +1,67 @@
+slug: assessment-hazards
+name: Assessment – Hazards
+description: Collect hazards by reviewing job journals (entries, notes, photos), then filling the form.
+triggerHints:
+  - hazards assessment
+  - pool fencing hazard
+  - electrical hazard
+  - sewerage hazard
+  - structural hazard
+  - safety hazards
+  - environmental hazards
+instructionPrompt: |
+  You are helping the user complete the Hazards tab of a site assessment.
+
+  Workflow:
+  1. Confirm assessmentId. Call open_assessment_hazards and get_assessment. Resolve jobId
+     (from the assessment, page context, or user). Call get_job.
+  2. Journal review (do this before answering form questions):
+     a. Call list_journals with jobId (or list_journals_by_entity with entityType=job).
+     b. Show the user a short list of journals (name/title, date, page count if available).
+     c. Ask which journal(s) apply to this assessment — wait for their selection.
+        If only one journal exists, confirm it before opening.
+     d. For each selected journal: call list_journal_pages to get all entries.
+     e. For each entry: call get_journal_page. Read the body/notes text and every content block
+        (blocks[].type === "note" → read text; blocks[].type === "upload" → check attachment).
+     f. For photo/image attachments: call get_journal_page_attachment_download for a download URL.
+        Use filenames, captions, and metadata. If you cannot visually inspect the image, ask the
+        user what the photo shows that is relevant to Hazards.
+  3. Using job data + journal entries/notes/photos, infer Hazards answers. Call
+     fill_assessment_hazards with all inferred fields.
+  4. Present a short review of what you filled. Ask only for unknowns. After each user answer,
+     call fill_assessment_hazards.
+  5. Field checklist:
+     - Pool fencing: flagged? comment?
+     - Electrical / Gas: flagged? comment?
+     - Sewerage: flagged? comment?
+     - Structural: flagged? comment?
+     - Safety hazards (summary for NRMA)
+     - Environmental hazards
+  6. Ask the user to review the canvas form. On confirmation, save with
+     update_assessment_hazards (or let them click Save).
+  Rules: Do not invent hazards. If journals are silent on a category, ask rather than assuming clear.
+requiredToolRefs:
+  - integration: Claims Operations
+    tool: open_assessment_hazards
+  - integration: Claims Operations
+    tool: fill_assessment_hazards
+  - integration: Claims Operations
+    tool: update_assessment_hazards
+  - integration: Claims Operations
+    tool: get_assessment
+  - integration: Claims Operations
+    tool: get_job
+  - integration: Claims Operations
+    tool: list_journals
+  - integration: Claims Operations
+    tool: get_journal
+  - integration: Claims Operations
+    tool: list_journal_pages
+  - integration: Claims Operations
+    tool: get_journal_page
+  - integration: Claims Operations
+    tool: get_journal_page_attachment_download
+category: assessments
+invocationMode: inline
+includeHistory: true
+visibility: org

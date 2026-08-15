@@ -11,6 +11,7 @@ const LOG_PREFIX = 'SkillMatcherService';
 const DEFAULT_TOP_K = 5;
 const MIN_SIMILARITY_THRESHOLD = 0.45;
 const MIN_KEYWORD_SCORE = 0.35;
+const PAGE_CATEGORY_BOOST = 0.3;
 
 @Injectable()
 export class SkillMatcherService {
@@ -27,6 +28,7 @@ export class SkillMatcherService {
     userMessage: string,
     agent: AgentConfig,
     _user: AuthenticatedUser,
+    pageEntityType?: string,
   ): Promise<SkillMatchResult[]> {
     const tenantId = this.tenantContext.getTenantId();
     const results: SkillMatchResult[] = [];
@@ -41,6 +43,10 @@ export class SkillMatcherService {
       }
     }
 
+    const pageCategory = pageEntityType
+      ? entityTypeToCategory(pageEntityType)
+      : undefined;
+
     const semanticPool = agent.semanticSkills ?? 'all';
     if (semanticPool !== 'none' && semanticPool !== 'pinned_only') {
       try {
@@ -52,6 +58,9 @@ export class SkillMatcherService {
         );
         for (const match of semanticResults) {
           if (!seen.has(match.skill.id)) {
+            if (pageCategory && match.skill.category === pageCategory) {
+              match.similarity = Math.min(1.0, match.similarity + PAGE_CATEGORY_BOOST);
+            }
             results.push(match);
             seen.add(match.skill.id);
           }
@@ -68,6 +77,9 @@ export class SkillMatcherService {
         );
         for (const match of keywordResults) {
           if (!seen.has(match.skill.id)) {
+            if (pageCategory && match.skill.category === pageCategory) {
+              match.similarity = Math.min(1.0, match.similarity + PAGE_CATEGORY_BOOST);
+            }
             results.push(match);
             seen.add(match.skill.id);
           }
@@ -75,10 +87,42 @@ export class SkillMatcherService {
       }
     }
 
+    if (pageCategory && semanticPool !== 'none' && semanticPool !== 'pinned_only') {
+      const pageBoosted = await this.findPageCategoryMatches(
+        tenantId,
+        pageCategory,
+        [...seen],
+      );
+      for (const match of pageBoosted) {
+        if (!seen.has(match.skill.id)) {
+          results.push(match);
+          seen.add(match.skill.id);
+        }
+      }
+    }
+
     this.logger.log(
-      `[${LOG_PREFIX}.findMatches] matched ${results.length} skill(s) for agent ${agent.id}`,
+      `[${LOG_PREFIX}.findMatches] matched ${results.length} skill(s) for agent ${agent.id}${pageCategory ? ` (page-category: ${pageCategory})` : ''}`,
     );
     return results;
+  }
+
+  private async findPageCategoryMatches(
+    tenantId: string,
+    category: string,
+    excludeIds: string[],
+  ): Promise<SkillMatchResult[]> {
+    const skills = await this.skillRepo.findVisible(tenantId);
+    return skills
+      .filter(
+        (skill) =>
+          skill.category === category && !excludeIds.includes(skill.id),
+      )
+      .map((skill) => ({
+        skill,
+        similarity: PAGE_CATEGORY_BOOST,
+        source: 'keyword' as const,
+      }));
   }
 
   async searchSkills(
@@ -227,4 +271,27 @@ function scoreSkillMatch(
   }
 
   return best;
+}
+
+const ENTITY_CATEGORY_MAP: Record<string, string> = {
+  assessment: 'assessments',
+  job: 'jobs',
+  claim: 'claims',
+  quote: 'quotes',
+  task: 'tasks',
+  contact: 'contacts',
+  document: 'documents',
+  invoice: 'invoices',
+  journal: 'journals',
+  rfq: 'rfqs',
+  proposal: 'proposals',
+  'purchase-order': 'purchase-orders',
+  bill: 'bills',
+  'work-order': 'work-orders',
+  message: 'messages',
+  appointment: 'appointments',
+};
+
+function entityTypeToCategory(entityType: string): string {
+  return ENTITY_CATEGORY_MAP[entityType] ?? entityType + 's';
 }

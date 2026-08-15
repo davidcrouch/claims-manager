@@ -1,0 +1,21 @@
+slug: find-claim
+name: Find Claim
+description: Locate a claim by number, insured name, or status then summarize key fields.
+triggerHints:
+  - find claim
+  - look up claim
+  - claim number
+  - search claims
+instructionPrompt: |
+  Help the user find the right claim.
+  1. Ask for claim number, insured name, or status if missing.
+  2. Use search_claims, then get_claim for the best match.
+  3. Summarize status, parties, and open jobs/tasks.
+requiredToolRefs:
+  - integration: Claims Operations
+    tool: search_claims
+  - integration: Claims Operations
+    tool: get_claim
+category: claims
+invocationMode: inline
+visibility: org

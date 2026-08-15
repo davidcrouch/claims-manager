@@ -1,60 +1,28 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import Link from 'next/link';
-import { toast } from 'sonner';
+import { useState } from 'react';
 import {
-  ArrowLeft,
   FileCode2,
   FileText,
   Files,
-  FolderOpen,
-  Loader2,
-  X,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
-import { ListPageHeader } from '@/components/layout/ListPageHeader';
+import { BackButton } from '@/components/layout/BackButton';
 import type {
   DocumentTemplateSetting,
   DocumentTemplatesFolderSetting,
   FilesystemCategory,
   FSDocument,
 } from '@/lib/api-client';
+import { TransformEditor } from './transform/TransformEditor';
+import { TemplateEditorTab } from './template/TemplateEditorTab';
 
-function collectFolderAndDescendantIds(
-  categories: FilesystemCategory[],
-  rootId: string,
-): Set<string> {
-  const childrenByParent = new Map<string | null, FilesystemCategory[]>();
-  for (const cat of categories) {
-    const key = cat.parentCategoryId;
-    const list = childrenByParent.get(key) ?? [];
-    list.push(cat);
-    childrenByParent.set(key, list);
-  }
+type TabValue = 'transform' | 'template';
 
-  const ids = new Set<string>([rootId]);
-  const stack = [rootId];
-  while (stack.length > 0) {
-    const current = stack.pop()!;
-    for (const child of childrenByParent.get(current) ?? []) {
-      if (!ids.has(child.id)) {
-        ids.add(child.id);
-        stack.push(child.id);
-      }
-    }
-  }
-  return ids;
-}
+const TABS: Array<{ id: TabValue; label: string; icon: typeof FileCode2 }> = [
+  { id: 'transform', label: 'Transform', icon: FileCode2 },
+  { id: 'template', label: 'Template', icon: FileText },
+];
 
 export interface DocumentTemplateDetailClientProps {
   setting: DocumentTemplateSetting;
@@ -70,258 +38,94 @@ export function DocumentTemplateDetailClient({
   folderSetting: initialFolder,
 }: DocumentTemplateDetailClientProps) {
   const [setting, setSetting] = useState(initialSetting);
-  const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState('transform');
+  const [activeTab, setActiveTab] = useState<TabValue>('transform');
 
-  const folderCategoryIds = useMemo(() => {
-    const rootId = initialFolder?.filesystemCategoryId;
-    if (!rootId) return null;
-    return collectFolderAndDescendantIds(companyCategories, rootId);
-  }, [companyCategories, initialFolder?.filesystemCategoryId]);
-
-  const visibleDocx = useMemo(() => {
-    if (!folderCategoryIds) return docxDocuments;
-    return docxDocuments.filter(
-      (doc) =>
-        doc.filesystemCategoryId != null &&
-        folderCategoryIds.has(doc.filesystemCategoryId),
-    );
-  }, [docxDocuments, folderCategoryIds]);
-
-  const docItems = useMemo(() => {
-    const items = Object.fromEntries(
-      visibleDocx.map((doc) => [doc.id, doc.fileName]),
-    ) as Record<string, string>;
-    if (setting.filesystemDocument && !items[setting.filesystemDocument.id]) {
-      items[setting.filesystemDocument.id] = setting.filesystemDocument.fileName;
-    }
-    return items;
-  }, [visibleDocx, setting.filesystemDocument]);
-
-  const folderPath = initialFolder?.folder?.path?.trim() || null;
   const isDefault = setting.documentType === 'default';
-  const selectedId = setting.filesystemDocument?.id ?? '';
-
-  async function refreshSetting() {
-    const res = await fetch('/api/document-templates');
-    if (!res.ok) throw new Error('Failed to refresh template settings');
-    const data = (await res.json()) as DocumentTemplateSetting[];
-    const next = data.find((row) => row.documentType === setting.documentType);
-    if (!next) throw new Error('Template scenario no longer available');
-    setSetting(next);
-  }
-
-  async function handleAssign(filesystemDocumentId: string) {
-    setSaving(true);
-    try {
-      const res = await fetch(
-        `/api/document-templates/${encodeURIComponent(setting.documentType)}`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filesystemDocumentId }),
-        },
-      );
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.message ?? 'Failed to assign template');
-      }
-      await refreshSetting();
-      toast.success('Template assigned');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to assign template');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleClear() {
-    setSaving(true);
-    try {
-      const res = await fetch(
-        `/api/document-templates/${encodeURIComponent(setting.documentType)}`,
-        { method: 'DELETE' },
-      );
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.message ?? 'Failed to clear template');
-      }
-      await refreshSetting();
-      toast.success('Template cleared');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to clear template');
-    } finally {
-      setSaving(false);
-    }
-  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
       <SetPageHeader>
-        <ListPageHeader
-          icon={Files}
-          title={setting.label}
-          total={0}
-          accent="slate"
-          stats={[
-            {
-              label: 'Type',
-              value: setting.documentType,
-            },
-            {
-              label: 'Template',
-              value: setting.filesystemDocument ? 'Assigned' : 'Not set',
-            },
-          ]}
-        />
+        <div className="flex w-full min-w-0 flex-col gap-y-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+            <BackButton
+              href="/admin/document-templates"
+              label="Back to document templates"
+            />
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted">
+              <Files className="h-4 w-4 text-muted-foreground" />
+            </span>
+            <h1 className="truncate text-lg font-semibold leading-tight">
+              {setting.label}
+            </h1>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pl-20 text-xs">
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-muted-foreground">Type:</span>
+              <span className="font-medium">{setting.documentType}</span>
+            </div>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-muted-foreground">Template:</span>
+              <span className="font-medium">
+                {setting.filesystemDocument ? 'Assigned' : 'Not set'}
+              </span>
+            </div>
+          </div>
+        </div>
       </SetPageHeader>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4">
-        <Link
-          href="/admin/document-templates"
-          className="mb-4 inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="mr-1 h-4 w-4" />
-          Back to document templates
-        </Link>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex w-full flex-wrap items-center gap-x-4 border-b border-slate-200">
+          <div className="flex min-w-0 flex-1 flex-wrap gap-0">
+            {TABS.map((t) => {
+              const Icon = t.icon;
+              const active = activeTab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setActiveTab(t.id)}
+                  className={`inline-flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t-md ${
+                    active
+                      ? 'border-emerald-600 bg-emerald-50 text-emerald-600'
+                      : 'border-transparent bg-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                  }`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
-        <p className="mb-5 max-w-3xl text-sm text-slate-500">{setting.description}</p>
-
-        <Tabs
-          value={activeTab}
-          onValueChange={(val) => setActiveTab(String(val))}
-          className="gap-4"
-        >
-          <TabsList variant="line" className="w-full max-w-md">
-            <TabsTrigger value="transform" className="flex-1 gap-1.5">
-              <FileCode2 className="size-3.5" />
-              Transform
-            </TabsTrigger>
-            <TabsTrigger value="template" className="flex-1 gap-1.5">
-              <FileText className="size-3.5" />
-              Template
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="transform" className="outline-none">
-            <div className="rounded-lg border border-slate-200 bg-white px-5 py-6">
-              <h2 className="text-sm font-semibold text-slate-900">Data transform</h2>
-              <p className="mt-2 max-w-2xl text-sm text-slate-500">
-                Maps {isDefault ? 'fallback' : setting.label.toLowerCase()} record data into
-                merge fields used by the Word template (for example{' '}
-                <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">
-                  {'{{company_name}}'}
-                </code>
-                ). Custom transform editing will live here.
-              </p>
-              <div className="mt-6 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
-                <FileCode2 className="mx-auto h-8 w-8 text-slate-300" />
-                <p className="mt-3 text-sm font-medium text-slate-700">
-                  Transform configuration
-                </p>
-                <p className="mt-1 text-sm text-slate-500">
-                  No custom transform is configured for this scenario yet. Generation uses the
-                  built-in data mapper.
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4">
+          {activeTab === 'transform' && (
+            isDefault ? (
+              <div className="rounded-lg border border-slate-200 bg-white px-5 py-6">
+                <h2 className="text-sm font-semibold text-slate-900">Data transform</h2>
+                <p className="mt-2 max-w-2xl text-sm text-slate-500">
+                  The default/fallback scenario does not support custom transforms. Configure
+                  transforms on individual document type pages instead.
                 </p>
               </div>
-            </div>
-          </TabsContent>
+            ) : (
+              <TransformEditor
+                documentType={setting.documentType}
+                label={setting.label}
+              />
+            )
+          )}
 
-          <TabsContent value="template" className="outline-none">
-            <div className="rounded-lg border border-slate-200 bg-white px-5 py-6">
-              <h2 className="text-sm font-semibold text-slate-900">Word template</h2>
-              <p className="mt-2 max-w-2xl text-sm text-slate-500">
-                Assign the .docx file used when generating this document
-                {isDefault
-                  ? '. This fallback is used whenever a scenario has no dedicated file.'
-                  : '.'}{' '}
-                Upload files in{' '}
-                <Link
-                  href="/documents"
-                  className="text-slate-900 underline underline-offset-2"
-                >
-                  Documents
-                </Link>
-                {folderPath ? (
-                  <>
-                    {' '}
-                    under <span className="font-medium text-slate-700">{folderPath}</span>
-                  </>
-                ) : null}
-                .
-              </p>
-
-              {folderPath && initialFolder?.filesystemCategoryId ? (
-                <Link
-                  href={`/documents?categoryId=${encodeURIComponent(initialFolder.filesystemCategoryId)}`}
-                  className="mt-4 inline-flex max-w-full items-center gap-1.5 truncate rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-sm text-slate-800 hover:border-slate-300 hover:bg-slate-100"
-                  title={`Open ${folderPath} in Documents`}
-                >
-                  <FolderOpen className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-                  <span className="truncate">{folderPath}</span>
-                </Link>
-              ) : null}
-
-              <div className="mt-6 flex flex-wrap items-center gap-2">
-                <Select
-                  value={selectedId || undefined}
-                  onValueChange={(value) => {
-                    if (value) void handleAssign(value);
-                  }}
-                  items={docItems}
-                  disabled={saving || visibleDocx.length === 0}
-                >
-                  <SelectTrigger size="sm" className="w-64 max-w-full">
-                    <SelectValue placeholder="Select .docx…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {visibleDocx.map((doc) => (
-                      <SelectItem key={doc.id} value={doc.id}>
-                        {doc.fileName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {setting.filesystemDocument ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    disabled={saving}
-                    onClick={() => void handleClear()}
-                  >
-                    {saving ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <>
-                        <X className="mr-1 h-3.5 w-3.5" />
-                        Clear
-                      </>
-                    )}
-                  </Button>
-                ) : null}
-              </div>
-
-              {visibleDocx.length === 0 ? (
-                <p className="mt-4 text-sm text-amber-800">
-                  No .docx files found
-                  {folderPath ? ' in the selected templates folder' : ' in the filesystem'}.
-                  Upload a Word template in Documents, then return here to assign it.
-                </p>
-              ) : setting.filesystemDocument ? (
-                <p className="mt-4 text-sm text-slate-600">
-                  Current file:{' '}
-                  <span className="font-medium text-slate-900">
-                    {setting.filesystemDocument.fileName}
-                  </span>
-                </p>
-              ) : (
-                <p className="mt-4 text-sm text-slate-500">No template assigned.</p>
-              )}
-            </div>
-          </TabsContent>
-        </Tabs>
+          {activeTab === 'template' && (
+            <TemplateEditorTab
+              setting={setting}
+              docxDocuments={docxDocuments}
+              companyCategories={companyCategories}
+              folderSetting={initialFolder}
+              onSettingChange={setSetting}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

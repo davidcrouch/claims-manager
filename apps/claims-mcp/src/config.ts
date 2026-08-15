@@ -5,7 +5,7 @@ const schema = z.object({
   CLAIMS_MCP_HOST: z.string().default('0.0.0.0'),
   MCP_SERVER_NAME: z.string().default('claims-mcp'),
   MCP_SERVER_VERSION: z.string().default('0.1.0'),
-  CLAIMS_API_URL: z.string().url().default('http://localhost:3001'),
+  CLAIMS_API_URL: z.string().url().default('http://127.0.0.1:5001'),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 });
 

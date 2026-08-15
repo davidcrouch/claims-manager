@@ -69,6 +69,8 @@ export interface StreamCompletionOptions {
   autonomousMode?: boolean;
   maxDurationMs?: number;
   messageId: string;
+  /** If set, re-read instructions before each provider step (e.g. after inline skill activation). */
+  getInstructions?: () => string;
   onToolCall?: (toolCall: ToolCall) => void;
   onToolResult?: (toolCallId: string, toolName: string, result: unknown, isError: boolean) => void;
 }
@@ -108,6 +110,12 @@ export async function* streamCompletion(opts: StreamCompletionOptions): AsyncGen
 
     step++;
     const stepStart = Date.now();
+    if (opts.getInstructions) {
+      currentRequest.instructions = opts.getInstructions();
+    }
+    // Re-read tools each step so inline skill activation can add required tools mid-turn.
+    currentRequest.tools =
+      Object.keys(tools).length > 0 ? Object.values(tools) : undefined;
     yield { type: 'step-start', step, model: currentRequest.model };
 
     const pendingToolCalls: ToolCall[] = [];

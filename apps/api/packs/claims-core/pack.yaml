@@ -1,0 +1,12 @@
+id: claims-core
+version: 1.0.0
+name: Claims Core
+description: Intake and operations agents for claims, jobs, tasks, contacts, and appointments.
+integrationRefs:
+  - Claims Operations
+agents:
+  - file: agents/claims-assistant.yaml
+skills:
+  - file: skills/find-claim.yaml
+  - file: skills/create-task.yaml
+prompts: []

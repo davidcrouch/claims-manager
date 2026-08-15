@@ -1,0 +1,21 @@
+slug: estimate-review
+name: Estimate Review
+description: Review a quote for completeness and obvious pricing gaps.
+triggerHints:
+  - review estimate
+  - review quote
+  - quote completeness
+  - estimate check
+instructionPrompt: |
+  Load the quote and its line items. Check for missing groups, zero quantities,
+  and unmatched catalog items. Summarize risks and suggested next actions.
+requiredToolRefs:
+  - integration: Claims Operations
+    tool: get_quote
+  - integration: Claims Operations
+    tool: get_quote_line_items
+  - integration: Claims Operations
+    tool: get_quote_catalog_mismatches
+category: quotes
+invocationMode: inline
+visibility: org

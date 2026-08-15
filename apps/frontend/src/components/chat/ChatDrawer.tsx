@@ -19,6 +19,7 @@ import {
   contextToInitialMessages,
   type AIContextPayload,
 } from '@/lib/ai/use-ai-context';
+import { usePageContext } from '@/lib/ai/use-page-context';
 import { cn } from '@/lib/utils';
 import { CHAT_BESIDE_FORM_WIDTH_CLASS } from '@/components/forms/form-drawer-layout';
 import { ChatInterface } from './ChatInterface';
@@ -78,6 +79,8 @@ export function ChatDrawer({
     component: string;
     props: Record<string, unknown>;
   } | null>(null);
+
+  const pageContext = usePageContext();
 
   const reactId = useId();
   const titleId = `chat-drawer-title-${reactId}`;
@@ -263,9 +266,20 @@ export function ChatDrawer({
     (event: { component: string; props: Record<string, unknown> }) => {
       setHistoryOpen(false);
       setCanvasArtifact(null);
-      setCanvasComponent(event);
+      setCanvasComponent((prev) => {
+        const mergedProps = {
+          ...(prev?.component === event.component ? prev.props : {}),
+          ...event.props,
+        };
+        const propJobId =
+          typeof mergedProps.jobId === 'string' ? mergedProps.jobId.trim() : '';
+        if (!propJobId && pageContext.jobId) {
+          mergedProps.jobId = pageContext.jobId;
+        }
+        return { component: event.component, props: mergedProps };
+      });
     },
-    [],
+    [pageContext.jobId],
   );
 
   const handleFormOpenChange = useCallback((nextOpen: boolean) => {
@@ -379,6 +393,7 @@ export function ChatDrawer({
                       conversationId={conversationId}
                       initialMessages={initialMessages}
                       agents={chatAgents}
+                      pageContext={initialContext ? undefined : pageContext}
                       onMessagesChange={handleMessagesChange}
                       onOpenCanvas={handleOpenCanvas}
                       onOpenCanvasComponent={handleOpenCanvasComponent}

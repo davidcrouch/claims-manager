@@ -1,0 +1,123 @@
+slug: complete-assessment
+name: Assessment – Complete All Tabs
+description: Walk all 9 tabs, reviewing job journals (entries, notes, photos) for evidence, then filling each form.
+triggerHints:
+  - complete assessment
+  - fill all assessment tabs
+  - walk through assessment
+  - full assessment
+  - complete all sections
+instructionPrompt: |
+  You are helping the user complete all sections of a site assessment, walking through each tab.
+
+  Before starting:
+  - Confirm assessmentId. Resolve jobId. Call get_assessment and get_job.
+
+  Journal review (do this ONCE before starting the tabs):
+  a. Call list_journals with jobId (or list_journals_by_entity with entityType=job).
+  b. Show the user a short list of journals (name/title, date, page count if available).
+  c. Ask which journal(s) apply to this assessment — wait for their selection.
+     If only one journal exists, confirm it before opening.
+  d. For each selected journal: call list_journal_pages to get all entries.
+  e. For each entry: call get_journal_page. Read the body/notes text and every content block
+     (blocks[].type === "note" → read text; blocks[].type === "upload" → check attachment).
+  f. For photo/image attachments: call get_journal_page_attachment_download for a download URL.
+     Use filenames, captions, and metadata. If you cannot visually inspect the image, ask the
+     user what the photo shows.
+  g. Keep a running evidence summary from all reviewed entries across all selected journals.
+
+  For each tab, follow this pattern:
+  1. Open the tab form (open_assessment_<tab>).
+  2. Using job + journal evidence (+ earlier tabs already saved), infer answers. Fill the form
+     with fill_assessment_<tab>.
+  3. Show a short review of what you filled and evidence source. Ask only for unknowns;
+     fill after each answer.
+  4. Ask the user to review the canvas form, then save with update_assessment_<tab> on confirmation.
+  5. Move to the next tab.
+
+  Tab order:
+  1. Attendance    2. Building       3. Habitability
+  4. Hazards       5. Damage & Cause 6. Make Safe
+  7. Temp Accommodation  8. Specialists  9. Recommendation
+
+  After all tabs, offer to validate with validate_assessment and publish with publish_assessment.
+
+  Rules: Never invent dates, people, costs, or recommendations. Prefer journal evidence;
+  if unsure, ask.
+requiredToolRefs:
+  - integration: Claims Operations
+    tool: get_assessment
+  - integration: Claims Operations
+    tool: get_job
+  - integration: Claims Operations
+    tool: list_journals
+  - integration: Claims Operations
+    tool: get_journal
+  - integration: Claims Operations
+    tool: list_journal_pages
+  - integration: Claims Operations
+    tool: get_journal_page
+  - integration: Claims Operations
+    tool: get_journal_page_attachment_download
+  - integration: Claims Operations
+    tool: open_assessment_attendance
+  - integration: Claims Operations
+    tool: fill_assessment_attendance
+  - integration: Claims Operations
+    tool: update_assessment_attendance
+  - integration: Claims Operations
+    tool: open_assessment_building
+  - integration: Claims Operations
+    tool: fill_assessment_building
+  - integration: Claims Operations
+    tool: update_assessment_building
+  - integration: Claims Operations
+    tool: open_assessment_habitability
+  - integration: Claims Operations
+    tool: fill_assessment_habitability
+  - integration: Claims Operations
+    tool: update_assessment_habitability
+  - integration: Claims Operations
+    tool: open_assessment_hazards
+  - integration: Claims Operations
+    tool: fill_assessment_hazards
+  - integration: Claims Operations
+    tool: update_assessment_hazards
+  - integration: Claims Operations
+    tool: open_assessment_damage
+  - integration: Claims Operations
+    tool: fill_assessment_damage
+  - integration: Claims Operations
+    tool: update_assessment_damage
+  - integration: Claims Operations
+    tool: open_assessment_makeSafe
+  - integration: Claims Operations
+    tool: fill_assessment_makeSafe
+  - integration: Claims Operations
+    tool: update_assessment_makeSafe
+  - integration: Claims Operations
+    tool: open_assessment_tempAccommodation
+  - integration: Claims Operations
+    tool: fill_assessment_tempAccommodation
+  - integration: Claims Operations
+    tool: update_assessment_tempAccommodation
+  - integration: Claims Operations
+    tool: open_assessment_specialists
+  - integration: Claims Operations
+    tool: fill_assessment_specialists
+  - integration: Claims Operations
+    tool: update_assessment_specialists
+  - integration: Claims Operations
+    tool: open_assessment_recommendation
+  - integration: Claims Operations
+    tool: fill_assessment_recommendation
+  - integration: Claims Operations
+    tool: update_assessment_recommendation
+  - integration: Claims Operations
+    tool: validate_assessment
+  - integration: Claims Operations
+    tool: publish_assessment
+category: assessments
+invocationMode: inline
+includeHistory: true
+visibility: org

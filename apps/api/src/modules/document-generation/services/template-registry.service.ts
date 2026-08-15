@@ -154,6 +154,10 @@ const SCENARIO_META: Record<AssignableTemplateType, { label: string; description
     label: 'Assessment',
     description: 'Generated when printing a single assessment detail PDF',
   },
+  document: {
+    label: 'Document',
+    description: 'Generated when printing a single document detail PDF',
+  },
   jobs_list: {
     label: 'Jobs List',
     description: 'Generated when printing the jobs register PDF',
@@ -217,6 +221,18 @@ const SCENARIO_META: Record<AssignableTemplateType, { label: string; description
   vendors_list: {
     label: 'Vendors List',
     description: 'Generated when printing the vendors register PDF',
+  },
+  assessments_list: {
+    label: 'Assessments List',
+    description: 'Generated when printing the assessments register PDF',
+  },
+  documents_list: {
+    label: 'Documents List',
+    description: 'Generated when printing the documents register PDF',
+  },
+  schedule_list: {
+    label: 'Schedule',
+    description: 'Generated when printing the schedule / calendar PDF',
   },
 };
 
@@ -396,7 +412,7 @@ export class TemplateRegistryService {
 
   async resolve(params: {
     tenantId: string;
-    documentType: DocumentType;
+    documentType: AssignableTemplateType;
     templateId?: string;
     filesystemDocumentId?: string;
   }): Promise<{ template: DocumentTemplateRow | null; fileBuffer: Buffer }> {
@@ -480,7 +496,7 @@ export class TemplateRegistryService {
   private async loadFilesystemDocumentBuffer(params: {
     tenantId: string;
     documentId: string;
-    documentType: DocumentType;
+    documentType: AssignableTemplateType;
   }): Promise<Buffer> {
     const logPrefix = 'TemplateRegistryService.loadFilesystemDocumentBuffer';
     try {
@@ -502,6 +518,75 @@ export class TemplateRegistryService {
       }
       throw err;
     }
+  }
+
+  async getTemplateContent(params: {
+    tenantId: string;
+    documentType: AssignableTemplateType;
+  }): Promise<{ base64: string; fileName: string }> {
+    const logPrefix = 'TemplateRegistryService.getTemplateContent';
+    const { fileBuffer, template } = await this.resolve({
+      tenantId: params.tenantId,
+      documentType: params.documentType,
+    });
+    const fileName = template?.name ?? `${params.documentType}.docx`;
+    this.logger.debug(`${logPrefix} — returning ${fileBuffer.length} bytes for ${fileName}`);
+    return { base64: fileBuffer.toString('base64'), fileName };
+  }
+
+  async saveTemplateContent(params: {
+    tenantId: string;
+    documentType: AssignableTemplateType;
+    docxBuffer: Buffer;
+  }): Promise<{ success: boolean }> {
+    const logPrefix = 'TemplateRegistryService.saveTemplateContent';
+    const template = await this.templatesRepo.findByType({
+      tenantId: params.tenantId,
+      documentType: params.documentType,
+    });
+    if (!template?.filesystemDocumentId) {
+      throw new NotFoundException(
+        `No template assigned for "${params.documentType}" — assign a .docx first.`,
+      );
+    }
+
+    const doc = await this.documentsRepo.findOne(
+      template.filesystemDocumentId,
+      params.tenantId,
+    );
+    if (!doc) {
+      throw new NotFoundException('Linked filesystem template document not found');
+    }
+
+    await this.gcsStorage.uploadBuffer({
+      objectPath: doc.gcsObjectPath,
+      buffer: params.docxBuffer,
+      contentType: DOCX_MIME,
+    });
+
+    this.logger.log(
+      `${logPrefix} — saved ${params.docxBuffer.length} bytes to ${doc.gcsObjectPath}`,
+    );
+    return { success: true };
+  }
+
+  async getTemplateTags(params: {
+    tenantId: string;
+    documentType: AssignableTemplateType;
+    templateEngineService: {
+      getTemplateTags: (p: { templateBuffer: Buffer }) => string[];
+    };
+  }): Promise<{ tags: string[] }> {
+    const logPrefix = 'TemplateRegistryService.getTemplateTags';
+    const { fileBuffer } = await this.resolve({
+      tenantId: params.tenantId,
+      documentType: params.documentType,
+    });
+    const tags = params.templateEngineService.getTemplateTags({
+      templateBuffer: fileBuffer,
+    });
+    this.logger.debug(`${logPrefix} — found ${tags.length} tags`);
+    return { tags };
   }
 
   async findAll(params: {

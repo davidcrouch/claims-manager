@@ -4,11 +4,13 @@ import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
 import {
   proposals,
   proposalGroups,
+  proposalCombos,
   proposalItems,
   organizations,
 } from '../../../database/schema';
 import type { DataMapper } from './base.mapper';
-import { formatCurrency, formatDate, formatQuantity } from './base.mapper';
+import { formatCurrency, formatDate } from './base.mapper';
+import { buildTemplateGroups } from './line-items.helper';
 import type { TemplateData } from '../types/document-types';
 
 @Injectable()
@@ -40,6 +42,12 @@ export class ProposalMapper implements DataMapper {
       )
       .orderBy(asc(proposalGroups.sortIndex));
 
+    const combos = await this.db
+      .select()
+      .from(proposalCombos)
+      .where(eq(proposalCombos.tenantId, params.tenantId))
+      .orderBy(asc(proposalCombos.sortIndex));
+
     const items = await this.db
       .select()
       .from(proposalItems)
@@ -50,28 +58,14 @@ export class ProposalMapper implements DataMapper {
     const proposalFrom = proposal.proposalFrom as Record<string, unknown>;
     const proposalFor = proposal.proposalFor as Record<string, unknown>;
 
-    const groupData = groups.map((g) => {
-      const groupItems = items
-        .filter((i) => i.proposalGroupId === g.id)
-        .map((i) => ({
-          item_name: i.name ?? '',
-          item_description: i.description ?? '',
-          item_category: i.category ?? '',
-          item_quantity: formatQuantity(i.quantity),
-          item_unit_cost: formatCurrency(i.unitCost),
-          item_tax: formatCurrency(i.tax),
-          item_total: formatCurrency(
-            i.unitCost && i.quantity ? parseFloat(i.unitCost) * parseFloat(i.quantity) : 0,
-          ),
-        }));
-
-      return {
-        group_name: g.description ?? '',
-        group_subtotal: formatCurrency(
-          (g.totals as Record<string, unknown>)?.subTotal as string ?? '0',
-        ),
-        items: groupItems,
-      };
+    const groupData = buildTemplateGroups({
+      groups,
+      combos: combos.map((c) => ({ ...c, groupId: c.proposalGroupId })),
+      items: items.map((i) => ({
+        ...i,
+        groupId: i.proposalGroupId,
+        comboId: i.proposalComboId,
+      })),
     });
 
     return {
