@@ -757,7 +757,7 @@
   Improved how chat uses page context and skills so help stays relevant to the screen in use.
   Outcome: packs, document transforms, and a wider assistant toolkit ready for day-to-day claims operations.
 
-- `2026-08-16` `PENDING` **7.5 h**
+- `2026-08-16` `a0b3619` **7.5 h**
   `51 files | +4504 −192 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Staff can email RFQ packs to suppliers and review what was sent, including generated documents and delivery status.
   **Send RFQ requests to suppliers by email with a clear request history.** Staff can select recipients, customise the message, and send quotation requests from an RFQ.
