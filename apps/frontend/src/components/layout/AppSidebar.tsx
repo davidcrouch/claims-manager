@@ -58,6 +58,7 @@ import {
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { hasFeature } from '@/lib/features';
+import { hasPermission } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
 
 export interface AppSidebarUser {
@@ -69,6 +70,7 @@ export interface AppSidebarUser {
 
 export interface AppSidebarProps {
   features?: string[];
+  permissions?: string[];
   orgName?: string | null;
   onOpenChat?: () => void;
 }
@@ -78,6 +80,7 @@ interface NavItem {
   href: string;
   icon: LucideIcon;
   feature?: string;
+  permission?: string;
   /** When a job is selected, append ?jobId= to this link. */
   jobFilterable?: boolean;
 }
@@ -144,8 +147,8 @@ const adminNavGroups: NavGroup[] = [
   {
     label: 'ORGANISATION',
     items: [
-      { title: 'Users', href: '/admin/users', icon: UserCog },
-      { title: 'Roles & Permissions', href: '/admin/roles', icon: Shield },
+      { title: 'Users', href: '/admin/users', icon: UserCog, permission: 'org.users.read' },
+      { title: 'Roles & Permissions', href: '/admin/roles', icon: Shield, permission: 'org.roles.read' },
       { title: 'Company', href: '/admin/settings', icon: Settings },
       { title: 'Organisation Claims', href: '/admin/claims', icon: Building2 },
     ],
@@ -179,7 +182,7 @@ const adminNavGroups: NavGroup[] = [
   {
     label: 'ADMIN',
     items: [
-      { title: 'Features', href: '/admin/features', icon: ToggleLeft },
+      { title: 'Features', href: '/admin/features', icon: ToggleLeft, permission: 'features.read' },
       { title: 'Notifications', href: '/admin/notifications', icon: Bell },
     ],
   },
@@ -197,7 +200,7 @@ function resolveHref(item: NavItem, jobId: string | null): string {
   return `${item.href}${item.href.includes('?') ? '&' : '?'}jobId=${jobId}`;
 }
 
-export function AppSidebar({ features, orgName, onOpenChat }: AppSidebarProps) {
+export function AppSidebar({ features, permissions, orgName, onOpenChat }: AppSidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [menuOverride, setMenuOverride] = useState<'main' | 'admin' | null>(null);
@@ -220,10 +223,14 @@ export function AppSidebar({ features, orgName, onOpenChat }: AppSidebarProps) {
     return pathname.startsWith(item.href + '/');
   }
 
+  function isNavItemVisible(item: NavItem): boolean {
+    if (item.feature && !hasFeature(features, item.feature)) return false;
+    if (item.permission && !hasPermission(permissions, item.permission)) return false;
+    return true;
+  }
+
   function renderMenuItems(group: NavGroup) {
-    const visibleItems = group.items.filter(
-      (item) => !item.feature || hasFeature(features, item.feature),
-    );
+    const visibleItems = group.items.filter(isNavItemVisible);
     return (
       <SidebarMenu>
         {visibleItems.map((item) => {
@@ -271,9 +278,7 @@ export function AppSidebar({ features, orgName, onOpenChat }: AppSidebarProps) {
   }
 
   function renderAdminGroup(group: NavGroup) {
-    const visibleItems = group.items.filter(
-      (item) => !item.feature || hasFeature(features, item.feature),
-    );
+    const visibleItems = group.items.filter(isNavItemVisible);
     if (visibleItems.length === 0) return null;
     return (
       <SidebarGroup key={group.label}>
@@ -363,6 +368,7 @@ export function AppSidebar({ features, orgName, onOpenChat }: AppSidebarProps) {
               </SidebarGroupContent>
             </SidebarGroup>
             {middleGroups.map((group) => renderCollapsibleGroup(group))}
+            {adminNavGroups.some((group) => group.items.some(isNavItemVisible)) ? (
             <SidebarGroup>
               <SidebarGroupContent>
                 <SidebarMenu>
@@ -380,6 +386,7 @@ export function AppSidebar({ features, orgName, onOpenChat }: AppSidebarProps) {
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
+            ) : null}
           </>
         )}
       </SidebarContent>

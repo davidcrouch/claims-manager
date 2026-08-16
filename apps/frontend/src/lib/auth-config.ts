@@ -19,7 +19,8 @@ const OIDC_COOKIE_SECRET =
 const OIDC_SCOPES = (process.env.OIDC_SCOPES || 'openid,profile,email')
   .split(',')
   .map((s) => s.trim());
-const OIDC_AUDIENCE = process.env.OIDC_AUDIENCE || OIDC_POST_LOGIN_URI;
+// RFC 8707 resource indicators must be absolute URIs (not client_ids).
+const OIDC_AUDIENCE = process.env.OIDC_AUDIENCE || 'http://more0.ai';
 const OIDC_ACCEPTED_AUDIENCES = process.env.OIDC_ACCEPTED_AUDIENCES
   ? process.env.OIDC_ACCEPTED_AUDIENCES.split(',')
       .map((s) => s.trim())
@@ -39,12 +40,9 @@ export const authConfig = {
   oidcAudience: OIDC_AUDIENCE,
   oidcAcceptedAudiences: OIDC_ACCEPTED_AUDIENCES,
   get oidcAcceptedJwtAudiences() {
-    return [
-      OIDC_CLIENT_ID,
-      OIDC_AUDIENCE,
-      OIDC_ISSUER,
-      ...OIDC_ACCEPTED_AUDIENCES,
-    ].filter(Boolean);
+    return Array.from(
+      new Set([OIDC_AUDIENCE, ...OIDC_ACCEPTED_AUDIENCES].filter(Boolean)),
+    );
   },
   appSlug: process.env.MORE0_APP_SLUG || 'claims-manager',
   cookieNames: {

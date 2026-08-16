@@ -26,6 +26,9 @@ locals {
     app       = "app-${var.environment}.${local.cloud_run_domain_suffix}"
     providers = "providers-${var.environment}.${local.cloud_run_domain_suffix}"
   }
+
+  # Absolute URI for OIDC resource indicators / JWT aud (RFC 8707). Not the client_id.
+  oidc_audience = "http://more0.ai"
 }
 
 resource "google_project_service" "run" {
@@ -199,6 +202,7 @@ module "cloud_run_api" {
       ? "https://${local.cloud_run_hosts.auth}/jwks"
       : "${local.auth_run_url}/jwks"
     )
+    AUTH_AUDIENCE = local.oidc_audience
   }
 
   secret_env_vars = [
@@ -249,7 +253,8 @@ module "cloud_run_auth" {
     OIDC_POST_LOGIN_URI  = var.use_public_hostnames ? "https://${local.cloud_run_hosts.app}/dashboard" : "${local.frontend_run_url}/dashboard"
     OIDC_POST_LOGOUT_URI = var.use_public_hostnames ? "https://${local.cloud_run_hosts.app}" : local.frontend_run_url
     CORS_ORIGINS         = var.use_public_hostnames ? "https://${local.cloud_run_hosts.app}" : local.frontend_run_url
-    JWT_EXPECTED_AUDIENCE = "claims-manager-ui"
+    JWT_EXPECTED_AUDIENCE  = local.oidc_audience
+    OIDC_ALLOWED_RESOURCES = local.oidc_audience
     JWT_PUBLIC_KEY_E     = "AQAB"
     REDIS_PROVIDER       = "self-hosted"
     REDIS_HOST           = module.memorystore.host
@@ -314,6 +319,7 @@ module "cloud_run_frontend" {
     AUTH_SERVER_URL = var.use_public_hostnames ? "https://${local.cloud_run_hosts.auth}" : local.auth_run_url
     OIDC_ISSUER     = var.use_public_hostnames ? "https://${local.cloud_run_hosts.auth}" : local.auth_run_url
     OIDC_CLIENT_ID  = "claims-manager-ui"
+    OIDC_AUDIENCE   = local.oidc_audience
     OIDC_REDIRECT_URI = (
       var.use_public_hostnames
       ? "https://${local.cloud_run_hosts.app}/api/auth/callback"

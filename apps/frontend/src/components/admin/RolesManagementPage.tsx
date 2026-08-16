@@ -65,13 +65,23 @@ export function RolesManagementPage() {
 
   const loadCatalogue = useCallback(async () => {
     setLoading(true);
-    const [roleRows, permRows] = await Promise.all([
-      listRolesAction(),
-      listPermissionsAction(),
-    ]);
-    setRoles(roleRows);
-    setPermissions(permRows);
-    setLoading(false);
+    try {
+      const [roleRows, permRows] = await Promise.all([
+        listRolesAction(),
+        listPermissionsAction(),
+      ]);
+      setRoles(roleRows);
+      setPermissions(permRows);
+      setError(null);
+    } catch (err) {
+      setRoles([]);
+      setPermissions([]);
+      setError(
+        err instanceof Error ? err.message : 'Failed to load roles and permissions',
+      );
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -245,7 +255,7 @@ export function RolesManagementPage() {
               </div>
             );
           })}
-          {!loading && roles.length === 0 && (
+          {!loading && roles.length === 0 && !error && (
             <p className="text-sm text-slate-500">No roles found.</p>
           )}
         </div>

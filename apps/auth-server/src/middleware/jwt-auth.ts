@@ -70,6 +70,17 @@ export function jwtAuthForIAT(req: Request, res: Response, next: NextFunction): 
    const jwks = createRemoteJWKSet(new URL(getSelfJwksUrl()));
 
    const expectedAudiences = parseExpectedAudiences(getJwtExpectedAudience());
+   if (expectedAudiences.length === 0 && process.env.NODE_ENV === 'production') {
+      log.error(
+         { functionName: 'jwtAuthForIAT' },
+         'auth-server:jwt-auth:jwtAuthForIAT - JWT_EXPECTED_AUDIENCE missing in production',
+      );
+      res.status(401).json({
+         error: 'invalid_token',
+         error_description: 'Invalid or expired token',
+      });
+      return;
+   }
    const verifyOptions: Parameters<typeof jwtVerify>[2] = {
       issuer,
       algorithms: ['RS256', 'ES256'],

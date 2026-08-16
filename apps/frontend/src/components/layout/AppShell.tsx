@@ -9,11 +9,12 @@ import { AppSidebar } from './AppSidebar';
 export interface AppShellProps {
   header: React.ReactNode;
   features?: string[];
+  permissions?: string[];
   orgName?: string | null;
   children: React.ReactNode;
 }
 
-export function AppShell({ header, features, orgName, children }: AppShellProps) {
+export function AppShell({ header, features, permissions, orgName, children }: AppShellProps) {
   const [chatOpen, setChatOpen] = useState(false);
   const chatEnabled = hasFeature(features, 'ai.chat');
 
@@ -21,6 +22,7 @@ export function AppShell({ header, features, orgName, children }: AppShellProps)
     <SidebarProvider>
       <AppSidebar
         features={features}
+        permissions={permissions}
         orgName={orgName}
         onOpenChat={chatEnabled ? () => setChatOpen(true) : undefined}
       />

@@ -17,9 +17,22 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       );
     }
 
+    const audiences = configService.get<string[]>('auth.audiences') ?? [];
+    if (audiences.length === 0 && process.env.NODE_ENV === 'production') {
+      throw new Error(
+        '[JwtStrategy.constructor] AUTH_AUDIENCE is required in production',
+      );
+    }
+
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       issuer: issuerUrl,
+      audience:
+        audiences.length === 1
+          ? audiences[0]
+          : audiences.length > 1
+            ? audiences
+            : undefined,
       algorithms: ['RS256'],
       secretOrKeyProvider: jwksRsa.passportJwtSecret({
         cache: true,

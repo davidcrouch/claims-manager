@@ -116,7 +116,12 @@ export default async function AppLayout({
   };
 
   return (
-    <AppLayoutClient user={headerUser} features={identity.features ?? []} orgName={orgName}>
+    <AppLayoutClient
+      user={headerUser}
+      features={identity.features ?? []}
+      permissions={identity.permissions ?? []}
+      orgName={orgName}
+    >
       {children}
     </AppLayoutClient>
   );

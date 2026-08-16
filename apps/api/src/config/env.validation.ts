@@ -158,6 +158,11 @@ export class EnvironmentVariables {
   @IsOptional()
   AUTH_JWKS_URI?: string;
 
+  /** Comma-separated JWT audiences accepted by the API. Required in production. */
+  @IsString()
+  @IsOptional()
+  AUTH_AUDIENCE?: string;
+
   /** Absolute path to soffice / soffice.exe for DOCX → PDF conversion. */
   @IsString()
   @IsOptional()

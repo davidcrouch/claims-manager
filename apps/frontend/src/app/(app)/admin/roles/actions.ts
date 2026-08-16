@@ -18,24 +18,14 @@ async function getApi() {
 
 export async function listRolesAction(scope?: string): Promise<RoleDef[]> {
   const api = await getApi();
-  if (!api) return [];
-  try {
-    return await api.listRoles(scope);
-  } catch (err) {
-    console.error('[admin/roles/actions.listRolesAction]', err);
-    return [];
-  }
+  if (!api) throw new Error('Not authenticated');
+  return await api.listRoles(scope);
 }
 
 export async function listPermissionsAction(): Promise<PermissionDef[]> {
   const api = await getApi();
-  if (!api) return [];
-  try {
-    return await api.listPermissions();
-  } catch (err) {
-    console.error('[admin/roles/actions.listPermissionsAction]', err);
-    return [];
-  }
+  if (!api) throw new Error('Not authenticated');
+  return await api.listPermissions();
 }
 
 export async function createRoleAction(input: {

@@ -60,6 +60,10 @@ function payloadToIdentity(payload: Record<string, unknown>): AuthIdentity {
 }
 
 async function verifyToken(token: string): Promise<AuthIdentity | null> {
+  if (AUDIENCES.length === 0) {
+    console.warn(`${LOG_PREFIX}:verifyToken - no accepted JWT audiences configured`);
+    return null;
+  }
   try {
     const { payload } = await jwtVerify(token, JWKS, {
       issuer: ISSUER,

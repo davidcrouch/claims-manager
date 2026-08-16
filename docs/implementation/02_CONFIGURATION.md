@@ -39,7 +39,7 @@ CREDENTIALS_ENCRYPTION_KEY=<base64url-encoded-32-byte-key>
 
 # Auth (Project Auth Server)
 AUTH_ISSUER_URL=https://auth.example.com
-AUTH_AUDIENCE=claims-manager-api
+AUTH_AUDIENCE=http://more0.ai
 AUTH_JWKS_URI=https://auth.example.com/.well-known/jwks.json
 
 # Logging

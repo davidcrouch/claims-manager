@@ -46,6 +46,7 @@ export function validateAuthServerEnvironment(): boolean {
       getEmailConfig();
       getOidcCookieKeys();
       getJwtExpectedAudience();
+      getOidcAllowedResources();
 
       // JWKS validation. SECURITY (F-15): required in production.
       try {
@@ -773,6 +774,24 @@ export function getJwtExpectedAudience(): string | undefined {
     throw new Error('JWT_EXPECTED_AUDIENCE is required in production (audience enforcement must be enabled)');
   }
   return audience;
+}
+
+/**
+ * Resource-indicator allowlist for token `aud` values.
+ * Required in production so clients cannot mint attacker-controlled audiences.
+ */
+export function getOidcAllowedResources(): string[] {
+  const raw = getEnvVar('OIDC_ALLOWED_RESOURCES') ?? '';
+  const resources = raw
+    .split(',')
+    .map((s) => s.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
+  if (resources.length === 0 && process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'OIDC_ALLOWED_RESOURCES is required in production (resource/aud allowlist must be enabled)',
+    );
+  }
+  return resources;
 }
 
 /**

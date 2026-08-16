@@ -15,7 +15,9 @@ import {
    getApiUrl,
    getMcpBaseUrl,
    getTokenTtlConfig,
-   getOidcCookieKeys
+   getOidcCookieKeys,
+   getOidcAllowedResources,
+   isProduction,
 } from './env-validation.js';
 import { registerOidcProviderEvents } from './oidc-provider-events.js';
 import { renderLogoutPage } from '../helpers/logout-renderer.js';
@@ -413,17 +415,13 @@ export async function createOidcProvider(): Promise<Provider> {
 
    // SECURITY (F-33): resource-indicator allowlist. Without this, a client could
    // request an arbitrary `resource` and have the provider mint a JWT whose `aud`
-   // is attacker-controlled. When OIDC_ALLOWED_RESOURCES is unset, fall back to
-   // legacy permissive behaviour so existing deployments keep working.
+   // is attacker-controlled. Production requires OIDC_ALLOWED_RESOURCES at boot.
+   // Non-production stays permissive when the allowlist is empty.
    const normalizeResource = (r: string): string => r.replace(/\/+$/, '');
-   const allowedResources = new Set(
-      (process.env.OIDC_ALLOWED_RESOURCES || '')
-         .split(',')
-         .map((s) => normalizeResource(s.trim()))
-         .filter(Boolean),
-   );
+   const allowedResources = new Set(getOidcAllowedResources().map(normalizeResource));
    allowedResources.add(normalizeResource(ISSUER));
-   const resourceAllowlistEnforced = (process.env.OIDC_ALLOWED_RESOURCES || '').trim().length > 0;
+   const resourceAllowlistEnforced =
+      isProduction() || allowedResources.size > 1;
    const isResourceAllowed = (resource: string | undefined): boolean => {
       if (!resource) return true;
       if (!resourceAllowlistEnforced) return true;
