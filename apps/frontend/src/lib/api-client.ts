@@ -275,6 +275,9 @@ export function createApiClient(options?: ApiClientOptions) {
     const res = await fetch(url, {
       ...init,
       headers: mergedHeaders,
+      // Prevent Next.js Data Cache from serving stale API responses in
+      // server components and server actions.
+      ...(typeof window === 'undefined' && !init?.cache ? { cache: 'no-store' as const } : {}),
     });
     return handleResponse<T>(res);
   }
@@ -760,6 +763,7 @@ export function createApiClient(options?: ApiClientOptions) {
       search?: string;
       sort?: string;
       jobId?: string;
+      typeLookupIds?: string[];
     }): Promise<PaginatedResponse<Contact>> {
       const sp = new URLSearchParams();
       if (params?.page != null) sp.set('page', String(params.page));
@@ -767,6 +771,9 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params?.search) sp.set('search', params.search);
       if (params?.sort) sp.set('sort', params.sort);
       if (params?.jobId) sp.set('jobId', params.jobId);
+      if (params?.typeLookupIds?.length) {
+        sp.set('typeLookupIds', params.typeLookupIds.join(','));
+      }
       return fetchApi<PaginatedResponse<Contact>>(`/contacts?${sp}`);
     },
 
@@ -789,10 +796,14 @@ export function createApiClient(options?: ApiClientOptions) {
     searchContacts(
       query: string,
       type?: 'USER' | 'CONTACT',
+      options?: { typeLookupIds?: string[] },
     ): Promise<{ id: string; type: 'USER' | 'CONTACT'; name: string; email?: string; mobilePhone?: string }[]> {
       const sp = new URLSearchParams({ search: query, limit: '20' });
       if (type === 'USER') {
         return fetchApi(`/contacts/search-users?${sp}`);
+      }
+      if (options?.typeLookupIds?.length) {
+        sp.set('typeLookupIds', options.typeLookupIds.join(','));
       }
       return fetchApi(`/contacts?${sp}`).then((res: any) => {
         const data: any[] = Array.isArray(res) ? res : res?.data ?? [];
@@ -2444,6 +2455,43 @@ export function createApiClient(options?: ApiClientOptions) {
         },
       );
     },
+
+    // -- RFQ Send Requests --
+
+    listRfqSendRequests(rfqId: string): Promise<RfqSendRequestListItem[]> {
+      return fetchApi<RfqSendRequestListItem[]>(`/rfqs/${rfqId}/send-requests`);
+    },
+
+    getRfqSendRequest(rfqId: string, requestId: string): Promise<RfqSendRequestDetail> {
+      return fetchApi<RfqSendRequestDetail>(`/rfqs/${rfqId}/send-requests/${requestId}`);
+    },
+
+    createRfqSendRequest(
+      rfqId: string,
+      body: {
+        recipients: Array<{ contactId?: string; name: string; email: string }>;
+        generatedDocumentId: string;
+        emailSubject?: string;
+        emailBodyHtml?: string;
+        emailBodyText?: string;
+      },
+    ): Promise<RfqSendRequestDetail> {
+      return fetchApi<RfqSendRequestDetail>(`/rfqs/${rfqId}/send-requests`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+
+    retryRfqSendRequest(
+      rfqId: string,
+      requestId: string,
+      body: { recipients: Array<{ recipientId: string; email?: string }> },
+    ): Promise<RfqSendRequestDetail> {
+      return fetchApi<RfqSendRequestDetail>(`/rfqs/${rfqId}/send-requests/${requestId}/retry`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
   };
 }
 
@@ -2842,3 +2890,49 @@ export interface OrganisationClaim {
 }
 
 export type ApiClient = ReturnType<typeof createApiClient>;
+
+// -- RFQ Send Request types --
+
+export interface RfqSendRequestRecipientSummary {
+  id: string;
+  recipientName: string;
+  recipientEmail: string;
+  status: string;
+}
+
+export interface RfqSendRequestListItem {
+  id: string;
+  rfqId: string;
+  status: string;
+  initiatedBy: string | null;
+  emailSubject: string;
+  replyTo: string | null;
+  recipientCount: number;
+  recipients: RfqSendRequestRecipientSummary[];
+  createdAt: string;
+}
+
+export interface RfqSendRequestRecipientDetail {
+  id: string;
+  contactId: string | null;
+  recipientName: string;
+  recipientEmail: string;
+  status: string;
+  errorMessage: string | null;
+  sentAt: string | null;
+  retryCount: number;
+}
+
+export interface RfqSendRequestDetail {
+  id: string;
+  rfqId: string;
+  status: string;
+  initiatedBy: string | null;
+  generatedDocId: string | null;
+  emailSubject: string;
+  emailBodyHtml: string;
+  replyTo: string | null;
+  recipients: RfqSendRequestRecipientDetail[];
+  createdAt: string;
+  updatedAt: string;
+}

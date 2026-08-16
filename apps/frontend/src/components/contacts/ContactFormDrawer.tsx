@@ -63,6 +63,11 @@ export interface ContactFormDrawerProps {
   companionChatOpen?: boolean;
   /** Called after a contact is created so the parent can update local state. */
   onSuccess?: (contact: Contact) => void;
+  /**
+   * Prefill contact type by lookup externalReference
+   * (e.g. `contact-type-vendor` or `seed-contact-type-vendor`).
+   */
+  defaultTypeRef?: string;
 }
 
 export function ContactFormDrawer({
@@ -72,6 +77,7 @@ export function ContactFormDrawer({
   aiAssistEnabled = false,
   companionChatOpen: companionChatOpenProp,
   onSuccess,
+  defaultTypeRef,
 }: ContactFormDrawerProps) {
   const router = useRouter();
   const { phase, busy, startCreating, resetPhase } = useCreateSubmitPhase();
@@ -112,12 +118,25 @@ export function ContactFormDrawer({
     let cancelled = false;
     void (async () => {
       const rows = await fetchContactTypeLookupsAction();
-      if (!cancelled) setContactTypes(rows);
+      if (cancelled) return;
+      setContactTypes(rows);
+      if (defaultTypeRef) {
+        const match = rows.find((t) => {
+          const ext = t.externalReference ?? '';
+          return (
+            ext === defaultTypeRef ||
+            ext === `seed-${defaultTypeRef}`
+          );
+        });
+        if (match) {
+          form.setValue('typeLookupId', match.id, { shouldValidate: true });
+        }
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, defaultTypeRef]); // eslint-disable-line react-hooks/exhaustive-deps -- apply default type when drawer opens
 
   async function onSubmit(values: ContactFormValues) {
     startCreating();

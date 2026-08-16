@@ -140,11 +140,12 @@ export async function updateAppointmentAction(
 
 export async function searchContactsAction(
   query: string,
+  options?: { typeLookupIds?: string[] },
 ): Promise<{ id: string; type: 'USER' | 'CONTACT'; name: string; email?: string; mobilePhone?: string }[]> {
   const api = await getApi();
   if (!api) return [];
   try {
-    return await api.searchContacts(query, 'CONTACT');
+    return await api.searchContacts(query, 'CONTACT', options);
   } catch (err) {
     console.error('[searchContactsAction]', err);
     return [];

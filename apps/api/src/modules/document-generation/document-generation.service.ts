@@ -7,6 +7,7 @@ import { SCENARIO_META, TemplateRegistryService } from './services/template-regi
 import { TemplateEngineService } from './services/template-engine.service';
 import { PdfConverterService } from './services/pdf-converter.service';
 import { TransformService } from './services/transform.service';
+import { formatDocumentGenerationError } from './utils/format-generation-error';
 import { QuoteMapper } from './data-mappers/quote.mapper';
 import { InvoiceMapper } from './data-mappers/invoice.mapper';
 import { PurchaseOrderMapper } from './data-mappers/purchase-order.mapper';
@@ -363,12 +364,12 @@ export class DocumentGenerationService {
         `${logPrefix} — completed id=${params.recordId} pdf=${pdfKey || 'none'} docx=${docxKey}`,
       );
     } catch (error) {
-      const err = error as Error;
-      this.logger.error(`${logPrefix} — failed id=${params.recordId}: ${err.message}`);
+      const detail = formatDocumentGenerationError(error);
+      this.logger.error(`${logPrefix} — failed id=${params.recordId}: ${detail}`);
       await this.generatedDocsRepo.updateStatus({
         id: params.recordId,
         status: 'failed',
-        errorMessage: err.message,
+        errorMessage: detail,
       });
     }
   }

@@ -1,8 +1,10 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { getSession, getAccessToken } from '@/lib/auth';
 import { createApiClient } from '@/lib/api-client';
 import type { Proposal } from '@/types/api';
+import type { RfqSendRequestListItem, RfqSendRequestDetail } from '@/lib/api-client';
 
 async function getApi() {
   const session = await getSession();
@@ -57,6 +59,7 @@ export async function replaceRfqLineItemsAction(
   if (!api) return { success: false, error: 'Not authenticated' };
   try {
     const groups = await api.replaceRfqLineItems(rfqId, { selectedItemIds });
+    revalidatePath(`/rfqs/${rfqId}`);
     return { success: true, groups };
   } catch (err) {
     console.error(
@@ -86,6 +89,7 @@ export async function updateRfqLineNoteAction(
   if (!api) return { success: false, error: 'Not authenticated' };
   try {
     const result = await api.updateRfqLineNote(rfqId, body);
+    revalidatePath(`/rfqs/${rfqId}`);
     return { success: true, note: result.note };
   } catch (err) {
     console.error(
@@ -96,5 +100,109 @@ export async function updateRfqLineNoteAction(
       success: false,
       error: err instanceof Error ? err.message : 'Failed to save note',
     };
+  }
+}
+
+export async function updateRfqFieldsAction(
+  rfqId: string,
+  body: { includePricing?: boolean; includeQuantities?: boolean },
+): Promise<{ success: boolean; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    await api.updateRfq(rfqId, body);
+    revalidatePath(`/rfqs/${rfqId}`);
+    revalidatePath('/rfqs');
+    return { success: true };
+  } catch (err) {
+    console.error(
+      'frontend:updateRfqFieldsAction - updateRfq failed:',
+      err instanceof Error ? err.message : err,
+    );
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to update RFQ',
+    };
+  }
+}
+
+// -- RFQ Send Requests --
+
+export async function fetchRfqSendRequestsAction(
+  rfqId: string,
+): Promise<{ success: boolean; data?: RfqSendRequestListItem[]; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const data = await api.listRfqSendRequests(rfqId);
+    return { success: true, data };
+  } catch (err) {
+    console.error(
+      'frontend:fetchRfqSendRequestsAction - failed:',
+      err instanceof Error ? err.message : err,
+    );
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to load send requests' };
+  }
+}
+
+export async function fetchRfqSendRequestDetailAction(
+  rfqId: string,
+  requestId: string,
+): Promise<{ success: boolean; data?: RfqSendRequestDetail; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const data = await api.getRfqSendRequest(rfqId, requestId);
+    return { success: true, data };
+  } catch (err) {
+    console.error(
+      'frontend:fetchRfqSendRequestDetailAction - failed:',
+      err instanceof Error ? err.message : err,
+    );
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to load request detail' };
+  }
+}
+
+export async function createRfqSendRequestAction(
+  rfqId: string,
+  body: {
+    recipients: Array<{ contactId?: string; name: string; email: string }>;
+    generatedDocumentId: string;
+    emailSubject?: string;
+    emailBodyHtml?: string;
+    emailBodyText?: string;
+  },
+): Promise<{ success: boolean; data?: RfqSendRequestDetail; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const data = await api.createRfqSendRequest(rfqId, body);
+    revalidatePath(`/rfqs/${rfqId}`);
+    return { success: true, data };
+  } catch (err) {
+    console.error(
+      'frontend:createRfqSendRequestAction - failed:',
+      err instanceof Error ? err.message : err,
+    );
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to send request' };
+  }
+}
+
+export async function retryRfqSendRequestAction(
+  rfqId: string,
+  requestId: string,
+  body: { recipients: Array<{ recipientId: string; email?: string }> },
+): Promise<{ success: boolean; data?: RfqSendRequestDetail; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const data = await api.retryRfqSendRequest(rfqId, requestId, body);
+    return { success: true, data };
+  } catch (err) {
+    console.error(
+      'frontend:retryRfqSendRequestAction - failed:',
+      err instanceof Error ? err.message : err,
+    );
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to retry' };
   }
 }

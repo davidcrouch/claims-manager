@@ -49,10 +49,14 @@ export async function GET(
       );
     }
 
+    const disposition =
+      req.nextUrl.searchParams.get('disposition') === 'inline' ? 'inline' : 'attachment';
+    const fileName = encodeURIComponent(data.fileName || 'document');
+
     return new NextResponse(streamRes.body as ReadableStream, {
       headers: {
         'Content-Type': data.mimeType || 'application/octet-stream',
-        'Content-Disposition': `attachment; filename="${encodeURIComponent(data.fileName || 'document')}"`,
+        'Content-Disposition': `${disposition}; filename="${fileName}"`,
       },
     });
   }

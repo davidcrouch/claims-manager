@@ -23,6 +23,7 @@ export class ContactsService {
     search?: string;
     sort?: string;
     jobId?: string;
+    typeLookupIds?: string[];
   }) {
     const tenantId = this.tenantContext.getTenantId();
     return this.contactsRepo.findAll({
@@ -32,6 +33,7 @@ export class ContactsService {
       search: params.search,
       sort: params.sort,
       jobId: params.jobId,
+      typeLookupIds: params.typeLookupIds,
     });
   }
 

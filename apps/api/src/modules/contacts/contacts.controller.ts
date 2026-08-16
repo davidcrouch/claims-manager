@@ -51,13 +51,21 @@ export class ContactsController {
     @Query('search') search?: string,
     @Query('sort') sort?: string,
     @Query('jobId') jobId?: string,
+    @Query('typeLookupIds') typeLookupIds?: string,
   ) {
+    const ids = typeLookupIds
+      ? typeLookupIds
+          .split(',')
+          .map((id) => id.trim())
+          .filter((id) => id.length > 0)
+      : undefined;
     return this.contactsService.findAll({
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
       search,
       sort,
       jobId,
+      typeLookupIds: ids && ids.length > 0 ? ids : undefined,
     });
   }
 

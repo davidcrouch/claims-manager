@@ -1771,6 +1771,14 @@ export interface QuoteLineItemsTableProps {
   compact?: boolean;
   /** When true, show Quantities/Pricing toggles on toolbar and per-header. RFQ detail only. */
   showColumnToggles?: boolean;
+  /**
+   * Controlled Quantities/Pricing column visibility (maps to RFQ includeQuantities / includePricing).
+   * When provided with change handlers, toolbar switches become controlled.
+   */
+  quantitiesVisible?: boolean;
+  pricingVisible?: boolean;
+  onQuantitiesVisibleChange?: (visible: boolean) => void;
+  onPricingVisibleChange?: (visible: boolean) => void;
   /** When true, show per-row notes edit icon and hover preview. RFQ detail view mode only. */
   enableLineNotes?: boolean;
   onEditLineNote?: (request: LineNoteEditRequest) => void;
@@ -2038,6 +2046,10 @@ export function QuoteLineItemsTable({
   selection,
   compact,
   showColumnToggles = false,
+  quantitiesVisible,
+  pricingVisible,
+  onQuantitiesVisibleChange,
+  onPricingVisibleChange,
   enableLineNotes = false,
   onEditLineNote,
 }: QuoteLineItemsTableProps) {
@@ -2052,8 +2064,14 @@ export function QuoteLineItemsTable({
   const [searchTerm, setSearchTerm] = useState('');
   const [showMarkup, setShowMarkup] = useState(true);
   const [showGst, setShowGst] = useState(true);
-  const [showQuantities, setShowQuantities] = useState(true);
-  const [showPricing, setShowPricing] = useState(true);
+  const [uncontrolledQuantities, setUncontrolledQuantities] = useState(true);
+  const [uncontrolledPricing, setUncontrolledPricing] = useState(true);
+  const quantitiesControlled = typeof quantitiesVisible === 'boolean' && !!onQuantitiesVisibleChange;
+  const pricingControlled = typeof pricingVisible === 'boolean' && !!onPricingVisibleChange;
+  const showQuantities = quantitiesControlled ? quantitiesVisible : uncontrolledQuantities;
+  const showPricing = pricingControlled ? pricingVisible : uncontrolledPricing;
+  const setShowQuantities = quantitiesControlled ? onQuantitiesVisibleChange : setUncontrolledQuantities;
+  const setShowPricing = pricingControlled ? onPricingVisibleChange : setUncontrolledPricing;
   const [suppressMarkupIcon, setSuppressMarkupIcon] = useState(false);
   const [suppressGstIcon, setSuppressGstIcon] = useState(false);
   const [headerVisibility, setHeaderVisibility] = useState<

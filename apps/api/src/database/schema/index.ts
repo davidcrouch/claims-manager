@@ -3335,3 +3335,83 @@ export const documentTemplateTransformVersions = pgTable(
     index('idx_doc_transform_versions_transform').on(t.transformId, t.version),
   ],
 );
+
+// ---------------------------------------------------------------------------
+// RFQ Send Requests (batch records for sending RFQs to suppliers)
+// ---------------------------------------------------------------------------
+export const rfqSendRequests = pgTable(
+  'rfq_send_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    rfqId: uuid('rfq_id')
+      .notNull()
+      .references(() => rfqs.id, { onDelete: 'cascade' }),
+    status: text('status').notNull().default('pending'),
+    initiatedBy: text('initiated_by'),
+    generatedDocId: uuid('generated_doc_id'),
+    emailSubject: text('email_subject').notNull(),
+    emailBodyHtml: text('email_body_html').notNull(),
+    emailBodyText: text('email_body_text'),
+    replyTo: text('reply_to'),
+    metadata: jsonb('metadata').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_rfq_send_requests_rfq').on(t.tenantId, t.rfqId),
+    index('idx_rfq_send_requests_status').on(t.status),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// RFQ Send Recipients (per-recipient tracking)
+// ---------------------------------------------------------------------------
+export const rfqSendRecipients = pgTable(
+  'rfq_send_recipients',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sendRequestId: uuid('send_request_id')
+      .notNull()
+      .references(() => rfqSendRequests.id, { onDelete: 'cascade' }),
+    contactId: uuid('contact_id').references(() => contacts.id, { onDelete: 'set null' }),
+    recipientName: text('recipient_name').notNull(),
+    recipientEmail: text('recipient_email').notNull(),
+    status: text('status').notNull().default('pending'),
+    errorMessage: text('error_message'),
+    resendMessageId: text('resend_message_id'),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    retryCount: integer('retry_count').notNull().default(0),
+    metadata: jsonb('metadata').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_rfq_send_recipients_request').on(t.sendRequestId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Email Templates (configurable per tenant)
+// ---------------------------------------------------------------------------
+export const emailTemplates = pgTable(
+  'email_templates',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    templateType: text('template_type').notNull(),
+    subject: text('subject').notNull(),
+    bodyHtml: text('body_html').notNull(),
+    bodyText: text('body_text'),
+    metadata: jsonb('metadata').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('email_templates_tenant_type_uidx').on(t.tenantId, t.templateType),
+  ],
+);

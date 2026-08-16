@@ -162,6 +162,22 @@ export class EnvironmentVariables {
   @IsString()
   @IsOptional()
   LIBREOFFICE_PATH?: string;
+
+  @IsString()
+  @IsOptional()
+  EMAIL_PROVIDER?: string;
+
+  @IsString()
+  @IsOptional()
+  RESEND_API_KEY?: string;
+
+  @IsString()
+  @IsOptional()
+  EMAIL_FROM?: string;
+
+  @IsString()
+  @IsOptional()
+  EMAIL_REPLY_TO?: string;
 }
 
 export function validate(config: Record<string, unknown>) {

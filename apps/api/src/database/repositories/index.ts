@@ -275,3 +275,15 @@ export {
   type DocumentTemplateTransformInsert,
   type DocumentTemplateTransformVersionRow,
 } from './document-template-transforms.repository';
+export {
+  RfqSendRequestsRepository,
+  type RfqSendRequestRow,
+  type RfqSendRequestInsert,
+  type RfqSendRecipientRow,
+  type RfqSendRecipientInsert,
+} from './rfq-send-requests.repository';
+export {
+  EmailTemplatesRepository,
+  type EmailTemplateRow,
+  type EmailTemplateInsert,
+} from './email-templates.repository';

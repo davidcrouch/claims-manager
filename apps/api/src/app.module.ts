@@ -41,6 +41,8 @@ import { InternalModule } from './modules/internal/internal.module';
 import { ProposalsModule } from './modules/proposals/proposals.module';
 import { BillsModule } from './modules/bills/bills.module';
 import { RfqsModule } from './modules/rfqs/rfqs.module';
+import { RfqRequestsModule } from './modules/rfq-requests/rfq-requests.module';
+import { CommunicationsModule } from './modules/communications/communications.module';
 import { FinanceModule } from './modules/finance/finance.module';
 import { DomainModule } from './modules/domain/domain.module';
 import { WorkflowModule } from './modules/domain/workflows/workflow.module';
@@ -130,6 +132,8 @@ import { OfficeModule } from './common/office/office.module';
     InternalModule,
     WorkOrdersModule,
     RfqsModule,
+    RfqRequestsModule,
+    CommunicationsModule,
     ProposalsModule,
     BillsModule,
     FinanceModule,

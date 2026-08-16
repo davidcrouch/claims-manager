@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef, type MutableRefObject } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   FileQuestion,
   ExternalLink,
@@ -14,7 +15,7 @@ import {
   MessageSquare,
   Loader2,
   Save,
-  Pencil,
+  Send,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -40,6 +41,7 @@ import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
 import {
   fetchRfqLineItemsAction,
   replaceRfqLineItemsAction,
+  updateRfqFieldsAction,
   updateRfqLineNoteAction,
 } from '@/app/(app)/rfqs/[id]/actions';
 import { getQuoteLineItemsAction } from '@/app/(app)/quotes/actions';
@@ -47,6 +49,7 @@ import {
   LineItemNoteDrawer,
   type LineNoteTarget,
 } from '@/components/rfqs/LineItemNoteDrawer';
+import { RequestsTab } from '@/components/rfqs/RequestsTab';
 import type { LineNoteEditRequest } from '@/components/quotes/QuoteLineItemsTable';
 
 // ---------- helpers ---------------------------------------------------------
@@ -286,6 +289,7 @@ function OverviewTab({
 
 type ScopeSaveControls = {
   canSave: boolean;
+  pageDirty: boolean;
   saving: boolean;
   estimateLoading: boolean;
   canEdit: boolean;
@@ -294,33 +298,39 @@ type ScopeSaveControls = {
 function ScopeItemsTab({
   rfqId,
   quoteId,
-  editing,
+  includeQuantities: savedIncludeQuantities,
+  includePricing: savedIncludePricing,
   onSaveControlsChange,
-  onSaveSuccess,
   saveRef,
   cancelRef,
 }: {
   rfqId: string;
   quoteId: string | null;
-  editing: boolean;
+  includeQuantities: boolean;
+  includePricing: boolean;
   onSaveControlsChange?: (controls: ScopeSaveControls | null) => void;
-  onSaveSuccess?: () => void;
   saveRef?: MutableRefObject<(() => void) | null>;
   cancelRef?: MutableRefObject<(() => void) | null>;
 }) {
+  const router = useRouter();
   const [rfqGroups, setRfqGroups] = useState<ApiGroup[] | null>(null);
   const [estimateGroups, setEstimateGroups] = useState<ApiGroup[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [estimateLoading, setEstimateLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [includeQuantities, setIncludeQuantities] = useState(savedIncludeQuantities);
+  const [includePricing, setIncludePricing] = useState(savedIncludePricing);
+  const [committedQuantities, setCommittedQuantities] = useState(savedIncludeQuantities);
+  const [committedPricing, setCommittedPricing] = useState(savedIncludePricing);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [noteTarget, setNoteTarget] = useState<LineNoteTarget | null>(null);
   const [noteDrawerOpen, setNoteDrawerOpen] = useState(false);
+  const pageDirtyRef = useRef(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     setError(null);
     try {
       const result = await fetchRfqLineItemsAction(rfqId);
@@ -332,7 +342,7 @@ function ScopeItemsTab({
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load scope items');
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   }, [rfqId]);
 
@@ -340,8 +350,9 @@ function ScopeItemsTab({
     void load();
   }, [load]);
 
+  // Always load the source estimate so scope can stay in edit mode (local selection until Save).
   useEffect(() => {
-    if (!editing || !quoteId || estimateGroups) return;
+    if (!quoteId || estimateGroups) return;
     let cancelled = false;
     setEstimateLoading(true);
     getQuoteLineItemsAction(quoteId)
@@ -353,22 +364,46 @@ function ScopeItemsTab({
       })
       .finally(() => { if (!cancelled) setEstimateLoading(false); });
     return () => { cancelled = true; };
-  }, [editing, quoteId, estimateGroups]);
+  }, [quoteId, estimateGroups]);
 
   const rfqSourceIds = useMemo(() => {
     if (!rfqGroups) return new Set<string>();
     return collectSourceQuoteIds(rfqGroups);
   }, [rfqGroups]);
 
+  const rfqSourceKey = useMemo(
+    () => Array.from(rfqSourceIds).sort().join('\0'),
+    [rfqSourceIds],
+  );
+
+  const rfqNoteTargets = useMemo(
+    () => (rfqGroups ? buildRfqNoteTargetMaps(rfqGroups) : null),
+    [rfqGroups],
+  );
+
+  // Reseed selection only when the committed RFQ scope identity changes (load / save).
+  // Depend on rfqSourceKey (content), not rfqSourceIds (new Set each render), so a
+  // silent note reload with the same items does not wipe in-progress edits.
+  // Do NOT gate on pageDirty — on first load selectedIds is empty while rfqSourceIds
+  // populates, which looks "dirty" and would permanently skip the seed.
   useEffect(() => {
     setSelectedIds(new Set(rfqSourceIds));
-  }, [rfqSourceIds]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally keyed by rfqSourceKey
+  }, [rfqSourceKey]);
+
+  useEffect(() => {
+    if (pageDirtyRef.current) return;
+    setCommittedQuantities(savedIncludeQuantities);
+    setCommittedPricing(savedIncludePricing);
+    setIncludeQuantities(savedIncludeQuantities);
+    setIncludePricing(savedIncludePricing);
+  }, [savedIncludeQuantities, savedIncludePricing]);
 
   const displayGroups = useMemo(() => {
     if (!estimateGroups) return rfqGroups;
-    if (editing) return estimateGroups;
-    return filterGroupsBySelectedIds(estimateGroups, selectedIds);
-  }, [editing, estimateGroups, rfqGroups, selectedIds]);
+    if (!rfqNoteTargets) return estimateGroups;
+    return overlayRfqNotesOntoEstimate(estimateGroups, rfqNoteTargets);
+  }, [estimateGroups, rfqGroups, rfqNoteTargets]);
 
   const selectionDirty = useMemo(() => {
     if (selectedIds.size !== rfqSourceIds.size) return true;
@@ -378,34 +413,66 @@ function ScopeItemsTab({
     return false;
   }, [selectedIds, rfqSourceIds]);
 
+  const flagsDirty =
+    includeQuantities !== committedQuantities || includePricing !== committedPricing;
+  const pageDirty = selectionDirty || flagsDirty;
+  pageDirtyRef.current = pageDirty;
+
   const handleSaveScope = useCallback(async () => {
-    if (selectedIds.size === 0) {
+    if (selectionDirty && selectedIds.size === 0) {
       setSaveError('Select at least one scope item');
       return;
     }
     setSaving(true);
     setSaveError(null);
     try {
-      const result = await replaceRfqLineItemsAction(rfqId, Array.from(selectedIds));
-      if (!result.success) {
-        setSaveError(result.error ?? 'Failed to update scope items');
-        return;
+      if (flagsDirty) {
+        const flagsResult = await updateRfqFieldsAction(rfqId, {
+          includeQuantities,
+          includePricing,
+        });
+        if (!flagsResult.success) {
+          setSaveError(flagsResult.error ?? 'Failed to update quantities/pricing settings');
+          return;
+        }
+        setCommittedQuantities(includeQuantities);
+        setCommittedPricing(includePricing);
       }
-      setRfqGroups((result.groups as unknown as ApiGroup[]) ?? []);
-      onSaveSuccess?.();
+      if (selectionDirty) {
+        const result = await replaceRfqLineItemsAction(rfqId, Array.from(selectedIds));
+        if (!result.success) {
+          setSaveError(result.error ?? 'Failed to update scope items');
+          return;
+        }
+        setRfqGroups((result.groups as unknown as ApiGroup[]) ?? []);
+      }
+      if (flagsDirty) {
+        router.refresh();
+      }
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Failed to update scope items');
+      setSaveError(err instanceof Error ? err.message : 'Failed to save changes');
     } finally {
       setSaving(false);
     }
-  }, [rfqId, selectedIds, onSaveSuccess]);
+  }, [
+    rfqId,
+    selectedIds,
+    selectionDirty,
+    flagsDirty,
+    includeQuantities,
+    includePricing,
+    router,
+  ]);
 
   const handleCancelEdit = useCallback(() => {
     setSelectedIds(new Set(rfqSourceIds));
+    setIncludeQuantities(committedQuantities);
+    setIncludePricing(committedPricing);
     setSaveError(null);
-  }, [rfqSourceIds]);
+  }, [rfqSourceIds, committedQuantities, committedPricing]);
 
-  const canSave = selectionDirty && !saving && selectedIds.size > 0;
+  const canSave =
+    pageDirty && !saving && (!selectionDirty || selectedIds.size > 0);
   const canEdit = !!quoteId && !!rfqGroups && rfqGroups.length > 0 && !loading && !error;
 
   useEffect(() => {
@@ -424,11 +491,12 @@ function ScopeItemsTab({
     if (!onSaveControlsChange) return;
     onSaveControlsChange({
       canSave,
+      pageDirty,
       saving,
       estimateLoading,
       canEdit,
     });
-  }, [onSaveControlsChange, canSave, saving, estimateLoading, canEdit]);
+  }, [onSaveControlsChange, canSave, pageDirty, saving, estimateLoading, canEdit]);
 
   useEffect(() => {
     return () => {
@@ -491,13 +559,18 @@ function ScopeItemsTab({
         groups={displayGroups ?? []}
         readOnly
         showColumnToggles
-        enableLineNotes={!editing}
+        quantitiesVisible={includeQuantities}
+        pricingVisible={includePricing}
+        onQuantitiesVisibleChange={setIncludeQuantities}
+        onPricingVisibleChange={setIncludePricing}
+        enableLineNotes
         onEditLineNote={(request: LineNoteEditRequest) => {
-          setNoteTarget(request);
+          const mapped = resolveRfqNoteTarget(request, rfqNoteTargets);
+          setNoteTarget(mapped);
           setNoteDrawerOpen(true);
         }}
         selection={
-          editing && estimateGroups
+          estimateGroups
             ? { selectedIds, onChange: setSelectedIds }
             : undefined
         }
@@ -511,6 +584,12 @@ function ScopeItemsTab({
         target={noteTarget}
         onSave={async (note) => {
           if (!noteTarget) return { success: false, error: 'No line selected' };
+          if (noteTarget.targetId.startsWith('unsaved:')) {
+            return {
+              success: false,
+              error: 'Save scope selection before adding notes to new items',
+            };
+          }
           const result = await updateRfqLineNoteAction(rfqId, {
             targetType: noteTarget.targetType,
             targetId: noteTarget.targetId,
@@ -519,7 +598,7 @@ function ScopeItemsTab({
           if (!result.success) {
             return { success: false, error: result.error ?? 'Failed to save note' };
           }
-          await load();
+          await load({ silent: true });
           return { success: true };
         }}
       />
@@ -566,45 +645,118 @@ function collectSourceQuoteIds(groups: ApiGroup[]): Set<string> {
   return ids;
 }
 
-/** Keep only selected items/combos; drop empty groups. */
-function filterGroupsBySelectedIds(groups: ApiGroup[], selectedIds: Set<string>): ApiGroup[] {
-  return groups
-    .map((group) => {
-      const items = (group.items ?? []).filter((item) => item.id && selectedIds.has(item.id));
-      const combos = (group.combos ?? [])
-        .map((combo) => {
-          const childItems = (combo.items ?? []).filter(
-            (item) => item.id && selectedIds.has(item.id),
-          );
-          const comboSelected = !!combo.id && selectedIds.has(combo.id);
-          if (!comboSelected && childItems.length === 0) return null;
-          return { ...combo, items: childItems };
-        })
-        .filter(Boolean) as NonNullable<ApiGroup['combos']>;
-      const scopes = (group.scopes ?? [])
-        .map((scope) => {
-          const childItems = (scope.items ?? []).filter(
-            (item) => item.id && selectedIds.has(item.id),
-          );
-          const childCombos = (scope.combos ?? [])
-            .map((combo) => {
-              const comboItems = (combo.items ?? []).filter(
-                (item) => item.id && selectedIds.has(item.id),
-              );
-              const comboSelected = !!combo.id && selectedIds.has(combo.id);
-              if (!comboSelected && comboItems.length === 0) return null;
-              return { ...combo, items: comboItems };
-            })
-            .filter(Boolean) as NonNullable<ApiGroup['combos']>;
-          const scopeSelected = !!scope.id && selectedIds.has(scope.id);
-          if (!scopeSelected && childItems.length === 0 && childCombos.length === 0) return null;
-          return { ...scope, items: childItems, combos: childCombos };
-        })
-        .filter(Boolean) as NonNullable<ApiGroup['scopes']>;
-      if (items.length === 0 && combos.length === 0 && scopes.length === 0) return null;
-      return { ...group, items, combos, scopes };
-    })
-    .filter(Boolean) as ApiGroup[];
+type RfqNoteTargetMaps = {
+  groups: Map<string, { rfqId: string; note: string | null | undefined }>;
+  combos: Map<string, { rfqId: string; note: string | null | undefined }>;
+  items: Map<string, { rfqId: string; note: string | null | undefined }>;
+};
+
+/** Map estimate/source quote IDs → RFQ entity IDs + notes for overlay + note saves. */
+function buildRfqNoteTargetMaps(groups: ApiGroup[]): RfqNoteTargetMaps {
+  const maps: RfqNoteTargetMaps = {
+    groups: new Map(),
+    combos: new Map(),
+    items: new Map(),
+  };
+
+  const putCombo = (combo: NonNullable<ApiGroup['combos']>[number]) => {
+    const sourceId =
+      (typeof (combo as Record<string, unknown>).sourceQuoteComboId === 'string'
+        ? ((combo as Record<string, unknown>).sourceQuoteComboId as string)
+        : null) ?? combo.id;
+    if (sourceId && combo.id) {
+      maps.combos.set(sourceId, { rfqId: combo.id, note: combo.note });
+    }
+    for (const item of combo.items ?? []) {
+      const itemSource =
+        (typeof (item as Record<string, unknown>).sourceQuoteItemId === 'string'
+          ? ((item as Record<string, unknown>).sourceQuoteItemId as string)
+          : null) ?? item.id;
+      if (itemSource && item.id) {
+        maps.items.set(itemSource, { rfqId: item.id, note: item.note });
+      }
+    }
+  };
+
+  for (const group of groups) {
+    const groupSource =
+      (typeof (group as Record<string, unknown>).sourceQuoteGroupId === 'string'
+        ? ((group as Record<string, unknown>).sourceQuoteGroupId as string)
+        : null) ?? group.id;
+    if (groupSource && group.id) {
+      maps.groups.set(groupSource, { rfqId: group.id, note: group.note });
+    }
+    for (const item of group.items ?? []) {
+      const itemSource =
+        (typeof (item as Record<string, unknown>).sourceQuoteItemId === 'string'
+          ? ((item as Record<string, unknown>).sourceQuoteItemId as string)
+          : null) ?? item.id;
+      if (itemSource && item.id) {
+        maps.items.set(itemSource, { rfqId: item.id, note: item.note });
+      }
+    }
+    for (const combo of group.combos ?? []) putCombo(combo);
+    for (const scope of group.scopes ?? []) putCombo(scope);
+  }
+
+  return maps;
+}
+
+function overlayRfqNotesOntoEstimate(
+  estimateGroups: ApiGroup[],
+  maps: RfqNoteTargetMaps,
+): ApiGroup[] {
+  const mapCombo = (combo: NonNullable<ApiGroup['combos']>[number]) => {
+    const mapped = combo.id ? maps.combos.get(combo.id) : undefined;
+    return {
+      ...combo,
+      note: mapped?.note ?? combo.note,
+      items: (combo.items ?? []).map((item) => {
+        const itemMapped = item.id ? maps.items.get(item.id) : undefined;
+        return { ...item, note: itemMapped?.note ?? item.note };
+      }),
+    };
+  };
+
+  return estimateGroups.map((group) => {
+    const groupMapped = group.id ? maps.groups.get(group.id) : undefined;
+    return {
+      ...group,
+      note: groupMapped?.note ?? group.note,
+      items: (group.items ?? []).map((item) => {
+        const itemMapped = item.id ? maps.items.get(item.id) : undefined;
+        return { ...item, note: itemMapped?.note ?? item.note };
+      }),
+      combos: (group.combos ?? []).map(mapCombo),
+      scopes: (group.scopes ?? []).map((scope) => {
+        const mapped = mapCombo(scope);
+        return {
+          ...mapped,
+          combos: (scope.combos ?? []).map(mapCombo),
+        };
+      }),
+    };
+  });
+}
+
+function resolveRfqNoteTarget(
+  request: LineNoteEditRequest,
+  maps: RfqNoteTargetMaps | null,
+): LineNoteTarget {
+  const bucket =
+    request.targetType === 'group'
+      ? maps?.groups
+      : request.targetType === 'combo'
+        ? maps?.combos
+        : maps?.items;
+  const mapped = bucket?.get(request.targetId);
+  return {
+    targetType: request.targetType,
+    // Prefix marks estimate rows that are not yet persisted on the RFQ.
+    targetId: mapped?.rfqId ?? `unsaved:${request.targetId}`,
+    label: request.label,
+    note: mapped?.note ?? request.note,
+  };
 }
 
 function ProposalsTab({
@@ -751,6 +903,7 @@ type RfqTab =
   | 'overview'
   | 'scope-items'
   | 'proposals'
+  | 'requests'
   | 'activities'
   | 'communications'
   | 'timeline';
@@ -767,8 +920,8 @@ export function RfqDetail({
   fetchProposals: (rfqId: string) => Promise<Proposal[]>;
 }) {
   const [tab, setTab] = useState<RfqTab>('overview');
-  const [editing, setEditing] = useState(false);
   const [scopeSave, setScopeSave] = useState<ScopeSaveControls | null>(null);
+  const [sendDrawerOpen, setSendDrawerOpen] = useState(false);
   const scopeSaveRef = useRef<(() => void) | null>(null);
   const scopeCancelRef = useRef<(() => void) | null>(null);
 
@@ -776,6 +929,7 @@ export function RfqDetail({
     setScopeSave((prev) => {
       if (
         prev?.canSave === controls?.canSave &&
+        prev?.pageDirty === controls?.pageDirty &&
         prev?.saving === controls?.saving &&
         prev?.estimateLoading === controls?.estimateLoading &&
         prev?.canEdit === controls?.canEdit
@@ -787,29 +941,17 @@ export function RfqDetail({
   }, []);
 
   useEffect(() => {
-    if (tab !== 'scope-items') setEditing(false);
+    if (tab !== 'requests') setSendDrawerOpen(false);
   }, [tab]);
 
   const handleCancel = useCallback(() => {
     scopeCancelRef.current?.();
-    setEditing(false);
   }, []);
-
-  const handleSaveSuccess = useCallback(() => {
-    setEditing(false);
-  }, []);
-
-  const handleTabChange = useCallback((next: RfqTab) => {
-    if (editing) {
-      scopeCancelRef.current?.();
-      setEditing(false);
-    }
-    setTab(next);
-  }, [editing]);
 
   const tabs: Array<{ id: RfqTab; label: string; icon: typeof Calendar }> = [
     { id: 'overview', label: 'Overview', icon: FileSignature },
     { id: 'scope-items', label: 'Scope Items', icon: Layers },
+    { id: 'requests', label: 'Requests', icon: Send },
     { id: 'proposals', label: 'Proposals', icon: Package },
     { id: 'activities', label: 'Activities', icon: ClipboardList },
     { id: 'communications', label: 'Communications', icon: MessageSquare },
@@ -817,46 +959,48 @@ export function RfqDetail({
   ];
 
   const showScopeActions = tab === 'scope-items' && (scopeSave?.canEdit ?? !!rfq.quoteId);
+  const scopeDirty = scopeSave?.pageDirty ?? false;
+  const scopeSaving = scopeSave?.saving ?? false;
+  const showSendRequest = tab === 'requests';
 
   return (
     <div className="flex flex-col">
       <SetHeaderActions>
+        {showSendRequest && (
+          <Button
+            size="default"
+            onClick={() => setSendDrawerOpen(true)}
+            className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+          >
+            <Send className="h-3.5 w-3.5" />
+            Send Request
+          </Button>
+        )}
         {showScopeActions && (
-          editing ? (
-            <>
-              <Button
-                size="default"
-                variant="outline"
-                onClick={handleCancel}
-                disabled={scopeSave?.saving}
-                className="h-9 gap-1.5 px-4"
-              >
-                Cancel
-              </Button>
-              <Button
-                size="default"
-                onClick={() => scopeSaveRef.current?.()}
-                disabled={!scopeSave?.canSave}
-                className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
-              >
-                {scopeSave?.saving ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Save className="h-3.5 w-3.5" />
-                )}
-                {scopeSave?.saving ? 'Saving...' : 'Save Scope'}
-              </Button>
-            </>
-          ) : (
+          <>
             <Button
               size="default"
-              onClick={() => setEditing(true)}
+              variant="outline"
+              onClick={handleCancel}
+              disabled={scopeSaving || !scopeDirty}
+              className="h-9 gap-1.5 px-4"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="default"
+              onClick={() => scopeSaveRef.current?.()}
+              disabled={!scopeSave?.canSave}
               className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
             >
-              <Pencil className="h-3.5 w-3.5" />
-              Edit
+              {scopeSaving ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Save className="h-3.5 w-3.5" />
+              )}
+              {scopeSaving ? 'Saving...' : 'Save'}
             </Button>
-          )
+          </>
         )}
         <PrintButton documentType="rfq" entityId={rfq.id} jobId={job?.id} />
         <ArchiveEntityButton
@@ -875,7 +1019,7 @@ export function RfqDetail({
             <button
               key={t.id}
               type="button"
-              onClick={() => handleTabChange(t.id)}
+              onClick={() => setTab(t.id)}
               className={`inline-flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t-md ${
                 active
                   ? 'border-violet-600 bg-violet-50 text-violet-600'
@@ -890,19 +1034,29 @@ export function RfqDetail({
       </div>
       <div className="pt-4">
         {tab === 'overview' && <OverviewTab rfq={rfq} job={job} quote={quote} />}
-        {tab === 'scope-items' && (
+        {/* Keep mounted so unsaved scope selection survives tab switches (Job pattern). */}
+        <div className={tab === 'scope-items' ? '' : 'hidden'}>
           <ScopeItemsTab
             rfqId={rfq.id}
             quoteId={rfq.quoteId ?? null}
-            editing={editing}
+            includeQuantities={!!rfq.includeQuantities}
+            includePricing={!!rfq.includePricing}
             onSaveControlsChange={handleScopeSaveControls}
-            onSaveSuccess={handleSaveSuccess}
             saveRef={scopeSaveRef}
             cancelRef={scopeCancelRef}
           />
-        )}
+        </div>
         {tab === 'proposals' && (
           <ProposalsTab rfqId={rfq.id} fetchProposals={fetchProposals} />
+        )}
+        {tab === 'requests' && (
+          <RequestsTab
+            rfqId={rfq.id}
+            rfqNumber={rfq.rfqNumber}
+            jobId={rfq.jobId}
+            sendDrawerOpen={sendDrawerOpen}
+            onSendDrawerOpenChange={setSendDrawerOpen}
+          />
         )}
         {tab === 'activities' && <ActivitiesTab />}
         {tab === 'communications' && <CommunicationsTab />}

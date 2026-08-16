@@ -756,3 +756,13 @@
   Refreshed field assessment screens and skills so assessors complete tabs with clearer guided assistance.
   Improved how chat uses page context and skills so help stays relevant to the screen in use.
   Outcome: packs, document transforms, and a wider assistant toolkit ready for day-to-day claims operations.
+
+- `2026-08-16` `PENDING` **7.5 h**
+  `51 files | +4504 −192 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  Lay summary: Staff can email RFQ packs to suppliers and review what was sent, including generated documents and delivery status.
+  **Send RFQ requests to suppliers by email with a clear request history.** Staff can select recipients, customise the message, and send quotation requests from an RFQ.
+  Each send is recorded as a request batch so the team can see who was contacted and when.
+  Generated RFQ documents can be attached to the outbound email for each supplier.
+  A requests tab and batch detail view show delivery status and related documents in one place.
+  Contact picking on jobs was improved so the right people are easier to choose when sending.
+  Outcome: RFQ outreach is tracked end-to-end instead of living only in inboxes.

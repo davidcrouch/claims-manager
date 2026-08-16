@@ -41,6 +41,7 @@ export class ContactsRepository {
     search?: string;
     sort?: string;
     jobId?: string;
+    typeLookupIds?: string[];
   }): Promise<{ data: ContactRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
@@ -58,6 +59,13 @@ export class ContactsRepository {
           ),
         )
       : eq(contacts.tenantId, params.tenantId);
+
+    if (params.typeLookupIds && params.typeLookupIds.length > 0) {
+      whereClause = and(
+        whereClause,
+        inArray(contacts.typeLookupId, params.typeLookupIds),
+      );
+    }
 
     if (params.jobId) {
       const linked = await this.db

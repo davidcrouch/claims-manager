@@ -23,6 +23,6 @@ import { DocumentsRepository } from '../../database/repositories/documents.repos
     FilesystemsRepository,
     DocumentsRepository,
   ],
-  exports: [DocumentsService, DocumentsRepository, FilesystemService],
+  exports: [DocumentsService, DocumentsRepository, FilesystemService, FilesystemsRepository],
 })
 export class FilesystemModule {}

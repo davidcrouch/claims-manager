@@ -4,6 +4,7 @@ import PizZip from 'pizzip';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const expressionParser = require('docxtemplater/expressions.js');
 import type { TemplateData } from '../types/document-types';
+import { formatDocumentGenerationError } from '../utils/format-generation-error';
 
 @Injectable()
 export class TemplateEngineService {
@@ -18,22 +19,28 @@ export class TemplateEngineService {
     const logPrefix = 'TemplateEngineService.populate';
     this.logger.debug(`${logPrefix} — populating template (${params.templateBuffer.length} bytes)`);
 
-    const zip = new PizZip(params.templateBuffer);
-    const doc = new Docxtemplater(zip, {
-      paragraphLoop: true,
-      linebreaks: true,
-      parser: this.parser,
-    });
+    try {
+      const zip = new PizZip(params.templateBuffer);
+      const doc = new Docxtemplater(zip, {
+        paragraphLoop: true,
+        linebreaks: true,
+        parser: this.parser,
+      });
 
-    doc.render(params.data);
+      doc.render(params.data);
 
-    const output = doc.getZip().generate({
-      type: 'nodebuffer',
-      compression: 'DEFLATE',
-    }) as Buffer;
+      const output = doc.getZip().generate({
+        type: 'nodebuffer',
+        compression: 'DEFLATE',
+      }) as Buffer;
 
-    this.logger.debug(`${logPrefix} — generated populated docx (${output.length} bytes)`);
-    return output;
+      this.logger.debug(`${logPrefix} — generated populated docx (${output.length} bytes)`);
+      return output;
+    } catch (error) {
+      const detail = formatDocumentGenerationError(error);
+      this.logger.error(`${logPrefix} — ${detail}`);
+      throw new Error(detail, { cause: error });
+    }
   }
 
   getTemplateTags(params: { templateBuffer: Buffer }): string[] {

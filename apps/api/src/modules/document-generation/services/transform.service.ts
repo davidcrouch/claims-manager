@@ -127,8 +127,21 @@ export class TransformService {
       documentType: params.documentType,
     });
 
-    const jsonataRules = row?.jsonataRules;
+    const defaults = TRANSFORM_DEFAULTS[params.documentType];
+    // Match getTransformWithDefaults / Transform tab: use saved rules, else code defaults.
+    // Previously only saved rows were applied, so Test Generation / RFQ preview kept source
+    // keys (company_name) while the Transform preview showed target keys (company).
+    const jsonataRules = row?.jsonataRules ?? defaults?.jsonataRules ?? null;
+    const rulesSource = row?.jsonataRules
+      ? 'custom'
+      : defaults?.jsonataRules
+        ? 'default'
+        : 'none';
+
     if (!jsonataRules) {
+      this.logger.debug(
+        `${logPrefix} — no rules for type=${params.documentType}; using source data`,
+      );
       return params.sourceData;
     }
 
@@ -139,11 +152,14 @@ export class TransformService {
 
     if (error || result == null) {
       this.logger.warn(
-        `${logPrefix} — falling back to source data for type=${params.documentType} tenant=${tenantId}: ${error}`,
+        `${logPrefix} — falling back to source data for type=${params.documentType} tenant=${tenantId} source=${rulesSource}: ${error}`,
       );
       return params.sourceData;
     }
 
+    this.logger.debug(
+      `${logPrefix} — applied ${rulesSource} rules for type=${params.documentType}`,
+    );
     return result as TemplateData;
   }
 }
