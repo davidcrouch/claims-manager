@@ -767,7 +767,7 @@
   Contact picking on jobs was improved so the right people are easier to choose when sending.
   Outcome: RFQ outreach is tracked end-to-end instead of living only in inboxes.
 
-- `2026-08-17` `SHORT_SHA` **4.5 h**
+- `2026-08-17` `0f43afb` **4.5 h**
   `53 files | +2450 −400 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Staff can open tasks and appointments from the schedule and lists without leaving the page, and an admin account can be seeded for Ensure Construction.
   Added a shared side panel so tasks and appointments open in place from schedule, lists, and assistant actions.
