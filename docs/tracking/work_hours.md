@@ -827,7 +827,7 @@
   Added the missing entity id on a skipped message projection result so typecheck passes.
   Outcome: CI can proceed to build and deploy again (no charge).
 
-- `2026-08-18` `PENDING` **2 h**
+- `2026-08-18` `3fdb697` **2 h**
   `7 files | +384 −228 | Tier 2 standard | Moderate orchestration`
   Lay summary: Journal pages are easier to scan and edit, with a clearer header, sticky tabs, and a simpler address form.
   Added a compact journal header with status, address, visit date, and linked job.
