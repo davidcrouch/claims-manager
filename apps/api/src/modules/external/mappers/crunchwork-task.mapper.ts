@@ -125,7 +125,10 @@ export class CrunchworkTaskMapper implements EntityMapper {
     const rawPriority = ((payload.priority as string) ?? 'low').toLowerCase();
     const rawStatus = ((payload.status as string) ?? 'open').toLowerCase();
 
-    const taskData: Record<string, unknown> = {
+    const relatedEntityType = jobId ? 'Job' : 'Claim';
+    const relatedEntityId = (jobId ?? claimId)!;
+
+    const taskData = {
       tenantId: params.tenantId,
       name: (payload.name as string) ?? 'Untitled Task',
       description: (payload.description as string) ?? undefined,
@@ -139,12 +142,10 @@ export class CrunchworkTaskMapper implements EntityMapper {
       assignedToExternalReference: (payload.assignedTo as string) ?? undefined,
       taskPayload: payload,
       updatedAt: new Date(),
+      ...(jobId || claimId
+        ? { relatedEntityType, relatedEntityId }
+        : {}),
     };
-
-    if (jobId || claimId) {
-      taskData.relatedEntityType = jobId ? 'Job' : 'Claim';
-      taskData.relatedEntityId = (jobId ?? claimId)!;
-    }
 
     if (existingLink) {
       await db
@@ -157,9 +158,28 @@ export class CrunchworkTaskMapper implements EntityMapper {
       };
     }
 
+    // New tasks always have a resolved parent (enforced above).
     const [created] = await db
       .insert(tasks)
-      .values({ ...taskData, createdAt: new Date() })
+      .values({
+        tenantId: params.tenantId,
+        name: (payload.name as string) ?? 'Untitled Task',
+        description: (payload.description as string) ?? undefined,
+        claimId: claimId ?? undefined,
+        jobId: jobId ?? undefined,
+        relatedEntityType,
+        relatedEntityId,
+        dueDate: payload.dueDate
+          ? new Date(payload.dueDate as string)
+          : undefined,
+        priority: priorityMap[rawPriority] ?? 'Low',
+        status: statusMap[rawStatus] ?? 'Open',
+        assignedToExternalReference:
+          (payload.assignedTo as string) ?? undefined,
+        taskPayload: payload,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
       .returning();
 
     await this.externalLinksRepo.upsert({
