@@ -786,8 +786,8 @@
   No change to day-to-day product behaviour beyond unblocking the release.
   Outcome: staging pipeline can proceed again.
 
-- `2026-08-17` `SHORT_SHA` **0.5 h**
-  `2 files | +25 −20 | Tier 2 standard | Light orchestration`
+- `2026-08-17` `3683461` **0.5 h**
+  `2 files | +19 −24 | Tier 2 standard | Light orchestration`
   Lay summary: Fixed the sign-in service build so staging packaging succeeds after the admin seed script failed type checks.
   Updated the Ensure Construction admin seed to use the shared organisation helpers.
   Corrected password-identity updates so they match the database schema types.
