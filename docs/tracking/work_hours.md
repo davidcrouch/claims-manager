@@ -811,7 +811,7 @@
   Tidied the main app header, sidebar, and shell layout behaviour.
   Outcome: smoother password reset and cleaner app chrome (no charge).
 
-- `2026-08-17` `PENDING` **7.5 h**
+- `2026-08-17` `7ef3ece` **7.5 h**
   `72 files | +4302 −3412 | Tier 2 standard / Tier 3 complex / Tier 4 deep | Heavy orchestration`
   Lay summary: Unified how external updates land in the app, improved messages and schedule, and made connection health easier to see.
   Replaced the old per-entity external mappers with a single projection path for inbound updates.
