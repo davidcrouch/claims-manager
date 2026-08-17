@@ -16,6 +16,7 @@ export class MessagesRepository {
     page?: number;
     limit?: number;
     jobId?: string;
+    claimId?: string;
     fromJobId?: string;
     toJobId?: string;
   }): Promise<{ data: MessageRow[]; total: number }> {
@@ -30,6 +31,15 @@ export class MessagesRepository {
         or(
           eq(messages.fromJobId, params.jobId),
           eq(messages.toJobId, params.jobId),
+        ),
+      )!;
+    }
+    if (params.claimId) {
+      whereClause = and(
+        whereClause,
+        or(
+          eq(messages.fromClaimId, params.claimId),
+          eq(messages.toClaimId, params.claimId),
         ),
       )!;
     }

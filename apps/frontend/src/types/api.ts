@@ -513,12 +513,19 @@ export interface Task {
 export interface Message {
   id: string;
   tenantId: string;
+  fromClaimId?: string | null;
   fromJobId?: string | null;
+  toClaimId?: string | null;
   toJobId?: string | null;
   subject?: string | null;
   body?: string | null;
+  acknowledgementRequired?: boolean;
   acknowledgedAt?: string | null;
+  originType?: string | null;
+  createdByUserId?: string | null;
+  messagePayload?: Record<string, unknown> | null;
   createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Vendor {
@@ -972,11 +979,18 @@ export type JournalPageBlock =
 export type ScheduleEventType =
   | 'appointment'
   | 'task'
+  | 'message'
+  | 'claim'
+  | 'job'
+  | 'quote'
   | 'work_order'
-  | 'purchase_order'
+  | 'invoice'
+  | 'journal'
+  | 'assessment'
   | 'rfq'
-  | 'bill'
-  | 'quote';
+  | 'proposal'
+  | 'purchase_order'
+  | 'bill';
 
 export interface ScheduleEvent {
   id: string;

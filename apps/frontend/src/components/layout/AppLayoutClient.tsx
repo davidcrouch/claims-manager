@@ -2,6 +2,7 @@
 
 import { BreadcrumbProvider } from './BreadcrumbProvider';
 import { AppShell } from './AppShell';
+import { ApiConnectionMonitor } from './ApiConnectionMonitor';
 import type { AppSidebarUser } from './AppSidebar';
 
 export interface AppLayoutClientProps {
@@ -21,6 +22,7 @@ export function AppLayoutClient({
 }: AppLayoutClientProps) {
   return (
     <BreadcrumbProvider>
+      <ApiConnectionMonitor />
       <AppShell
         user={user}
         features={features}

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
   IntegrationConnectionsRepository,
+  ConnectionIdentifiersRepository,
   type IntegrationConnectionRow,
 } from '../../database/repositories';
 import { CredentialsCipher } from '../../common/credentials-cipher';
@@ -18,9 +19,15 @@ export class ConnectionResolverService {
 
   constructor(
     private readonly connectionsRepo: IntegrationConnectionsRepository,
+    private readonly identifiersRepo: ConnectionIdentifiersRepository,
     private readonly cipher: CredentialsCipher,
   ) {}
 
+  /**
+   * Resolve a connection from an inbound webhook's payload tenant ID and client.
+   * Checks the connection_identifiers table first (supports multiple external IDs
+   * per connection), then falls back to the legacy provider_tenant_id column.
+   */
   async resolveForWebhook(params: {
     payloadTenantId: string;
     payloadClient: string;
@@ -31,10 +38,17 @@ export class ConnectionResolverService {
     const cached = this.getFromCache(cacheKey);
     if (cached) return cached;
 
-    const connection = await this.connectionsRepo.findByTenantIdAndClient({
-      providerTenantId: params.payloadTenantId,
+    let connection = await this.identifiersRepo.findConnectionByIdentifier({
+      identifierValue: params.payloadTenantId,
       clientIdentifier: params.payloadClient,
     });
+
+    if (!connection) {
+      connection = await this.connectionsRepo.findByTenantIdAndClient({
+        providerTenantId: params.payloadTenantId,
+        clientIdentifier: params.payloadClient,
+      });
+    }
 
     if (connection) {
       this.setCache(cacheKey, connection);

@@ -8,6 +8,12 @@ import {
   fetchCloudRunIdToken,
   resolveApiAudience,
 } from './cloud-run-id-token';
+import {
+  fetchWithTransientRetry,
+  isTransientNetworkError,
+} from './transient-network';
+
+export { isTransientNetworkError };
 import type {
   Claim,
   Job,
@@ -272,13 +278,19 @@ export function createApiClient(options?: ApiClientOptions) {
         mergedHeaders['X-Serverless-Authorization'] = `Bearer ${idToken}`;
       }
     }
-    const res = await fetch(url, {
-      ...init,
-      headers: mergedHeaders,
-      // Prevent Next.js Data Cache from serving stale API responses in
-      // server components and server actions.
-      ...(typeof window === 'undefined' && !init?.cache ? { cache: 'no-store' as const } : {}),
-    });
+    const res = await fetchWithTransientRetry(
+      url,
+      {
+        ...init,
+        headers: mergedHeaders,
+        // Prevent Next.js Data Cache from serving stale API responses in
+        // server components and server actions.
+        ...(typeof window === 'undefined' && !init?.cache
+          ? { cache: 'no-store' as const }
+          : {}),
+      },
+      { logLabel: 'frontend:api-client:fetchApi' },
+    );
     return handleResponse<T>(res);
   }
 
@@ -371,8 +383,27 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<Task | null>(`/tasks/${id}`);
     },
 
+    getMessages(params?: {
+      page?: number;
+      limit?: number;
+      jobId?: string;
+      claimId?: string;
+    }): Promise<PaginatedResponse<Message>> {
+      const sp = new URLSearchParams();
+      if (params?.page != null) sp.set('page', String(params.page));
+      if (params?.limit != null) sp.set('limit', String(params.limit));
+      if (params?.jobId) sp.set('jobId', params.jobId);
+      if (params?.claimId) sp.set('claimId', params.claimId);
+      const qs = sp.toString();
+      return fetchApi<PaginatedResponse<Message>>(`/messages${qs ? `?${qs}` : ''}`);
+    },
+
     getJobMessages(jobId: string): Promise<PaginatedResponse<Message>> {
       return fetchApi<PaginatedResponse<Message>>(`/messages?jobId=${jobId}&limit=100`);
+    },
+
+    getClaimMessages(claimId: string): Promise<PaginatedResponse<Message>> {
+      return fetchApi<PaginatedResponse<Message>>(`/messages?claimId=${claimId}&limit=100`);
     },
 
     getJobReports(jobId: string): Promise<Report[]> {
@@ -425,6 +456,11 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params?.relatedRecordType) sp.set('relatedRecordType', params.relatedRecordType);
       if (params?.sort) sp.set('sort', params.sort);
       return fetchApi<PaginatedResponse<Attachment>>(`/attachments?${sp}`);
+    },
+
+    getEntityAttachments(relatedRecordType: string, entityId: string): Promise<Attachment[]> {
+      const sp = new URLSearchParams({ relatedRecordType, relatedRecordId: entityId });
+      return fetchApi<Attachment[]>(`/attachments?${sp}`);
     },
 
     getJobAttachments(jobId: string): Promise<Attachment[]> {
@@ -1631,6 +1667,8 @@ export function createApiClient(options?: ApiClientOptions) {
       to: string;
       eventType?: string;
       jobId?: string;
+      mine?: boolean;
+      assignedToUserId?: string;
       limit?: number;
     }): Promise<{ data: import('@/types/api').ScheduleEvent[]; total: number }> {
       const sp = new URLSearchParams();
@@ -1638,6 +1676,8 @@ export function createApiClient(options?: ApiClientOptions) {
       sp.set('to', params.to);
       if (params.eventType) sp.set('eventType', params.eventType);
       if (params.jobId) sp.set('jobId', params.jobId);
+      if (params.mine) sp.set('mine', 'true');
+      if (params.assignedToUserId) sp.set('assignedToUserId', params.assignedToUserId);
       if (params.limit != null) sp.set('limit', String(params.limit));
       return fetchApi(`/schedule/events?${sp}`);
     },
@@ -2327,11 +2367,16 @@ export function createApiClient(options?: ApiClientOptions) {
       if (options?.token) headers.Authorization = `Bearer ${options.token}`;
       if (options?.tenantId) headers['x-tenant-id'] = options.tenantId;
       const base = getApiBaseUrl().replace(/\/$/, '');
-      const res = await fetch(`${base}/capability-packs/upload`, {
-        method: 'POST',
-        headers,
-        body: form,
-      });
+      const res = await fetchWithTransientRetry(
+        `${base}/capability-packs/upload`,
+        {
+          method: 'POST',
+          headers,
+          body: form,
+          ...(typeof window === 'undefined' ? { cache: 'no-store' as const } : {}),
+        },
+        { logLabel: 'frontend:api-client:uploadCapabilityPack' },
+      );
       return handleResponse(res);
     },
 

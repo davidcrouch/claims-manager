@@ -45,6 +45,7 @@ import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
 import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
 import { groupsFromDocumentPayload } from '@/components/quotes/quote-line-items.utils';
 import { getWorkOrderLineItemsAction } from '@/app/(app)/work-orders/actions';
+import { EntityAttachmentsTab } from '@/components/shared/EntityAttachmentsTab';
 
 // ---------- helpers ---------------------------------------------------------
 
@@ -557,21 +558,6 @@ function TimelineTab({ wo }: { wo: WorkOrder }) {
   );
 }
 
-function AttachmentsTab() {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Attachments</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">
-          Attachments linked to this work order will appear here once the
-          attachments API is connected.
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
 
 // ---------- container -------------------------------------------------------
 
@@ -627,7 +613,7 @@ export function WorkOrderDetail({ wo }: { wo: WorkOrder }) {
         {tab === 'activities' && <ActivitiesTab />}
         {tab === 'communications' && <CommunicationsTab />}
         {tab === 'timeline' && <TimelineTab wo={wo} />}
-        {tab === 'attachments' && <AttachmentsTab />}
+        {tab === 'attachments' && <EntityAttachmentsTab entityId={wo.id} relatedRecordType="PurchaseOrder" entityLabel="this work order" />}
       </div>
     </div>
   );

@@ -15,22 +15,30 @@ export class MessageTransformer implements EntityTransformer {
     const entity: Record<string, unknown> = {
       tenantId,
       subject: asString(payload.subject),
-      body: asString(payload.body),
+      body: asString(payload.text) ?? asString(payload.body),
       acknowledgementRequired: asBool(payload.acknowledgementRequired) ?? false,
       messagePayload: payload,
     };
 
-    // from/to parents
-    const fromJobId = isPlainObject(payload.fromJob) ? asString(payload.fromJob.id) : undefined;
+    // from/to parents — CW may send nested objects or direct UUID strings
+    const fromJobId = isPlainObject(payload.fromJob)
+      ? asString(payload.fromJob.id)
+      : asString(payload.fromJobId);
     if (fromJobId) parentRefs.push({ entityType: 'fromJob', externalId: fromJobId, required: false });
 
-    const toJobId = isPlainObject(payload.toJob) ? asString(payload.toJob.id) : undefined;
+    const toJobId = isPlainObject(payload.toJob)
+      ? asString(payload.toJob.id)
+      : asString(payload.toJobId);
     if (toJobId) parentRefs.push({ entityType: 'toJob', externalId: toJobId, required: false });
 
-    const fromClaimId = isPlainObject(payload.fromClaim) ? asString(payload.fromClaim.id) : undefined;
+    const fromClaimId = isPlainObject(payload.fromClaim)
+      ? asString(payload.fromClaim.id)
+      : asString(payload.fromClaimId);
     if (fromClaimId) parentRefs.push({ entityType: 'fromClaim', externalId: fromClaimId, required: false });
 
-    const toClaimId = isPlainObject(payload.toClaim) ? asString(payload.toClaim.id) : undefined;
+    const toClaimId = isPlainObject(payload.toClaim)
+      ? asString(payload.toClaim.id)
+      : asString(payload.toClaimId);
     if (toClaimId) parentRefs.push({ entityType: 'toClaim', externalId: toClaimId, required: false });
 
     return { entity, lookups: [], parentRefs };

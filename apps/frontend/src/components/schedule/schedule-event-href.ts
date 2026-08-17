@@ -27,12 +27,26 @@ export function scheduleEventHref(eventType: ScheduleEventType, id: string): str
       return `/appointments?open=${encodeURIComponent(id)}`;
     case 'task':
       return `/tasks?open=${encodeURIComponent(id)}`;
+    case 'message':
+      return `/messages?open=${encodeURIComponent(id)}`;
+    case 'claim':
+      return `/claims/${id}`;
+    case 'job':
+      return `/jobs/${id}`;
     case 'work_order':
       return `/work-orders/${id}`;
+    case 'invoice':
+      return `/invoices/${id}`;
+    case 'journal':
+      return `/journals/${id}`;
+    case 'assessment':
+      return `/assessments/${id}`;
     case 'purchase_order':
       return `/purchase-orders/${id}`;
     case 'rfq':
       return `/rfqs/${id}`;
+    case 'proposal':
+      return `/proposals/${id}`;
     case 'bill':
       return `/bills/${id}`;
     case 'quote':

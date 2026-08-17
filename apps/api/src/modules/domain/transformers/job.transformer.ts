@@ -44,7 +44,7 @@ export class JobTransformer implements EntityTransformer<JobInsert> {
       collectExcess: asBool(payload.collectExcess),
       excess: asString(payload.excess),
       makeSafeRequired: asBool(payload.makeSafeRequired),
-      jobInstructions: asString(payload.instructions),
+      jobInstructions: asString(payload.jobInstructions) ?? asString(payload.instructions),
       apiPayload: payload,
       customData: isPlainObject(payload.customData)
         ? (payload.customData as Record<string, unknown>)
@@ -145,12 +145,14 @@ export class JobTransformer implements EntityTransformer<JobInsert> {
     }
 
     // ── JSONB blocks ────────────────────────────────────────────────
+    // CW sends these as top-level keys, not nested objects.
     entity.vendorSnapshot = extractObject(payload, 'vendor') ?? {};
-    entity.temporaryAccommodationDetails = extractObject(payload, 'temporaryAccommodation') ?? {};
-    entity.specialistDetails = extractObject(payload, 'specialist') ?? {};
-    entity.rectificationDetails = extractObject(payload, 'rectification') ?? {};
-    entity.auditDetails = extractObject(payload, 'audit') ?? {};
-    entity.mobilityConsiderations = payload.mobilityConsiderations ?? [];
+
+    entity.temporaryAccommodationDetails = this.buildTemporaryAccommodation(payload);
+    entity.specialistDetails = this.buildSpecialistDetails(payload);
+    entity.rectificationDetails = this.buildRectificationDetails(payload);
+    entity.auditDetails = this.buildAuditDetails(payload);
+    entity.mobilityConsiderations = this.buildMobilityConsiderations(payload);
 
     return {
       entity,
@@ -158,5 +160,95 @@ export class JobTransformer implements EntityTransformer<JobInsert> {
       parentRefs,
       contacts: contacts.length > 0 ? contacts : undefined,
     };
+  }
+
+  private buildTemporaryAccommodation(
+    payload: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    const keys = [
+      'emergency',
+      'habitableProperty',
+      'estimatedStayStartDate',
+      'estimatedStayEndDate',
+      'numberOfAdults',
+      'numberOfChildren',
+      'numberOfBedrooms',
+      'numberOfCots',
+      'numberOfVehicles',
+      'petsInformation',
+    ] as const;
+    for (const key of keys) {
+      if (payload[key] !== undefined) out[key] = payload[key];
+    }
+    return out;
+  }
+
+  private buildSpecialistDetails(
+    payload: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    if (payload.isSpecificSpecialistRequired !== undefined) {
+      out.isSpecificSpecialistRequired = payload.isSpecificSpecialistRequired;
+    }
+    if (payload.specialistCategory !== undefined) {
+      out.specialistCategory = payload.specialistCategory;
+    }
+    if (payload.specialistReport !== undefined) {
+      out.specialistReport = payload.specialistReport;
+    }
+    if (payload.specialistBusinessName !== undefined) {
+      out.specialistBusinessName = payload.specialistBusinessName;
+    }
+    if (payload.locationOfDamage !== undefined) {
+      out.locationOfDamage = payload.locationOfDamage;
+    }
+    if (payload.typeOfDamage !== undefined) {
+      out.typeOfDamage = payload.typeOfDamage;
+    }
+    return out;
+  }
+
+  private buildRectificationDetails(
+    payload: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    if (payload.originalJobReference !== undefined) {
+      out.originalJobReference = payload.originalJobReference;
+    }
+    if (payload.originalJobType !== undefined) {
+      out.originalJobType = payload.originalJobType;
+    }
+    if (payload.paidJob !== undefined) {
+      out.paidJob = payload.paidJob;
+    }
+    return out;
+  }
+
+  private buildAuditDetails(
+    payload: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    if (payload.auditType !== undefined) {
+      out.auditType = payload.auditType;
+    }
+    return out;
+  }
+
+  private buildMobilityConsiderations(
+    payload: Record<string, unknown>,
+  ): Array<{ name?: string; externalReference?: string }> {
+    const raw = payload.mobilityConsiderations;
+    if (!Array.isArray(raw)) return [];
+    const out: Array<{ name?: string; externalReference?: string }> = [];
+    for (const entry of raw) {
+      if (!isPlainObject(entry)) continue;
+      const name = asString(entry.name) ?? undefined;
+      const externalReference = asString(entry.externalReference) ?? undefined;
+      if (name || externalReference) {
+        out.push({ name, externalReference });
+      }
+    }
+    return out;
   }
 }

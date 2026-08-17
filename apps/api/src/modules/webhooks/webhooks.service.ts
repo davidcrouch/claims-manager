@@ -48,9 +48,9 @@ export class WebhooksService implements OnModuleInit {
       return null;
     }
 
-    const connection = await this.connectionsRepo.findByTenantIdAndClient({
-      providerTenantId: params.payloadTenantId,
-      clientIdentifier: params.payloadClient,
+    const connection = await this.connectionResolver.resolveForWebhook({
+      payloadTenantId: params.payloadTenantId,
+      payloadClient: params.payloadClient,
     });
 
     if (!connection) {

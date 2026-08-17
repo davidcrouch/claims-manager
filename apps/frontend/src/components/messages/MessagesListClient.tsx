@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
@@ -15,6 +16,7 @@ import {
   TableEmptyRow,
   commitColumnFilterSelection,
   buildColumnFilterOptions,
+  columnFilterKey,
   type SortOption,
 } from '@/components/shared/list-filters';
 import {
@@ -22,7 +24,12 @@ import {
   useColumnVisibility,
   type ColumnVisibilityDef,
 } from '@/components/shared/column-visibility';
-import type { Job, Claim } from '@/types/api';
+import { TablePagination } from '@/components/shared/table-pagination';
+import { formatDateTime } from '@/components/shared/detail';
+import { resolveJobName } from '@/components/shared/job-label';
+import { MessageDetailDrawer } from '@/components/messages/MessageDetailDrawer';
+import { fetchMessagesAction } from '@/app/(app)/messages/actions';
+import type { Job, Claim, Message } from '@/types/api';
 
 const SORT_OPTIONS: SortOption[] = [
   { key: 'created_at', label: 'Date' },
@@ -46,6 +53,37 @@ const MESSAGES_COLUMNS: ColumnVisibilityDef[] = [
   { key: 'attachments', label: 'Attachments' },
 ];
 
+function messageSender(message: Message): string {
+  const payload = message.messagePayload ?? {};
+  const createdBy = payload.createdBy as Record<string, unknown> | undefined;
+  const createdByUser = payload.createdByUser as Record<string, unknown> | undefined;
+  return (
+    (createdByUser?.name as string | undefined)?.trim() ||
+    (createdBy?.name as string | undefined)?.trim() ||
+    message.createdByUserId ||
+    'System'
+  );
+}
+
+function messageRecipient(message: Message): string {
+  const payload = message.messagePayload ?? {};
+  const toUser = payload.toUser as Record<string, unknown> | undefined;
+  return (toUser?.name as string | undefined)?.trim() || '—';
+}
+
+function messageJobId(message: Message): string | null {
+  return message.toJobId ?? message.fromJobId ?? null;
+}
+
+function messageStatusLabel(message: Message): 'Read' | 'Unread' {
+  if (message.acknowledgementRequired && !message.acknowledgedAt) return 'Unread';
+  return 'Read';
+}
+
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 export function MessagesListClient({
   job,
   parentClaim,
@@ -55,6 +93,12 @@ export function MessagesListClient({
   parentClaim?: Claim | null;
   jobNameById?: Record<string, string>;
 } = {}) {
+  const searchParams = useSearchParams();
+  const jobId = searchParams.get('jobId') ?? job?.id ?? undefined;
+
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [sortField, setSortField] = useState('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -67,27 +111,71 @@ export function MessagesListClient({
   const [toFilterActive, setToFilterActive] = useState(false);
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [statusFilterActive, setStatusFilterActive] = useState(false);
+  const [page, setPage] = useState(1);
+  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const limit = 20;
   const { isVisible, toggle, visibleCount } = useColumnVisibility(
     'messages',
     MESSAGES_COLUMNS,
   );
 
+  const openMessage = (message: Message) => {
+    setSelectedMessage(message);
+    setDetailOpen(true);
+  };
+
+  const handleDetailOpenChange = (open: boolean) => {
+    setDetailOpen(open);
+    if (!open) setSelectedMessage(null);
+  };
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetchMessagesAction({
+        page,
+        limit,
+        jobId,
+      });
+      setMessages(res.data);
+      setTotal(res.total);
+    } finally {
+      setLoading(false);
+    }
+  }, [page, jobId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, sortField, sortOrder, jobId, readFilter]);
+
   const uniqueJobs = useMemo(
     () =>
-      buildColumnFilterOptions(Object.values(jobNameById ?? {}), {
-        alwaysIncludeBlank: true,
-      }),
-    [jobNameById],
+      buildColumnFilterOptions(
+        messages.map((m) => resolveJobName(messageJobId(m), jobNameById ?? {})),
+        { alwaysIncludeBlank: true },
+      ),
+    [messages, jobNameById],
   );
 
-  // Populated when message rows are connected; always offer Blank for empty cells.
   const uniqueFrom = useMemo(
-    () => buildColumnFilterOptions([], { alwaysIncludeBlank: true }),
-    [],
+    () =>
+      buildColumnFilterOptions(messages.map((m) => messageSender(m)), {
+        alwaysIncludeBlank: true,
+      }),
+    [messages],
   );
+
   const uniqueTo = useMemo(
-    () => buildColumnFilterOptions([], { alwaysIncludeBlank: true }),
-    [],
+    () =>
+      buildColumnFilterOptions(messages.map((m) => messageRecipient(m)), {
+        alwaysIncludeBlank: true,
+      }),
+    [messages],
   );
 
   const handleSort = (field: string) => {
@@ -135,13 +223,106 @@ export function MessagesListClient({
     setStatusFilterActive(committed.active);
   };
 
+  const visibleMessages = useMemo(() => {
+    let rows = [...messages];
+
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      rows = rows.filter((m) => {
+        const subject = (m.subject ?? '').toLowerCase();
+        const body = stripHtml(m.body ?? '').toLowerCase();
+        const from = messageSender(m).toLowerCase();
+        const jobName = resolveJobName(messageJobId(m), jobNameById ?? {}).toLowerCase();
+        return (
+          subject.includes(q) ||
+          body.includes(q) ||
+          from.includes(q) ||
+          jobName.includes(q)
+        );
+      });
+    }
+
+    if (readFilter.size > 0) {
+      rows = rows.filter((m) => {
+        const status = messageStatusLabel(m).toLowerCase();
+        return readFilter.has(status);
+      });
+    }
+
+    if (jobFilterActive) {
+      if (jobFilter.size === 0) {
+        rows = [];
+      } else {
+        rows = rows.filter((m) =>
+          jobFilter.has(
+            columnFilterKey(resolveJobName(messageJobId(m), jobNameById ?? {})),
+          ),
+        );
+      }
+    }
+
+    if (fromFilterActive) {
+      if (fromFilter.size === 0) {
+        rows = [];
+      } else {
+        rows = rows.filter((m) => fromFilter.has(columnFilterKey(messageSender(m))));
+      }
+    }
+
+    if (toFilterActive) {
+      if (toFilter.size === 0) {
+        rows = [];
+      } else {
+        rows = rows.filter((m) =>
+          toFilter.has(columnFilterKey(messageRecipient(m))),
+        );
+      }
+    }
+
+    if (statusFilterActive) {
+      if (statusFilter.size === 0) {
+        rows = [];
+      } else {
+        rows = rows.filter((m) => statusFilter.has(messageStatusLabel(m)));
+      }
+    }
+
+    rows.sort((a, b) => {
+      let cmp = 0;
+      if (sortField === 'subject') {
+        cmp = (a.subject ?? '').localeCompare(b.subject ?? '');
+      } else {
+        cmp = (a.createdAt ?? '').localeCompare(b.createdAt ?? '');
+      }
+      return sortOrder === 'asc' ? cmp : -cmp;
+    });
+
+    return rows;
+  }, [
+    messages,
+    search,
+    readFilter,
+    jobFilterActive,
+    jobFilter,
+    fromFilterActive,
+    fromFilter,
+    toFilterActive,
+    toFilter,
+    statusFilterActive,
+    statusFilter,
+    sortField,
+    sortOrder,
+    jobNameById,
+  ]);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
       <SetPageHeader>
         <EntityPageHeader
           icon={MessageSquare}
           title="Messages"
-          total={0}
+          total={total}
+          showing={visibleMessages.length}
           accent="slate"
           job={job}
           parentClaim={parentClaim}
@@ -283,14 +464,107 @@ export function MessagesListClient({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              <TableEmptyRow
-                colSpan={visibleCount + 1 + 1}
-                label="No messages yet. Messages will appear here once the communications API is connected."
-              />
+              {loading ? (
+                <TableEmptyRow
+                  colSpan={visibleCount + 1 + 1}
+                  label="Loading messages…"
+                />
+              ) : visibleMessages.length === 0 ? (
+                <TableEmptyRow
+                  colSpan={visibleCount + 1 + 1}
+                  label="No messages found."
+                />
+              ) : (
+                visibleMessages.map((message) => {
+                  const jobLabel = resolveJobName(
+                    messageJobId(message),
+                    jobNameById ?? {},
+                  );
+                  const status = messageStatusLabel(message);
+                  const preview = stripHtml(message.body ?? '').slice(0, 80);
+                  return (
+                    <tr
+                      key={message.id}
+                      className="cursor-pointer hover:bg-slate-50/80"
+                      onClick={() => openMessage(message)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          openMessage(message);
+                        }
+                      }}
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`Open message: ${message.subject || 'No subject'}`}
+                    >
+                      {isVisible('job') && (
+                        <td className="px-4 py-3 text-slate-700">{jobLabel || '—'}</td>
+                      )}
+                      {isVisible('subject') && (
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-slate-900">
+                            {message.subject || '(No subject)'}
+                          </div>
+                          {preview && (
+                            <div className="mt-0.5 text-xs text-slate-500 truncate max-w-md">
+                              {preview}
+                            </div>
+                          )}
+                        </td>
+                      )}
+                      {isVisible('from') && (
+                        <td className="px-4 py-3 text-slate-700">
+                          {messageSender(message)}
+                        </td>
+                      )}
+                      {isVisible('to') && (
+                        <td className="px-4 py-3 text-slate-700">
+                          {messageRecipient(message)}
+                        </td>
+                      )}
+                      {isVisible('date') && (
+                        <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
+                          {formatDateTime(message.createdAt)}
+                        </td>
+                      )}
+                      {isVisible('status') && (
+                        <td className="px-4 py-3">
+                          <span
+                            className={
+                              status === 'Unread'
+                                ? 'inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700'
+                                : 'inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600'
+                            }
+                          >
+                            {status}
+                          </span>
+                        </td>
+                      )}
+                      {isVisible('attachments') && (
+                        <td className="px-4 py-3 text-slate-500">—</td>
+                      )}
+                      <td className="px-4 py-3 text-slate-500">—</td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
+          <TablePagination
+            page={page}
+            pageSize={limit}
+            total={total}
+            onPageChange={setPage}
+          />
         </div>
       </div>
+
+      <MessageDetailDrawer
+        open={detailOpen}
+        onOpenChange={handleDetailOpenChange}
+        message={selectedMessage}
+        jobNameById={jobNameById}
+      />
     </div>
   );
 }

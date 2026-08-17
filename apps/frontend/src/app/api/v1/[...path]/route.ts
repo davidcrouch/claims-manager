@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getApiBaseUrl } from '@/lib/env';
 import { getUpstreamApiAuth } from '@/lib/upstream-api';
+import {
+  fetchWithTransientRetry,
+  isTransientNetworkError,
+} from '@/lib/transient-network';
 
 const LOG = 'frontend:api:v1-proxy';
 
@@ -34,7 +38,9 @@ async function proxy(req: NextRequest, pathSegments: string[]): Promise<NextResp
   }
 
   try {
-    const upstream = await fetch(upstreamUrl, init);
+    const upstream = await fetchWithTransientRetry(upstreamUrl, init, {
+      logLabel: LOG,
+    });
     const contentType = upstream.headers.get('content-type') ?? '';
 
     if (
@@ -64,6 +70,7 @@ async function proxy(req: NextRequest, pathSegments: string[]): Promise<NextResp
   } catch (err) {
     console.error(`${LOG} — upstream failed`, {
       url: upstreamUrl,
+      transient: isTransientNetworkError(err),
       error: err instanceof Error ? err.message : err,
     });
     return NextResponse.json(

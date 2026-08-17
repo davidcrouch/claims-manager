@@ -5,11 +5,20 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
-import { MessageSquare } from 'lucide-react';
+import { useEditor, EditorContent } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import Placeholder from '@tiptap/extension-placeholder';
+import {
+  MessageSquare,
+  Bold,
+  Italic,
+  List,
+  ListOrdered,
+  Strikethrough,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   BottomFormDrawer,
   BottomFormDrawerBody,
@@ -17,10 +26,10 @@ import {
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
 import { createMessageAction } from '@/app/(app)/jobs/[id]/actions';
+import { cn } from '@/lib/utils';
 
 const messageFormSchema = z.object({
   subject: z.string().min(1, 'Subject is required'),
-  body: z.string().min(1, 'Message body is required'),
 });
 
 type MessageFormValues = z.infer<typeof messageFormSchema>;
@@ -30,6 +39,64 @@ export interface MessageFormDrawerProps {
   onOpenChange: (open: boolean) => void;
   jobId: string;
   claimId?: string | null;
+}
+
+function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> | null }) {
+  if (!editor) return null;
+
+  const btnClass = (active: boolean) =>
+    cn(
+      'inline-flex h-7 w-7 items-center justify-center rounded transition-colors',
+      active
+        ? 'bg-slate-200 text-slate-900'
+        : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700',
+    );
+
+  return (
+    <div className="flex items-center gap-0.5 border-b border-slate-200 px-2 py-1.5">
+      <button
+        type="button"
+        onClick={() => editor.chain().focus().toggleBold().run()}
+        className={btnClass(editor.isActive('bold'))}
+        title="Bold"
+      >
+        <Bold className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={() => editor.chain().focus().toggleItalic().run()}
+        className={btnClass(editor.isActive('italic'))}
+        title="Italic"
+      >
+        <Italic className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={() => editor.chain().focus().toggleStrike().run()}
+        className={btnClass(editor.isActive('strike'))}
+        title="Strikethrough"
+      >
+        <Strikethrough className="h-3.5 w-3.5" />
+      </button>
+      <div className="mx-1 h-4 w-px bg-slate-200" />
+      <button
+        type="button"
+        onClick={() => editor.chain().focus().toggleBulletList().run()}
+        className={btnClass(editor.isActive('bulletList'))}
+        title="Bullet list"
+      >
+        <List className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={() => editor.chain().focus().toggleOrderedList().run()}
+        className={btnClass(editor.isActive('orderedList'))}
+        title="Numbered list"
+      >
+        <ListOrdered className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
 }
 
 export function MessageFormDrawer({
@@ -46,11 +113,43 @@ export function MessageFormDrawer({
     resolver: standardSchemaResolver(messageFormSchema),
     defaultValues: {
       subject: '',
-      body: '',
+    },
+  });
+
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        heading: false,
+        codeBlock: false,
+        code: false,
+        horizontalRule: false,
+      }),
+      Placeholder.configure({
+        placeholder: 'Compose your message...',
+        emptyEditorClass: 'is-editor-empty',
+      }),
+    ],
+    content: '',
+    immediatelyRender: false,
+    editorProps: {
+      attributes: {
+        class: cn(
+          'min-h-[160px] max-h-[40vh] overflow-y-auto px-3 py-2 text-sm focus:outline-none',
+          'prose prose-sm max-w-none prose-p:my-1 prose-p:leading-relaxed',
+          'prose-ul:my-1 prose-ol:my-1 prose-li:my-0',
+        ),
+      },
     },
   });
 
   async function onSubmit(values: MessageFormValues) {
+    const body = editor?.getHTML() ?? '';
+    const textContent = editor?.getText()?.trim() ?? '';
+    if (!textContent) {
+      setError('Message body is required');
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
     try {
@@ -59,11 +158,12 @@ export function MessageFormDrawer({
         ...(claimId ? { fromClaimId: claimId, toClaimId: claimId } : {}),
         toJobId: jobId,
         subject: values.subject,
-        body: values.body,
+        text: body,
       });
       if (result.success) {
         onOpenChange(false);
         form.reset();
+        editor?.commands.clearContent();
         router.refresh();
       } else {
         setError(result.error ?? 'Failed to send message');
@@ -80,7 +180,7 @@ export function MessageFormDrawer({
       open={open}
       onOpenChange={onOpenChange}
       title="Send Message"
-      description="Send a message related to this job. Include a clear subject and body."
+      description="Compose and send a message related to this job."
       icon={<MessageSquare className="h-5 w-5" />}
     >
       <form
@@ -88,7 +188,7 @@ export function MessageFormDrawer({
         className="flex min-h-0 flex-1 flex-col"
       >
         <BottomFormDrawerBody>
-          <div className="grid grid-cols-1 gap-x-6 gap-y-5">
+          <div className="grid grid-cols-1 gap-x-6 gap-y-4">
             <div className="space-y-2">
               <Label htmlFor="subject">Subject</Label>
               <Input
@@ -104,18 +204,11 @@ export function MessageFormDrawer({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="body">Message</Label>
-              <Textarea
-                id="body"
-                {...form.register('body')}
-                placeholder="Enter your message..."
-                rows={6}
-              />
-              {form.formState.errors.body && (
-                <p className="text-sm text-destructive">
-                  {form.formState.errors.body.message}
-                </p>
-              )}
+              <Label>Message</Label>
+              <div className="rounded-md border border-input bg-background focus-within:ring-1 focus-within:ring-ring">
+                <EditorToolbar editor={editor} />
+                <EditorContent editor={editor} />
+              </div>
             </div>
           </div>
 
@@ -136,6 +229,15 @@ export function MessageFormDrawer({
           </Button>
         </BottomFormDrawerFooter>
       </form>
+      <style>{`
+        .ProseMirror p.is-editor-empty:first-child::before {
+          color: #94a3b8;
+          content: attr(data-placeholder);
+          float: left;
+          height: 0;
+          pointer-events: none;
+        }
+      `}</style>
     </BottomFormDrawer>
   );
 }

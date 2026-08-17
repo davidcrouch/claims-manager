@@ -2,25 +2,27 @@ import { redirect } from 'next/navigation';
 import { getSession, getAccessToken } from '@/lib/auth';
 import { getApiBaseUrl } from '@/lib/env';
 import { cloudRunInvokerHeaders } from '@/lib/cloud-run-id-token';
+import { fetchWithTransientRetry } from '@/lib/transient-network';
 import { AppLayoutClient } from '@/components/layout/AppLayoutClient';
 import { ProvisioningScreen } from '@/components/provisioning/ProvisioningScreen';
-
-/** Short TTL so nav feels snappy; provisioning/org name rarely change mid-session. */
-const LAYOUT_FETCH_REVALIDATE_SECONDS = 60;
 
 async function checkProvisioningStatus(
   token: string,
   tenantId: string,
 ): Promise<'complete' | 'pending' | 'provisioning' | 'failed' | null> {
   try {
-    const res = await fetch(`${getApiBaseUrl()}/provisioning/status`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
-        ...(await cloudRunInvokerHeaders()),
+    const res = await fetchWithTransientRetry(
+      `${getApiBaseUrl()}/provisioning/status`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
+          ...(await cloudRunInvokerHeaders()),
+        },
+        cache: 'no-store',
       },
-      next: { revalidate: LAYOUT_FETCH_REVALIDATE_SECONDS },
-    });
+      { logLabel: 'frontend:AppLayout:checkProvisioningStatus' },
+    );
     if (!res.ok) {
       console.warn(
         `frontend:AppLayout:checkProvisioningStatus — failed status=${res.status} tenantId=${tenantId}`,
@@ -44,14 +46,18 @@ async function fetchOrgName(
 ): Promise<string | null> {
   const LOG = 'frontend:AppLayout:fetchOrgName';
   try {
-    const res = await fetch(`${getApiBaseUrl()}/organisations/me`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
-        ...(await cloudRunInvokerHeaders()),
+    const res = await fetchWithTransientRetry(
+      `${getApiBaseUrl()}/organisations/me`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
+          ...(await cloudRunInvokerHeaders()),
+        },
+        cache: 'no-store',
       },
-      next: { revalidate: LAYOUT_FETCH_REVALIDATE_SECONDS },
-    });
+      { logLabel: LOG },
+    );
     if (!res.ok) {
       console.warn(`${LOG} — failed status=${res.status} tenantId=${tenantId}`);
       return null;

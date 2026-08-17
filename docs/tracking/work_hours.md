@@ -810,3 +810,13 @@
   Kept the reset flow tied to the active sign-in session when one exists.
   Tidied the main app header, sidebar, and shell layout behaviour.
   Outcome: smoother password reset and cleaner app chrome (no charge).
+
+- `2026-08-17` `PENDING` **7.5 h**
+  `72 files | +4302 −3412 | Tier 2 standard / Tier 3 complex / Tier 4 deep | Heavy orchestration`
+  Lay summary: Unified how external updates land in the app, improved messages and schedule, and made connection health easier to see.
+  Replaced the old per-entity external mappers with a single projection path for inbound updates.
+  Added connection identifiers and webhook admin/sweep tooling so sync issues are easier to find and clear.
+  Expanded schedule event data and calendar behaviour so appointments link and display more reliably.
+  Improved messages across entity screens, including detail viewing, composing, and shared message/attachment tabs.
+  Added upstream API health monitoring so users get clearer feedback when the backend is unreachable.
+  Documented webhook projection unification and event-type coverage for operators and future work.

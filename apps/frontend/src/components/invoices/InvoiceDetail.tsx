@@ -45,6 +45,7 @@ import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
 import { groupsFromDocumentPayload } from '@/components/quotes/quote-line-items.utils';
 import { getPurchaseOrderLineItemsAction } from '@/app/(app)/purchase-orders/actions';
 import { getWorkOrderLineItemsAction } from '@/app/(app)/work-orders/actions';
+import { EntityAttachmentsTab } from '@/components/shared/EntityAttachmentsTab';
 import {
   InvoicePublishWizard,
   type InvoicePublishMode,
@@ -397,21 +398,6 @@ function CommunicationsTab() {
   );
 }
 
-function AttachmentsTab() {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Attachments</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">
-          Supporting documents attached to this invoice will appear here once
-          the attachments API is connected.
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
 
 function TimelineTab({ invoice }: { invoice: Invoice }) {
   return (
@@ -479,7 +465,7 @@ export function InvoiceDetail({ invoice }: { invoice: Invoice }) {
         {tab === 'line-items' && <LineItemsTab invoice={invoice} />}
         {tab === 'activities' && <ActivitiesTab />}
         {tab === 'communications' && <CommunicationsTab />}
-        {tab === 'attachments' && <AttachmentsTab />}
+        {tab === 'attachments' && <EntityAttachmentsTab entityId={invoice.id} relatedRecordType="Invoice" entityLabel="this invoice" />}
         {tab === 'journals' && (
           <JournalList
             entityType="Invoice"

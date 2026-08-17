@@ -86,6 +86,11 @@ export {
   type IntegrationConnectionInsert,
 } from './integration-connections.repository';
 export {
+  ConnectionIdentifiersRepository,
+  type ConnectionIdentifierRow,
+  type ConnectionIdentifierInsert,
+} from './connection-identifiers.repository';
+export {
   ExternalObjectsRepository,
   type ExternalObjectRow,
   type ExternalObjectInsert,

@@ -73,7 +73,7 @@ import {
   linkJournalAction,
   unlinkJournalAction,
 } from '@/app/(app)/journals/actions';
-import { QuoteAttachmentsTab } from '@/components/quotes/QuoteAttachmentsTab';
+import { EntityAttachmentsTab } from '@/components/shared/EntityAttachmentsTab';
 import {
   EstimatePublishWizard,
   type EstimatePublishMode,
@@ -570,7 +570,7 @@ export function QuoteDetail({
         {tab === 'activities' && <ActivitiesTab />}
         {tab === 'communications' && <CommunicationsTab />}
         {tab === 'timeline' && <TimelineTab quote={quote} />}
-        {tab === 'attachments' && <QuoteAttachmentsTab quoteId={quote.id} />}
+        {tab === 'attachments' && <EntityAttachmentsTab entityId={quote.id} relatedRecordType="Quote" entityLabel="this estimate" />}
         {tab === 'journals' && (
           <JournalList
             entityType="Quote"

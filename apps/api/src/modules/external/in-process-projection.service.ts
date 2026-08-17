@@ -1,11 +1,10 @@
-import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   ExternalObjectsRepository,
   ExternalProcessingLogRepository,
   InboundWebhookEventsRepository,
 } from '../../database/repositories';
 import { DRIZZLE, type DrizzleDB } from '../../database/drizzle.module';
-import { EntityMapperRegistry } from './entity-mapper.registry';
 import { UseCaseRegistry } from '../domain/use-cases/use-case.registry';
 
 export type InProcessProjectionOutcome =
@@ -27,7 +26,7 @@ export type InProcessProjectionOutcome =
 /**
  * InProcessProjectionService collapses, in one atomic TX, the work that
  * More0's workflow would otherwise do via /api/v1/tools/mappers/:entityType
- * and /api/v1/tools/processing-log/update. Reuses the EntityMapper registry.
+ * and /api/v1/tools/processing-log/update. Uses the domain UseCaseRegistry.
  */
 @Injectable()
 export class InProcessProjectionService {
@@ -35,11 +34,10 @@ export class InProcessProjectionService {
 
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
-    private readonly mapperRegistry: EntityMapperRegistry,
+    private readonly useCaseRegistry: UseCaseRegistry,
     private readonly externalObjectsRepo: ExternalObjectsRepository,
     private readonly processingLogRepo: ExternalProcessingLogRepository,
     private readonly webhookRepo: InboundWebhookEventsRepository,
-    @Optional() private readonly useCaseRegistry?: UseCaseRegistry,
   ) {}
 
   async run(params: {
@@ -55,15 +53,11 @@ export class InProcessProjectionService {
       `${logPrefix} — entity=${params.providerEntityType} externalObjectId=${params.externalObjectId} webhookEventId=${params.webhookEventId}`,
     );
 
-    // Try domain use case first, fall back to legacy mapper
-    const useCase = this.useCaseRegistry?.get(params.providerEntityType);
-    const mapper = useCase
-      ? undefined
-      : this.mapperRegistry.get({ entityType: params.providerEntityType });
+    const useCase = this.useCaseRegistry.get(params.providerEntityType);
 
-    if (!useCase && !mapper) {
+    if (!useCase) {
       this.logger.warn(
-        `${logPrefix} — no use case or mapper registered for entityType=${params.providerEntityType}; marking skipped_no_mapper`,
+        `${logPrefix} — no use case registered for entityType=${params.providerEntityType}; marking skipped_no_mapper`,
       );
       await this.processingLogRepo.updateStatus({
         id: params.processingLogId,
@@ -95,40 +89,24 @@ export class InProcessProjectionService {
     }
 
     return this.db.transaction(async (tx) => {
-      let result: { internalEntityId: string; internalEntityType: string; skipped?: string; metadata?: Record<string, unknown> };
+      const ucResult = await useCase.execute({
+        externalObject: externalObject as unknown as Record<string, unknown>,
+        tenantId: params.tenantId,
+        connectionId: params.connectionId,
+        tx,
+      });
 
-      if (useCase) {
-        const ucResult = await useCase.execute({
-          externalObject: externalObject as unknown as Record<string, unknown>,
-          tenantId: params.tenantId,
-          connectionId: params.connectionId,
-          tx,
-        });
-
-        result = {
-          internalEntityId: ucResult.internalEntityId,
-          internalEntityType: ucResult.internalEntityType,
-          skipped: ucResult.status === 'skipped' ? ucResult.reason : undefined,
-        };
-      } else {
-        result = await mapper!.map({
-          externalObject: externalObject as unknown as Record<string, unknown>,
-          tenantId: params.tenantId,
-          connectionId: params.connectionId,
-          tx,
-        });
-      }
-
-      if (result.skipped) {
+      if (ucResult.status === 'skipped') {
+        const reason = ucResult.reason ?? 'skipped';
         this.logger.warn(
-          `${logPrefix} — mapper reported skipped=${result.skipped} for entity=${params.providerEntityType}`,
+          `${logPrefix} — use case reported skipped=${reason} for entity=${params.providerEntityType}`,
         );
         await this.processingLogRepo.updateStatus({
           id: params.processingLogId,
-          status: result.skipped,
+          status: reason,
           completedAt: new Date(),
           externalObjectId: params.externalObjectId,
-          metadata: { orchestratorRoute: 'inproc', reason: result.skipped },
+          metadata: { orchestratorRoute: 'inproc', reason },
           tx,
         });
         await this.webhookRepo.updateProcessingStatus({
@@ -139,8 +117,8 @@ export class InProcessProjectionService {
         });
         return {
           status: 'skipped' as const,
-          reason: result.skipped,
-          internalEntityType: result.internalEntityType,
+          reason,
+          internalEntityType: ucResult.internalEntityType,
         };
       }
 
@@ -151,8 +129,8 @@ export class InProcessProjectionService {
         externalObjectId: params.externalObjectId,
         metadata: {
           orchestratorRoute: 'inproc',
-          internalEntityType: result.internalEntityType,
-          internalEntityId: result.internalEntityId,
+          internalEntityType: ucResult.internalEntityType,
+          internalEntityId: ucResult.internalEntityId,
         },
         tx,
       });
@@ -166,9 +144,8 @@ export class InProcessProjectionService {
 
       return {
         status: 'completed' as const,
-        internalEntityType: result.internalEntityType,
-        internalEntityId: result.internalEntityId,
-        metadata: result.metadata,
+        internalEntityType: ucResult.internalEntityType,
+        internalEntityId: ucResult.internalEntityId,
       };
     });
   }

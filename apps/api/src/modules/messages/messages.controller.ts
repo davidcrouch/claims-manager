@@ -14,6 +14,7 @@ export class MessagesController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('jobId') jobId?: string,
+    @Query('claimId') claimId?: string,
     @Query('fromJobId') fromJobId?: string,
     @Query('toJobId') toJobId?: string,
   ) {
@@ -21,6 +22,7 @@ export class MessagesController {
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
       jobId,
+      claimId,
       fromJobId,
       toJobId,
     });

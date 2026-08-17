@@ -73,4 +73,6 @@ export default registerAs('webhook', () => ({
     process.env.WEBHOOK_MAX_PARENT_RETRY_ATTEMPTS,
     5,
   ),
+  sweepEnabled: parseBool(process.env.WEBHOOK_SWEEP_ENABLED, true),
+  sweepIntervalMs: parseInt32(process.env.WEBHOOK_SWEEP_INTERVAL_MS, 30_000),
 }));

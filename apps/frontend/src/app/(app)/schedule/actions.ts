@@ -17,6 +17,7 @@ export async function fetchScheduleEventsAction(params: {
   to: string;
   eventType?: string;
   jobId?: string;
+  mine?: boolean;
   limit?: number;
 }): Promise<{ data: ScheduleEvent[]; total: number }> {
   const api = await getApi();

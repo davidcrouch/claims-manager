@@ -9,6 +9,7 @@ import {
   Mail,
   FileBarChart,
   Info,
+  Paperclip,
   Save,
   Plus,
 } from 'lucide-react';
@@ -25,6 +26,7 @@ import { JobPartiesTab } from './tabs/JobPartiesTab';
 import { JobCommunicationsTab } from './tabs/JobCommunicationsTab';
 import { JobReportsTab } from './tabs/JobReportsTab';
 import { JobTimelineTab } from './tabs/JobTimelineTab';
+import { EntityAttachmentsTab } from '@/components/shared/EntityAttachmentsTab';
 import { hasTypeDetails } from './util/jobType';
 import { updateJobFieldsAction } from '@/app/(app)/jobs/[id]/actions';
 import type { LookupOption } from './job-edit.types';
@@ -36,6 +38,7 @@ const VALID_TABS = [
   'parties',
   'communications',
   'reports',
+  'attachments',
   'timeline',
 ] as const;
 
@@ -185,6 +188,7 @@ export function JobDetail({
     { id: 'parties', label: 'Parties', icon: Users },
     { id: 'communications', label: 'Communications', icon: Mail },
     { id: 'reports', label: 'Reports', icon: FileBarChart },
+    { id: 'attachments', label: 'Attachments', icon: Paperclip },
     { id: 'timeline', label: 'Timeline', icon: Clock },
   ];
 
@@ -346,7 +350,10 @@ export function JobDetail({
           />
         )}
         {activeTab === 'communications' && (
-          <JobCommunicationsTab jobId={job.id} />
+          <JobCommunicationsTab jobId={job.id} claimId={claimId} />
+        )}
+        {activeTab === 'attachments' && (
+          <EntityAttachmentsTab entityId={job.id} relatedRecordType="Job" entityLabel="this job" />
         )}
         {activeTab === 'timeline' && <JobTimelineTab job={job} />}
       </div>

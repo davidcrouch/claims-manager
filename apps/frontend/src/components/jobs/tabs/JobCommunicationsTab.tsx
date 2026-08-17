@@ -1,42 +1,31 @@
 'use client';
 
-import { Mail } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState } from 'react';
+import { EntityMessagesTab } from '@/components/shared/EntityMessagesTab';
+import { MessageFormDrawer } from '@/components/forms/MessageFormDrawer';
 
-export function JobCommunicationsTab({ jobId }: { jobId: string }) {
-  void jobId;
+export function JobCommunicationsTab({
+  jobId,
+  claimId,
+}: {
+  jobId: string;
+  claimId?: string | null;
+}) {
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <Mail className="h-4 w-4 text-muted-foreground" />
-            Email Correspondence
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Email correspondence will appear here once the communications API is
-            connected.
-          </p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <Mail className="h-4 w-4 text-muted-foreground" />
-            Shared Email Correspondence
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Shared email correspondence will appear here once the
-            communications API is connected.
-          </p>
-        </CardContent>
-      </Card>
+      <EntityMessagesTab
+        entityId={jobId}
+        entityType="job"
+        onSendMessage={() => setDrawerOpen(true)}
+      />
+      <MessageFormDrawer
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        jobId={jobId}
+        claimId={claimId}
+      />
     </div>
   );
 }

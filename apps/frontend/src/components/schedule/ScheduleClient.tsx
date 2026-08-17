@@ -8,6 +8,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { EntityPageHeader } from '@/components/shared/EntityPageHeader';
 import { fetchScheduleEventsAction } from '@/app/(app)/schedule/actions';
@@ -30,22 +31,50 @@ const VIEW_LABELS: Record<ViewMode, string> = {
 const EVENT_COLORS: Record<ScheduleEventType, { dot: string; bg: string; text: string }> = {
   appointment:    { dot: 'bg-blue-500',    bg: 'bg-blue-50 border-blue-200',    text: 'text-blue-700' },
   task:           { dot: 'bg-amber-500',   bg: 'bg-amber-50 border-amber-200',  text: 'text-amber-700' },
-  work_order:     { dot: 'bg-purple-500',  bg: 'bg-purple-50 border-purple-200', text: 'text-purple-700' },
-  purchase_order: { dot: 'bg-emerald-500', bg: 'bg-emerald-50 border-emerald-200', text: 'text-emerald-700' },
-  rfq:            { dot: 'bg-cyan-500',    bg: 'bg-cyan-50 border-cyan-200',    text: 'text-cyan-700' },
-  bill:           { dot: 'bg-rose-500',    bg: 'bg-rose-50 border-rose-200',    text: 'text-rose-700' },
+  message:        { dot: 'bg-sky-500',     bg: 'bg-sky-50 border-sky-200',      text: 'text-sky-700' },
+  claim:          { dot: 'bg-orange-500',  bg: 'bg-orange-50 border-orange-200', text: 'text-orange-700' },
+  job:            { dot: 'bg-teal-500',    bg: 'bg-teal-50 border-teal-200',    text: 'text-teal-700' },
   quote:          { dot: 'bg-indigo-500',  bg: 'bg-indigo-50 border-indigo-200', text: 'text-indigo-700' },
+  work_order:     { dot: 'bg-purple-500',  bg: 'bg-purple-50 border-purple-200', text: 'text-purple-700' },
+  invoice:        { dot: 'bg-lime-600',    bg: 'bg-lime-50 border-lime-200',    text: 'text-lime-800' },
+  journal:        { dot: 'bg-stone-500',   bg: 'bg-stone-50 border-stone-200',  text: 'text-stone-700' },
+  assessment:     { dot: 'bg-fuchsia-500', bg: 'bg-fuchsia-50 border-fuchsia-200', text: 'text-fuchsia-700' },
+  rfq:            { dot: 'bg-cyan-500',    bg: 'bg-cyan-50 border-cyan-200',    text: 'text-cyan-700' },
+  proposal:       { dot: 'bg-violet-500',  bg: 'bg-violet-50 border-violet-200', text: 'text-violet-700' },
+  purchase_order: { dot: 'bg-emerald-500', bg: 'bg-emerald-50 border-emerald-200', text: 'text-emerald-700' },
+  bill:           { dot: 'bg-rose-500',    bg: 'bg-rose-50 border-rose-200',    text: 'text-rose-700' },
 };
 
 const EVENT_LABELS: Record<ScheduleEventType, string> = {
   appointment: 'Appointments',
   task: 'Tasks',
-  work_order: 'Work Orders',
-  purchase_order: 'Purchase Orders',
-  rfq: 'RFQs',
-  bill: 'Bills',
+  message: 'Messages',
+  claim: 'Claims',
+  job: 'Jobs',
   quote: 'Quotes',
+  work_order: 'Work Orders',
+  invoice: 'Invoices',
+  journal: 'Journals',
+  assessment: 'Assessments',
+  rfq: 'RFQs',
+  proposal: 'Proposals',
+  purchase_order: 'Purchase Orders',
+  bill: 'Bills',
 };
+
+/** Two header rows (no category labels). */
+const FILTER_ROWS: ScheduleEventType[][] = [
+  ['task', 'appointment', 'message', 'claim', 'job', 'quote', 'work_order'],
+  ['invoice', 'journal', 'assessment', 'rfq', 'proposal', 'purchase_order', 'bill'],
+];
+
+/** Enabled by default: tasks, appointments, claims, quotes. */
+const DEFAULT_ENABLED_TYPES: ScheduleEventType[] = [
+  'task',
+  'appointment',
+  'claim',
+  'quote',
+];
 
 function monthLabel(date: Date): string {
   return date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
@@ -244,22 +273,29 @@ export function ScheduleClient({ jobId, job, parentClaim }: { jobId?: string; jo
   const [view, setView] = useState<ViewMode>('month');
   const [cursor, setCursor] = useState(() => new Date());
   const [events, setEvents] = useState<ScheduleEvent[]>([]);
-  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [hiddenTypes, setHiddenTypes] = useState<Set<ScheduleEventType>>(new Set());
+  const [mineOnly, setMineOnly] = useState(false);
+  const [enabledTypes, setEnabledTypes] = useState<Set<ScheduleEventType>>(
+    () => new Set(DEFAULT_ENABLED_TYPES),
+  );
 
   const { from, to } = useMemo(() => getDateRange(cursor, view), [cursor, view]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetchScheduleEventsAction({ from, to, jobId, limit: 1000 });
+      const res = await fetchScheduleEventsAction({
+        from,
+        to,
+        jobId,
+        mine: mineOnly || undefined,
+        limit: 1000,
+      });
       setEvents(res.data);
-      setTotal(res.total);
     } finally {
       setLoading(false);
     }
-  }, [from, to, jobId]);
+  }, [from, to, jobId, mineOnly]);
 
   useEffect(() => {
     load();
@@ -274,14 +310,14 @@ export function ScheduleClient({ jobId, job, parentClaim }: { jobId?: string; jo
   );
 
   const filteredEvents = useMemo(
-    () => hiddenTypes.size === 0 ? events : events.filter((ev) => !hiddenTypes.has(ev.eventType)),
-    [events, hiddenTypes],
+    () => events.filter((ev) => enabledTypes.has(ev.eventType)),
+    [events, enabledTypes],
   );
 
   const eventMap = useMemo(() => buildEventMap(filteredEvents), [filteredEvents]);
 
   const toggleType = (type: ScheduleEventType) => {
-    setHiddenTypes((prev) => {
+    setEnabledTypes((prev) => {
       const next = new Set(prev);
       if (next.has(type)) next.delete(type);
       else next.add(type);
@@ -299,28 +335,24 @@ export function ScheduleClient({ jobId, job, parentClaim }: { jobId?: string; jo
   const cells = view === 'month' ? buildMonthGrid(cursor) : [];
   const curMonth = cursor.getMonth();
 
-  const visibleTypes = useMemo(() => {
-    const types = new Set<ScheduleEventType>();
-    for (const ev of events) types.add(ev.eventType);
-    return types;
-  }, [events]);
+  const hasVisibleEvents = filteredEvents.length > 0;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <SetPageHeader>
         <EntityPageHeader
           icon={Calendar}
           title="Schedule"
-          total={total}
+          total={filteredEvents.length}
           accent="slate"
           job={job}
           parentClaim={parentClaim}
         />
       </SetPageHeader>
 
-      <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+      <div className="shrink-0 px-6 pb-3 pt-1">
+        <div className="flex items-center gap-4">
+          <div className="flex shrink-0 items-center gap-2">
             <Button
               variant="outline"
               size="icon"
@@ -329,7 +361,7 @@ export function ScheduleClient({ jobId, job, parentClaim }: { jobId?: string; jo
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <h2 className="min-w-[200px] text-center text-sm font-semibold">
+            <h2 className="min-w-[180px] text-center text-sm font-semibold">
               {label}
             </h2>
             <Button
@@ -348,12 +380,65 @@ export function ScheduleClient({ jobId, job, parentClaim }: { jobId?: string; jo
             >
               Today
             </Button>
+            <div className="ml-3 flex items-center gap-2 border-l border-slate-200 pl-3">
+              <button
+                type="button"
+                onClick={() => setMineOnly(false)}
+                className={`text-xs font-medium transition-colors ${
+                  mineOnly ? 'text-slate-400 hover:text-slate-600' : 'text-slate-700'
+                }`}
+              >
+                All
+              </button>
+              <Switch
+                id="schedule-scope"
+                checked={mineOnly}
+                onCheckedChange={setMineOnly}
+                aria-label="Show only my work"
+              />
+              <button
+                type="button"
+                onClick={() => setMineOnly(true)}
+                className={`text-xs font-medium transition-colors ${
+                  mineOnly ? 'text-slate-700' : 'text-slate-400 hover:text-slate-600'
+                }`}
+              >
+                My Work
+              </button>
+            </div>
             {loading && (
               <span className="ml-2 text-xs text-slate-400">Loading…</span>
             )}
           </div>
 
-          <div className="flex items-center rounded-md border border-slate-200 bg-white p-1">
+          <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-1.5 text-xs">
+            {FILTER_ROWS.map((row, rowIdx) => (
+              <div key={rowIdx} className="flex flex-wrap items-center justify-center gap-1.5">
+                {row.map((type) => {
+                  const enabled = enabledTypes.has(type);
+                  const colors = EVENT_COLORS[type];
+                  return (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => toggleType(type)}
+                      aria-pressed={enabled}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-medium transition-colors ${
+                        enabled
+                          ? `${colors.bg} ${colors.text}`
+                          : 'border-slate-200 bg-white text-slate-400'
+                      }`}
+                    >
+                      <span className={`h-2 w-2 rounded-full ${enabled ? colors.dot : 'bg-slate-300'}`} />
+                      {EVENT_LABELS[type]}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+
+          <div className="flex shrink-0 items-center rounded-md border border-slate-200 bg-white p-1">
             {(['month', 'week', 'day'] as ViewMode[]).map((v) => (
               <button
                 key={v}
@@ -372,7 +457,7 @@ export function ScheduleClient({ jobId, job, parentClaim }: { jobId?: string; jo
         </div>
       </div>
 
-      <div className="flex-1 px-6 pb-6" style={{ minHeight: 0, overflow: 'auto' }}>
+      <div className="min-h-0 flex-1 overflow-auto px-6 pb-4">
         {view === 'month' && (
           <MonthView cells={cells} curMonth={curMonth} eventMap={eventMap} onSelect={handleEventSelect} />
         )}
@@ -386,33 +471,11 @@ export function ScheduleClient({ jobId, job, parentClaim }: { jobId?: string; jo
             onSelect={handleEventSelect}
           />
         )}
-
-        <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
-          {(Object.keys(EVENT_COLORS) as ScheduleEventType[])
-            .filter((type) => visibleTypes.has(type))
-            .map((type) => {
-              const hidden = hiddenTypes.has(type);
-              const colors = EVENT_COLORS[type];
-              return (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => toggleType(type)}
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-medium transition-colors ${
-                    hidden
-                      ? 'border-slate-200 bg-white text-slate-400 line-through'
-                      : `${colors.bg} ${colors.text}`
-                  }`}
-                >
-                  <span className={`h-2 w-2 rounded-full ${hidden ? 'bg-slate-300' : colors.dot}`} />
-                  {EVENT_LABELS[type]}
-                </button>
-              );
-            })}
-          {visibleTypes.size === 0 && !loading && (
-            <span className="text-slate-400">No events in this period.</span>
-          )}
-        </div>
+        {!hasVisibleEvents && !loading && (
+          <p className="mt-3 text-xs text-slate-400">
+            No events in this period for the selected filters.
+          </p>
+        )}
       </div>
     </div>
   );

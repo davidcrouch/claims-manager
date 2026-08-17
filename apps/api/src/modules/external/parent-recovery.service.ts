@@ -3,7 +3,7 @@ import { DRIZZLE, type DrizzleDB } from '../../database/drizzle.module';
 import { CrunchworkService } from '../../crunchwork/crunchwork.service';
 import { ExternalObjectService } from './external-object.service';
 import { ExternalObjectsRepository } from '../../database/repositories';
-import { EntityMapperRegistry } from './entity-mapper.registry';
+import { UseCaseRegistry } from '../domain/use-cases/use-case.registry';
 import { ParentNotProjectedError } from './errors/parent-not-projected.error';
 
 export interface RecoveryOutcome {
@@ -40,7 +40,7 @@ export class ParentRecoveryService {
     private readonly crunchworkService: CrunchworkService,
     private readonly externalObjectService: ExternalObjectService,
     private readonly externalObjectsRepo: ExternalObjectsRepository,
-    private readonly mapperRegistry: EntityMapperRegistry,
+    private readonly useCaseRegistry: UseCaseRegistry,
   ) {}
 
   async recover(params: {
@@ -88,16 +88,14 @@ export class ParentRecoveryService {
               tx,
             });
 
-          const mapper = this.mapperRegistry.get({
-            entityType: parent.providerEntityType,
-          });
-          if (!mapper) {
+          const useCase = this.useCaseRegistry.get(parent.providerEntityType);
+          if (!useCase) {
             throw new Error(
-              `${logPrefix} — no mapper registered for parent entityType=${parent.providerEntityType}`,
+              `${logPrefix} — no use case registered for parent entityType=${parent.providerEntityType}`,
             );
           }
 
-          await mapper.map({
+          await useCase.execute({
             externalObject: externalObject as unknown as Record<
               string,
               unknown

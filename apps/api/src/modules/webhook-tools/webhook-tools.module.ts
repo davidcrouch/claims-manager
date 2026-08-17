@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { CrunchworkModule } from '../../crunchwork/crunchwork.module';
 import { ExternalModule } from '../external/external.module';
+import { DomainModule } from '../domain/domain.module';
 import { ToolAuthGuard } from './tool-auth.guard';
 import { WebhookEventReadController } from './controllers/webhook-event-read.controller';
 import { CrunchworkFetchController } from './controllers/crunchwork-fetch.controller';
@@ -30,7 +31,7 @@ import { ProcessingLogUpdateController } from './controllers/processing-log-upda
  *   - POST /processing-log/update           (processing-log-update)
  */
 @Module({
-  imports: [ExternalModule, CrunchworkModule],
+  imports: [ExternalModule, CrunchworkModule, DomainModule],
   controllers: [
     WebhookEventReadController,
     CrunchworkFetchController,

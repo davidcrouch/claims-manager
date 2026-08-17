@@ -4,6 +4,7 @@ import {
   Controller,
   HttpCode,
   HttpStatus,
+  Inject,
   Logger,
   Param,
   Post,
@@ -14,7 +15,8 @@ import {
   ExternalObjectsRepository,
   ExternalProcessingLogRepository,
 } from '../../../database/repositories';
-import { EntityMapperRegistry } from '../../external/entity-mapper.registry';
+import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
+import { UseCaseRegistry } from '../../domain/use-cases/use-case.registry';
 import { ToolAuthGuard } from '../tool-auth.guard';
 
 /**
@@ -29,9 +31,10 @@ export class EntityMapperController {
   private readonly logger = new Logger('EntityMapperController');
 
   constructor(
-    private readonly mapperRegistry: EntityMapperRegistry,
+    private readonly useCaseRegistry: UseCaseRegistry,
     private readonly externalObjectsRepo: ExternalObjectsRepository,
     private readonly processingLogRepo: ExternalProcessingLogRepository,
+    @Inject(DRIZZLE) private readonly db: DrizzleDB,
   ) {}
 
   @Post(':entityType')
@@ -55,10 +58,10 @@ export class EntityMapperController {
       `${logPrefix} — entityType=${entityType} externalObjectId=${body.externalObjectId} processingLogId=${body.processingLogId ?? 'none'}`,
     );
 
-    const mapper = this.mapperRegistry.get({ entityType });
-    if (!mapper) {
+    const useCase = this.useCaseRegistry.get(entityType);
+    if (!useCase) {
       throw new BadRequestException(
-        `${logPrefix} — no mapper registered for entity type: ${entityType}`,
+        `${logPrefix} — no use case registered for entity type: ${entityType}`,
       );
     }
 
@@ -71,13 +74,16 @@ export class EntityMapperController {
       );
     }
 
-    const result = await mapper.map({
-      externalObject: externalObject as unknown as Record<string, unknown>,
-      tenantId: body.tenantId,
-      connectionId: body.connectionId,
+    const result = await this.db.transaction(async (tx) => {
+      return useCase.execute({
+        externalObject: externalObject as unknown as Record<string, unknown>,
+        tenantId: body.tenantId,
+        connectionId: body.connectionId,
+        tx,
+      });
     });
 
-    if (body.processingLogId) {
+    if (body.processingLogId && result.status === 'completed') {
       await this.processingLogRepo.updateStatus({
         id: body.processingLogId,
         status: 'completed',
@@ -86,6 +92,10 @@ export class EntityMapperController {
       });
     }
 
-    return result;
+    return {
+      internalEntityId: result.internalEntityId,
+      internalEntityType: result.internalEntityType,
+      skipped: result.status === 'skipped' ? result.reason : undefined,
+    };
   }
 }

@@ -47,6 +47,8 @@ import {
   type Dict,
 } from '@/components/shared/detail';
 import { LocationMap } from '@/components/shared/LocationMap';
+import { EntityAttachmentsTab } from '@/components/shared/EntityAttachmentsTab';
+import { EntityMessagesTab } from '@/components/shared/EntityMessagesTab';
 import type { Claim } from '@/types/api';
 
 function claimAddress(claim: Claim, full = false): string {
@@ -843,18 +845,6 @@ function ActivitiesTab() {
   );
 }
 
-function CommunicationsTab() {
-  return (
-    <Card>
-      <CardContent className="py-8 text-center">
-        <p className="text-sm text-muted-foreground">
-          Emails associated with this claim will appear here once the
-          communications API is connected.
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
 
 function TimelineTab({ claim }: { claim: Claim }) {
   const api = getApi(claim);
@@ -882,18 +872,6 @@ function TimelineTab({ claim }: { claim: Claim }) {
   );
 }
 
-function AttachmentsTab() {
-  return (
-    <Card>
-      <CardContent className="py-8 text-center">
-        <p className="text-sm text-muted-foreground">
-          Attachments linked to this claim will appear here once the attachments
-          API is connected.
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
 
 export function ClaimPageHeader({ claim }: { claim: Claim }) {
   const title = claim.claimNumber ?? claim.externalReference ?? claim.id;
@@ -1044,9 +1022,9 @@ export function ClaimDetail({ claim }: { claim: Claim }) {
         {tab === 'jobs' && <JobsTab claim={claim} />}
         {tab === 'compliance' && <ComplianceTab claim={claim} />}
         {tab === 'activities' && <ActivitiesTab />}
-        {tab === 'communications' && <CommunicationsTab />}
+        {tab === 'communications' && <EntityMessagesTab entityId={claim.id} entityType="claim" />}
         {tab === 'timeline' && <TimelineTab claim={claim} />}
-        {tab === 'attachments' && <AttachmentsTab />}
+        {tab === 'attachments' && <EntityAttachmentsTab entityId={claim.id} relatedRecordType="Claim" entityLabel="this claim" />}
       </div>
     </div>
   );

@@ -1051,6 +1051,25 @@ export const integrationConnections = pgTable(
   ],
 );
 
+// Connection identifiers — maps multiple external tenant/platform IDs to a single connection
+export const connectionIdentifiers = pgTable(
+  'connection_identifiers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    connectionId: uuid('connection_id')
+      .notNull()
+      .references(() => integrationConnections.id, { onDelete: 'cascade' }),
+    identifierType: text('identifier_type').notNull(),
+    identifierValue: text('identifier_value').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('uq_identifier_type_value').on(t.identifierType, t.identifierValue),
+    index('idx_identifier_connection').on(t.connectionId),
+    index('idx_identifier_value').on(t.identifierValue),
+  ],
+);
+
 // External objects
 export const externalObjects = pgTable(
   'external_objects',
