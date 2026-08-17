@@ -109,6 +109,37 @@ export function commitColumnFilterSelection(params: {
   return { selected: new Set(params.next), active: true };
 }
 
+/** Sentinel label for null/empty column values in checkbox filters. */
+export const COLUMN_FILTER_BLANK = '(Blank)';
+
+/** Map a raw cell value to its filter option key (blank → COLUMN_FILTER_BLANK). */
+export function columnFilterKey(value: string | null | undefined): string {
+  const trimmed = (value ?? '').trim();
+  return trimmed || COLUMN_FILTER_BLANK;
+}
+
+/**
+ * Build sorted filter options from raw cell values, always including (Blank)
+ * when any empty/null value is present (or when `alwaysIncludeBlank` is true).
+ */
+export function buildColumnFilterOptions(
+  values: Iterable<string | null | undefined>,
+  opts?: { alwaysIncludeBlank?: boolean },
+): string[] {
+  const names = new Set<string>();
+  let hasBlank = false;
+  for (const value of values) {
+    const trimmed = (value ?? '').trim();
+    if (!trimmed) hasBlank = true;
+    else names.add(trimmed);
+  }
+  const sorted = [...names].sort((a, b) => a.localeCompare(b));
+  if (hasBlank || opts?.alwaysIncludeBlank) {
+    return [COLUMN_FILTER_BLANK, ...sorted];
+  }
+  return sorted;
+}
+
 /**
  * Build API filter param from applied column filter state.
  * - inactive → undefined (no query filter)

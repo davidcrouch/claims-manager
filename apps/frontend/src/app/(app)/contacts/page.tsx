@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { ContactsListClient } from '@/components/contacts/ContactsListClient';
+import { buildJobNameById } from '@/components/shared/job-label';
 import type { PaginatedResponse, Contact, Job, Claim } from '@/types/api';
 
 export const metadata = { title: 'Contacts — EnsureOS' };
@@ -16,13 +17,24 @@ export default async function ContactsPage({
   const params = await searchParams;
 
   const empty: PaginatedResponse<Contact> = { data: [], total: 0 };
-  const contactsRes = await api.getContacts().catch((err: unknown) => {
-    console.error(
-      'frontend:ContactsPage - getContacts failed:',
-      err instanceof Error ? err.message : err,
-    );
-    return empty;
-  });
+  const emptyJobs: PaginatedResponse<Job> = { data: [], total: 0 };
+
+  const [contactsRes, jobsRes] = await Promise.all([
+    api.getContacts().catch((err: unknown) => {
+      console.error(
+        'frontend:ContactsPage - getContacts failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return empty;
+    }),
+    api.getJobs({ limit: 100 }).catch((err: unknown) => {
+      console.error(
+        'frontend:ContactsPage - getJobs failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return emptyJobs;
+    }),
+  ]);
 
   let job: Job | null = null;
   let parentClaim: Claim | null = null;
@@ -44,6 +56,7 @@ export default async function ContactsPage({
       initialData={contactsRes ?? empty}
       job={job}
       parentClaim={parentClaim}
+      jobNameById={buildJobNameById(jobsRes?.data ?? [])}
     />
   );
 }

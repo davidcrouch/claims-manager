@@ -11,15 +11,18 @@ import {
   isArchivedStatus,
   commitColumnFilterSelection,
   columnFilterToIdsParam,
+  columnFilterKey,
+  buildColumnFilterOptions,
   ValueFilterMenu,
 } from '@/components/shared/list-filters';
+import { resolveJobName } from '@/components/shared/job-label';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import {
   EntityPageHeader,
 } from '@/components/shared/EntityPageHeader';
 import { computeStatusBreakdown } from '@/components/layout/ListPageHeader';
 import { TablePagination } from '@/components/shared/table-pagination';
-import { QuotesTable, type QuoteSortField, getEstimateTypeName } from './QuotesTable';
+import { QuotesTable, type QuoteSortField, getEstimateTypeName, resolveEstimateListAssigneeName } from './QuotesTable';
 import type { Quote, PaginatedResponse, Job, Claim } from '@/types/api';
 
 type ListTab = 'active' | 'archived' | 'all';
@@ -34,6 +37,7 @@ export interface QuotesListClientProps {
   statusOptions: StatusOption[];
   quoteTypes: StatusOption[];
   jobNameById?: Record<string, string>;
+  jobAssigneeNameById?: Record<string, string>;
   /** When provided, the page header shows job details and data is scoped to this job. */
   job?: Job | null;
   parentClaim?: Claim | null;
@@ -46,6 +50,7 @@ export function QuotesListClient({
   statusOptions,
   quoteTypes,
   jobNameById,
+  jobAssigneeNameById,
   job,
   parentClaim,
 }: QuotesListClientProps) {
@@ -69,6 +74,10 @@ export function QuotesListClient({
   const [typeFilterActive, setTypeFilterActive] = useState(false);
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [statusFilterActive, setStatusFilterActive] = useState(false);
+  const [jobFilter, setJobFilter] = useState<Set<string>>(new Set());
+  const [jobFilterActive, setJobFilterActive] = useState(false);
+  const [assigneeFilter, setAssigneeFilter] = useState<Set<string>>(new Set());
+  const [assigneeFilterActive, setAssigneeFilterActive] = useState(false);
   const lastFetchKeyRef = useRef<string | null>(null);
   const statusParam = useMemo(
     () => columnFilterToIdsParam(statusFilterActive, statusFilter, statusOptions),
@@ -146,6 +155,24 @@ export function QuotesListClient({
     [quoteTypes],
   );
 
+  const uniqueJobs = useMemo(
+    () =>
+      buildColumnFilterOptions(
+        data.data.map((row) => resolveJobName(row.jobId, jobNameById)),
+      ),
+    [data.data, jobNameById],
+  );
+
+  const uniqueAssignees = useMemo(
+    () =>
+      buildColumnFilterOptions(
+        data.data.map((row) =>
+          resolveEstimateListAssigneeName(row, jobAssigneeNameById),
+        ),
+      ),
+    [data.data, jobAssigneeNameById],
+  );
+
   const uniqueStatuses = useMemo(() => {
     const fromOptions = statusOptions
       .map((s) => s.name?.trim())
@@ -194,6 +221,26 @@ export function QuotesListClient({
     setPage(1);
   };
 
+  const applyJobFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueJobs.length,
+    });
+    setJobFilter(committed.selected);
+    setJobFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const applyAssigneeFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueAssignees.length,
+    });
+    setAssigneeFilter(committed.selected);
+    setAssigneeFilterActive(committed.active);
+    setPage(1);
+  };
+
   const visibleRows = useMemo(() => {
     const query = debouncedSearch.trim().toLowerCase();
     let rows = data.data;
@@ -205,6 +252,24 @@ export function QuotesListClient({
       });
     }
 
+    if (jobFilterActive) {
+      if (jobFilter.size === 0) rows = [];
+      else rows = rows.filter((row) =>
+        jobFilter.has(columnFilterKey(resolveJobName(row.jobId, jobNameById))),
+      );
+    }
+
+    if (assigneeFilterActive) {
+      if (assigneeFilter.size === 0) rows = [];
+      else rows = rows.filter((row) =>
+        assigneeFilter.has(
+          columnFilterKey(
+            resolveEstimateListAssigneeName(row, jobAssigneeNameById),
+          ),
+        ),
+      );
+    }
+
     if (query) {
       rows = rows.filter((q) => {
         const num = (q.quoteNumber ?? '').toLowerCase();
@@ -214,7 +279,17 @@ export function QuotesListClient({
     }
 
     return rows;
-  }, [data.data, debouncedSearch, tab]);
+  }, [
+    data.data,
+    debouncedSearch,
+    tab,
+    jobFilterActive,
+    jobFilter,
+    jobNameById,
+    assigneeFilterActive,
+    assigneeFilter,
+    jobAssigneeNameById,
+  ]);
 
   const breakdown = computeStatusBreakdown(visibleRows, (q) => q.status?.name);
   const totalValue = useMemo(() => {
@@ -307,6 +382,7 @@ export function QuotesListClient({
           <QuotesTable
             quotes={visibleRows}
             jobNameById={jobNameById}
+            jobAssigneeNameById={jobAssigneeNameById}
             onRowClick={(q) => {
               const jobId = searchParams.get('jobId');
               const href = jobId ? `/quotes/${q.id}?jobId=${jobId}` : `/quotes/${q.id}`;
@@ -329,6 +405,22 @@ export function QuotesListClient({
               onApply: applyStatusFilter,
               menuTitle: 'Filter by status',
               itemNoun: { singular: 'status', plural: 'statuses' },
+            }}
+            jobColumnFilter={{
+              options: uniqueJobs,
+              selected: jobFilter,
+              active: jobFilterActive,
+              onApply: applyJobFilter,
+              menuTitle: 'Filter by job',
+              itemNoun: { singular: 'job', plural: 'jobs' },
+            }}
+            assigneeColumnFilter={{
+              options: uniqueAssignees,
+              selected: assigneeFilter,
+              active: assigneeFilterActive,
+              onApply: applyAssigneeFilter,
+              menuTitle: 'Filter by assignee',
+              itemNoun: { singular: 'assignee', plural: 'assignees' },
             }}
             estimateTypeColumnFilter={{
               options: uniqueTypes,

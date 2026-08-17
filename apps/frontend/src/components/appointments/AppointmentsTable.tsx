@@ -14,10 +14,12 @@ import {
   type ColumnVisibilityDef,
 } from '@/components/shared/column-visibility';
 import { formatDateTime } from '@/components/shared/detail';
+import { resolveJobName } from '@/components/shared/job-label';
 import type { Appointment, AppointmentAttendee } from '@/types/api';
 
 const APPOINTMENT_COLUMNS: ColumnVisibilityDef[] = [
   { key: 'name', label: 'Name', locked: true },
+  { key: 'job', label: 'Job' },
   { key: 'type', label: 'Type' },
   { key: 'location', label: 'Location' },
   { key: 'start_date', label: 'Start' },
@@ -98,6 +100,9 @@ export interface AppointmentsTableProps {
   onSort?: (field: string) => void;
   statusColumnFilter?: ColumnValueFilter;
   typeColumnFilter?: ColumnValueFilter;
+  jobColumnFilter?: ColumnValueFilter;
+  locationColumnFilter?: ColumnValueFilter;
+  jobNameById?: Record<string, string>;
 }
 
 export function AppointmentsTable({
@@ -110,6 +115,9 @@ export function AppointmentsTable({
   onSort,
   statusColumnFilter,
   typeColumnFilter,
+  jobColumnFilter,
+  locationColumnFilter,
+  jobNameById,
 }: AppointmentsTableProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const { isVisible, toggle, visibleCount } = useColumnVisibility(
@@ -132,7 +140,8 @@ export function AppointmentsTable({
   }
 
   const noopSort = () => {};
-  const useSortableHeaders = onSort || typeColumnFilter || statusColumnFilter;
+  const useSortableHeaders =
+    onSort || typeColumnFilter || statusColumnFilter || jobColumnFilter || locationColumnFilter;
   // Leading expand spacer + visible data columns + settings cell
   const emptyColSpan = 1 + visibleCount + 1;
   const expandedColSpan = visibleCount + 1;
@@ -148,6 +157,16 @@ export function AppointmentsTable({
                 {isVisible('name') && (
                   <SortableColumnHeader columnKey="name" label="Name" activeField={sortField ?? null} sortOrder={sortOrder} onSort={onSort ?? noopSort} />
                 )}
+                {isVisible('job') && (
+                  <SortableColumnHeader
+                    columnKey="job"
+                    label="Job"
+                    activeField={sortField ?? null}
+                    sortOrder={sortOrder}
+                    onSort={onSort ?? noopSort}
+                    filter={jobColumnFilter}
+                  />
+                )}
                 {isVisible('type') && (
                   <SortableColumnHeader
                     columnKey="type"
@@ -159,7 +178,14 @@ export function AppointmentsTable({
                   />
                 )}
                 {isVisible('location') && (
-                  <SortableColumnHeader columnKey="location" label="Location" activeField={sortField ?? null} sortOrder={sortOrder} onSort={onSort ?? noopSort} />
+                  <SortableColumnHeader
+                    columnKey="location"
+                    label="Location"
+                    activeField={sortField ?? null}
+                    sortOrder={sortOrder}
+                    onSort={onSort ?? noopSort}
+                    filter={locationColumnFilter}
+                  />
                 )}
                 {isVisible('start_date') && (
                   <SortableColumnHeader columnKey="start_date" label="Start" activeField={sortField ?? null} sortOrder={sortOrder} onSort={onSort ?? noopSort} />
@@ -188,6 +214,9 @@ export function AppointmentsTable({
               <>
                 {isVisible('name') && (
                   <th scope="col" className="px-4 py-2.5">Name</th>
+                )}
+                {isVisible('job') && (
+                  <th scope="col" className="px-4 py-2.5">Job</th>
                 )}
                 {isVisible('type') && (
                   <th scope="col" className="px-4 py-2.5">Type</th>
@@ -248,6 +277,11 @@ export function AppointmentsTable({
                   </td>
                   {isVisible('name') && (
                     <td className="px-4 py-2.5 font-medium">{a.name}</td>
+                  )}
+                  {isVisible('job') && (
+                    <td className="px-4 py-2.5 text-slate-600">
+                      {resolveJobName(a.jobId, jobNameById)}
+                    </td>
                   )}
                   {isVisible('type') && (
                     <td className="px-4 py-2.5 text-muted-foreground">

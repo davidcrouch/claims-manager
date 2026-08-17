@@ -262,6 +262,8 @@ module "cloud_run_auth" {
     # New-org catalog seed (auth → api /internal/seed-tenant).
     SEED_NEW_TENANTS     = "true"
     API_INTERNAL_URL     = local.api_run_url
+    EMAIL_PROVIDER       = "resend"
+    EMAIL_FROM           = "noreply@branlamie.com"
   }
 
   secret_env_vars = [
@@ -283,6 +285,7 @@ module "cloud_run_auth" {
     { name = "JWT_EC_PRIVATE_KEY_D", secret = "auth-jwks-ec-d" },
     { name = "JWT_EC_PUBLIC_KEY_X", secret = "auth-jwks-ec-x" },
     { name = "JWT_EC_PUBLIC_KEY_Y", secret = "auth-jwks-ec-y" },
+    { name = "RESEND_API_KEY", secret = "resend-api-key" },
   ]
 
   depends_on = [

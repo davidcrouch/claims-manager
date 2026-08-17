@@ -19,19 +19,19 @@ import {
   SortableColumnHeader,
   commitColumnFilterSelection,
   columnFilterToValuesParam,
+  columnFilterKey,
+  buildColumnFilterOptions,
   TableEmptyRow,
 } from '@/components/shared/list-filters';
 import { TaskFormDrawer } from '@/components/forms/TaskFormDrawer';
-import {
-  BottomFormDrawer,
-  BottomFormDrawerBody,
-  BottomFormDrawerFooter,
-} from '@/components/forms/BottomFormDrawer';
+import { TaskDetailDrawer } from '@/components/tasks/TaskDetailDrawer';
 import { TablePagination } from '@/components/shared/table-pagination';
 import {
   ColumnSettingsHeaderCell,
   useColumnVisibility,
 } from '@/components/shared/column-visibility';
+import { resolveJobName } from '@/components/shared/job-label';
+import { useEntityDrawer } from '@/components/layout/EntityDrawerHost';
 import { fetchTasksAction } from '@/app/(app)/tasks/actions';
 import type { Task, LookupRef, Job, Claim } from '@/types/api';
 
@@ -45,6 +45,7 @@ function refName(value: string | LookupRef | null | undefined): string {
 
 type TaskSortField =
   | 'name'
+  | 'job'
   | 'status'
   | 'priority'
   | 'task_type'
@@ -55,11 +56,12 @@ type TaskSortField =
 interface ColDef { key: TaskSortField; label: string; filterable?: boolean; locked?: boolean }
 
 const TABLE_COLUMNS: ColDef[] = [
-  { key: 'name', label: 'Task', locked: true },
+  { key: 'name', label: 'Task', locked: true, filterable: true },
+  { key: 'job', label: 'Job', filterable: true },
   { key: 'status', label: 'Status', filterable: true },
   { key: 'priority', label: 'Priority', filterable: true },
   { key: 'task_type', label: 'Type', filterable: true },
-  { key: 'assignee', label: 'Assigned' },
+  { key: 'assignee', label: 'Assigned', filterable: true },
   { key: 'due_date', label: 'Due Date' },
   { key: 'updated_at', label: 'Updated' },
 ];
@@ -80,13 +82,23 @@ function PriorityBadge({ priority }: { priority: string }) {
   );
 }
 
-function DetailField({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1">
-      <span className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</span>
-      <div>{children}</div>
-    </div>
+/** Calendar-day urgency for the Due Date column. */
+function dueDateClassName(dueDate?: string | null): string {
+  if (!dueDate) return 'text-slate-600';
+  const due = new Date(dueDate);
+  if (Number.isNaN(due.getTime())) return 'text-slate-600';
+
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startDue = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+  const daysUntil = Math.round(
+    (startDue.getTime() - startToday.getTime()) / (24 * 60 * 60 * 1000),
   );
+
+  if (daysUntil < 0) return 'font-medium text-red-600';
+  if (daysUntil <= 2) return 'font-medium text-orange-600';
+  if (daysUntil <= 7) return 'font-medium text-green-600';
+  return 'text-slate-600';
 }
 
 function isCompletedStatus(name: string | null | undefined): boolean {
@@ -97,12 +109,22 @@ function isCompletedStatus(name: string | null | undefined): boolean {
 
 const PAGE_SIZE = 20;
 
-export function TasksListClient({ job, parentClaim }: { job?: Job | null; parentClaim?: Claim | null } = {}) {
+export function TasksListClient({
+  job,
+  parentClaim,
+  jobNameById,
+}: {
+  job?: Job | null;
+  parentClaim?: Claim | null;
+  jobNameById?: Record<string, string>;
+} = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { openEntityDrawer } = useEntityDrawer();
   const jobId = searchParams.get('jobId');
   const overdue = searchParams.get('overdue') === 'true';
   const assignedToUserId = searchParams.get('assignedToUserId');
+  const openTaskId = searchParams.get('open');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -123,6 +145,12 @@ export function TasksListClient({ job, parentClaim }: { job?: Job | null; parent
   const [statusFilterActive, setStatusFilterActive] = useState(false);
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
   const [typeFilterActive, setTypeFilterActive] = useState(false);
+  const [nameFilter, setNameFilter] = useState<Set<string>>(new Set());
+  const [nameFilterActive, setNameFilterActive] = useState(false);
+  const [jobFilter, setJobFilter] = useState<Set<string>>(new Set());
+  const [jobFilterActive, setJobFilterActive] = useState(false);
+  const [assigneeFilter, setAssigneeFilter] = useState<Set<string>>(new Set());
+  const [assigneeFilterActive, setAssigneeFilterActive] = useState(false);
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const { isVisible, toggle, visibleCount } = useColumnVisibility(
@@ -197,6 +225,18 @@ export function TasksListClient({ job, parentClaim }: { job?: Job | null; parent
     // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop: router.replace updates URL -> searchParams changes -> effect re-runs
   }, [debouncedSearch, sortParam, tab, page, statusParam, priorityParam, jobId, overdue, assignedToUserId]);
 
+  useEffect(() => {
+    if (!openTaskId) return;
+    openEntityDrawer({
+      component: 'TaskDetailDrawer',
+      props: { taskId: openTaskId },
+    });
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('open');
+    router.replace(`/tasks?${params}`, { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- open once per openTaskId
+  }, [openTaskId]);
+
   const handleColumnSort = (field: TaskSortField) => {
     setColumnSort((prev) => {
       if (prev.field === field) {
@@ -229,6 +269,24 @@ export function TasksListClient({ job, parentClaim }: { job?: Job | null; parent
     }
     return [...names].sort((a, b) => a.localeCompare(b));
   }, [tasks]);
+
+  const uniqueNames = useMemo(
+    () => buildColumnFilterOptions(tasks.map((task) => task.name)),
+    [tasks],
+  );
+
+  const uniqueJobs = useMemo(
+    () =>
+      buildColumnFilterOptions(
+        tasks.map((task) => resolveJobName(task.jobId, jobNameById)),
+      ),
+    [tasks, jobNameById],
+  );
+
+  const uniqueAssignees = useMemo(
+    () => buildColumnFilterOptions(tasks.map((task) => task.assigneeName)),
+    [tasks],
+  );
 
   const togglePriority = (name: string) => {
     const working = priorityFilterActive
@@ -275,6 +333,36 @@ export function TasksListClient({ job, parentClaim }: { job?: Job | null; parent
     setPage(1);
   };
 
+  const applyNameFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueNames.length,
+    });
+    setNameFilter(committed.selected);
+    setNameFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const applyJobFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueJobs.length,
+    });
+    setJobFilter(committed.selected);
+    setJobFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const applyAssigneeFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueAssignees.length,
+    });
+    setAssigneeFilter(committed.selected);
+    setAssigneeFilterActive(committed.active);
+    setPage(1);
+  };
+
   const visibleRows = useMemo(() => {
     let rows = tasks;
 
@@ -283,6 +371,34 @@ export function TasksListClient({ job, parentClaim }: { job?: Job | null; parent
         const completed = isCompletedStatus(refName(task.status));
         return tab === 'completed' ? completed : !completed;
       });
+    }
+
+    if (nameFilterActive) {
+      if (nameFilter.size === 0) {
+        rows = [];
+      } else {
+        rows = rows.filter((task) => nameFilter.has(columnFilterKey(task.name)));
+      }
+    }
+
+    if (jobFilterActive) {
+      if (jobFilter.size === 0) {
+        rows = [];
+      } else {
+        rows = rows.filter((task) =>
+          jobFilter.has(columnFilterKey(resolveJobName(task.jobId, jobNameById))),
+        );
+      }
+    }
+
+    if (assigneeFilterActive) {
+      if (assigneeFilter.size === 0) {
+        rows = [];
+      } else {
+        rows = rows.filter((task) =>
+          assigneeFilter.has(columnFilterKey(task.assigneeName)),
+        );
+      }
     }
 
     if (typeFilterActive) {
@@ -302,12 +418,31 @@ export function TasksListClient({ job, parentClaim }: { job?: Job | null; parent
         const name = (task.name ?? '').toLowerCase();
         const type = refName(task.taskType).toLowerCase();
         const assignee = (task.assigneeName ?? '').toLowerCase();
-        return name.includes(query) || type.includes(query) || assignee.includes(query);
+        const jobName = resolveJobName(task.jobId, jobNameById).toLowerCase();
+        return (
+          name.includes(query) ||
+          type.includes(query) ||
+          assignee.includes(query) ||
+          jobName.includes(query)
+        );
       });
     }
 
     return rows;
-  }, [tasks, tab, typeFilterActive, typeFilter, debouncedSearch]);
+  }, [
+    tasks,
+    tab,
+    nameFilterActive,
+    nameFilter,
+    jobFilterActive,
+    jobFilter,
+    assigneeFilterActive,
+    assigneeFilter,
+    typeFilterActive,
+    typeFilter,
+    debouncedSearch,
+    jobNameById,
+  ]);
 
   const breakdown = computeStatusBreakdown(visibleRows, (t) => refName(t.status));
 
@@ -418,34 +553,61 @@ export function TasksListClient({ job, parentClaim }: { job?: Job | null; parent
                       sortOrder={columnSort.order}
                       onSort={handleColumnSort}
                       filter={
-                        col.key === 'status'
+                        col.key === 'name'
                           ? {
-                              options: uniqueStatuses,
-                              selected: statusFilter,
-                              active: statusFilterActive,
-                              onApply: applyStatusFilter,
-                              menuTitle: 'Filter by status',
-                              itemNoun: { singular: 'status', plural: 'statuses' },
+                              options: uniqueNames,
+                              selected: nameFilter,
+                              active: nameFilterActive,
+                              onApply: applyNameFilter,
+                              menuTitle: 'Filter by task',
+                              itemNoun: { singular: 'task', plural: 'tasks' },
                             }
-                          : col.key === 'priority'
+                          : col.key === 'job'
                             ? {
-                                options: uniquePriorities,
-                                selected: priorityFilter,
-                                active: priorityFilterActive,
-                                onApply: applyPriorityFilter,
-                                menuTitle: 'Filter by priority',
-                                itemNoun: { singular: 'priority', plural: 'priorities' },
+                                options: uniqueJobs,
+                                selected: jobFilter,
+                                active: jobFilterActive,
+                                onApply: applyJobFilter,
+                                menuTitle: 'Filter by job',
+                                itemNoun: { singular: 'job', plural: 'jobs' },
                               }
-                            : col.key === 'task_type'
+                            : col.key === 'status'
                               ? {
-                                  options: uniqueTypes,
-                                  selected: typeFilter,
-                                  active: typeFilterActive,
-                                  onApply: applyTypeFilter,
-                                  menuTitle: 'Filter by type',
-                                  itemNoun: { singular: 'type', plural: 'types' },
+                                  options: uniqueStatuses,
+                                  selected: statusFilter,
+                                  active: statusFilterActive,
+                                  onApply: applyStatusFilter,
+                                  menuTitle: 'Filter by status',
+                                  itemNoun: { singular: 'status', plural: 'statuses' },
                                 }
-                              : undefined
+                              : col.key === 'priority'
+                                ? {
+                                    options: uniquePriorities,
+                                    selected: priorityFilter,
+                                    active: priorityFilterActive,
+                                    onApply: applyPriorityFilter,
+                                    menuTitle: 'Filter by priority',
+                                    itemNoun: { singular: 'priority', plural: 'priorities' },
+                                  }
+                                : col.key === 'task_type'
+                                  ? {
+                                      options: uniqueTypes,
+                                      selected: typeFilter,
+                                      active: typeFilterActive,
+                                      onApply: applyTypeFilter,
+                                      menuTitle: 'Filter by type',
+                                      itemNoun: { singular: 'type', plural: 'types' },
+                                    }
+                                  : col.key === 'assignee'
+                                    ? {
+                                        options: uniqueAssignees,
+                                        selected: assigneeFilter,
+                                        active: assigneeFilterActive,
+                                        onApply: applyAssigneeFilter,
+                                        menuTitle: 'Filter by assignee',
+                                        itemNoun: { singular: 'assignee', plural: 'assignees' },
+                                      }
+                                    : undefined
                       }
                     />
                   ))}
@@ -475,6 +637,11 @@ export function TasksListClient({ job, parentClaim }: { job?: Job | null; parent
                       {isVisible('name') && (
                         <td className="px-4 py-3 font-medium text-slate-900">{task.name}</td>
                       )}
+                      {isVisible('job') && (
+                        <td className="px-4 py-3 text-slate-600">
+                          {resolveJobName(task.jobId, jobNameById)}
+                        </td>
+                      )}
                       {isVisible('status') && (
                         <td className="whitespace-nowrap px-4 py-3">
                           <StatusBadge status={statusName} />
@@ -496,7 +663,9 @@ export function TasksListClient({ job, parentClaim }: { job?: Job | null; parent
                         </td>
                       )}
                       {isVisible('due_date') && (
-                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                        <td
+                          className={`whitespace-nowrap px-4 py-3 ${dueDateClassName(task.dueDate)}`}
+                        >
                           {formatDate(task.dueDate)}
                         </td>
                       )}
@@ -523,67 +692,14 @@ export function TasksListClient({ job, parentClaim }: { job?: Job | null; parent
         claimId={job?.claimId ?? parentClaim?.id}
       />
 
-      <BottomFormDrawer
+      <TaskDetailDrawer
         open={!!selectedTask}
-        onOpenChange={(open) => { if (!open) setSelectedTask(null); }}
-        title={selectedTask?.name ?? 'Task Detail'}
-        description="View task details"
-        icon={<CheckSquare className="h-5 w-5" />}
-      >
-        {selectedTask && (
-          <>
-            <BottomFormDrawerBody>
-              <div className="grid grid-cols-1 gap-x-8 gap-y-5 md:grid-cols-2">
-                <DetailField label="Status">
-                  <StatusBadge status={refName(selectedTask.status)} />
-                </DetailField>
-                <DetailField label="Priority">
-                  <PriorityBadge priority={refName(selectedTask.priority)} />
-                </DetailField>
-                <DetailField label="Type">
-                  <TypeBadge
-                    type={
-                      typeof selectedTask.taskType === 'string'
-                        ? selectedTask.taskType
-                        : selectedTask.taskType?.name ?? selectedTask.taskType?.externalReference
-                    }
-                  />
-                </DetailField>
-                <DetailField label="Assigned">
-                  <span className="text-sm text-slate-700">
-                    {selectedTask.assigneeName ?? '—'}
-                  </span>
-                </DetailField>
-                <DetailField label="Due Date">
-                  <span className="text-sm text-slate-700">{formatDate(selectedTask.dueDate)}</span>
-                </DetailField>
-                <DetailField label="Completed">
-                  <span className="text-sm text-slate-700">{formatDate(selectedTask.completedAt)}</span>
-                </DetailField>
-                <DetailField label="Created">
-                  <span className="text-sm text-slate-700">{formatDate(selectedTask.createdAt)}</span>
-                </DetailField>
-                <DetailField label="Updated">
-                  <span className="text-sm text-slate-700">{formatDate(selectedTask.updatedAt)}</span>
-                </DetailField>
-                {selectedTask.description && (
-                  <div className="md:col-span-2">
-                    <DetailField label="Description">
-                      <p className="whitespace-pre-wrap text-sm text-slate-700">{selectedTask.description}</p>
-                    </DetailField>
-                  </div>
-                )}
-              </div>
-            </BottomFormDrawerBody>
-            <BottomFormDrawerFooter>
-              <div />
-              <Button variant="outline" onClick={() => setSelectedTask(null)}>
-                Close
-              </Button>
-            </BottomFormDrawerFooter>
-          </>
-        )}
-      </BottomFormDrawer>
+        onOpenChange={(open) => {
+          if (!open) setSelectedTask(null);
+        }}
+        task={selectedTask}
+        jobNameById={jobNameById}
+      />
     </div>
   );
 }

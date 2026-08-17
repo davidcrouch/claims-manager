@@ -20,6 +20,8 @@ import {
   isArchivedStatus,
   commitColumnFilterSelection,
   columnFilterToIdsParam,
+  columnFilterKey,
+  buildColumnFilterOptions,
   ValueFilterMenu,
   SortableColumnHeader,
   TableEmptyRow,
@@ -56,13 +58,19 @@ type JobSortField =
   | 'request_date'
   | 'updated_at';
 
-interface ColDef { key: JobSortField; label: string; filterable?: boolean; locked?: boolean }
+interface ColDef {
+  key: JobSortField;
+  label: string;
+  filterable?: boolean;
+  locked?: boolean;
+  defaultHidden?: boolean;
+}
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'external_reference', label: 'Job Ref', locked: true },
   { key: 'status', label: 'Status', filterable: true },
   { key: 'job_type', label: 'Type', filterable: true },
-  { key: 'assignee', label: 'Assigned' },
+  { key: 'assignee', label: 'Assigned', filterable: true },
   { key: 'address', label: 'Address' },
   { key: 'request_date', label: 'Requested' },
   { key: 'updated_at', label: 'Updated' },
@@ -126,6 +134,8 @@ export function JobsListClient({
   const [typeFilterActive, setTypeFilterActive] = useState(false);
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [statusFilterActive, setStatusFilterActive] = useState(false);
+  const [assigneeFilter, setAssigneeFilter] = useState<Set<string>>(new Set());
+  const [assigneeFilterActive, setAssigneeFilterActive] = useState(false);
   const { isVisible, toggle, visibleCount } = useColumnVisibility(
     'jobs',
     TABLE_COLUMNS,
@@ -312,7 +322,31 @@ export function JobsListClient({
     setPage(1);
   };
 
-  const visibleRows = useMemo(() => data.data, [data.data]);
+  const uniqueAssignees = useMemo(
+    () => buildColumnFilterOptions(data.data.map((job) => job.assigneeName)),
+    [data.data],
+  );
+
+  const applyAssigneeFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueAssignees.length,
+    });
+    setAssigneeFilter(committed.selected);
+    setAssigneeFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const visibleRows = useMemo(() => {
+    let rows = data.data;
+    if (assigneeFilterActive) {
+      if (assigneeFilter.size === 0) return [];
+      rows = rows.filter((job) =>
+        assigneeFilter.has(columnFilterKey(job.assigneeName)),
+      );
+    }
+    return rows;
+  }, [data.data, assigneeFilterActive, assigneeFilter]);
 
   const breakdown = computeStatusBreakdown(visibleRows, (j) => j.status?.name);
 
@@ -332,6 +366,15 @@ export function JobsListClient({
     onApply: applyTypeFilter,
     menuTitle: 'Filter by type',
     itemNoun: { singular: 'type', plural: 'types' },
+  };
+
+  const assigneeFilterProps = {
+    options: uniqueAssignees,
+    selected: assigneeFilter,
+    active: assigneeFilterActive,
+    onApply: applyAssigneeFilter,
+    menuTitle: 'Filter by assignee',
+    itemNoun: { singular: 'assignee', plural: 'assignees' },
   };
 
   const handleRowClick = (job: Job) => {
@@ -436,7 +479,9 @@ export function JobsListClient({
                           ? statusFilterProps
                           : col.key === 'job_type'
                             ? typeFilterProps
-                            : undefined
+                            : col.key === 'assignee'
+                              ? assigneeFilterProps
+                              : undefined
                       }
                     />
                   ))}

@@ -12,6 +12,8 @@ import {
   isArchivedStatus,
   commitColumnFilterSelection,
   columnFilterToIdsParam,
+  columnFilterKey,
+  buildColumnFilterOptions,
   ValueFilterMenu,
   SortableColumnHeader,
   TableEmptyRow,
@@ -58,18 +60,16 @@ type POSortField =
   | 'status'
   | 'vendor'
   | 'total_amount'
-  | 'external_id'
   | 'updated_at';
 
 interface ColDef { key: POSortField; label: string; filterable?: boolean; locked?: boolean }
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'purchase_order_number', label: 'PO #', locked: true },
-  { key: 'job', label: 'Job' },
+  { key: 'job', label: 'Job', filterable: true },
   { key: 'status', label: 'Status', filterable: true },
   { key: 'vendor', label: 'Vendor', filterable: true },
   { key: 'total_amount', label: 'Total' },
-  { key: 'external_id', label: 'External Id' },
   { key: 'updated_at', label: 'Updated' },
 ];
 
@@ -109,6 +109,8 @@ export function PurchaseOrdersListClient({
   const [vendorFilterActive, setVendorFilterActive] = useState(false);
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [statusFilterActive, setStatusFilterActive] = useState(false);
+  const [jobFilter, setJobFilter] = useState<Set<string>>(new Set());
+  const [jobFilterActive, setJobFilterActive] = useState(false);
   const { isVisible, toggle, visibleCount } = useColumnVisibility(
     'purchase-orders',
     TABLE_COLUMNS,
@@ -170,6 +172,14 @@ export function PurchaseOrdersListClient({
 
   const uniqueVendors = useMemo(() => [...new Set(vendorOptions.map((vendor) => vendor.name.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [vendorOptions]);
 
+  const uniqueJobs = useMemo(
+    () =>
+      buildColumnFilterOptions(
+        data.data.map((row) => resolveJobName(row.jobId, jobNameById)),
+      ),
+    [data.data, jobNameById],
+  );
+
   const uniqueStatuses = useMemo(() => {
     const fromOptions = statusOptions
       .map((s) => s.name?.trim())
@@ -218,6 +228,16 @@ export function PurchaseOrdersListClient({
     setPage(1);
   };
 
+  const applyJobFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueJobs.length,
+    });
+    setJobFilter(committed.selected);
+    setJobFilterActive(committed.active);
+    setPage(1);
+  };
+
   const statusFilterProps = {
     options: uniqueStatuses,
     selected: statusFilter,
@@ -236,6 +256,15 @@ export function PurchaseOrdersListClient({
     itemNoun: { singular: 'vendor', plural: 'vendors' },
   };
 
+  const jobFilterProps = {
+    options: uniqueJobs,
+    selected: jobFilter,
+    active: jobFilterActive,
+    onApply: applyJobFilter,
+    menuTitle: 'Filter by job',
+    itemNoun: { singular: 'job', plural: 'jobs' },
+  };
+
   const visibleRows = useMemo(() => {
     const query = debouncedSearch.trim().toLowerCase();
     let rows = data.data;
@@ -245,6 +274,13 @@ export function PurchaseOrdersListClient({
         const archived = isArchivedStatus(po.status?.name);
         return tab === 'archived' ? archived : !archived;
       });
+    }
+
+    if (jobFilterActive) {
+      if (jobFilter.size === 0) rows = [];
+      else rows = rows.filter((row) =>
+        jobFilter.has(columnFilterKey(resolveJobName(row.jobId, jobNameById))),
+      );
     }
 
     if (query) {
@@ -257,7 +293,7 @@ export function PurchaseOrdersListClient({
     }
 
     return rows;
-  }, [data.data, debouncedSearch, tab]);
+  }, [data.data, debouncedSearch, tab, jobFilterActive, jobFilter, jobNameById]);
 
   const breakdown = computeStatusBreakdown(
     visibleRows,
@@ -362,11 +398,13 @@ export function PurchaseOrdersListClient({
                       sortOrder={columnSort.order}
                       onSort={handleColumnSort}
                       filter={
-                        col.key === 'status'
-                          ? statusFilterProps
-                          : col.key === 'vendor'
-                            ? vendorFilterProps
-                            : undefined
+                        col.key === 'job'
+                          ? jobFilterProps
+                          : col.key === 'status'
+                            ? statusFilterProps
+                            : col.key === 'vendor'
+                              ? vendorFilterProps
+                              : undefined
                       }
                     />
                   ))}
@@ -420,11 +458,6 @@ export function PurchaseOrdersListClient({
                       {isVisible('total_amount') && (
                         <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                           {formatAmount(po.totalAmount)}
-                        </td>
-                      )}
-                      {isVisible('external_id') && (
-                        <td className="px-4 py-3 text-slate-600">
-                          {po.externalId ?? ''}
                         </td>
                       )}
                       {isVisible('updated_at') && (

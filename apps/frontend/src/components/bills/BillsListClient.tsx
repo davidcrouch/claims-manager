@@ -12,6 +12,8 @@ import {
   isArchivedStatus,
   commitColumnFilterSelection,
   columnFilterToIdsParam,
+  columnFilterKey,
+  buildColumnFilterOptions,
   ValueFilterMenu,
   SortableColumnHeader,
   TableEmptyRow,
@@ -55,9 +57,9 @@ interface ColDef { key: BillSortField; label: string; filterable?: boolean; lock
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'bill_number', label: 'Bill #', locked: true },
-  { key: 'job', label: 'Job' },
+  { key: 'job', label: 'Job', filterable: true },
   { key: 'status', label: 'Status', filterable: true },
-  { key: 'vendor', label: 'Vendor (sub)', filterable: true },
+  { key: 'vendor', label: 'Vendor', filterable: true },
   { key: 'po_ref', label: 'PO #' },
   { key: 'total_amount', label: 'Amount' },
   { key: 'received_date', label: 'Received' },
@@ -103,6 +105,8 @@ export function BillsListClient({
   const [vendorFilterActive, setVendorFilterActive] = useState(false);
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [statusFilterActive, setStatusFilterActive] = useState(false);
+  const [jobFilter, setJobFilter] = useState<Set<string>>(new Set());
+  const [jobFilterActive, setJobFilterActive] = useState(false);
   const { isVisible, toggle, visibleCount } = useColumnVisibility(
     'bills',
     TABLE_COLUMNS,
@@ -164,6 +168,14 @@ export function BillsListClient({
 
   const uniqueVendors = useMemo(() => [...new Set(vendorOptions.map((vendor) => vendor.name.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [vendorOptions]);
 
+  const uniqueJobs = useMemo(
+    () =>
+      buildColumnFilterOptions(
+        data.data.map((row) => resolveJobName(row.jobId, jobNameById)),
+      ),
+    [data.data, jobNameById],
+  );
+
   const uniqueStatuses = useMemo(() => {
     const fromOptions = statusOptions
       .map((s) => s.name?.trim())
@@ -212,6 +224,16 @@ export function BillsListClient({
     setPage(1);
   };
 
+  const applyJobFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueJobs.length,
+    });
+    setJobFilter(committed.selected);
+    setJobFilterActive(committed.active);
+    setPage(1);
+  };
+
   const statusFilterProps = {
     options: uniqueStatuses,
     selected: statusFilter,
@@ -230,6 +252,15 @@ export function BillsListClient({
     itemNoun: { singular: 'vendor', plural: 'vendors' },
   };
 
+  const jobFilterProps = {
+    options: uniqueJobs,
+    selected: jobFilter,
+    active: jobFilterActive,
+    onApply: applyJobFilter,
+    menuTitle: 'Filter by job',
+    itemNoun: { singular: 'job', plural: 'jobs' },
+  };
+
   const visibleRows = useMemo(() => {
     const query = debouncedSearch.trim().toLowerCase();
     let rows = data.data;
@@ -241,6 +272,13 @@ export function BillsListClient({
       });
     }
 
+    if (jobFilterActive) {
+      if (jobFilter.size === 0) rows = [];
+      else rows = rows.filter((row) =>
+        jobFilter.has(columnFilterKey(resolveJobName(row.jobId, jobNameById))),
+      );
+    }
+
     if (query) {
       rows = rows.filter((b) => {
         const num = (b.billNumber ?? '').toLowerCase();
@@ -250,7 +288,7 @@ export function BillsListClient({
     }
 
     return rows;
-  }, [data.data, debouncedSearch, tab]);
+  }, [data.data, debouncedSearch, tab, jobFilterActive, jobFilter, jobNameById]);
 
   const breakdown = computeStatusBreakdown(
     visibleRows,
@@ -356,11 +394,13 @@ export function BillsListClient({
                       sortOrder={columnSort.order}
                       onSort={handleColumnSort}
                       filter={
-                        col.key === 'status'
-                          ? statusFilterProps
-                          : col.key === 'vendor'
-                            ? vendorFilterProps
-                            : undefined
+                        col.key === 'job'
+                          ? jobFilterProps
+                          : col.key === 'status'
+                            ? statusFilterProps
+                            : col.key === 'vendor'
+                              ? vendorFilterProps
+                              : undefined
                       }
                     />
                   ))}

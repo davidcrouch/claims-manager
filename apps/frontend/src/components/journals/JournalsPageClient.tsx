@@ -13,6 +13,8 @@ import {
   SortableColumnHeader,
   commitColumnFilterSelection,
   columnFilterToValuesParam,
+  columnFilterKey,
+  buildColumnFilterOptions,
   TableEmptyRow,
 } from '@/components/shared/list-filters';
 import { TablePagination } from '@/components/shared/table-pagination';
@@ -52,7 +54,7 @@ interface ColDef { key: JournalSortField; label: string; filterable?: boolean; l
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'name', label: 'Name', locked: true },
-  { key: 'job', label: 'Job' },
+  { key: 'job', label: 'Job', filterable: true },
   { key: 'status', label: 'Status', filterable: true },
   { key: 'description', label: 'Description' },
   { key: 'location', label: 'Location' },
@@ -111,6 +113,8 @@ export function JournalsPageClient({
   });
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [statusFilterActive, setStatusFilterActive] = useState(false);
+  const [jobFilter, setJobFilter] = useState<Set<string>>(new Set());
+  const [jobFilterActive, setJobFilterActive] = useState(false);
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
   const { isVisible, toggle, visibleCount } = useColumnVisibility(
     'journals',
@@ -178,6 +182,14 @@ export function JournalsPageClient({
     [],
   );
 
+  const uniqueJobs = useMemo(
+    () =>
+      buildColumnFilterOptions(
+        data.data.map((row) => resolveJobName(row.jobId, jobNameById)),
+      ),
+    [data.data, jobNameById],
+  );
+
   const toggleStatus = (name: string) => {
     const working = statusFilterActive
       ? new Set(statusFilter)
@@ -203,6 +215,16 @@ export function JournalsPageClient({
     setPage(1);
   };
 
+  const applyJobFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueJobs.length,
+    });
+    setJobFilter(committed.selected);
+    setJobFilterActive(committed.active);
+    setPage(1);
+  };
+
   const visibleRows = useMemo(() => {
     let rows = data.data;
 
@@ -213,8 +235,15 @@ export function JournalsPageClient({
       });
     }
 
+    if (jobFilterActive) {
+      if (jobFilter.size === 0) rows = [];
+      else rows = rows.filter((row) =>
+        jobFilter.has(columnFilterKey(resolveJobName(row.jobId, jobNameById))),
+      );
+    }
+
     return rows;
-  }, [data.data, tab]);
+  }, [data.data, tab, jobFilterActive, jobFilter, jobNameById]);
 
   const breakdown = computeStatusBreakdown(visibleRows, (j) => j.status);
 
@@ -313,16 +342,25 @@ export function JournalsPageClient({
                       sortOrder={columnSort.order}
                       onSort={handleColumnSort}
                       filter={
-                        col.key === 'status'
+                        col.key === 'job'
                           ? {
-                              options: uniqueStatuses,
-                              selected: statusFilter,
-                              active: statusFilterActive,
-                              onApply: applyStatusFilter,
-                              menuTitle: 'Filter by status',
-                              itemNoun: { singular: 'status', plural: 'statuses' },
+                              options: uniqueJobs,
+                              selected: jobFilter,
+                              active: jobFilterActive,
+                              onApply: applyJobFilter,
+                              menuTitle: 'Filter by job',
+                              itemNoun: { singular: 'job', plural: 'jobs' },
                             }
-                          : undefined
+                          : col.key === 'status'
+                            ? {
+                                options: uniqueStatuses,
+                                selected: statusFilter,
+                                active: statusFilterActive,
+                                onApply: applyStatusFilter,
+                                menuTitle: 'Filter by status',
+                                itemNoun: { singular: 'status', plural: 'statuses' },
+                              }
+                            : undefined
                       }
                     />
                   ))}

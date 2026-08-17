@@ -57,6 +57,8 @@ locals {
     # apps/api/src/modules/internal/ and
     # apps/auth-server/src/services/api-seed-client.ts.
     "internal-api-token",
+    # Transactional email (auth invites, password reset; also usable by API RFQ mail).
+    "resend-api-key",
   ]
 }
 

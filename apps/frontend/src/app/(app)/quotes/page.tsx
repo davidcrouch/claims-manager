@@ -1,7 +1,11 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { QuotesPageClient } from '@/components/quotes/QuotesPageClient';
-import { buildJobNameById, toJobOptions } from '@/components/shared/job-label';
+import {
+  buildJobAssigneeNameById,
+  buildJobNameById,
+  toJobOptions,
+} from '@/components/shared/job-label';
 import type { Job, PaginatedResponse, Quote, Claim } from '@/types/api';
 
 export default async function QuotesPage({
@@ -70,6 +74,11 @@ export default async function QuotesPage({
   }));
   const jobs = jobsRes?.data ?? [];
   const jobNameById = buildJobNameById(jobs);
+  const jobAssigneeNameById = buildJobAssigneeNameById(jobs);
+  if (job?.id) {
+    const scopedName = job.assigneeName?.trim();
+    if (scopedName) jobAssigneeNameById[job.id] = scopedName;
+  }
 
   return (
     <QuotesPageClient
@@ -77,6 +86,7 @@ export default async function QuotesPage({
       statusOptions={statusOptions}
       quoteTypes={quoteTypes}
       jobNameById={jobNameById}
+      jobAssigneeNameById={jobAssigneeNameById}
       jobs={toJobOptions(jobs)}
       job={job}
       parentClaim={parentClaim}

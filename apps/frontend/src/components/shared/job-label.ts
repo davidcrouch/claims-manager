@@ -34,6 +34,18 @@ export function buildJobNameById(jobs: JobLabelSource[]): Record<string, string>
   return map;
 }
 
+/** Map job id → assignee display name (omit jobs with no assignee name). */
+export function buildJobAssigneeNameById(
+  jobs: Array<Pick<Job, 'id' | 'assigneeName'>>,
+): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const job of jobs) {
+    const name = job.assigneeName?.trim();
+    if (name) map[job.id] = name;
+  }
+  return map;
+}
+
 export function resolveJobName(
   jobId: string | null | undefined,
   jobNameById?: Record<string, string>,

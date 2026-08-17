@@ -114,6 +114,20 @@ export const drawerRegistry: Record<string, DrawerRegistryEntry> = {
         default: m.AssessmentRecommendationDrawer as unknown as ComponentType<CanvasDrawerProps>,
       })),
   },
+  TaskDetailDrawer: {
+    title: 'Task Detail',
+    loader: () =>
+      import('@/components/tasks/TaskDetailDrawer').then((m) => ({
+        default: m.TaskDetailDrawer as unknown as ComponentType<CanvasDrawerProps>,
+      })),
+  },
+  AppointmentFormDrawer: {
+    title: 'Appointment',
+    loader: () =>
+      import('@/components/forms/AppointmentFormDrawer').then((m) => ({
+        default: m.AppointmentFormDrawer as unknown as ComponentType<CanvasDrawerProps>,
+      })),
+  },
 };
 
 export const LazyQuoteFormDrawer = dynamic(

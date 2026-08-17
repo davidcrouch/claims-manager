@@ -53,28 +53,43 @@ export class ProjectTaskUseCase implements ProjectionUseCase {
     if (claimId) (result.entity as Record<string, unknown>).claimId = claimId;
     if (jobId) (result.entity as Record<string, unknown>).jobId = jobId;
 
-    // Tasks require at least one parent (chk_task_parent)
-    if (!existingLink && !claimId && !jobId) {
-      const missingRefs = result.parentRefs
-        .filter((r) => r.required !== false)
-        .map((r) => ({
-          internalEntityType: r.entityType,
-          providerEntityType: r.entityType,
-          providerEntityId: r.externalId,
-        }));
-      throw new ParentNotProjectedError(
-        'task',
-        externalObjectId,
-        missingRefs,
-        `Task ${externalObjectId} requires at least one parent (job or claim)`,
+    // For new tasks, every parent referenced in the payload must be resolved
+    // so we don't silently drop the job (or claim) link.
+    if (!existingLink) {
+      const unresolvedRefs = result.parentRefs.filter(
+        (ref) => !resolvedParents[ref.entityType],
       );
+      if (unresolvedRefs.length > 0) {
+        throw new ParentNotProjectedError(
+          'task',
+          externalObjectId,
+          unresolvedRefs.map((r) => ({
+            internalEntityType: r.entityType,
+            providerEntityType: r.entityType,
+            providerEntityId: r.externalId,
+          })),
+          `Task ${externalObjectId} cannot be created: unresolved parents ` +
+            unresolvedRefs.map((r) => `${r.entityType}:${r.externalId}`).join(', '),
+        );
+      }
+      if (!claimId && !jobId) {
+        throw new ParentNotProjectedError(
+          'task',
+          externalObjectId,
+          [],
+          `Task ${externalObjectId} requires at least one parent (job or claim)`,
+        );
+      }
     }
 
-    // Derive relatedEntityType / relatedEntityId
-    const resolvedEntityType = jobId ? 'Job' : 'Claim';
-    const resolvedEntityId = (jobId ?? claimId)!;
-    (result.entity as Record<string, unknown>).relatedEntityType = resolvedEntityType;
-    (result.entity as Record<string, unknown>).relatedEntityId = resolvedEntityId;
+    // Derive relatedEntityType / relatedEntityId only when at least one
+    // parent resolved — avoids overwriting good values on the update path.
+    if (jobId || claimId) {
+      const resolvedEntityType = jobId ? 'Job' : 'Claim';
+      const resolvedEntityId = (jobId ?? claimId)!;
+      (result.entity as Record<string, unknown>).relatedEntityType = resolvedEntityType;
+      (result.entity as Record<string, unknown>).relatedEntityId = resolvedEntityId;
+    }
 
     // 4. Upsert
     let taskId: string;

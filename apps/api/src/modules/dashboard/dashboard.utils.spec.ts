@@ -113,7 +113,8 @@ describe('dashboard.utils', () => {
   describe('scheduleEventHref', () => {
     it('maps event types to existing routes', () => {
       expect(scheduleEventHref('quote', 'q1')).toBe('/quotes/q1');
-      expect(scheduleEventHref('appointment', 'a1')).toBe('/appointments');
+      expect(scheduleEventHref('appointment', 'a1')).toBe('/appointments?open=a1');
+      expect(scheduleEventHref('task', 't1')).toBe('/tasks?open=t1');
     });
   });
 

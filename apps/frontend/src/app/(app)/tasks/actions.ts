@@ -37,3 +37,14 @@ export async function fetchTasksAction(params?: {
     return { data: [], total: 0 };
   }
 }
+
+export async function fetchTaskAction(id: string): Promise<Task | null> {
+  const api = await getApi();
+  if (!api) return null;
+  try {
+    return await api.getTask(id);
+  } catch (err) {
+    console.error('[tasks/actions.fetchTaskAction]', err);
+    return null;
+  }
+}

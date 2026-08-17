@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import {
   Calendar,
   ChevronLeft,
@@ -10,6 +11,12 @@ import { Button } from '@/components/ui/button';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { EntityPageHeader } from '@/components/shared/EntityPageHeader';
 import { fetchScheduleEventsAction } from '@/app/(app)/schedule/actions';
+import { useEntityDrawer } from '@/components/layout/EntityDrawerHost';
+import {
+  scheduleEventHref,
+  scheduleEventUsesDrawer,
+  scheduleEventDrawerRequest,
+} from '@/components/schedule/schedule-event-href';
 import type { ScheduleEvent, ScheduleEventType, Job, Claim } from '@/types/api';
 
 type ViewMode = 'month' | 'week' | 'day';
@@ -134,37 +141,106 @@ function buildEventMap(events: ScheduleEvent[]): Map<string, ScheduleEvent[]> {
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MAX_CHIPS_IN_CELL = 3;
 
-function EventChip({ event }: { event: ScheduleEvent }) {
+const eventChipClass = (colors: { bg: string; text: string }) =>
+  `flex w-full items-center gap-1 truncate rounded border px-1 py-0.5 text-left text-[10px] leading-tight transition-opacity hover:opacity-80 ${colors.bg} ${colors.text}`;
+
+const eventBarClass = (colors: { bg: string; text: string }) =>
+  `flex w-full items-center gap-1.5 truncate rounded border px-2 py-1 text-left text-xs transition-opacity hover:opacity-80 ${colors.bg} ${colors.text}`;
+
+function EventChip({
+  event,
+  onSelect,
+}: {
+  event: ScheduleEvent;
+  onSelect: (event: ScheduleEvent) => void;
+}) {
   const colors = EVENT_COLORS[event.eventType] ?? EVENT_COLORS.task;
-  return (
-    <div
-      className={`flex items-center gap-1 truncate rounded border px-1 py-0.5 text-[10px] leading-tight ${colors.bg} ${colors.text}`}
-      title={`${event.title} (${event.eventType.replace('_', ' ')})`}
-    >
+  const title = `${event.title} (${event.eventType.replace('_', ' ')})`;
+  const content = (
+    <>
       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${colors.dot}`} />
       <span className="truncate">{event.title}</span>
-    </div>
+    </>
+  );
+
+  if (scheduleEventUsesDrawer(event.eventType)) {
+    return (
+      <button
+        type="button"
+        className={eventChipClass(colors)}
+        title={title}
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelect(event);
+        }}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <Link
+      href={scheduleEventHref(event.eventType, event.id)}
+      className={eventChipClass(colors)}
+      title={title}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {content}
+    </Link>
   );
 }
 
-function EventBar({ event }: { event: ScheduleEvent }) {
+function EventBar({
+  event,
+  onSelect,
+}: {
+  event: ScheduleEvent;
+  onSelect: (event: ScheduleEvent) => void;
+}) {
   const colors = EVENT_COLORS[event.eventType] ?? EVENT_COLORS.task;
+  const title = `${event.title} (${event.eventType.replace('_', ' ')})`;
   const time = event.startsAt
     ? new Date(event.startsAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
     : '';
-  return (
-    <div
-      className={`flex items-center gap-1.5 truncate rounded border px-2 py-1 text-xs ${colors.bg} ${colors.text}`}
-      title={`${event.title} (${event.eventType.replace('_', ' ')})`}
-    >
+  const content = (
+    <>
       <span className={`h-2 w-2 shrink-0 rounded-full ${colors.dot}`} />
       <span className="truncate font-medium">{event.title}</span>
       {time && <span className="ml-auto shrink-0 text-[10px] opacity-70">{time}</span>}
-    </div>
+    </>
+  );
+
+  if (scheduleEventUsesDrawer(event.eventType)) {
+    return (
+      <button
+        type="button"
+        className={eventBarClass(colors)}
+        title={title}
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelect(event);
+        }}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <Link
+      href={scheduleEventHref(event.eventType, event.id)}
+      className={eventBarClass(colors)}
+      title={title}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {content}
+    </Link>
   );
 }
 
 export function ScheduleClient({ jobId, job, parentClaim }: { jobId?: string; job?: Job | null; parentClaim?: Claim | null } = {}) {
+  const { openEntityDrawer } = useEntityDrawer();
   const [view, setView] = useState<ViewMode>('month');
   const [cursor, setCursor] = useState(() => new Date());
   const [events, setEvents] = useState<ScheduleEvent[]>([]);
@@ -188,6 +264,14 @@ export function ScheduleClient({ jobId, job, parentClaim }: { jobId?: string; jo
   useEffect(() => {
     load();
   }, [load]);
+
+  const handleEventSelect = useCallback(
+    (event: ScheduleEvent) => {
+      const request = scheduleEventDrawerRequest(event.eventType, event.id);
+      if (request) openEntityDrawer(request);
+    },
+    [openEntityDrawer],
+  );
 
   const filteredEvents = useMemo(
     () => hiddenTypes.size === 0 ? events : events.filter((ev) => !hiddenTypes.has(ev.eventType)),
@@ -290,13 +374,17 @@ export function ScheduleClient({ jobId, job, parentClaim }: { jobId?: string; jo
 
       <div className="flex-1 px-6 pb-6" style={{ minHeight: 0, overflow: 'auto' }}>
         {view === 'month' && (
-          <MonthView cells={cells} curMonth={curMonth} eventMap={eventMap} />
+          <MonthView cells={cells} curMonth={curMonth} eventMap={eventMap} onSelect={handleEventSelect} />
         )}
         {view === 'week' && (
-          <WeekView cursor={cursor} eventMap={eventMap} />
+          <WeekView cursor={cursor} eventMap={eventMap} onSelect={handleEventSelect} />
         )}
         {view === 'day' && (
-          <DayView cursor={cursor} events={eventMap.get(dateKey(cursor)) ?? []} />
+          <DayView
+            cursor={cursor}
+            events={eventMap.get(dateKey(cursor)) ?? []}
+            onSelect={handleEventSelect}
+          />
         )}
 
         <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
@@ -334,10 +422,12 @@ function MonthView({
   cells,
   curMonth,
   eventMap,
+  onSelect,
 }: {
   cells: Date[];
   curMonth: number;
   eventMap: Map<string, ScheduleEvent[]>;
+  onSelect: (event: ScheduleEvent) => void;
 }) {
   return (
     <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -377,7 +467,7 @@ function MonthView({
               </span>
               <div className="flex flex-col gap-0.5">
                 {dayEvents.slice(0, MAX_CHIPS_IN_CELL).map((ev) => (
-                  <EventChip key={ev.id} event={ev} />
+                  <EventChip key={ev.id} event={ev} onSelect={onSelect} />
                 ))}
                 {overflow > 0 && (
                   <span className="px-1 text-[10px] text-slate-400">
@@ -396,9 +486,11 @@ function MonthView({
 function WeekView({
   cursor,
   eventMap,
+  onSelect,
 }: {
   cursor: Date;
   eventMap: Map<string, ScheduleEvent[]>;
+  onSelect: (event: ScheduleEvent) => void;
 }) {
   const weekStart = new Date(cursor);
   weekStart.setDate(weekStart.getDate() - weekStart.getDay());
@@ -432,7 +524,7 @@ function WeekView({
               <div className="min-h-[300px] space-y-1 p-1.5">
                 {dayEvents.length > 0 ? (
                   dayEvents.map((ev) => (
-                    <EventBar key={ev.id} event={ev} />
+                    <EventBar key={ev.id} event={ev} onSelect={onSelect} />
                   ))
                 ) : (
                   <p className="pt-2 text-center text-[10px] text-slate-300">—</p>
@@ -449,9 +541,11 @@ function WeekView({
 function DayView({
   cursor,
   events,
+  onSelect,
 }: {
   cursor: Date;
   events: ScheduleEvent[];
+  onSelect: (event: ScheduleEvent) => void;
 }) {
   const hourBuckets = useMemo(() => {
     const buckets = new Map<number, ScheduleEvent[]>();
@@ -493,7 +587,7 @@ function DayView({
           </div>
           <div className="space-y-1">
             {allDayEvents.map((ev) => (
-              <EventBar key={ev.id} event={ev} />
+              <EventBar key={ev.id} event={ev} onSelect={onSelect} />
             ))}
           </div>
         </div>
@@ -512,7 +606,7 @@ function DayView({
               </div>
               <div className="flex-1 space-y-0.5 p-1">
                 {bucket.map((ev) => (
-                  <EventBar key={ev.id} event={ev} />
+                  <EventBar key={ev.id} event={ev} onSelect={onSelect} />
                 ))}
               </div>
             </div>

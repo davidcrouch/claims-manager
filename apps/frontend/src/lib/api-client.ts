@@ -367,6 +367,10 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<Task[]>(`/tasks/job/${jobId}`);
     },
 
+    getTask(id: string): Promise<Task | null> {
+      return fetchApi<Task | null>(`/tasks/${id}`);
+    },
+
     getJobMessages(jobId: string): Promise<PaginatedResponse<Message>> {
       return fetchApi<PaginatedResponse<Message>>(`/messages?jobId=${jobId}&limit=100`);
     },
@@ -397,6 +401,10 @@ export function createApiClient(options?: ApiClientOptions) {
 
     getJobAppointments(jobId: string): Promise<Appointment[]> {
       return fetchApi<Appointment[]>(`/appointments/job/${jobId}`);
+    },
+
+    getAppointment(id: string): Promise<Appointment | null> {
+      return fetchApi<Appointment | null>(`/appointments/${id}`);
     },
 
     getJobInvoices(jobId: string): Promise<Invoice[]> {

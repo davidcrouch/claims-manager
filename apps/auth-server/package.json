@@ -18,7 +18,9 @@
     "test:cov": "jest --coverage",
     "clean": "npx rimraf -I .turbo .vercel dist .next tsconfig.tsbuildinfo",
     "db:seed-rbac": "node dist/scripts/seed-rbac.js",
-    "db:seed-rbac:dev": "tsx src/scripts/seed-rbac.ts"
+    "db:seed-rbac:dev": "tsx src/scripts/seed-rbac.ts",
+    "db:seed-ensure-admin": "node dist/scripts/seed-ensure-construction-admin.js",
+    "db:seed-ensure-admin:dev": "tsx src/scripts/seed-ensure-construction-admin.ts"
   },
   "dependencies": {
     "@morezero/telemetry": "workspace:*",

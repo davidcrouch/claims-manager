@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { ChatDrawer } from '@/components/chat/ChatDrawer';
+import { EntityDrawerProvider } from '@/components/layout/EntityDrawerHost';
 import { hasFeature } from '@/lib/features';
 import { AppSidebar } from './AppSidebar';
 
@@ -19,20 +20,22 @@ export function AppShell({ header, features, permissions, orgName, children }: A
   const chatEnabled = hasFeature(features, 'ai.chat');
 
   return (
-    <SidebarProvider>
-      <AppSidebar
-        features={features}
-        permissions={permissions}
-        orgName={orgName}
-        onOpenChat={chatEnabled ? () => setChatOpen(true) : undefined}
-      />
-      <SidebarInset>
-        {header}
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">{children}</div>
-      </SidebarInset>
-      {chatEnabled && (
-        <ChatDrawer open={chatOpen} onOpenChange={setChatOpen} />
-      )}
-    </SidebarProvider>
+    <EntityDrawerProvider companionChatOpen={chatOpen}>
+      <SidebarProvider>
+        <AppSidebar
+          features={features}
+          permissions={permissions}
+          orgName={orgName}
+          onOpenChat={chatEnabled ? () => setChatOpen(true) : undefined}
+        />
+        <SidebarInset>
+          {header}
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">{children}</div>
+        </SidebarInset>
+        {chatEnabled && (
+          <ChatDrawer open={chatOpen} onOpenChange={setChatOpen} />
+        )}
+      </SidebarProvider>
+    </EntityDrawerProvider>
   );
 }

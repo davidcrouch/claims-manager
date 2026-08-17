@@ -30,3 +30,14 @@ export async function fetchAppointmentsAction(params?: {
     return { data: [], total: 0 };
   }
 }
+
+export async function fetchAppointmentAction(id: string): Promise<Appointment | null> {
+  const api = await getApi();
+  if (!api) return null;
+  try {
+    return await api.getAppointment(id);
+  } catch (err) {
+    console.error('[appointments/actions.fetchAppointmentAction]', err);
+    return null;
+  }
+}

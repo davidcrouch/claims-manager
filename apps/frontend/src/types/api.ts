@@ -543,6 +543,9 @@ export interface Contact {
   typeLookupId?: string | null;
   preferredContactMethodLookupId?: string | null;
   notes?: string | null;
+  /** Present when API/payload marks the contact archived or removed. */
+  status?: string | null;
+  contactPayload?: Record<string, unknown> | null;
   createdAt?: string;
   updatedAt?: string;
 }

@@ -13,6 +13,8 @@ import {
   SortableColumnHeader,
   commitColumnFilterSelection,
   columnFilterToValuesParam,
+  columnFilterKey,
+  buildColumnFilterOptions,
   TableEmptyRow,
 } from '@/components/shared/list-filters';
 import { TablePagination } from '@/components/shared/table-pagination';
@@ -45,7 +47,7 @@ interface ColDef { key: AssessmentSortField; label: string; filterable?: boolean
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'name', label: 'Name', locked: true },
-  { key: 'job', label: 'Job' },
+  { key: 'job', label: 'Job', filterable: true },
   { key: 'status', label: 'Status', filterable: true },
   { key: 'created_at', label: 'Created' },
   { key: 'updated_at', label: 'Updated' },
@@ -84,6 +86,8 @@ export function AssessmentsPageClient({
   });
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [statusFilterActive, setStatusFilterActive] = useState(false);
+  const [jobFilter, setJobFilter] = useState<Set<string>>(new Set());
+  const [jobFilterActive, setJobFilterActive] = useState(false);
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
   const { isVisible, toggle, visibleCount } = useColumnVisibility(
     'assessments',
@@ -146,6 +150,14 @@ export function AssessmentsPageClient({
     [],
   );
 
+  const uniqueJobs = useMemo(
+    () =>
+      buildColumnFilterOptions(
+        data.data.map((row) => resolveJobName(row.jobId, jobNameById)),
+      ),
+    [data.data, jobNameById],
+  );
+
   const toggleStatus = (name: string) => {
     const working = statusFilterActive
       ? new Set(statusFilter)
@@ -171,6 +183,16 @@ export function AssessmentsPageClient({
     setPage(1);
   };
 
+  const applyJobFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueJobs.length,
+    });
+    setJobFilter(committed.selected);
+    setJobFilterActive(committed.active);
+    setPage(1);
+  };
+
   const visibleRows = useMemo(() => {
     let rows = data.data;
 
@@ -179,6 +201,13 @@ export function AssessmentsPageClient({
         const archived = isArchivedStatus(a.status);
         return tab === 'archived' ? archived : !archived;
       });
+    }
+
+    if (jobFilterActive) {
+      if (jobFilter.size === 0) rows = [];
+      else rows = rows.filter((row) =>
+        jobFilter.has(columnFilterKey(resolveJobName(row.jobId, jobNameById))),
+      );
     }
 
     if (debouncedSearch) {
@@ -193,7 +222,7 @@ export function AssessmentsPageClient({
     }
 
     return rows;
-  }, [data.data, tab, debouncedSearch]);
+  }, [data.data, tab, debouncedSearch, jobFilterActive, jobFilter, jobNameById]);
 
   const breakdown = computeStatusBreakdown(visibleRows, (a) => a.status);
 
@@ -300,16 +329,25 @@ export function AssessmentsPageClient({
                     sortOrder={columnSort.order}
                     onSort={handleColumnSort}
                     filter={
-                      col.key === 'status'
+                      col.key === 'job'
                         ? {
-                            options: uniqueStatuses,
-                            selected: statusFilter,
-                            active: statusFilterActive,
-                            onApply: applyStatusFilter,
-                            menuTitle: 'Filter by status',
-                            itemNoun: { singular: 'status', plural: 'statuses' },
+                            options: uniqueJobs,
+                            selected: jobFilter,
+                            active: jobFilterActive,
+                            onApply: applyJobFilter,
+                            menuTitle: 'Filter by job',
+                            itemNoun: { singular: 'job', plural: 'jobs' },
                           }
-                        : undefined
+                        : col.key === 'status'
+                          ? {
+                              options: uniqueStatuses,
+                              selected: statusFilter,
+                              active: statusFilterActive,
+                              onApply: applyStatusFilter,
+                              menuTitle: 'Filter by status',
+                              itemNoun: { singular: 'status', plural: 'statuses' },
+                            }
+                          : undefined
                     }
                   />
                 ))}

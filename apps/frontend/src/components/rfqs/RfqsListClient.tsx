@@ -12,6 +12,8 @@ import {
   isArchivedStatus,
   commitColumnFilterSelection,
   columnFilterToIdsParam,
+  columnFilterKey,
+  buildColumnFilterOptions,
   ValueFilterMenu,
   SortableColumnHeader,
   TableEmptyRow,
@@ -54,9 +56,9 @@ interface ColDef { key: RfqSortField; label: string; filterable?: boolean; locke
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'rfq_number', label: 'RFQ #', locked: true },
-  { key: 'job', label: 'Job' },
+  { key: 'job', label: 'Job', filterable: true },
   { key: 'status', label: 'Status', filterable: true },
-  { key: 'vendor', label: 'Vendor (sub)', filterable: true },
+  { key: 'vendor', label: 'Vendor', filterable: true },
   { key: 'sent_date', label: 'Sent' },
   { key: 'due_date', label: 'Due' },
   { key: 'updated_at', label: 'Updated' },
@@ -98,6 +100,8 @@ export function RfqsListClient({
   const [vendorFilterActive, setVendorFilterActive] = useState(false);
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [statusFilterActive, setStatusFilterActive] = useState(false);
+  const [jobFilter, setJobFilter] = useState<Set<string>>(new Set());
+  const [jobFilterActive, setJobFilterActive] = useState(false);
   const { isVisible, toggle, visibleCount } = useColumnVisibility(
     'rfqs',
     TABLE_COLUMNS,
@@ -159,6 +163,14 @@ export function RfqsListClient({
 
   const uniqueVendors = useMemo(() => [...new Set(vendorOptions.map((vendor) => vendor.name.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [vendorOptions]);
 
+  const uniqueJobs = useMemo(
+    () =>
+      buildColumnFilterOptions(
+        data.data.map((row) => resolveJobName(row.jobId, jobNameById)),
+      ),
+    [data.data, jobNameById],
+  );
+
   const uniqueStatuses = useMemo(() => {
     const fromOptions = statusOptions
       .map((s) => s.name?.trim())
@@ -207,6 +219,16 @@ export function RfqsListClient({
     setPage(1);
   };
 
+  const applyJobFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueJobs.length,
+    });
+    setJobFilter(committed.selected);
+    setJobFilterActive(committed.active);
+    setPage(1);
+  };
+
   const statusFilterProps = {
     options: uniqueStatuses,
     selected: statusFilter,
@@ -225,6 +247,15 @@ export function RfqsListClient({
     itemNoun: { singular: 'vendor', plural: 'vendors' },
   };
 
+  const jobFilterProps = {
+    options: uniqueJobs,
+    selected: jobFilter,
+    active: jobFilterActive,
+    onApply: applyJobFilter,
+    menuTitle: 'Filter by job',
+    itemNoun: { singular: 'job', plural: 'jobs' },
+  };
+
   const visibleRows = useMemo(() => {
     const query = debouncedSearch.trim().toLowerCase();
     let rows = data.data;
@@ -234,6 +265,13 @@ export function RfqsListClient({
         const archived = isArchivedStatus(rfq.status?.name);
         return tab === 'archived' ? archived : !archived;
       });
+    }
+
+    if (jobFilterActive) {
+      if (jobFilter.size === 0) rows = [];
+      else rows = rows.filter((row) =>
+        jobFilter.has(columnFilterKey(resolveJobName(row.jobId, jobNameById))),
+      );
     }
 
     if (query) {
@@ -246,7 +284,7 @@ export function RfqsListClient({
     }
 
     return rows;
-  }, [data.data, debouncedSearch, tab]);
+  }, [data.data, debouncedSearch, tab, jobFilterActive, jobFilter, jobNameById]);
 
   const breakdown = computeStatusBreakdown(
     visibleRows,
@@ -338,11 +376,13 @@ export function RfqsListClient({
                       sortOrder={columnSort.order}
                       onSort={handleColumnSort}
                       filter={
-                        col.key === 'status'
-                          ? statusFilterProps
-                          : col.key === 'vendor'
-                            ? vendorFilterProps
-                            : undefined
+                        col.key === 'job'
+                          ? jobFilterProps
+                          : col.key === 'status'
+                            ? statusFilterProps
+                            : col.key === 'vendor'
+                              ? vendorFilterProps
+                              : undefined
                       }
                     />
                   ))}

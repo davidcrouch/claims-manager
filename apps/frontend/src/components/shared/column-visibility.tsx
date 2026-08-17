@@ -22,9 +22,16 @@ export interface ColumnVisibilityDef {
   label: string;
   /** When true, the column cannot be hidden. Defaults to false. */
   locked?: boolean;
+  /** When true and no stored preference, the column starts hidden. Defaults to false. */
+  defaultHidden?: boolean;
 }
 
 const STORAGE_PREFIX = 'ensureos:table-columns:';
+
+function defaultVisibilityForColumn(col: ColumnVisibilityDef): boolean {
+  if (col.locked) return true;
+  return !col.defaultHidden;
+}
 
 function readStoredVisibility(
   storageKey: string,
@@ -32,7 +39,7 @@ function readStoredVisibility(
 ): Record<string, boolean> {
   const defaults: Record<string, boolean> = {};
   for (const col of columns) {
-    defaults[col.key] = true;
+    defaults[col.key] = defaultVisibilityForColumn(col);
   }
   if (typeof window === 'undefined') return defaults;
   try {
@@ -76,11 +83,13 @@ export function useColumnVisibility(
   storageKey: string,
   columns: ColumnVisibilityDef[],
 ) {
-  const columnSignature = columns.map((c) => `${c.key}:${c.locked ? 1 : 0}`).join(',');
+  const columnSignature = columns
+    .map((c) => `${c.key}:${c.locked ? 1 : 0}:${c.defaultHidden ? 0 : 1}`)
+    .join(',');
 
   const [visibility, setVisibility] = useState<Record<string, boolean>>(() => {
     const defaults: Record<string, boolean> = {};
-    for (const col of columns) defaults[col.key] = true;
+    for (const col of columns) defaults[col.key] = defaultVisibilityForColumn(col);
     return defaults;
   });
 

@@ -15,6 +15,7 @@ export interface QuotesPageClientProps {
   statusOptions: StatusOption[];
   quoteTypes: StatusOption[];
   jobNameById?: Record<string, string>;
+  jobAssigneeNameById?: Record<string, string>;
   jobs: JobOption[];
   job?: Job | null;
   parentClaim?: Claim | null;
@@ -25,6 +26,7 @@ export function QuotesPageClient({
   statusOptions,
   quoteTypes,
   jobNameById,
+  jobAssigneeNameById,
   jobs,
   job,
   parentClaim,
@@ -48,6 +50,7 @@ export function QuotesPageClient({
         statusOptions={statusOptions}
         quoteTypes={quoteTypes}
         jobNameById={jobNameById}
+        jobAssigneeNameById={jobAssigneeNameById}
         job={job}
         parentClaim={parentClaim}
       />

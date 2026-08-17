@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
@@ -11,7 +11,10 @@ import {
   SortTabs,
   SearchInput,
   StatusFilterMenu,
+  SortableColumnHeader,
   TableEmptyRow,
+  commitColumnFilterSelection,
+  buildColumnFilterOptions,
   type SortOption,
 } from '@/components/shared/list-filters';
 import {
@@ -31,24 +34,60 @@ const READ_OPTIONS = [
   { id: 'unread', name: 'Unread' },
 ];
 
+const STATUS_FILTER_OPTIONS = ['Read', 'Unread'];
+
 const MESSAGES_COLUMNS: ColumnVisibilityDef[] = [
+  { key: 'job', label: 'Job' },
   { key: 'subject', label: 'Subject', locked: true },
   { key: 'from', label: 'From' },
   { key: 'to', label: 'To' },
-  { key: 'job_ref', label: 'Job Ref' },
   { key: 'date', label: 'Date' },
   { key: 'status', label: 'Status' },
   { key: 'attachments', label: 'Attachments' },
 ];
 
-export function MessagesListClient({ job, parentClaim }: { job?: Job | null; parentClaim?: Claim | null } = {}) {
+export function MessagesListClient({
+  job,
+  parentClaim,
+  jobNameById,
+}: {
+  job?: Job | null;
+  parentClaim?: Claim | null;
+  jobNameById?: Record<string, string>;
+} = {}) {
   const [search, setSearch] = useState('');
   const [sortField, setSortField] = useState('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [readFilter, setReadFilter] = useState<Set<string>>(new Set());
+  const [jobFilter, setJobFilter] = useState<Set<string>>(new Set());
+  const [jobFilterActive, setJobFilterActive] = useState(false);
+  const [fromFilter, setFromFilter] = useState<Set<string>>(new Set());
+  const [fromFilterActive, setFromFilterActive] = useState(false);
+  const [toFilter, setToFilter] = useState<Set<string>>(new Set());
+  const [toFilterActive, setToFilterActive] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [statusFilterActive, setStatusFilterActive] = useState(false);
   const { isVisible, toggle, visibleCount } = useColumnVisibility(
     'messages',
     MESSAGES_COLUMNS,
+  );
+
+  const uniqueJobs = useMemo(
+    () =>
+      buildColumnFilterOptions(Object.values(jobNameById ?? {}), {
+        alwaysIncludeBlank: true,
+      }),
+    [jobNameById],
+  );
+
+  // Populated when message rows are connected; always offer Blank for empty cells.
+  const uniqueFrom = useMemo(
+    () => buildColumnFilterOptions([], { alwaysIncludeBlank: true }),
+    [],
+  );
+  const uniqueTo = useMemo(
+    () => buildColumnFilterOptions([], { alwaysIncludeBlank: true }),
+    [],
   );
 
   const handleSort = (field: string) => {
@@ -58,6 +97,42 @@ export function MessagesListClient({ job, parentClaim }: { job?: Job | null; par
       setSortField(field);
       setSortOrder('desc');
     }
+  };
+
+  const applyJobFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueJobs.length,
+    });
+    setJobFilter(committed.selected);
+    setJobFilterActive(committed.active);
+  };
+
+  const applyFromFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueFrom.length,
+    });
+    setFromFilter(committed.selected);
+    setFromFilterActive(committed.active);
+  };
+
+  const applyToFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueTo.length,
+    });
+    setToFilter(committed.selected);
+    setToFilterActive(committed.active);
+  };
+
+  const applyStatusColumnFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: STATUS_FILTER_OPTIONS.length,
+    });
+    setStatusFilter(committed.selected);
+    setStatusFilterActive(committed.active);
   };
 
   return (
@@ -122,23 +197,79 @@ export function MessagesListClient({ job, parentClaim }: { job?: Job | null; par
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50">
               <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                {isVisible('job') && (
+                  <SortableColumnHeader
+                    columnKey="job"
+                    label="Job"
+                    activeField={sortField}
+                    sortOrder={sortOrder}
+                    onSort={handleSort}
+                    filter={{
+                      options: uniqueJobs,
+                      selected: jobFilter,
+                      active: jobFilterActive,
+                      onApply: applyJobFilter,
+                      menuTitle: 'Filter by job',
+                      itemNoun: { singular: 'job', plural: 'jobs' },
+                    }}
+                  />
+                )}
                 {isVisible('subject') && (
                   <th scope="col" className="px-4 py-3">Subject</th>
                 )}
                 {isVisible('from') && (
-                  <th scope="col" className="px-4 py-3">From</th>
+                  <SortableColumnHeader
+                    columnKey="from"
+                    label="From"
+                    activeField={sortField}
+                    sortOrder={sortOrder}
+                    onSort={handleSort}
+                    filter={{
+                      options: uniqueFrom,
+                      selected: fromFilter,
+                      active: fromFilterActive,
+                      onApply: applyFromFilter,
+                      menuTitle: 'Filter by from',
+                      itemNoun: { singular: 'sender', plural: 'senders' },
+                    }}
+                  />
                 )}
                 {isVisible('to') && (
-                  <th scope="col" className="px-4 py-3">To</th>
-                )}
-                {isVisible('job_ref') && (
-                  <th scope="col" className="px-4 py-3">Job Ref</th>
+                  <SortableColumnHeader
+                    columnKey="to"
+                    label="To"
+                    activeField={sortField}
+                    sortOrder={sortOrder}
+                    onSort={handleSort}
+                    filter={{
+                      options: uniqueTo,
+                      selected: toFilter,
+                      active: toFilterActive,
+                      onApply: applyToFilter,
+                      menuTitle: 'Filter by to',
+                      itemNoun: { singular: 'recipient', plural: 'recipients' },
+                    }}
+                  />
                 )}
                 {isVisible('date') && (
                   <th scope="col" className="px-4 py-3">Date</th>
                 )}
                 {isVisible('status') && (
-                  <th scope="col" className="px-4 py-3">Status</th>
+                  <SortableColumnHeader
+                    columnKey="status"
+                    label="Status"
+                    activeField={sortField}
+                    sortOrder={sortOrder}
+                    onSort={handleSort}
+                    filter={{
+                      options: STATUS_FILTER_OPTIONS,
+                      selected: statusFilter,
+                      active: statusFilterActive,
+                      onApply: applyStatusColumnFilter,
+                      menuTitle: 'Filter by status',
+                      itemNoun: { singular: 'status', plural: 'statuses' },
+                    }}
+                  />
                 )}
                 {isVisible('attachments') && (
                   <th scope="col" className="px-4 py-3">Attachments</th>

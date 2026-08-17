@@ -333,7 +333,9 @@ export function QuoteDetail({
   const showTakeOffActions = tab === 'line-items' && !locked;
   const showFieldEditActions =
     !locked && (tab === 'overview' || tab === 'parties');
-  const canEditAssignee = showFieldEditActions;
+  /** Assignment is always editable, including published / locked estimates. */
+  const canEditAssignee = true;
+  const showAssigneeSaveActions = assigneeDirty;
 
   const handleLineItemsDirtyChange = useCallback((dirty: boolean, save: () => void) => {
     setLineItemsDirty(dirty);
@@ -392,7 +394,7 @@ export function QuoteDetail({
   return (
     <div className="flex flex-col">
       <SetHeaderActions>
-        {showFieldEditActions && (
+        {(showFieldEditActions || showAssigneeSaveActions) && (
           <>
             <Button
               size="default"
@@ -526,7 +528,8 @@ export function QuoteDetail({
       <div className="pt-4">
         {locked && (
           <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-            This estimate has been published and can no longer be edited.
+            This estimate has been published and can no longer be edited, except
+            for Assigned.
           </div>
         )}
         {saveError && (

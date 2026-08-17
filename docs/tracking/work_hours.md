@@ -766,3 +766,13 @@
   A requests tab and batch detail view show delivery status and related documents in one place.
   Contact picking on jobs was improved so the right people are easier to choose when sending.
   Outcome: RFQ outreach is tracked end-to-end instead of living only in inboxes.
+
+- `2026-08-17` `SHORT_SHA` **4.5 h**
+  `53 files | +2450 −400 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  Lay summary: Staff can open tasks and appointments from the schedule and lists without leaving the page, and an admin account can be seeded for Ensure Construction.
+  Added a shared side panel so tasks and appointments open in place from schedule, lists, and assistant actions.
+  Schedule and dashboard links now open the matching task or appointment directly.
+  Improved list filters and column controls across jobs, quotes, contacts, and related screens.
+  Hardened task sync and quote handling so parent jobs and related records stay consistent.
+  Added an Ensure Construction admin seed and wiring for transactional email secrets in hosted environments.
+  Outcome: faster day-to-day navigation from calendar and lists, with cleaner admin bootstrap.

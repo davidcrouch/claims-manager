@@ -14,6 +14,8 @@ import {
   isArchivedStatus,
   commitColumnFilterSelection,
   columnFilterToIdsParam,
+  columnFilterKey,
+  buildColumnFilterOptions,
   ValueFilterMenu,
   SortableColumnHeader,
   TableEmptyRow,
@@ -69,7 +71,7 @@ interface ColDef { key: WOSortField; label: string; filterable?: boolean; locked
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'name', label: 'Name', locked: true },
-  { key: 'job', label: 'Job' },
+  { key: 'job', label: 'Job', filterable: true },
   { key: 'status', label: 'Status', filterable: true },
   { key: 'wo_type', label: 'Type', filterable: true },
   { key: 'source', label: 'From (upstream)' },
@@ -115,6 +117,8 @@ export function WorkOrdersListClient({
   const [typeFilterActive, setTypeFilterActive] = useState(false);
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [statusFilterActive, setStatusFilterActive] = useState(false);
+  const [jobFilter, setJobFilter] = useState<Set<string>>(new Set());
+  const [jobFilterActive, setJobFilterActive] = useState(false);
   const [captureDrawerOpen, setCaptureDrawerOpen] = useState(false);
   const { isVisible, toggle, visibleCount } = useColumnVisibility(
     'work-orders',
@@ -202,6 +206,14 @@ export function WorkOrdersListClient({
     [workOrderTypes],
   );
 
+  const uniqueJobs = useMemo(
+    () =>
+      buildColumnFilterOptions(
+        data.data.map((row) => resolveJobName(row.jobId, jobNameById)),
+      ),
+    [data.data, jobNameById],
+  );
+
   const uniqueStatuses = useMemo(() => {
     const fromOptions = statusOptions
       .map((s) => s.name?.trim())
@@ -250,6 +262,16 @@ export function WorkOrdersListClient({
     setPage(1);
   };
 
+  const applyJobFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueJobs.length,
+    });
+    setJobFilter(committed.selected);
+    setJobFilterActive(committed.active);
+    setPage(1);
+  };
+
   const statusFilterProps = {
     options: uniqueStatuses,
     selected: statusFilter,
@@ -268,6 +290,15 @@ export function WorkOrdersListClient({
     itemNoun: { singular: 'type', plural: 'types' },
   };
 
+  const jobFilterProps = {
+    options: uniqueJobs,
+    selected: jobFilter,
+    active: jobFilterActive,
+    onApply: applyJobFilter,
+    menuTitle: 'Filter by job',
+    itemNoun: { singular: 'job', plural: 'jobs' },
+  };
+
   const visibleRows = useMemo(() => {
     const query = debouncedSearch.trim().toLowerCase();
     let rows = data.data;
@@ -277,6 +308,13 @@ export function WorkOrdersListClient({
         const archived = isArchivedStatus(wo.status?.name);
         return tab === 'archived' ? archived : !archived;
       });
+    }
+
+    if (jobFilterActive) {
+      if (jobFilter.size === 0) rows = [];
+      else rows = rows.filter((row) =>
+        jobFilter.has(columnFilterKey(resolveJobName(row.jobId, jobNameById))),
+      );
     }
 
     if (query) {
@@ -289,7 +327,7 @@ export function WorkOrdersListClient({
     }
 
     return rows;
-  }, [data.data, tab, debouncedSearch]);
+  }, [data.data, tab, debouncedSearch, jobFilterActive, jobFilter, jobNameById]);
 
   const breakdown = computeStatusBreakdown(visibleRows, (wo) => wo.status?.name);
 
@@ -402,11 +440,13 @@ export function WorkOrdersListClient({
                       sortOrder={columnSort.order}
                       onSort={handleColumnSort}
                       filter={
-                        col.key === 'status'
-                          ? statusFilterProps
-                          : col.key === 'wo_type'
-                            ? typeFilterProps
-                            : undefined
+                        col.key === 'job'
+                          ? jobFilterProps
+                          : col.key === 'status'
+                            ? statusFilterProps
+                            : col.key === 'wo_type'
+                              ? typeFilterProps
+                              : undefined
                       }
                     />
                   ))}

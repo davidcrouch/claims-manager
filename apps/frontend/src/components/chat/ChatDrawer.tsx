@@ -22,9 +22,9 @@ import {
 import { usePageContext } from '@/lib/ai/use-page-context';
 import { cn } from '@/lib/utils';
 import { CHAT_BESIDE_FORM_WIDTH_CLASS } from '@/components/forms/form-drawer-layout';
+import { useEntityDrawer } from '@/components/layout/EntityDrawerHost';
 import { ChatInterface } from './ChatInterface';
 import { ChatHistoryPanel, type ConversationItem } from './ChatHistoryPanel';
-import { ChatFormHost } from './ChatFormHost';
 import { ChatArtifactDrawer } from './ChatArtifactDrawer';
 
 export interface ChatDrawerProps {
@@ -66,6 +66,7 @@ export function ChatDrawer({
   besideCanvas = false,
   widthClassName,
 }: ChatDrawerProps) {
+  const { openEntityDrawer, closeEntityDrawer, isOpen: formDrawerOpen } = useEntityDrawer();
   const [mounted, setMounted] = useState(false);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [sessionKey, setSessionKey] = useState(0);
@@ -75,10 +76,6 @@ export function ChatDrawer({
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [canvasArtifact, setCanvasArtifact] = useState<CanvasArtifact | null>(null);
-  const [canvasComponent, setCanvasComponent] = useState<{
-    component: string;
-    props: Record<string, unknown>;
-  } | null>(null);
 
   const pageContext = usePageContext();
 
@@ -89,7 +86,6 @@ export function ChatDrawer({
   const conversationIdRef = useRef(conversationId);
   conversationIdRef.current = conversationId;
 
-  const formDrawerOpen = !!canvasComponent;
   const artifactDrawerOpen = !!canvasArtifact;
   const toolDrawerOpen = formDrawerOpen || artifactDrawerOpen;
   const besideForm = besideCanvas || toolDrawerOpen;
@@ -136,7 +132,6 @@ export function ChatDrawer({
       setLiveMessages([]);
       setHistoryOpen(false);
       setCanvasArtifact(null);
-      setCanvasComponent(null);
       return;
     }
 
@@ -201,8 +196,8 @@ export function ChatDrawer({
     setLiveMessages([]);
     setHistoryOpen(false);
     setCanvasArtifact(null);
-    setCanvasComponent(null);
-  }, [agentId]);
+    closeEntityDrawer();
+  }, [agentId, closeEntityDrawer]);
 
   const handleSelectConversation = useCallback(async (id: string) => {
     const detail = await getConversationAction(id);
@@ -213,8 +208,8 @@ export function ChatDrawer({
     setLiveMessages(msgs);
     setHistoryOpen(false);
     setCanvasArtifact(null);
-    setCanvasComponent(null);
-  }, []);
+    closeEntityDrawer();
+  }, [closeEntityDrawer]);
 
   const handleDeleteConversation = useCallback(
     async (id: string) => {
@@ -258,33 +253,39 @@ export function ChatDrawer({
 
   const handleOpenCanvas = useCallback((artifact: CanvasArtifact) => {
     setHistoryOpen(false);
-    setCanvasComponent(null);
+    closeEntityDrawer();
     setCanvasArtifact(artifact);
-  }, []);
+  }, [closeEntityDrawer]);
 
   const handleOpenCanvasComponent = useCallback(
     (event: { component: string; props: Record<string, unknown> }) => {
       setHistoryOpen(false);
       setCanvasArtifact(null);
-      setCanvasComponent((prev) => {
-        const mergedProps = {
-          ...(prev?.component === event.component ? prev.props : {}),
-          ...event.props,
-        };
-        const propJobId =
-          typeof mergedProps.jobId === 'string' ? mergedProps.jobId.trim() : '';
-        if (!propJobId && pageContext.jobId) {
-          mergedProps.jobId = pageContext.jobId;
-        }
-        return { component: event.component, props: mergedProps };
-      });
+      const mergedProps = { ...event.props };
+      const propJobId =
+        typeof mergedProps.jobId === 'string' ? mergedProps.jobId.trim() : '';
+      if (!propJobId && pageContext.jobId) {
+        mergedProps.jobId = pageContext.jobId;
+      }
+      // Normalize common id aliases for detail drawers opened from chat/MCP tools
+      if (
+        event.component === 'TaskDetailDrawer' &&
+        !mergedProps.taskId &&
+        typeof mergedProps.id === 'string'
+      ) {
+        mergedProps.taskId = mergedProps.id;
+      }
+      if (
+        event.component === 'AppointmentFormDrawer' &&
+        !mergedProps.appointmentId &&
+        typeof mergedProps.id === 'string'
+      ) {
+        mergedProps.appointmentId = mergedProps.id;
+      }
+      openEntityDrawer({ component: event.component, props: mergedProps });
     },
-    [pageContext.jobId],
+    [pageContext.jobId, openEntityDrawer],
   );
-
-  const handleFormOpenChange = useCallback((nextOpen: boolean) => {
-    if (!nextOpen) setCanvasComponent(null);
-  }, []);
 
   const handleArtifactOpenChange = useCallback((nextOpen: boolean) => {
     if (!nextOpen) setCanvasArtifact(null);
@@ -435,16 +436,6 @@ export function ChatDrawer({
   return (
     <>
       {drawer}
-
-      {canvasComponent && (
-        <ChatFormHost
-          component={canvasComponent.component}
-          props={canvasComponent.props}
-          open={formDrawerOpen}
-          onOpenChange={handleFormOpenChange}
-          companionChatOpen={open}
-        />
-      )}
 
       <ChatArtifactDrawer
         artifact={canvasArtifact}

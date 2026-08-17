@@ -823,6 +823,23 @@ export class QuotesService {
     if (!existing) return null;
 
     const tenantId = this.tenantContext.getTenantId();
+    const bodyKeys = Object.keys(params.body);
+    const assigneeOnly =
+      bodyKeys.length === 1 && bodyKeys[0] === 'assignedToUserId';
+
+    // Assignment can be changed anytime, including on published estimates.
+    if (assigneeOnly) {
+      await this.quotesRepo.update({
+        id: params.id,
+        data: {
+          assignedToUserId:
+            parseOptionalUserId(params.body.assignedToUserId) ?? null,
+          ...(params.userId ? { updatedByUserId: params.userId } : {}),
+        },
+      });
+      const updated = await this.quotesRepo.findOne({ id: params.id, tenantId });
+      return updated ? this.shapeQuoteResponse(updated) : null;
+    }
 
     // Local drafts (no CW id): apply §3.3.6 creatable/editable fields in-DB.
     if (!existing.externalReference) {

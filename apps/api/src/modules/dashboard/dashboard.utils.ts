@@ -137,9 +137,9 @@ export function notificationHref(entityType: string, entityId: string): string {
 export function scheduleEventHref(eventType: string, id: string): string {
   switch (eventType) {
     case 'appointment':
-      return '/appointments';
+      return `/appointments?open=${encodeURIComponent(id)}`;
     case 'task':
-      return '/tasks';
+      return `/tasks?open=${encodeURIComponent(id)}`;
     case 'work_order':
       return `/work-orders/${id}`;
     case 'purchase_order':

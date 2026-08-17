@@ -37,6 +37,7 @@ import {
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
 import { createAppointmentAction, updateAppointmentAction, searchContactsAction } from '@/app/(app)/mutations';
+import { fetchAppointmentAction } from '@/app/(app)/appointments/actions';
 import { JobSelectField } from '@/components/forms/JobSelectField';
 import type { JobOption } from '@/components/shared/job-label';
 import type { Appointment } from '@/types/api';
@@ -130,7 +131,11 @@ export interface AppointmentFormDrawerProps {
   jobParties?: JobParty[];
   defaultAddress?: string;
   appointment?: Appointment;
+  /** Fetch-by-id when opened from Schedule, chat, or MCP (edit mode). */
+  appointmentId?: string | null;
   onSuccess?: (startDate: string) => void;
+  /** Leave a clear strip for an already-open companion chat drawer. */
+  companionChatOpen?: boolean;
 }
 
 function PersonSearchField({
@@ -310,18 +315,50 @@ export function AppointmentFormDrawer({
   jobs,
   jobParties = [],
   defaultAddress,
-  appointment,
+  appointment: appointmentProp,
+  appointmentId,
   onSuccess,
+  companionChatOpen = false,
 }: AppointmentFormDrawerProps) {
   const router = useRouter();
+  const [appointment, setAppointment] = useState<Appointment | undefined>(appointmentProp);
+  const [loadingAppointment, setLoadingAppointment] = useState(false);
   const isEdit = !!appointment;
   const [submitting, setSubmitting] = useState(false);
   const { phase, busy, startCreating, resetPhase } = useCreateSubmitPhase();
   const [error, setError] = useState<string | null>(null);
-  const locked = submitting || busy;
+  const locked = submitting || busy || loadingAppointment;
   const [assignees, setAssignees] = useState<PersonRef[]>([]);
   const [selectedParties, setSelectedParties] = useState<JobParty[]>([]);
   const needsJobPicker = !isEdit && (jobs?.length ?? 0) > 0;
+
+  useEffect(() => {
+    if (!open) return;
+
+    if (appointmentProp) {
+      setAppointment(appointmentProp);
+      return;
+    }
+
+    const id = appointmentId?.trim();
+    if (!id) {
+      if (!appointmentProp) setAppointment(undefined);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingAppointment(true);
+    void fetchAppointmentAction(id).then((fetched) => {
+      if (cancelled) return;
+      setLoadingAppointment(false);
+      setAppointment(fetched ?? undefined);
+      if (!fetched) setError('Appointment not found.');
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, appointmentProp, appointmentId]);
 
   const now = todayDateString();
   const defaultTime = '19:15';
@@ -346,46 +383,49 @@ export function AppointmentFormDrawer({
   const watchedJobId = form.watch('jobId');
 
   useEffect(() => {
-    if (open) {
-      if (appointment) {
-        const start = extractDateParts(appointment.startDate);
-        const end = extractDateParts(appointment.endDate);
-        form.reset({
-          jobId: appointment.jobId,
-          name: appointment.name ?? '',
-          appointmentType: resolveAppointmentType(appointment),
-          location: appointment.location ?? 'ONSITE',
-          timezone: 'Australia/Brisbane',
-          startDate: start?.date ?? todayDateString(),
-          startTime: start?.time ?? '19:15',
-          endDate: end?.date ?? todayDateString(),
-          endTime: end?.time ?? '20:15',
-          address: defaultAddress ?? '',
-          description: '',
-        });
-        setAssignees([]);
-        setSelectedParties([]);
-      } else {
-        const today = todayDateString();
-        form.reset({
-          jobId: jobId ?? '',
-          name: '',
-          appointmentType: 'Inspection',
-          location: 'ONSITE',
-          timezone: 'Australia/Brisbane',
-          startDate: today,
-          startTime: '19:15',
-          endDate: today,
-          endTime: '20:15',
-          address: defaultAddress ?? '',
-          description: '',
-        });
-        setAssignees([]);
-        setSelectedParties([]);
-      }
-      setError(null);
+    if (!open) return;
+    if (loadingAppointment) return;
+    // Wait for fetch-by-id before deciding create vs edit defaults
+    if (appointmentId?.trim() && !appointment) return;
+
+    if (appointment) {
+      const start = extractDateParts(appointment.startDate);
+      const end = extractDateParts(appointment.endDate);
+      form.reset({
+        jobId: appointment.jobId,
+        name: appointment.name ?? '',
+        appointmentType: resolveAppointmentType(appointment),
+        location: appointment.location ?? 'ONSITE',
+        timezone: 'Australia/Brisbane',
+        startDate: start?.date ?? todayDateString(),
+        startTime: start?.time ?? '19:15',
+        endDate: end?.date ?? todayDateString(),
+        endTime: end?.time ?? '20:15',
+        address: defaultAddress ?? '',
+        description: '',
+      });
+      setAssignees([]);
+      setSelectedParties([]);
+    } else {
+      const today = todayDateString();
+      form.reset({
+        jobId: jobId ?? '',
+        name: '',
+        appointmentType: 'Inspection',
+        location: 'ONSITE',
+        timezone: 'Australia/Brisbane',
+        startDate: today,
+        startTime: '19:15',
+        endDate: today,
+        endTime: '20:15',
+        address: defaultAddress ?? '',
+        description: '',
+      });
+      setAssignees([]);
+      setSelectedParties([]);
     }
-  }, [open, jobId, defaultAddress, form, appointment]);
+    setError(null);
+  }, [open, jobId, defaultAddress, form, appointment, loadingAppointment, appointmentId]);
 
   const searchContacts = useCallback(
     async (q: string): Promise<PersonRef[]> => {
@@ -466,6 +506,7 @@ export function AppointmentFormDrawer({
       description={isEdit ? 'Update the appointment details below.' : 'Schedule a new appointment. Fill in the details below.'}
       icon={<CalendarClock className="h-5 w-5" />}
       preventClose={locked}
+      companionChatOpen={companionChatOpen}
     >
       <form
         onSubmit={form.handleSubmit(onSubmit)}

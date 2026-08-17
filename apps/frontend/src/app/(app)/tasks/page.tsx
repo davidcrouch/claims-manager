@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { TasksListClient } from '@/components/tasks/TasksListClient';
-import type { Job, Claim } from '@/types/api';
+import { buildJobNameById } from '@/components/shared/job-label';
+import type { Job, Claim, PaginatedResponse } from '@/types/api';
 
 export const metadata = { title: 'Tasks — EnsureOS' };
 
@@ -23,6 +24,15 @@ export default async function TasksPage({
   if (!api) redirect('/api/auth/login');
 
   const params = await searchParams;
+  const emptyJobs: PaginatedResponse<Job> = { data: [], total: 0 };
+
+  const jobsRes = await api.getJobs({ limit: 100 }).catch((err: unknown) => {
+    console.error(
+      'frontend:TasksPage - getJobs failed:',
+      err instanceof Error ? err.message : err,
+    );
+    return emptyJobs;
+  });
 
   let job: Job | null = null;
   let parentClaim: Claim | null = null;
@@ -39,5 +49,11 @@ export default async function TasksPage({
     }
   }
 
-  return <TasksListClient job={job} parentClaim={parentClaim} />;
+  return (
+    <TasksListClient
+      job={job}
+      parentClaim={parentClaim}
+      jobNameById={buildJobNameById(jobsRes?.data ?? [])}
+    />
+  );
 }

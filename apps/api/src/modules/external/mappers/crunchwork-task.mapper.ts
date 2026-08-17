@@ -71,26 +71,42 @@ export class CrunchworkTaskMapper implements EntityMapper {
       tx: params.tx,
     });
 
-    if (!claimId && !jobId) {
-      throw new ParentNotProjectedError(
-        'task',
-        externalObjectId,
-        [
-          {
-            internalEntityType: 'job',
-            providerEntityType: 'job',
-            providerEntityId: cwJobId,
-          },
-          {
-            internalEntityType: 'claim',
-            providerEntityType: 'claim',
-            providerEntityId: cwClaimId,
-          },
-        ],
-        `CrunchworkTaskMapper.map — cannot create task ${externalObjectId}: ` +
-          `neither claimId (${cwClaimId ?? 'missing'}) nor jobId (${cwJobId ?? 'missing'}) ` +
-          `resolved to an internal entity. Task rows require at least one parent ` +
-          `(chk_task_parent). The parent claim/job may not yet have been projected.`,
+    // For new tasks, every parent referenced in the payload must be resolved
+    // so we don't silently drop the job (or claim) link.
+    if (!existingLink) {
+      const missingParents: Array<{
+        internalEntityType: string;
+        providerEntityType: string;
+        providerEntityId: string | undefined;
+      }> = [];
+      if (cwJobId && !jobId) {
+        missingParents.push({ internalEntityType: 'job', providerEntityType: 'job', providerEntityId: cwJobId });
+      }
+      if (cwClaimId && !claimId) {
+        missingParents.push({ internalEntityType: 'claim', providerEntityType: 'claim', providerEntityId: cwClaimId });
+      }
+      if (missingParents.length > 0) {
+        throw new ParentNotProjectedError(
+          'task',
+          externalObjectId,
+          missingParents,
+          `CrunchworkTaskMapper.map — cannot create task ${externalObjectId}: ` +
+            `unresolved parents: ${missingParents.map((p) => `${p.providerEntityType}:${p.providerEntityId ?? 'missing'}`).join(', ')}. ` +
+            `The parent claim/job may not yet have been projected.`,
+        );
+      }
+      if (!claimId && !jobId) {
+        throw new ParentNotProjectedError(
+          'task',
+          externalObjectId,
+          [],
+          `CrunchworkTaskMapper.map — cannot create task ${externalObjectId}: ` +
+            `no parent references in payload.`,
+        );
+      }
+    } else if (!claimId && !jobId) {
+      this.logger.warn(
+        `CrunchworkTaskMapper.map — updating task ${externalObjectId} but neither parent resolved`,
       );
     }
 
@@ -109,17 +125,12 @@ export class CrunchworkTaskMapper implements EntityMapper {
     const rawPriority = ((payload.priority as string) ?? 'low').toLowerCase();
     const rawStatus = ((payload.status as string) ?? 'open').toLowerCase();
 
-    const resolvedEntityType = jobId ? 'Job' : 'Claim';
-    const resolvedEntityId = (jobId ?? claimId)!;
-
-    const taskData = {
+    const taskData: Record<string, unknown> = {
       tenantId: params.tenantId,
       name: (payload.name as string) ?? 'Untitled Task',
       description: (payload.description as string) ?? undefined,
       claimId: claimId ?? undefined,
       jobId: jobId ?? undefined,
-      relatedEntityType: resolvedEntityType,
-      relatedEntityId: resolvedEntityId,
       dueDate: payload.dueDate
         ? new Date(payload.dueDate as string)
         : undefined,
@@ -129,6 +140,11 @@ export class CrunchworkTaskMapper implements EntityMapper {
       taskPayload: payload,
       updatedAt: new Date(),
     };
+
+    if (jobId || claimId) {
+      taskData.relatedEntityType = jobId ? 'Job' : 'Claim';
+      taskData.relatedEntityId = (jobId ?? claimId)!;
+    }
 
     if (existingLink) {
       await db

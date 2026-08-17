@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { CalendarCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
@@ -14,6 +14,8 @@ import {
   SearchInput,
   StatusFilterMenu,
   commitColumnFilterSelection,
+  buildColumnFilterOptions,
+  columnFilterKey,
   type SortOption,
 } from '@/components/shared/list-filters';
 import { TablePagination } from '@/components/shared/table-pagination';
@@ -22,8 +24,11 @@ import {
   appointmentTypeName,
 } from '@/components/appointments/AppointmentsTable';
 import { AppointmentFormDrawer } from '@/components/forms/AppointmentFormDrawer';
-import type { JobOption } from '@/components/shared/job-label';
-import { fetchAppointmentsAction } from '@/app/(app)/appointments/actions';
+import { resolveJobName, type JobOption } from '@/components/shared/job-label';
+import {
+  fetchAppointmentsAction,
+} from '@/app/(app)/appointments/actions';
+import { useEntityDrawer } from '@/components/layout/EntityDrawerHost';
 import type { Appointment, Job, Claim } from '@/types/api';
 
 const SORT_OPTIONS: SortOption[] = [
@@ -48,7 +53,9 @@ export function AppointmentsListClient({
   job?: Job | null;
   parentClaim?: Claim | null;
 }) {
+  const router = useRouter();
   const searchParams = useSearchParams();
+  const { openEntityDrawer } = useEntityDrawer();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -60,6 +67,10 @@ export function AppointmentsListClient({
   const [statusNameFilterActive, setStatusNameFilterActive] = useState(false);
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
   const [typeFilterActive, setTypeFilterActive] = useState(false);
+  const [jobFilter, setJobFilter] = useState<Set<string>>(new Set());
+  const [jobFilterActive, setJobFilterActive] = useState(false);
+  const [locationFilter, setLocationFilter] = useState<Set<string>>(new Set());
+  const [locationFilterActive, setLocationFilterActive] = useState(false);
   const [page, setPage] = useState(1);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
@@ -70,6 +81,12 @@ export function AppointmentsListClient({
   );
 
   const jobId = searchParams.get('jobId') ?? undefined;
+  const openAppointmentId = searchParams.get('open');
+  const jobNameById = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const j of jobs) map[j.id] = j.label;
+    return map;
+  }, [jobs]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -97,6 +114,19 @@ export function AppointmentsListClient({
   useEffect(() => {
     setPage(1);
   }, [search, sortField, sortOrder, statusParam]);
+
+  useEffect(() => {
+    if (!openAppointmentId) return;
+    openEntityDrawer({
+      component: 'AppointmentFormDrawer',
+      props: { appointmentId: openAppointmentId },
+    });
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('open');
+    const qs = params.toString();
+    router.replace(qs ? `/appointments?${qs}` : '/appointments', { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- open once per openAppointmentId
+  }, [openAppointmentId]);
 
   const handleSort = (field: string) => {
     if (sortField === field) {
@@ -139,6 +169,19 @@ export function AppointmentsListClient({
     return [...names].sort((a, b) => a.localeCompare(b));
   }, [appointments]);
 
+  const uniqueJobs = useMemo(
+    () =>
+      buildColumnFilterOptions(
+        appointments.map((a) => resolveJobName(a.jobId, jobNameById)),
+      ),
+    [appointments, jobNameById],
+  );
+
+  const uniqueLocations = useMemo(
+    () => buildColumnFilterOptions(appointments.map((a) => a.location)),
+    [appointments],
+  );
+
   const applyStatusNameFilter = (next: Set<string>) => {
     const committed = commitColumnFilterSelection({
       next,
@@ -156,6 +199,26 @@ export function AppointmentsListClient({
     });
     setTypeFilter(committed.selected);
     setTypeFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const applyJobFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueJobs.length,
+    });
+    setJobFilter(committed.selected);
+    setJobFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const applyLocationFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueLocations.length,
+    });
+    setLocationFilter(committed.selected);
+    setLocationFilterActive(committed.active);
     setPage(1);
   };
 
@@ -184,8 +247,39 @@ export function AppointmentsListClient({
       }
     }
 
+    if (jobFilterActive) {
+      if (jobFilter.size === 0) {
+        rows = [];
+      } else {
+        rows = rows.filter((a) =>
+          jobFilter.has(columnFilterKey(resolveJobName(a.jobId, jobNameById))),
+        );
+      }
+    }
+
+    if (locationFilterActive) {
+      if (locationFilter.size === 0) {
+        rows = [];
+      } else {
+        rows = rows.filter((a) =>
+          locationFilter.has(columnFilterKey(a.location)),
+        );
+      }
+    }
+
     return rows;
-  }, [appointments, statusNameFilterActive, statusNameFilter, typeFilterActive, typeFilter]);
+  }, [
+    appointments,
+    statusNameFilterActive,
+    statusNameFilter,
+    typeFilterActive,
+    typeFilter,
+    jobFilterActive,
+    jobFilter,
+    locationFilterActive,
+    locationFilter,
+    jobNameById,
+  ]);
 
   const breakdown = computeStatusBreakdown(visibleAppointments, (a) => a.status);
 
@@ -253,6 +347,7 @@ export function AppointmentsListClient({
           sortField={sortField}
           sortOrder={sortOrder}
           onSort={handleSort}
+          jobNameById={jobNameById}
           statusColumnFilter={{
             options: uniqueStatuses,
             selected: statusNameFilter,
@@ -268,6 +363,22 @@ export function AppointmentsListClient({
             onApply: applyTypeFilter,
             menuTitle: 'Filter by type',
             itemNoun: { singular: 'type', plural: 'types' },
+          }}
+          jobColumnFilter={{
+            options: uniqueJobs,
+            selected: jobFilter,
+            active: jobFilterActive,
+            onApply: applyJobFilter,
+            menuTitle: 'Filter by job',
+            itemNoun: { singular: 'job', plural: 'jobs' },
+          }}
+          locationColumnFilter={{
+            options: uniqueLocations,
+            selected: locationFilter,
+            active: locationFilterActive,
+            onApply: applyLocationFilter,
+            menuTitle: 'Filter by location',
+            itemNoun: { singular: 'location', plural: 'locations' },
           }}
         />
 

@@ -117,9 +117,6 @@ export class ParentRecoveryService {
           ok: true,
         });
         outcome.recovered = true;
-        // Only need one parent to resolve for the child to succeed (task
-        // requires claim OR job per chk_task_parent). Stop after first win.
-        return outcome;
       } catch (err) {
         const msg = (err as Error).message;
         this.logger.warn(

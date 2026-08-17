@@ -6,12 +6,31 @@ import {
   useColumnVisibility,
 } from '@/components/shared/column-visibility';
 import { resolveJobName } from '@/components/shared/job-label';
+import { resolveDetailAssignee } from '@/components/shared/DetailAssignee';
 import { ListArchiveButton, LIST_ARCHIVE_TH_CLASS, LIST_ARCHIVE_TD_CLASS, LIST_ARCHIVE_SPACER_TD_CLASS } from '@/components/shared/ListArchiveButton';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { TypeBadge } from '@/components/ui/type-badge';
 import type { Quote } from '@/types/api';
 
 type Dict = Record<string, unknown>;
+
+/** Same fallback as estimate detail: quote assignee, else job assignee. */
+export function resolveEstimateListAssigneeName(
+  quote: Quote,
+  jobAssigneeNameById?: Record<string, string>,
+): string {
+  const resolved = resolveDetailAssignee({
+    entityAssigneeName: quote.assigneeName,
+    entityAssignedToUserId: quote.assignedToUserId,
+    job: quote.jobId
+      ? {
+          assigneeName: jobAssigneeNameById?.[quote.jobId] ?? null,
+          assignedToUserId: null,
+        }
+      : null,
+  });
+  return resolved.assigneeName?.trim() || '';
+}
 
 export function getEstimateTypeName(quote: Quote): string {
   if (quote.quoteType?.name) return quote.quoteType.name;
@@ -48,6 +67,7 @@ function formatAmount(value?: string | null): string {
 export type QuoteSortField =
   | 'quote_number'
   | 'job'
+  | 'assignee'
   | 'status'
   | 'estimate_type'
   | 'reference'
@@ -55,12 +75,19 @@ export type QuoteSortField =
   | 'quote_date'
   | 'updated_at';
 
-interface ColDef { key: QuoteSortField; label: string; filterable?: boolean; locked?: boolean }
+interface ColDef {
+  key: QuoteSortField;
+  label: string;
+  filterable?: boolean;
+  locked?: boolean;
+  defaultHidden?: boolean;
+}
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'quote_number', label: 'Estimate #', locked: true },
-  { key: 'job', label: 'Job' },
-  { key: 'reference', label: 'Reference' },
+  { key: 'job', label: 'Job', filterable: true },
+  { key: 'assignee', label: 'Assigned', filterable: true },
+  { key: 'reference', label: 'Reference', defaultHidden: true },
   { key: 'status', label: 'Status', filterable: true },
   { key: 'estimate_type', label: 'Estimate Type', filterable: true },
   { key: 'total_amount', label: 'Total' },
@@ -71,28 +98,34 @@ const TABLE_COLUMNS: ColDef[] = [
 export interface QuotesTableProps {
   quotes: Quote[];
   jobNameById?: Record<string, string>;
+  jobAssigneeNameById?: Record<string, string>;
   onRowClick?: (quote: Quote) => void;
   onArchived?: (quoteId: string) => void;
   sortField?: QuoteSortField;
   sortOrder?: 'asc' | 'desc';
   onSort?: (field: QuoteSortField) => void;
   statusColumnFilter?: ColumnValueFilter;
+  jobColumnFilter?: ColumnValueFilter;
+  assigneeColumnFilter?: ColumnValueFilter;
   estimateTypeColumnFilter?: ColumnValueFilter;
 }
 
 export function QuotesTable({
   quotes,
   jobNameById,
+  jobAssigneeNameById,
   onRowClick,
   onArchived,
   sortField,
   sortOrder = 'desc',
   onSort,
   statusColumnFilter,
+  jobColumnFilter,
+  assigneeColumnFilter,
   estimateTypeColumnFilter,
 }: QuotesTableProps) {
   const { isVisible, toggle, visibleCount } = useColumnVisibility(
-    'quotes',
+    'quotes-v2',
     TABLE_COLUMNS,
   );
   const visibleColumns = TABLE_COLUMNS.filter((col) => isVisible(col.key));
@@ -103,7 +136,11 @@ export function QuotesTable({
       <table className="min-w-full divide-y divide-slate-200 text-sm">
         <thead className="bg-slate-50">
           <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-            {onSort || statusColumnFilter || estimateTypeColumnFilter
+            {onSort ||
+            statusColumnFilter ||
+            jobColumnFilter ||
+            assigneeColumnFilter ||
+            estimateTypeColumnFilter
               ? visibleColumns.map((col) => (
                   <SortableColumnHeader
                     key={col.key}
@@ -113,11 +150,15 @@ export function QuotesTable({
                     sortOrder={sortOrder}
                     onSort={onSort ?? (() => {})}
                     filter={
-                      col.key === 'status'
-                        ? statusColumnFilter
-                        : col.key === 'estimate_type'
-                          ? estimateTypeColumnFilter
-                          : undefined
+                      col.key === 'job'
+                        ? jobColumnFilter
+                        : col.key === 'assignee'
+                          ? assigneeColumnFilter
+                          : col.key === 'status'
+                            ? statusColumnFilter
+                            : col.key === 'estimate_type'
+                              ? estimateTypeColumnFilter
+                              : undefined
                     }
                   />
                 ))
@@ -158,6 +199,12 @@ export function QuotesTable({
                 {isVisible('job') && (
                   <td className="px-4 py-3 text-slate-600">
                     {resolveJobName(quote.jobId, jobNameById)}
+                  </td>
+                )}
+                {isVisible('assignee') && (
+                  <td className="px-4 py-3 text-slate-600">
+                    {resolveEstimateListAssigneeName(quote, jobAssigneeNameById) ||
+                      '—'}
                   </td>
                 )}
                 {isVisible('reference') && (

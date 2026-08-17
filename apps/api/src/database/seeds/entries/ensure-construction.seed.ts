@@ -12,6 +12,10 @@
  *   - CLI (`pnpm --filter api run db:seed`) — always
  *   - api-server `POST /internal/seed-tenant` — connection only, when the
  *     tenant is Ensure Construction
+ *
+ * Platform admin user/password for this org is seeded on the auth-server side
+ * (`pnpm --filter @morezero/auth-server run db:seed-ensure-admin:dev`) when
+ * ENSURE_PLATFORM_ADMIN_PASSWORD is set — same shared claims_manager database.
  */
 import * as crypto from 'node:crypto';
 import { and, eq } from 'drizzle-orm';

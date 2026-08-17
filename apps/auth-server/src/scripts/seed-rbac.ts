@@ -360,6 +360,22 @@ async function seed() {
   console.log(`  Backfilled ${backfilled.length} org members with admin role`);
 
   console.log('RBAC seed complete.');
+
+  if ((process.env.ENSURE_PLATFORM_ADMIN_PASSWORD ?? '').trim()) {
+    console.log('Seeding Ensure Construction platform admin...');
+    const { seedEnsureConstructionPlatformAdmin } = await import(
+      './seed-ensure-construction-admin.js'
+    );
+    const admin = await seedEnsureConstructionPlatformAdmin();
+    console.log(
+      `  Ensure Construction platform admin ready userId=${admin.userId} orgId=${admin.organizationId}`,
+    );
+  } else {
+    console.log(
+      '  Skipping Ensure Construction platform admin (ENSURE_PLATFORM_ADMIN_PASSWORD not set)',
+    );
+  }
+
   await sql.end();
 }
 
