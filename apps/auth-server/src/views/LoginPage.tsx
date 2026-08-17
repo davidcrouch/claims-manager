@@ -14,6 +14,8 @@ interface LoginPageProps {
   appSlug?: string | null;
   startOverUrl?: string;
   nonce?: string;
+  /** When false, hide public Sign Up (orgs already exist / invite-only). */
+  showSignUp?: boolean;
 }
 
 export function LoginPage({
@@ -28,6 +30,7 @@ export function LoginPage({
   appSlug,
   startOverUrl,
   nonce,
+  showSignUp = false,
 }: LoginPageProps) {
   const isSessionExpired =
     error && /session.*expired|session.*not found/i.test(error);
@@ -237,15 +240,17 @@ export function LoginPage({
               </div>
             </form>
 
-            <div className="mt-8 text-center text-sm text-slate-500 md:text-left">
-              Don&apos;t have an account?{' '}
-              <a
-                href={registerUrl}
-                className="font-medium text-brand-600 transition-colors duration-200 hover:text-brand-700 hover:underline"
-              >
-                Sign Up
-              </a>
-            </div>
+            {showSignUp && (
+              <div className="mt-8 text-center text-sm text-slate-500 md:text-left">
+                Don&apos;t have an account?{' '}
+                <a
+                  href={registerUrl}
+                  className="font-medium text-brand-600 transition-colors duration-200 hover:text-brand-700 hover:underline"
+                >
+                  Sign Up
+                </a>
+              </div>
+            )}
           </div>
         </div>
       </div>

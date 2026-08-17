@@ -141,7 +141,8 @@ export type RegistrationErrorCode =
    | 'INVALID_PROVIDER'
    | 'PROVISIONING_FAILED'
    | 'DATABASE_ERROR'
-   | 'VALIDATION_ERROR';
+   | 'VALIDATION_ERROR'
+   | 'PUBLIC_ORG_SIGNUP_DISABLED';
 
 // =============================================================================
 // PROVIDER VALIDATORS

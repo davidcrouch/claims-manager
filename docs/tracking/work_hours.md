@@ -793,3 +793,12 @@
   Corrected password-identity updates so they match the database schema types.
   Confirmed the auth service compiles cleanly for release packaging.
   Outcome: auth service build unblocked for staging deploy.
+
+- `2026-08-17` `SHORT_SHA` **0 h**
+  `9 files | +227 −13 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  Lay summary: After the first organisation exists, people can no longer create new organisations from public sign-up; they need an invitation.
+  Closed public new-organisation signup once at least one organisation is on the system.
+  Left an optional setting to force open or closed signup for testing or recovery.
+  Hid the Sign Up link and create-organisation option when signup is closed.
+  Blocked registration and API signup paths that would create a new organisation.
+  Invite-based joins to existing organisations remain available.

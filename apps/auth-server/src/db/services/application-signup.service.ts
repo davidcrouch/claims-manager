@@ -11,6 +11,11 @@ import { createUserIdentitiesRepository } from '../repositories/user-identities-
 import { createOrganizationsRepository } from '../repositories/organizations-repository.js';
 import { createOrganizationUsersRepository } from '../repositories/organization-users-repository.js';
 import type { NewUser } from '../../schemas/index.js';
+import { sql } from 'drizzle-orm';
+import { organizations } from '../schema.js';
+import {
+  assertPublicOrgSignupAllowed,
+} from '../../services/public-org-signup-policy.js';
 
 const log = createLogger('auth-server:db:application-signup-service', LoggerType.NODEJS);
 
@@ -163,6 +168,15 @@ export class ApplicationSignupService {
         const userExists = await this.existsUser(txDb, userId!);
         scenario = userIdentityId || userExists ? 'existing_user_existing_organization' : 'new_user_new_organization';
       } else {
+        // Bootstrap gate: only the first organisation may be created via public signup.
+        // Re-check inside the transaction to reduce race windows.
+        await assertPublicOrgSignupAllowed(async () => {
+          const [row] = await tx
+            .select({ count: sql<number>`count(*)::int` })
+            .from(organizations);
+          return Number(row?.count ?? 0);
+        });
+
         const orgCode = this.generateOrgCode(input.organizationName ?? input.email);
         const created = await organizationsRepo.create(systemContext, {
           name: input.organizationName ?? `${input.name ?? input.email}'s Organization`,

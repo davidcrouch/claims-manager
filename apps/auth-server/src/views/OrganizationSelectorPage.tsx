@@ -30,7 +30,9 @@ export function OrganizationSelectorPage({
 }: OrganizationSelectorPageProps) {
   const subtitle = mode === 'login'
     ? `${name ? `Welcome, ${name}! ` : ''}You belong to multiple organizations. Please select the one you want to sign in to.`
-    : `${name ? `Welcome, ${name}! ` : ''}You belong to multiple organizations. Please select which one you want to create an account for, or create a new organization.`;
+    : showCreateNew
+      ? `${name ? `Welcome, ${name}! ` : ''}You belong to multiple organizations. Please select which one you want to create an account for, or create a new organization.`
+      : `${name ? `Welcome, ${name}! ` : ''}You belong to multiple organizations. Please select which one you want to create an account for.`;
 
   const bottomLabel = mode === 'login'
     ? 'Signing in as'

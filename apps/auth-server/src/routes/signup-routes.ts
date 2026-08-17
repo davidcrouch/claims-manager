@@ -23,6 +23,11 @@ import {
    type IdentityRegistrationInput,
    type IdentityProvider
 } from '../services/identity-registration-service.js';
+import {
+   isPublicOrgSignupAllowed,
+   PUBLIC_ORG_SIGNUP_DISABLED_CODE,
+   PUBLIC_ORG_SIGNUP_DISABLED_MESSAGE,
+} from '../services/public-org-signup-policy.js';
 
 const baseLogger = createLogger('auth-server:signup-routes', LoggerType.NODEJS);
 const log = createTelemetryLogger(baseLogger, 'signup-routes', 'SignupRoutes', 'auth-server');
@@ -120,6 +125,19 @@ export default function createSignupRoutes(app: Application): void {
             origin,
             clientId: clientId ? 'present' : 'missing'
          }, 'auth-server:signup-routes:signup - Signup request received');
+
+         // Creating a new organisation is only allowed while none exist (bootstrap).
+         // Joining an existing organisation via organizationId remains allowed.
+         if (!organizationId && !(await isPublicOrgSignupAllowed())) {
+            log.info(
+               { functionName, email },
+               'auth-server:signup-routes:signup - Public org signup closed',
+            );
+            return res.status(403).json({
+               error: PUBLIC_ORG_SIGNUP_DISABLED_CODE,
+               message: PUBLIC_ORG_SIGNUP_DISABLED_MESSAGE,
+            });
+         }
 
          // Validate terms acceptance for password registration
          if (provider === 'password' && !acceptTerms) {

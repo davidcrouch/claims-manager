@@ -17,6 +17,10 @@ import {
 import type { AccessContext } from '../schemas/index.js';
 import * as bcrypt from 'bcrypt';
 import { triggerSeedTenant } from './api-seed-client.js';
+import {
+  PublicOrgSignupDisabledError,
+  PUBLIC_ORG_SIGNUP_DISABLED_CODE,
+} from './public-org-signup-policy.js';
 
 const baseLogger = createLogger('auth-server:internal-signup', LoggerType.NODEJS);
 const log = createTelemetryLogger(baseLogger, 'internal-signup', 'InternalSignupService', 'auth-server');
@@ -46,7 +50,8 @@ export type InternalSignupErrorCode =
    | 'INVALID_PROVIDER'
    | 'PROVISIONING_FAILED'
    | 'DATABASE_ERROR'
-   | 'VALIDATION_ERROR';
+   | 'VALIDATION_ERROR'
+   | 'PUBLIC_ORG_SIGNUP_DISABLED';
 
 export interface InternalSignupResult {
    success: boolean;
@@ -187,6 +192,18 @@ class InternalSignupService {
                success: false,
                error: 'User or identity already exists',
                errorCode: 'IDENTITY_ALREADY_EXISTS'
+            };
+         }
+
+         if (
+            error instanceof PublicOrgSignupDisabledError ||
+            error?.code === PUBLIC_ORG_SIGNUP_DISABLED_CODE ||
+            error?.name === 'PublicOrgSignupDisabledError'
+         ) {
+            return {
+               success: false,
+               error: error.message,
+               errorCode: 'PUBLIC_ORG_SIGNUP_DISABLED',
             };
          }
 

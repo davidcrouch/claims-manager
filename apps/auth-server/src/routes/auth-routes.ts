@@ -56,6 +56,10 @@ import {
 import { getUserByEmail, addPasswordIdentityToUser } from '../services/identity-registration-service.js';
 // Internal signup service for user + organization provisioning
 import { getInternalSignupService } from '../services/internal-signup-service.js';
+import {
+   isPublicOrgSignupAllowed,
+   PUBLIC_ORG_SIGNUP_DISABLED_MESSAGE,
+} from '../services/public-org-signup-policy.js';
 // OAuth state storage via Redis (centralized in oidc-provider.ts)
 import { 
    storeOAuthState, 
@@ -367,6 +371,7 @@ export default function createAuthRoutes(
             const resetPasswordUrl = `${baseUrl}/reset-password`;
             const appSlug = await getAppSlug(uid) || undefined;
             const startOverUrl = error ? await getStartOverUrl(uid, req, res) : undefined;
+            const showSignUp = await isPublicOrgSignupAllowed();
 
             const html = renderPage(
                React.createElement(LoginPage, {
@@ -381,6 +386,7 @@ export default function createAuthRoutes(
                   appSlug,
                   startOverUrl,
                   nonce: res.locals.cspNonce as string | undefined,
+                  showSignUp,
                }),
                { title: 'EnsureOS — Sign in', description: 'Sign in to your EnsureOS account' }
             );
@@ -482,6 +488,17 @@ export default function createAuthRoutes(
                   familyName = pendingInvite.preview.familyName;
                   registerEmail = pendingInvite.preview.email || registerEmail;
                }
+            }
+
+            // Greenfield registration is only for bootstrap (no orgs yet) or invitees.
+            if (!inviteMode && !(await isPublicOrgSignupAllowed())) {
+               log.info(
+                  { functionName: 'register', uid },
+                  'auth-server:auth-routes:register - Public org signup closed; redirecting to login',
+               );
+               return res.redirect(
+                  `${baseUrl}/login?interaction=${uid}&error=${encodeURIComponent(PUBLIC_ORG_SIGNUP_DISABLED_MESSAGE)}`,
+               );
             }
 
             const html = renderPage(
@@ -587,6 +604,16 @@ export default function createAuthRoutes(
 
          if (!interaction || !email || !name) {
             return res.redirect(`${baseUrl}/register?error=${encodeURIComponent('Invalid registration link. Please try again.')}`);
+         }
+
+         if (!(await isPublicOrgSignupAllowed())) {
+            log.info(
+               { functionName: 'onboard-company' },
+               'auth-server:auth-routes:onboard-company - Public org signup closed',
+            );
+            return res.redirect(
+               `${baseUrl}/login?interaction=${encodeURIComponent(interaction)}&error=${encodeURIComponent(PUBLIC_ORG_SIGNUP_DISABLED_MESSAGE)}`,
+            );
          }
 
          const html = renderPage(
@@ -1005,7 +1032,7 @@ export default function createAuthRoutes(
                      error: (req.query.error as string) || null,
                      mode: 'registration',
                      actionUrl: `/interaction/${interactionUid}/select-organization`,
-                     showCreateNew: true,
+                     showCreateNew: await isPublicOrgSignupAllowed(),
                   }),
                   { title: 'EnsureOS — Select organization' }
                );
@@ -1376,6 +1403,15 @@ export default function createAuthRoutes(
                   functionName: 'login-submit', 
                   email 
                }, 'auth-server:auth-routes:login-submit - User not found, redirecting to registration');
+               if (!(await isPublicOrgSignupAllowed())) {
+                  log.info(
+                     { functionName: 'login-submit', email },
+                     'auth-server:auth-routes:login-submit - Public org signup closed; not redirecting to register',
+                  );
+                  return res.redirect(
+                     `/login?interaction=${uid}&error=${encodeURIComponent(PUBLIC_ORG_SIGNUP_DISABLED_MESSAGE)}`,
+                  );
+               }
                const registerUrl = `/register?interaction=${uid}&email=${encodeURIComponent(email)}&from=login`;
                // When client uses fetch with redirect:'manual', return JSON so it can navigate (Location header may be inaccessible for cross-origin).
                if (req.headers['x-more0-app-slug']) {
@@ -1792,6 +1828,14 @@ export default function createAuthRoutes(
          if (!organizationId && !createNew) {
             log.warn({ functionName: 'select-organization-submit', uid }, 'auth-server:auth-routes:select-organization-submit - No organization selected');
             return res.redirect(getAppSelectOrganizationUrl('Please select an organization or create a new one.'));
+         }
+
+         if (createNew && !(await isPublicOrgSignupAllowed())) {
+            log.info(
+               { functionName: 'select-organization-submit', uid },
+               'auth-server:auth-routes:select-organization-submit - Public org signup closed; createNew rejected',
+            );
+            return res.redirect(getAppSelectOrganizationUrl(PUBLIC_ORG_SIGNUP_DISABLED_MESSAGE));
          }
 
          // Get interaction details
@@ -2360,6 +2404,16 @@ export default function createAuthRoutes(
          // =====================================================================
          // UNIFIED SIGNUP: Create all records in a single transaction
          // =====================================================================
+
+         if (!(await isPublicOrgSignupAllowed())) {
+            log.info(
+               { functionName: 'register-submit', email },
+               'auth-server:auth-routes:register - Public org signup closed; rejecting greenfield registration',
+            );
+            return res.redirect(
+               `/login?interaction=${uid}&error=${encodeURIComponent(PUBLIC_ORG_SIGNUP_DISABLED_MESSAGE)}`,
+            );
+         }
 
          log.info({ 
             functionName: 'register-submit', 
@@ -3201,6 +3255,7 @@ export default function createAuthRoutes(
                resetPasswordUrl: `${baseUrl}/reset-password`,
                startOverUrl,
                nonce: res.locals.cspNonce as string | undefined,
+               showSignUp: await isPublicOrgSignupAllowed(),
             }),
             { title: 'EnsureOS — Session expired' }
          );
