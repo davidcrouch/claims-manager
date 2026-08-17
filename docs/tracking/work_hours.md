@@ -794,7 +794,7 @@
   Confirmed the auth service compiles cleanly for release packaging.
   Outcome: auth service build unblocked for staging deploy.
 
-- `2026-08-17` `SHORT_SHA` **0 h**
+- `2026-08-17` `9369b43` **0 h**
   `9 files | +227 −13 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: After the first organisation exists, people can no longer create new organisations from public sign-up; they need an invitation.
   Closed public new-organisation signup once at least one organisation is on the system.
