@@ -803,8 +803,8 @@
   Blocked registration and API signup paths that would create a new organisation.
   Invite-based joins to existing organisations remain available.
 
-- `2026-08-17` `SHORT_SHA` **0 h**
-  `7 files | +478 −172 | Tier 2 standard | Light orchestration`
+- `2026-08-17` `e66ca52` **0 h**
+  `8 files | +486 −172 | Tier 2 standard | Light orchestration`
   Lay summary: Password reset now returns people to sign-in correctly, and the app layout chrome was tightened.
   Fixed password-reset success and sign-in links so users are not sent to a broken login page.
   Kept the reset flow tied to the active sign-in session when one exists.
