@@ -777,8 +777,8 @@
   Added an Ensure Construction admin seed and wiring for transactional email secrets in hosted environments.
   Outcome: faster day-to-day navigation from calendar and lists, with cleaner admin bootstrap.
 
-- `2026-08-17` `SHORT_SHA` **0.5 h**
-  `2 files | +45 −20 | Tier 2 standard / Tier 3 complex | Light orchestration`
+- `2026-08-17` `659bb61` **0.5 h**
+  `3 files | +42 −7 | Tier 2 standard / Tier 3 complex | Light orchestration`
   Lay summary: Fixed a failed staging release by correcting task sync typing and recognising an email secret that was already in place.
   Corrected task sync typing so the API build and checks pass again.
   Told staging infrastructure to adopt the existing email API key secret instead of trying to create a duplicate.
