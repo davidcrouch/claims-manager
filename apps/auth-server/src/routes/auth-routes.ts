@@ -368,7 +368,7 @@ export default function createAuthRoutes(
             const microsoftAuthUrl = microsoftConfig ? `${baseUrl}/login/microsoft/start?interaction=${encodeURIComponent(uid)}` : undefined;
             const loginActionUrl = `${baseUrl}/interaction/${uid}/login`;
             const registerUrl = `${baseUrl}/register?interaction=${uid}`;
-            const resetPasswordUrl = `${baseUrl}/reset-password`;
+            const resetPasswordUrl = `${baseUrl}/reset-password?interaction=${encodeURIComponent(uid)}`;
             const appSlug = await getAppSlug(uid) || undefined;
             const startOverUrl = error ? await getStartOverUrl(uid, req, res) : undefined;
             const showSignUp = await isPublicOrgSignupAllowed();
@@ -534,20 +534,59 @@ export default function createAuthRoutes(
    });
 
    /**
-    * GET /reset-password - Renders the password reset request page
+    * First-party app login entry (starts a fresh OIDC interaction).
+    * Auth-server /login cannot be used without an interaction UID.
+    */
+   function appLoginUrl(): string {
+      const clientOrigin = getCorsOrigins()[0] || 'http://localhost:3000';
+      return `${clientOrigin}/api/auth/login?returnTo=/dashboard`;
+   }
+
+   /**
+    * Resolve a safe "sign in" URL for password-reset pages.
+    * Prefer resuming the OIDC interaction when still present; otherwise start a
+    * fresh login via the first-party app (auth-server /login requires interaction).
+    */
+   function resetFlowLoginUrl(baseUrl: string, interaction?: string | null): string {
+      const uid = (interaction || '').trim();
+      if (uid) {
+         return `${baseUrl}/login?interaction=${encodeURIComponent(uid)}`;
+      }
+      return appLoginUrl();
+   }
+
+   /**
+    * GET /reset-password - Renders the password reset request page (or success/done)
     */
    app.get('/reset-password', setNoCache, async (req: Request, res: Response, next: NextFunction) => {
       try {
          const error = req.query.error as string | undefined;
-         const success = req.query.success === '1';
+         const successParam = req.query.success as string | undefined;
+         const interaction = (req.query.interaction as string | undefined)?.trim() || '';
          const baseUrl = getRequestBaseUrl(req);
+         const loginUrl = resetFlowLoginUrl(baseUrl, interaction);
+         const nonce = res.locals.cspNonce as string | undefined;
+
+         if (successParam === 'updated') {
+            const html = renderPage(
+               React.createElement(ResetPasswordPage, {
+                  mode: 'done' as const,
+                  loginUrl: appLoginUrl(),
+                  nonce,
+               }),
+               { title: 'EnsureOS — Password updated', description: 'Your password was updated successfully' }
+            );
+            return res.send(html);
+         }
 
          const html = renderPage(
             React.createElement(ResetPasswordPage, {
                mode: 'request' as const,
                error: error ? decodeURIComponent(error) : null,
-               success,
-               loginUrl: `${baseUrl}/login`,
+               success: successParam === '1',
+               loginUrl,
+               interaction: interaction || undefined,
+               nonce,
             }),
             { title: 'EnsureOS — Reset password', description: 'Reset your password' }
          );
@@ -565,10 +604,14 @@ export default function createAuthRoutes(
       try {
          const token = req.query.token as string;
          const error = req.query.error as string | undefined;
+         const interaction = (req.query.interaction as string | undefined)?.trim() || '';
          const baseUrl = getRequestBaseUrl(req);
 
          if (!token) {
-            return res.redirect(`${baseUrl}/reset-password?error=${encodeURIComponent('Invalid or missing reset token.')}`);
+            const qs = interaction
+               ? `?interaction=${encodeURIComponent(interaction)}&error=${encodeURIComponent('Invalid or missing reset token.')}`
+               : `?error=${encodeURIComponent('Invalid or missing reset token.')}`;
+            return res.redirect(`${baseUrl}/reset-password${qs}`);
          }
 
          const html = renderPage(
@@ -576,7 +619,8 @@ export default function createAuthRoutes(
                mode: 'confirm' as const,
                token,
                error: error ? decodeURIComponent(error) : null,
-               loginUrl: `${baseUrl}/login`,
+               loginUrl: resetFlowLoginUrl(baseUrl, interaction),
+               nonce: res.locals.cspNonce as string | undefined,
             }),
             { title: 'EnsureOS — Set new password' }
          );
@@ -645,12 +689,15 @@ export default function createAuthRoutes(
       const baseUrl = getRequestBaseUrl(req);
       try {
          const email = (req.body?.email || '').trim();
+         const interaction = (req.body?.interaction || '').trim();
+         const interactionQs = interaction ? `&interaction=${encodeURIComponent(interaction)}` : '';
+
          if (!email) {
-            return res.redirect(`${baseUrl}/reset-password?error=${encodeURIComponent('Please provide your email address.')}`);
+            return res.redirect(`${baseUrl}/reset-password?error=${encodeURIComponent('Please provide your email address.')}${interactionQs}`);
          }
 
          await requestPasswordReset({ email });
-         return res.redirect(`${baseUrl}/reset-password?success=1`);
+         return res.redirect(`${baseUrl}/reset-password?success=1${interactionQs}`);
       } catch (err) {
          log.error({ functionName: 'reset-password-request', error: err.message }, 'auth-server:auth-routes:reset-password-request - Error');
          return res.redirect(`${baseUrl}/reset-password?error=${encodeURIComponent('An error occurred. Please try again.')}`);
@@ -676,7 +723,9 @@ export default function createAuthRoutes(
             return res.redirect(`${baseUrl}/reset-password/confirm?token=${encodeURIComponent(token)}&error=${encodeURIComponent(result.error || 'Failed to reset password.')}`);
          }
 
-         return res.redirect(`${baseUrl}/login?registered=0&error=${encodeURIComponent('')}&success_message=${encodeURIComponent('Password updated successfully. Please sign in with your new password.')}`);
+         // Do not redirect to /login without an OIDC interaction — that returns 400.
+         // Show a success page that starts a fresh app login.
+         return res.redirect(`${baseUrl}/reset-password?success=updated`);
       } catch (err) {
          log.error({ functionName: 'reset-password-confirm', error: err.message }, 'auth-server:auth-routes:reset-password-confirm - Error');
          return res.redirect(`${baseUrl}/reset-password?error=${encodeURIComponent('An error occurred. Please try again.')}`);
@@ -3048,11 +3097,6 @@ export default function createAuthRoutes(
    // =============================================================================
    // INVITATION ACCEPTANCE ROUTES
    // =============================================================================
-
-   function appLoginUrl(): string {
-      const clientOrigin = getCorsOrigins()[0] || 'http://localhost:3000';
-      return `${clientOrigin}/api/auth/login?returnTo=/dashboard`;
-   }
 
    app.get('/accept-invite', setNoCache, async (req: Request, res: Response, next: NextFunction) => {
       try {

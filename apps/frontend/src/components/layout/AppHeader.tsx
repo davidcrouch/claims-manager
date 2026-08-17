@@ -1,9 +1,11 @@
 'use client';
 
+import { Settings } from 'lucide-react';
 import {
   SidebarTrigger,
   SidebarRail,
 } from '@/components/ui/sidebar';
+import { Button } from '@/components/ui/button';
 import { BreadcrumbConsumer, HeaderActionsConsumer } from './BreadcrumbProvider';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { UserAvatarMenu } from './UserAvatarMenu';
@@ -11,9 +13,17 @@ import type { AppSidebarUser } from './AppSidebar';
 
 export interface AppHeaderProps {
   user?: AppSidebarUser | null;
+  showAdminSettings?: boolean;
+  onOpenAdminSettings?: () => void;
+  adminSettingsActive?: boolean;
 }
 
-export function AppHeader({ user }: AppHeaderProps) {
+export function AppHeader({
+  user,
+  showAdminSettings = false,
+  onOpenAdminSettings,
+  adminSettingsActive = false,
+}: AppHeaderProps) {
   return (
     <header
       data-slot="app-header"
@@ -26,6 +36,20 @@ export function AppHeader({ user }: AppHeaderProps) {
         <div className="flex shrink-0 items-center gap-2 pl-5">
           <HeaderActionsConsumer />
           <UserAvatarMenu user={user} />
+          {showAdminSettings && onOpenAdminSettings ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Settings"
+              title="Settings"
+              aria-pressed={adminSettingsActive}
+              onClick={onOpenAdminSettings}
+              className="h-9 w-9 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
+          ) : null}
           <NotificationBell />
         </div>
       </div>

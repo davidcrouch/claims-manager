@@ -2,7 +2,6 @@
 
 import { BreadcrumbProvider } from './BreadcrumbProvider';
 import { AppShell } from './AppShell';
-import { AppHeader } from './AppHeader';
 import type { AppSidebarUser } from './AppSidebar';
 
 export interface AppLayoutClientProps {
@@ -13,11 +12,17 @@ export interface AppLayoutClientProps {
   children: React.ReactNode;
 }
 
-export function AppLayoutClient({ user, features, permissions, orgName, children }: AppLayoutClientProps) {
+export function AppLayoutClient({
+  user,
+  features,
+  permissions,
+  orgName,
+  children,
+}: AppLayoutClientProps) {
   return (
     <BreadcrumbProvider>
       <AppShell
-        header={<AppHeader user={user} />}
+        user={user}
         features={features}
         permissions={permissions}
         orgName={orgName}

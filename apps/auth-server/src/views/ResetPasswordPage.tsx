@@ -1,11 +1,15 @@
 import React from 'react';
 import { AuthLayout } from './AuthLayout.js';
+import { AuthLeftPanel } from './AuthLeftPanel.js';
 
 interface ResetPasswordRequestProps {
   mode: 'request';
   error?: string | null;
   success?: boolean;
   loginUrl: string;
+  /** When present, preserved so "Sign in" can resume the OIDC interaction. */
+  interaction?: string;
+  nonce?: string;
 }
 
 interface ResetPasswordConfirmProps {
@@ -13,21 +17,97 @@ interface ResetPasswordConfirmProps {
   token: string;
   error?: string | null;
   loginUrl: string;
+  nonce?: string;
 }
 
-type ResetPasswordPageProps = ResetPasswordRequestProps | ResetPasswordConfirmProps;
+interface ResetPasswordDoneProps {
+  mode: 'done';
+  loginUrl: string;
+  nonce?: string;
+}
+
+type ResetPasswordPageProps =
+  | ResetPasswordRequestProps
+  | ResetPasswordConfirmProps
+  | ResetPasswordDoneProps;
 
 export function ResetPasswordPage(props: ResetPasswordPageProps) {
-  const { error, loginUrl } = props;
-
-  if (props.mode === 'confirm') {
-    return <ResetPasswordConfirmView token={props.token} error={error} loginUrl={loginUrl} />;
+  if (props.mode === 'done') {
+    return <ResetPasswordDoneView loginUrl={props.loginUrl} nonce={props.nonce} />;
   }
 
-  return <ResetPasswordRequestView error={error} success={props.success} loginUrl={loginUrl} />;
+  if (props.mode === 'confirm') {
+    return (
+      <ResetPasswordConfirmView
+        token={props.token}
+        error={props.error}
+        loginUrl={props.loginUrl}
+        nonce={props.nonce}
+      />
+    );
+  }
+
+  return (
+    <ResetPasswordRequestView
+      error={props.error}
+      success={props.success}
+      loginUrl={props.loginUrl}
+      interaction={props.interaction}
+      nonce={props.nonce}
+    />
+  );
 }
 
-function ResetPasswordRequestView({ error, success, loginUrl }: { error?: string | null; success?: boolean; loginUrl: string }) {
+function AuthCardShell({
+  eyebrow,
+  title,
+  subtitle,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex min-h-screen items-center justify-center px-4 py-10">
+      <div className="flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-brand-200 bg-white shadow-2xl md:flex-row md:items-stretch">
+        <AuthLeftPanel variant="full" />
+
+        <div className="flex min-w-0 flex-1 basis-0 flex-col justify-center px-8 py-10 sm:px-10">
+          <div className="mb-8 text-center md:text-left">
+            <div className="mb-3 flex items-center justify-center gap-3 md:justify-start">
+              <span className="h-px w-8 shrink-0 bg-brand-500" />
+              <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-500">
+                {eyebrow}
+              </span>
+              <span className="h-px w-8 shrink-0 bg-brand-500" />
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
+              {title}
+            </h1>
+            <p className="mt-2 text-sm text-slate-500">{subtitle}</p>
+          </div>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ResetPasswordRequestView({
+  error,
+  success,
+  loginUrl,
+  interaction,
+  nonce,
+}: {
+  error?: string | null;
+  success?: boolean;
+  loginUrl: string;
+  interaction?: string;
+  nonce?: string;
+}) {
   const submitScript = `
     (function() {
       var form = document.getElementById('resetForm');
@@ -44,67 +124,102 @@ function ResetPasswordRequestView({ error, success, loginUrl }: { error?: string
   `;
 
   return (
-    <AuthLayout inlineScript={submitScript}>
-      <section className="relative z-20 flex items-start min-h-screen">
-        <div className="ml-[30%] min-w8xl max-w8xl px-4 sm:px-6">
-          <div className="py-12 md:py-20">
-            <div className="pb-12 text-center">
-              <h1 className="animate-[gradient_6s_linear_infinite] bg-[linear-gradient(to_right,var(--color-gray-200),var(--color-indigo-200),var(--color-gray-50),var(--color-indigo-300),var(--color-gray-200))] bg-[length:200%_auto] bg-clip-text font-nacelle text-3xl font-semibold text-transparent md:text-4xl">
-                Reset your password
-              </h1>
-              {error && (
-                <div className="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
-                  {error}
-                </div>
-              )}
-              {success && (
-                <div className="mt-4 p-3 rounded-lg bg-green-500/10 border border-green-500/20 text-green-400 text-sm">
-                  If an account with that email exists, we&apos;ve sent a password reset link. Please check your inbox.
-                </div>
-              )}
-            </div>
-
-            {!success && (
-              <form id="resetForm" method="POST" action="/api/auth/reset-password/request" className="mx-auto max-w-[400px]">
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-indigo-200/65" htmlFor="email">
-                    Email
-                  </label>
-                  <input
-                    id="email"
-                    name="email"
-                    type="email"
-                    className="form-input w-full"
-                    placeholder="Your email"
-                    required
-                  />
-                </div>
-                <div className="mt-6">
-                  <button
-                    id="submitBtn"
-                    type="submit"
-                    className="btn w-full bg-linear-to-t from-indigo-600 to-indigo-500 bg-[length:100%_100%] bg-[bottom] text-white shadow-[inset_0px_1px_0px_0px_--theme(--color-white/.16)] hover:bg-[length:100%_150%]"
-                  >
-                    Reset Password
-                  </button>
-                </div>
-              </form>
-            )}
-
-            <div className="mt-6 text-center text-sm text-indigo-200/65">
-              Remember your password?{' '}
-              <a href={loginUrl} className="font-medium text-indigo-500">
-                Sign in
-              </a>
-            </div>
+    <AuthLayout inlineScript={submitScript} nonce={nonce}>
+      <AuthCardShell
+        eyebrow="Password"
+        title="Reset your password"
+        subtitle={
+          success
+            ? 'Check your inbox for the next step.'
+            : 'Enter the email associated with your account and we will send a reset link.'
+        }
+      >
+        {error && (
+          <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {error}
           </div>
+        )}
+        {success && (
+          <div className="mb-5 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700">
+            If an account with that email exists, we&apos;ve sent a password reset link. Please check
+            your inbox.
+          </div>
+        )}
+
+        {!success && (
+          <form
+            id="resetForm"
+            method="POST"
+            action="/api/auth/reset-password/request"
+            className="w-full"
+          >
+            {interaction ? <input type="hidden" name="interaction" value={interaction} /> : null}
+            <div>
+              <label
+                className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500"
+                htmlFor="email"
+              >
+                Email
+              </label>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                className="form-input w-full"
+                placeholder="you@example.com"
+                required
+              />
+            </div>
+            <div className="mt-7">
+              <button
+                id="submitBtn"
+                type="submit"
+                className="group inline-flex w-full items-center justify-center rounded-lg bg-brand-700 px-5 py-3 text-sm font-medium text-white shadow-md transition-all duration-300 hover:-translate-y-0.5 hover:bg-brand-800 hover:shadow-xl"
+              >
+                Send reset link
+                <svg
+                  className="ml-2 size-4 transition-transform duration-300 group-hover:translate-x-1"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M5 12h14" />
+                  <path d="m12 5 7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+          </form>
+        )}
+
+        <div className="mt-8 text-center text-sm text-slate-500 md:text-left">
+          Remember your password?{' '}
+          <a
+            href={loginUrl}
+            className="font-medium text-brand-600 transition-colors duration-200 hover:text-brand-700 hover:underline"
+          >
+            Sign in
+          </a>
         </div>
-      </section>
+      </AuthCardShell>
     </AuthLayout>
   );
 }
 
-function ResetPasswordConfirmView({ token, error, loginUrl }: { token: string; error?: string | null; loginUrl: string }) {
+function ResetPasswordConfirmView({
+  token,
+  error,
+  loginUrl,
+  nonce,
+}: {
+  token: string;
+  error?: string | null;
+  loginUrl: string;
+  nonce?: string;
+}) {
   const confirmScript = `
     (function() {
       var form = document.getElementById('confirmForm');
@@ -128,72 +243,150 @@ function ResetPasswordConfirmView({ token, error, loginUrl }: { token: string; e
   `;
 
   return (
-    <AuthLayout inlineScript={confirmScript}>
-      <section className="relative z-20 flex items-start min-h-screen">
-        <div className="ml-[30%] min-w8xl max-w8xl px-4 sm:px-6">
-          <div className="py-12 md:py-20">
-            <div className="pb-12 text-center">
-              <h1 className="animate-[gradient_6s_linear_infinite] bg-[linear-gradient(to_right,var(--color-gray-200),var(--color-indigo-200),var(--color-gray-50),var(--color-indigo-300),var(--color-gray-200))] bg-[length:200%_auto] bg-clip-text font-nacelle text-3xl font-semibold text-transparent md:text-4xl">
-                Set new password
-              </h1>
-              {error && (
-                <div className="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
-                  {error}
-                </div>
-              )}
+    <AuthLayout inlineScript={confirmScript} nonce={nonce}>
+      <AuthCardShell
+        eyebrow="Password"
+        title="Set a new password"
+        subtitle="Choose a strong password you have not used before."
+      >
+        {error && (
+          <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        <form
+          id="confirmForm"
+          method="POST"
+          action="/api/auth/reset-password/confirm"
+          className="w-full"
+        >
+          <input type="hidden" name="token" value={token} />
+          <div className="space-y-5">
+            <div>
+              <label
+                className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500"
+                htmlFor="password"
+              >
+                New password
+              </label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                className="form-input w-full"
+                placeholder="Choose a strong password"
+                required
+                minLength={8}
+              />
             </div>
-
-            <form id="confirmForm" method="POST" action="/api/auth/reset-password/confirm" className="mx-auto max-w-[400px]">
-              <input type="hidden" name="token" value={token} />
-              <div className="space-y-5">
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-indigo-200/65" htmlFor="password">
-                    New password
-                  </label>
-                  <input
-                    id="password"
-                    name="password"
-                    type="password"
-                    className="form-input w-full"
-                    placeholder="Choose a strong password"
-                    required
-                    minLength={8}
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-indigo-200/65" htmlFor="confirmPassword">
-                    Confirm new password
-                  </label>
-                  <input
-                    id="confirmPassword"
-                    name="confirmPassword"
-                    type="password"
-                    className="form-input w-full"
-                    placeholder="Re-enter your password"
-                    required
-                    minLength={8}
-                  />
-                </div>
-              </div>
-              <div className="mt-6">
-                <button
-                  id="confirmBtn"
-                  type="submit"
-                  className="btn w-full bg-linear-to-t from-indigo-600 to-indigo-500 bg-[length:100%_100%] bg-[bottom] text-white shadow-[inset_0px_1px_0px_0px_--theme(--color-white/.16)] hover:bg-[length:100%_150%]"
-                >
-                  Update Password
-                </button>
-              </div>
-            </form>
-
-            <div className="mt-6 text-center text-sm text-indigo-200/65">
-              <a href={loginUrl} className="font-medium text-indigo-500">
-                Back to sign in
-              </a>
+            <div>
+              <label
+                className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500"
+                htmlFor="confirmPassword"
+              >
+                Confirm new password
+              </label>
+              <input
+                id="confirmPassword"
+                name="confirmPassword"
+                type="password"
+                className="form-input w-full"
+                placeholder="Re-enter your password"
+                required
+                minLength={8}
+              />
             </div>
           </div>
+          <div className="mt-7">
+            <button
+              id="confirmBtn"
+              type="submit"
+              className="group inline-flex w-full items-center justify-center rounded-lg bg-brand-700 px-5 py-3 text-sm font-medium text-white shadow-md transition-all duration-300 hover:-translate-y-0.5 hover:bg-brand-800 hover:shadow-xl"
+            >
+              Update password
+              <svg
+                className="ml-2 size-4 transition-transform duration-300 group-hover:translate-x-1"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M5 12h14" />
+                <path d="m12 5 7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+        </form>
+
+        <div className="mt-8 text-center text-sm text-slate-500 md:text-left">
+          <a
+            href={loginUrl}
+            className="font-medium text-brand-600 transition-colors duration-200 hover:text-brand-700 hover:underline"
+          >
+            Back to sign in
+          </a>
         </div>
-      </section>
+      </AuthCardShell>
+    </AuthLayout>
+  );
+}
+
+function ResetPasswordDoneView({ loginUrl, nonce }: { loginUrl: string; nonce?: string }) {
+  const safeLoginUrl = JSON.stringify(loginUrl);
+  const autoRedirectScript = `
+    (function() {
+      var countdown = 5;
+      var el = document.getElementById('countdown');
+      var loginUrl = ${safeLoginUrl};
+      var interval = setInterval(function() {
+        countdown--;
+        if (el) el.textContent = countdown;
+        if (countdown <= 0) {
+          clearInterval(interval);
+          window.location.href = loginUrl;
+        }
+      }, 1000);
+    })();
+  `;
+
+  return (
+    <AuthLayout inlineScript={autoRedirectScript} nonce={nonce}>
+      <AuthCardShell
+        eyebrow="Password"
+        title="Password updated"
+        subtitle="Your password has been changed. Sign in with your new password to continue."
+      >
+        <div className="mb-5 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700">
+          Password updated successfully.
+        </div>
+
+        <a
+          href={loginUrl}
+          className="group inline-flex w-full items-center justify-center rounded-lg bg-brand-700 px-5 py-3 text-sm font-medium text-white shadow-md transition-all duration-300 hover:-translate-y-0.5 hover:bg-brand-800 hover:shadow-xl"
+        >
+          Continue to sign in
+          <svg
+            className="ml-2 size-4 transition-transform duration-300 group-hover:translate-x-1"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M5 12h14" />
+            <path d="m12 5 7 7-7 7" />
+          </svg>
+        </a>
+        <p className="mt-4 text-center text-xs text-slate-400 md:text-left">
+          Redirecting in <span id="countdown">5</span> seconds…
+        </p>
+      </AuthCardShell>
     </AuthLayout>
   );
 }

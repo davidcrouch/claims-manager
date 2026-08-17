@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
@@ -73,6 +73,8 @@ export interface AppSidebarProps {
   permissions?: string[];
   orgName?: string | null;
   onOpenChat?: () => void;
+  menuOverride: 'main' | 'admin' | null;
+  onMenuOverrideChange: (view: 'main' | 'admin' | null) => void;
 }
 
 interface NavItem {
@@ -190,9 +192,28 @@ const adminNavGroups: NavGroup[] = [
 
 const adminHrefs = adminNavGroups.flatMap((group) => group.items.map((item) => item.href));
 
+export function hasAdminNavAccess(
+  features?: string[],
+  permissions?: string[],
+): boolean {
+  return adminNavGroups.some((group) =>
+    group.items.some((item) => {
+      if (item.feature && !hasFeature(features, item.feature)) return false;
+      if (item.permission && !hasPermission(permissions, item.permission)) {
+        return false;
+      }
+      return true;
+    }),
+  );
+}
+
 function isAdminPath(pathname: string): boolean {
   if (pathname === '/admin' || pathname.startsWith('/admin/')) return true;
   return adminHrefs.some((href) => pathname === href || pathname.startsWith(`${href}/`));
+}
+
+export function isAdminNavPath(pathname: string): boolean {
+  return isAdminPath(pathname);
 }
 
 function resolveHref(item: NavItem, jobId: string | null): string {
@@ -200,22 +221,27 @@ function resolveHref(item: NavItem, jobId: string | null): string {
   return `${item.href}${item.href.includes('?') ? '&' : '?'}jobId=${jobId}`;
 }
 
-export function AppSidebar({ features, permissions, orgName, onOpenChat }: AppSidebarProps) {
+export function AppSidebar({
+  features,
+  permissions,
+  orgName,
+  onOpenChat,
+  menuOverride,
+  onMenuOverrideChange,
+}: AppSidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [menuOverride, setMenuOverride] = useState<'main' | 'admin' | null>(null);
 
   const jobMatch = pathname.match(/^\/jobs\/([^/?]+)/);
   const jobId = jobMatch?.[1] ?? searchParams.get('jobId');
   const menuView = menuOverride ?? (isAdminPath(pathname) ? 'admin' : 'main');
 
   useEffect(() => {
-    setMenuOverride(null);
-  }, [pathname]);
+    onMenuOverrideChange(null);
+  }, [pathname, onMenuOverrideChange]);
 
   const dashboardGroup = navGroups[0];
   const middleGroups = navGroups.filter((g) => g.label !== null);
-  const onAdminPath = isAdminPath(pathname);
 
   function isItemActive(item: NavItem): boolean {
     if (pathname === item.href) return true;
@@ -348,7 +374,7 @@ export function AppSidebar({ features, permissions, orgName, onOpenChat }: AppSi
                 <SidebarMenu>
                   <SidebarMenuItem>
                     <SidebarMenuButton
-                      onClick={() => setMenuOverride('main')}
+                      onClick={() => onMenuOverrideChange('main')}
                       tooltip="Main menu"
                     >
                       <ChevronLeft className="size-4" />
@@ -368,25 +394,6 @@ export function AppSidebar({ features, permissions, orgName, onOpenChat }: AppSi
               </SidebarGroupContent>
             </SidebarGroup>
             {middleGroups.map((group) => renderCollapsibleGroup(group))}
-            {adminNavGroups.some((group) => group.items.some(isNavItemVisible)) ? (
-            <SidebarGroup>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      onClick={() => setMenuOverride('admin')}
-                      isActive={onAdminPath}
-                      tooltip="Admin"
-                    >
-                      <Shield className="size-4" />
-                      <span>Admin</span>
-                      <ChevronRight className="ml-auto size-3.5" />
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-            ) : null}
           </>
         )}
       </SidebarContent>

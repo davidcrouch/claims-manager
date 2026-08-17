@@ -802,3 +802,11 @@
   Hid the Sign Up link and create-organisation option when signup is closed.
   Blocked registration and API signup paths that would create a new organisation.
   Invite-based joins to existing organisations remain available.
+
+- `2026-08-17` `SHORT_SHA` **0 h**
+  `7 files | +478 −172 | Tier 2 standard | Light orchestration`
+  Lay summary: Password reset now returns people to sign-in correctly, and the app layout chrome was tightened.
+  Fixed password-reset success and sign-in links so users are not sent to a broken login page.
+  Kept the reset flow tied to the active sign-in session when one exists.
+  Tidied the main app header, sidebar, and shell layout behaviour.
+  Outcome: smoother password reset and cleaner app chrome (no charge).
