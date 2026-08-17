@@ -1,11 +1,8 @@
-import Link from 'next/link';
 import { redirect, notFound } from 'next/navigation';
-import { ExternalLink } from 'lucide-react';
 import { getServerApiClient } from '@/lib/server-api';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { JournalDetailClient } from '@/components/journals/JournalDetailClient';
-import { BackButton } from '@/components/layout/BackButton';
-import { jobDisplayName } from '@/components/shared/job-label';
+import { JournalPageHeader } from '@/components/journals/JournalHeader';
 import type { Metadata } from 'next';
 
 export async function generateMetadata({
@@ -52,19 +49,7 @@ export default async function JournalDetailPage({
   return (
     <>
       <SetPageHeader>
-        <div className="flex items-center gap-3">
-          <BackButton href={job ? `/journals?jobId=${job.id}` : '/journals'} label="Back to journals" />
-          <h1 className="text-lg font-semibold">{journal.name}</h1>
-          {job && (
-            <Link
-              href={`/jobs/${job.id}`}
-              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-            >
-              {jobDisplayName(job)}
-              <ExternalLink className="h-3 w-3" />
-            </Link>
-          )}
-        </div>
+        <JournalPageHeader journal={journal} job={job} entryCount={pagesResult.total} />
       </SetPageHeader>
       <JournalDetailClient journal={journal} initialPages={pagesResult} job={job} />
     </>

@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { BookOpen, Loader2, MapPin } from 'lucide-react';
+import { Collapsible } from '@base-ui/react/collapsible';
+import { BookOpen, ChevronRight, Loader2, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -31,6 +32,7 @@ import {
   AddressAutocompleteInput,
   type AddressSuggestion,
 } from '@/components/shared/AddressAutocompleteInput';
+import { formatAddress } from '@/components/shared/detail';
 import type { AddressPayload, Journal } from '@/types/api';
 
 const AU_STATES = ['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA'] as const;
@@ -132,6 +134,7 @@ export function JournalFormDrawer({
   const [visitDate, setVisitDate] = useState(todayLocalDateInputValue);
   const [address, setAddress] = useState<SiteAddressForm>(EMPTY_ADDRESS);
   const [addressSearch, setAddressSearch] = useState('');
+  const [addressFieldsOpen, setAddressFieldsOpen] = useState(false);
   const [location, setLocation] = useState<{
     latitude: number;
     longitude: number;
@@ -148,6 +151,11 @@ export function JournalFormDrawer({
   const stateItems = useMemo(
     () => Object.fromEntries(AU_STATES.map((s) => [s, s])) as Record<string, string>,
     [],
+  );
+
+  const addressSummary = useMemo(
+    () => formatAddress(address, { full: true }) || null,
+    [address],
   );
 
   useEffect(() => {
@@ -173,6 +181,8 @@ export function JournalFormDrawer({
     setDescription('');
     setVisitDate(todayLocalDateInputValue());
     setAddress(addressFromJob(jobs.find((j) => j.id === (jobId ?? ''))));
+    setAddressSearch('');
+    setAddressFieldsOpen(false);
     setLocation(null);
     setLocationError(null);
     setLocating(false);
@@ -343,7 +353,7 @@ export function JournalFormDrawer({
 
             <div className="md:col-span-2">
               <p className="mb-3 text-sm font-medium text-foreground">Site address</p>
-              <div className="mb-4 space-y-2">
+              <div className="mb-3 space-y-2">
                 <Label htmlFor="journal-address-search">Search address</Label>
                 <AddressAutocompleteInput
                   id="journal-address-search"
@@ -361,81 +371,112 @@ export function JournalFormDrawer({
                       country: p.country ?? 'Australia',
                     });
                     setAddressSearch(suggestion.label);
+                    setAddressFieldsOpen(false);
                   }}
                   placeholder="Search Australian address to fill fields…"
                   name="journal-address-search"
                 />
+                {!addressFieldsOpen && addressSummary ? (
+                  <p className="text-sm text-muted-foreground">{addressSummary}</p>
+                ) : null}
               </div>
-              <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-6">
-                <div className="space-y-2 md:col-span-1">
-                  <Label htmlFor="journal-unit">Unit</Label>
-                  <Input
-                    id="journal-unit"
-                    value={address.unitNumber}
-                    onChange={(e) => updateAddressField('unitNumber', e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2 md:col-span-1">
-                  <Label htmlFor="journal-street-no">Street no.</Label>
-                  <Input
-                    id="journal-street-no"
-                    value={address.streetNumber}
-                    onChange={(e) => updateAddressField('streetNumber', e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2 md:col-span-4">
-                  <Label htmlFor="journal-street-name">Street name</Label>
-                  <Input
-                    id="journal-street-name"
-                    value={address.streetName}
-                    onChange={(e) => updateAddressField('streetName', e.target.value)}
-                    placeholder="e.g. Smith Street"
-                  />
-                </div>
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="journal-suburb">Suburb</Label>
-                  <Input
-                    id="journal-suburb"
-                    value={address.suburb}
-                    onChange={(e) => updateAddressField('suburb', e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2 md:col-span-1">
-                  <Label htmlFor="journal-state">State</Label>
-                  <Select
-                    value={address.state || null}
-                    onValueChange={(v) => updateAddressField('state', v ?? '')}
-                    items={stateItems}
-                  >
-                    <SelectTrigger id="journal-state" className="w-full">
-                      <SelectValue placeholder="State" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {AU_STATES.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {s}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2 md:col-span-1">
-                  <Label htmlFor="journal-postcode">Postcode</Label>
-                  <Input
-                    id="journal-postcode"
-                    value={address.postcode}
-                    onChange={(e) => updateAddressField('postcode', e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="journal-country">Country</Label>
-                  <Input
-                    id="journal-country"
-                    value={address.country}
-                    onChange={(e) => updateAddressField('country', e.target.value)}
-                  />
-                </div>
-              </div>
+              <Collapsible.Root
+                open={addressFieldsOpen}
+                onOpenChange={setAddressFieldsOpen}
+              >
+                <Collapsible.Trigger className="group/address-fields flex w-full items-center gap-1.5 rounded-md py-1.5 text-left text-sm font-medium text-foreground hover:text-foreground/80">
+                  <ChevronRight className="size-3.5 shrink-0 transition-transform duration-200 group-data-panel-open/address-fields:rotate-90" />
+                  {addressSummary
+                    ? 'Edit address manually'
+                    : 'Enter address manually'}
+                </Collapsible.Trigger>
+                <Collapsible.Panel className="overflow-hidden transition-all duration-200 data-ending-style:h-0 data-starting-style:h-0">
+                  <div className="grid grid-cols-1 gap-x-6 gap-y-4 pt-3 md:grid-cols-6">
+                    <div className="space-y-2 md:col-span-1">
+                      <Label htmlFor="journal-unit">Unit</Label>
+                      <Input
+                        id="journal-unit"
+                        value={address.unitNumber}
+                        onChange={(e) =>
+                          updateAddressField('unitNumber', e.target.value)
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2 md:col-span-1">
+                      <Label htmlFor="journal-street-no">Street no.</Label>
+                      <Input
+                        id="journal-street-no"
+                        value={address.streetNumber}
+                        onChange={(e) =>
+                          updateAddressField('streetNumber', e.target.value)
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2 md:col-span-4">
+                      <Label htmlFor="journal-street-name">Street name</Label>
+                      <Input
+                        id="journal-street-name"
+                        value={address.streetName}
+                        onChange={(e) =>
+                          updateAddressField('streetName', e.target.value)
+                        }
+                        placeholder="e.g. Smith Street"
+                      />
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="journal-suburb">Suburb</Label>
+                      <Input
+                        id="journal-suburb"
+                        value={address.suburb}
+                        onChange={(e) =>
+                          updateAddressField('suburb', e.target.value)
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2 md:col-span-1">
+                      <Label htmlFor="journal-state">State</Label>
+                      <Select
+                        value={address.state || null}
+                        onValueChange={(v) =>
+                          updateAddressField('state', v ?? '')
+                        }
+                        items={stateItems}
+                      >
+                        <SelectTrigger id="journal-state" className="w-full">
+                          <SelectValue placeholder="State" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {AU_STATES.map((s) => (
+                            <SelectItem key={s} value={s}>
+                              {s}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2 md:col-span-1">
+                      <Label htmlFor="journal-postcode">Postcode</Label>
+                      <Input
+                        id="journal-postcode"
+                        value={address.postcode}
+                        onChange={(e) =>
+                          updateAddressField('postcode', e.target.value)
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="journal-country">Country</Label>
+                      <Input
+                        id="journal-country"
+                        value={address.country}
+                        onChange={(e) =>
+                          updateAddressField('country', e.target.value)
+                        }
+                      />
+                    </div>
+                  </div>
+                </Collapsible.Panel>
+              </Collapsible.Root>
             </div>
 
             <div className="space-y-2 md:col-span-2">
