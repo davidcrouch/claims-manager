@@ -24,6 +24,7 @@ import {
 } from '../db/schema.js';
 import { createUsersRepository } from '../db/repositories/users-repository.js';
 import { createUserIdentitiesRepository } from '../db/repositories/user-identities-repository.js';
+import { createOrganizationsRepository } from '../db/repositories/organizations-repository.js';
 import { assignUserRoles } from '../db/services/user-role-assignments.js';
 import type { AccessContext } from '../schemas/index.js';
 
@@ -81,6 +82,7 @@ export async function seedEnsureConstructionPlatformAdmin(): Promise<SeedEnsureA
   };
   const usersRepo = createUsersRepository(() => db, undefined);
   const identitiesRepo = createUserIdentitiesRepository(() => db, undefined);
+  const orgsRepo = createOrganizationsRepository(() => db, undefined);
 
   let createdOrg = false;
   let [org] = await db
@@ -90,29 +92,14 @@ export async function seedEnsureConstructionPlatformAdmin(): Promise<SeedEnsureA
     .limit(1);
 
   if (!org) {
-    const now = new Date().toISOString();
-    const [inserted] = await db
-      .insert(organizations)
-      .values({
-        name: ENSURE_CONSTRUCTION_NAME,
-        slug: ENSURE_CONSTRUCTION_SLUG,
-        description: '',
-        orgCode: ENSURE_CONSTRUCTION_ORG_CODE,
-        config: { url: null },
-        status: 'Active',
-        object: 'organization',
-        created: now,
-        modified: now,
-        createdBy: SYSTEM_USER_ID,
-        modifiedBy: SYSTEM_USER_ID,
-      })
-      .returning({ id: organizations.id, name: organizations.name });
-    if (!inserted) {
-      throw new Error(
-        'auth-server:scripts:seed-ensure-construction-admin - failed to create Ensure Construction org',
-      );
-    }
-    org = inserted;
+    const inserted = await orgsRepo.create(systemContext, {
+      name: ENSURE_CONSTRUCTION_NAME,
+      slug: ENSURE_CONSTRUCTION_SLUG,
+      description: '',
+      orgCode: ENSURE_CONSTRUCTION_ORG_CODE,
+      config: { url: null },
+    });
+    org = { id: inserted.id, name: inserted.name };
     createdOrg = true;
     log.info(
       { organizationId: org.id },
@@ -189,7 +176,7 @@ export async function seedEnsureConstructionPlatformAdmin(): Promise<SeedEnsureA
           seededAs: 'ensure-construction-platform-admin',
         },
         updatedAt: new Date(),
-      })
+      } as Partial<typeof userIdentities.$inferInsert>)
       .where(eq(userIdentities.id, existingIdentity.id));
     passwordUpdated = true;
     log.info(
