@@ -101,7 +101,7 @@ export class ProjectMessageUseCase implements ProjectionUseCase {
           `Message ${externalObjectId} requires at least one "from" parent to be projected`,
         );
       }
-      return { status: 'skipped', reason: 'no_from_parent', internalEntityType: 'message' };
+      return { status: 'skipped', reason: 'no_from_parent', internalEntityId: '', internalEntityType: 'message' };
     }
 
     // 5. Upsert
