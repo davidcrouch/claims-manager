@@ -835,3 +835,9 @@
   Simplified the create/edit journal address flow with a collapsible detail section after search.
   Cleaned up the journal overview layout for faster reading of site and visit details.
   Outcome: smoother day-to-day journal review and data entry.
+
+- `2026-08-18` `PENDING` **0 h**
+  `1 files | +8 −1 | Tier 1 mechanical | Light orchestration`
+  Lay summary: Registered a missed database migration so staging can load connection identifiers for messages.
+  Added the connection identifiers migration to the Drizzle journal so deploy migrators apply it.
+  Outcome: staging can create the identifiers table and unblock message sync (no charge).
