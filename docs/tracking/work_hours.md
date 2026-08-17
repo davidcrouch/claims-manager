@@ -821,7 +821,7 @@
   Added upstream API health monitoring so users get clearer feedback when the backend is unreachable.
   Documented webhook projection unification and event-type coverage for operators and future work.
 
-- `2026-08-17` `PENDING` **0 h**
+- `2026-08-17` `2693c29` **0 h**
   `1 files | +1 −1 | Tier 2 standard | Light orchestration`
   Lay summary: Fixed a type error that was blocking the staging release build.
   Added the missing entity id on a skipped message projection result so typecheck passes.
