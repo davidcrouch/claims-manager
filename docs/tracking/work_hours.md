@@ -862,7 +862,7 @@
   Forms and chat sit side by side more reliably, and connection and file-pipeline screens were simplified.
   Updated the public hero image to match the current brand presentation.
 
-- `2026-08-19` `PENDING` **1 h**
+- `2026-08-19` `67dc756` **1 h**
   `6 files | +95 −7 | Tier 3 complex | Moderate orchestration`
   Lay summary: The live hosting pipeline can now manage production as well as staging, after the deployer account was given the right access.
   **Granted the automated deployer access to the production project.**
