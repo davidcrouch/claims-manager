@@ -11,6 +11,7 @@ Claims Manager runs **Cloud Run only** (staging and production). No GKE, no Comp
 | `claims-mcp` | IAM-private | Cloud Run IAM (invoker SA) | 1 vCPU / 512Mi | same |
 | `ms-graph-mcp` | IAM-private | Cloud Run IAM (invoker SA) | 1 vCPU / 512Mi | same |
 | `migrate-api` | Job | — | 1 vCPU / 1Gi | same |
+| `seed-api-lookups` | Job | — | 1 vCPU / 1Gi | same |
 | `seed-auth-rbac` | Job | — | 1 vCPU / 512Mi | same |
 
 **Data plane:** Cloud SQL Postgres + Memorystore Redis + GCS + Pub/Sub.
@@ -24,7 +25,8 @@ Claims Manager runs **Cloud Run only** (staging and production). No GKE, no Comp
 **New-org seeding:**
 - Signup creates org → auth-server `SEED_NEW_TENANTS=true` + `API_INTERNAL_URL` → `POST /internal/seed-tenant` (catalog, MCP, lookups; Crunchwork staging connection when the org is Ensure Construction).
 - CLI `pnpm --filter api run db:seed` upserts Ensure Construction Pty Ltd + its Crunchwork staging connection.
-- First login → frontend provisioning flow (`filesystem` / templates / catalog) when `organizations.provisioning_status != complete`.
+- First login → frontend provisioning flow (`filesystem` / templates / catalog / lookups) when `organizations.provisioning_status != complete`.
+- CD after migrate runs `seed-api-lookups` (idempotent group labels + status lookups for every tenant) in both staging and production.
 
 **Networking:** Active subnet is `claims-manager-private-<env>`. An orphan `claims-manager-gke-staging` subnet may remain until GCP releases stuck serverless address reservations — it is unused.
 
@@ -49,8 +51,8 @@ After first image push, keep `cloud_run_use_bootstrap_image=false` (staging defa
 | Workflow | Role |
 |----------|------|
 | [`.github/workflows/ci.yaml`](../.github/workflows/ci.yaml) | Matrix Docker builds (api / auth / frontend / provider / claims-mcp / ms-graph-mcp) |
-| [`.github/workflows/cd-staging.yaml`](../.github/workflows/cd-staging.yaml) | Update staging Cloud Run images, then `migrate-api`, then `seed-auth-rbac` |
-| [`.github/workflows/cd-production.yaml`](../.github/workflows/cd-production.yaml) | Update production Cloud Run on `v*.*.*` tags, then migrate + RBAC seed |
+| [`.github/workflows/cd-staging.yaml`](../.github/workflows/cd-staging.yaml) | Update staging Cloud Run images, then `migrate-api`, then `seed-auth-rbac` + `seed-api-lookups` |
+| [`.github/workflows/cd-production.yaml`](../.github/workflows/cd-production.yaml) | Update production Cloud Run on `v*.*.*` tags, then migrate + RBAC seed + lookups seed |
 
 ## App sources
 

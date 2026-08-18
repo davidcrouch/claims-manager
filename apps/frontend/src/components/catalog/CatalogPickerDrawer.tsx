@@ -318,16 +318,27 @@ function GroupLabelsTab({ open }: { open: boolean }) {
   const [labels, setLabels] = useState<GroupLabelOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [groupQuery, setGroupQuery] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setLoading(true);
-    fetchGroupLabelLookupsAction().then((result) => {
-      if (result.success && result.options) {
-        setLabels(result.options);
-      }
-      setLoading(false);
-    });
+    setError(null);
+    fetchGroupLabelLookupsAction()
+      .then((result) => {
+        if (result.success && Array.isArray(result.options)) {
+          setLabels(result.options);
+        } else {
+          setLabels([]);
+          setError(result.error ?? 'Failed to load groups');
+        }
+        setLoading(false);
+      })
+      .catch((err: unknown) => {
+        setLabels([]);
+        setError(err instanceof Error ? err.message : 'Failed to load groups');
+        setLoading(false);
+      });
   }, [open]);
 
   useEffect(() => {
@@ -361,7 +372,11 @@ function GroupLabelsTab({ open }: { open: boolean }) {
         )}
         {!loading && filtered.length === 0 && (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            {groupQuery ? 'No matching groups' : 'No groups found'}
+            {error
+              ? error
+              : groupQuery
+                ? 'No matching groups'
+                : 'No groups found'}
           </p>
         )}
         {filtered.length > 0 && (
@@ -500,7 +515,7 @@ export function CatalogPickerDrawer({ open, onOpenChange, catalogType }: Catalog
             role="dialog"
             aria-modal="true"
             aria-labelledby="catalog-picker-title"
-            className="pointer-events-auto absolute inset-y-0 right-0 flex w-[65%] flex-col border-l border-slate-200 bg-background shadow-2xl"
+            className="pointer-events-auto absolute inset-y-0 right-0 flex w-full max-w-md flex-col border-l border-slate-200 bg-background shadow-2xl"
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}

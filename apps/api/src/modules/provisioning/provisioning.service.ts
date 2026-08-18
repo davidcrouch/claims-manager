@@ -9,12 +9,13 @@ import { and, eq } from 'drizzle-orm';
 import { Storage } from '@google-cloud/storage';
 import { ConfigService } from '@nestjs/config';
 import { DRIZZLE, type DrizzleDB } from '../../database/drizzle.module';
-import { mcpIntegration, organizations } from '../../database/schema';
+import { lookupValues, mcpIntegration, organizations } from '../../database/schema';
 import { TenantContext } from '../../tenant/tenant-context';
 import { FilesystemService } from '../filesystem/filesystem.service';
 import { DocumentsService } from '../filesystem/documents.service';
 import { TemplateRegistryService } from '../document-generation/services/template-registry.service';
 import { seedCatalogDevForTenant } from '../../database/seeds/entries/catalog-dev.seed';
+import { seedLookupsForTenant } from '../../database/seeds/entries/lookups.seed';
 import { seedMcpForTenant } from '../../database/seeds/entries/mcp.seed';
 import { seedAssessmentSkillsForTenant } from '../../database/seeds/entries/assessment-skills.seed';
 import filesystemDefaultSeed from '../../database/seeds/entries/filesystem-default.seed';
@@ -164,12 +165,13 @@ export class ProvisioningService {
     // cases where GCS was unset on first provision and docx were skipped.
     if (org.provisioningStatus === 'complete') {
       this.logger.log(
-        `[${LOG}.${fn}] repair path — re-running template + mcp steps tenantId=${tenantId}`,
+        `[${LOG}.${fn}] repair path — re-running template + mcp + lookups steps tenantId=${tenantId}`,
       );
       try {
         await this.runStep('upload_templates', tenantId);
         await this.runStep('assign_document_templates', tenantId);
         await this.runStep('seed_mcp', tenantId);
+        await this.runStep('seed_lookups', tenantId);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         this.logger.error(
@@ -199,6 +201,7 @@ export class ProvisioningService {
       await this.runStep('upload_templates', tenantId);
       await this.runStep('assign_document_templates', tenantId);
       await this.runStep('seed_catalog', tenantId);
+      await this.runStep('seed_lookups', tenantId);
       await this.runStep('seed_mcp', tenantId);
 
       await this.db
@@ -239,6 +242,9 @@ export class ProvisioningService {
         break;
       case 'seed_catalog':
         await this.stepSeedCatalog(tenantId);
+        break;
+      case 'seed_lookups':
+        await this.stepSeedLookups(tenantId);
         break;
       case 'seed_mcp':
         await this.stepSeedMcp(tenantId);
@@ -481,6 +487,16 @@ export class ProvisioningService {
     await seedCatalogDevForTenant({ db: this.db, tenantId, logger });
   }
 
+  private async stepSeedLookups(tenantId: string): Promise<void> {
+    const logger = {
+      info: (msg: string) => this.logger.log(`[${LOG}.stepSeedLookups] ${msg}`),
+      warn: (msg: string) => this.logger.warn(`[${LOG}.stepSeedLookups] ${msg}`),
+      error: (msg: string) => this.logger.error(`[${LOG}.stepSeedLookups] ${msg}`),
+    };
+
+    await seedLookupsForTenant({ db: this.db, tenantId, logger });
+  }
+
   private async stepSeedMcp(tenantId: string): Promise<void> {
     const logger = {
       info: (msg: string) => this.logger.log(`[${LOG}.stepSeedMcp] ${msg}`),
@@ -557,6 +573,19 @@ export class ProvisioningService {
       }
       case 'seed_catalog':
         return true;
+      case 'seed_lookups': {
+        const [row] = await this.db
+          .select({ id: lookupValues.id })
+          .from(lookupValues)
+          .where(
+            and(
+              eq(lookupValues.tenantId, tenantId),
+              eq(lookupValues.domain, 'group_label'),
+            ),
+          )
+          .limit(1);
+        return !!row;
+      }
       case 'seed_mcp': {
         const [row] = await this.db
           .select({ id: mcpIntegration.id })

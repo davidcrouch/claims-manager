@@ -8,14 +8,15 @@
  * Idempotent via (tenant, domain, provider_code, external_reference).
  *
  * Callers:
- *   - CLI (`pnpm --filter api run db:seed`) → Ensure Construction, else first org
+ *   - CLI (`pnpm --filter api run db:seed`) → every organisation
+ *   - Cloud Run job `seed-api-lookups` (`node dist/database/run-seed-lookups.js`) → every organisation
  *   - api-server `POST /internal/seed-tenant` → given tenant
+ *   - first-login provisioning (`seed_lookups` step) → given tenant
  */
-import { and, eq, isNull } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type { Seed, SeedContext, SeedLogger, SeedResult } from '../lib/runner';
 import type { SeedDb } from '../lib/db';
 import * as schema from '../../schema';
-import { ENSURE_CONSTRUCTION_SLUG } from './ensure-construction.seed';
 
 export const LOOKUP_REF_PREFIX = 'seed-';
 
@@ -119,74 +120,74 @@ interface Stats {
   skipped: number;
 }
 
-async function seedLookups(params: {
-  db: SeedDb;
-  tenantId: string;
-  stats: Stats;
-}): Promise<void> {
-  for (const spec of LOOKUP_SPECS) {
-    const ref = `${LOOKUP_REF_PREFIX}${spec.ref}`;
-    const conditions = [
-      eq(schema.lookupValues.tenantId, params.tenantId),
-      eq(schema.lookupValues.domain, spec.domain),
-      eq(schema.lookupValues.externalReference, ref),
-    ];
-    if (spec.providerCode) {
-      conditions.push(eq(schema.lookupValues.providerCode, spec.providerCode));
-    } else {
-      conditions.push(isNull(schema.lookupValues.providerCode));
-    }
-    const [existing] = await params.db
-      .select({ id: schema.lookupValues.id })
-      .from(schema.lookupValues)
-      .where(and(...conditions))
-      .limit(1);
-    if (existing) {
-      params.stats.skipped += 1;
-      continue;
-    }
-    await params.db.insert(schema.lookupValues).values({
-      tenantId: params.tenantId,
-      domain: spec.domain,
-      name: spec.name,
-      externalReference: ref,
-      providerCode: spec.providerCode ?? null,
-    });
-    params.stats.inserted += 1;
-  }
+function lookupKey(params: {
+  domain: string;
+  providerCode: string | null;
+  externalReference: string | null;
+}): string {
+  return `${params.domain}\0${params.providerCode ?? ''}\0${params.externalReference ?? ''}`;
 }
 
-async function seedCrunchworkGroupLabels(params: {
+async function loadExistingKeys(params: {
   db: SeedDb;
   tenantId: string;
-  stats: Stats;
-}): Promise<void> {
-  for (const name of CW_GROUP_LABELS) {
-    const [existing] = await params.db
-      .select({ id: schema.lookupValues.id })
-      .from(schema.lookupValues)
-      .where(
-        and(
-          eq(schema.lookupValues.tenantId, params.tenantId),
-          eq(schema.lookupValues.domain, 'group_label'),
-          eq(schema.lookupValues.providerCode, 'crunchwork'),
-          eq(schema.lookupValues.externalReference, name),
-        ),
-      )
-      .limit(1);
-    if (existing) {
+}): Promise<Set<string>> {
+  const rows = await params.db
+    .select({
+      domain: schema.lookupValues.domain,
+      providerCode: schema.lookupValues.providerCode,
+      externalReference: schema.lookupValues.externalReference,
+    })
+    .from(schema.lookupValues)
+    .where(eq(schema.lookupValues.tenantId, params.tenantId));
+  return new Set(
+    rows.map((row) =>
+      lookupKey({
+        domain: row.domain,
+        providerCode: row.providerCode,
+        externalReference: row.externalReference,
+      }),
+    ),
+  );
+}
+
+async function insertMissing(
+  params: {
+    db: SeedDb;
+    tenantId: string;
+    stats: Stats;
+    existing: Set<string>;
+  },
+  rows: Array<{
+    domain: string;
+    name: string;
+    externalReference: string;
+    providerCode: string | null;
+  }>,
+): Promise<void> {
+  const toInsert = rows.filter((row) => {
+    const key = lookupKey(row);
+    if (params.existing.has(key)) {
       params.stats.skipped += 1;
-      continue;
+      return false;
     }
-    await params.db.insert(schema.lookupValues).values({
-      tenantId: params.tenantId,
-      domain: 'group_label',
-      providerCode: 'crunchwork',
-      name,
-      externalReference: name,
-    });
-    params.stats.inserted += 1;
-  }
+    params.existing.add(key);
+    return true;
+  });
+  if (toInsert.length === 0) return;
+  await params.db
+    .insert(schema.lookupValues)
+    .values(
+      toInsert.map((row) => ({
+        tenantId: params.tenantId,
+        domain: row.domain,
+        name: row.name,
+        externalReference: row.externalReference,
+        providerCode: row.providerCode,
+      })),
+    )
+    .onConflictDoNothing();
+  params.stats.inserted += toInsert.length;
 }
 
 export async function seedLookupsForTenant(params: {
@@ -202,9 +203,26 @@ export async function seedLookupsForTenant(params: {
   };
 
   const stats: Stats = { inserted: 0, skipped: 0 };
-  await seedLookups({ db, tenantId, stats });
+  const existing = await loadExistingKeys({ db, tenantId });
+  await insertMissing(
+    { db, tenantId, stats, existing },
+    LOOKUP_SPECS.map((spec) => ({
+      domain: spec.domain,
+      name: spec.name,
+      externalReference: `${LOOKUP_REF_PREFIX}${spec.ref}`,
+      providerCode: spec.providerCode ?? null,
+    })),
+  );
   logger.info(`lookups ready (${LOOKUP_SPECS.length} specs)`);
-  await seedCrunchworkGroupLabels({ db, tenantId, stats });
+  await insertMissing(
+    { db, tenantId, stats, existing },
+    CW_GROUP_LABELS.map((name) => ({
+      domain: 'group_label',
+      name,
+      externalReference: name,
+      providerCode: 'crunchwork',
+    })),
+  );
   logger.info(`crunchwork group labels ready (${CW_GROUP_LABELS.length})`);
 
   return {
@@ -215,33 +233,45 @@ export async function seedLookupsForTenant(params: {
   };
 }
 
-async function resolveTenantId(params: { db: SeedDb }): Promise<string | null> {
-  const [named] = await params.db
-    .select({ id: schema.organizations.id, name: schema.organizations.name })
-    .from(schema.organizations)
-    .where(eq(schema.organizations.slug, ENSURE_CONSTRUCTION_SLUG))
-    .limit(1);
-  if (named) {
-    console.log(`${LOG} tenant=${named.name} (${named.id})`);
-    return named.id;
+export async function seedLookupsForAllTenants(params: {
+  db: SeedDb;
+  logger?: SeedLogger;
+}): Promise<SeedResult> {
+  const { db } = params;
+  const logger: SeedLogger = params.logger ?? {
+    info: (msg) => console.log(`${LOG} ${msg}`),
+    warn: (msg) => console.warn(`${LOG} ${msg}`),
+    error: (msg) => console.error(`${LOG} ${msg}`),
+  };
+
+  const orgs = await db
+    .select({
+      id: schema.organizations.id,
+      name: schema.organizations.name,
+      subscriptionStatus: schema.organizations.subscriptionStatus,
+    })
+    .from(schema.organizations);
+
+  const tenants = orgs.filter((org) => org.subscriptionStatus !== 'ghost');
+  if (tenants.length === 0) {
+    logger.warn('no organisations in DB — nothing to seed');
+    return { inserted: 0, updated: 0, skipped: 0, notes: 'no tenant' };
   }
-  const [org] = await params.db
-    .select({ id: schema.organizations.id, name: schema.organizations.name })
-    .from(schema.organizations)
-    .limit(1);
-  if (!org) return null;
-  console.log(`${LOG} tenant=${org.name} (${org.id})`);
-  return org.id;
+
+  const totals: SeedResult = { inserted: 0, updated: 0, skipped: 0 };
+  for (const org of tenants) {
+    logger.info(`tenant=${org.name} (${org.id})`);
+    const result = await seedLookupsForTenant({ db, tenantId: org.id, logger });
+    totals.inserted += result.inserted;
+    totals.updated += result.updated;
+    totals.skipped += result.skipped;
+  }
+  totals.notes = `tenants=${tenants.length}`;
+  return totals;
 }
 
 async function run(ctx: SeedContext): Promise<SeedResult> {
-  const { db, logger } = ctx;
-  const tenantId = await resolveTenantId({ db });
-  if (!tenantId) {
-    logger.warn('no organizations in DB — nothing to seed');
-    return { inserted: 0, updated: 0, skipped: 0, notes: 'no tenant' };
-  }
-  return seedLookupsForTenant({ db, tenantId, logger });
+  return seedLookupsForAllTenants({ db: ctx.db, logger: ctx.logger });
 }
 
 const seed: Seed = {

@@ -478,7 +478,7 @@ psql "$DATABASE_URL_ADMIN" -f deploy/scripts/grant-provider-app.sql
 
 1. Push a `v*.*.*` tag (or run `workflow_dispatch` on CI with `force_build_all=true`).
 2. CI builds all six images tagged with the release version.
-3. `cd-production` updates Cloud Run revisions, runs `migrate-api`, then `seed-auth-rbac`.
+3. `cd-production` updates Cloud Run revisions, runs `migrate-api`, then `seed-auth-rbac` and `seed-api-lookups`.
 
 ## 4. Flip bootstrap image off
 
@@ -520,6 +520,7 @@ Replace any `REPLACE_ME` placeholders:
 - [ ] All six Cloud Run services showing `Ready`
 - [ ] `migrate-api` job succeeded
 - [ ] `seed-auth-rbac` job succeeded
+- [ ] `seed-api-lookups` job succeeded
 - [ ] Auth login flow works end-to-end
 - [ ] Webhook ingest on `providers.branlamie.com` reaches `provider-server`
 - [ ] Template sync populated GCS bucket
@@ -542,9 +543,10 @@ After all previous steps are complete, run through:
 4. Confirm Cloud Run services update to new revision
 5. Confirm `migrate-api` job succeeds
 6. Confirm `seed-auth-rbac` job succeeds
-7. Confirm OIDC login at `https://app.branlamie.com/api/auth/callback` completes
-8. Confirm webhook delivery to `providers.branlamie.com` reaches `provider-server`
-9. Confirm `gcloud run services list --project claims-manager-production` shows all healthy
+7. Confirm `seed-api-lookups` job succeeds
+8. Confirm OIDC login at `https://app.branlamie.com/api/auth/callback` completes
+9. Confirm webhook delivery to `providers.branlamie.com` reaches `provider-server`
+10. Confirm `gcloud run services list --project claims-manager-production` shows all healthy
 
 ---
 

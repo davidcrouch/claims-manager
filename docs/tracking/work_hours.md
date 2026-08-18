@@ -870,3 +870,12 @@
   Enabled the required Google Cloud services on production so the first apply does not stall.
   Documented the one-time bootstrap step operators must run if production access is missing.
   Outcome: production Terraform apply can proceed instead of failing with permission errors.
+
+- `2026-08-19` `pending` **1 h**
+  `16 files | +469 −112 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  Lay summary: The catalogue side panel is back to its original width, and room groups now appear for existing customers on staging and production.
+  **Restored the catalogue panel and filled in missing room groups for hosted environments.**
+  The catalogue drawer is back to its original compact width so the quote stays visible beside it.
+  Room groups such as kitchen and bathroom now appear for existing customers instead of an empty list.
+  Staging and production releases now load those groups automatically for every organisation.
+  Outcome: staff can drag room groups onto quotes in both hosted environments.
