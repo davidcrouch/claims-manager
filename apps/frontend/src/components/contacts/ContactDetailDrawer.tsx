@@ -161,7 +161,6 @@ export function ContactDetailDrawer({
       title={title}
       description={description}
       icon={<User className="h-5 w-5" />}
-      widthClassName="w-[60%]"
     >
       <BottomFormDrawerBody>
         {!detail ? (

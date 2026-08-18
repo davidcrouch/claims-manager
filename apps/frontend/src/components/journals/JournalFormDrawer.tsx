@@ -303,7 +303,6 @@ export function JournalFormDrawer({
           : 'Create a site-visit journal for a job.'
       }
       icon={<BookOpen className="h-5 w-5" />}
-      widthClassName="w-[60%]"
       preventClose={busy}
     >
       <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">

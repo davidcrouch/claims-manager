@@ -1,6 +1,10 @@
 slug: create-assessment
-name: Assessment – Create New
-description: Open the Create Assessment form, review job journals (entries, notes, photos), pre-fill, then ask unknowns.
+name: Assessment – Create & Complete
+description: |
+  When asked to "create assessment": gather all job data (claim, contacts, appointments, reports,
+  journals), create the assessment with all sections pre-populated, then walk
+  through each of the 9 tab drawers for the user to review. When asked for a "new assessment":
+  just open the blank create form.
 triggerHints:
   - create assessment
   - new assessment
@@ -12,36 +16,134 @@ triggerHints:
 instructionPrompt: |
   You are helping the user create a new site assessment for a job.
 
-  Workflow:
-  1. Call open_create_assessment immediately (pass jobId from active job context when available).
-     Resolve jobId, then call get_job.
-  2. Journal review (do this before filling the creation form):
-     a. Call list_journals with jobId (or list_journals_by_entity with entityType=job).
-     b. Show the user a short list of journals (name/title, date, page count if available).
-     c. Ask which journal(s) apply to this assessment — wait for their selection.
-        If only one journal exists, confirm it before opening.
-     d. For each selected journal: call list_journal_pages to get all entries.
-     e. For each entry: call get_journal_page. Read the body/notes text and every content block
-        (blocks[].type === "note" → read text; blocks[].type === "upload" → check attachment).
-     f. For photo/image attachments: call get_journal_page_attachment_download for a download URL.
-        Use filenames, captions, and metadata. If you cannot visually inspect the image, ask the
-        user what the photo shows that is relevant.
-  3. Using job data + journal entries/notes/photos, infer create-form fields. Suggest a sensible
-     assessment name. Call fill_create_assessment with all inferred fields.
-  4. Present a short review of what you filled and evidence sources. Ask only for unknowns.
-     After each user answer, call fill_create_assessment.
-  5. Field checklist:
-     - Assessment name (required)
-     - Confirm job if not already set (required)
-     - Claim recommendation (Approve / Decline / Refer / Pending) — only if supported by evidence
-     - Design type, construction, roof type, building type — only if supported by evidence
-     - Make safe required? If yes, make safe type
-     - Comments / special notes (optional)
-  6. Ask the user to review the canvas form. When ready, create with create_assessment
-     or let them click Submit.
-  7. After creation, confirm the assessment id and offer to continue with tab skills.
-  Rules: Do not invent recommendations or building details. Prefer evidence; if unsure, ask.
+  IMPORTANT — detect the user's intent:
+  • "new assessment" / "open assessment form" → QUICK START path (step A below).
+  • "create assessment" / "start assessment" / "begin assessment" → FULL DATA path (step B below).
+  If ambiguous, ask which they prefer: "Would you like me to just open a blank form, or
+  gather job data and pre-fill everything for you?"
+
+  ── A. QUICK START ──
+  1. Call open_create_assessment immediately (pass jobId from page context when available).
+  2. Tell the user the form is open and they can fill it manually.
+  3. Offer: "Say 'create assessment' any time and I'll gather all the job data to help fill it."
+  Done.
+
+  ── B. FULL DATA-DRIVEN CREATION (wizard) ──
+
+  PHASE 1 — GATHER ALL EVIDENCE
+  Resolve jobId, then call these in parallel where possible:
+
+  a. JOB — call get_job. Note job type, status, description, risk address, event date,
+     external reference, and any embedded claim fields.
+
+  b. CLAIM — if the job has a claimId, call get_claim. Extract:
+     • Event type and date of loss (→ damage cause, recommendation)
+     • Policy holder / insured name and contact details
+     • Claim number / reference
+     • Any policy notes or event description
+
+  c. CONTACTS — call list_contacts_by_job. Look for:
+     • Builder / estimator (name, phone → attendance)
+     • Insurance assessor (name, phone → attendance)
+     • Insured / homeowner (name → attendance "persons attending")
+     • Any specialist contacts (→ specialists tab)
+
+  d. APPOINTMENTS — call list_appointments_by_job. Look for:
+     • Completed site visit dates (→ attendance "site attendance date")
+     • Attendee names from appointment records
+     • Appointment notes or outcomes
+
+  e. REPORTS — call list_reports_by_job. For each relevant report, call get_report. Look for:
+     • Prior assessment or inspection findings
+     • Building details, damage observations, hazard notes
+     • Recommendations from earlier inspections
+
+  f. JOURNALS — call list_journals with jobId (or list_journals_by_entity with entityType=job).
+     Show the user a short numbered list (name/title, date, page count if available).
+     Ask which journal(s) apply — wait for selection. If only one journal exists, confirm it.
+     For each selected journal:
+     • list_journal_pages → get_journal_page for each entry.
+     • Read body/notes text and every content block.
+     • For photo attachments: get_journal_page_attachment_download for a download URL.
+       Use filenames, captions, metadata. If you cannot visually inspect the image, ask
+       the user what it shows.
+
+  PHASE 2 — CREATE THE ASSESSMENT (with all sections pre-populated)
+  Using all gathered evidence, build the full assessment payload and call create_assessment
+  directly. Do NOT use the create drawer form — call the API tool with all section data:
+
+  {
+    "data": {
+      "name": "Site Assessment – [risk address] – [date]",
+      "jobId": "<jobId>",
+      "attendance": { addressAttended, siteAttendanceDate, personsAttending,
+                      builderEstimatorName, builderEstimatorPhone,
+                      insuranceAssessorAttended, insuranceAssessorName,
+                      insuranceAssessorPhone, occupancyType },
+      "building":   { houseM2, estimatedBuildYear, buildingType, designType,
+                      constructionType, roofType, additionalStructures,
+                      mainHouseRoofDamage, propertyCondition, furnitureRemovalStorage },
+      "habitability": { habitable, uninhabitableReason },
+      "hazards":    { hazardDetails: { poolFencing, electrical, sewerage, structural },
+                      safetyHazards, environmentalHazards },
+      "damage":     { damageObserved, causeOfDamage, hasDamageCoveredByPolicy,
+                      preExistingMaintenanceIssues, preExistingRelateDamage,
+                      maintenanceDefectIssues, worksRequiredToAddressDamage },
+      "makeSafe":   { makeSafeRequired, makeSafeType, dateMakeSafeCompleted,
+                      dateMainRoofRepaired },
+      "temporaryAccommodation": { required, estimatedAmount, estimatedDuration,
+                      requiredImmediately, immediateEstimateDays,
+                      requiredDuringRepairs, repairsEstimateDays,
+                      tempRepairsToMakeLivable, workWhileInAccommodation },
+      "specialists": { specialistRequired, specialistType },
+      "recommendation": { claimRecommendation, costEstimateForRepairs,
+                      estimatedRepairTime, estimatedRepairDuration,
+                      hasInsuredAdvised, clientWillingToProceed,
+                      customerArrangedRepairs, arrangedRepairComments,
+                      clientDiscussions, specialNotes, conclusion, builderLicenses }
+    }
+  }
+
+  Only include fields you have evidence for — omit unknown fields entirely.
+  Tell the user: "I've created the assessment with [N] fields pre-filled from [sources].
+  Let me walk you through each section so you can review and adjust."
+
+  PHASE 3 — TAB-BY-TAB REVIEW (wizard walk-through)
+  Walk through each tab sequentially. For each tab:
+  1. Open the tab drawer: call open_assessment_<tab> with the new assessmentId.
+  2. The drawer will load the section data that was saved during creation.
+  3. Present a short review of what was filled and the evidence source for each value.
+  4. Ask the user if anything needs changing. If they provide corrections,
+     call fill_assessment_<tab> with the updated values.
+  5. When the user confirms, save with update_assessment_<tab>.
+  6. Move to the next tab.
+
+  Tab order:
+  1. Attendance — evidence: contacts, appointments, claim (insured name), journals
+  2. Building — evidence: journals (photos, notes), reports
+  3. Habitability — evidence: journals (livability notes), damage severity
+  4. Hazards — evidence: journals (hazard observations, photos)
+  5. Damage & Cause — evidence: journals, claim (event type/date), reports
+  6. Make Safe — evidence: journals (emergency works), job description
+  7. Temp Accommodation — evidence: journals (habitability), claim details
+  8. Specialists — evidence: journals (specialist mentions), contacts, reports
+  9. Recommendation — evidence: ALL sources combined
+
+  After all 9 tabs:
+  - Offer to validate: call validate_assessment.
+  - If valid, offer to publish: call publish_assessment.
+  - If validation errors, show them and offer to fix.
+
+  Rules:
+  - Do NOT invent dates, people, costs, or recommendations.
+  - Always cite the evidence source when filling a field.
+  - If a data source returns empty results, skip it silently — do not tell the user
+    "no contacts found" unless it prevents filling a required field.
+  - Prefer evidence; if unsure, ask.
+  - If the user wants to skip a tab during review, move to the next one.
+  - If the user wants to stop the wizard early, confirm and stop.
 requiredToolRefs:
+  # Create & read
   - integration: Claims Operations
     tool: open_create_assessment
   - integration: Claims Operations
@@ -50,8 +152,22 @@ requiredToolRefs:
     tool: create_assessment
   - integration: Claims Operations
     tool: get_assessment
+  # Data gathering — job, claim, contacts, appointments, reports
   - integration: Claims Operations
     tool: get_job
+  - integration: Claims Operations
+    tool: get_claim
+  - integration: Claims Operations
+    tool: list_contacts_by_job
+  - integration: Claims Operations
+    tool: get_contact
+  - integration: Claims Operations
+    tool: list_appointments_by_job
+  - integration: Claims Operations
+    tool: list_reports_by_job
+  - integration: Claims Operations
+    tool: get_report
+  # Data gathering — journals
   - integration: Claims Operations
     tool: list_journals
   - integration: Claims Operations
@@ -62,6 +178,74 @@ requiredToolRefs:
     tool: get_journal_page
   - integration: Claims Operations
     tool: get_journal_page_attachment_download
+  # Tab 1: Attendance
+  - integration: Claims Operations
+    tool: open_assessment_attendance
+  - integration: Claims Operations
+    tool: fill_assessment_attendance
+  - integration: Claims Operations
+    tool: update_assessment_attendance
+  # Tab 2: Building
+  - integration: Claims Operations
+    tool: open_assessment_building
+  - integration: Claims Operations
+    tool: fill_assessment_building
+  - integration: Claims Operations
+    tool: update_assessment_building
+  # Tab 3: Habitability
+  - integration: Claims Operations
+    tool: open_assessment_habitability
+  - integration: Claims Operations
+    tool: fill_assessment_habitability
+  - integration: Claims Operations
+    tool: update_assessment_habitability
+  # Tab 4: Hazards
+  - integration: Claims Operations
+    tool: open_assessment_hazards
+  - integration: Claims Operations
+    tool: fill_assessment_hazards
+  - integration: Claims Operations
+    tool: update_assessment_hazards
+  # Tab 5: Damage & Cause
+  - integration: Claims Operations
+    tool: open_assessment_damage
+  - integration: Claims Operations
+    tool: fill_assessment_damage
+  - integration: Claims Operations
+    tool: update_assessment_damage
+  # Tab 6: Make Safe
+  - integration: Claims Operations
+    tool: open_assessment_makeSafe
+  - integration: Claims Operations
+    tool: fill_assessment_makeSafe
+  - integration: Claims Operations
+    tool: update_assessment_makeSafe
+  # Tab 7: Temp Accommodation
+  - integration: Claims Operations
+    tool: open_assessment_tempAccommodation
+  - integration: Claims Operations
+    tool: fill_assessment_tempAccommodation
+  - integration: Claims Operations
+    tool: update_assessment_tempAccommodation
+  # Tab 8: Specialists
+  - integration: Claims Operations
+    tool: open_assessment_specialists
+  - integration: Claims Operations
+    tool: fill_assessment_specialists
+  - integration: Claims Operations
+    tool: update_assessment_specialists
+  # Tab 9: Recommendation
+  - integration: Claims Operations
+    tool: open_assessment_recommendation
+  - integration: Claims Operations
+    tool: fill_assessment_recommendation
+  - integration: Claims Operations
+    tool: update_assessment_recommendation
+  # Lifecycle
+  - integration: Claims Operations
+    tool: validate_assessment
+  - integration: Claims Operations
+    tool: publish_assessment
 category: assessments
 invocationMode: inline
 includeHistory: true

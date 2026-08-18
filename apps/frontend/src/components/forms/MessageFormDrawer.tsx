@@ -37,7 +37,9 @@ type MessageFormValues = z.infer<typeof messageFormSchema>;
 export interface MessageFormDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  jobId: string;
+  /** Job-scoped send (CW fromJobId/toJobId). */
+  jobId?: string | null;
+  /** Claim-scoped send (CW fromClaimId/toClaimId). Ignored when jobId is set. */
   claimId?: string | null;
 }
 
@@ -153,13 +155,22 @@ export function MessageFormDrawer({
     setSubmitting(true);
     setError(null);
     try {
-      const result = await createMessageAction({
-        fromJobId: jobId,
-        ...(claimId ? { fromClaimId: claimId, toClaimId: claimId } : {}),
-        toJobId: jobId,
+      const payload: Record<string, unknown> = {
         subject: values.subject,
         text: body,
-      });
+      };
+      if (jobId) {
+        payload.fromJobId = jobId;
+        payload.toJobId = jobId;
+      } else if (claimId) {
+        payload.fromClaimId = claimId;
+        payload.toClaimId = claimId;
+      } else {
+        setError('A job or claim is required to send a message');
+        setSubmitting(false);
+        return;
+      }
+      const result = await createMessageAction(payload);
       if (result.success) {
         onOpenChange(false);
         form.reset();
@@ -180,7 +191,11 @@ export function MessageFormDrawer({
       open={open}
       onOpenChange={onOpenChange}
       title="Send Message"
-      description="Compose and send a message related to this job."
+      description={
+        jobId
+          ? 'Compose and send a message related to this job.'
+          : 'Compose and send a message related to this claim.'
+      }
       icon={<MessageSquare className="h-5 w-5" />}
     >
       <form

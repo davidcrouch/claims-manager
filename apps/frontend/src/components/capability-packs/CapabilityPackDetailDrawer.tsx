@@ -36,7 +36,6 @@ export function CapabilityPackDetailDrawer({
       title={preview?.name ?? 'Pack details'}
       description={description}
       icon={<Package className="h-5 w-5" />}
-      widthClassName="w-[60%]"
     >
       <BottomFormDrawerBody>
         <BottomFormDrawerError error={error} className="mt-0 mb-5" />

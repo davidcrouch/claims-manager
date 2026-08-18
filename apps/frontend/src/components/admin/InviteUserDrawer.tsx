@@ -82,7 +82,6 @@ export function InviteUserDrawer({
       title="Invite User"
       description="Send an invitation email with a role assignment."
       icon={<UserPlus className="h-5 w-5" />}
-      widthClassName="w-[60%]"
     >
       <BottomFormDrawerBody>
         <div className="space-y-4">

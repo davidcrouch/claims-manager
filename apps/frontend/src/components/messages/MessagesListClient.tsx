@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { MessageSquare } from 'lucide-react';
+import { Mail, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { PrintButton } from '@/components/shared/PrintButton';
 import { EntityPageHeader } from '@/components/shared/EntityPageHeader';
+import { MessageFormDrawer } from '@/components/forms/MessageFormDrawer';
 import {
   SortTabs,
   SearchInput,
@@ -114,6 +115,7 @@ export function MessagesListClient({
   const [page, setPage] = useState(1);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [composeOpen, setComposeOpen] = useState(false);
   const limit = 20;
   const { isVisible, toggle, visibleCount } = useColumnVisibility(
     'messages',
@@ -320,7 +322,7 @@ export function MessagesListClient({
       <SetPageHeader>
         <EntityPageHeader
           icon={MessageSquare}
-          title="Messages"
+          title="Communications"
           total={total}
           showing={visibleMessages.length}
           accent="slate"
@@ -329,14 +331,16 @@ export function MessagesListClient({
         />
       </SetPageHeader>
       <SetHeaderActions>
-        <Button
-          size="default"
-          disabled
-          title="Create from a Job detail page"
-          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
-        >
-          New Message
-        </Button>
+        {jobId ? (
+          <Button
+            size="default"
+            onClick={() => setComposeOpen(true)}
+            className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+          >
+            <Mail className="h-3.5 w-3.5" />
+            Send Message
+          </Button>
+        ) : null}
         <PrintButton documentType="messages_list" entityId="list" />
       </SetHeaderActions>
 
@@ -565,6 +569,16 @@ export function MessagesListClient({
         message={selectedMessage}
         jobNameById={jobNameById}
       />
+      {jobId && (
+        <MessageFormDrawer
+          open={composeOpen}
+          onOpenChange={(open) => {
+            setComposeOpen(open);
+            if (!open) void load();
+          }}
+          jobId={jobId}
+        />
+      )}
     </div>
   );
 }

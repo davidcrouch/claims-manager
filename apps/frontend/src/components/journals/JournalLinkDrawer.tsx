@@ -5,12 +5,9 @@ import { BookOpen, Search, Link2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from '@/components/ui/sheet';
+  BottomFormDrawer,
+  BottomFormDrawerBody,
+} from '@/components/forms/BottomFormDrawer';
 import type { Journal } from '@/types/api';
 
 export interface JournalLinkDrawerProps {
@@ -63,16 +60,15 @@ export function JournalLinkDrawer({
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="gap-0 p-0 [&>button]:text-sidebar-foreground [&>button]:hover:bg-sidebar-accent [&>button]:hover:text-sidebar-foreground">
-        <SheetHeader data-slot="drawer-header" className="border-b border-sidebar-border p-4 pr-12">
-          <SheetTitle className="text-sidebar-foreground">Link Existing Journal</SheetTitle>
-          <SheetDescription className="text-sidebar-foreground/65">
-            Search and select a journal to link to this {entityType.toLowerCase()}.
-          </SheetDescription>
-        </SheetHeader>
-
-        <div className="space-y-4 px-8 py-6">
+    <BottomFormDrawer
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Link Existing Journal"
+      description={`Search and select a journal to link to this ${entityType.toLowerCase()}.`}
+      icon={<BookOpen className="h-5 w-5" />}
+    >
+      <BottomFormDrawerBody>
+        <div className="space-y-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -102,7 +98,9 @@ export function JournalLinkDrawer({
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{journal.name}</p>
                     {journal.description && (
-                      <p className="truncate text-xs text-muted-foreground">{journal.description}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {journal.description}
+                      </p>
                     )}
                   </div>
                   <Button
@@ -119,7 +117,7 @@ export function JournalLinkDrawer({
             </div>
           )}
         </div>
-      </SheetContent>
-    </Sheet>
+      </BottomFormDrawerBody>
+    </BottomFormDrawer>
   );
 }

@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: [main]
+    tags: ["v*.*.*"]
   workflow_dispatch:
     inputs:
       force_build_all:
@@ -40,7 +41,7 @@ jobs:
   prepare-docker:
     runs-on: ubuntu-latest
     needs: [node-ci]
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
       id-token: write
@@ -58,7 +59,12 @@ jobs:
           fetch-depth: 0
 
       - id: tag
-        run: echo "image_tag=main-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "image_tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "image_tag=main-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
 
       - id: changes
         uses: dorny/paths-filter@v3
@@ -90,6 +96,10 @@ jobs:
       - id: decide
         name: Decide which images to build
         run: |
+          FORCE="${{ inputs.force_build_all }}"
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            FORCE="true"
+          fi
           for image in api-server auth-server frontend provider-server claims-mcp ms-graph-mcp; do
             case "$image" in
               api-server) changed="${{ steps.changes.outputs.api-server }}" ;;
@@ -104,9 +114,9 @@ jobs:
             else
               existed=false
             fi
-            if [ "${{ inputs.force_build_all }}" = "true" ] || [ "$changed" = "true" ] || [ "$existed" = "false" ]; then
+            if [ "$FORCE" = "true" ] || [ "$changed" = "true" ] || [ "$existed" = "false" ]; then
               echo "${image}=true" >> "$GITHUB_OUTPUT"
-              echo "Will BUILD ${image} (changed=${changed} existed=${existed} force=${{ inputs.force_build_all }})"
+              echo "Will BUILD ${image} (changed=${changed} existed=${existed} force=${FORCE})"
             else
               echo "${image}=false" >> "$GITHUB_OUTPUT"
               echo "Will RETAG ${image}"
@@ -116,7 +126,7 @@ jobs:
   docker-build:
     runs-on: ubuntu-latest
     needs: [prepare-docker]
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
       id-token: write
@@ -186,7 +196,7 @@ jobs:
   ensure-tags:
     runs-on: ubuntu-latest
     needs: [prepare-docker, docker-build]
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
       id-token: write

@@ -54,3 +54,13 @@ output "cloudsql_provider_app_password" {
 output "subnet_name" {
   value = module.networking.subnet_name
 }
+
+output "use_public_hostnames" {
+  value       = var.use_public_hostnames
+  description = "Whether OIDC env uses Cloudflare public hostnames vs *.run.app"
+}
+
+output "lb_ip" {
+  value       = module.https_lb.lb_ip
+  description = "Global anycast IP for the HTTPS load balancer (point DNS A records here)"
+}

@@ -9,6 +9,7 @@ import {
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { Sparkles, X } from 'lucide-react';
+import { useEntityDrawerOptional } from '@/components/layout/EntityDrawerHost';
 import {
   FORM_DRAWER_BESIDE_CHAT_WIDTH_CLASS,
   FORM_DRAWER_COMPANION_LEFT_CLASS,
@@ -22,7 +23,7 @@ export interface BottomFormDrawerProps {
   description?: string;
   icon: ReactNode;
   children: ReactNode;
-  /** Tailwind width class for the panel. Defaults to 70% viewport width. */
+  /** Tailwind width class for the panel. Defaults to 65% viewport width. */
   widthClassName?: string;
   aiAssistEnabled?: boolean;
   onAIAssist?: () => void;
@@ -47,12 +48,21 @@ export function BottomFormDrawer({
 }: BottomFormDrawerProps) {
   const [mounted, setMounted] = useState(false);
   const reactId = useId();
+  const layout = useEntityDrawerOptional();
+  const chatBeside = companionChatOpen || !!layout?.companionChatOpen;
   const titleId = `bfd-title-${reactId}`;
   const descriptionId = `bfd-description-${reactId}`;
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  const registerFormDrawer = layout?.registerFormDrawer;
+  useEffect(() => {
+    if (!registerFormDrawer) return;
+    registerFormDrawer(reactId, open);
+    return () => registerFormDrawer(reactId, false);
+  }, [open, reactId, registerFormDrawer]);
 
   useEffect(() => {
     if (!open) return;
@@ -83,7 +93,7 @@ export function BottomFormDrawer({
         >
           <motion.div
             className={
-              companionChatOpen
+              chatBeside
                 ? `absolute inset-y-0 right-0 ${FORM_DRAWER_COMPANION_LEFT_CLASS} bg-slate-900/40 backdrop-blur-sm`
                 : 'absolute inset-0 bg-slate-900/40 backdrop-blur-sm'
             }
@@ -99,7 +109,7 @@ export function BottomFormDrawer({
             aria-labelledby={titleId}
             aria-describedby={description ? descriptionId : undefined}
             className={`absolute inset-y-0 right-0 flex h-full flex-col overflow-hidden border-l border-slate-200 bg-background shadow-2xl transition-[width] duration-300 ease-in-out ${
-              companionChatOpen ? FORM_DRAWER_BESIDE_CHAT_WIDTH_CLASS : widthClassName
+              chatBeside ? FORM_DRAWER_BESIDE_CHAT_WIDTH_CLASS : widthClassName
             }`}
             variants={{ closed: { x: '100%' }, open: { x: 0 } }}
             transition={{ type: 'spring', damping: 30, stiffness: 280, mass: 0.9 }}

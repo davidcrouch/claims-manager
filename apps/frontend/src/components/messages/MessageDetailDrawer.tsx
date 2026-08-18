@@ -97,7 +97,6 @@ export function MessageDetailDrawer({
         title="Message"
         description="Message details"
         icon={<Mail className="h-5 w-5" />}
-        widthClassName="w-[60%]"
       >
         <BottomFormDrawerBody>
           <p className="text-sm text-slate-500">No message selected.</p>
@@ -134,7 +133,6 @@ export function MessageDetailDrawer({
       title={subject}
       description={description || 'Message details'}
       icon={<Mail className="h-5 w-5" />}
-      widthClassName="w-[60%]"
     >
       <BottomFormDrawerBody className="px-0! py-0!">
         <div className="flex h-full min-h-0 flex-col">

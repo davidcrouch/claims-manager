@@ -279,7 +279,6 @@ export function McpConnectionsPanel() {
         title={integrationById.get(detailConnection?.integrationId ?? '')?.name ?? 'Connection'}
         description="Connection details and discovered tools."
         icon={<Wrench className="h-5 w-5" />}
-        widthClassName="w-[60%]"
       >
         {detailConnection && (
           <>
@@ -346,7 +345,6 @@ export function McpConnectionsPanel() {
         title="Connect MCP Server"
         description="Create a connection to an existing MCP integration."
         icon={<Plug2 className="h-5 w-5" />}
-        widthClassName="w-[50%]"
       >
         <BottomFormDrawerBody>
           <div className="space-y-4">

@@ -139,7 +139,6 @@ export function AgentConfigDrawer({
       title={agent.name}
       description="Configure model, connections, tools, and prompt settings."
       icon={<Bot className="h-5 w-5" />}
-      widthClassName="w-[70%]"
     >
       <BottomFormDrawerBody className="px-8">
         <nav className="mb-5 flex items-center gap-1 rounded-lg bg-slate-100 p-1">

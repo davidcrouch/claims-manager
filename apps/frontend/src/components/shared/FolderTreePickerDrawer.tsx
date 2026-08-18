@@ -75,7 +75,6 @@ export function FolderTreePickerDrawer({
       title={title}
       description={description}
       icon={<FolderOpen className="h-5 w-5" />}
-      widthClassName="w-[60%]"
     >
       <BottomFormDrawerBody>
         <div className="mx-auto max-w-xl space-y-3">

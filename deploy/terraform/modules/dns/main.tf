@@ -10,17 +10,16 @@ terraform {
 }
 
 locals {
-  # Hyphenated env hosts: api-staging.branlamie.com / api-dev.branlamie.com
-  # Prod (production|prod): api.branlamie.com (no suffix)
+  # Hyphenated env hosts: auth-staging.branlamie.com / app-dev.branlamie.com
+  # Prod (production|prod): auth.branlamie.com (no suffix)
+  # api-server is VPC-internal; no public DNS record needed.
   is_prod = contains(["production", "prod"], var.environment)
 
   default_host_labels = local.is_prod ? {
-    api       = "api"
     auth      = "auth"
     app       = "app"
     providers = "providers"
     } : {
-    api       = "api-${var.environment}"
     auth      = "auth-${var.environment}"
     app       = "app-${var.environment}"
     providers = "providers-${var.environment}"

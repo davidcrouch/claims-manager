@@ -55,8 +55,8 @@ module "memorystore" {
   project_id         = var.project_id
   region             = var.region
   environment        = var.environment
-  tier               = "STANDARD_HA"
-  memory_size_gb     = 3
+  tier               = "BASIC"
+  memory_size_gb     = 1
   authorized_network = module.networking.vpc_self_link
 }
 
@@ -136,13 +136,13 @@ module "https_lb" {
   region      = var.region
   environment = var.environment
 
-  # All production domains on the LB — no Cloudflare Worker fanout in prod.
+  # Public services on the LB — no Cloudflare Worker fanout in prod.
   # providers.branlamie.com routes directly to provider-server (grey-cloud DNS).
+  # api-server is VPC-internal only; callers use IAM-authenticated .run.app URLs.
   domains = [
     local.cloud_run_hosts.app,
     local.cloud_run_hosts.auth,
     local.cloud_run_hosts.providers,
-    local.cloud_run_hosts.api,
   ]
 
   services = {
@@ -157,10 +157,6 @@ module "https_lb" {
     provider = {
       cloud_run_service_name = "provider-server"
       hostnames              = [local.cloud_run_hosts.providers]
-    }
-    api = {
-      cloud_run_service_name = "api-server"
-      hostnames              = [local.cloud_run_hosts.api]
     }
   }
 

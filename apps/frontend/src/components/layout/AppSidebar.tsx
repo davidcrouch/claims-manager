@@ -129,7 +129,7 @@ const navGroups: NavGroup[] = [
     items: [
       { title: 'Tasks', href: '/tasks', icon: CheckSquare, jobFilterable: true },
       { title: 'Schedule', href: '/schedule', icon: Calendar, jobFilterable: true },
-      { title: 'Messages', href: '/messages', icon: MessageSquare, jobFilterable: true },
+      { title: 'Communications', href: '/messages', icon: MessageSquare, jobFilterable: true },
       { title: 'Appointments', href: '/appointments', icon: CalendarCheck, jobFilterable: true },
       { title: 'Contacts', href: '/contacts', icon: Users, jobFilterable: true },
       { title: 'Documents', href: '/documents', icon: FolderOpen, jobFilterable: true },

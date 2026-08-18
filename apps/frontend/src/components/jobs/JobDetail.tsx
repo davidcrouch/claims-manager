@@ -6,7 +6,6 @@ import {
   Calendar,
   Clock,
   Users,
-  Mail,
   FileBarChart,
   Info,
   Paperclip,
@@ -23,7 +22,6 @@ import { JOB_REPORT_TYPES } from '@/components/shared/PrintDocumentDrawer';
 import { JobOverviewTab, type JobOverviewTabHandle } from './tabs/JobOverviewTab';
 import { JobTypeDetailsTab, type JobTypeDetailsTabHandle } from './tabs/JobTypeDetailsTab';
 import { JobPartiesTab } from './tabs/JobPartiesTab';
-import { JobCommunicationsTab } from './tabs/JobCommunicationsTab';
 import { JobReportsTab } from './tabs/JobReportsTab';
 import { JobTimelineTab } from './tabs/JobTimelineTab';
 import { EntityAttachmentsTab } from '@/components/shared/EntityAttachmentsTab';
@@ -36,7 +34,6 @@ const VALID_TABS = [
   'overview',
   'type-details',
   'parties',
-  'communications',
   'reports',
   'attachments',
   'timeline',
@@ -186,7 +183,6 @@ export function JobDetail({
       ? [{ id: 'type-details' as TabValue, label: 'Type Details', icon: Info }]
       : []),
     { id: 'parties', label: 'Parties', icon: Users },
-    { id: 'communications', label: 'Communications', icon: Mail },
     { id: 'reports', label: 'Reports', icon: FileBarChart },
     { id: 'attachments', label: 'Attachments', icon: Paperclip },
     { id: 'timeline', label: 'Timeline', icon: Clock },
@@ -348,9 +344,6 @@ export function JobDetail({
             drawerOpen={reportDrawerOpen}
             onDrawerOpenChange={setReportDrawerOpen}
           />
-        )}
-        {activeTab === 'communications' && (
-          <JobCommunicationsTab jobId={job.id} claimId={claimId} />
         )}
         {activeTab === 'attachments' && (
           <EntityAttachmentsTab entityId={job.id} relatedRecordType="Job" entityLabel="this job" />

@@ -21,7 +21,7 @@ import {
 } from '@/lib/ai/use-ai-context';
 import { usePageContext } from '@/lib/ai/use-page-context';
 import { cn } from '@/lib/utils';
-import { CHAT_BESIDE_FORM_WIDTH_CLASS } from '@/components/forms/form-drawer-layout';
+import { CHAT_BESIDE_FORM_WIDTH_CLASS, CHAT_DRAWER_WIDTH_CLASS } from '@/components/forms/form-drawer-layout';
 import { useEntityDrawer } from '@/components/layout/EntityDrawerHost';
 import { ChatInterface } from './ChatInterface';
 import { ChatHistoryPanel, type ConversationItem } from './ChatHistoryPanel';
@@ -66,7 +66,12 @@ export function ChatDrawer({
   besideCanvas = false,
   widthClassName,
 }: ChatDrawerProps) {
-  const { openEntityDrawer, closeEntityDrawer, isOpen: formDrawerOpen } = useEntityDrawer();
+  const {
+    openEntityDrawer,
+    closeEntityDrawer,
+    isOpen: formDrawerOpen,
+    hasOpenFormDrawer,
+  } = useEntityDrawer();
   const [mounted, setMounted] = useState(false);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [sessionKey, setSessionKey] = useState(0);
@@ -87,7 +92,7 @@ export function ChatDrawer({
   conversationIdRef.current = conversationId;
 
   const artifactDrawerOpen = !!canvasArtifact;
-  const toolDrawerOpen = formDrawerOpen || artifactDrawerOpen;
+  const toolDrawerOpen = formDrawerOpen || artifactDrawerOpen || hasOpenFormDrawer;
   const besideForm = besideCanvas || toolDrawerOpen;
 
   useEffect(() => {
@@ -296,7 +301,7 @@ export function ChatDrawer({
 
   const resolvedWidthClassName =
     widthClassName ??
-    (besideForm ? CHAT_BESIDE_FORM_WIDTH_CLASS : 'w-[50%]');
+    (besideForm ? CHAT_BESIDE_FORM_WIDTH_CLASS : CHAT_DRAWER_WIDTH_CLASS);
 
   const drawer = mounted
     ? createPortal(

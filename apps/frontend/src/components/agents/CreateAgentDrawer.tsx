@@ -175,7 +175,6 @@ export function CreateAgentDrawer({ open, onOpenChange, onCreated }: CreateAgent
         title="Create Agent"
         description={STEPS[stepIndex].description}
         icon={<Plus className="h-5 w-5" />}
-        widthClassName="w-[70%]"
       >
         <BottomFormDrawerBody>
           <div className="space-y-5">

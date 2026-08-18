@@ -156,7 +156,6 @@ export function FilesystemTemplateDrawer({
           : 'Category blueprint for the organisation document filesystem.'
       }
       icon={<LayoutTemplate className="h-5 w-5" />}
-      widthClassName="w-[85%]"
     >
       <BottomFormDrawerBody className="flex h-full flex-col !px-0 !py-0">
         <div className="shrink-0 border-b border-slate-200 px-12 py-6">

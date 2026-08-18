@@ -132,12 +132,14 @@ export class MessagesService {
       throw new BadRequestException(`${logPrefix} — message text is required`);
     }
 
+    // CW maps messageType.externalReference to an internal lookup. Known
+    // IAG staging values are "General" and "Status Update" — "Message" is not mapped.
     const messageTypeExtRef =
       (params.body.messageType as { externalReference?: string } | undefined)?.externalReference ??
       (typeof params.body.messageTypeExternalReference === 'string'
         ? params.body.messageTypeExternalReference
         : undefined) ??
-      'Message';
+      'General';
 
     const cwBody: Record<string, unknown> = {
       messageType: { externalReference: messageTypeExtRef },
@@ -153,7 +155,7 @@ export class MessagesService {
     }
 
     this.logger.log(
-      `${logPrefix} — posting to CW connectionId=${connectionId} fromJob=${cwFromJobId ?? 'none'} toJob=${cwToJobId ?? 'none'}`,
+      `${logPrefix} — posting to CW connectionId=${connectionId} messageType=${messageTypeExtRef} fromJob=${cwFromJobId ?? 'none'} toJob=${cwToJobId ?? 'none'} fromClaim=${cwFromClaimId ?? 'none'} toClaim=${cwToClaimId ?? 'none'}`,
     );
 
     const apiMessage = await this.crunchworkService.createMessage({

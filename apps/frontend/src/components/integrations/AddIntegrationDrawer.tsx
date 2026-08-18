@@ -179,7 +179,6 @@ export function AddIntegrationDrawer({
       title={editing ? 'Edit MCP Server' : 'Add MCP Server'}
       description="Register an MCP server integration for your organisation."
       icon={<Server className="h-5 w-5" />}
-      widthClassName="w-[75%]"
     >
       <BottomFormDrawerBody>
         <div className="space-y-5">

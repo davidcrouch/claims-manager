@@ -145,10 +145,10 @@ module "https_lb" {
   # so the crunchwork-webhook-proxy Worker intercepts webhook POSTs and fans
   # out to api-staging + api-dev. Google cert validation for that hostname is
   # not required while Cloudflare terminates client TLS.
+  # api-server is VPC-internal only; callers use IAM-authenticated .run.app URLs.
   domains = [
     local.cloud_run_hosts.app,
     local.cloud_run_hosts.auth,
-    local.cloud_run_hosts.api,
   ]
 
   services = {
@@ -163,10 +163,6 @@ module "https_lb" {
     provider = {
       cloud_run_service_name = "provider-server"
       hostnames              = [local.cloud_run_hosts.providers]
-    }
-    api = {
-      cloud_run_service_name = "api-server"
-      hostnames              = [local.cloud_run_hosts.api]
     }
   }
 

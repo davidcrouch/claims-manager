@@ -29,6 +29,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { Button } from '@/components/ui/button';
 import { BackButton } from '@/components/layout/BackButton';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { PrintButton } from '@/components/shared/PrintButton';
@@ -49,6 +50,7 @@ import {
 import { LocationMap } from '@/components/shared/LocationMap';
 import { EntityAttachmentsTab } from '@/components/shared/EntityAttachmentsTab';
 import { EntityMessagesTab } from '@/components/shared/EntityMessagesTab';
+import { MessageFormDrawer } from '@/components/forms/MessageFormDrawer';
 import type { Claim } from '@/types/api';
 
 function claimAddress(claim: Claim, full = false): string {
@@ -946,6 +948,7 @@ type ClaimTab =
 export function ClaimDetail({ claim }: { claim: Claim }) {
   const jobs = claim.jobs ?? [];
   const [tab, setTab] = useState<ClaimTab>('overview');
+  const [messageDrawerOpen, setMessageDrawerOpen] = useState(false);
 
   const tabs: Array<{
     id: ClaimTab;
@@ -973,6 +976,16 @@ export function ClaimDetail({ claim }: { claim: Claim }) {
   return (
     <div className="flex flex-col">
       <SetHeaderActions>
+        {tab === 'communications' ? (
+          <Button
+            size="default"
+            onClick={() => setMessageDrawerOpen(true)}
+            className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+          >
+            <Mail className="h-3.5 w-3.5" />
+            Send Message
+          </Button>
+        ) : null}
         <PrintButton documentType="claim" entityId={claim.id} />
         <ArchiveEntityButton
           entityType="claim"
@@ -990,7 +1003,10 @@ export function ClaimDetail({ claim }: { claim: Claim }) {
             <button
               key={t.id}
               type="button"
-              onClick={() => setTab(t.id)}
+                onClick={() => {
+                  if (t.id !== 'communications') setMessageDrawerOpen(false);
+                  setTab(t.id);
+                }}
               className={`inline-flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t-md ${
                 active
                   ? 'border-blue-600 bg-blue-50 text-blue-600'
@@ -1026,6 +1042,11 @@ export function ClaimDetail({ claim }: { claim: Claim }) {
         {tab === 'timeline' && <TimelineTab claim={claim} />}
         {tab === 'attachments' && <EntityAttachmentsTab entityId={claim.id} relatedRecordType="Claim" entityLabel="this claim" />}
       </div>
+      <MessageFormDrawer
+        open={messageDrawerOpen}
+        onOpenChange={setMessageDrawerOpen}
+        claimId={claim.id}
+      />
     </div>
   );
 }

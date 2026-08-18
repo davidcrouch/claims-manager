@@ -4,7 +4,7 @@ import { MessagesListClient } from '@/components/messages/MessagesListClient';
 import { buildJobNameById } from '@/components/shared/job-label';
 import type { Job, Claim, PaginatedResponse } from '@/types/api';
 
-export const metadata = { title: 'Messages — EnsureOS' };
+export const metadata = { title: 'Communications — EnsureOS' };
 
 export default async function MessagesPage({
   searchParams,

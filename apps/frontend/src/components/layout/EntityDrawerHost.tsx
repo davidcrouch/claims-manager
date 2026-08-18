@@ -22,6 +22,11 @@ type EntityDrawerContextValue = {
   closeEntityDrawer: () => void;
   isOpen: boolean;
   activeComponent: string | null;
+  /** App-shell chat drawer is open — forms shrink to the companion 60% width. */
+  companionChatOpen: boolean;
+  /** Any BottomFormDrawer (hosted or page-level) is currently open. */
+  hasOpenFormDrawer: boolean;
+  registerFormDrawer: (id: string, open: boolean) => void;
 };
 
 const EntityDrawerContext = createContext<EntityDrawerContextValue | null>(null);
@@ -39,6 +44,18 @@ export function EntityDrawerProvider({
   companionChatOpen?: boolean;
 }) {
   const [request, setRequest] = useState<OpenEntityDrawerArgs | null>(null);
+  const [openFormIds, setOpenFormIds] = useState<ReadonlySet<string>>(() => new Set());
+
+  const registerFormDrawer = useCallback((id: string, isOpen: boolean) => {
+    setOpenFormIds((prev) => {
+      const has = prev.has(id);
+      if (isOpen === has) return prev;
+      const next = new Set(prev);
+      if (isOpen) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
 
   const openEntityDrawer = useCallback((args: OpenEntityDrawerArgs) => {
     if (!drawerRegistry[args.component]) {
@@ -68,8 +85,18 @@ export function EntityDrawerProvider({
       closeEntityDrawer,
       isOpen: !!request,
       activeComponent: request?.component ?? null,
+      companionChatOpen,
+      hasOpenFormDrawer: openFormIds.size > 0 || !!request,
+      registerFormDrawer,
     }),
-    [openEntityDrawer, closeEntityDrawer, request],
+    [
+      openEntityDrawer,
+      closeEntityDrawer,
+      request,
+      companionChatOpen,
+      openFormIds,
+      registerFormDrawer,
+    ],
   );
 
   return (

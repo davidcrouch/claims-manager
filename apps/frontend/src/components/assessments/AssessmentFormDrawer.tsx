@@ -205,7 +205,6 @@ export function AssessmentFormDrawer({
       title="Create Assessment"
       description="Create a new site assessment for an insurance claim job."
       icon={<ClipboardList className="h-5 w-5" />}
-      widthClassName="w-[60%]"
       preventClose={busy}
     >
       <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">

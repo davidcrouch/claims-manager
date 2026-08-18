@@ -403,7 +403,6 @@ export function PrintDocumentDrawer({
       title="Print report"
       description="Review the report type, template, and where the PDF will be saved."
       icon={<Printer className="h-5 w-5" />}
-      widthClassName="w-[60%]"
       preventClose={generating || folderPickerOpen}
     >
       <BottomFormDrawerBody>

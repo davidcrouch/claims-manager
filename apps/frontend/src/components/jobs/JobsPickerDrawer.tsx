@@ -88,7 +88,6 @@ export function JobsPickerDrawer({
       title="Switch job"
       description="Select a job to open it in this view."
       icon={<Briefcase className="h-5 w-5" />}
-      widthClassName="w-[60%]"
     >
       <BottomFormDrawerBody className="flex h-full flex-col !px-0 !py-0">
         {loading && !bootstrap ? (

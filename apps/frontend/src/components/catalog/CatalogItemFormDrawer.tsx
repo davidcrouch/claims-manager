@@ -60,7 +60,6 @@ export function CatalogItemFormDrawer({
       title="New catalogue item"
       description="Add an item to this catalogue"
       icon={<Package className="h-5 w-5" />}
-      widthClassName="w-[60%]"
       preventClose={busy}
     >
       <BottomFormDrawerBody>

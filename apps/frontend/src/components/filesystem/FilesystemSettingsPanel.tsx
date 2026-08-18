@@ -978,7 +978,6 @@ function CategoryEditorDrawer({
       title="Edit Categories"
       description={filesystem.name}
       icon={<FolderTree className="h-5 w-5" />}
-      widthClassName="w-[85%]"
     >
       <BottomFormDrawerBody className="h-full !px-0 !py-0">
         <FilesystemEditorPanel
@@ -1073,7 +1072,6 @@ function TemplateCategoryEditorDrawer({
       title="Edit Categories"
       description={templateName}
       icon={<FolderTree className="h-5 w-5" />}
-      widthClassName="w-[85%]"
     >
       <BottomFormDrawerBody className="h-full !px-0 !py-0">
         <FilesystemEditorPanel

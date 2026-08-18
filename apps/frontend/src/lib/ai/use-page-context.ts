@@ -21,7 +21,7 @@ const ROUTE_ENTITY_MAP: Record<string, { entityType: string; label: string }> = 
   documents: { entityType: 'document', label: 'Documents' },
   invoices: { entityType: 'invoice', label: 'Invoices' },
   journals: { entityType: 'journal', label: 'Journals' },
-  messages: { entityType: 'message', label: 'Messages' },
+  messages: { entityType: 'message', label: 'Communications' },
   appointments: { entityType: 'appointment', label: 'Appointments' },
   rfqs: { entityType: 'rfq', label: 'Request for Quotations' },
   proposals: { entityType: 'proposal', label: 'Proposals' },

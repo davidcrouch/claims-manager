@@ -83,7 +83,6 @@ export function CreateSkillDrawer({ open, onOpenChange, onCreated }: CreateSkill
         title="Create Skill"
         description="Define instructions injected when trigger keywords match user messages."
         icon={<Plus className="h-5 w-5" />}
-        widthClassName="w-[55%]"
       >
         <BottomFormDrawerBody>
           <div className="space-y-4">

@@ -21,7 +21,6 @@ locals {
   # Public hostnames (Cloudflare → *.run.app). Used when use_public_hostnames=true.
   cloud_run_domain_suffix = trimsuffix(var.dns_name, ".")
   cloud_run_hosts = {
-    api       = "api-${var.environment}.${local.cloud_run_domain_suffix}"
     auth      = "auth-${var.environment}.${local.cloud_run_domain_suffix}"
     app       = "app-${var.environment}.${local.cloud_run_domain_suffix}"
     providers = "providers-${var.environment}.${local.cloud_run_domain_suffix}"
@@ -148,13 +147,12 @@ module "cloud_run_api" {
   timeout               = "900s"
   health_path           = var.cloud_run_use_bootstrap_image ? "/" : "/api/v1/health"
   enable_probes         = !var.cloud_run_use_bootstrap_image
-  # Public on HTTPS LB as api-staging.branlamie.com.
-  # Security model: application-level guards (JWT on user routes, HMAC on
-  # webhooks, InternalTokenGuard on /internal, ToolAuthGuard on /webhook-tools).
-  # Cloud Run IAM (allUsers invoker) is required for the LB serverless NEG.
-  # MCP services remain IAM-private; api/auth/frontend/provider use app auth.
+  # Not on the public LB. IAM-private (same pattern as MCP services):
+  # callers hit the .run.app URL with a Cloud Run invoker identity token.
+  # INGRESS_TRAFFIC_INTERNAL_ONLY blocks Cloud Run→Cloud Run over *.run.app
+  # (egress is private-ranges-only, so those calls leave the VPC).
   ingress               = "INGRESS_TRAFFIC_ALL"
-  allow_unauthenticated = true
+  allow_unauthenticated = false
   invoker_members = [
     "serviceAccount:${module.iam.service_account_emails["frontend"]}",
     "serviceAccount:${module.iam.service_account_emails["auth-server"]}",

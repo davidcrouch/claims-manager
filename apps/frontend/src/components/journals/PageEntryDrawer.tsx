@@ -505,7 +505,6 @@ export function PageEntryDrawer({
       title="Add Entry"
       description="Build a running list of notes and uploads in any order."
       icon={<FilePlus2 className="h-5 w-5" />}
-      widthClassName="w-[50%]"
     >
       <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
         <BottomFormDrawerBody>

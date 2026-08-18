@@ -178,7 +178,6 @@ export function DocumentUploadDrawer({
       title="Upload Documents"
       description="Drag and drop or browse. Supports PDF, Word, Excel, and images."
       icon={<Upload className="h-5 w-5" />}
-      widthClassName="w-[50%]"
     >
       <BottomFormDrawerBody>
         {taskCount > 0 && (

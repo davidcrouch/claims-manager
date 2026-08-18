@@ -1,11 +1,13 @@
 name: Deploy Cloud Run Production
 
-# Opt-in: runs on semver tags (e.g. v1.2.3) or manual dispatch.
+# Opt-in: runs after successful CI on semver tags (e.g. v1.2.3) or manual dispatch.
 # Same Cloud Run matrix as staging; terraform owns SA / VPC / secrets / sizing.
 
 on:
-  push:
-    tags: ["v*.*.*"]
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: ["v*.*.*"]
   workflow_dispatch:
     inputs:
       image_tag:
@@ -17,12 +19,13 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  PROD_PROJECT: claims-manager-production
+  PROD_PROJECT: claims-manager-prod-493807
   GCP_REGION: australia-southeast1
   REGISTRY: australia-southeast1-docker.pkg.dev/claims-manager-infra-493807/claims-manager
 
 jobs:
   deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     environment: production
     permissions:
@@ -43,6 +46,9 @@ jobs:
         run: |
           if [ -n "${{ github.event.inputs.image_tag }}" ]; then
             echo "IMAGE_TAG=${{ github.event.inputs.image_tag }}" >> "$GITHUB_ENV"
+          elif [ "${{ github.event_name }}" = "workflow_run" ]; then
+            # workflow_run on a tag: head_branch is the tag name (e.g. v1.2.3)
+            echo "IMAGE_TAG=${{ github.event.workflow_run.head_branch }}" >> "$GITHUB_ENV"
           elif [ "${{ github.ref_type }}" = "tag" ]; then
             echo "IMAGE_TAG=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
           else
@@ -73,6 +79,7 @@ jobs:
 
   sync-platform-assets:
     needs: [deploy]
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     environment: production
     permissions:
@@ -96,6 +103,7 @@ jobs:
 
   migrate:
     needs: [deploy]
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     environment: production
     permissions:
@@ -106,6 +114,8 @@ jobs:
         run: |
           if [ -n "${{ github.event.inputs.image_tag }}" ]; then
             echo "IMAGE_TAG=${{ github.event.inputs.image_tag }}" >> "$GITHUB_ENV"
+          elif [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "IMAGE_TAG=${{ github.event.workflow_run.head_branch }}" >> "$GITHUB_ENV"
           elif [ "${{ github.ref_type }}" = "tag" ]; then
             echo "IMAGE_TAG=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
           else
@@ -138,6 +148,7 @@ jobs:
 
   seed-rbac:
     needs: [migrate]
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     environment: production
     permissions:
@@ -148,6 +159,8 @@ jobs:
         run: |
           if [ -n "${{ github.event.inputs.image_tag }}" ]; then
             echo "IMAGE_TAG=${{ github.event.inputs.image_tag }}" >> "$GITHUB_ENV"
+          elif [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "IMAGE_TAG=${{ github.event.workflow_run.head_branch }}" >> "$GITHUB_ENV"
           elif [ "${{ github.ref_type }}" = "tag" ]; then
             echo "IMAGE_TAG=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
           else

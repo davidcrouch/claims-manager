@@ -126,7 +126,6 @@ export function AssessmentPublishDrawer({
       title="Publish field assessment"
       description="Review the claim, job, and assessment summary, then send this field assessment to NRMA."
       icon={<Shield className="h-5 w-5 text-amber-600" />}
-      widthClassName="w-[55%]"
       preventClose={publishing}
     >
       <BottomFormDrawerBody>

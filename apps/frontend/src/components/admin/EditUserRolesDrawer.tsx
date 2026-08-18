@@ -75,7 +75,6 @@ export function EditUserRolesDrawer({
       title="Edit Roles"
       description={displayName}
       icon={<Shield className="h-5 w-5" />}
-      widthClassName="w-full max-w-lg"
     >
       <BottomFormDrawerBody>
         <div className="space-y-4">

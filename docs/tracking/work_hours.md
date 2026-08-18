@@ -850,3 +850,14 @@
   Prefers newest unmatched events so recent work is not blocked by old junk.
   Makes batch size and retry limit configurable for operators.
   Outcome: staging-style backlog starvation is much less likely to repeat.
+
+- `2026-08-19` `PENDING` **8.5 h**
+  `72 files | +1921 −814 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
+  Lay summary: Production can now be released the same way as staging, and staff get clearer messages, assessments, and side-by-side forms.
+  **Brought production hosting in line with staging and improved day-to-day screens.**
+  Release tags now build, check, and deploy the live environment with the same steps staging already uses.
+  Added a production go-live runbook, secret seeding, and rollback so the first live cutover is repeatable.
+  Field assessment guidance now gathers job information first and walks staff through each section to finish.
+  Communications live on one messages screen with send from a job, instead of a duplicate tab on the job page.
+  Forms and chat sit side by side more reliably, and connection and file-pipeline screens were simplified.
+  Updated the public hero image to match the current brand presentation.

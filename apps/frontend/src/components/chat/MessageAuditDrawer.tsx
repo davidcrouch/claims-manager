@@ -61,7 +61,6 @@ export function MessageAuditDrawer({
       onOpenChange={onOpenChange}
       title="Message Audit"
       icon={<Cpu className="h-5 w-5 text-violet-500" />}
-      widthClassName="w-[60%]"
     >
       <div className="space-y-5 overflow-y-auto px-14 py-6">
         {!audit ? (

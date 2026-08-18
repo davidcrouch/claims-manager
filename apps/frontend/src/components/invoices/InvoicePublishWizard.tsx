@@ -105,7 +105,6 @@ export function InvoicePublishWizard({
           <Shield className="h-5 w-5 text-amber-600" />
         )
       }
-      widthClassName="w-[55%]"
       preventClose={publishing}
     >
       <BottomFormDrawerBody>

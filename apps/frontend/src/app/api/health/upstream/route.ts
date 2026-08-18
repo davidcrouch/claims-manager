@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getApiBaseUrl } from '@/lib/env';
+import { cloudRunInvokerHeaders } from '@/lib/cloud-run-id-token';
 import { fetchWithTransientRetry } from '@/lib/transient-network';
 
 const LOG = 'frontend:api:health:upstream';
@@ -13,7 +14,11 @@ export async function GET() {
   try {
     const res = await fetchWithTransientRetry(
       url,
-      { cache: 'no-store', method: 'GET' },
+      {
+        cache: 'no-store',
+        method: 'GET',
+        headers: await cloudRunInvokerHeaders(),
+      },
       { logLabel: LOG, maxAttempts: 2 },
     );
     if (!res.ok) {

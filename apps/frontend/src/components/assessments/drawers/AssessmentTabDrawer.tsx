@@ -114,7 +114,6 @@ export function createAssessmentTabDrawer(config: AssessmentTabDrawerConfig) {
         title={title}
         description={`Update the ${title.toLowerCase()} section for this assessment.`}
         icon={<Icon className="h-5 w-5" />}
-        widthClassName="w-[55%]"
         companionChatOpen={companionChatOpen}
       >
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">

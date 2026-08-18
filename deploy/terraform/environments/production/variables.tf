@@ -60,7 +60,7 @@ variable "cloud_run_image_tag" {
 
 variable "cloud_run_use_bootstrap_image" {
   type        = bool
-  default     = true
+  default     = false
   description = "Use hello image until first production image push (set false after first deploy)"
 }
 

@@ -1,6 +1,6 @@
 slug: assessment-attendance
 name: Assessment – Attendance
-description: Collect attendance details by reviewing job journals (entries, notes, photos), then filling the form.
+description: Collect attendance details by reviewing job contacts, appointments, journals, and claim data, then filling the form.
 triggerHints:
   - attendance assessment
   - site attendance
@@ -14,7 +14,17 @@ instructionPrompt: |
   Workflow:
   1. Confirm assessmentId. Call open_assessment_attendance and get_assessment. Resolve jobId
      (from the assessment, page context, or user). Call get_job.
-  2. Journal review (do this before answering form questions):
+  2. Gather structured data sources (call in parallel where possible):
+     a. CONTACTS — call list_contacts_by_job. Look for:
+        • Builder / estimator → name, phone (maps to builderEstimatorName, builderEstimatorPhone)
+        • Insurance assessor → name, phone (maps to insuranceAssessorName, insuranceAssessorPhone)
+        • Insured / homeowner → name (maps to personsAttending)
+     b. APPOINTMENTS — call list_appointments_by_job. Look for:
+        • Completed site visit → date (maps to siteAttendanceDate)
+        • Attendee names listed in appointment records
+        • Whether the risk address was visited (maps to addressAttended)
+     c. CLAIM — if the job has a claimId, call get_claim for insured name and address details.
+  3. Journal review (do this after structured data, to fill remaining gaps):
      a. Call list_journals with jobId (or list_journals_by_entity with entityType=job).
      b. Show the user a short list of journals (name/title, date, page count if available).
      c. Ask which journal(s) apply to this assessment — wait for their selection.
@@ -25,22 +35,22 @@ instructionPrompt: |
      f. For photo/image attachments: call get_journal_page_attachment_download for a download URL.
         Use filenames, captions, and metadata. If you cannot visually inspect the image, ask the
         user what the photo shows that is relevant to Attendance.
-  3. Using job data + journal entries/notes/photos, infer Attendance answers. Call
-     fill_assessment_attendance with all inferred fields.
-  4. Present a short review of what you filled and the evidence source (which journal entry/page).
-     Ask only for fields you still cannot answer. After each user answer, call
-     fill_assessment_attendance.
-  5. Field checklist (cover every field; skip asking if already filled confidently):
-     - Risk address attended (yes/no)
+  4. Using ALL sources (contacts, appointments, claim, job, journals), infer Attendance answers.
+     Call fill_assessment_attendance with all inferred fields.
+  5. Present a short review of what you filled and the evidence source. Ask only for fields you
+     still cannot answer. After each user answer, call fill_assessment_attendance.
+  6. Field checklist (cover every field; skip asking if already filled confidently):
+     - Risk address attended (yes/no) — from appointments or journal
      - Other address (if not risk address)
-     - Site attendance date
-     - Persons attending
-     - Builder / estimator name and phone
-     - Insurance assessor attended? If yes: name and phone
-     - Occupancy type (Vacant / Occupied / Partially Occupied)
-  6. Ask the user to review the canvas form. On confirmation, save with
+     - Site attendance date — from appointments (completed visit date)
+     - Persons attending — from contacts + appointments + journals
+     - Builder / estimator name and phone — from contacts (type: builder/estimator)
+     - Insurance assessor attended? If yes: name and phone — from contacts
+     - Occupancy type (Vacant / Occupied / Partially Occupied) — from journals
+  7. Ask the user to review the canvas form. On confirmation, save with
      update_assessment_attendance (or let them click Save).
-  Rules: Never invent people, phones, or dates. Prefer journal evidence; if unsure, ask.
+  Rules: Never invent people, phones, or dates. Prefer structured data (contacts, appointments)
+  over journal inference. If unsure, ask.
 requiredToolRefs:
   - integration: Claims Operations
     tool: open_assessment_attendance
@@ -52,6 +62,12 @@ requiredToolRefs:
     tool: get_assessment
   - integration: Claims Operations
     tool: get_job
+  - integration: Claims Operations
+    tool: get_claim
+  - integration: Claims Operations
+    tool: list_contacts_by_job
+  - integration: Claims Operations
+    tool: list_appointments_by_job
   - integration: Claims Operations
     tool: list_journals
   - integration: Claims Operations
