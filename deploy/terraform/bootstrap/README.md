@@ -24,7 +24,9 @@ Provisions in `claims-manager-infra-493807`:
   scoped to the configured `github_owner/github_repo`
 - Cross-project IAM grants on `claims-manager-staging-493807` so the same
   `ci-deployer` SA can run `terraform apply` and `gcloud compute ssh
-  --tunnel-through-iap` against the staging VM
+  --tunnel-through-iap` against staging
+- Cross-project IAM grants on `claims-manager-prod-493807` so the same
+  `ci-deployer` SA can `terraform apply` and deploy Cloud Run in production
 
 State is **local** — the bucket it would otherwise live in is the very
 resource this module creates. Keep the local `terraform.tfstate` safe

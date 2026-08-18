@@ -861,3 +861,12 @@
   Communications live on one messages screen with send from a job, instead of a duplicate tab on the job page.
   Forms and chat sit side by side more reliably, and connection and file-pipeline screens were simplified.
   Updated the public hero image to match the current brand presentation.
+
+- `2026-08-19` `PENDING` **1 h**
+  `6 files | +95 −7 | Tier 3 complex | Moderate orchestration`
+  Lay summary: The live hosting pipeline can now manage production as well as staging, after the deployer account was given the right access.
+  **Granted the automated deployer access to the production project.**
+  The same trusted GitHub identity that already updates staging can now apply production infrastructure.
+  Enabled the required Google Cloud services on production so the first apply does not stall.
+  Documented the one-time bootstrap step operators must run if production access is missing.
+  Outcome: production Terraform apply can proceed instead of failing with permission errors.

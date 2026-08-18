@@ -10,6 +10,12 @@ variable "staging_project_id" {
   default     = "claims-manager-staging-493807"
 }
 
+variable "production_project_id" {
+  type        = string
+  description = "GCP project for the production environment. ci-deployer is granted cross-project roles here."
+  default     = "claims-manager-prod-493807"
+}
+
 variable "region" {
   type    = string
   default = "australia-southeast1"

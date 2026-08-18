@@ -19,12 +19,18 @@ provider "google" {
   region  = var.region
 }
 
-# Alias provider pinned at the staging project so cross-project IAM
-# bindings (granting ci-deployer@infra the roles it needs in staging)
-# live in one terraform apply.
+# Alias providers pinned at the env projects so cross-project IAM
+# bindings (granting ci-deployer@infra the roles it needs in staging
+# and production) live in one terraform apply.
 provider "google" {
   alias   = "staging"
   project = var.staging_project_id
+  region  = var.region
+}
+
+provider "google" {
+  alias   = "production"
+  project = var.production_project_id
   region  = var.region
 }
 
@@ -79,6 +85,26 @@ locals {
     "storage.googleapis.com",
     "oslogin.googleapis.com",
   ])
+
+  # Same APIs as staging, plus Cloud Run / Vertex (production is Cloud Run only).
+  production_apis = toset([
+    "cloudresourcemanager.googleapis.com",
+    "iam.googleapis.com",
+    "iamcredentials.googleapis.com",
+    "serviceusage.googleapis.com",
+    "compute.googleapis.com",
+    "secretmanager.googleapis.com",
+    "sqladmin.googleapis.com",
+    "redis.googleapis.com",
+    "servicenetworking.googleapis.com",
+    "dns.googleapis.com",
+    "logging.googleapis.com",
+    "monitoring.googleapis.com",
+    "artifactregistry.googleapis.com",
+    "storage.googleapis.com",
+    "run.googleapis.com",
+    "aiplatform.googleapis.com",
+  ])
 }
 
 resource "google_project_service" "infra" {
@@ -94,6 +120,15 @@ resource "google_project_service" "staging" {
   for_each = local.staging_apis
 
   project            = var.staging_project_id
+  service            = each.key
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "production" {
+  provider = google.production
+  for_each = local.production_apis
+
+  project            = var.production_project_id
   service            = each.key
   disable_on_destroy = false
 }
@@ -200,6 +235,30 @@ resource "google_project_iam_member" "ci_deployer_staging" {
   member  = google_service_account.ci_deployer.member
 
   depends_on = [google_project_service.staging]
+}
+
+# Roles in the production project. Same baseline as staging minus IAP/OS Login
+# (production is Cloud Run only — no VMs to SSH into).
+locals {
+  ci_deployer_production_roles = toset([
+    "roles/editor",
+    "roles/resourcemanager.projectIamAdmin",
+    "roles/iam.serviceAccountAdmin",
+    "roles/secretmanager.admin",
+    "roles/pubsub.admin",
+    "roles/run.admin",
+  ])
+}
+
+resource "google_project_iam_member" "ci_deployer_production" {
+  provider = google.production
+  for_each = local.ci_deployer_production_roles
+
+  project = var.production_project_id
+  role    = each.key
+  member  = google_service_account.ci_deployer.member
+
+  depends_on = [google_project_service.production]
 }
 
 # ── Workload Identity Federation for GitHub Actions ────────────────

@@ -1,5 +1,6 @@
-infra_project_id   = "claims-manager-infra-493807"
-staging_project_id = "claims-manager-staging-493807"
+infra_project_id      = "claims-manager-infra-493807"
+staging_project_id    = "claims-manager-staging-493807"
+production_project_id = "claims-manager-prod-493807"
 region             = "australia-southeast1"
 state_bucket_name  = "claims-manager-terraform-state"
 

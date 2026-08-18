@@ -4,9 +4,20 @@ Production is **Cloud Run only** (same architecture as staging). See [`CLOUD_RUN
 
 ## Prerequisites
 
-- Infra bootstrap applied (`deploy/terraform/bootstrap/infra`) — state bucket, Artifact Registry, WIF.
+- Infra bootstrap applied (`deploy/terraform/bootstrap/infra`) — state bucket, Artifact Registry, WIF, **and** `ci-deployer` IAM on the production project.
 - GitHub environment `production` with `WIF_PROVIDER` secret and (recommended) required reviewer gate.
 - Production GCP project (`claims-manager-prod-493807`) exists with billing enabled.
+
+If GitHub Actions `apply-production` fails with 403s on `claims-manager-prod-493807`, re-apply the infra bootstrap locally as a project owner:
+
+```powershell
+gcloud auth application-default login
+cd deploy/terraform/bootstrap/infra
+terraform init
+terraform apply
+```
+
+That grants `ci-deployer@claims-manager-infra-493807` editor / IAM / Secret Manager / Cloud Run admin on production. Then re-run the Terraform workflow.
 
 ## 1. Apply production Terraform
 
