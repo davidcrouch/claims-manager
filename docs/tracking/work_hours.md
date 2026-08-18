@@ -842,7 +842,7 @@
   Added the connection identifiers migration to the Drizzle journal so deploy migrators apply it.
   Outcome: staging can create the identifiers table and unblock message sync (no charge).
 
-- `2026-08-18` `PENDING` **1 h**
+- `2026-08-18` `cbf1941` **1 h**
   `2 files | +68 −44 | Tier 3 complex / Tier 4 deep | Moderate orchestration`
   Lay summary: Webhook catch-up no longer gets stuck behind old unmatched events, so new messages and updates keep flowing.
   Processes ready webhook events before trying to match unmatched ones.
