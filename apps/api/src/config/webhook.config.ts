@@ -75,4 +75,6 @@ export default registerAs('webhook', () => ({
   ),
   sweepEnabled: parseBool(process.env.WEBHOOK_SWEEP_ENABLED, true),
   sweepIntervalMs: parseInt32(process.env.WEBHOOK_SWEEP_INTERVAL_MS, 30_000),
+  sweepBatchSize: parseInt32(process.env.WEBHOOK_SWEEP_BATCH_SIZE, 10),
+  sweepMaxRetries: parseInt32(process.env.WEBHOOK_SWEEP_MAX_RETRIES, 10),
 }));

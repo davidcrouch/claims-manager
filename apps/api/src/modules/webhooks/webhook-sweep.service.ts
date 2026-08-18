@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy, Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { and, eq, lt, isNull, isNotNull } from 'drizzle-orm';
+import { and, eq, lt, isNull, isNotNull, desc, sql } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../database/drizzle.module';
 import { inboundWebhookEvents } from '../../database/schema';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
@@ -9,13 +9,15 @@ import { WebhooksService } from './webhooks.service';
 /**
  * Polls for stuck webhook events and re-attempts processing.
  *
- * Two passes per sweep cycle:
- * 1. Resolution pass — events with connection_id IS NULL that can now be
+ * Two passes per sweep cycle (run in priority order):
+ * 1. Reprocess pass — events with connection_id set but still at 'pending'
+ *    status (crashed between persist and processEventAsync). These are
+ *    guaranteed processable so they run first.
+ * 2. Resolution pass — events with connection_id IS NULL that can now be
  *    resolved (e.g. because a connection_identifiers row was added). Stamps
- *    the connection and proceeds to processing.
- * 2. Reprocess pass — events with connection_id set but still at 'pending'
- *    status (crashed between persist and processEventAsync). Re-invokes
- *    processEventAsync.
+ *    the connection and proceeds to processing. Ordered newest-first so
+ *    recently arrived events aren't starved by old unresolvable ones.
+ *    Events that exceed `sweepMaxRetries` resolution attempts are excluded.
  *
  * Uses FOR UPDATE SKIP LOCKED to prevent double-processing across instances.
  */
@@ -61,8 +63,47 @@ export class WebhookSweepService implements OnModuleInit, OnModuleDestroy {
 
     try {
       const staleThreshold = new Date(Date.now() - 30_000);
+      const batchSize = this.configService.get<number>('webhook.sweepBatchSize', 10);
+      const maxRetries = this.configService.get<number>('webhook.sweepMaxRetries', 10);
 
-      // Pass 1: Resolve unresolved events (connection_id IS NULL)
+      // Pass 1: Reprocess events that have connection but are still pending.
+      // These are guaranteed processable so they get priority.
+      const stuckEvents = await this.db
+        .select()
+        .from(inboundWebhookEvents)
+        .where(
+          and(
+            eq(inboundWebhookEvents.processingStatus, 'pending'),
+            isNotNull(inboundWebhookEvents.connectionId),
+            lt(inboundWebhookEvents.createdAt, staleThreshold),
+          ),
+        )
+        .limit(batchSize)
+        .for('update', { skipLocked: true });
+
+      for (const event of stuckEvents) {
+        try {
+          await this.webhooksService.processEventAsync({
+            eventId: event.id,
+            tenantId: event.tenantId!,
+            connectionId: event.connectionId!,
+            providerCode: event.providerCode ?? 'crunchwork',
+            eventType: event.eventType,
+            providerEntityId: event.payloadEntityId ?? '',
+            eventTimestamp: event.eventTimestamp ?? undefined,
+          });
+          reprocessed++;
+        } catch (err) {
+          failed++;
+          this.logger.error(
+            `WebhookSweepService.sweep — failed reprocessing eventId=${event.id}: ${(err as Error).message}`,
+          );
+        }
+      }
+
+      // Pass 2: Resolve unresolved events (connection_id IS NULL).
+      // Ordered newest-first so recent events aren't starved by old unresolvable ones.
+      // Events with retry_count >= maxRetries are excluded (parked).
       const unresolvedEvents = await this.db
         .select()
         .from(inboundWebhookEvents)
@@ -73,9 +114,11 @@ export class WebhookSweepService implements OnModuleInit, OnModuleDestroy {
             isNotNull(inboundWebhookEvents.payloadTenantId),
             isNotNull(inboundWebhookEvents.payloadClient),
             lt(inboundWebhookEvents.createdAt, staleThreshold),
+            lt(inboundWebhookEvents.retryCount, maxRetries),
           ),
         )
-        .limit(10)
+        .orderBy(desc(inboundWebhookEvents.createdAt))
+        .limit(batchSize)
         .for('update', { skipLocked: true });
 
       for (const event of unresolvedEvents) {
@@ -85,7 +128,20 @@ export class WebhookSweepService implements OnModuleInit, OnModuleDestroy {
             payloadClient: event.payloadClient!,
           });
 
-          if (!connection) continue;
+          if (!connection) {
+            const newRetryCount = event.retryCount + 1;
+            await this.db
+              .update(inboundWebhookEvents)
+              .set({ retryCount: sql`retry_count + 1` })
+              .where(eq(inboundWebhookEvents.id, event.id));
+
+            if (newRetryCount >= maxRetries) {
+              this.logger.warn(
+                `WebhookSweepService.sweep — eventId=${event.id} exhausted resolution retries (${maxRetries}); parking`,
+              );
+            }
+            continue;
+          }
 
           await this.db
             .update(inboundWebhookEvents)
@@ -113,40 +169,6 @@ export class WebhookSweepService implements OnModuleInit, OnModuleDestroy {
           failed++;
           this.logger.error(
             `WebhookSweepService.sweep — failed resolving/processing eventId=${event.id}: ${(err as Error).message}`,
-          );
-        }
-      }
-
-      // Pass 2: Reprocess events that have connection but are still pending
-      const stuckEvents = await this.db
-        .select()
-        .from(inboundWebhookEvents)
-        .where(
-          and(
-            eq(inboundWebhookEvents.processingStatus, 'pending'),
-            isNotNull(inboundWebhookEvents.connectionId),
-            lt(inboundWebhookEvents.createdAt, staleThreshold),
-          ),
-        )
-        .limit(10)
-        .for('update', { skipLocked: true });
-
-      for (const event of stuckEvents) {
-        try {
-          await this.webhooksService.processEventAsync({
-            eventId: event.id,
-            tenantId: event.tenantId!,
-            connectionId: event.connectionId!,
-            providerCode: event.providerCode ?? 'crunchwork',
-            eventType: event.eventType,
-            providerEntityId: event.payloadEntityId ?? '',
-            eventTimestamp: event.eventTimestamp ?? undefined,
-          });
-          reprocessed++;
-        } catch (err) {
-          failed++;
-          this.logger.error(
-            `WebhookSweepService.sweep — failed reprocessing eventId=${event.id}: ${(err as Error).message}`,
           );
         }
       }
