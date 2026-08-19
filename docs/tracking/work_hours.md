@@ -880,7 +880,7 @@
   Staging and production releases now load those groups automatically for every organisation.
   Outcome: staff can drag room groups onto quotes in both hosted environments.
 
-- `2026-08-19` `pending` **0.5 h**
+- `2026-08-19` `2a4f0de` **0.5 h**
   `91 files | +3936 −89 | Tier 2 standard | Light orchestration`
   Lay summary: Partner systems now hear about job changes, quote lines can be reordered, and builder workflow guides are filed in one place.
   **Sent job updates to partner systems, tidied job and quote screens, and filed builder workflow guides.**
