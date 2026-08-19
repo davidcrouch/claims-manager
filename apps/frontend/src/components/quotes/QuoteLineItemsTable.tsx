@@ -302,6 +302,14 @@ function ItemRow({
   contentDisabled,
   enableLineNotes,
   onEditLineNote,
+  showDragHandle,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
+  onDrop,
+  showBulkSelect,
+  isBulkSelected,
+  onBulkToggle,
 }: {
   item: ApiItem;
   rowKey: string;
@@ -328,6 +336,14 @@ function ItemRow({
   contentDisabled?: { quantities?: boolean; pricing?: boolean };
   enableLineNotes?: boolean;
   onEditLineNote?: (request: LineNoteEditRequest) => void;
+  showDragHandle?: boolean;
+  onDragStart?: (e: React.DragEvent, rowKey: string) => void;
+  onDragOver?: (e: React.DragEvent, rowKey: string) => void;
+  onDragEnd?: (e: React.DragEvent) => void;
+  onDrop?: (e: React.DragEvent, rowKey: string) => void;
+  showBulkSelect?: boolean;
+  isBulkSelected?: boolean;
+  onBulkToggle?: () => void;
 }) {
   const qtyDisabled = contentDisabled?.quantities ?? false;
   const priceDisabled = contentDisabled?.pricing ?? false;
@@ -397,6 +413,7 @@ function ItemRow({
     {noteHover.popup}
     <tr
       data-item-row
+      data-row-key={rowKey}
       className={cn(
         'cursor-pointer transition-colors',
         showSelect && !isPicked && 'opacity-40',
@@ -408,6 +425,12 @@ function ItemRow({
             ? 'bg-emerald-100 hover:bg-emerald-200 hover:ring-2 hover:ring-inset hover:ring-emerald-400'
             : 'hover:bg-amber-50/40 hover:ring-2 hover:ring-inset hover:ring-amber-300',
       )}
+      draggable={!!showDragHandle}
+      onDragStart={showDragHandle ? (e) => onDragStart?.(e, rowKey) : undefined}
+      onDragOver={showDragHandle ? (e) => { e.preventDefault(); onDragOver?.(e, rowKey); } : undefined}
+      onDragLeave={showDragHandle ? (e) => { (e.currentTarget as HTMLElement).style.borderTop = ''; } : undefined}
+      onDragEnd={showDragHandle ? onDragEnd : undefined}
+      onDrop={showDragHandle ? (e) => { e.preventDefault(); onDrop?.(e, rowKey); } : undefined}
       {...noteHover.handlers}
       onClick={(e) => {
         if (showSelect) {
@@ -418,6 +441,20 @@ function ItemRow({
         onRowClick(e, rowKey, item);
       }}
     >
+      {showDragHandle && (
+        <td className="w-8 px-1 py-2.5 cursor-grab active:cursor-grabbing" onClick={(e) => e.stopPropagation()}>
+          <GripVertical className="h-4 w-4 text-slate-300 hover:text-slate-500" />
+        </td>
+      )}
+      {showBulkSelect && (
+        <td className="w-10 px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={!!isBulkSelected}
+            onCheckedChange={() => onBulkToggle?.()}
+            aria-label={`Select ${item.name ?? item.component ?? 'item'}`}
+          />
+        </td>
+      )}
       {showSelect && (
         <td className="w-10 px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
           <Checkbox
@@ -732,6 +769,14 @@ function AssemblyBlock({
   onTogglePricing,
   enableLineNotes,
   onEditLineNote,
+  showDragHandle,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
+  onDrop,
+  showBulkSelect,
+  bulkSelectedIds,
+  onBulkToggle,
 }: {
   combo: ApiCombo;
   comboKey: string;
@@ -767,6 +812,14 @@ function AssemblyBlock({
   onTogglePricing?: () => void;
   enableLineNotes?: boolean;
   onEditLineNote?: (request: LineNoteEditRequest) => void;
+  showDragHandle?: boolean;
+  onDragStart?: (e: React.DragEvent, rowKey: string) => void;
+  onDragOver?: (e: React.DragEvent, rowKey: string) => void;
+  onDragEnd?: (e: React.DragEvent) => void;
+  onDrop?: (e: React.DragEvent, rowKey: string) => void;
+  showBulkSelect?: boolean;
+  bulkSelectedIds?: Set<string>;
+  onBulkToggle?: (ids: string[]) => void;
 }) {
   const effectiveContentQty = contentShowQuantities ?? (showQuantities ?? true);
   const effectiveContentPrice = contentShowPricing ?? (showPricing ?? true);
@@ -852,6 +905,7 @@ function AssemblyBlock({
       {/* Assembly header row */}
       <tr
         data-item-row
+        data-row-key={comboKey}
         className={cn(
           'relative cursor-pointer transition-colors',
           showSelect && !comboPicked && 'opacity-40',
@@ -861,6 +915,12 @@ function AssemblyBlock({
               ? 'bg-emerald-200 hover:bg-emerald-300'
               : 'bg-slate-200 hover:bg-slate-300',
         )}
+        draggable={!!showDragHandle}
+        onDragStart={showDragHandle ? (e) => onDragStart?.(e, comboKey) : undefined}
+        onDragOver={showDragHandle ? (e) => { e.preventDefault(); onDragOver?.(e, comboKey); } : undefined}
+        onDragLeave={showDragHandle ? (e) => { (e.currentTarget as HTMLElement).style.borderTop = ''; } : undefined}
+        onDragEnd={showDragHandle ? onDragEnd : undefined}
+        onDrop={showDragHandle ? (e) => { e.preventDefault(); onDrop?.(e, comboKey); } : undefined}
         {...noteHover.handlers}
         onClick={(e) => {
           if (showSelect) {
@@ -881,6 +941,21 @@ function AssemblyBlock({
           }
         }}
       >
+        {showDragHandle && (
+          <td className="w-8 px-1 py-2.5 cursor-grab active:cursor-grabbing" onClick={(e) => e.stopPropagation()}>
+            <GripVertical className="h-4 w-4 text-slate-400 hover:text-slate-600" />
+          </td>
+        )}
+        {showBulkSelect && (
+          <td className="w-10 px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+            <Checkbox
+              checked={comboPickIds.every((id) => bulkSelectedIds?.has(id))}
+              indeterminate={comboPickIds.some((id) => bulkSelectedIds?.has(id)) && !comboPickIds.every((id) => bulkSelectedIds?.has(id))}
+              onCheckedChange={() => onBulkToggle?.(comboPickIds)}
+              aria-label={`Select assembly ${comboName}`}
+            />
+          </td>
+        )}
         {showSelect && (
           <td className="w-10 px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
             <Checkbox
@@ -1156,6 +1231,14 @@ function AssemblyBlock({
               contentDisabled={assemblyContentDisabled}
               enableLineNotes={enableLineNotes}
               onEditLineNote={onEditLineNote}
+              showDragHandle={showDragHandle}
+              onDragStart={onDragStart}
+              onDragOver={onDragOver}
+              onDragEnd={onDragEnd}
+              onDrop={onDrop}
+              showBulkSelect={showBulkSelect}
+              isBulkSelected={!!item.id && !!bulkSelectedIds?.has(item.id)}
+              onBulkToggle={() => item.id && onBulkToggle?.([item.id])}
             />
           );
         })}
@@ -1204,6 +1287,14 @@ function ScopeBlock({
   toggleChildOverride,
   enableLineNotes,
   onEditLineNote,
+  showDragHandle,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
+  onDrop,
+  showBulkSelect,
+  bulkSelectedIds,
+  onBulkToggle,
 }: {
   scope: ApiScope;
   scopeKey: string;
@@ -1245,6 +1336,14 @@ function ScopeBlock({
   toggleChildOverride?: (key: string, parentQty: boolean, parentPrice: boolean) => void;
   enableLineNotes?: boolean;
   onEditLineNote?: (request: LineNoteEditRequest) => void;
+  showDragHandle?: boolean;
+  onDragStart?: (e: React.DragEvent, rowKey: string) => void;
+  onDragOver?: (e: React.DragEvent, rowKey: string) => void;
+  onDragEnd?: (e: React.DragEvent) => void;
+  onDrop?: (e: React.DragEvent, rowKey: string) => void;
+  showBulkSelect?: boolean;
+  bulkSelectedIds?: Set<string>;
+  onBulkToggle?: (ids: string[]) => void;
 }) {
   const scopeName = scope.name ?? 'Scope';
   const scopeNote = scope.note;
@@ -1346,6 +1445,7 @@ function ScopeBlock({
       {/* Scope header row */}
       <tr
         data-item-row
+        data-row-key={scopeKey}
         className={cn(
           'relative cursor-pointer transition-colors',
           showSelect && !scopePicked && 'opacity-40',
@@ -1355,6 +1455,12 @@ function ScopeBlock({
               ? 'bg-emerald-200 hover:bg-emerald-300'
               : 'bg-violet-100 hover:bg-violet-200',
         )}
+        draggable={!!showDragHandle}
+        onDragStart={showDragHandle ? (e) => onDragStart?.(e, scopeKey) : undefined}
+        onDragOver={showDragHandle ? (e) => { e.preventDefault(); onDragOver?.(e, scopeKey); } : undefined}
+        onDragLeave={showDragHandle ? (e) => { (e.currentTarget as HTMLElement).style.borderTop = ''; } : undefined}
+        onDragEnd={showDragHandle ? onDragEnd : undefined}
+        onDrop={showDragHandle ? (e) => { e.preventDefault(); onDrop?.(e, scopeKey); } : undefined}
         {...noteHover.handlers}
         onClick={(e) => {
           if (showSelect) {
@@ -1375,6 +1481,21 @@ function ScopeBlock({
           }
         }}
       >
+        {showDragHandle && (
+          <td className="w-8 px-1 py-2.5 cursor-grab active:cursor-grabbing" onClick={(e) => e.stopPropagation()}>
+            <GripVertical className="h-4 w-4 text-violet-300 hover:text-violet-500" />
+          </td>
+        )}
+        {showBulkSelect && (
+          <td className="w-10 px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+            <Checkbox
+              checked={allChildIds.every((id) => bulkSelectedIds?.has(id))}
+              indeterminate={allChildIds.some((id) => bulkSelectedIds?.has(id)) && !allChildIds.every((id) => bulkSelectedIds?.has(id))}
+              onCheckedChange={() => onBulkToggle?.(allChildIds)}
+              aria-label={`Select scope ${scopeName}`}
+            />
+          </td>
+        )}
         {showSelect && (
           <td className="w-10 px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
             <Checkbox
@@ -1671,6 +1792,14 @@ function ScopeBlock({
                 onTogglePick={() => item.id && onToggleIds?.([item.id])}
                 enableLineNotes={enableLineNotes}
                 onEditLineNote={onEditLineNote}
+                showDragHandle={showDragHandle}
+                onDragStart={onDragStart}
+                onDragOver={onDragOver}
+                onDragEnd={onDragEnd}
+                onDrop={onDrop}
+                showBulkSelect={showBulkSelect}
+                isBulkSelected={!!item.id && !!bulkSelectedIds?.has(item.id)}
+                onBulkToggle={() => item.id && onBulkToggle?.([item.id])}
               />
             );
           })}
@@ -1719,6 +1848,14 @@ function ScopeBlock({
                 onTogglePricing={toggleChildField ? () => toggleChildField(comboKey, 'showPricing', resolvedScopeAssembly.showPricing) : undefined}
                 enableLineNotes={enableLineNotes}
                 onEditLineNote={onEditLineNote}
+                showDragHandle={showDragHandle}
+                onDragStart={onDragStart}
+                onDragOver={onDragOver}
+                onDragEnd={onDragEnd}
+                onDrop={onDrop}
+                showBulkSelect={showBulkSelect}
+                bulkSelectedIds={bulkSelectedIds}
+                onBulkToggle={onBulkToggle}
               />
             );
           })}
@@ -1782,6 +1919,13 @@ export interface QuoteLineItemsTableProps {
   /** When true, show per-row notes edit icon and hover preview. RFQ detail view mode only. */
   enableLineNotes?: boolean;
   onEditLineNote?: (request: LineNoteEditRequest) => void;
+  /** Reorder callback: moves an item within a group from one index to another. */
+  onReorderItems?: (groupId: string, fromIndex: number, toIndex: number) => void;
+  /** Bulk selection state for multi-select + bulk actions. */
+  bulkSelection?: {
+    selectedIds: Set<string>;
+    onChange: (ids: Set<string>) => void;
+  };
 }
 
 function dimToInput(value?: number): string {
@@ -1887,6 +2031,8 @@ function GroupDimensionFields({
 }
 
 function LineItemsColGroup({
+  showDragHandle,
+  showBulkSelect,
   showSelect,
   showCategory,
   showQuantities,
@@ -1895,6 +2041,8 @@ function LineItemsColGroup({
   showGst,
   showNotesColumn,
 }: {
+  showDragHandle?: boolean;
+  showBulkSelect?: boolean;
   showSelect?: boolean;
   showCategory: boolean;
   showQuantities: boolean;
@@ -1905,6 +2053,8 @@ function LineItemsColGroup({
 }) {
   return (
     <colgroup>
+      {showDragHandle && <col className="w-8" />}
+      {showBulkSelect && <col className="w-10" />}
       {showSelect && <col className="w-10" />}
       <col className={showCategory ? 'w-[28%]' : 'w-[38%]'} />
       <col className="w-[10%]" />
@@ -2052,6 +2202,8 @@ export function QuoteLineItemsTable({
   onPricingVisibleChange,
   enableLineNotes = false,
   onEditLineNote,
+  onReorderItems,
+  bulkSelection,
 }: QuoteLineItemsTableProps) {
   const groups = useMemo(() => normalizeLineItemGroups(rawGroups), [rawGroups]);
   const labels = modeLabels(mode);
@@ -2119,6 +2271,72 @@ export function QuoteLineItemsTable({
   const [editState, setEditState] = useState<{ rowKey: string; field: EditableFieldKey } | null>(null);
   const [editInputs, setEditInputs] = useState<Record<string, Record<EditableFieldKey, string>>>({});
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+
+  // Drag-and-drop reorder state
+  const showDragHandles = !isReadOnly && !!onReorderItems;
+  const dragRowKey = useRef<string | null>(null);
+
+  function handleRowDragStart(e: React.DragEvent, rowKey: string) {
+    dragRowKey.current = rowKey;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', rowKey);
+    const row = (e.target as HTMLElement).closest('tr');
+    if (row) row.style.opacity = '0.4';
+  }
+
+  function handleRowDragOver(e: React.DragEvent, _rowKey: string) {
+    const row = (e.target as HTMLElement).closest('tr');
+    if (row) {
+      row.style.borderTop = '2px solid #2563eb';
+    }
+  }
+
+  function handleRowDragEnd(e: React.DragEvent) {
+    const row = (e.target as HTMLElement).closest('tr');
+    if (row) row.style.opacity = '';
+    dragRowKey.current = null;
+    document.querySelectorAll('tr[data-row-key]').forEach((el) => {
+      (el as HTMLElement).style.borderTop = '';
+    });
+  }
+
+  function handleRowDrop(e: React.DragEvent, targetRowKey: string) {
+    document.querySelectorAll('tr[data-row-key]').forEach((el) => {
+      (el as HTMLElement).style.borderTop = '';
+    });
+    const sourceKey = dragRowKey.current;
+    dragRowKey.current = null;
+    if (!sourceKey || sourceKey === targetRowKey || !onReorderItems) return;
+
+    for (let gi = 0; gi < groups.length; gi++) {
+      const g = groups[gi];
+      const gId = g.id ?? `group-${gi}`;
+      const items = g.items ?? [];
+      const sourceIdx = items.findIndex((item, idx) => `${gId}-item-${item.id ?? idx}` === sourceKey);
+      const targetIdx = items.findIndex((item, idx) => `${gId}-item-${item.id ?? idx}` === targetRowKey);
+      if (sourceIdx !== -1 && targetIdx !== -1) {
+        onReorderItems(gId, sourceIdx, targetIdx);
+        return;
+      }
+    }
+  }
+
+  // Bulk selection state (internal fallback when no external state provided)
+  const [internalBulkIds, setInternalBulkIds] = useState<Set<string>>(new Set());
+  const showBulkSelect = !isReadOnly && !showSelect;
+  const bulkSelectedIds = bulkSelection?.selectedIds ?? internalBulkIds;
+  const setBulkSelectedIds = bulkSelection?.onChange ?? setInternalBulkIds;
+
+  function handleBulkToggle(ids: string[]) {
+    const next = new Set(bulkSelectedIds);
+    const allSelected = ids.every((id) => next.has(id));
+    if (allSelected) {
+      ids.forEach((id) => next.delete(id));
+    } else {
+      ids.forEach((id) => next.add(id));
+    }
+    setBulkSelectedIds(next);
+  }
 
   useEffect(() => {
     setEditInputs({});
@@ -2566,7 +2784,7 @@ export function QuoteLineItemsTable({
         }
         break;
       }
-      case 'Tab':
+      case 'Tab': {
         e.preventDefault();
         if (e.shiftKey) {
           if (editState.field === 'description') {
@@ -2576,6 +2794,17 @@ export function QuoteLineItemsTable({
           } else if (!inNameCol && colIdx > 0) {
             const prev = fields[colIdx - 1];
             setEditState({ ...editState, field: prev === 'description' ? 'description' : prev });
+          } else if (inNameCol && editState.field === 'name') {
+            const rowIdx = visibleRowIndex.findIndex((r) => r.key === editState.rowKey);
+            if (rowIdx > 0) {
+              const prevRow = visibleRowIndex[rowIdx - 1];
+              const prevFields = prevRow.kind === 'assembly'
+                ? assemblyFields
+                : prevRow.kind === 'scope'
+                  ? scopeFields
+                  : fields;
+              navigateToRow(rowIdx - 1, prevFields[prevFields.length - 1]);
+            }
           }
         } else {
           if (editState.field === 'name') {
@@ -2584,9 +2813,15 @@ export function QuoteLineItemsTable({
             setEditState({ ...editState, field: 'description' });
           } else if (colIdx < fields.length - 1) {
             setEditState({ ...editState, field: fields[colIdx + 1] });
+          } else {
+            const rowIdx = visibleRowIndex.findIndex((r) => r.key === editState.rowKey);
+            if (rowIdx >= 0 && rowIdx < visibleRowIndex.length - 1) {
+              navigateToRow(rowIdx + 1, 'name');
+            }
           }
         }
         break;
+      }
       case 'Escape':
       case 'Enter':
         e.preventDefault();
@@ -3291,6 +3526,8 @@ export function QuoteLineItemsTable({
                   <div className="overflow-x-auto">
                     <table className="w-full table-fixed divide-y divide-slate-100 text-sm">
                       <LineItemsColGroup
+                        showDragHandle={showDragHandles}
+                        showBulkSelect={showBulkSelect}
                         showSelect={showSelect}
                         showCategory={showCategory}
                         showQuantities={resolvedGroup.showQuantities}
@@ -3301,6 +3538,20 @@ export function QuoteLineItemsTable({
                       />
                       <thead className="bg-slate-50/50">
                         <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-400">
+                          {showDragHandles && <th scope="col" className="w-8 px-1 py-2" />}
+                          {showBulkSelect && (
+                            <th scope="col" className="w-10 px-3 py-2">
+                              <Checkbox
+                                checked={standaloneItems.length > 0 && standaloneItems.every((i) => i.id && bulkSelectedIds.has(i.id))}
+                                indeterminate={standaloneItems.some((i) => i.id && bulkSelectedIds.has(i.id)) && !standaloneItems.every((i) => i.id && bulkSelectedIds.has(i.id))}
+                                onCheckedChange={() => {
+                                  const allIds = standaloneItems.map((i) => i.id).filter(Boolean) as string[];
+                                  handleBulkToggle(allIds);
+                                }}
+                                aria-label="Select all items in group"
+                              />
+                            </th>
+                          )}
                           {showSelect && <th scope="col" className="w-10 px-3 py-2" />}
                           <th scope="col" className="px-4 py-2">Name</th>
                           <th scope="col" className="px-4 py-2">Type</th>
@@ -3350,6 +3601,14 @@ export function QuoteLineItemsTable({
                               onTogglePick={() => item.id && toggleSelectionIds([item.id])}
                               enableLineNotes={enableLineNotes}
                               onEditLineNote={onEditLineNote}
+                              showDragHandle={showDragHandles}
+                              onDragStart={handleRowDragStart}
+                              onDragOver={handleRowDragOver}
+                              onDragEnd={handleRowDragEnd}
+                              onDrop={handleRowDrop}
+                              showBulkSelect={showBulkSelect}
+                              isBulkSelected={!!item.id && bulkSelectedIds.has(item.id)}
+                              onBulkToggle={() => item.id && handleBulkToggle([item.id])}
                             />
                           );
                         })}
@@ -3399,6 +3658,14 @@ export function QuoteLineItemsTable({
                               onTogglePricing={() => toggleHeaderField(comboKey, 'showPricing', resolvedAssembly.showPricing)}
                               enableLineNotes={enableLineNotes}
                               onEditLineNote={onEditLineNote}
+                              showDragHandle={showDragHandles}
+                              onDragStart={handleRowDragStart}
+                              onDragOver={handleRowDragOver}
+                              onDragEnd={handleRowDragEnd}
+                              onDrop={handleRowDrop}
+                              showBulkSelect={showBulkSelect}
+                              bulkSelectedIds={bulkSelectedIds}
+                              onBulkToggle={handleBulkToggle}
                             />
                           );
                         })}
@@ -3458,6 +3725,8 @@ export function QuoteLineItemsTable({
                             >
                               <table className="w-full table-fixed divide-y divide-slate-100 text-sm">
                                 <LineItemsColGroup
+                                  showDragHandle={showDragHandles}
+                                  showBulkSelect={showBulkSelect}
                                   showSelect={showSelect}
                                   showCategory={showCategory}
                                   showQuantities={resolvedScope.showQuantities}
@@ -3508,6 +3777,14 @@ export function QuoteLineItemsTable({
                                     toggleChildOverride={toggleHeaderOverride}
                                     enableLineNotes={enableLineNotes}
                                     onEditLineNote={onEditLineNote}
+                                    showDragHandle={showDragHandles}
+                                    onDragStart={handleRowDragStart}
+                                    onDragOver={handleRowDragOver}
+                                    onDragEnd={handleRowDragEnd}
+                                    onDrop={handleRowDrop}
+                                    showBulkSelect={showBulkSelect}
+                                    bulkSelectedIds={bulkSelectedIds}
+                                    onBulkToggle={handleBulkToggle}
                                   />
                                 </tbody>
                               </table>

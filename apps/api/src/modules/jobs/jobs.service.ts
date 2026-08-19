@@ -13,6 +13,7 @@ import { ConnectionResolverService } from '../external/connection-resolver.servi
 import { LookupResolver } from '../external/lookup-resolver.service';
 import { OutboundSyncService } from '../domain/outbound/outbound-sync.service';
 import { FilesystemService } from '../filesystem/filesystem.service';
+import { OutboundEventsService } from '../outbound-events/outbound-events.service';
 
 type ContactInput = {
   contactId?: string;
@@ -41,6 +42,7 @@ export class JobsService {
     private readonly filesystemService: FilesystemService,
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
     @Optional() private readonly connectionResolver?: ConnectionResolverService,
+    @Optional() private readonly outboundEvents?: OutboundEventsService,
   ) {}
 
   private async resolveProvider(
@@ -242,6 +244,16 @@ export class JobsService {
       throw err;
     }
 
+    if (this.outboundEvents) {
+      this.outboundEvents.emitJobCreated({
+        jobId: job.id,
+        tenantId,
+        jobType: (params.body.jobTypeLookupId as string) ?? '',
+        claimId: (params.body.claimId as string) ?? undefined,
+        parentJobId: (params.body.parentJobId as string) ?? undefined,
+      }).catch(() => {});
+    }
+
     return this.findOne({ id: job.id });
   }
 
@@ -287,6 +299,25 @@ export class JobsService {
 
       return updated;
     });
+
+    if (this.outboundEvents && params.body.customData) {
+      const custom = params.body.customData as Record<string, unknown>;
+      const trackedFields = [
+        'makeSafeRequired', 'scopeSignedDate', 'excessPaymentCollected',
+        'workflowPhase', 'estimatedDatesSet', 'dateCustomerConfirmedCompletion',
+      ];
+      for (const field of trackedFields) {
+        if (custom[field] !== undefined) {
+          this.outboundEvents.emitFieldUpdated({
+            entityType: 'job',
+            entityId: params.id,
+            tenantId,
+            field,
+            value: custom[field],
+          }).catch(() => {});
+        }
+      }
+    }
 
     return this.findOne({ id: params.id });
   }

@@ -1,0 +1,195 @@
+JOB SCENARIO: Fire damage (kitchen cooking fire with smoke migration)
+Job folder: data/jobs/fire-damage
+Photos: data/jobs/fire-damage/pics/
+
+================================================================================
+CLAIM / JOB CONTEXT
+================================================================================
+Loss type:           Fire – accidental cooking fire; smoke and heat damage
+Date of loss:        22 February 2026 (~18:40)
+Date of request:     23 February 2026
+Site attendance:     25 February 2026
+Claim number:        CLM-2026-07660
+Policy name:         Home Building & Contents – Standard
+Policy number:       POL-3340088
+Site address:        27 Palm Court, Liverpool NSW 2170
+Insured:             R. Kowalski
+Occupancy at loss:   Occupied
+Current occupancy:   Vacant – insured in temporary accommodation; property secured
+
+================================================================================
+ASSESSMENT – SITE OBSERVATIONS
+================================================================================
+
+--- attendance ---
+addressAttended:           Yes – 27 Palm Court, Liverpool NSW 2170
+otherAddress:              N/A (TA address held by insurer)
+siteAttendanceDate:        25 February 2026
+personsAttending:          Insured (R. Kowalski); Builder estimator (Alex Morgan, Ensure Building); Fire brigade incident report on file
+builderEstimatorName:      Alex Morgan
+builderEstimatorPhone:     0499 120 330
+insuranceAssessorAttended: Yes
+insuranceAssessorName:     Tom Bradley
+insuranceAssessorPhone:    02 8111 2200
+occupancyType:             Vacant
+
+--- building ---
+buildingType:              House
+designType:                Standard
+constructionType:          Brick Veneer
+roofType:                  Colorbond
+estimatedBuildYear:        2005
+houseM2:                   160
+squares:                   ~17
+mainHouseRoofDamage:       No structural roof fire damage; kitchen ceiling linings heat/smoke affected under roof space (no burn-through)
+additionalStructures:      None
+otherStructures:           Concrete rear patio (soot wash-down only)
+propertyCondition:         Good pre-fire; kitchen now fire-affected; remainder smoke-affected
+furnitureRemovalStorage:   Yes – contents pack-out for cleaning/disposal per contents assessor; building strip requires empty rooms
+
+--- habitability ---
+habitable:                 No
+uninhabitableReason:       Fire and smoke contamination; kitchen not usable; HVAC/air quality unsuitable; board-up security
+otherUninhabitableReason:  Electricity partially isolated in kitchen circuit
+
+--- hazards ---
+safetyHazards:             Charred cabinetry sharpness; possible compromised rangehood electrics; slip from firefighting water residue (mostly dried); secured board-up at kitchen window cracked by heat
+environmentalHazards:     Soot and smoke residue throughout; odour; potential HVAC contamination
+hazardDetails.electrical:  flagged – kitchen circuits and rangehood require full isolation/rewire assessment before reinstatement
+hazardDetails.structural:  not flagged – no framing collapse; heat damage limited to cabinetry/linings in kitchen
+hazardDetails.sewerage:    not flagged
+hazardDetails.poolFencing: not flagged
+mould:                     Low risk currently (dry); monitor if water from firefighting left in cavities
+asbestosOnSite:            Unlikely – 2005 construction; standard PPE for soot remediation
+
+--- damage ---
+causeOfDamage:             Accidental cooking fire on cooktop (oil). Flames involved rangehood and upper cabinets. Fire extinguished by Fire & Rescue NSW. Heat and smoke damaged kitchen; smoke migrated through hallway to living room, bathroom, bedroom, and laundry. Limited firefighting water on kitchen floor (dried; minor vinyl edge lift only – not primary scope).
+damageObserved:            Kitchen: charred upper cabinets at stove; blistered finishes; heavy soot on ceiling and upper walls; rangehood destroyed. Living room: soot film on walls/ceiling; curtains/soft goods smoke-damaged (contents). Bathroom: soot on ceiling, walls, mirror/vanity surfaces. Bedroom: soot near doorway and ceiling smoke staining. Laundry: soot on walls/ceiling and ash on floor. No burn-through of external brick or roof sheeting.
+hasDamageCoveredByPolicy:  Yes
+preExistingMaintenanceIssues: None material to fire cause
+preExistingRelateDamage:   No
+maintenanceDefectIssues:   N/A
+worksRequiredToAddressDamage: Kitchen demolition of fire-affected joinery and linings; clean/seal or replace smoke-affected linings in remote rooms; odour treatment; repaint; electrical/kitchen fit-off; HVAC clean; contents per separate assessor
+
+--- makeSafe ---
+makeSafeRequired:          Yes
+makeSafeType:              Board Up
+dateMakeSafeCompleted:     22 February 2026 (FRNSW / emergency board-up overnight)
+dateMainRoofRepaired:      N/A
+
+--- temporaryAccommodation ---
+required:                  Yes, Temporary Accommodation
+estimatedAmount:           $220–$260/night (2-bed apartment) or insurer preferred provider
+estimatedDuration:         8–10 weeks
+requiredImmediately:       Yes
+immediateEstimateDays:     Already in TA from night of loss
+requiredDuringRepairs:     Yes
+repairsEstimateDays:       55–70
+tempRepairsToMakeLivable:  Not viable until kitchen rebuilt and smoke seal/paint complete
+workWhileInAccommodation:  Yes – full access for strip, clean, rebuild
+
+--- specialists ---
+specialistRequired:        Yes
+specialistType:            Fire/soot restoration specialist (or building cleaner with thermal fog/seal); Electrician; Optional HVAC technician for duct clean; Contents restoration
+
+--- recommendation ---
+claimRecommendation:       Approve
+costEstimateForRepairs:    Indicative building works $55,000–$75,000 excl. GST (excl. contents)
+estimatedRepairTime:       8–10
+estimatedRepairDuration:   Weeks
+hasInsuredAdvised:         Yes
+clientWillingToProceed:    Yes
+clientDiscussions:         Insured understands kitchen is full rebuild of affected joinery. Prefers like-for-like cabinet style. Asking about odour guarantee – advise seal + paint protocol and possible second clean if odour remains.
+customerArrangedRepairs:   Board-up only via emergency services path
+arrangedRepairComments:    Board-up invoice to insurer emergency stream
+specialNotes:              Separate contents claim for soft goods/curtains/clothing. Building estimate excludes contents replacement.
+conclusion:                Accidental kitchen fire with significant heat damage to kitchen joinery and widespread smoke contamination. Property uninhabitable. Recommend approve building claim; Scope of Work by room with kitchen as primary rebuild and remote rooms as clean/seal/paint.
+builderLicenses:           Ensure Building – NSW licence on file
+
+--- extras ---
+FRNSW incident number:     On claim file (insured to supply copy if not attached)
+Photos: kitchen-fire-cabinet-char; kitchen-ceiling-smoke-soot; living-room-smoke-soot-walls; bathroom-smoke-soot-damage; bedroom-smoke-soot-walls; laundry-smoke-soot-walls
+
+================================================================================
+ESTIMATE – SCOPE INPUT
+================================================================================
+Estimate name:             Fire & smoke reinstatement – 27 Palm Court
+quoteType:                 Scope Of Work
+estimateDate:              26 February 2026
+expiresInDays:             30
+estimatedStart:            After contents pack-out / insurer approval
+estimatedCompletion:       8–10 weeks from start
+reference:                 CLM-2026-07660
+note:                      Building only. Kitchen heat/fire rebuild; remote rooms soot remediation. HVAC clean provisional. Odour seal included.
+
+Parties (indicative):
+  quoteFrom: Ensure Building Pty Ltd
+  quoteTo:   Insurer / Insured as directed
+  quoteFor:  27 Palm Court, Liverpool NSW 2170
+
+--- Group: Make Safe ---
+  - Maintain/replace board-up until glazing/joinery secure
+  - Temporary security locksmith if required
+  Qty: 1 lot
+
+--- Group: Preliminaries ---
+  - Site establish, HEPA containment, negative air as needed
+  - Protection zones; waste (soot-contaminated) disposal
+  - Contents coordination hold-point before strip
+  Qty: 1 lot
+
+--- Group: Kitchen ---
+  Dimensions: approx L 3.8 m × W 2.8 m × H 2.7 m
+  Scope:
+  - Demolish fire-damaged upper and affected lower cabinets; dispose
+  - Remove soot-contaminated ceiling lining; replace PB; set
+  - Replace rangehood and cooktop surround (allowance – confirm with contents vs building)
+  - Supply & install new cabinetry like-for-like layout (~8 lineal m uppers/bases as required)
+  - New splashback if heat-cracked (provisional)
+  - Electrical: new circuit points for rangehood/cooktop as required; safety certificate
+  - Prime/seal soot; paint walls & ceiling
+  - Floor: clean; replace only if heat/water damaged (minor edge – provisional 4 m²)
+  Photos: kitchen-fire-cabinet-char.png; kitchen-ceiling-smoke-soot.png
+  Indicative qty: cabinets 1 kitchen lot; ceiling 11 m²; paint 35 m²; electrical 1 lot
+
+--- Group: Living Area ---
+  Dimensions: approx L 5.0 m × W 4.2 m × H 2.7 m
+  Scope:
+  - Dry soot clean walls/ceiling; seal with stain-blocking primer; repaint full room
+  - Clean hard floors; soft floor coverings via contents claim
+  Photos: living-room-smoke-soot-walls.png
+  Indicative qty: paint 55 m²; clean 1 lot
+
+--- Group: Bathroom ---
+  Dimensions: approx L 2.3 m × W 1.7 m × H 2.7 m
+  Scope:
+  - Clean soot from tiles, ceiling, vanity surfaces; seal/paint ceiling and painted walls
+  - Replace silicone if soot-contaminated and discoloured
+  Photos: bathroom-smoke-soot-damage.png
+  Indicative qty: clean 1 lot; paint 12 m²
+
+--- Group: Bedroom 1 ---
+  Dimensions: approx L 3.5 m × W 3.0 m × H 2.7 m
+  Scope:
+  - Clean soot; seal and paint walls/ceiling (full room blend)
+  - Soft contents via contents claim
+  Photos: bedroom-smoke-soot-walls.png
+  Indicative qty: paint 45 m²; clean 1 lot
+
+--- Group: Laundry ---
+  Dimensions: approx L 2.0 m × W 1.5 m × H 2.7 m
+  Scope:
+  - Clean soot/ash; seal and paint walls/ceiling; clean vinyl floor
+  Photos: laundry-smoke-soot-walls.png
+  Indicative qty: paint 18 m²; clean 1 lot
+
+--- Group: Internal (Hall / HVAC provisional) ---
+  Scope:
+  - Clean/seal/paint hallway smoke path
+  - Provisional: HVAC duct inspection and clean if system ran during fire
+  Qty: hallway paint ~20 m²; HVAC provisional 1 lot
+
+Totals (order-of-magnitude):
+  Building reinstatement excl. GST: ~$55k–$75k
+  Kitchen rebuild is majority of cost; remote rooms clean/seal/paint
+  Contents: separate – not in this building estimate

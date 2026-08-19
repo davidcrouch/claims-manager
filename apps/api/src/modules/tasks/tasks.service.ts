@@ -3,6 +3,7 @@ import { TasksRepository, type TaskInsert } from '../../database/repositories';
 import { TenantContext } from '../../tenant/tenant-context';
 import { CrunchworkService } from '../../crunchwork/crunchwork.service';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
+import { OutboundEventsService } from '../outbound-events/outbound-events.service';
 
 function parseOptionalUserId(value: unknown): string | null | undefined {
   if (value === undefined) return undefined;
@@ -22,6 +23,7 @@ export class TasksService {
     private readonly tenantContext: TenantContext,
     private readonly crunchworkService: CrunchworkService,
     @Optional() private readonly connectionResolver?: ConnectionResolverService,
+    @Optional() private readonly outboundEvents?: OutboundEventsService,
   ) {}
 
   private async resolveConnectionId(tenantId: string): Promise<string> {
@@ -189,6 +191,7 @@ export class TasksService {
       `TasksService.update — id=${params.id} assignedToUserId=${assignedToUserId === undefined ? 'unchanged' : assignedToUserId ?? 'none'}`,
     );
 
+    let updated: typeof existing;
     try {
       const connectionId = await this.resolveConnectionId(tenantId);
       const apiTask = await this.crunchworkService.updateTask({
@@ -198,7 +201,7 @@ export class TasksService {
       });
 
       const apiObj = apiTask as Record<string, unknown>;
-      return this.tasksRepo.update({
+      updated = await this.tasksRepo.update({
         id: params.id,
         data: {
           ...localPatch,
@@ -208,10 +211,44 @@ export class TasksService {
       });
     } catch {
       if (Object.keys(localPatch).length === 0) return existing;
-      return this.tasksRepo.update({
+      updated = await this.tasksRepo.update({
         id: params.id,
         data: localPatch,
       });
+    }
+
+    this.emitStatusChange(existing, updated);
+    return updated;
+  }
+
+  private emitStatusChange(
+    previous: Record<string, unknown>,
+    current: Record<string, unknown> | null,
+  ): void {
+    if (!this.outboundEvents || !current) return;
+    const prevStatus = previous.status as string;
+    const newStatus = current.status as string;
+    if (prevStatus === newStatus) return;
+
+    const tenantId = this.tenantContext.getTenantId();
+    const jobId = (current.jobId ?? '') as string;
+
+    if (newStatus === 'Completed' || newStatus === 'Complete') {
+      this.outboundEvents.emitTaskCompleted({
+        taskId: current.id as string,
+        taskName: current.name as string,
+        jobId,
+        entityType: 'job',
+        entityId: jobId,
+        tenantId,
+      }).catch(() => {});
+    } else if (newStatus === 'Failed' || newStatus === 'Cancelled') {
+      this.outboundEvents.emitTaskFailed({
+        taskId: current.id as string,
+        taskName: current.name as string,
+        jobId,
+        tenantId,
+      }).catch(() => {});
     }
   }
 }

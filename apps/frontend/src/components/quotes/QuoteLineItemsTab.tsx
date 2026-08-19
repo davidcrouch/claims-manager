@@ -345,6 +345,21 @@ export function QuoteLineItemsTab({
     });
   }
 
+  function handleReorderItems(groupId: string, fromIndex: number, toIndex: number) {
+    setDbGroups((prev) => {
+      if (!prev) return prev;
+      return prev.map((g) => {
+        if ((g.id ?? '') !== groupId) return g;
+        const items = [...(g.items ?? [])];
+        if (fromIndex < 0 || fromIndex >= items.length || toIndex < 0 || toIndex >= items.length) return g;
+        const [moved] = items.splice(fromIndex, 1);
+        items.splice(toIndex, 0, moved);
+        return { ...g, items };
+      });
+    });
+    setStructurallyDirty(true);
+  }
+
   const editingGroup = editingGroupId ? groups.find((g) => g.id === editingGroupId) : null;
   const deletingGroup = deletingGroupId ? groups.find((g) => g.id === deletingGroupId) : null;
 
@@ -374,6 +389,7 @@ export function QuoteLineItemsTab({
         hideToolbarActions={hideToolbarActions}
         structurallyDirty={structurallyDirty}
         readOnly={readOnly}
+        onReorderItems={readOnly ? undefined : handleReorderItems}
       />
 
       {editingGroup && (

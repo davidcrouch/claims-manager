@@ -31,6 +31,7 @@ import { LookupResolver } from '../external/lookup-resolver.service';
 import { CatalogOutboundService } from '../catalog/services/catalog-outbound.service';
 import { CatalogSelectionService } from '../catalog/services/catalog-selection.service';
 import { DocumentIssuanceService } from '../domain/services/document-issuance.service';
+import { OutboundEventsService } from '../outbound-events/outbound-events.service';
 @Injectable()
 export class QuotesService {
   private readonly logger = new Logger('QuotesService');
@@ -50,6 +51,7 @@ export class QuotesService {
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
     @Optional() private readonly connectionResolver?: ConnectionResolverService,
     @Optional() private readonly catalogOutbound?: CatalogOutboundService,
+    @Optional() private readonly outboundEvents?: OutboundEventsService,
   ) {}
 
   private async resolvePublishedStatus(params: { tenantId: string }): Promise<{
@@ -568,6 +570,16 @@ export class QuotesService {
       recipientOrganisationId: existing.recipientOrganisationId,
     });
     const updated = await this.quotesRepo.findOne({ id: params.id, tenantId });
+
+    if (this.outboundEvents && existing.jobId) {
+      this.outboundEvents.emitQuotePublished({
+        quoteId: params.id,
+        jobId: existing.jobId,
+        tenantId,
+        publishedAt: new Date().toISOString(),
+      }).catch(() => {});
+    }
+
     return updated ? this.shapeQuoteResponse(updated) : null;
   }
 
@@ -979,6 +991,16 @@ export class QuotesService {
     this.logger.log(
       `QuotesService.approve — quoteId=${params.id} set Approved, created workOrderId=${result.workOrderId}`,
     );
+
+    if (this.outboundEvents && existing.jobId) {
+      this.outboundEvents.emitQuoteStatusChanged({
+        quoteId: params.id,
+        jobId: existing.jobId,
+        tenantId,
+        newStatus: 'Approved',
+        previousStatus: 'Pending',
+      }).catch(() => {});
+    }
 
     const updated = await this.quotesRepo.findOne({ id: params.id, tenantId });
     return {

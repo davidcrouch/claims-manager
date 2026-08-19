@@ -1,10 +1,29 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Loader2 } from 'lucide-react';
 
-export type CreateSubmitPhase = 'idle' | 'creating' | 'opening';
+export type CreateSubmitPhase = 'idle' | 'creating' | 'opening' | 'loading';
+
+function overlayCopy(phase: Exclude<CreateSubmitPhase, 'idle'>, entityLabel: string) {
+  if (phase === 'opening') {
+    return {
+      title: `Opening ${entityLabel}…`,
+      subtitle: `Taking you to the new ${entityLabel}.`,
+    };
+  }
+  if (phase === 'loading') {
+    return {
+      title: `Loading ${entityLabel}…`,
+      subtitle: `Please wait while we load this ${entityLabel}.`,
+    };
+  }
+  return {
+    title: `Creating ${entityLabel}…`,
+    subtitle: `Please wait while we set up this ${entityLabel}.`,
+  };
+}
 
 /**
  * Navigate to a newly created entity.
@@ -26,12 +45,14 @@ export function useCreateSubmitPhase() {
   const [phase, setPhase] = useState<CreateSubmitPhase>('idle');
   const startCreating = useCallback(() => setPhase('creating'), []);
   const startOpening = useCallback(() => setPhase('opening'), []);
+  const startLoading = useCallback(() => setPhase('loading'), []);
   const resetPhase = useCallback(() => setPhase('idle'), []);
   return {
     phase,
     busy: phase !== 'idle',
     startCreating,
     startOpening,
+    startLoading,
     resetPhase,
   };
 }
@@ -43,9 +64,11 @@ export function CreateSubmitOverlay({
   phase: CreateSubmitPhase;
   entityLabel: string;
 }) {
-  if (phase === 'idle' || typeof document === 'undefined') return null;
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted || phase === 'idle') return null;
 
-  const opening = phase === 'opening';
+  const copy = overlayCopy(phase, entityLabel);
 
   return createPortal(
     <div
@@ -56,14 +79,8 @@ export function CreateSubmitOverlay({
     >
       <div className="flex flex-col items-center gap-3 rounded-xl border border-slate-200 bg-white px-8 py-7 shadow-xl">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-        <p className="text-sm font-medium text-slate-900">
-          {opening ? `Opening ${entityLabel}…` : `Creating ${entityLabel}…`}
-        </p>
-        <p className="text-xs text-slate-500">
-          {opening
-            ? `Taking you to the new ${entityLabel}.`
-            : `Please wait while we set up this ${entityLabel}.`}
-        </p>
+        <p className="text-sm font-medium text-slate-900">{copy.title}</p>
+        <p className="text-xs text-slate-500">{copy.subtitle}</p>
       </div>
     </div>,
     document.body,

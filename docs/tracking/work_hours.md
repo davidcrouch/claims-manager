@@ -879,3 +879,12 @@
   Room groups such as kitchen and bathroom now appear for existing customers instead of an empty list.
   Staging and production releases now load those groups automatically for every organisation.
   Outcome: staff can drag room groups onto quotes in both hosted environments.
+
+- `2026-08-19` `pending` **0.5 h**
+  `91 files | +3936 −89 | Tier 2 standard | Light orchestration`
+  Lay summary: Partner systems now hear about job changes, quote lines can be reordered, and builder workflow guides are filed in one place.
+  **Sent job updates to partner systems, tidied job and quote screens, and filed builder workflow guides.**
+  Jobs, quotes, tasks, appointments, and purchase orders now notify the partner workflow when they change.
+  Staff can reorder quote lines, see make-safe and excess as clear yes/no markers, and get a loading message on the catalogue.
+  Builder make-safe, assessment, and works guides plus related reference files now live in one Crunchwork folder.
+  Sample flood, fire, and roof-leak job photos and notes were added for training and walkthroughs.

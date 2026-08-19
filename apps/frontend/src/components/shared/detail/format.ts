@@ -24,8 +24,16 @@ export function asString(v: unknown): string | undefined {
 export function asBool(v: unknown): boolean | undefined {
   if (v == null) return undefined;
   if (typeof v === 'boolean') return v;
-  if (v === 'true') return true;
-  if (v === 'false') return false;
+  if (typeof v === 'number') {
+    if (v === 1) return true;
+    if (v === 0) return false;
+    return undefined;
+  }
+  if (typeof v === 'string') {
+    const n = v.trim().toLowerCase();
+    if (n === 'true' || n === 'yes' || n === '1') return true;
+    if (n === 'false' || n === 'no' || n === '0') return false;
+  }
   return undefined;
 }
 

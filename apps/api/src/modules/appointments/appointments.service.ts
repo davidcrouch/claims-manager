@@ -3,6 +3,7 @@ import { AppointmentsRepository, JobsRepository, type AppointmentInsert } from '
 import { TenantContext } from '../../tenant/tenant-context';
 import { CrunchworkService } from '../../crunchwork/crunchwork.service';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
+import { OutboundEventsService } from '../outbound-events/outbound-events.service';
 
 @Injectable()
 export class AppointmentsService {
@@ -15,6 +16,7 @@ export class AppointmentsService {
     private readonly tenantContext: TenantContext,
     private readonly crunchworkService: CrunchworkService,
     @Optional() private readonly connectionResolver?: ConnectionResolverService,
+    @Optional() private readonly outboundEvents?: OutboundEventsService,
   ) {}
 
   private async resolveConnectionId(tenantId: string): Promise<string> {
@@ -127,7 +129,19 @@ export class AppointmentsService {
       status: (apiObj.status ?? 'Scheduled') as string,
       appointmentPayload: mergedPayload,
     };
-    return this.appointmentsRepo.create({ data: insertData });
+    const created = await this.appointmentsRepo.create({ data: insertData });
+
+    if (this.outboundEvents && created && insertData.jobId) {
+      this.outboundEvents.emitAppointmentScheduled({
+        appointmentId: created.id,
+        jobId: insertData.jobId,
+        tenantId,
+        scheduledAt: new Date().toISOString(),
+        appointmentDate: insertData.startDate.toISOString(),
+      }).catch(() => {});
+    }
+
+    return created;
   }
 
   async update(params: { id: string; body: Record<string, unknown> }) {

@@ -1,0 +1,193 @@
+JOB SCENARIO: Major roof leak (storm – missing tiles / failed valley flashing)
+Job folder: data/jobs/major-roof-leak
+Photos: data/jobs/major-roof-leak/pics/
+
+================================================================================
+CLAIM / JOB CONTEXT
+================================================================================
+Loss type:           Storm – roof damage with internal water ingress
+Date of loss:        3 April 2026 (overnight storm)
+Date of request:     4 April 2026
+Site attendance:     6 April 2026
+Claim number:        CLM-2026-09105
+Policy name:         Home Building – Plus
+Policy number:       POL-5521190
+Site address:        8 Waratah Place, Hornsby NSW 2077
+Insured:             A. Nguyen
+Occupancy at loss:   Occupied
+Current occupancy:   Occupied – bedrooms partially usable; bathroom near leak restricted
+
+================================================================================
+ASSESSMENT – SITE OBSERVATIONS
+================================================================================
+
+--- attendance ---
+addressAttended:           Yes – 8 Waratah Place, Hornsby NSW 2077
+otherAddress:              N/A
+siteAttendanceDate:        6 April 2026
+personsAttending:          Insured (A. Nguyen); Builder estimator (Sam Ortiz, Ensure Building)
+builderEstimatorName:      Sam Ortiz
+builderEstimatorPhone:     0408 221 774
+insuranceAssessorAttended: No (desktop pending; photos shared)
+insuranceAssessorName:     
+insuranceAssessorPhone:    
+occupancyType:             Occupied
+
+--- building ---
+buildingType:              House
+designType:                Multi-storey
+constructionType:          Brick Veneer
+roofType:                  Tile
+estimatedBuildYear:        1987
+houseM2:                   210
+squares:                   ~22–23
+mainHouseRoofDamage:       Yes – missing/broken tiles near ridge; failed valley flashing
+additionalStructures:      Detached Garage (garage roof not damaged)
+otherStructures:           Front portico (unaffected)
+propertyCondition:         Generally well maintained; some prior minor ceiling patches noted in hallway (old, unrelated size/location)
+furnitureRemovalStorage:   Limited – clear Bedroom 2 and hallway for ceiling works; bathroom fixtures remain
+
+--- habitability ---
+habitable:                 Yes (with restrictions)
+uninhabitableReason:       N/A – property remains habitable
+otherUninhabitableReason:  Main bathroom limited use due to mould/moisture at shower wall; use ensuite if available / temporary
+
+--- hazards ---
+safetyHazards:             Working at heights on pitched tile roof; wet/slippery ceilings; possible loose plasterboard in hallway
+environmentalHazards:      Active mould at bathroom shower wall from prolonged ceiling leak moisture
+hazardDetails.electrical:  flagged – check light circuit in hallway ceiling cavity (fitting in stained area)
+hazardDetails.structural:  flagged – hairline crack living room wall may be secondary to prolonged wetting of ceiling/framing; engineer not required at this stage but monitor
+hazardDetails.sewerage:    not flagged
+hazardDetails.poolFencing: not flagged
+mould:                     Confirmed visual mould bathroom wall adjacent shower (photo)
+asbestosOnSite:            Possible – 1987 build; ceiling linings and eaves to be treated as asbestos-risk until tested before major ceiling demolition
+
+--- damage ---
+causeOfDamage:             Severe wind and rain event displaced multiple terracotta tiles on the northern roof plane and compromised valley flashing at the junction above hallway/bathroom. Wind-driven rain entered roof space and tracked to ceilings below.
+damageObserved:            Roof: missing/broken tiles; valley flashing failure with staining. Internal: hallway ceiling large water stain and sag; bathroom ceiling water stain; bathroom wall mould/moisture at shower; kitchen ceiling leak stain above cabinets; Bedroom 2 ceiling water damage and peeling paint; living room diagonal wall crack (possible secondary); kitchen backsplash cracked tiles near wet wall junction.
+hasDamageCoveredByPolicy:  Yes
+preExistingMaintenanceIssues: Aged valley flashing (original era) – progressive wear; storm was precipitating event for failure
+preExistingRelateDamage:   Partial – flashing age contributed but storm caused tile loss and acute ingress
+maintenanceDefectIssues:   Recommend full valley reflash and tile bed check on northern plane as part of reinstatement (storm-related + prevent recurrence)
+worksRequiredToAddressDamage: Emergency tarp; replace missing tiles; renew valley flashing; dry roof space; replace damaged ceiling linings; treat mould; paint; repair cracked tiles/crack as scoped; electrical check of hallway light
+
+--- makeSafe ---
+makeSafeRequired:          Yes
+makeSafeType:              Tarp
+dateMakeSafeCompleted:     5 April 2026 (emergency tarp by roofing contractor)
+dateMainRoofRepaired:      Pending – permanent roof works not yet complete
+
+--- temporaryAccommodation ---
+required:                  No
+estimatedAmount:           
+estimatedDuration:         
+requiredImmediately:       No
+immediateEstimateDays:     
+requiredDuringRepairs:     No (insured can remain; bathroom works scheduled as day works)
+repairsEstimateDays:       15–20 working days on site (phased)
+tempRepairsToMakeLivable:  Tarp already in place; bathroom usable with care
+workWhileInAccommodation:  N/A
+
+--- specialists ---
+specialistRequired:        Yes
+specialistType:            Roofer (tiles/flashing); Electrician (ceiling circuit); Asbestos hygienist if ceiling sample positive; Optional structural engineer if crack worsens after drying
+
+--- recommendation ---
+claimRecommendation:       Approve
+costEstimateForRepairs:    Indicative building works $28,000–$38,000 excl. GST
+estimatedRepairTime:       3–4
+estimatedRepairDuration:   Weeks
+hasInsuredAdvised:         Yes
+clientWillingToProceed:    Yes
+clientDiscussions:         Insured prioritises permanent roof repair then ceilings. Accepts bathroom mould remediation. Queries whether living room crack is claim-related – advise include provisional monitoring/repair item.
+customerArrangedRepairs:   Yes – emergency tarp only
+arrangedRepairComments:    Tarp invoice ~$850 – to be included / reimbursed per insurer process
+specialNotes:              Distinguish storm-related ceiling/roof damage from any historic micro-patches in hallway. Photo set includes roof exterior and per-room ceilings.
+conclusion:                Storm damage to tile roof and valley flashing caused significant internal water damage to ceilings and secondary finishes. Habitable with tarp make-safe. Recommend approve; proceed Scope of Work with Roof, Hallway, Bathroom, Kitchen, Bedroom 2, Living Area groups.
+builderLicenses:           Ensure Building – NSW licence on file; licensed roofing subcontractor required
+
+--- extras ---
+Photos: roof-external-missing-tiles; roof-valley-flashing-failure; hallway-ceiling-water-stain; bathroom-ceiling-water-stain; bathroom-wall-mold-moisture; kitchen-ceiling-leak-stain; bedroom-ceiling-water-damage; living-room-wall-structural-crack; kitchen-backsplash-cracked-tiles
+Moisture: Hallway ceiling lining soft; bathroom wall elevated moisture at mould zone
+
+================================================================================
+ESTIMATE – SCOPE INPUT
+================================================================================
+Estimate name:             Major roof leak reinstatement – 8 Waratah Place
+quoteType:                 Scope Of Work
+estimateDate:              7 April 2026
+expiresInDays:             30
+estimatedStart:            On approval (roof first)
+estimatedCompletion:       ~3–4 weeks from start
+reference:                 CLM-2026-09105
+note:                      Permanent roof repair before ceiling linings. Asbestos testing allowance for ceiling works (1987). Emergency tarp reimbursement separate line.
+
+Parties (indicative):
+  quoteFrom: Ensure Building Pty Ltd
+  quoteTo:   Insurer / Insured as directed
+  quoteFor:  8 Waratah Place, Hornsby NSW 2077
+
+--- Group: Make Safe ---
+  - Credit/reimburse emergency tarp already installed
+  - Maintain tarp until permanent tiles/flashing complete
+  Qty: 1 lot
+
+--- Group: Roof ---
+  Dimensions: northern plane approx 45 m² affected zone; valley length ~6 m
+  Scope:
+  - Remove tarp; replace missing/broken terracotta tiles; re-bed/repoint as required
+  - Strip and renew valley flashing (like-for-like metal/lead per engineer/roofer spec)
+  - Clear debris from gutters; check sarking in wet zone; dry roof space
+  Photos: roof-external-missing-tiles.png; roof-valley-flashing-failure.png
+  Indicative qty: tiles 25–40 ea; valley flashing 6 m; labour roof 2–3 days
+
+--- Group: Preliminaries ---
+  - Access scaffolding / roof edge protection
+  - Asbestos test samples (ceiling) + clearance if required
+  - Protection of floors/furnishings
+  Qty: 1 lot
+
+--- Group: Hallway / Internal ---
+  Dimensions: hallway ceiling zone ~2.0 m × 1.2 m damaged; paint full ceiling ~8 m²
+  Scope:
+  - Cut out sagging plasterboard; dry cavity; replace PB; set/sand
+  - Repaint ceiling and walls as needed to blend
+  - Electrician: inspect/replace light fitting if water-affected
+  Photos: hallway-ceiling-water-stain.png
+  Indicative qty: PB 3 m²; paint 10 m²; light 1 ea provisional
+
+--- Group: Bathroom ---
+  Dimensions: L 2.5 m × W 1.9 m × H 2.7 m
+  Scope:
+  - Replace water-stained ceiling lining; paint
+  - Mould remediation at shower wall; replace affected plaster if soft; repaint
+  - Check silicone and grout at shower (claim-related moisture)
+  Photos: bathroom-ceiling-water-stain.png; bathroom-wall-mold-moisture.png
+  Indicative qty: ceiling 4.8 m²; wall repair 2 m²; mould treat 1 lot
+
+--- Group: Kitchen ---
+  Dimensions: ceiling stain zone ~1.5 m diameter above cabinets
+  Scope:
+  - Replace/repair stained ceiling section; paint full kitchen ceiling for blend
+  - Replace cracked backsplash tiles at wet junction (~0.6 m²)
+  Photos: kitchen-ceiling-leak-stain.png; kitchen-backsplash-cracked-tiles.png
+  Indicative qty: ceiling repair 2 m² + paint 12 m²; tiles 0.6 m²
+
+--- Group: Bedroom 2 ---
+  Dimensions: L 3.6 m × W 3.0 m × H 2.7 m
+  Scope:
+  - Ceiling lining replace at water damage; paint full ceiling
+  - Minor wall paint touch where peel occurred
+  Photos: bedroom-ceiling-water-damage.png
+  Indicative qty: PB 4 m²; paint 12 m²
+
+--- Group: Living Area ---
+  Dimensions: crack length ~1.8 m diagonal
+  Scope:
+  - After drying: rake/fill/paint hairline crack; provisional sum if crack reopens (monitor 2 weeks post dry-down)
+  Photos: living-room-wall-structural-crack.png
+  Indicative qty: crack repair 1 lot; provisional engineer visit if required
+
+Totals (order-of-magnitude):
+  Building reinstatement excl. GST: ~$28k–$38k
+  Incl. roof access, flashing, ceilings, mould, provisional crack

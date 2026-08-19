@@ -1,0 +1,197 @@
+JOB SCENARIO: Area flooding (flash flood / overland flow)
+Job folder: data/jobs/area-flooding
+Photos: data/jobs/area-flooding/pics/
+
+================================================================================
+CLAIM / JOB CONTEXT
+================================================================================
+Loss type:           Storm / flood – overland water ingress
+Date of loss:        12 March 2026
+Date of request:     13 March 2026
+Site attendance:     15 March 2026
+Claim number:        CLM-2026-08421
+Policy name:         Home Building & Contents – Gold
+Policy number:       POL-7784521
+Site address:        14 Riverview Circuit, Fairfield West NSW 2165
+Insured:             M. & S. Patel
+Occupancy at loss:   Occupied (family of four present; evacuated overnight)
+Current occupancy:   Partially Occupied – sleeping upstairs with friends; ground floor largely unusable
+
+================================================================================
+ASSESSMENT – SITE OBSERVATIONS
+(map into Assessment sections: attendance, building, habitability, hazards,
+damage, makeSafe, temporaryAccommodation, specialists, recommendation, extras)
+================================================================================
+
+--- attendance ---
+addressAttended:           Yes – 14 Riverview Circuit, Fairfield West NSW 2165
+otherAddress:              N/A
+siteAttendanceDate:        15 March 2026
+personsAttending:          Insured (M. Patel); Builder estimator (Jordan Lee, Ensure Building)
+builderEstimatorName:      Jordan Lee
+builderEstimatorPhone:     0412 555 018
+insuranceAssessorAttended: Yes
+insuranceAssessorName:     Priya Chen
+insuranceAssessorPhone:    02 9000 4411
+occupancyType:             Partially Occupied
+
+--- building ---
+buildingType:              House
+designType:                Standard
+constructionType:          Brick Veneer
+roofType:                  Tile
+estimatedBuildYear:        1998
+houseM2:                   185
+squares:                   ~20
+mainHouseRoofDamage:       No (roof intact; water entered at ground level)
+additionalStructures:      Detached Garage, Sheds
+otherStructures:           Front porch slab (minor silt only)
+propertyCondition:         Fair–good pre-event; ground floor finishes now water-affected
+furnitureRemovalStorage:   Yes – lounge and kitchen soft goods to be removed before strip-out
+
+--- habitability ---
+habitable:                 No (ground floor)
+uninhabitableReason:       Contaminated flood water through living areas; flooring and lower joinery unsafe; mould risk
+otherUninhabitableReason:  Electrical circuits on ground floor isolated as precaution
+
+--- hazards ---
+safetyHazards:             Slippery silt residue; isolated power to ground floor RCD board; trip hazards from lifted flooring
+environmentalHazards:      Category 2–3 flood water (overland with silt/organic matter); emerging mould odour in bathroom vanity cavity
+hazardDetails.electrical:  flagged – ground floor circuits isolated pending electrician clearance
+hazardDetails.structural:  flagged – no primary structural failure observed; monitor brick veneer base for prolonged saturation
+hazardDetails.sewerage:    not flagged – no sewage backup confirmed
+hazardDetails.poolFencing: not flagged – no pool
+mould:                     Early mould on bathroom vanity kickboard and laundry floor edges (see photos)
+asbestosOnSite:            Unlikely – 1998 brick veneer; vinyl in laundry only; standard asbestos caution during strip-out
+
+--- damage ---
+causeOfDamage:             Intense local storm caused overland flow along Riverview Circuit. Stormwater exceeded kerb capacity; water entered via front door threshold, laundry external door, and weepholes. Water height approx. 350–400 mm above FFL on ground floor (external waterline visible on brickwork).
+damageObserved:            External brick waterline ~400 mm AFL. Kitchen: base cabinets swollen/delaminated; vinyl plank flooring buckled/cupped. Bathroom: floor tiles cracked/lifted; vanity base water-damaged. Living room: carpet saturated with large stain and musty odour. Bedroom 1 (ground): hardwood cupped/warped. Laundry: sheet vinyl blistered and seams failed. Upper storey: no water damage observed.
+hasDamageCoveredByPolicy:  Yes (subject to insurer confirmation of flood vs stormwater wording)
+preExistingMaintenanceIssues: Minor worn sealant at laundry door threshold; did not cause ingress (water height exceeded threshold)
+preExistingRelateDamage:   No – damage pattern consistent with sudden overland flooding
+maintenanceDefectIssues:   Recommend door threshold and weephole drainage review as betterment discussion (not claim cause)
+worksRequiredToAddressDamage: Strip-out contaminated flooring and lower cabinetry; dry-down/dehumidify; treat mould; reinstate floors, joinery, skirtings, paint to waterline + 300 mm; electrician clearance; soft contents cleaning/disposal as directed by insurer
+
+--- makeSafe ---
+makeSafeRequired:          Yes
+makeSafeType:              Other – isolate power; remove wet soft goods; temporary plastic to laundry door; dehumidifier setup
+dateMakeSafeCompleted:     14 March 2026 (insured + emergency contractor)
+dateMainRoofRepaired:      N/A
+
+--- temporaryAccommodation ---
+required:                  Yes, Temporary Accommodation
+estimatedAmount:           $280/night family motel or short-stay (indicative)
+estimatedDuration:         6–8 weeks (strip-out, dry, reinstate ground floor)
+requiredImmediately:       Yes
+immediateEstimateDays:     14 (already partially with relatives)
+requiredDuringRepairs:     Yes
+repairsEstimateDays:       42–56
+tempRepairsToMakeLivable:  Not practical for full occupancy while flooring/joinery open
+workWhileInAccommodation:  Yes – strip-out and drying while family off-site preferred
+
+--- specialists ---
+specialistRequired:        Yes
+specialistType:            Electrician (clearance); Indoor air / mould hygienist if odour persists after dry-down; Contents restoration (optional)
+
+--- recommendation ---
+claimRecommendation:       Approve
+costEstimateForRepairs:    Indicative building works $48,000–$62,000 excl. GST (excl. contents)
+estimatedRepairTime:       6–8
+estimatedRepairDuration:   Weeks
+hasInsuredAdvised:         Yes – discussed strip-out, TA, and drying timeline on site
+clientWillingToProceed:    Yes
+clientDiscussions:         Insured wants to stay partially on site upstairs if safe; prefer TA if demolition noisy. Seeking like-for-like kitchen cabinets and carpet replacement.
+customerArrangedRepairs:   No (emergency drying only)
+arrangedRepairComments:    Emergency crew placed dehumidifiers 14 Mar; invoices to be claimed separately if approved
+specialNotes:              Photo set documents waterline and per-room finish damage. No roof involvement.
+conclusion:                Sudden overland flooding damaged ground-floor finishes and joinery. Property not fully habitable until strip-out, dry-down, and reinstatement. Recommend approve building claim subject to policy flood wording; proceed Scope of Work estimate by room.
+builderLicenses:           Ensure Building – NSW licence on file
+
+--- extras ---
+Photos reviewed:           external-flood-waterline; kitchen cabinets/floor; bathroom tiles/vanity; living carpet; bedroom hardwood; laundry vinyl
+Moisture readings:         Kitchen floor 28–35% WME; living carpet pad saturated; bedroom boards elevated along external wall
+
+================================================================================
+ESTIMATE – SCOPE INPUT
+(quoteType: Scope Of Work / Quote; group by room via group_label)
+================================================================================
+Estimate name:             Area flooding reinstatement – 14 Riverview Circuit
+quoteType:                 Scope Of Work
+estimateDate:              16 March 2026
+expiresInDays:             30
+estimatedStart:            ~2 weeks after approval / dry-down complete
+estimatedCompletion:       6–8 weeks from start
+reference:                 CLM-2026-08421
+note:                      Ground floor water damage reinstate. Exclude contents unless insurer instructs. Prelims include drying equipment hire already partly on site.
+
+Parties (indicative):
+  quoteFrom: Ensure Building Pty Ltd
+  quoteTo:   Insurer / Insured as directed
+  quoteFor:  14 Riverview Circuit, Fairfield West NSW 2165
+
+--- Group: Preliminaries ---
+  Combos/items (indicative):
+  - Site establishment, protection, waste bins
+  - Dehumidifier / air mover hire (2 weeks remaining)
+  - Contents shift / furniture protection ground floor
+  Qty notes: 1 lot
+
+--- Group: Make Safe ---
+  - Electrical isolation / temporary power for drying
+  - Contaminated soft goods bag-out (carpet offcuts)
+  Qty notes: 1 lot
+
+--- Group: External ---
+  - Clean silt from brick veneer base / weep holes; inspect subfloor vents
+  Dimensions: perimeter ~45 m affected band
+  Photos: external-flood-waterline.png
+
+--- Group: Kitchen ---
+  Dimensions: approx L 4.2 m × W 3.1 m × H 2.7 m
+  Scope:
+  - Remove and replace water-damaged base cabinets (like-for-like laminate)
+  - Remove buckled vinyl plank flooring; supply & install new LVP (~13 m²)
+  - Replace skirting; spot plaster/paint to waterline + 300 mm
+  - Dishwasher reconnect after floor works
+  Photos: kitchen-cabinets-flood-damage.png; kitchen-floor-buckled-planks.png
+  Indicative qty: cabinets 6 doors/3 drawers; floor 13 m²; paint 18 m²
+
+--- Group: Bathroom ---
+  Dimensions: approx L 2.4 m × W 1.8 m × H 2.7 m
+  Scope:
+  - Lift cracked floor tiles (~4.3 m²); re-tile like-for-like
+  - Replace vanity cabinet (vanity top OK if undamaged – confirm on strip)
+  - Treat mould; seal/paint walls lower 1.2 m
+  Photos: bathroom-floor-tile-cracks.png; bathroom-vanity-water-damage.png
+  Indicative qty: floor tiles 4.3 m²; vanity 1 ea; paint 8 m²
+
+--- Group: Living Area ---
+  Dimensions: approx L 5.5 m × W 4.0 m × H 2.7 m
+  Scope:
+  - Remove saturated carpet and underlay (~22 m²); dispose contaminated
+  - Supply & install new carpet/underlay like-for-like
+  - Replace skirting; clean/paint lower walls as required
+  Photos: living-room-carpet-water-stain.png
+  Indicative qty: carpet 22 m²
+
+--- Group: Bedroom 1 ---
+  Dimensions: approx L 3.8 m × W 3.2 m × H 2.7 m
+  Scope:
+  - Remove cupped hardwood (~12 m²); supply & install matching engineered/hardwood
+  - Sand/seal transitions to hallway (if retained)
+  - Skirting replace/paint
+  Photos: bedroom-floor-warped-hardwood.png
+  Indicative qty: floor 12 m²
+
+--- Group: Laundry ---
+  Dimensions: approx L 2.2 m × W 1.6 m × H 2.7 m
+  Scope:
+  - Remove blistered sheet vinyl (~3.5 m²); install new sheet vinyl
+  - Check and reseal external door threshold (maintenance/betterment note)
+  Photos: laundry-floor-blistered-vinyl.png
+  Indicative qty: floor 3.5 m²
+
+Totals (order-of-magnitude for recommendation field):
+  Building reinstatement excl. GST: ~$48k–$62k
+  Contingency for hidden mould/subfloor: 10%

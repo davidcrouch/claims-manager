@@ -3,6 +3,7 @@ import { PurchaseOrdersRepository } from '../../database/repositories';
 import { TenantContext } from '../../tenant/tenant-context';
 import { CrunchworkService } from '../../crunchwork/crunchwork.service';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
+import { OutboundEventsService } from '../outbound-events/outbound-events.service';
 
 @Injectable()
 export class PurchaseOrdersService {
@@ -13,6 +14,7 @@ export class PurchaseOrdersService {
     private readonly tenantContext: TenantContext,
     private readonly crunchworkService: CrunchworkService,
     @Optional() private readonly connectionResolver?: ConnectionResolverService,
+    @Optional() private readonly outboundEvents?: OutboundEventsService,
   ) {}
 
   private async resolveConnectionId(tenantId: string): Promise<string> {
@@ -81,13 +83,24 @@ export class PurchaseOrdersService {
     if (!existing) return null;
 
     if (typeof params.body.statusLookupId === 'string' && params.body.statusLookupId) {
-      return this.purchaseOrdersRepo.update({
+      const updated = await this.purchaseOrdersRepo.update({
         id: params.id,
         data: {
           statusLookupId: params.body.statusLookupId,
           ...(params.userId ? { updatedByUserId: params.userId } : {}),
         },
       });
+      if (this.outboundEvents && existing.jobId) {
+        const status = (params.body.status as string) ?? '';
+        if (status === 'Completed' || status === 'Complete') {
+          this.outboundEvents.emitPurchaseOrderCompleted({
+            purchaseOrderId: params.id,
+            jobId: existing.jobId,
+            tenantId: this.tenantContext.getTenantId(),
+          }).catch(() => {});
+        }
+      }
+      return updated;
     }
 
     const tenantId = this.tenantContext.getTenantId();

@@ -18,7 +18,6 @@ import { TypeBadge } from '@/components/ui/type-badge';
 import { Input } from '@/components/ui/input';
 import {
   EditLookupSelect,
-  EditSwitch,
   EditText,
   EditTextarea,
 } from '@/components/jobs/JobEditControls';
@@ -136,6 +135,9 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
   const claimPriority = asString((claimApi.priority as Dict | undefined)?.name) ?? asString((apiClaim.priority as Dict | undefined)?.name) ?? asString(claimApi.priority) ?? asString(apiClaim.priority);
   const claimPolicyName = parentClaim?.policyName ?? asString(claimApi.policyName) ?? asString(apiClaim.policyName);
   const autoApproval = (job as unknown as Dict).autoApproval ?? pick(api, 'autoApprovalApplies', 'autoApproval');
+  const collectExcessFlag = job.collectExcess ?? pick(api, 'collectExcess');
+  const makeSafeFlag = job.makeSafeRequired ?? pick(api, 'makeSafeRequired');
+  const excessAmount = job.excess ?? pick(api, 'excess');
   const vendorJobNumber = asString(pick(api, 'vendorJobNumber'));
   const contactDate = asString(pick(custom, 'contactDate') ?? pick(api, 'contactDate'));
   const bookedDateRaw = asString(pick(custom, 'bookedDate') ?? pick(api, 'bookedDate'));
@@ -150,9 +152,6 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
   const [statusExternalReference, setStatusExternalReference] = useState(
     job.status?.externalReference ?? '',
   );
-  const [makeSafeRequired, setMakeSafeRequired] = useState(!!job.makeSafeRequired);
-  const [collectExcess, setCollectExcess] = useState(!!job.collectExcess);
-  const [excess, setExcess] = useState(job.excess != null ? String(job.excess) : '');
   const [jobInstructions, setJobInstructions] = useState(job.jobInstructions ?? '');
   const [vendorExtRef, setVendorExtRef] = useState(vendorExtRefInitial ?? '');
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -163,9 +162,6 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     setAttendanceDate(attendanceDateRaw ?? '');
     setStatusLookupId(job.statusLookupId ?? job.status?.id ?? '');
     setStatusExternalReference(job.status?.externalReference ?? '');
-    setMakeSafeRequired(!!job.makeSafeRequired);
-    setCollectExcess(!!job.collectExcess);
-    setExcess(job.excess != null ? String(job.excess) : '');
     setJobInstructions(job.jobInstructions ?? '');
     setVendorExtRef(vendorExtRefInitial ?? '');
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keep drafts across same-job updates
@@ -176,9 +172,6 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     attendanceDate !== (attendanceDateRaw ?? '') ||
     (isCrunchwork && (
       statusLookupId !== (job.statusLookupId ?? job.status?.id ?? '') ||
-      makeSafeRequired !== !!job.makeSafeRequired ||
-      collectExcess !== !!job.collectExcess ||
-      excess !== (job.excess != null ? String(job.excess) : '') ||
       jobInstructions !== (job.jobInstructions ?? '') ||
       vendorExtRef !== (vendorExtRefInitial ?? '')
     ));
@@ -196,9 +189,6 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     if (isCrunchwork) {
       pending.statusLookupId = statusLookupId || null;
       pending.statusExternalReference = statusExternalReference || null;
-      pending.makeSafeRequired = makeSafeRequired;
-      pending.collectExcess = collectExcess;
-      pending.excess = excess;
       pending.jobInstructions = jobInstructions;
       pending.vendorExternalReference = vendorExtRef || null;
     }
@@ -210,9 +200,6 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     setAttendanceDate(attendanceDateRaw ?? '');
     setStatusLookupId(job.statusLookupId ?? job.status?.id ?? '');
     setStatusExternalReference(job.status?.externalReference ?? '');
-    setMakeSafeRequired(!!job.makeSafeRequired);
-    setCollectExcess(!!job.collectExcess);
-    setExcess(job.excess != null ? String(job.excess) : '');
     setJobInstructions(job.jobInstructions ?? '');
     setVendorExtRef(vendorExtRefInitial ?? '');
   };
@@ -229,9 +216,6 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     attendanceDate,
     statusLookupId,
     statusExternalReference,
-    makeSafeRequired,
-    collectExcess,
-    excess,
     jobInstructions,
     vendorExtRef,
     isCrunchwork,
@@ -321,48 +305,15 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
           <DefRow label="Request date" value={formatDate(job.requestDate)} />
           <DefRow
             label="Make-safe required"
-            value={
-              cwEditing ? (
-                <EditSwitch
-                  checked={makeSafeRequired}
-                  onChange={setMakeSafeRequired}
-                  disabled={saving}
-                />
-              ) : (
-                <BoolPill value={job.makeSafeRequired} />
-              )
-            }
+            value={<BoolPill value={makeSafeFlag} />}
           />
           <DefRow
             label="Collect excess"
-            value={
-              cwEditing ? (
-                <EditSwitch
-                  checked={collectExcess}
-                  onChange={setCollectExcess}
-                  disabled={saving}
-                />
-              ) : (
-                <BoolPill value={job.collectExcess} />
-              )
-            }
+            value={<BoolPill value={collectExcessFlag} />}
           />
           <DefRow
             label="Excess"
-            value={
-              cwEditing ? (
-                <EditText
-                  type="number"
-                  step="0.01"
-                  min={0}
-                  value={excess}
-                  onChange={setExcess}
-                  disabled={saving || !collectExcess}
-                />
-              ) : (
-                formatCurrency(job.excess)
-              )
-            }
+            value={formatCurrency(excessAmount)}
           />
           <AnimatePresence initial={false}>
             {showAdvanced && (

@@ -14,7 +14,7 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { TypeBadge } from '@/components/ui/type-badge';
 import { BackButton } from '@/components/layout/BackButton';
 import { JobsPickerDrawer } from '@/components/jobs/JobsPickerDrawer';
-import { formatDate, formatDateTime, formatCurrency, formatAddress } from '@/components/shared/detail';
+import { formatDate, formatDateTime, formatCurrency, formatAddress, BoolPill } from '@/components/shared/detail';
 import type { Job, Claim } from '@/types/api';
 
 type Dict = Record<string, unknown>;
@@ -138,13 +138,7 @@ export function JobPageHeader({
           )}
           <div className="flex items-baseline gap-1">
             <span className="text-muted-foreground">Make-safe:</span>
-            <span className="font-medium">
-              {job.makeSafeRequired == null
-                ? '—'
-                : job.makeSafeRequired
-                  ? 'Yes'
-                  : 'No'}
-            </span>
+            <BoolPill value={job.makeSafeRequired} />
           </div>
         </div>
       </div>

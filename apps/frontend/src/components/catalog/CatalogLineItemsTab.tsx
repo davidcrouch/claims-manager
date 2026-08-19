@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { CreateSubmitOverlay } from '@/components/forms/CreateSubmitOverlay';
 import { QuoteLineItemsTable, type DeleteItemRequest } from '@/components/quotes/QuoteLineItemsTable';
 import { EditGroupDialog } from '@/components/quotes/EditGroupDialog';
 import { DeleteGroupDialog } from '@/components/quotes/DeleteGroupDialog';
@@ -138,6 +139,7 @@ export function CatalogLineItemsTab({
 }) {
   const router = useRouter();
   const [groups, setGroups] = useState<ApiGroup[]>([]);
+  const [initialLoad, setInitialLoad] = useState(true);
   const [pending, startTransition] = useTransition();
   const [structurallyDirty, setStructurallyDirty] = useState(false);
   const latestEditsRef = useRef<Record<string, Record<string, string>>>({});
@@ -148,12 +150,16 @@ export function CatalogLineItemsTab({
   const [deletingItem, setDeletingItem] = useState<DeleteItemRequest | null>(null);
 
   const loadGroupedItems = useCallback(async () => {
-    const result = await getCatalogGroupedItemsAction(catalogId);
-    if (result.success && result.groups) {
-      setGroups(mapCatalogGroupsToApiGroups(result.groups));
-    } else if (!result.success) {
-      console.error(`${PREFIX}.loadGroupedItems — ${result.error}`);
-      toast.error(result.error ?? 'Failed to load catalogue items');
+    try {
+      const result = await getCatalogGroupedItemsAction(catalogId);
+      if (result.success && result.groups) {
+        setGroups(mapCatalogGroupsToApiGroups(result.groups));
+      } else if (!result.success) {
+        console.error(`${PREFIX}.loadGroupedItems — ${result.error}`);
+        toast.error(result.error ?? 'Failed to load catalogue items');
+      }
+    } finally {
+      setInitialLoad(false);
     }
   }, [catalogId]);
 
@@ -453,6 +459,7 @@ export function CatalogLineItemsTab({
 
   return (
     <div className="space-y-4">
+      <CreateSubmitOverlay phase={initialLoad ? 'loading' : 'idle'} entityLabel="catalogue" />
       <QuoteLineItemsTable
         groups={filteredGroups}
         onEditGroup={(id) => setEditingGroupId(id)}

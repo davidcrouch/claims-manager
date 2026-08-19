@@ -68,6 +68,7 @@ import { CapabilityPacksModule } from './modules/capability-packs/capability-pac
 import { AuthServerModule } from './modules/auth-server/auth-server.module';
 import { UserManagementModule } from './modules/user-management/user-management.module';
 import { RbacModule } from './modules/rbac/rbac.module';
+import { OutboundEventsModule } from './modules/outbound-events/outbound-events.module';
 import { TenantInterceptor } from './tenant/tenant.interceptor';
 import { AllExceptionsFilter, HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -108,6 +109,7 @@ import { OfficeModule } from './common/office/office.module';
     TenantModule,
     CrunchworkModule,
     More0Module,
+    OutboundEventsModule,
     ExternalModule,
     WebhookToolsModule,
     HomeModule,

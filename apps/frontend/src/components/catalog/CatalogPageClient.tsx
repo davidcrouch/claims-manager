@@ -117,7 +117,7 @@ export function CatalogPageClient({
           </Button>
         </SetHeaderActions>
 
-        <div className="sticky top-14 z-10 flex flex-col gap-4 border-b border-slate-200 bg-background px-6 pb-3 pt-1">
+        <div className="flex shrink-0 flex-col border-b border-slate-200 bg-background px-6 pb-3">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
             <div className="relative flex-1">
               <Search
