@@ -93,27 +93,34 @@ const scopeJsonata = `{ "name": scope_name, "description": scope_description, "q
 
 const groupedItemsJsonata = `groups.{ "name": group_name, "note": group_note, "subtotal": group_subtotal, "items": items.(${itemJsonata}), "combos": combos.(${comboJsonata}), "scopes": scopes.(${scopeJsonata}) }`;
 
+/** Groups live under `_context.groups` for data-context document types. */
+const groupedItemsJsonataCtx = `_context.groups.{ "name": group_name, "note": group_note, "subtotal": group_subtotal, "items": items.(${itemJsonata}), "combos": combos.(${comboJsonata}), "scopes": scopes.(${scopeJsonata}) }`;
+
 export const TRANSFORM_DEFAULTS: Record<DocumentType, TransformDefault> = {
-  // ── Detail: Grouped financial documents ──────────────────────────────
+  // ── Detail: Grouped financial documents (data-context source) ────────
 
   quote: {
     jsonataRules: `{
-  "company": company_name,
-  "quote_number": quote_number,
-  "name": quote_name,
-  "date": quote_date,
-  "reference": quote_reference,
-  "note": quote_note,
-  "expires_in_days": expires_in_days,
-  "start_date": estimated_start_date,
-  "completion_date": estimated_completion_date,
-  "to": { "name": quote_to_name, "email": quote_to_email, "address": quote_to_address },
-  "from": { "name": quote_from_name, "address": quote_from_address },
-  "for_name": quote_for_name,
-  "subtotal": sub_total,
-  "tax": total_tax,
-  "total": total_amount,
-  "groups": ${groupedItemsJsonata}
+  "company": _context.organization.name,
+  "quote_number": _context.quote.quoteNumber,
+  "name": _context.quote.name,
+  "date": $formatDate(_context.quote.quoteDate),
+  "reference": _context.quote.reference,
+  "note": _context.quote.note,
+  "expires_in_days": $str(_context.quote.expiresInDays),
+  "start_date": $formatDate(_context.quote.estimatedStartDate),
+  "completion_date": $formatDate(_context.quote.estimatedCompletionDate),
+  "to": {
+    "name": _context.quote.quoteToName ? _context.quote.quoteToName : _context.quote.quoteTo.name,
+    "email": _context.quote.quoteToEmail ? _context.quote.quoteToEmail : _context.quote.quoteTo.email,
+    "address": _context.quote.quoteTo.address
+  },
+  "from": { "name": _context.quote.quoteFrom.name, "address": _context.quote.quoteFrom.address },
+  "for_name": _context.quote.quoteForName ? _context.quote.quoteForName : _context.quote.quoteFor.name,
+  "subtotal": $formatCurrency(_context.quote.subTotal),
+  "tax": $formatCurrency(_context.quote.totalTax),
+  "total": $formatCurrency(_context.quote.totalAmount),
+  "groups": ${groupedItemsJsonataCtx}
 }`,
     targetSchema: groupedDocSchema('quote', {
       reference: { type: 'string' },
@@ -125,75 +132,89 @@ export const TRANSFORM_DEFAULTS: Record<DocumentType, TransformDefault> = {
 
   purchase_order: {
     jsonataRules: `{
-  "company": company_name,
-  "po_number": po_number,
-  "name": po_name,
-  "start_date": start_date,
-  "end_date": end_date,
-  "note": note,
-  "to": { "name": po_to_name, "email": po_to_email, "address": po_to_address },
-  "from": { "name": po_from_name, "address": po_from_address },
-  "for_name": po_for_name,
-  "total": total_amount,
-  "adjusted_total": adjusted_total,
-  "groups": ${groupedItemsJsonata}
+  "company": _context.organization.name,
+  "po_number": _context.purchase_order.purchaseOrderNumber,
+  "name": _context.purchase_order.name,
+  "start_date": $formatDate(_context.purchase_order.startDate),
+  "end_date": $formatDate(_context.purchase_order.endDate),
+  "note": _context.purchase_order.note,
+  "to": {
+    "name": _context.purchase_order.poTo.name,
+    "email": _context.purchase_order.poToEmail,
+    "address": _context.purchase_order.poTo.address
+  },
+  "from": { "name": _context.purchase_order.poFrom.name, "address": _context.purchase_order.poFrom.address },
+  "for_name": _context.purchase_order.poForName ? _context.purchase_order.poForName : _context.purchase_order.poFor.name,
+  "total": $formatCurrency(_context.purchase_order.totalAmount),
+  "adjusted_total": $formatCurrency(_context.purchase_order.adjustedTotal),
+  "groups": ${groupedItemsJsonataCtx}
 }`,
     targetSchema: groupedDocSchema('po', { adjusted_total: { type: 'string' } }),
   },
 
   work_order: {
     jsonataRules: `{
-  "company": company_name,
-  "wo_number": wo_number,
-  "name": wo_name,
-  "start_date": start_date,
-  "end_date": end_date,
-  "note": note,
-  "scope": scope_of_work,
-  "to": { "name": wo_to_name, "email": wo_to_email, "address": wo_to_address },
-  "from": { "name": wo_from_name, "address": wo_from_address },
-  "for_name": wo_for_name,
-  "total": total_amount,
-  "adjusted_total": adjusted_total,
-  "groups": ${groupedItemsJsonata}
+  "company": _context.organization.name,
+  "wo_number": _context.work_order.workOrderNumber,
+  "name": _context.work_order.name,
+  "start_date": $formatDate(_context.work_order.startDate),
+  "end_date": $formatDate(_context.work_order.endDate),
+  "note": _context.work_order.note,
+  "scope": _context.work_order.scopeOfWork,
+  "to": {
+    "name": _context.work_order.woTo.name,
+    "email": _context.work_order.woToEmail,
+    "address": _context.work_order.woTo.address
+  },
+  "from": { "name": _context.work_order.woFrom.name, "address": _context.work_order.woFrom.address },
+  "for_name": _context.work_order.woForName ? _context.work_order.woForName : _context.work_order.woFor.name,
+  "total": $formatCurrency(_context.work_order.totalAmount),
+  "adjusted_total": $formatCurrency(_context.work_order.adjustedTotal),
+  "groups": ${groupedItemsJsonataCtx}
 }`,
     targetSchema: groupedDocSchema('wo', { scope: { type: 'string' }, adjusted_total: { type: 'string' } }),
   },
 
   proposal: {
     jsonataRules: `{
-  "company": company_name,
-  "proposal_number": proposal_number,
-  "name": proposal_name,
-  "reference": proposal_reference,
-  "date": proposal_date,
-  "received_date": received_date,
-  "note": note,
-  "to": { "name": proposal_to_name, "email": proposal_to_email },
-  "from": { "name": proposal_from_name },
-  "for_name": proposal_for_name,
-  "subtotal": sub_total,
-  "tax": total_tax,
-  "total": total_amount,
-  "groups": ${groupedItemsJsonata}
+  "company": _context.organization.name,
+  "proposal_number": _context.proposal.proposalNumber,
+  "name": _context.proposal.name,
+  "reference": _context.proposal.reference,
+  "date": $formatDate(_context.proposal.proposalDate),
+  "received_date": $formatDate(_context.proposal.receivedDate),
+  "note": _context.proposal.note,
+  "to": {
+    "name": _context.proposal.proposalToName ? _context.proposal.proposalToName : _context.proposal.proposalTo.name,
+    "email": _context.proposal.proposalToEmail
+  },
+  "from": { "name": _context.proposal.proposalFromName },
+  "for_name": _context.proposal.proposalFor.name,
+  "subtotal": $formatCurrency(_context.proposal.subTotal),
+  "tax": $formatCurrency(_context.proposal.totalTax),
+  "total": $formatCurrency(_context.proposal.totalAmount),
+  "groups": ${groupedItemsJsonataCtx}
 }`,
     targetSchema: groupedDocSchema('proposal', { reference: { type: 'string' }, received_date: { type: 'string' } }),
   },
 
   rfq: {
     jsonataRules: `{
-  "company": company_name,
-  "rfq_number": rfq_number,
-  "name": rfq_name,
-  "note": note,
-  "sent_date": sent_date,
-  "due_date": due_date,
-  "received_date": received_date,
-  "include_pricing": include_pricing,
-  "include_quantities": include_quantities,
-  "to": { "name": rfq_to_name, "email": rfq_to_email },
-  "from": { "name": rfq_from_name },
-  "groups": ${groupedItemsJsonata}
+  "company": _context.organization.name,
+  "rfq_number": _context.rfq.rfqNumber,
+  "name": _context.rfq.name,
+  "note": _context.rfq.note,
+  "sent_date": $formatDate(_context.rfq.sentDate),
+  "due_date": $formatDate(_context.rfq.dueDate),
+  "received_date": $formatDate(_context.rfq.receivedDate),
+  "include_pricing": $yn(_context.rfq.includePricing),
+  "include_quantities": $yn(_context.rfq.includeQuantities),
+  "to": {
+    "name": _context.rfq.rfqToName ? _context.rfq.rfqToName : _context.rfq.rfqTo.name,
+    "email": _context.rfq.rfqToEmail ? _context.rfq.rfqToEmail : _context.rfq.rfqTo.email
+  },
+  "from": { "name": _context.rfq.rfqFrom.name },
+  "groups": ${groupedItemsJsonataCtx}
 }`,
     targetSchema: groupedDocSchema('rfq', {
       sent_date: { type: 'string' }, due_date: { type: 'string' }, received_date: { type: 'string' },
@@ -205,16 +226,19 @@ export const TRANSFORM_DEFAULTS: Record<DocumentType, TransformDefault> = {
 
   invoice: {
     jsonataRules: `{
-  "company": company_name,
-  "number": invoice_number,
-  "date": issue_date,
-  "received": received_date,
-  "notes": comments,
-  "subtotal": sub_total,
-  "tax": total_tax,
-  "total": total_amount,
-  "excess": excess_amount,
-  "po": { "number": po_number, "name": po_name }
+  "company": _context.organization.name,
+  "number": _context.invoice.invoiceNumber,
+  "date": $formatDate(_context.invoice.issueDate),
+  "received": $formatDate(_context.invoice.receivedDate),
+  "notes": _context.invoice.comments,
+  "subtotal": $formatCurrency(_context.invoice.subTotal),
+  "tax": $formatCurrency(_context.invoice.totalTax),
+  "total": $formatCurrency(_context.invoice.totalAmount),
+  "excess": $formatCurrency(_context.invoice.excessAmount),
+  "po": {
+    "number": _context.purchase_order.purchaseOrderNumber,
+    "name": _context.purchase_order.name
+  }
 }`,
     targetSchema: {
       type: 'object',
@@ -230,18 +254,18 @@ export const TRANSFORM_DEFAULTS: Record<DocumentType, TransformDefault> = {
 
   bill: {
     jsonataRules: `{
-  "company": company_name,
-  "number": bill_number,
-  "invoice_number": invoice_number,
-  "po_number": po_number,
-  "issue_date": issue_date,
-  "received_date": received_date,
-  "due_date": due_date,
-  "payment_date": payment_date,
-  "notes": comments,
-  "subtotal": sub_total,
-  "tax": total_tax,
-  "total": total_amount
+  "company": _context.organization.name,
+  "number": _context.bill.billNumber,
+  "invoice_number": _context.invoice.invoiceNumber,
+  "po_number": _context.purchase_order.purchaseOrderNumber,
+  "issue_date": $formatDate(_context.bill.issueDate),
+  "received_date": $formatDate(_context.bill.receivedDate),
+  "due_date": $formatDate(_context.bill.dueDate),
+  "payment_date": $formatDate(_context.bill.paymentDate),
+  "notes": _context.bill.comments,
+  "subtotal": $formatCurrency(_context.bill.subTotal),
+  "tax": $formatCurrency(_context.bill.totalTax),
+  "total": $formatCurrency(_context.bill.totalAmount)
 }`,
     targetSchema: {
       type: 'object',
@@ -259,22 +283,27 @@ export const TRANSFORM_DEFAULTS: Record<DocumentType, TransformDefault> = {
 
   job_details: {
     jsonataRules: `{
-  "company": company_name,
-  "name": job_name,
-  "reference": job_reference,
-  "status": job_status,
-  "type": job_type,
-  "request_date": request_date,
-  "excess": excess,
-  "make_safe": make_safe_required,
-  "instructions": job_instructions,
-  "address": job_address,
-  "suburb": address_suburb,
-  "state": address_state,
-  "postcode": address_postcode,
-  "claim": { "number": claim_number, "reference": claim_reference, "date_of_loss": date_of_loss, "incident": incident_description },
-  "scope": scope_of_work,
-  "date": report_date
+  "company": _context.organization.name,
+  "name": _context.job.name,
+  "reference": _context.job.externalReference ? _context.job.externalReference : _context.job.externalJobId,
+  "status": _context.job.statusName,
+  "type": _context.job.jobTypeName,
+  "request_date": $formatDate(_context.job.requestDate),
+  "excess": $formatCurrency(_context.job.excess),
+  "make_safe": $yn(_context.job.makeSafeRequired),
+  "instructions": _context.job.jobInstructions,
+  "address": _context.job.address,
+  "suburb": _context.job.addressSuburb,
+  "state": _context.job.addressState,
+  "postcode": _context.job.addressPostcode,
+  "claim": {
+    "number": _context.claim.claimNumber,
+    "reference": _context.claim.externalReference,
+    "date_of_loss": $formatDate(_context.claim.dateOfLoss),
+    "incident": _context.claim.incidentDescription
+  },
+  "scope": _context.job.jobInstructions,
+  "date": $formatDate($now())
 }`,
     targetSchema: {
       type: 'object',
@@ -293,22 +322,27 @@ export const TRANSFORM_DEFAULTS: Record<DocumentType, TransformDefault> = {
 
   scope_of_work: {
     jsonataRules: `{
-  "company": company_name,
-  "name": job_name,
-  "reference": job_reference,
-  "status": job_status,
-  "type": job_type,
-  "request_date": request_date,
-  "excess": excess,
-  "make_safe": make_safe_required,
-  "instructions": job_instructions,
-  "address": job_address,
-  "suburb": address_suburb,
-  "state": address_state,
-  "postcode": address_postcode,
-  "claim": { "number": claim_number, "reference": claim_reference, "date_of_loss": date_of_loss, "incident": incident_description },
-  "scope": scope_of_work,
-  "date": report_date
+  "company": _context.organization.name,
+  "name": _context.job.name,
+  "reference": _context.job.externalReference ? _context.job.externalReference : _context.job.externalJobId,
+  "status": _context.job.statusName,
+  "type": _context.job.jobTypeName,
+  "request_date": $formatDate(_context.job.requestDate),
+  "excess": $formatCurrency(_context.job.excess),
+  "make_safe": $yn(_context.job.makeSafeRequired),
+  "instructions": _context.job.jobInstructions,
+  "address": _context.job.address,
+  "suburb": _context.job.addressSuburb,
+  "state": _context.job.addressState,
+  "postcode": _context.job.addressPostcode,
+  "claim": {
+    "number": _context.claim.claimNumber,
+    "reference": _context.claim.externalReference,
+    "date_of_loss": $formatDate(_context.claim.dateOfLoss),
+    "incident": _context.claim.incidentDescription
+  },
+  "scope": _context.job.jobInstructions,
+  "date": $formatDate($now())
 }`,
     targetSchema: {
       type: 'object',
@@ -327,20 +361,20 @@ export const TRANSFORM_DEFAULTS: Record<DocumentType, TransformDefault> = {
 
   claim: {
     jsonataRules: `{
-  "company": company_name,
-  "number": claim_number,
-  "reference": external_reference,
-  "status": status,
-  "lodgement_date": lodgement_date,
-  "date_of_loss": date_of_loss,
-  "incident": incident_description,
-  "address": address,
-  "policy": { "number": policy_number, "name": policy_name },
-  "abn": abn,
-  "vulnerable": vulnerable_customer,
-  "total_loss": total_loss,
-  "contentious": contentious_claim,
-  "date": report_date
+  "company": _context.organization.name,
+  "number": _context.claim.claimNumber,
+  "reference": _context.claim.externalReference,
+  "status": $str(_context.claim.statusLookupId),
+  "lodgement_date": $formatDate(_context.claim.lodgementDate),
+  "date_of_loss": $formatDate(_context.claim.dateOfLoss),
+  "incident": _context.claim.incidentDescription,
+  "address": _context.claim.address,
+  "policy": { "number": _context.claim.policyNumber, "name": _context.claim.policyName },
+  "abn": _context.claim.abn,
+  "vulnerable": $yn(_context.claim.vulnerableCustomer),
+  "total_loss": $yn(_context.claim.totalLoss),
+  "contentious": $yn(_context.claim.contentiousClaim),
+  "date": $formatDate($now())
 }`,
     targetSchema: {
       type: 'object',
@@ -485,13 +519,89 @@ export const TRANSFORM_DEFAULTS: Record<DocumentType, TransformDefault> = {
   },
 
   assessment: {
-    jsonataRules: `$`,
-    targetSchema: { type: 'object', additionalProperties: true, description: 'Assessment has ~50 fields; passthrough by default — customize as needed.' },
+    jsonataRules: `(
+  $a := _context.assessment;
+  $job := _context.job;
+  $att := $a.attendance ? $a.attendance : {};
+  $bld := $a.building ? $a.building : {};
+  $hab := $a.habitability ? $a.habitability : {};
+  $haz := $a.hazards ? $a.hazards : {};
+  $dmg := $a.damage ? $a.damage : {};
+  $ms := $a.makeSafe ? $a.makeSafe : {};
+  $ta := $a.temporaryAccommodation ? $a.temporaryAccommodation : {};
+  $rec := $a.recommendation ? $a.recommendation : {};
+  $details := $haz.hazardDetails ? $haz.hazardDetails : {};
+  {
+    "company_name": _context.organization.name,
+    "assessment_name": $a.name,
+    "status": $a.status,
+    "job_name": $job.name,
+    "job_reference": $job.externalReference,
+    "claim_recommendation": $str($rec.claimRecommendation),
+    "design_type": $str($bld.designType),
+    "construction": $str($bld.constructionType),
+    "roof_type": $str($bld.roofType),
+    "building_type": $str($bld.buildingType),
+    "make_safe": $yn($ms.makeSafeRequired),
+    "make_safe_type": $str($ms.makeSafeType),
+    "squares": $str($bld.squares),
+    "building_age": $str($bld.estimatedBuildYear),
+    "square_metres": $str($bld.houseM2),
+    "date_booked": $formatDate($att.siteAttendanceDate),
+    "overall_condition_acceptable": $yn($bld.propertyCondition),
+    "iag_inspection_required": $yn($att.insuranceAssessorAttended),
+    "make_safe_completion_date": $formatDate($ms.dateMakeSafeCompleted),
+    "main_roof_damage": $yn($bld.mainHouseRoofDamage),
+    "date_main_roof_repaired": $formatDate($ms.dateMainRoofRepaired),
+    "habitable": $yn($hab.habitable),
+    "mould": $contains($lowercase($str($haz.environmentalHazards)), "mould") ? "Yes" : "No",
+    "asbestos_on_site": $contains($lowercase($str($haz.safetyHazards)), "asbestos") ? "Yes" : "No",
+    "detached_garage": $contains($str($bld.additionalStructures), "Garage") ? "Yes" : "No",
+    "sheds": $contains($str($bld.additionalStructures), "Shed") ? "Yes" : "No",
+    "swimming_pool": $contains($str($bld.additionalStructures), "Pool") ? "Yes" : "No",
+    "detached_granny_flat": $contains($str($bld.additionalStructures), "Granny") ? "Yes" : "No",
+    "damage_caused_by_listed_event": $str($dmg.hasDamageCoveredByPolicy),
+    "hazard_pool_fencing": $yn($details.poolFencing.flagged),
+    "hazard_pool_fencing_comment": $str($details.poolFencing.comment),
+    "hazard_electrical_gas": $yn($details.electrical.flagged),
+    "hazard_electrical_gas_comment": $str($details.electrical.comment),
+    "hazard_sewerage": $yn($details.sewerage.flagged),
+    "hazard_sewerage_comment": $str($details.sewerage.comment),
+    "hazard_structural": $yn($details.structural.flagged),
+    "hazard_structural_comment": $str($details.structural.comment),
+    "hazard_other": $str($details.other) ? $str($details.other) : $str($haz.safetyHazards),
+    "temp_accom_required_immediately": $yn($ta.requiredImmediately),
+    "temp_accom_immediate_estimate_days": $str($ta.immediateEstimateDays),
+    "temp_repairs_to_make_livable": $str($ta.tempRepairsToMakeLivable),
+    "temp_accom_required_during_repairs": $yn($ta.requiredDuringRepairs),
+    "temp_accom_repairs_estimate_days": $str($ta.repairsEstimateDays),
+    "work_while_in_accommodation": $str($ta.workWhileInAccommodation),
+    "client_discussion": $str($rec.clientDiscussions),
+    "resultant_damage": $str($dmg.damageObserved),
+    "cause_of_damage": $str($dmg.causeOfDamage),
+    "maintenance_related_issues": $str($dmg.maintenanceDefectIssues),
+    "comments": $str($rec.specialNotes),
+    "variances_of_scope": $str($rec.conclusion),
+    "created_at": $formatDate($a.createdAt),
+    "report_date": $formatDate($now())
+  }
+)`,
+    targetSchema: { type: 'object', additionalProperties: true, description: 'Assessment merge fields derived from _context' },
   },
 
   report: {
-    jsonataRules: `$`,
-    targetSchema: { type: 'object', additionalProperties: true, description: 'Report has dynamic data_* keys; passthrough by default.' },
+    jsonataRules: `{
+  "company_name": _context.organization.name,
+  "title": _context.report.title,
+  "reference": _context.report.reference,
+  "report_data": _context.report.reportData,
+  "report_meta": _context.report.reportMeta,
+  "created_at": $formatDate(_context.report.createdAt),
+  "report_date": $formatDate($now()),
+  "job": _context.job,
+  "claim": _context.claim
+}`,
+    targetSchema: { type: 'object', additionalProperties: true, description: 'Report merge fields from _context' },
   },
 
   // ── List reports ─────────────────────────────────────────────────────

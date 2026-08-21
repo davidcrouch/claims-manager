@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, isNull, desc, asc, sql, inArray, aliasedTable, getTableColumns } from 'drizzle-orm';
+import { eq, and, isNull, desc, asc, sql, inArray, or, aliasedTable, getTableColumns, ilike } from 'drizzle-orm';
+import { normalizeListJobIds, parseCsvFilterValues } from '../../common/list-job-filter';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { quotes, lookupValues, users } from '../schema';
 
@@ -56,12 +57,15 @@ export class QuotesRepository {
     page?: number;
     limit?: number;
     jobId?: string;
+    jobIds?: string[];
     /** Comma-separated status lookup IDs. */
     status?: string;
     /** Comma-separated quote type lookup IDs. */
     quoteType?: string;
     /** @deprecated Use status. */
     statusId?: string;
+    assignedToUserIds?: string;
+    search?: string;
     sort?: string;
   }): Promise<{ data: QuoteViewRow[]; total: number }> {
     const page = params.page ?? 1;
@@ -75,8 +79,13 @@ export class QuotesRepository {
       eq(quotes.tenantId, params.tenantId),
       isNull(quotes.deletedAt),
     );
-    if (params.jobId) {
-      whereClause = and(whereClause, eq(quotes.jobId, params.jobId));
+    const jobIds = normalizeListJobIds({ jobId: params.jobId, jobIds: params.jobIds });
+    if (jobIds) {
+      if (jobIds.length === 0) return { data: [], total: 0 };
+      whereClause = and(
+        whereClause,
+        jobIds.length === 1 ? eq(quotes.jobId, jobIds[0]) : inArray(quotes.jobId, jobIds),
+      );
     }
     const statusIds = (params.status ?? params.statusId)?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
     const quoteTypeIds = params.quoteType?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
@@ -88,6 +97,36 @@ export class QuotesRepository {
     }
     if (quoteTypeIds.length > 0) {
       whereClause = and(whereClause, inArray(quotes.quoteTypeLookupId, quoteTypeIds));
+    }
+
+    if (params.search?.trim()) {
+      const term = `%${params.search.trim()}%`;
+      whereClause = and(
+        whereClause,
+        or(
+          ilike(quotes.quoteNumber, term),
+          ilike(quotes.name, term),
+          ilike(quotes.reference, term),
+          ilike(quotes.note, term),
+        )!,
+      );
+    }
+
+    const assigneeIds = parseCsvFilterValues(params.assignedToUserIds);
+    if (assigneeIds) {
+      if (assigneeIds.length === 0) return { data: [], total: 0 };
+      const includeBlank = assigneeIds.includes('__blank__');
+      const realIds = assigneeIds.filter((id) => id !== '__blank__');
+      if (includeBlank && realIds.length > 0) {
+        whereClause = and(
+          whereClause,
+          or(isNull(quotes.assignedToUserId), inArray(quotes.assignedToUserId, realIds))!,
+        );
+      } else if (includeBlank) {
+        whereClause = and(whereClause, isNull(quotes.assignedToUserId));
+      } else {
+        whereClause = and(whereClause, inArray(quotes.assignedToUserId, realIds));
+      }
     }
 
     let orderBy;
@@ -134,6 +173,27 @@ export class QuotesRepository {
 
     const total = countResult[0]?.count ?? 0;
     return { data: data as QuoteViewRow[], total };
+  }
+
+  async findFilterAssignees(params: {
+    tenantId: string;
+  }): Promise<{ id: string; name: string }[]> {
+    const rows = await this.db
+      .selectDistinct({ id: quotes.assignedToUserId, name: users.name })
+      .from(quotes)
+      .leftJoin(users, assigneeJoinOn)
+      .where(
+        and(
+          eq(quotes.tenantId, params.tenantId),
+          isNull(quotes.deletedAt),
+          sql`${quotes.assignedToUserId} IS NOT NULL AND btrim(${quotes.assignedToUserId}) <> ''`,
+        ),
+      )
+      .orderBy(asc(users.name));
+
+    return rows
+      .filter((r): r is { id: string; name: string | null } => !!r.id)
+      .map((r) => ({ id: r.id, name: (r.name ?? '').trim() || r.id }));
   }
 
   async findOne(params: {

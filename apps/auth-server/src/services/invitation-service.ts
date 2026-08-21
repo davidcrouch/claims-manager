@@ -13,6 +13,7 @@ import {
 } from '../db/services/index.js';
 import { assignUserRoles } from '../db/services/user-role-assignments.js';
 import { sendInviteEmail } from './email/index.js';
+import { triggerEnsureUserContact } from './api-seed-client.js';
 import type { AccessContext } from '../schemas/index.js';
 
 const baseLogger = createLogger('auth-server:invitation', LoggerType.NODEJS);
@@ -203,6 +204,17 @@ export async function inviteUser(params: InviteUserParams): Promise<InviteUserRe
     'auth-server:invitation:inviteUser - Invitation created successfully',
   );
 
+  try {
+    triggerEnsureUserContact({
+      tenantId: organizationId,
+      email,
+      firstName: givenName,
+      lastName: familyName,
+    });
+  } catch {
+    // non-fatal
+  }
+
   return {
     userId,
     email,
@@ -290,6 +302,18 @@ export async function acceptInvite(params: {
   await activateUserAndMembership(userId, organizationId);
   await redis.del(`${INVITE_TOKEN_PREFIX}${token}`);
 
+  try {
+    triggerEnsureUserContact({
+      tenantId: organizationId,
+      email,
+      firstName: resolvedGiven || undefined,
+      lastName: resolvedFamily || undefined,
+      name: displayName || undefined,
+    });
+  } catch {
+    // non-fatal
+  }
+
   log.info(
     { email, userId },
     'auth-server:invitation:acceptInvite - Invite accepted, user activated',
@@ -319,6 +343,17 @@ export async function acceptInviteWithoutPassword(
 
   await activateUserAndMembership(userId, organizationId);
   await redis.del(`${INVITE_TOKEN_PREFIX}${token}`);
+
+  try {
+    triggerEnsureUserContact({
+      tenantId: organizationId,
+      email,
+      firstName: tokenData.givenName,
+      lastName: tokenData.familyName,
+    });
+  } catch {
+    // non-fatal
+  }
 
   log.info(
     { email, userId },

@@ -1,4 +1,4 @@
-import { IsEnum, IsOptional, IsUUID } from 'class-validator';
+import { IsArray, IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { DOCUMENT_TYPES, type DocumentType } from '../types/document-types';
 
@@ -38,4 +38,14 @@ export class GenerateDocumentDto {
   @IsOptional()
   @IsUUID()
   destinationCategoryId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Related-entity slugs to include in the data context for this generation (overrides tenant defaults).',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  enabledSlugs?: string[];
 }

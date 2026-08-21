@@ -12,6 +12,7 @@ export async function fetchReportsAction(params: {
   claimId?: string;
   status?: string;
   reportTypeId?: string;
+  search?: string;
   sort?: string;
 }): Promise<PaginatedResponse<Report> | null> {
   const session = await getSession();
@@ -28,6 +29,7 @@ export async function fetchReportsAction(params: {
     claimId: params.claimId,
     status: params.status,
     reportTypeId: params.reportTypeId,
+    search: params.search,
     sort: params.sort,
   });
 }

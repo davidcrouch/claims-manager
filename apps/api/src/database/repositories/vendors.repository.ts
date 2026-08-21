@@ -1,12 +1,30 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, or, ilike, asc, sql, getTableColumns } from 'drizzle-orm';
+import { eq, and, or, ilike, asc, desc, isNull, isNotNull, sql, getTableColumns } from 'drizzle-orm';
 import { DRIZZLE } from '../drizzle.module';
 import type { DrizzleDB, DrizzleDbOrTx } from '../drizzle.module';
 import { vendors, organizations } from '../schema';
 
 export type VendorRow = typeof vendors.$inferSelect;
 export type VendorInsert = typeof vendors.$inferInsert;
+
+function buildVendorsOrderBy(sort?: string) {
+  switch (sort) {
+    case 'name_desc':
+      return [desc(vendors.name)];
+    case 'created_at_desc':
+      return [desc(vendors.createdAt)];
+    case 'created_at_asc':
+      return [asc(vendors.createdAt)];
+    case 'updated_at_desc':
+      return [desc(vendors.updatedAt)];
+    case 'updated_at_asc':
+      return [asc(vendors.updatedAt)];
+    case 'name_asc':
+    default:
+      return [asc(vendors.name)];
+  }
+}
 
 @Injectable()
 export class VendorsRepository {
@@ -17,29 +35,37 @@ export class VendorsRepository {
     page?: number;
     limit?: number;
     search?: string;
+    /** When true/false, filter by presence of externalReference (linked to provider). */
+    linked?: boolean;
+    sort?: string;
   }): Promise<{ data: VendorRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
     const skip = (page - 1) * limit;
 
-    const searchPattern = params.search ? `%${params.search}%` : null;
-    const whereClause = searchPattern
-      ? and(
-          eq(vendors.tenantId, params.tenantId),
-          eq(vendors.isActive, true),
-          or(
-            ilike(vendors.name, searchPattern),
-            ilike(vendors.externalReference, searchPattern),
-          )!,
-        )
-      : and(eq(vendors.tenantId, params.tenantId), eq(vendors.isActive, true));
+    const searchPattern = params.search?.trim() ? `%${params.search.trim()}%` : null;
+    let whereClause = and(eq(vendors.tenantId, params.tenantId), eq(vendors.isActive, true));
+    if (searchPattern) {
+      whereClause = and(
+        whereClause,
+        or(
+          ilike(vendors.name, searchPattern),
+          ilike(vendors.externalReference, searchPattern),
+        )!,
+      );
+    }
+    if (params.linked === true) {
+      whereClause = and(whereClause, isNotNull(vendors.externalReference));
+    } else if (params.linked === false) {
+      whereClause = and(whereClause, isNull(vendors.externalReference));
+    }
 
     const [data, countResult] = await Promise.all([
       this.db
         .select()
         .from(vendors)
         .where(whereClause)
-        .orderBy(asc(vendors.name))
+        .orderBy(...buildVendorsOrderBy(params.sort))
         .limit(limit)
         .offset(skip),
       this.db

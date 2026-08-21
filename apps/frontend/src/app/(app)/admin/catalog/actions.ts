@@ -38,10 +38,59 @@ export async function fetchCatalogAction(id: string) {
   }
 }
 
+export async function fetchCatalogItemAction(id: string) {
+  const api = await getApi();
+  if (!api) return null;
+  try {
+    return api.getCatalogItem(id);
+  } catch (err) {
+    console.error('[catalog/actions.fetchCatalogItemAction]', err);
+    return null;
+  }
+}
+
+export async function fetchCatalogFormSupportAction() {
+  const api = await getApi();
+  if (!api) {
+    return { types: [], categories: [], unitTypes: [] as Array<{ id: string; name?: string; externalReference?: string }> };
+  }
+  try {
+    const [types, categories, unitTypes] = await Promise.all([
+      api.getCatalogTypes().catch(() => []),
+      api.getCatalogCategoriesTree().catch(() => []),
+      api.getLookupsByDomain('unit_type').catch(() => []),
+    ]);
+    return { types, categories, unitTypes };
+  } catch (err) {
+    console.error('[catalog/actions.fetchCatalogFormSupportAction]', err);
+    return { types: [], categories: [], unitTypes: [] };
+  }
+}
+
+export async function fetchCatalogItemForBomAction(itemId: string) {
+  const api = await getApi();
+  if (!api) return null;
+  try {
+    const [item, components] = await Promise.all([
+      api.getCatalogItem(itemId),
+      api.getCatalogItemComponents(itemId),
+    ]);
+    const candidates = await api.getCatalogItems({
+      catalogId: item.catalogId ?? undefined,
+      limit: 200,
+    });
+    return { item, components, candidates: candidates.data ?? [] };
+  } catch (err) {
+    console.error('[catalog/actions.fetchCatalogItemForBomAction]', err);
+    return null;
+  }
+}
+
 export async function createCatalogAction(body: {
   name: string;
   description?: string;
   type: string;
+  isDefault?: boolean;
 }): Promise<{ success: boolean; id?: string; error?: string }> {
   const api = await getApi();
   if (!api) return { success: false, error: 'Not authenticated' };
@@ -75,6 +124,26 @@ export async function updateCatalogAction(
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to update catalogue',
+    };
+  }
+}
+
+export async function deleteCatalogAction(
+  id: string,
+): Promise<{ success: boolean; error?: string }> {
+  const PREFIX = 'catalog/actions.deleteCatalogAction';
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+
+  try {
+    await api.deleteCatalog(id);
+    revalidatePath('/admin/catalog');
+    return { success: true };
+  } catch (err) {
+    console.error(`[${PREFIX}]`, err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to delete catalogue',
     };
   }
 }
@@ -133,6 +202,7 @@ export async function importCatalogCsvAction(
   try {
     const result = await api.importCatalogCsv(csv, catalogId);
     revalidatePath('/admin/catalog');
+    if (catalogId) revalidatePath(`/admin/catalog/${catalogId}`);
     return { success: true, result };
   } catch (err) {
     console.error('[catalog/actions.importCatalogCsvAction]', err);
@@ -160,6 +230,51 @@ export async function createCatalogCategoryAction(body: {
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to create category',
+    };
+  }
+}
+
+export async function updateCatalogCategoryAction(
+  id: string,
+  body: {
+    code?: string;
+    name?: string;
+    parentCategoryId?: string | null;
+    sortIndex?: number;
+    isActive?: boolean;
+  },
+): Promise<{ success: boolean; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+
+  try {
+    await api.updateCatalogCategory(id, body);
+    revalidatePath('/admin/catalog');
+    return { success: true };
+  } catch (err) {
+    console.error('[catalog/actions.updateCatalogCategoryAction]', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to update category',
+    };
+  }
+}
+
+export async function deleteCatalogCategoryAction(
+  id: string,
+): Promise<{ success: boolean; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+
+  try {
+    await api.deleteCatalogCategory(id);
+    revalidatePath('/admin/catalog');
+    return { success: true };
+  } catch (err) {
+    console.error('[catalog/actions.deleteCatalogCategoryAction]', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to deactivate category',
     };
   }
 }
@@ -262,22 +377,48 @@ export interface CatalogGroupedCategory {
   scopes: CatalogGroupedScope[];
 }
 
-export async function getCatalogGroupedItemsAction(catalogId: string): Promise<{
+export async function getCatalogGroupedItemsAction(params: {
+  catalogId: string;
+  search?: string;
+  categoryIds?: string[];
+  page?: number;
+  limit?: number;
+}): Promise<{
   success: boolean;
   groups?: CatalogGroupedCategory[];
+  total?: number;
+  page?: number;
+  limit?: number;
+  groupSummaries?: Array<{ id: string; label: string; count: number }>;
   error?: string;
 }> {
   const PREFIX = 'catalog/actions.getCatalogGroupedItemsAction';
+  const catalogId = params.catalogId;
+  const page = Math.max(1, params.page ?? 1);
+  const limit = Math.min(params.limit ?? 100, 100);
   const api = await getApi();
   if (!api) return { success: false, error: 'Not authenticated' };
 
   try {
-    const [allItems, categories, unitTypes, itemTypes] = await Promise.all([
-      api.getCatalogItems({ catalogId, limit: 5000 }),
+    const noCategories = Array.isArray(params.categoryIds) && params.categoryIds.length === 0;
+    const [pageItems, categories, unitTypes, itemTypes, categoryCounts] = await Promise.all([
+      noCategories
+        ? Promise.resolve({ data: [], total: 0 })
+        : api.getCatalogItems({
+            catalogId,
+            q: params.search || undefined,
+            categoryIds: params.categoryIds,
+            page,
+            limit,
+            sort: 'category_asc',
+          }),
       api.getCatalogCategoriesTree(),
       api.getLookupsByDomain('unit_type'),
       api.getCatalogTypes(),
+      api.getCatalogCategoryCounts(catalogId, { q: params.search || undefined }),
     ]);
+
+    const allItems = pageItems;
 
     const unitTypeMap = new Map(
       unitTypes.map((u) => [u.id, { id: u.id, name: u.name, externalReference: u.externalReference }]),
@@ -311,30 +452,36 @@ export async function getCatalogGroupedItemsAction(catalogId: string): Promise<{
       }),
     );
 
+    /** Items that appear under a scope/assembly BOM must not also list at category root. */
+    const nestedComponentIds = new Set<string>();
+
     for (const { assemblyId, components } of componentResults) {
       assemblyComponents.set(
         assemblyId,
-        components.map((c) => ({
-          id: c.id,
-          name: c.component?.name ?? '',
-          component: c.component?.code ?? '',
-          description: c.component?.description ?? '',
-          kind: (c.component?.kind ?? 'primitive') as 'primitive' | 'assembly' | 'scope',
-          type: (c.component?.typeId ? itemTypeMap.get(c.component.typeId) : undefined) ?? '',
-          category: '',
-          subCategory: null,
-          quantity: parseFloat(c.quantity) || 1,
-          unitCost: parseFloat(c.resolvedUnitCost ?? c.component?.unitCost ?? '0') || 0,
-          buyCost: 0,
-          markupType: c.component?.markupType ?? 'percentage',
-          markupValue: parseFloat(c.component?.markupValue ?? '0') || 0,
-          tax: parseFloat(c.component?.taxRate ?? '0') || 0,
-          unitType: c.component?.unitTypeLookupId
-            ? unitTypeMap.get(c.component.unitTypeLookupId) ?? null
-            : null,
-          catalogItemId: c.componentId,
-          code: c.component?.code ?? '',
-        })),
+        components.map((c) => {
+          if (c.componentId) nestedComponentIds.add(c.componentId);
+          return {
+            id: c.id,
+            name: c.component?.name ?? '',
+            component: c.component?.code ?? '',
+            description: c.component?.description ?? '',
+            kind: (c.component?.kind ?? 'primitive') as 'primitive' | 'assembly' | 'scope',
+            type: (c.component?.typeId ? itemTypeMap.get(c.component.typeId) : undefined) ?? '',
+            category: '',
+            subCategory: null,
+            quantity: parseFloat(c.quantity) || 1,
+            unitCost: parseFloat(c.resolvedUnitCost ?? c.component?.unitCost ?? '0') || 0,
+            buyCost: 0,
+            markupType: c.component?.markupType ?? 'percentage',
+            markupValue: parseFloat(c.component?.markupValue ?? '0') || 0,
+            tax: parseFloat(c.component?.taxRate ?? '0') || 0,
+            unitType: c.component?.unitTypeLookupId
+              ? unitTypeMap.get(c.component.unitTypeLookupId) ?? null
+              : null,
+            catalogItemId: c.componentId,
+            code: c.component?.code ?? '',
+          };
+        }),
       );
     }
 
@@ -342,6 +489,9 @@ export async function getCatalogGroupedItemsAction(catalogId: string): Promise<{
     const UNCATEGORIZED = '__uncategorized__';
 
     for (const item of allItems.data) {
+      // BOM children render under their parent scope/assembly only
+      if (nestedComponentIds.has(item.id)) continue;
+
       const catId = item.categoryId ?? UNCATEGORIZED;
       if (!grouped.has(catId)) grouped.set(catId, { items: [], assemblies: [], scopes: [] });
       const bucket = grouped.get(catId)!;
@@ -433,7 +583,23 @@ export async function getCatalogGroupedItemsAction(catalogId: string): Promise<{
       });
     }
 
-    return { success: true, groups };
+    const groupSummaries = categoryCounts.map((row) => {
+      const id = row.categoryId ?? UNCATEGORIZED;
+      const name =
+        id === UNCATEGORIZED
+          ? 'Uncategorized'
+          : categoryMap.get(id)?.name ?? 'Unknown Category';
+      return { id, label: name, count: row.count };
+    });
+
+    return {
+      success: true,
+      groups,
+      total: pageItems.total,
+      page,
+      limit,
+      groupSummaries,
+    };
   } catch (err) {
     console.error(`[${PREFIX}]`, err);
     return {

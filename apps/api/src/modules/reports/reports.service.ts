@@ -29,6 +29,7 @@ export class ReportsService {
     claimId?: string;
     status?: string;
     reportTypeId?: string;
+    search?: string;
     sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
@@ -40,6 +41,7 @@ export class ReportsService {
       claimId: params.claimId,
       status: params.status,
       reportTypeId: params.reportTypeId,
+      search: params.search,
       sort: params.sort,
     });
   }

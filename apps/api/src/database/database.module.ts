@@ -53,8 +53,11 @@ import {
   AiUserMemoryRepository,
   AssessmentsRepository,
   DocumentTemplateTransformsRepository,
+  DocumentTemplateDataContextsRepository,
   RfqSendRequestsRepository,
   EmailTemplatesRepository,
+  EntityActivitiesRepository,
+  TaskTypeMappingsRepository,
 } from './repositories';
 
 const repositories = [
@@ -110,8 +113,11 @@ const repositories = [
   AiUserMemoryRepository,
   AssessmentsRepository,
   DocumentTemplateTransformsRepository,
+  DocumentTemplateDataContextsRepository,
   RfqSendRequestsRepository,
   EmailTemplatesRepository,
+  EntityActivitiesRepository,
+  TaskTypeMappingsRepository,
 ];
 
 @Global()

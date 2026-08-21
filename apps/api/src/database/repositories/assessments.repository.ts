@@ -1,5 +1,6 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, desc, isNull, sql, inArray } from 'drizzle-orm';
+import { eq, and, desc, isNull, sql, inArray, ilike } from 'drizzle-orm';
+import { normalizeListJobIds } from '../../common/list-job-filter';
 import { DRIZZLE, type DrizzleDB } from '../drizzle.module';
 import { assessments } from '../schema';
 
@@ -16,6 +17,8 @@ export class AssessmentsRepository {
     limit?: number;
     status?: string;
     jobId?: string;
+    jobIds?: string[];
+    search?: string;
   }): Promise<{ data: AssessmentRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
@@ -31,8 +34,20 @@ export class AssessmentsRepository {
       whereClause = and(whereClause, inArray(assessments.status, statuses));
     }
 
-    if (params.jobId) {
-      whereClause = and(whereClause, eq(assessments.jobId, params.jobId));
+    const jobIds = normalizeListJobIds({ jobId: params.jobId, jobIds: params.jobIds });
+    if (jobIds) {
+      if (jobIds.length === 0) return { data: [], total: 0 };
+      whereClause = and(
+        whereClause,
+        jobIds.length === 1
+          ? eq(assessments.jobId, jobIds[0])
+          : inArray(assessments.jobId, jobIds),
+      );
+    }
+
+    if (params.search?.trim()) {
+      const term = `%${params.search.trim()}%`;
+      whereClause = and(whereClause, ilike(assessments.name, term));
     }
 
     const [data, countResult] = await Promise.all([

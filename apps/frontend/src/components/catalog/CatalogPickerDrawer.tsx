@@ -14,6 +14,7 @@ import type { Catalog, CatalogItem, CatalogType } from '@/types/api';
 import {
   setCatalogDragData,
   setGroupLabelDragData,
+  clearCatalogDrag,
   type CatalogDragPayload,
   type GroupLabelDragPayload,
 } from '@/components/catalog/catalog-drag';
@@ -175,9 +176,11 @@ function ItemsTab({ open, catalogType }: { open: boolean; catalogType?: CatalogT
         sorted = list;
       }
       setCatalogs(sorted);
-      // Default to all catalogues so assemblies in internal catalogues are visible
-      // alongside crunchwork primitives. Only auto-select when there is a single catalogue.
-      setSelectedCatalogId(sorted.length === 1 ? sorted[0].id : '');
+      // Prefer the tenant default catalogue when the drawer opens.
+      const defaultId = sorted.find((c) => c.isDefault)?.id;
+      setSelectedCatalogId(
+        defaultId ?? (sorted.length === 1 ? sorted[0].id : ''),
+      );
       setCatalogsReady(true);
     })();
   }, [open, catalogType]);
@@ -430,14 +433,26 @@ export function CatalogPickerDrawer({ open, onOpenChange, catalogType }: Catalog
       setIsDragging(false);
       return;
     }
-    const onStart = () => setIsDragging(true);
-    const onEnd = () => setIsDragging(false);
+    const onStart = () => {
+      // Sync: disable outside-click layer before React re-renders so it cannot
+      // swallow dragover/drop aimed at the Take Off underneath.
+      const overlay = document.querySelector('[data-catalog-outside-click]');
+      if (overlay instanceof HTMLElement) overlay.style.pointerEvents = 'none';
+      setIsDragging(true);
+    };
+    const onEnd = () => {
+      const overlay = document.querySelector('[data-catalog-outside-click]');
+      if (overlay instanceof HTMLElement) overlay.style.pointerEvents = '';
+      setIsDragging(false);
+      clearCatalogDrag();
+    };
     document.addEventListener('dragstart', onStart);
     document.addEventListener('dragend', onEnd);
     return () => {
       document.removeEventListener('dragstart', onStart);
       document.removeEventListener('dragend', onEnd);
       setIsDragging(false);
+      clearCatalogDrag();
     };
   }, [open]);
 
@@ -507,6 +522,7 @@ export function CatalogPickerDrawer({ open, onOpenChange, catalogType }: Catalog
               cannot intercept drag events passing to drop targets below */}
           {!pinned && !isDragging && (
             <div
+              data-catalog-outside-click=""
               className="absolute inset-0 pointer-events-auto cursor-default"
               onClick={() => onOpenChange(false)}
             />

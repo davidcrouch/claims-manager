@@ -16,6 +16,7 @@ import { DocumentsService } from '../filesystem/documents.service';
 import { TemplateRegistryService } from '../document-generation/services/template-registry.service';
 import { seedCatalogDevForTenant } from '../../database/seeds/entries/catalog-dev.seed';
 import { seedLookupsForTenant } from '../../database/seeds/entries/lookups.seed';
+import { seedTaskTypeMappingsForTenant } from '../../database/seeds/entries/task-type-mappings.seed';
 import { seedMcpForTenant } from '../../database/seeds/entries/mcp.seed';
 import { seedAssessmentSkillsForTenant } from '../../database/seeds/entries/assessment-skills.seed';
 import filesystemDefaultSeed from '../../database/seeds/entries/filesystem-default.seed';
@@ -495,6 +496,7 @@ export class ProvisioningService {
     };
 
     await seedLookupsForTenant({ db: this.db, tenantId, logger });
+    await seedTaskTypeMappingsForTenant({ db: this.db, tenantId, logger });
   }
 
   private async stepSeedMcp(tenantId: string): Promise<void> {

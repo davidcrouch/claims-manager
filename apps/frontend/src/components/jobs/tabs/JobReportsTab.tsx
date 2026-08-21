@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -8,11 +8,13 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ReportFormDrawer } from '@/components/forms/ReportFormDrawer';
 import { fetchJobReportsAction } from '@/app/(app)/jobs/[id]/actions';
 import {
-  isArchivedStatus,
   compareDates,
   compareValues,
   formatDate,
   commitColumnFilterSelection,
+  columnFilterToIdsParam,
+  statusIdsForArchiveListTab,
+  mergeStatusParamWithTab,
   ValueFilterMenu,
   SortableColumnHeader,
   TableEmptyRow,
@@ -54,11 +56,15 @@ export function JobReportsTab({
   claimId,
   drawerOpen,
   onDrawerOpenChange,
+  statusOptions = [],
+  reportTypes = [],
 }: {
   jobId: string;
   claimId?: string | null;
   drawerOpen: boolean;
   onDrawerOpenChange: (open: boolean) => void;
+  statusOptions?: Array<{ id: string; name?: string }>;
+  reportTypes?: Array<{ id: string; name?: string }>;
 }) {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,23 +80,71 @@ export function JobReportsTab({
     field: 'updated_at',
     order: 'desc',
   });
+  const lastFetchKeyRef = useRef<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await fetchJobReportsAction(jobId);
-      setReports(data ?? []);
-    } finally {
-      setLoading(false);
-    }
-  }, [jobId]);
+  const normalizedStatuses = useMemo(
+    () =>
+      statusOptions.map((s) => ({
+        id: s.id,
+        name: s.name?.trim() || 'Unknown',
+      })),
+    [statusOptions],
+  );
+  const normalizedTypes = useMemo(
+    () =>
+      reportTypes.map((t) => ({
+        id: t.id,
+        name: t.name?.trim() || 'Unknown',
+      })),
+    [reportTypes],
+  );
 
-  useEffect(() => { load(); }, [load]);
+  const tabStatusIds = useMemo(
+    () => statusIdsForArchiveListTab(tab, normalizedStatuses),
+    [tab, normalizedStatuses],
+  );
+  const statusParam = useMemo(
+    () =>
+      mergeStatusParamWithTab(
+        columnFilterToIdsParam(statusFilterActive, statusFilter, normalizedStatuses),
+        tabStatusIds,
+      ),
+    [statusFilterActive, statusFilter, normalizedStatuses, tabStatusIds],
+  );
+  const reportTypeParam = useMemo(
+    () => columnFilterToIdsParam(typeFilterActive, typeFilter, normalizedTypes),
+    [typeFilterActive, typeFilter, normalizedTypes],
+  );
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
   }, [search]);
+
+  useEffect(() => {
+    const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
+    const typeKey = reportTypeParam === null ? '__none__' : (reportTypeParam ?? '');
+    const fetchKey = `${jobId}|${tab}|${debouncedSearch}|${statusKey}|${typeKey}`;
+    if (lastFetchKeyRef.current === fetchKey) return;
+    lastFetchKeyRef.current = fetchKey;
+
+    if (statusParam === null || reportTypeParam === null) {
+      setReports([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    fetchJobReportsAction(jobId, {
+      search: debouncedSearch || undefined,
+      status: statusParam,
+      reportTypeId: reportTypeParam,
+      sort: 'updated_at_desc',
+      limit: 100,
+    })
+      .then((data) => setReports(data ?? []))
+      .finally(() => setLoading(false));
+  }, [jobId, tab, debouncedSearch, statusParam, reportTypeParam]);
 
   const handleColumnSort = (field: ReportSortField) => {
     setColumnSort((prev) => {
@@ -99,23 +153,21 @@ export function JobReportsTab({
     });
   };
 
-  const uniqueTypes = useMemo(() => {
-    const names = new Set<string>();
-    for (const r of reports) {
-      const n = r.reportType?.name?.trim();
-      if (n) names.add(n);
-    }
-    return [...names].sort((a, b) => a.localeCompare(b));
-  }, [reports]);
+  const uniqueTypes = useMemo(
+    () =>
+      [...new Set(normalizedTypes.map((t) => t.name.trim()).filter(Boolean))].sort((a, b) =>
+        a.localeCompare(b),
+      ),
+    [normalizedTypes],
+  );
 
-  const uniqueStatuses = useMemo(() => {
-    const names = new Set<string>();
-    for (const r of reports) {
-      const n = r.status?.name?.trim();
-      if (n) names.add(n);
-    }
-    return [...names].sort((a, b) => a.localeCompare(b));
-  }, [reports]);
+  const uniqueStatuses = useMemo(
+    () =>
+      [...new Set(normalizedStatuses.map((s) => s.name.trim()).filter(Boolean))].sort((a, b) =>
+        a.localeCompare(b),
+      ),
+    [normalizedStatuses],
+  );
 
   const toggleType = (name: string) => {
     const working = typeFilterActive ? new Set(typeFilter) : new Set(uniqueTypes);
@@ -147,56 +199,30 @@ export function JobReportsTab({
     setTypeFilterActive(committed.active);
   };
 
+  const reload = () => {
+    lastFetchKeyRef.current = null;
+    setLoading(true);
+    fetchJobReportsAction(jobId, {
+      search: debouncedSearch || undefined,
+      status: statusParam ?? undefined,
+      reportTypeId: reportTypeParam ?? undefined,
+      sort: 'updated_at_desc',
+      limit: 100,
+    })
+      .then((data) => setReports(data ?? []))
+      .finally(() => setLoading(false));
+  };
+
   const visibleRows = useMemo(() => {
-    let rows = reports;
-
-    if (tab !== 'all') {
-      rows = rows.filter((r) => {
-        const archived = isArchivedStatus(r.status?.name);
-        return tab === 'archived' ? archived : !archived;
-      });
-    }
-
-    if (statusFilterActive) {
-      if (statusFilter.size === 0) {
-        rows = [];
-      } else {
-        rows = rows.filter((r) => {
-          const n = r.status?.name?.trim();
-          return n ? statusFilter.has(n) : false;
-        });
-      }
-    }
-
-    if (typeFilterActive) {
-      if (typeFilter.size === 0) {
-        rows = [];
-      } else {
-        rows = rows.filter((r) => {
-          const n = r.reportType?.name?.trim();
-          return n ? typeFilter.has(n) : false;
-        });
-      }
-    }
-
-    const query = debouncedSearch.trim().toLowerCase();
-    if (query) {
-      rows = rows.filter((r) => {
-        const title = (r.title ?? '').toLowerCase();
-        const ref = (r.reference ?? '').toLowerCase();
-        return title.includes(query) || ref.includes(query);
-      });
-    }
-
     const isDate = columnSort.field === 'updated_at';
-    return [...rows].sort((a, b) => {
+    return [...reports].sort((a, b) => {
       const aVal = getSortValue(a, columnSort.field);
       const bVal = getSortValue(b, columnSort.field);
       return isDate
         ? compareDates(aVal, bVal, columnSort.order)
         : compareValues(aVal, bVal, columnSort.order);
     });
-  }, [reports, tab, statusFilterActive, statusFilter, typeFilterActive, typeFilter, debouncedSearch, columnSort]);
+  }, [reports, columnSort]);
 
   if (loading) {
     return <p className="text-sm text-slate-400">Loading...</p>;
@@ -254,7 +280,7 @@ export function JobReportsTab({
         open={drawerOpen}
         onOpenChange={(open) => {
           onDrawerOpenChange(open);
-          if (!open) load();
+          if (!open) reload();
         }}
         jobId={jobId}
         claimId={claimId}

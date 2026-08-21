@@ -7,6 +7,7 @@ import { SCENARIO_META, TemplateRegistryService } from './services/template-regi
 import { TemplateEngineService } from './services/template-engine.service';
 import { PdfConverterService } from './services/pdf-converter.service';
 import { TransformService } from './services/transform.service';
+import { DataContextService, hasContextDefinition } from './data-context';
 import { formatDocumentGenerationError } from './utils/format-generation-error';
 import { QuoteMapper } from './data-mappers/quote.mapper';
 import { InvoiceMapper } from './data-mappers/invoice.mapper';
@@ -68,6 +69,7 @@ export class DocumentGenerationService {
     private readonly templateEngine: TemplateEngineService,
     private readonly pdfConverter: PdfConverterService,
     private readonly transformService: TransformService,
+    private readonly dataContextService: DataContextService,
     private readonly gcsStorage: GcsStorageService,
     private readonly generatedDocsRepo: GeneratedDocumentsRepository,
     private readonly documentsService: DocumentsService,
@@ -154,6 +156,7 @@ export class DocumentGenerationService {
   async getSampleData(params: {
     documentType: DocumentType;
     entityId: string;
+    enabledSlugs?: string[];
   }): Promise<TemplateData> {
     const logPrefix = 'DocumentGenerationService.getSampleData';
     const tenantId = this.tenantContext.getTenantId();
@@ -166,7 +169,17 @@ export class DocumentGenerationService {
     this.logger.log(
       `${logPrefix} — type=${params.documentType} entityId=${params.entityId}`,
     );
-    return mapper.aggregate({ tenantId, entityId: params.entityId });
+    const mapperData = await mapper.aggregate({
+      tenantId,
+      entityId: params.entityId,
+    });
+    return this.enrichWithContext({
+      tenantId,
+      documentType: params.documentType,
+      entityId: params.entityId,
+      mapperData,
+      enabledSlugs: params.enabledSlugs,
+    });
   }
 
   async generate(params: {
@@ -175,6 +188,7 @@ export class DocumentGenerationService {
     templateId?: string;
     filesystemDocumentId?: string;
     destinationCategoryId?: string;
+    enabledSlugs?: string[];
     trigger?: GenerationTrigger;
     userId?: string;
   }) {
@@ -219,6 +233,7 @@ export class DocumentGenerationService {
         templateId: params.templateId,
         filesystemDocumentId: params.filesystemDocumentId,
         destinationCategoryId: params.destinationCategoryId,
+        enabledSlugs: params.enabledSlugs,
         userId: params.userId,
       }).catch((err: unknown) => {
         const message = err instanceof Error ? err.message : String(err);
@@ -238,6 +253,7 @@ export class DocumentGenerationService {
     templateId?: string;
     filesystemDocumentId?: string;
     destinationCategoryId?: string;
+    enabledSlugs?: string[];
     userId?: string;
   }) {
     const logPrefix = 'DocumentGenerationService.runGenerate';
@@ -252,13 +268,20 @@ export class DocumentGenerationService {
         throw new BadRequestException(`No mapper for document type "${params.documentType}"`);
       }
 
-      const data = await mapper.aggregate({
+      const mapperData = await mapper.aggregate({
         tenantId: params.tenantId,
         entityId: params.entityId,
       });
+      const data = await this.enrichWithContext({
+        tenantId: params.tenantId,
+        documentType: params.documentType,
+        entityId: params.entityId,
+        mapperData,
+        enabledSlugs: params.enabledSlugs,
+      });
 
       const sourceSchema = SOURCE_SCHEMAS[params.documentType];
-      if (sourceSchema) {
+      if (sourceSchema && !hasContextDefinition(params.documentType)) {
         const result = sourceSchema.safeParse(data);
         if (!result.success) {
           const issues = result.error.issues.map(
@@ -443,6 +466,29 @@ export class DocumentGenerationService {
       templateId: params.templateId ?? existing.templateId ?? undefined,
       trigger: 'manual',
     });
+  }
+
+  private async enrichWithContext(params: {
+    tenantId: string;
+    documentType: DocumentType;
+    entityId: string;
+    mapperData: TemplateData;
+    enabledSlugs?: string[];
+  }): Promise<TemplateData> {
+    const envelope = await this.dataContextService.resolveForGeneration({
+      tenantId: params.tenantId,
+      documentType: params.documentType,
+      entityId: params.entityId,
+      enabledSlugs: params.enabledSlugs,
+    });
+    if (!envelope) return params.mapperData;
+
+    // Line-item groups remain presentation-shaped (from mapper helpers) under `_context.groups`.
+    if (Array.isArray(params.mapperData.groups)) {
+      envelope.groups = params.mapperData.groups;
+    }
+
+    return { _context: envelope };
   }
 
   private resolveDownloadTarget(

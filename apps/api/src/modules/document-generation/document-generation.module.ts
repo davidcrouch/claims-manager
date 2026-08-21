@@ -46,6 +46,7 @@ import { DocumentsListMapper } from './data-mappers/documents-list.mapper';
 import { ScheduleListMapper } from './data-mappers/schedule-list.mapper';
 import { DocumentsRepository } from '../../database/repositories/documents.repository';
 import { TransformService } from './services/transform.service';
+import { ContextResolver, DataContextService } from './data-context';
 
 @Module({
   imports: [TenantModule, FilesystemModule],
@@ -56,6 +57,8 @@ import { TransformService } from './services/transform.service';
     PdfConverterService,
     TemplateRegistryService,
     TransformService,
+    ContextResolver,
+    DataContextService,
     DocumentsRepository,
     QuoteMapper,
     InvoiceMapper,
@@ -95,6 +98,6 @@ import { TransformService } from './services/transform.service';
     DocumentsListMapper,
     ScheduleListMapper,
   ],
-  exports: [DocumentGenerationService, TemplateRegistryService, TransformService],
+  exports: [DocumentGenerationService, TemplateRegistryService, TransformService, DataContextService],
 })
 export class DocumentGenerationModule {}

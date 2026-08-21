@@ -768,21 +768,21 @@ export async function createOidcProvider(): Promise<Provider> {
 
       // DCR: persist organization + MCP app allow-list (used in JWT for MCP gateway, doc 35)
       extraClientMetadata: {
-         properties: ['organization_id', 'allowed_apps'],
+         properties: ['organization_id', 'allowed_apps', 'permissions', 'roles', 'features'],
          validator(_ctx, key, value, _metadata) {
             if (key === 'organization_id') {
                if (value !== undefined && value !== null && typeof value !== 'string') {
                   throw new errors.InvalidClientMetadata('organization_id must be a string');
                }
             }
-            if (key === 'allowed_apps') {
+            if (key === 'allowed_apps' || key === 'permissions' || key === 'roles' || key === 'features') {
                if (value === undefined || value === null) return;
                if (!Array.isArray(value)) {
-                  throw new errors.InvalidClientMetadata('allowed_apps must be an array of strings');
+                  throw new errors.InvalidClientMetadata(`${key} must be an array of strings`);
                }
                const bad = value.some((v) => typeof v !== 'string');
                if (bad) {
-                  throw new errors.InvalidClientMetadata('allowed_apps entries must be strings');
+                  throw new errors.InvalidClientMetadata(`${key} entries must be strings`);
                }
             }
          },
@@ -903,6 +903,7 @@ export async function createOidcProvider(): Promise<Provider> {
             extra: {
                organization_id: organizationId,
                roles: (meta.roles as unknown[]) || [],
+               permissions: (meta.permissions as unknown[]) || [],
                features: (meta.features as unknown[]) || [],
                ...(allowedApps.length > 0 ? { allowed_apps: allowedApps } : {}),
             },
@@ -1026,6 +1027,7 @@ export async function createOidcProvider(): Promise<Provider> {
             if (organizationId) {
                const allowedApps = normalizeAllowedAppsFromMetadata(clientMetadata);
                const roles = Array.isArray(clientMetadata.roles) ? clientMetadata.roles : [];
+               const permissions = Array.isArray(clientMetadata.permissions) ? clientMetadata.permissions : [];
                const features = Array.isArray(clientMetadata.features) ? clientMetadata.features : [];
                log.info({
                   clientId,
@@ -1036,16 +1038,21 @@ export async function createOidcProvider(): Promise<Provider> {
                return {
                   organization_id: organizationId,
                   ...(roles.length > 0 ? { roles } : {}),
+                  ...(permissions.length > 0 ? { permissions } : {}),
                   ...(features.length > 0 ? { features } : {}),
                   ...(allowedApps.length > 0 ? { allowed_apps: allowedApps } : {}),
                };
             }
 
+            const permissions = Array.isArray(clientMetadata.permissions) ? clientMetadata.permissions : [];
             log.info({
                clientId,
                flow: 'client_credentials',
+               permissionsCount: permissions.length,
             }, 'auth-server:oidc-provider:extraTokenClaims - Org-less M2M client; issuing token without organization claim');
-            return {};
+            return {
+               ...(permissions.length > 0 ? { permissions } : {}),
+            };
          }
 
          log.error({ sessionAccountId, clientId, tokenKind: token.kind }, 'auth-server:oidc-provider:extraTokenClaims - no account and no client_id; cannot mint token');

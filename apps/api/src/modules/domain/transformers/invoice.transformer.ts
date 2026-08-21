@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { EntityTransformer, TransformResult, LookupRequest, ParentRef } from './transformer.interface';
-import { asString, asTimestamp, isPlainObject } from './transform-utils';
+import { asString, asNumericString, asTimestamp, isPlainObject } from './transform-utils';
 
 @Injectable()
 export class InvoiceTransformer implements EntityTransformer {
@@ -13,20 +13,27 @@ export class InvoiceTransformer implements EntityTransformer {
     const lookups: LookupRequest[] = [];
     const parentRefs: ParentRef[] = [];
 
+    // createdBy / updatedBy user references
+    const createdByRef = isPlainObject(payload.createdBy) ? asString(payload.createdBy.externalReference) : undefined;
+    const updatedByRef = isPlainObject(payload.updatedBy) ? asString(payload.updatedBy.externalReference) : undefined;
+
     const entity: Record<string, unknown> = {
       tenantId,
       invoiceNumber: asString(payload.invoiceNumber),
       issueDate: asTimestamp(payload.issueDate),
       receivedDate: asTimestamp(payload.receivedDate),
       comments: asString(payload.comments),
-      subTotal: asString(payload.subTotal),
-      totalTax: asString(payload.totalTax),
-      totalAmount: asString(payload.totalAmount),
-      excessAmount: asString(payload.excessAmount),
+      declinedReason: asString(payload.declinedReason),
+      subTotal: asNumericString(payload.subTotal),
+      totalTax: asNumericString(payload.totalTax),
+      totalAmount: asNumericString(payload.totalAmount),
+      excessAmount: asNumericString(payload.excessAmount),
+      createdByUserId: createdByRef,
+      updatedByUserId: updatedByRef,
       invoicePayload: payload,
     };
 
-    // Parent refs are resolved in ProjectInvoiceUseCase (PO may project as WO).
+    // Parent: purchase order (may project as WO) — nested object or flat string
     const cwPoId = isPlainObject(payload.purchaseOrder)
       ? asString((payload.purchaseOrder as Record<string, unknown>).id)
       : asString(payload.purchaseOrderId);
@@ -34,10 +41,28 @@ export class InvoiceTransformer implements EntityTransformer {
       parentRefs.push({ entityType: 'purchase_order', externalId: cwPoId, required: false });
     }
 
-    // Lookups
+    // Parent: job — nested object or flat string
+    const cwJobId = isPlainObject(payload.job)
+      ? asString((payload.job as Record<string, unknown>).id)
+      : asString(payload.jobId);
+    if (cwJobId) {
+      parentRefs.push({ entityType: 'job', externalId: cwJobId, required: false });
+    }
+
+    // Parent: claim — nested object or flat string
+    const cwClaimId = isPlainObject(payload.claim)
+      ? asString((payload.claim as Record<string, unknown>).id)
+      : asString(payload.claimId);
+    if (cwClaimId) {
+      parentRefs.push({ entityType: 'claim', externalId: cwClaimId, required: false });
+    }
+
+    // Lookups — status (handle object or bare-string)
     if (isPlainObject(payload.status)) {
-      const extRef = asString(payload.status.externalReference) ?? asString(payload.status.id);
-      if (extRef) lookups.push({ field: 'statusLookupId', domain: 'invoice_status', externalReference: extRef, autoCreate: true });
+      const extRef = asString(payload.status.externalReference) ?? asString(payload.status.name) ?? asString(payload.status.id);
+      if (extRef) lookups.push({ field: 'statusLookupId', domain: 'invoice_status', externalReference: extRef, name: asString(payload.status.name), autoCreate: true });
+    } else if (typeof payload.status === 'string' && payload.status.trim()) {
+      lookups.push({ field: 'statusLookupId', domain: 'invoice_status', externalReference: payload.status.trim(), name: payload.status.trim(), autoCreate: true });
     }
 
     return { entity, lookups, parentRefs };

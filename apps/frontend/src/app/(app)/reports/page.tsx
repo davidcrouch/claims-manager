@@ -6,7 +6,7 @@ import type { PaginatedResponse, Report } from '@/types/api';
 export default async function ReportsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; jobId?: string; status?: string; reportTypeId?: string; sort?: string }>;
+  searchParams: Promise<{ page?: string; jobId?: string; status?: string; reportTypeId?: string; sort?: string; search?: string }>;
 }) {
   const api = await getServerApiClient();
   if (!api) redirect('/api/auth/login');
@@ -22,6 +22,7 @@ export default async function ReportsPage({
         status: params.status,
         reportTypeId: params.reportTypeId,
         sort: params.sort,
+        search: params.search,
       })
       .catch((err: unknown) => {
         console.error(

@@ -4,15 +4,29 @@ import {
   CatalogCategoriesRepository,
   CatalogItemTypesRepository,
   CatalogItemsRepository,
+  CatalogAssemblyComponentsRepository,
   LookupsRepository,
 } from '../../../database/repositories';
 import { TenantContext } from '../../../tenant/tenant-context';
 import { CatalogBootstrapService } from './catalog-bootstrap.service';
 import { CatalogPricingService } from './catalog-pricing.service';
+import { CatalogAssemblyService } from './catalog-assembly.service';
 import type { CatalogItemKind, CatalogPricingMode } from '../catalog.utils';
-import { DEFAULT_CATALOG_CATEGORIES, DEFAULT_UNIT_TYPES } from '../catalog.utils';
+import {
+  DEFAULT_CATALOG_CATEGORIES,
+  DEFAULT_UNIT_TYPES,
+  coerceToRateString,
+  defaultProviderCodesForImport,
+  isCatalogBomParentKind,
+} from '../catalog.utils';
 import type { CatalogCategoryRow } from '../../../database/repositories';
 import type { CatalogType } from './catalogs.service';
+import {
+  detectImportFormat,
+  parseCatalogItemKind,
+  sortImportRowIndexes,
+  validateBomParentChildKinds,
+} from './catalog-import.utils';
 
 // ── Column mapping profiles ─────────────────────────────────────
 
@@ -75,6 +89,7 @@ const INTERNAL_PROFILE: ColumnMapping[] = [
   { csvHeader: 'display_name', aliases: ['name'], target: 'column', field: 'name', required: true },
   { csvHeader: 'line_item_description', aliases: ['description'], target: 'column', field: 'description' },
   { csvHeader: 'kind', target: 'column', field: 'kind', required: true },
+  { csvHeader: 'parent', aliases: ['parent_id', 'parent_code'], target: 'column', field: 'parentCode' },
   { csvHeader: 'type_code', target: 'column', field: 'type_code', required: true },
   { csvHeader: 'category_code', target: 'column', field: 'category_code' },
   { csvHeader: 'unit_type_ref', target: 'column', field: 'unit_type_ref' },
@@ -86,6 +101,7 @@ const INTERNAL_PROFILE: ColumnMapping[] = [
   { csvHeader: 'pricing_mode', target: 'column', field: 'pricingMode' },
   { csvHeader: 'fixed_unit_cost', target: 'column', field: 'fixedUnitCost' },
   { csvHeader: 'external_reference', target: 'column', field: 'externalReference' },
+  { csvHeader: 'provider_codes', aliases: ['providers'], target: 'column', field: 'providerCodes', transform: toTagArray },
 ];
 
 const CRUNCHWORK_PROFILE: ColumnMapping[] = [
@@ -94,6 +110,7 @@ const CRUNCHWORK_PROFILE: ColumnMapping[] = [
   { csvHeader: 'name', aliases: ['display_name'], target: 'column', field: 'name', required: true },
   { csvHeader: 'description', aliases: ['line_item_description'], target: 'column', field: 'description' },
   { csvHeader: 'kind', target: 'column', field: 'kind' },
+  { csvHeader: 'parent', aliases: ['parent_id', 'parent_code'], target: 'column', field: 'parentCode' },
   { csvHeader: 'type', aliases: ['type_code'], target: 'column', field: 'type_code', required: true },
   { csvHeader: 'category', aliases: ['category_code'], target: 'column', field: 'category_code' },
   { csvHeader: 'subcategory', aliases: ['sub_category_code'], target: 'column', field: 'sub_category_code' },
@@ -120,6 +137,7 @@ const CRUNCHWORK_PROFILE: ColumnMapping[] = [
   { csvHeader: 'buy locked', target: 'metadata', field: 'locks.buy', transform: (v) => toBool(v) },
   { csvHeader: 'unit locked', target: 'metadata', field: 'locks.unit', transform: (v) => toBool(v) },
   { csvHeader: 'tags', target: 'metadata', field: 'tags', transform: toTagArray },
+  { csvHeader: 'provider_codes', aliases: ['providers'], target: 'column', field: 'providerCodes', transform: toTagArray },
   { csvHeader: 'category id', target: 'metadata', field: 'cwCategoryId' },
   { csvHeader: 'subcategory id', target: 'metadata', field: 'cwSubcategoryId' },
 ];
@@ -131,25 +149,6 @@ const COLUMN_PROFILES: Record<string, ColumnMapping[]> = {
 
 function getProfile(catalogType: string): ColumnMapping[] {
   return COLUMN_PROFILES[catalogType] ?? INTERNAL_PROFILE;
-}
-
-/** Prefer CSV headers over catalogue type so CW exports import into any catalogue. */
-function detectImportFormat(header: string[], catalogType: CatalogType): 'internal' | 'crunchwork' {
-  const cols = new Set(header);
-  const looksCrunchwork =
-    cols.has('id') &&
-    (cols.has('name') || cols.has('type')) &&
-    !cols.has('code') &&
-    !cols.has('kind') &&
-    !cols.has('type_code') &&
-    !cols.has('display_name');
-  if (looksCrunchwork) return 'crunchwork';
-
-  const looksInternal =
-    cols.has('code') || cols.has('type_code') || cols.has('display_name') || cols.has('kind');
-  if (looksInternal) return 'internal';
-
-  return catalogType === 'crunchwork' ? 'crunchwork' : 'internal';
 }
 
 function buildTemplateFromProfile(profile: ColumnMapping[]): string {
@@ -219,6 +218,8 @@ export class CatalogImportService {
     private readonly typesRepo: CatalogItemTypesRepository,
     private readonly categoriesRepo: CatalogCategoriesRepository,
     private readonly lookupsRepo: LookupsRepository,
+    private readonly bomRepo: CatalogAssemblyComponentsRepository,
+    private readonly assemblyService: CatalogAssemblyService,
     private readonly bootstrapService: CatalogBootstrapService,
     private readonly pricingService: CatalogPricingService,
     private readonly tenantContext: TenantContext,
@@ -241,7 +242,7 @@ export class CatalogImportService {
     return {
       catalogType: type,
       columns,
-      csv: `${header}\nGYPROCK-10,Gyprock 10mm sheet,"Supply 10mm plasterboard sheet 2400×1200 for wall or ceiling lining",primitive,material,plastering,ea,45.00,32.00,percent,15,0.10,,,\n`,
+      csv: `${header}\nGYPROCK-10,Gyprock 10mm sheet,"Supply 10mm plasterboard sheet 2400×1200 for wall or ceiling lining",primitive, material,plastering,ea,45.00,32.00,percent,15,10, ,\n`,
     };
   }
 
@@ -253,9 +254,10 @@ export class CatalogImportService {
     const categoriesToCreate = new Set<string>();
     const unitsToCreate = new Set<string>();
     const previewRows: CatalogImportPreviewRow[] = [];
+    const codesInFile = this.collectCodesInFile(ctx);
 
     for (let i = 1; i < ctx.rows.length; i++) {
-      const preview = await this.previewRow(ctx, i, categoriesToCreate, unitsToCreate);
+      const preview = await this.previewRow(ctx, i, categoriesToCreate, unitsToCreate, codesInFile);
       previewRows.push(preview);
     }
 
@@ -297,7 +299,17 @@ export class CatalogImportService {
     let skipped = 0;
     let errors = 0;
 
-    for (let i = 1; i < ctx.rows.length; i++) {
+    const dataIndexes = Array.from({ length: ctx.rows.length - 1 }, (_, i) => i + 1);
+    const orderedIndexes = sortImportRowIndexes({
+      dataRowIndexes: dataIndexes,
+      getCode: (rowIndex) => this.resolveCode(ctx, ctx.rows[rowIndex]),
+      getParentCode: (rowIndex) => cellByField(ctx, ctx.rows[rowIndex], 'parentCode'),
+    });
+
+    const upsertedByCode = new Map<string, { id: string; kind: string; code: string }>();
+    const parentsToRefresh = new Set<string>();
+
+    for (const i of orderedIndexes) {
       const cells = ctx.rows[i];
       const code = this.resolveCode(ctx, cells);
       if (!code) {
@@ -314,14 +326,13 @@ export class CatalogImportService {
           catalogId: ctx.catalogId,
         });
 
+        let itemId: string;
+        let itemKind: string;
+
         if (existing) {
           await this.itemsRepo.update({ tenantId: ctx.tenantId, id: existing.id, data: rowData });
-          if (existing.kind === 'assembly' || existing.kind === 'scope') {
-            await this.pricingService.refreshComputedCost({
-              tenantId: ctx.tenantId,
-              assemblyId: existing.id,
-            });
-          }
+          itemId = existing.id;
+          itemKind = rowData.kind;
           results.push({ row: i + 1, code, status: 'updated' });
           updated++;
         } else {
@@ -329,14 +340,42 @@ export class CatalogImportService {
             tenantId: ctx.tenantId,
             data: { ...rowData, code, catalogId: ctx.catalogId, isActive: true },
           });
-          if (row.kind === 'assembly' || row.kind === 'scope') {
-            await this.pricingService.refreshComputedCost({
-              tenantId: ctx.tenantId,
-              assemblyId: row.id,
-            });
-          }
+          itemId = row.id;
+          itemKind = row.kind;
           results.push({ row: i + 1, code, status: 'created' });
           created++;
+        }
+
+        upsertedByCode.set(code.toLowerCase(), { id: itemId, kind: itemKind, code });
+
+        const parentCode = cellByField(ctx, cells, 'parentCode');
+        if (parentCode) {
+          const link = await this.ensureBomParentLink({
+            ctx,
+            childCode: code,
+            childId: itemId,
+            childKind: itemKind,
+            parentCode,
+            upsertedByCode,
+          });
+          if (link.error) {
+            const last = results[results.length - 1];
+            last.message = [last.message, link.error].filter(Boolean).join('; ');
+            if (last.status === 'created') created--;
+            else if (last.status === 'updated') updated--;
+            last.status = 'error';
+            errors++;
+          } else if (link.parentId) {
+            parentsToRefresh.add(link.parentId);
+            if (link.created) {
+              const last = results[results.length - 1];
+              last.message = [last.message, `Linked under parent ${parentCode}`]
+                .filter(Boolean)
+                .join('; ');
+            }
+          }
+        } else if (isCatalogBomParentKind(itemKind)) {
+          parentsToRefresh.add(itemId);
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -345,6 +384,23 @@ export class CatalogImportService {
         errors++;
       }
     }
+
+    for (const assemblyId of parentsToRefresh) {
+      try {
+        await this.pricingService.refreshComputedCost({
+          tenantId: ctx.tenantId,
+          assemblyId,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.warn(
+          `CatalogImportService.importCsv — refreshComputedCost failed for ${assemblyId}: ${message}`,
+        );
+      }
+    }
+
+    // Keep result order aligned with CSV row numbers
+    results.sort((a, b) => a.row - b.row);
 
     return { created, updated, skipped, errors, results };
   }
@@ -452,11 +508,97 @@ export class CatalogImportService {
     return cellByField(ctx, cells, 'code');
   }
 
+  private collectCodesInFile(ctx: ImportParseContext): Map<string, { kind: string }> {
+    const codes = new Map<string, { kind: string }>();
+    for (let i = 1; i < ctx.rows.length; i++) {
+      const cells = ctx.rows[i];
+      const code = this.resolveCode(ctx, cells);
+      if (!code) continue;
+      const kind =
+        parseCatalogItemKind(cellByField(ctx, cells, 'kind'), ctx.importFormat) || 'primitive';
+      codes.set(code.toLowerCase(), { kind });
+    }
+    return codes;
+  }
+
+  private async resolveItemByCodeOrExternalRef(params: {
+    tenantId: string;
+    catalogId?: string;
+    code: string;
+  }) {
+    const byCode = await this.itemsRepo.findByCode({
+      tenantId: params.tenantId,
+      code: params.code,
+      catalogId: params.catalogId,
+    });
+    if (byCode) return byCode;
+    return this.itemsRepo.findByExternalReference({
+      tenantId: params.tenantId,
+      externalReference: params.code,
+      catalogId: params.catalogId,
+    });
+  }
+
+  private async ensureBomParentLink(params: {
+    ctx: ImportParseContext;
+    childCode: string;
+    childId: string;
+    childKind: string;
+    parentCode: string;
+    upsertedByCode: Map<string, { id: string; kind: string; code: string }>;
+  }): Promise<{ parentId?: string; created?: boolean; error?: string }> {
+    const parentKey = params.parentCode.toLowerCase();
+    let parent = params.upsertedByCode.get(parentKey) ?? null;
+
+    if (!parent) {
+      const row = await this.resolveItemByCodeOrExternalRef({
+        tenantId: params.ctx.tenantId,
+        catalogId: params.ctx.catalogId,
+        code: params.parentCode,
+      });
+      if (row) {
+        parent = { id: row.id, kind: row.kind, code: row.code };
+        params.upsertedByCode.set(parentKey, parent);
+      }
+    }
+
+    if (!parent) {
+      return { error: `Unknown parent: ${params.parentCode}` };
+    }
+
+    const kindError = validateBomParentChildKinds({
+      parentKind: parent.kind,
+      childKind: params.childKind,
+    });
+    if (kindError) return { error: kindError };
+
+    const existingLines = await this.bomRepo.findByAssemblyId({
+      tenantId: params.ctx.tenantId,
+      assemblyId: parent.id,
+    });
+    if (existingLines.some((line) => line.componentId === params.childId)) {
+      return { parentId: parent.id, created: false };
+    }
+
+    try {
+      await this.assemblyService.addComponent({
+        assemblyId: parent.id,
+        componentId: params.childId,
+        quantity: '1',
+      });
+      return { parentId: parent.id, created: true };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { error: message };
+    }
+  }
+
   private async previewRow(
     ctx: ImportParseContext,
     rowIndex: number,
     categoriesToCreate: Set<string>,
     unitsToCreate: Set<string>,
+    codesInFile: Map<string, { kind: string }>,
   ): Promise<CatalogImportPreviewRow> {
     const cells = ctx.rows[rowIndex];
     const rowNum = rowIndex + 1;
@@ -467,14 +609,9 @@ export class CatalogImportService {
     const typeCode = normaliseImportTypeCode(cellByField(ctx, cells, 'type_code'));
     const categoryCode = cellByField(ctx, cells, 'category_code') || null;
     const unitTypeRef = cellByField(ctx, cells, 'unit_type_ref') || null;
+    const parentCode = cellByField(ctx, cells, 'parentCode') || null;
 
-    const kindRaw = cellByField(ctx, cells, 'kind');
-    const kind =
-      kindRaw === 'primitive' || kindRaw === 'assembly' || kindRaw === 'scope'
-        ? kindRaw
-        : ctx.importFormat === 'crunchwork'
-          ? 'primitive'
-          : kindRaw;
+    const kind = parseCatalogItemKind(cellByField(ctx, cells, 'kind'), ctx.importFormat);
 
     const base = {
       row: rowNum,
@@ -522,6 +659,28 @@ export class CatalogImportService {
       }
     }
 
+    if (parentCode) {
+      const parentInFile = codesInFile.get(parentCode.toLowerCase());
+      const parentInDb = parentInFile
+        ? null
+        : await this.resolveItemByCodeOrExternalRef({
+            tenantId: ctx.tenantId,
+            catalogId: ctx.catalogId,
+            code: parentCode,
+          });
+      const parentKind = parentInFile?.kind ?? parentInDb?.kind ?? '';
+      if (!parentInFile && !parentInDb) {
+        issues.push(`Unknown parent: ${parentCode}`);
+      } else if (kind) {
+        const kindError = validateBomParentChildKinds({
+          parentKind,
+          childKind: kind,
+        });
+        if (kindError) issues.push(kindError);
+        else warnings.push(`Will link under parent ${parentCode}`);
+      }
+    }
+
     if (issues.length > 0) {
       return { ...base, status: 'error', action: 'skip', message: issues.join('; ') };
     }
@@ -549,13 +708,9 @@ export class CatalogImportService {
 
     const kindRaw = cellByField(ctx, cells, 'kind');
     const kind: CatalogItemKind =
-      kindRaw === 'primitive' || kindRaw === 'assembly' || kindRaw === 'scope'
-        ? kindRaw
-        : ctx.importFormat === 'crunchwork'
-          ? 'primitive'
-          : (kindRaw as CatalogItemKind);
+      parseCatalogItemKind(kindRaw, ctx.importFormat) || (kindRaw as CatalogItemKind);
     if (kind !== 'primitive' && kind !== 'assembly' && kind !== 'scope') {
-      throw new Error(`Invalid kind: ${kind}`);
+      throw new Error(`Invalid kind: ${kind || '(missing)'}`);
     }
 
     const typeCode = normaliseImportTypeCode(cellByField(ctx, cells, 'type_code'));
@@ -613,14 +768,31 @@ export class CatalogImportService {
       buyCost: cellByField(ctx, cells, 'buyCost') || undefined,
       markupType: (() => {
         const raw = cellByField(ctx, cells, 'markupType');
-        return raw ? normaliseImportMarkupType(raw) : undefined;
+        return raw ? normaliseImportMarkupType(raw) : 'percent';
       })(),
-      markupValue: cellByField(ctx, cells, 'markupValue') || undefined,
-      taxRate: cellByField(ctx, cells, 'taxRate') || undefined,
+      markupValue: (() => {
+        const raw = cellByField(ctx, cells, 'markupValue');
+        const markupType = (() => {
+          const t = cellByField(ctx, cells, 'markupType');
+          return t ? normaliseImportMarkupType(t) : 'percent';
+        })();
+        if (!raw) return '0.19';
+        if (markupType === 'fixed' || markupType === 'absolute') return raw;
+        return coerceToRateString(raw, 0.19);
+      })(),
+      taxRate: coerceToRateString(cellByField(ctx, cells, 'taxRate') || '10', 0.1),
       pricingMode: (cellByField(ctx, cells, 'pricingMode') ||
         (kind === 'assembly' || kind === 'scope' ? 'computed' : null)) as CatalogPricingMode | null,
       fixedUnitCost: cellByField(ctx, cells, 'fixedUnitCost') || undefined,
       externalReference: cellByField(ctx, cells, 'externalReference') || undefined,
+      providerCodes: (() => {
+        const raw = cellByField(ctx, cells, 'providerCodes');
+        if (raw) {
+          const tags = toTagArray(raw).map((c) => c.trim().toLowerCase()).filter(Boolean);
+          return kind === 'scope' ? ['internal'] : tags;
+        }
+        return defaultProviderCodesForImport(ctx.importFormat, kind);
+      })(),
       isActive,
       deletedAt: archivedRaw && toBool(archivedRaw) ? new Date() : undefined,
       metadata: Object.keys(metadata).length > 0 ? metadata : {},

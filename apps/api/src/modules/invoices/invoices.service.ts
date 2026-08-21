@@ -3,12 +3,14 @@ import {
   InvoicesRepository,
   WorkOrdersRepository,
   PurchaseOrdersRepository,
+  LookupsRepository,
   type InvoiceInsert,
 } from '../../database/repositories';
 import { TenantContext } from '../../tenant/tenant-context';
 import { CrunchworkService } from '../../crunchwork/crunchwork.service';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
 import { LookupResolver } from '../external/lookup-resolver.service';
+import { OutboundEventsService } from '../outbound-events/outbound-events.service';
 
 @Injectable()
 export class InvoicesService {
@@ -18,10 +20,12 @@ export class InvoicesService {
     private readonly invoicesRepo: InvoicesRepository,
     private readonly workOrdersRepo: WorkOrdersRepository,
     private readonly purchaseOrdersRepo: PurchaseOrdersRepository,
+    private readonly lookupsRepo: LookupsRepository,
     private readonly tenantContext: TenantContext,
     private readonly crunchworkService: CrunchworkService,
     private readonly lookupResolver: LookupResolver,
     @Optional() private readonly connectionResolver?: ConnectionResolverService,
+    @Optional() private readonly outboundEvents?: OutboundEventsService,
   ) {}
 
   private async resolveConnectionId(tenantId: string): Promise<string | null> {
@@ -84,8 +88,10 @@ export class InvoicesService {
     limit?: number;
     purchaseOrderId?: string;
     jobId?: string;
+    jobIds?: string[];
     status?: string;
     statusId?: string;
+    search?: string;
     sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
@@ -95,8 +101,10 @@ export class InvoicesService {
       limit: params.limit,
       purchaseOrderId: params.purchaseOrderId,
       jobId: params.jobId,
+      jobIds: params.jobIds,
       status: params.status,
       statusId: params.statusId,
+      search: params.search,
       sort: params.sort,
     });
   }
@@ -243,6 +251,9 @@ export class InvoicesService {
 
     const cwBody: Record<string, unknown> = {
       purchaseOrderId: providerPurchaseOrderId,
+      // CreateVendorTaxInvoiceInput — CW resolves this to a Vendor Tax Invoice.
+      // Omitting invoiceType causes upstream: Cannot read properties of undefined (reading 'externalReference').
+      invoiceType: { externalReference: 'Invoice' },
     };
     if (existing.invoiceNumber) cwBody.invoiceNumber = existing.invoiceNumber;
     if (existing.issueDate) {
@@ -256,7 +267,7 @@ export class InvoicesService {
     if (existing.totalAmount != null) cwBody.total = Number(existing.totalAmount);
 
     this.logger.log(
-      `${logPrefix} — pushing invoice=${params.id} to provider connectionId=${connectionId} purchaseOrderId=${providerPurchaseOrderId}`,
+      `${logPrefix} — pushing invoice=${params.id} to provider connectionId=${connectionId} purchaseOrderId=${providerPurchaseOrderId} invoiceType=Invoice`,
     );
 
     const apiInvoice = await this.crunchworkService.createInvoice({
@@ -277,12 +288,17 @@ export class InvoicesService {
     });
 
     const toNum = (v: unknown) => (v != null ? String(v) : undefined);
+    // UI titles use invoiceNumber; CW returns a display name plus a numeric invoiceNumber.
+    const cwInvoiceNumber =
+      (typeof apiObj.name === 'string' && apiObj.name.trim() ? apiObj.name.trim() : null) ??
+      (apiObj.invoiceNumber != null ? String(apiObj.invoiceNumber) : null);
 
     await this.invoicesRepo.update({
       id: params.id,
       data: {
         sourceExternalReference: cwInvoiceId,
         statusLookupId: submittedStatusId ?? existing.statusLookupId,
+        invoiceNumber: cwInvoiceNumber ?? existing.invoiceNumber,
         subTotal: toNum(apiObj.subTotal) ?? existing.subTotal,
         totalTax: toNum(apiObj.totalTax) ?? existing.totalTax,
         totalAmount: toNum(apiObj.totalAmount ?? apiObj.total) ?? existing.totalAmount,
@@ -335,9 +351,51 @@ export class InvoicesService {
       data.issueDate = new Date(params.body.issueDate);
     }
 
-    return this.invoicesRepo.update({
+    const updated = await this.invoicesRepo.update({
       id: params.id,
       data,
     });
+
+    if (this.outboundEvents && data.statusLookupId && data.statusLookupId !== existing.statusLookupId) {
+      this.checkAndEmitInvoiceApproved({
+        invoiceId: params.id,
+        statusLookupId: data.statusLookupId,
+        jobId: (existing.jobId ?? '') as string,
+        purchaseOrderId: (existing.purchaseOrderId as string) ?? undefined,
+      }).catch(() => {});
+    }
+
+    return updated;
+  }
+
+  private async checkAndEmitInvoiceApproved(params: {
+    invoiceId: string;
+    statusLookupId: string;
+    jobId: string;
+    purchaseOrderId?: string;
+  }): Promise<void> {
+    if (!this.outboundEvents || !params.jobId) return;
+
+    try {
+      const tenantId = this.tenantContext.getTenantId();
+      const lookup = await this.lookupsRepo.findOne({
+        id: params.statusLookupId,
+        tenantId,
+      });
+      const name = (lookup?.name ?? '').toLowerCase();
+
+      if (name === 'approved') {
+        this.outboundEvents.emitInvoiceApproved({
+          invoiceId: params.invoiceId,
+          jobId: params.jobId,
+          tenantId,
+          purchaseOrderId: params.purchaseOrderId,
+        }).catch(() => {});
+      }
+    } catch (err) {
+      this.logger.warn(
+        `InvoicesService.checkAndEmitInvoiceApproved — failed: ${(err as Error).message}`,
+      );
+    }
   }
 }

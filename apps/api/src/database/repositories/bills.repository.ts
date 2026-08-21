@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, desc, asc, sql, inArray } from 'drizzle-orm';
+import { eq, and, desc, asc, sql, inArray, or, ilike } from 'drizzle-orm';
+import { normalizeListJobIds } from '../../common/list-job-filter';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { bills } from '../schema';
 
@@ -54,11 +55,13 @@ export class BillsRepository {
     page?: number;
     limit?: number;
     jobId?: string;
+    jobIds?: string[];
     purchaseOrderId?: string;
     /** Comma-separated status lookup IDs. */
     status?: string;
     vendorId?: string;
     invoiceId?: string;
+    search?: string;
     sort?: string;
   }): Promise<{ data: BillRow[]; total: number }> {
     const page = params.page ?? 1;
@@ -69,8 +72,13 @@ export class BillsRepository {
       eq(bills.tenantId, params.tenantId),
       eq(bills.isDeleted, false),
     );
-    if (params.jobId) {
-      whereClause = and(whereClause, eq(bills.jobId, params.jobId));
+    const jobIds = normalizeListJobIds({ jobId: params.jobId, jobIds: params.jobIds });
+    if (jobIds) {
+      if (jobIds.length === 0) return { data: [], total: 0 };
+      whereClause = and(
+        whereClause,
+        jobIds.length === 1 ? eq(bills.jobId, jobIds[0]) : inArray(bills.jobId, jobIds),
+      );
     }
     if (params.purchaseOrderId) {
       whereClause = and(whereClause, eq(bills.purchaseOrderId, params.purchaseOrderId));
@@ -85,6 +93,18 @@ export class BillsRepository {
     }
     if (params.invoiceId) {
       whereClause = and(whereClause, eq(bills.invoiceId, params.invoiceId));
+    }
+    if (params.search?.trim()) {
+      const term = `%${params.search.trim()}%`;
+      whereClause = and(
+        whereClause,
+        or(
+          ilike(bills.billNumber, term),
+          ilike(bills.externalReference, term),
+          ilike(bills.sourceExternalReference, term),
+          ilike(bills.comments, term),
+        )!,
+      );
     }
 
     const [data, countResult] = await Promise.all([

@@ -6,7 +6,7 @@
 **Mapper:** `apps/api/src/modules/external/mappers/crunchwork-job.mapper.ts`
 **Last aligned with:** Insurance REST API v17 (exported 2026-03-04)
 
-> **Coverage status:** Mapper promotes the full §3.3.2 surface into columns, JSONB buckets, and `job_contacts` (see §10). `appointments[]` remain in `api_payload` and are projected by `CrunchworkAppointmentMapper`. Full CW response is always stored in `api_payload`.
+> **Coverage status:** `JobTransformer` + `ProjectJobUseCase` promote the full §3.3.2 surface into columns, JSONB buckets, `job_contacts`, and `custom_data` (see §10). Embedded `appointments[]` are projected into the `appointments` table inline during job ingest; standalone appointment webhooks also continue to work. Full CW response is always stored in `api_payload`.
 
 ---
 
@@ -225,7 +225,7 @@ For each element in CW `contacts[]`:
 
 ### 8.2 `appointments` + `appointment_attendees`
 
-`jobs.apiPayload.appointments[]` is persisted verbatim on the job row. Each element is **also** projected into the `appointments` table by `CrunchworkAppointmentMapper` (see `docs/mapping/appointments.md`) using `appointments.job_id = jobs.id`. The job mapper itself does **not** write to `appointments` — that remains the appointment mapper's responsibility — but the contract field `appointments` is considered covered through the appointments child table.
+`jobs.apiPayload.appointments[]` is persisted verbatim on the job row. Each element is **also** projected into the `appointments` table by `ProjectAppointmentUseCase` — both inline during job ingest (step 9 of `ProjectJobUseCase`) and via standalone appointment webhook events. The inline projection uses a synthetic `externalObjectId` of `embedded:appointment:{cwAppointmentId}` for idempotent deduplication. If the same appointment later arrives as a standalone webhook, it is linked via the real `external_objects.id` and matched by `external_reference` on the appointments table.
 
 ---
 
@@ -241,26 +241,58 @@ For each element in CW `contacts[]`:
 
 ## 10. Current mapper coverage
 
-`CrunchworkJobMapper` promotes the full §3.3.2 surface on create and update.
+`JobTransformer` + `ProjectJobUseCase` promote the full §3.3.2 surface on create and update.
 
 | Field | Populated? | Notes |
 |---|---|---|
 | `external_reference` | ✅ | Set to `payload.id` (CW job UUID). |
 | `external_job_id` | ✅ | Set to `payload.externalReference` (insurer system ID). |
-| `claim_id` | ✅ | Resolved via `NestedEntityExtractor.extractFromJobPayload`; shallow claim auto-created when missing. Insertion is refused if no `claimId` can be derived. |
-| `parent_claim_id` | ✅ | From `payload.parentClaimId` when it is a valid UUID. |
-| `job_type_lookup_id` | ✅ | Resolved via `lookupResolver.resolve({ domain: 'job_type', …, autoCreate: true })`. Insertion refused if missing. |
+| `claim_id` | ✅ | Resolved via `EntityRelationshipService.resolveParents`; insertion refused if no `claimId` can be derived. |
+| `parent_claim_id` | ✅ | From `payload.parentClaimId` — CW UUID resolved to internal claim ID via `customData.cwParentClaimId` lookup against `external_links`. Falls back to unresolved when the parent claim has not yet been ingested. |
+| `job_type_lookup_id` | ✅ | Resolved via `LookupResolutionService` (`job_type` domain, `autoCreate: true`). Insertion refused if missing. |
 | `status_lookup_id` | ✅ | `job_status` domain; leave null + log on miss. |
 | `request_date`, `collect_excess`, `excess`, `make_safe_required`, `job_instructions` | ✅ | Promoted scalars. |
 | `address`, `address_postcode/suburb/state/country` | ✅ | Full address JSONB + promoted locality columns. |
-| `vendor_id` | ✅ (best-effort) | Via nested extractor; left null when unresolved. |
+| `vendor_id` | ✅ (best-effort) | Via `EntityRelationshipService`; left null when unresolved. |
 | `vendor_snapshot` | ✅ | Full CW `vendor` object. |
 | `temporary_accommodation_details`, `specialist_details`, `rectification_details`, `audit_details`, `mobility_considerations` | ✅ | Job-type conditional JSONB buckets. |
-| `custom_data` | ✅ | Includes `cwUpdatedAtDate`, `insurerExternalReference`, CW `customData`, and unknown top-level keys. |
+| `custom_data` | ✅ | See below for full promoted keys. `collectUnknownKeys` sweeps any unrecognised top-level CW keys into `custom_data` so nothing is silently dropped. |
 | `api_payload` | ✅ | Always written verbatim. |
-| `job_contacts` / `contacts[]` sync | ✅ | Additive upsert (no prune). |
-| `appointments[]` | via appointment mapper | Kept in `api_payload`; child rows owned by `CrunchworkAppointmentMapper`. |
+| `job_contacts` / `contacts[]` sync | ✅ | Additive upsert (no prune). `contacts[].notes` extracted to `contacts.notes`. |
+| `appointments[]` | ✅ (embedded + standalone) | `ProjectJobUseCase` iterates embedded `appointments[]` and calls `ProjectAppointmentUseCase` for each (idempotent via synthetic `embedded:appointment:{cwId}` external object IDs). Standalone appointment webhook events continue to work independently. |
+| `assignees[]` | ✅ (snapshot) | Snapshotted to `custom_data.assignees` (array of `{ externalReference, displayName, email, type }`). No dedicated `job_assignees` child table yet. |
 | `parent_job_id` | N/A — internal-only | Never sourced from CW; preserved on update. |
+
+### 10.1 `custom_data` promoted keys
+
+The following CW fields are stored into the `custom_data` JSONB bucket by the transformer:
+
+| CW field | `custom_data` key |
+|---|---|
+| `updatedAtDate` | `cwUpdatedAtDate` |
+| `createdAtDate` | `cwCreatedAtDate` |
+| `externalReference` | `insurerExternalReference` |
+| `estimatedStartDate` | `estimatedStartDate` |
+| `estimatedCompletionDate` | `estimatedCompletionDate` |
+| `estimatedDeliveryDate` | `estimatedDeliveryDate` |
+| `claimRecommendation` | `claimRecommendation` |
+| `approvalLimitApplicable` | `approvalLimitApplicable` |
+| `internalAllocatedVendorJobId` | `internalAllocatedVendorJobId` |
+| `internalAllocatedVendorJobReference` | `internalAllocatedVendorJobReference` |
+| `lastSubmissionDate` | `lastSubmissionDate` |
+| `firstSubmissionDate` | `firstSubmissionDate` |
+| `reference` | `reference` |
+| (assignees snapshot) | `assignees` |
+| (unknown top-level keys) | verbatim key name |
+
+### 10.2 Remaining gaps
+
+| Area | Gap | Notes |
+|---|---|---|
+| `job_assignees` child table | Not yet materialised | Assignees live only in `custom_data.assignees`; no dedicated table for querying/filtering by assignee. |
+| `parent_claim_id` resolution timing | Best-effort only | If the parent claim has not been ingested when the job arrives, the resolution silently fails; no retry mechanism. |
+| §3.3.3 slim jobs inside Claims | Not projected | Slim job stubs from the Claim payload are preserved in `claims.api_payload` only; real job rows arrive via dedicated job webhooks. |
+| Standalone vs embedded appointment deduplication | Synthetic ID divergence | Embedded appointments use `embedded:appointment:{cwId}` external object IDs; a later standalone webhook uses the real `external_objects.id`. Both create valid `external_links` rows but point to the same internal appointment (deduplicated by `external_reference` on the appointments table). |
 
 Inbound vs outbound contract rules:
 

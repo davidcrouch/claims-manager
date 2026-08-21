@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import {
   Receipt,
@@ -13,7 +13,6 @@ import {
   MessageSquare,
   Paperclip,
   BookOpen,
-  Loader2,
   Send,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -41,7 +40,7 @@ import {
   unlinkJournalAction,
 } from '@/app/(app)/journals/actions';
 import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
-import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
+import { PagedLineItemsTable } from '@/components/quotes/PagedLineItemsTable';
 import { groupsFromDocumentPayload } from '@/components/quotes/quote-line-items.utils';
 import { getPurchaseOrderLineItemsAction } from '@/app/(app)/purchase-orders/actions';
 import { getWorkOrderLineItemsAction } from '@/app/(app)/work-orders/actions';
@@ -272,50 +271,31 @@ function LineItemsTab({ invoice }: { invoice: Invoice }) {
   const payload = (invoice.invoicePayload ?? invoice.apiPayload ?? {}) as Record<string, unknown>;
   const payloadGroups = groupsFromDocumentPayload(payload);
   const lineItems = (payload.lineItems ?? payload.items ?? []) as Array<Record<string, unknown>>;
-  const [poGroups, setPoGroups] = useState<ApiGroup[] | null>(null);
-  const [loading, setLoading] = useState(
-    payloadGroups.length === 0 &&
-      (!!invoice.purchaseOrderId || !!invoice.workOrderId),
-  );
 
-  const loadPo = useCallback(async () => {
-    if (payloadGroups.length > 0) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    if (invoice.purchaseOrderId) {
-      const result = await getPurchaseOrderLineItemsAction(invoice.purchaseOrderId);
-      if (result.success && result.groups) {
-        setPoGroups(result.groups as ApiGroup[]);
-      }
-    } else if (invoice.workOrderId) {
-      const result = await getWorkOrderLineItemsAction(invoice.workOrderId);
-      if (result.success && result.groups) {
-        setPoGroups(result.groups as ApiGroup[]);
-      }
-    }
-    setLoading(false);
-  }, [invoice.purchaseOrderId, invoice.workOrderId, payloadGroups.length]);
+  if (payloadGroups.length > 0) {
+    return <QuoteLineItemsTable groups={payloadGroups} readOnly />;
+  }
 
-  useEffect(() => {
-    void loadPo();
-  }, [loadPo]);
-
-  const groups = payloadGroups.length > 0 ? payloadGroups : poGroups;
-
-  if (loading) {
+  if (invoice.purchaseOrderId) {
     return (
-      <Card>
-        <CardContent className="flex items-center justify-center py-12">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </CardContent>
-      </Card>
+      <PagedLineItemsTable
+        documentId={invoice.purchaseOrderId}
+        loadAction={getPurchaseOrderLineItemsAction}
+        emptyLabel="No line items found in this invoice payload."
+        readOnly
+      />
     );
   }
 
-  if (groups && groups.length > 0) {
-    return <QuoteLineItemsTable groups={groups} readOnly />;
+  if (invoice.workOrderId) {
+    return (
+      <PagedLineItemsTable
+        documentId={invoice.workOrderId}
+        loadAction={getWorkOrderLineItemsAction}
+        emptyLabel="No line items found in this invoice payload."
+        readOnly
+      />
+    );
   }
 
   if (lineItems.length === 0) {
@@ -470,7 +450,9 @@ export function InvoiceDetail({ invoice }: { invoice: Invoice }) {
           <JournalList
             entityType="Invoice"
             entityId={invoice.id}
-            fetchJournals={() => fetchJournalsByEntityAction('Invoice', invoice.id)}
+            fetchJournals={(params) =>
+              fetchJournalsByEntityAction('Invoice', invoice.id, params)
+            }
             fetchAllJournals={() => fetchJournalsListAction()}
             createJournal={(data) => createJournalAction(data)}
             linkJournal={(jId) => linkJournalAction(jId, 'Invoice', invoice.id)}

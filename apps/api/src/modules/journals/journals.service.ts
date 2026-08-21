@@ -50,10 +50,17 @@ export class JournalsService {
 
   // -- Journals --
 
-  async findAll(params: { page?: number; limit?: number; status?: string; jobId?: string }) {
+  async findAll(params: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    search?: string;
+    jobId?: string;
+    jobIds?: string[];
+  }) {
     const tenantId = this.tenantContext.getTenantId();
     this.logger.debug(
-      `[JournalsService.findAll] tenantId=${tenantId} jobId=${params.jobId ?? 'none'}`,
+      `[JournalsService.findAll] tenantId=${tenantId} jobId=${params.jobId ?? 'none'} jobIds=${params.jobIds?.length ?? 0}`,
     );
     return this.journalsRepo.findAll({ tenantId, ...params });
   }
@@ -67,7 +74,12 @@ export class JournalsService {
     return { ...journal, pageCount, entityLinks: links };
   }
 
-  async findByEntity(params: { entityType: string; entityId: string }) {
+  async findByEntity(params: {
+    entityType: string;
+    entityId: string;
+    search?: string;
+    status?: string;
+  }) {
     const tenantId = this.tenantContext.getTenantId();
     if (!VALID_ENTITY_TYPES.includes(params.entityType)) {
       throw new BadRequestException(`entityType must be one of: ${VALID_ENTITY_TYPES.join(', ')}`);

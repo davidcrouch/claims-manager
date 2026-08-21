@@ -37,7 +37,8 @@ export interface ParentRef {
 // ── Contact extraction ──────────────────────────────────────────────
 
 export interface RawContact {
-  externalReference: string;
+  /** CW external reference when present; identity may also use email/phone/name. */
+  externalReference?: string;
   firstName?: string;
   lastName?: string;
   email?: string;

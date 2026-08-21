@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import {
   Database,
-  Download,
   Loader2,
   Play,
   AlertCircle,
@@ -24,7 +23,10 @@ export function TemplateTestPanel({ className = '' }: { className?: string }) {
   const { documentType, hasTemplate } = useTemplateEditor();
 
   const [testData, setTestData] = useState('{\n  \n}');
-  const [entityId, setEntityId] = useState('');
+  /** Entity ID entered in the Load entity popover (transient). */
+  const [entityIdInput, setEntityIdInput] = useState('');
+  /** Entity ID used for generation — set when sample data is loaded, or parsed from JSON. */
+  const [sourceEntityId, setSourceEntityId] = useState('');
   const [loadingData, setLoadingData] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [generateResult, setGenerateResult] = useState<string | null>(null);
@@ -32,7 +34,8 @@ export function TemplateTestPanel({ className = '' }: { className?: string }) {
   const [loadEntityOpen, setLoadEntityOpen] = useState(false);
 
   async function handleLoadSampleData() {
-    if (!entityId.trim()) return;
+    const id = entityIdInput.trim();
+    if (!id) return;
     setLoadingData(true);
     try {
       const res = await fetch(
@@ -40,7 +43,7 @@ export function TemplateTestPanel({ className = '' }: { className?: string }) {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ entityId: entityId.trim() }),
+          body: JSON.stringify({ entityId: id }),
         },
       );
       if (!res.ok) {
@@ -48,10 +51,16 @@ export function TemplateTestPanel({ className = '' }: { className?: string }) {
         throw new Error(err.message ?? `Failed to load sample data (${res.status})`);
       }
       const result = await res.json();
-      setTestData(JSON.stringify(result.data, null, 2));
+      // Mapper output is merge-tag shaped and has no id — keep entityId for generation.
+      const payload =
+        result.data && typeof result.data === 'object' && !Array.isArray(result.data)
+          ? { entityId: id, ...(result.data as Record<string, unknown>) }
+          : { entityId: id, data: result.data };
+      setTestData(JSON.stringify(payload, null, 2));
+      setSourceEntityId(id);
       toast.success('Sample data loaded from entity');
       setLoadEntityOpen(false);
-      setEntityId('');
+      setEntityIdInput('');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to load sample data');
     } finally {
@@ -66,17 +75,22 @@ export function TemplateTestPanel({ className = '' }: { className?: string }) {
 
     let parsedEntityId: string | undefined;
     try {
-      const parsed = JSON.parse(testData);
-      parsedEntityId = parsed?.id ?? parsed?.entityId;
+      const parsed = JSON.parse(testData) as Record<string, unknown>;
+      const fromJson = parsed?.id ?? parsed?.entityId;
+      if (typeof fromJson === 'string' && fromJson.trim()) {
+        parsedEntityId = fromJson.trim();
+      }
     } catch {
       setGenerateError('Test data is not valid JSON');
       setGenerating(false);
       return;
     }
 
-    if (!parsedEntityId) {
+    const resolvedEntityId = parsedEntityId || sourceEntityId.trim() || undefined;
+
+    if (!resolvedEntityId) {
       setGenerateError(
-        'Test data must contain an "id" or "entityId" field to identify the source entity for generation.',
+        'Load an entity first (or add an "id" / "entityId" field to the test JSON) so generation knows which record to use.',
       );
       setGenerating(false);
       return;
@@ -85,8 +99,9 @@ export function TemplateTestPanel({ className = '' }: { className?: string }) {
     try {
       const result = await generateAndDownloadDocument({
         documentType,
-        entityId: parsedEntityId,
+        entityId: resolvedEntityId,
       });
+      setSourceEntityId(resolvedEntityId);
       setGenerateResult(
         `Document generated (${result.format.toUpperCase()})${result.savedToFolder ? ' and saved to folder' : ''}`,
       );
@@ -125,12 +140,13 @@ export function TemplateTestPanel({ className = '' }: { className?: string }) {
               <div>
                 <p className="text-sm font-medium text-slate-800">Load sample data</p>
                 <p className="mt-0.5 text-[12px] text-slate-500">
-                  Enter an entity ID to fetch its real data from the mapper.
+                  Enter an entity ID to fetch its real data from the mapper. Generation uses
+                  this same entity.
                 </p>
               </div>
               <Input
-                value={entityId}
-                onChange={(e) => setEntityId(e.target.value)}
+                value={entityIdInput}
+                onChange={(e) => setEntityIdInput(e.target.value)}
                 placeholder="Entity UUID…"
                 className="font-mono text-xs"
                 onKeyDown={(e) => {
@@ -142,7 +158,7 @@ export function TemplateTestPanel({ className = '' }: { className?: string }) {
                 size="sm"
                 className="w-full"
                 onClick={() => void handleLoadSampleData()}
-                disabled={loadingData || !entityId.trim()}
+                disabled={loadingData || !entityIdInput.trim()}
               >
                 {loadingData ? (
                   <Loader2 className="mr-1 size-3.5 animate-spin" />
@@ -161,8 +177,18 @@ export function TemplateTestPanel({ className = '' }: { className?: string }) {
         onChange={(e) => setTestData(e.target.value)}
         className="h-48 w-full resize-none rounded-md border border-slate-200 bg-slate-50 p-2 font-mono text-[12px] leading-relaxed text-slate-700 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
         spellCheck={false}
-        placeholder="Paste source JSON or load from an entity…"
+        placeholder="Load an entity to preview merge-tag values…"
       />
+
+      {sourceEntityId ? (
+        <p className="truncate font-mono text-[11px] text-slate-500" title={sourceEntityId}>
+          Source entity: {sourceEntityId}
+        </p>
+      ) : (
+        <p className="text-[11px] text-slate-400">
+          Use Load entity, then Generate test document.
+        </p>
+      )}
 
       <Button
         type="button"

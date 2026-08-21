@@ -51,7 +51,14 @@ import { LocationMap } from '@/components/shared/LocationMap';
 import { EntityAttachmentsTab } from '@/components/shared/EntityAttachmentsTab';
 import { EntityMessagesTab } from '@/components/shared/EntityMessagesTab';
 import { MessageFormDrawer } from '@/components/forms/MessageFormDrawer';
+import { JobFormDrawer } from '@/components/forms/JobFormDrawer';
+import {
+  toJobFormClaimOption,
+  type JobFormClaimOption,
+} from '@/components/forms/job-form-claim';
 import type { Claim } from '@/types/api';
+
+const BUILDER_MAKE_SAFE_JOB_TYPE = 'Builder Make Safe';
 
 function claimAddress(claim: Claim, full = false): string {
   return formatAddress(claim.address as Dict | undefined, {
@@ -640,7 +647,13 @@ function isLinkedJob(job: { vendorSnapshot?: Record<string, unknown> }): boolean
   return typeof name === 'string' && name.trim().length > 0;
 }
 
-function JobsTab({ claim }: { claim: Claim }) {
+function JobsTab({
+  claim,
+  onCreateJob,
+}: {
+  claim: Claim;
+  onCreateJob?: () => void;
+}) {
   const jobs = claim.jobs ?? [];
   const internalJobs = jobs.filter((j) => !isLinkedJob(j));
   const linkedJobs = jobs.filter((j) => isLinkedJob(j));
@@ -649,9 +662,20 @@ function JobsTab({ claim }: { claim: Claim }) {
     return (
       <Card>
         <CardContent className="px-0">
-          <p className="px-4 text-sm text-muted-foreground">
-            No jobs linked to this claim.
-          </p>
+          <div className="flex flex-col items-start gap-3 px-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              No jobs linked to this claim.
+            </p>
+            {onCreateJob ? (
+              <Button
+                size="sm"
+                onClick={onCreateJob}
+                className="h-8 gap-1.5 bg-blue-600 text-white hover:bg-blue-500"
+              >
+                Create Job
+              </Button>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
     );
@@ -945,10 +969,21 @@ type ClaimTab =
   | 'timeline'
   | 'attachments';
 
-export function ClaimDetail({ claim }: { claim: Claim }) {
+export function ClaimDetail({
+  claim,
+  jobTypes = [],
+  currentUserId,
+}: {
+  claim: Claim;
+  jobTypes?: { id: string; name?: string; providerCode?: string | null }[];
+  currentUserId?: string | null;
+}) {
   const jobs = claim.jobs ?? [];
   const [tab, setTab] = useState<ClaimTab>('overview');
   const [messageDrawerOpen, setMessageDrawerOpen] = useState(false);
+  const [jobDrawerOpen, setJobDrawerOpen] = useState(false);
+
+  const claimOptions: JobFormClaimOption[] = [toJobFormClaimOption(claim)];
 
   const tabs: Array<{
     id: ClaimTab;
@@ -976,6 +1011,14 @@ export function ClaimDetail({ claim }: { claim: Claim }) {
   return (
     <div className="flex flex-col">
       <SetHeaderActions>
+        <Button
+          size="default"
+          onClick={() => setJobDrawerOpen(true)}
+          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          <Briefcase className="h-3.5 w-3.5" />
+          Create Job
+        </Button>
         {tab === 'communications' ? (
           <Button
             size="default"
@@ -1035,7 +1078,12 @@ export function ClaimDetail({ claim }: { claim: Claim }) {
         {tab === 'policy' && <PolicyTab claim={claim} />}
         {tab === 'loss' && <LossTab claim={claim} />}
         {tab === 'parties' && <PartiesTab claim={claim} />}
-        {tab === 'jobs' && <JobsTab claim={claim} />}
+        {tab === 'jobs' && (
+          <JobsTab
+            claim={claim}
+            onCreateJob={() => setJobDrawerOpen(true)}
+          />
+        )}
         {tab === 'compliance' && <ComplianceTab claim={claim} />}
         {tab === 'activities' && <ActivitiesTab />}
         {tab === 'communications' && <EntityMessagesTab entityId={claim.id} entityType="claim" />}
@@ -1046,6 +1094,16 @@ export function ClaimDetail({ claim }: { claim: Claim }) {
         open={messageDrawerOpen}
         onOpenChange={setMessageDrawerOpen}
         claimId={claim.id}
+      />
+      <JobFormDrawer
+        open={jobDrawerOpen}
+        onOpenChange={setJobDrawerOpen}
+        jobTypes={jobTypes}
+        claims={claimOptions}
+        claimId={claim.id}
+        claimPreview={claim}
+        defaultJobTypeName={BUILDER_MAKE_SAFE_JOB_TYPE}
+        currentUserId={currentUserId}
       />
     </div>
   );

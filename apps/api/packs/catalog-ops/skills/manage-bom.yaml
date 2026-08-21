@@ -1,0 +1,40 @@
+slug: manage-bom
+name: Manage bill of materials
+description: Edit BOM lines for an assembly (primitives only) or scope (assemblies and primitives).
+triggerHints:
+  - edit bom
+  - bill of materials
+  - add component to assembly
+  - scope components
+instructionPrompt: |
+  1. Confirm parent item is assembly or scope (get_catalog_item).
+  2. Remind the user of nesting rules (assembly→primitive; scope→assembly|primitive).
+  3. Call open_catalog_bom. Use list_catalog_items to find allowed components.
+  4. Suggest lines with fill_catalog_bom; on confirmation persist with
+     replace_catalog_item_components or add/update/delete component tools.
+  5. Offer refresh_catalog_item_cost when pricingMode is computed.
+requiredToolRefs:
+  - integration: Claims Filesystem
+    tool: get_catalog_item
+  - integration: Claims Filesystem
+    tool: list_catalog_item_components
+  - integration: Claims Filesystem
+    tool: list_catalog_items
+  - integration: Claims Filesystem
+    tool: open_catalog_bom
+  - integration: Claims Filesystem
+    tool: fill_catalog_bom
+  - integration: Claims Filesystem
+    tool: replace_catalog_item_components
+  - integration: Claims Filesystem
+    tool: add_catalog_item_component
+  - integration: Claims Filesystem
+    tool: update_catalog_item_component
+  - integration: Claims Filesystem
+    tool: delete_catalog_item_component
+  - integration: Claims Filesystem
+    tool: refresh_catalog_item_cost
+category: catalog
+invocationMode: inline
+includeHistory: true
+visibility: org

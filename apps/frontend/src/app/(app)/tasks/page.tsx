@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { TasksListClient } from '@/components/tasks/TasksListClient';
-import { buildJobNameById } from '@/components/shared/job-label';
+import { buildJobNameById, toJobOptions } from '@/components/shared/job-label';
 import type { Job, Claim, PaginatedResponse } from '@/types/api';
 
 export const metadata = { title: 'Tasks — EnsureOS' };
@@ -54,6 +54,7 @@ export default async function TasksPage({
       job={job}
       parentClaim={parentClaim}
       jobNameById={buildJobNameById(jobsRes?.data ?? [])}
+      jobs={toJobOptions(jobsRes?.data ?? [])}
     />
   );
 }

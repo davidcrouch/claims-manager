@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -15,7 +15,6 @@ import {
   ClipboardList,
   MessageSquare,
   Paperclip,
-  Loader2,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -38,7 +37,7 @@ import { PrintButton } from '@/components/shared/PrintButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { jobDisplayName } from '@/components/shared/job-label';
 import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
-import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
+import { PagedLineItemsTable } from '@/components/quotes/PagedLineItemsTable';
 import { groupsFromDocumentPayload } from '@/components/quotes/quote-line-items.utils';
 import { getPurchaseOrderLineItemsAction } from '@/app/(app)/purchase-orders/actions';
 // ---------- helpers ---------------------------------------------------------
@@ -328,40 +327,20 @@ function LineItemsTab({ bill }: { bill: Bill }) {
   const payload = (bill.billPayload ?? {}) as Record<string, unknown>;
   const payloadGroups = groupsFromDocumentPayload(payload);
   const lineItems = (payload.lineItems ?? payload.items ?? []) as Array<Record<string, unknown>>;
-  const [poGroups, setPoGroups] = useState<ApiGroup[] | null>(null);
-  const [loading, setLoading] = useState(payloadGroups.length === 0 && !!bill.purchaseOrderId);
 
-  const loadPo = useCallback(async () => {
-    if (payloadGroups.length > 0 || !bill.purchaseOrderId) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    const result = await getPurchaseOrderLineItemsAction(bill.purchaseOrderId);
-    if (result.success && result.groups) {
-      setPoGroups(result.groups as ApiGroup[]);
-    }
-    setLoading(false);
-  }, [bill.purchaseOrderId, payloadGroups.length]);
-
-  useEffect(() => {
-    void loadPo();
-  }, [loadPo]);
-
-  const groups = payloadGroups.length > 0 ? payloadGroups : poGroups;
-
-  if (loading) {
-    return (
-      <Card>
-        <CardContent className="flex items-center justify-center py-12">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </CardContent>
-      </Card>
-    );
+  if (payloadGroups.length > 0) {
+    return <QuoteLineItemsTable groups={payloadGroups} readOnly />;
   }
 
-  if (groups && groups.length > 0) {
-    return <QuoteLineItemsTable groups={groups} readOnly />;
+  if (bill.purchaseOrderId) {
+    return (
+      <PagedLineItemsTable
+        documentId={bill.purchaseOrderId}
+        loadAction={getPurchaseOrderLineItemsAction}
+        emptyLabel="No line items found for this bill."
+        readOnly
+      />
+    );
   }
 
   if (lineItems.length === 0) {

@@ -157,6 +157,21 @@ export function columnFilterToIdsParam(
 }
 
 /**
+ * Assignee column filter → CSV user ids.
+ * Selected (Blank) maps to `__blank__` (API IS NULL sentinel).
+ */
+export function columnFilterToAssigneeIdsParam(
+  active: boolean,
+  selected: Set<string>,
+  assignees: { id: string; name: string }[],
+): string | undefined | null {
+  return columnFilterToIdsParam(active, selected, [
+    { id: '__blank__', name: COLUMN_FILTER_BLANK },
+    ...assignees,
+  ]);
+}
+
+/**
  * Build CSV string param for non-lookup filters (e.g. task status strings).
  * Same active/empty semantics as columnFilterToIdsParam.
  */
@@ -428,6 +443,71 @@ export const ARCHIVED_STATUS_NAMES = new Set(['archived', 'closed']);
 
 export function isArchivedStatus(name: string | null | undefined): boolean {
   return !!name && ARCHIVED_STATUS_NAMES.has(name.trim().toLowerCase());
+}
+
+export type ArchiveListTab = 'active' | 'archived' | 'all';
+
+/**
+ * Status lookup IDs implied by Active / Archived / All tabs.
+ * - all → undefined (no tab constraint)
+ * - active/archived with no matching lookups → null (empty result set)
+ */
+export function statusIdsForArchiveListTab(
+  tab: ArchiveListTab,
+  statusOptions: { id: string; name: string }[],
+): string | undefined | null {
+  if (tab === 'all') return undefined;
+  const ids = statusOptions
+    .filter((s) => {
+      const archived = isArchivedStatus(s.name);
+      return tab === 'archived' ? archived : !archived;
+    })
+    .map((s) => s.id);
+  return ids.length > 0 ? ids.sort().join(',') : null;
+}
+
+/**
+ * String status values implied by Active / Archived / All tabs
+ * (journals, assessments, etc.).
+ */
+export function statusValuesForArchiveListTab(
+  tab: ArchiveListTab,
+  allStatuses: string[],
+): string | undefined | null {
+  if (tab === 'all') return undefined;
+  const values = allStatuses.filter((s) => {
+    const archived = isArchivedStatus(s);
+    return tab === 'archived' ? archived : !archived;
+  });
+  return values.length > 0 ? [...values].sort().join(',') : null;
+}
+
+/**
+ * Combine column status filter with tab-derived status IDs/values.
+ * Column empty-selection (null) wins; otherwise intersect when both set.
+ */
+export function mergeStatusParamWithTab(
+  columnStatus: string | undefined | null,
+  tabStatus: string | undefined | null,
+): string | undefined | null {
+  if (columnStatus === null) return null;
+  if (tabStatus === null) return null;
+  if (!tabStatus) return columnStatus;
+  if (!columnStatus) return tabStatus;
+  const tabSet = new Set(tabStatus.split(',').filter(Boolean));
+  const intersect = columnStatus.split(',').filter((id) => tabSet.has(id));
+  return intersect.length > 0 ? intersect.join(',') : null;
+}
+
+export type TaskListTab = 'open' | 'completed' | 'all';
+
+/** Status string values implied by Open / Completed / All task list tabs. */
+export function statusValuesForTaskListTab(
+  tab: TaskListTab,
+): string | undefined {
+  if (tab === 'all') return undefined;
+  if (tab === 'completed') return 'Cancelled,Completed,Failed';
+  return 'In Progress,On Hold,Open';
 }
 
 export function ValueFilterMenu(props: {

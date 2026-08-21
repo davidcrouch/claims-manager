@@ -15,10 +15,11 @@ async function getApi() {
 export async function fetchJournalsByEntityAction(
   entityType: string,
   entityId: string,
+  params?: { search?: string; status?: string },
 ): Promise<Journal[]> {
   const api = await getApi();
   if (!api) return [];
-  return api.getJournalsByEntity(entityType, entityId);
+  return api.getJournalsByEntity(entityType, entityId, params);
 }
 
 export async function fetchJournalsListAction(): Promise<Journal[]> {
@@ -32,7 +33,9 @@ export async function fetchJournalsAction(params?: {
   page?: number;
   limit?: number;
   status?: string;
+  search?: string;
   jobId?: string;
+  jobIds?: string[];
 }): Promise<PaginatedResponse<Journal>> {
   const api = await getApi();
   if (!api) return { data: [], total: 0 };
@@ -41,7 +44,9 @@ export async function fetchJournalsAction(params?: {
       page: params?.page ?? 1,
       limit: params?.limit ?? 20,
       status: params?.status,
+      search: params?.search,
       jobId: params?.jobId,
+      jobIds: params?.jobIds,
     });
   } catch (err) {
     console.error('[journals/actions.fetchJournalsAction]', err);

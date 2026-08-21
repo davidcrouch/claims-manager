@@ -33,6 +33,7 @@ export class CatalogItemsController {
     @Query('kind') kind?: 'primitive' | 'assembly' | 'scope',
     @Query('typeId') typeId?: string,
     @Query('categoryId') categoryId?: string,
+    @Query('categoryIds') categoryIds?: string,
     @Query('q') search?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -43,6 +44,9 @@ export class CatalogItemsController {
       kind,
       typeId,
       categoryId,
+      categoryIds: categoryIds
+        ? categoryIds.split(',').map((id) => id.trim()).filter(Boolean)
+        : undefined,
       search,
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,

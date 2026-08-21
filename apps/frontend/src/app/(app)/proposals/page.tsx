@@ -9,7 +9,7 @@ export const metadata = { title: 'Proposals — EnsureOS' };
 export default async function ProposalsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; sort?: string; status?: string; vendorId?: string; jobId?: string }>;
+  searchParams: Promise<{ page?: string; sort?: string; status?: string; vendorId?: string; jobId?: string; search?: string }>;
 }) {
   const api = await getServerApiClient();
   if (!api) redirect('/api/auth/login');
@@ -26,6 +26,7 @@ export default async function ProposalsPage({
         status: params.status,
         vendorId: params.vendorId,
         jobId: params.jobId,
+        search: params.search,
       })
       .catch((err: unknown) => {
         console.error(

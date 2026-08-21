@@ -12,13 +12,16 @@ export const metadata: Metadata = {
 export default async function AssessmentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; status?: string; jobId?: string }>;
+  searchParams: Promise<{ page?: string; status?: string; jobId?: string; jobIds?: string; search?: string }>;
 }) {
   const api = await getServerApiClient();
   if (!api) redirect('/api/auth/login');
 
   const params = await searchParams;
   const emptyJobs: PaginatedResponse<Job> = { data: [], total: 0 };
+  const jobIds = params.jobIds
+    ? params.jobIds.split(',').map((id) => id.trim()).filter(Boolean)
+    : undefined;
 
   const [result, jobsRes] = await Promise.all([
     api.getAssessments({
@@ -26,6 +29,8 @@ export default async function AssessmentsPage({
       limit: 20,
       status: params.status,
       jobId: params.jobId,
+      jobIds,
+      search: params.search,
     }).catch((err: unknown) => {
       console.error(
         'frontend:AssessmentsPage - getAssessments failed:',

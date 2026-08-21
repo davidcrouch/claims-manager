@@ -6,6 +6,11 @@ import { proposalCombos, proposalGroups, proposalItems } from '../../database/sc
 import { TenantContext } from '../../tenant/tenant-context';
 import { LookupResolutionService } from '../domain/services/lookup-resolution.service';
 import { isScopeComboPayload } from '../catalog/catalog.utils';
+import {
+  emptyLineItemsPage,
+  paginateAssembledLineItems,
+  type LineItemsPageQuery,
+} from '../catalog/line-items-page';
 
 function parseDecimal(value: string | null | undefined): number | undefined {
   if (value == null) return undefined;
@@ -55,9 +60,11 @@ export class ProposalsService {
     page?: number;
     limit?: number;
     jobId?: string;
+    jobIds?: string[];
     rfqId?: string;
     status?: string;
     vendorId?: string;
+    search?: string;
     sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
@@ -66,9 +73,11 @@ export class ProposalsService {
       page: params.page,
       limit: params.limit,
       jobId: params.jobId,
+      jobIds: params.jobIds,
       rfqId: params.rfqId,
       status: params.status,
       vendorId: params.vendorId,
+      search: params.search,
       sort: params.sort,
     });
   }
@@ -78,7 +87,7 @@ export class ProposalsService {
     return this.proposalsRepo.findOne({ id: params.id, tenantId });
   }
 
-  async getProposalLineItems(params: { proposalId: string }) {
+  async getProposalLineItems(params: { proposalId: string } & LineItemsPageQuery) {
     const tenantId = this.tenantContext.getTenantId();
     this.logger.debug(`ProposalsService.getProposalLineItems proposalId=${params.proposalId}`);
 
@@ -93,7 +102,9 @@ export class ProposalsService {
       )
       .orderBy(proposalGroups.sortIndex);
 
-    if (groups.length === 0) return [];
+    if (groups.length === 0) {
+      return emptyLineItemsPage(params);
+    }
 
     const groupIds = groups.map((g) => g.id);
 
@@ -174,7 +185,7 @@ export class ProposalsService {
       comboItemsByCombo.set(item.proposalComboId, list);
     }
 
-    return groups.map((group, index) => {
+    const assembled = groups.map((group, index) => {
       const dimensions = (group.dimensions as Record<string, unknown>) ?? {};
       const groupTotals = (group.totals as Record<string, unknown>) ?? {};
       const groupCombos = combosByGroup.get(group.id) ?? [];
@@ -233,6 +244,7 @@ export class ProposalsService {
         })),
       };
     });
+    return paginateAssembledLineItems(assembled, params);
   }
 
   private mapProposalItemRow(

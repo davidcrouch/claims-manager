@@ -1,0 +1,26 @@
+slug: find-catalog-item
+name: Find catalogue item
+description: Search catalogues for primitives, assemblies, or scopes by code, name, or category.
+triggerHints:
+  - find catalogue item
+  - search catalog
+  - look up assembly
+  - find primitive
+  - find scope
+instructionPrompt: |
+  1. Confirm which catalogue (list_catalogs / get_catalog) if not clear from context.
+  2. Call list_catalog_items with q and optional kind / categoryId filters.
+  3. Summarise matches (code, name, kind, category). Offer to open_catalog_item for edit.
+requiredToolRefs:
+  - integration: Claims Filesystem
+    tool: list_catalogs
+  - integration: Claims Filesystem
+    tool: list_catalog_items
+  - integration: Claims Filesystem
+    tool: get_catalog_item
+  - integration: Claims Filesystem
+    tool: open_catalog_item
+category: catalog
+invocationMode: inline
+includeHistory: true
+visibility: org

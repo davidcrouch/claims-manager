@@ -241,14 +241,56 @@ export class ProvidersService {
     });
   }
 
-  async listTenantConnections(params: { tenantId: string }): Promise<ConnectionListItem[]> {
+  async listTenantConnections(params: {
+    tenantId: string;
+    search?: string;
+    isActive?: boolean;
+    sort?: string;
+  }): Promise<ConnectionListItem[]> {
     this.logger.debug(
       `[ProvidersService.listTenantConnections] tenantId=${params.tenantId}`,
     );
-    const connections = await this.connectionsRepo.findAll({ tenantId: params.tenantId });
-    const items = await Promise.all(
+    const connections = await this.connectionsRepo.findAll({
+      tenantId: params.tenantId,
+      isActive: params.isActive,
+    });
+    let items = await Promise.all(
       connections.map((conn) => this.enrichConnection({ connection: conn })),
     );
+
+    if (params.search?.trim()) {
+      const q = params.search.trim().toLowerCase();
+      items = items.filter(
+        (c) =>
+          c.name.toLowerCase().includes(q) ||
+          c.providerName.toLowerCase().includes(q) ||
+          c.providerCode.toLowerCase().includes(q) ||
+          c.environment.toLowerCase().includes(q),
+      );
+    }
+
+    const sortParam = params.sort ?? 'name_asc';
+    const idx = sortParam.lastIndexOf('_');
+    const field = idx > 0 ? sortParam.slice(0, idx) : 'name';
+    const order = idx > 0 ? sortParam.slice(idx + 1) : 'asc';
+    const dir = order === 'desc' ? -1 : 1;
+    items.sort((a, b) => {
+      switch (field) {
+        case 'providerName':
+          return a.providerName.localeCompare(b.providerName) * dir;
+        case 'lastEventAt': {
+          const aT = a.lastEventAt ? new Date(a.lastEventAt).getTime() : 0;
+          const bT = b.lastEventAt ? new Date(b.lastEventAt).getTime() : 0;
+          return (aT - bT) * dir;
+        }
+        case 'totalWebhookEvents':
+          return (a.totalWebhookEvents - b.totalWebhookEvents) * dir;
+        case 'name':
+        default:
+          return (a.name || a.providerName).localeCompare(b.name || b.providerName) * dir;
+      }
+    });
+
     return items;
   }
 
@@ -294,6 +336,8 @@ export class ProvidersService {
     connectionId: string;
     tenantId: string;
     status?: string;
+    search?: string;
+    sort?: string;
     page?: number;
     limit?: number;
   }) {
@@ -308,6 +352,8 @@ export class ProvidersService {
       connectionId: params.connectionId,
       tenantId: params.tenantId,
       status: params.status,
+      search: params.search,
+      sort: params.sort,
       page: params.page,
       limit: params.limit,
     });

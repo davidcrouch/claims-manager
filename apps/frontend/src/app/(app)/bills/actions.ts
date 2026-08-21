@@ -8,10 +8,12 @@ export async function fetchBillsAction(params?: {
   page?: number;
   limit?: number;
   jobId?: string;
+  jobIds?: string[];
   purchaseOrderId?: string;
   status?: string;
   vendorId?: string;
   invoiceId?: string;
+  search?: string;
   sort?: string;
 }): Promise<PaginatedResponse<Bill>> {
   const session = await getSession();
@@ -26,10 +28,12 @@ export async function fetchBillsAction(params?: {
       page: params?.page ?? 1,
       limit: params?.limit ?? 20,
       jobId: params?.jobId,
+      jobIds: params?.jobIds,
       purchaseOrderId: params?.purchaseOrderId,
       status: params?.status,
       vendorId: params?.vendorId,
       invoiceId: params?.invoiceId,
+      search: params?.search,
       sort: params?.sort,
     });
   } catch (err) {

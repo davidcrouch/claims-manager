@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import type { EntityTransformer, TransformResult, ParentRef } from './transformer.interface';
-import { asString } from './transform-utils';
+import type { EntityTransformer, TransformResult, LookupRequest, ParentRef } from './transformer.interface';
+import { asString, asTimestamp, isPlainObject } from './transform-utils';
 
 const SCOPE_TO_RECORD_TYPE: Record<string, string> = {
   job: 'Job', claim: 'Claim', quote: 'Quote',
@@ -25,6 +25,7 @@ export class AttachmentTransformer implements EntityTransformer {
     existingEntity?: Record<string, unknown>;
   }): TransformResult<Record<string, unknown>> {
     const { payload, tenantId } = params;
+    const lookups: LookupRequest[] = [];
     const parentRefs: ParentRef[] = [];
 
     const rawScope = asString(payload.scope);
@@ -34,6 +35,19 @@ export class AttachmentTransformer implements EntityTransformer {
     const relatedRecordType = SCOPE_TO_RECORD_TYPE[scope] ?? (cwRecordType || 'Job');
 
     const scopeId = asString(payload.scopeId) ?? asString(payload.relatedRecordId);
+
+    // createdBy user reference
+    const createdByRef = isPlainObject(payload.createdBy)
+      ? asString(payload.createdBy.externalReference)
+      : asString(payload.createdByUserId);
+
+    // attachmentMeta bucket — fields without dedicated columns
+    const attachmentMeta: Record<string, unknown> = {};
+    const uploadedAt = asTimestamp(payload.uploadedAt);
+    if (uploadedAt) attachmentMeta.uploadedAt = uploadedAt;
+    const category = asString(payload.category);
+    if (category) attachmentMeta.category = category;
+    if (Array.isArray(payload.tags)) attachmentMeta.tags = payload.tags.filter((t): t is string => typeof t === 'string');
 
     const entity: Record<string, unknown> = {
       tenantId,
@@ -45,14 +59,25 @@ export class AttachmentTransformer implements EntityTransformer {
       fileSize: typeof payload.fileSize === 'number' ? payload.fileSize : undefined,
       storageProvider: 'crunchwork',
       fileUrl: asString(payload.downloadUrl) ?? asString(payload.fileUrl),
+      createdByUserId: createdByRef,
+      attachmentMeta: Object.keys(attachmentMeta).length > 0 ? attachmentMeta : {},
       apiPayload: payload,
     };
+
+    // Lookups — documentType / category (object or bare-string)
+    const docType = payload.documentType ?? payload.documentCategory;
+    if (isPlainObject(docType)) {
+      const extRef = asString((docType as Record<string, unknown>).externalReference) ?? asString((docType as Record<string, unknown>).name) ?? asString((docType as Record<string, unknown>).id);
+      if (extRef) lookups.push({ field: 'documentTypeLookupId', domain: 'document_type', externalReference: extRef, name: asString((docType as Record<string, unknown>).name), autoCreate: true });
+    } else if (typeof docType === 'string' && docType.trim()) {
+      lookups.push({ field: 'documentTypeLookupId', domain: 'document_type', externalReference: docType.trim(), name: docType.trim(), autoCreate: true });
+    }
 
     const providerType = SCOPE_TO_ENTITY_TYPE[scope];
     if (providerType && scopeId) {
       parentRefs.push({ entityType: providerType, externalId: scopeId, required: false });
     }
 
-    return { entity, lookups: [], parentRefs };
+    return { entity, lookups, parentRefs };
   }
 }

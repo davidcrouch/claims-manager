@@ -15,6 +15,7 @@ import { renderDocxPreviewSvg } from '../../common/office/docx-preview-svg';
 import { CreateDocumentUploadUrlDto } from './dto/create-document-upload-url.dto';
 import { BatchUploadUrlsDto } from './dto/batch-upload-urls.dto';
 import { PipelineService } from '../pipelines/pipeline.service';
+import { OutboundEventsService } from '../outbound-events/outbound-events.service';
 
 const ADC_REAUTH_REQUIRED_RE = /invalid_grant|invalid_rapt|reauth related error|credentials expired/i;
 
@@ -67,6 +68,7 @@ export class DocumentsService {
     private readonly officeConverter: OfficeConverterService,
     private readonly tenantContext: TenantContext,
     @Optional() private readonly pipelineService?: PipelineService,
+    @Optional() private readonly outboundEvents?: OutboundEventsService,
   ) {}
 
   async findAll(params: {
@@ -267,6 +269,14 @@ export class DocumentsService {
         `${logPrefix} — pipeline trigger failed: ${err instanceof Error ? err.message : err}`,
       );
     }
+
+    await this.emitDocumentUploadedIfRelevant({
+      documentId,
+      tenantId,
+      relatedRecordType: doc.relatedRecordType,
+      relatedRecordId: doc.relatedRecordId,
+      categoryId: doc.filesystemCategoryId,
+    });
 
     const withPipeline = await this.documentsRepo.findOne(documentId, tenantId);
     return withPipeline ?? updated;
@@ -537,6 +547,15 @@ export class DocumentsService {
             `[DocumentsService.assignCategory] pipeline trigger failed: ${err instanceof Error ? err.message : err}`,
           );
         });
+
+      await this.emitDocumentUploadedIfRelevant({
+        documentId,
+        tenantId,
+        relatedRecordType: doc.relatedRecordType,
+        relatedRecordId: doc.relatedRecordId,
+        categoryId,
+      });
+
       return updated;
     }
 
@@ -744,5 +763,41 @@ export class DocumentsService {
     if (!allowed) {
       throw new BadRequestException(`Unsupported MIME type: ${mimeType}`);
     }
+  }
+
+  private async resolveCategoryName(categoryId: string | null | undefined): Promise<string | null> {
+    if (!categoryId) return null;
+    try {
+      const cat = await this.filesystemsRepo.findCategoryById(categoryId);
+      return cat?.name ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async emitDocumentUploadedIfRelevant(params: {
+    documentId: string;
+    tenantId: string;
+    relatedRecordType: string | null;
+    relatedRecordId: string | null;
+    categoryId: string | null | undefined;
+  }): Promise<void> {
+    if (!this.outboundEvents) return;
+    if (params.relatedRecordType !== 'Job' || !params.relatedRecordId) return;
+
+    const documentType = await this.resolveCategoryName(params.categoryId);
+    if (!documentType) return;
+
+    this.logger.debug(
+      `DocumentsService.emitDocumentUploadedIfRelevant — docId=${params.documentId} jobId=${params.relatedRecordId} type="${documentType}"`,
+    );
+
+    this.outboundEvents.emitDocumentUploaded({
+      documentId: params.documentId,
+      jobId: params.relatedRecordId,
+      tenantId: params.tenantId,
+      documentType,
+      uploadedAt: new Date().toISOString(),
+    }).catch(() => {});
   }
 }

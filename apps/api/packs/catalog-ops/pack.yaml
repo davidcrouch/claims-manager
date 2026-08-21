@@ -1,0 +1,20 @@
+id: catalog-ops
+version: 1.0.0
+name: Catalogue Operations
+description: >
+  Chat-driven catalogue authoring for categories, primitives, assemblies, scopes,
+  and bills of materials. Uses Claims Filesystem catalogue tools and canvas drawers.
+integrationRefs:
+  - Claims Filesystem
+agents:
+  - file: agents/catalog-assistant.yaml
+skills:
+  - file: skills/find-catalog-item.yaml
+  - file: skills/create-item.yaml
+  - file: skills/create-assembly.yaml
+  - file: skills/create-scope.yaml
+  - file: skills/edit-catalog-item.yaml
+  - file: skills/manage-bom.yaml
+  - file: skills/manage-category.yaml
+  - file: skills/import-catalog.yaml
+prompts: []

@@ -8,9 +8,11 @@ export async function fetchRfqsAction(params?: {
   page?: number;
   limit?: number;
   jobId?: string;
+  jobIds?: string[];
   quoteId?: string;
   status?: string;
   vendorId?: string;
+  search?: string;
   sort?: string;
 }): Promise<PaginatedResponse<Rfq>> {
   const session = await getSession();
@@ -25,9 +27,11 @@ export async function fetchRfqsAction(params?: {
       page: params?.page ?? 1,
       limit: params?.limit ?? 20,
       jobId: params?.jobId,
+      jobIds: params?.jobIds,
       quoteId: params?.quoteId,
       status: params?.status,
       vendorId: params?.vendorId,
+      search: params?.search,
       sort: params?.sort,
     });
   } catch (err) {

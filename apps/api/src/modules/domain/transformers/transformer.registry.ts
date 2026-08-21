@@ -1,4 +1,6 @@
-import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
+import type { Type } from '@nestjs/common';
 import type { EntityTransformer } from './transformer.interface';
 import { ClaimTransformer } from './claim.transformer';
 import { JobTransformer } from './job.transformer';
@@ -11,39 +13,58 @@ import { AppointmentTransformer } from './appointment.transformer';
 import { ReportTransformer } from './report.transformer';
 import { AttachmentTransformer } from './attachment.transformer';
 
+const TRANSFORMER_ENTRIES: Array<[string, Type<EntityTransformer>]> = [
+  ['claim', ClaimTransformer],
+  ['job', JobTransformer],
+  ['quote', QuoteTransformer],
+  ['purchase_order', PurchaseOrderTransformer],
+  ['invoice', InvoiceTransformer],
+  ['task', TaskTransformer],
+  ['message', MessageTransformer],
+  ['appointment', AppointmentTransformer],
+  ['report', ReportTransformer],
+  ['attachment', AttachmentTransformer],
+];
+
+/**
+ * Resolves transformers via ModuleRef during onModuleInit to avoid empty
+ * registration when constructor @Optional() deps are undefined under circular imports.
+ */
 @Injectable()
 export class TransformerRegistry implements OnModuleInit {
   private readonly logger = new Logger('TransformerRegistry');
   private transformers: Record<string, EntityTransformer> = {};
 
-  constructor(
-    @Optional() private readonly claimTransformer?: ClaimTransformer,
-    @Optional() private readonly jobTransformer?: JobTransformer,
-    @Optional() private readonly quoteTransformer?: QuoteTransformer,
-    @Optional() private readonly purchaseOrderTransformer?: PurchaseOrderTransformer,
-    @Optional() private readonly invoiceTransformer?: InvoiceTransformer,
-    @Optional() private readonly taskTransformer?: TaskTransformer,
-    @Optional() private readonly messageTransformer?: MessageTransformer,
-    @Optional() private readonly appointmentTransformer?: AppointmentTransformer,
-    @Optional() private readonly reportTransformer?: ReportTransformer,
-    @Optional() private readonly attachmentTransformer?: AttachmentTransformer,
-  ) {}
+  // Explicit @Inject: SWC emitDecoratorMetadata collapses constructor types to Object
+  constructor(@Inject(ModuleRef) private readonly moduleRef: ModuleRef) {}
 
   onModuleInit(): void {
-    if (this.claimTransformer) this.transformers['claim'] = this.claimTransformer;
-    if (this.jobTransformer) this.transformers['job'] = this.jobTransformer;
-    if (this.quoteTransformer) this.transformers['quote'] = this.quoteTransformer;
-    if (this.purchaseOrderTransformer) this.transformers['purchase_order'] = this.purchaseOrderTransformer;
-    if (this.invoiceTransformer) this.transformers['invoice'] = this.invoiceTransformer;
-    if (this.taskTransformer) this.transformers['task'] = this.taskTransformer;
-    if (this.messageTransformer) this.transformers['message'] = this.messageTransformer;
-    if (this.appointmentTransformer) this.transformers['appointment'] = this.appointmentTransformer;
-    if (this.reportTransformer) this.transformers['report'] = this.reportTransformer;
-    if (this.attachmentTransformer) this.transformers['attachment'] = this.attachmentTransformer;
+    for (const [entityType, token] of TRANSFORMER_ENTRIES) {
+      try {
+        const transformer = this.moduleRef.get(token, { strict: false });
+        if (transformer) {
+          this.transformers[entityType] = transformer;
+        } else {
+          this.logger.warn(
+            `TransformerRegistry.onModuleInit — ${entityType} resolved to undefined`,
+          );
+        }
+      } catch (err) {
+        this.logger.warn(
+          `TransformerRegistry.onModuleInit — ${entityType} unavailable: ${(err as Error).message}`,
+        );
+      }
+    }
 
+    const registered = Object.keys(this.transformers);
     this.logger.log(
-      `TransformerRegistry.onModuleInit — registered: ${Object.keys(this.transformers).join(', ') || '(none)'}`,
+      `TransformerRegistry.onModuleInit — registered: ${registered.join(', ') || '(none)'}`,
     );
+    if (registered.length === 0) {
+      this.logger.error(
+        'TransformerRegistry.onModuleInit — no transformers registered',
+      );
+    }
   }
 
   get(entityType: string): EntityTransformer | undefined {

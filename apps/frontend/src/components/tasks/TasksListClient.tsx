@@ -19,23 +19,34 @@ import {
   SortableColumnHeader,
   commitColumnFilterSelection,
   columnFilterToValuesParam,
-  columnFilterKey,
+  columnFilterToAssigneeIdsParam,
   buildColumnFilterOptions,
   TableEmptyRow,
+  statusValuesForTaskListTab,
+  mergeStatusParamWithTab,
+  type TaskListTab,
 } from '@/components/shared/list-filters';
 import { TaskFormDrawer } from '@/components/forms/TaskFormDrawer';
-import { TaskDetailDrawer } from '@/components/tasks/TaskDetailDrawer';
 import { TablePagination } from '@/components/shared/table-pagination';
 import {
   ColumnSettingsHeaderCell,
   useColumnVisibility,
 } from '@/components/shared/column-visibility';
-import { resolveJobName } from '@/components/shared/job-label';
-import { useEntityDrawer } from '@/components/layout/EntityDrawerHost';
-import { fetchTasksAction } from '@/app/(app)/tasks/actions';
+import { resolveJobName, type JobOption } from '@/components/shared/job-label';
+import {
+  buildServerJobFilterOptions,
+  resolveServerJobFilterSelection,
+  selectedJobFilterLabels,
+  parseSelectedJobIds,
+  toServerJobFetchParams,
+  writeServerJobFilterParams,
+  jobFilterOptionsFromNameById,
+} from '@/components/shared/server-job-filter';
+import {
+  fetchTasksAction,
+  fetchTaskFilterOptionsAction,
+} from '@/app/(app)/tasks/actions';
 import type { Task, LookupRef, Job, Claim } from '@/types/api';
-
-type ListTab = 'open' | 'completed' | 'all';
 
 function refName(value: string | LookupRef | null | undefined): string {
   if (!value) return '—';
@@ -70,6 +81,7 @@ const PRIORITY_STYLES: Record<string, string> = {
   low: 'bg-green-100 text-green-700',
   medium: 'bg-amber-100 text-amber-700',
   high: 'bg-orange-100 text-orange-700',
+  critical: 'bg-red-100 text-red-700',
   urgent: 'bg-red-100 text-red-700',
 };
 
@@ -101,27 +113,23 @@ function dueDateClassName(dueDate?: string | null): string {
   return 'text-slate-600';
 }
 
-function isCompletedStatus(name: string | null | undefined): boolean {
-  if (!name) return false;
-  const lower = name.trim().toLowerCase();
-  return lower === 'completed' || lower === 'cancelled' || lower === 'closed';
-}
-
 const PAGE_SIZE = 20;
 
 export function TasksListClient({
   job,
   parentClaim,
   jobNameById,
+  jobs,
 }: {
   job?: Job | null;
   parentClaim?: Claim | null;
   jobNameById?: Record<string, string>;
+  jobs?: JobOption[];
 } = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { openEntityDrawer } = useEntityDrawer();
-  const jobId = searchParams.get('jobId');
+  const jobId = searchParams.get('jobId') ?? undefined;
+  const jobIdsParam = searchParams.get('jobIds') ?? undefined;
   const overdue = searchParams.get('overdue') === 'true';
   const assignedToUserId = searchParams.get('assignedToUserId');
   const openTaskId = searchParams.get('open');
@@ -130,7 +138,7 @@ export function TasksListClient({
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [tab, setTab] = useState<ListTab>('open');
+  const [tab, setTab] = useState<TaskListTab>('open');
   const [page, setPage] = useState(() => {
     const p = parseInt(searchParams.get('page') ?? '1', 10);
     return Number.isFinite(p) && p > 0 ? p : 1;
@@ -147,24 +155,82 @@ export function TasksListClient({
   const [typeFilterActive, setTypeFilterActive] = useState(false);
   const [nameFilter, setNameFilter] = useState<Set<string>>(new Set());
   const [nameFilterActive, setNameFilterActive] = useState(false);
-  const [jobFilter, setJobFilter] = useState<Set<string>>(new Set());
-  const [jobFilterActive, setJobFilterActive] = useState(false);
   const [assigneeFilter, setAssigneeFilter] = useState<Set<string>>(new Set());
   const [assigneeFilterActive, setAssigneeFilterActive] = useState(false);
+  const [filterOptions, setFilterOptions] = useState<{
+    names: string[];
+    taskTypes: string[];
+    assignees: { id: string; name: string }[];
+  }>({ names: [], taskTypes: [], assignees: [] });
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [openTaskIdFromUrl, setOpenTaskIdFromUrl] = useState<string | null>(null);
   const { isVisible, toggle, visibleCount } = useColumnVisibility(
     'tasks',
     TABLE_COLUMNS,
   );
   const lastFetchKeyRef = useRef<string | null>(null);
+  const selectedJobIds = useMemo(
+    () => parseSelectedJobIds(jobId, jobIdsParam),
+    [jobId, jobIdsParam],
+  );
+  const filterJobs = useMemo(() => {
+    if (jobs && jobs.length > 0) {
+      return jobs.map((j) => ({ id: j.id, label: j.label }));
+    }
+    return jobFilterOptionsFromNameById(jobNameById);
+  }, [jobs, jobNameById]);
+  const uniqueJobs = useMemo(
+    () => buildServerJobFilterOptions(filterJobs),
+    [filterJobs],
+  );
+  const { selected: jobFilter, active: jobFilterActive } = useMemo(
+    () =>
+      selectedJobFilterLabels({
+        jobId,
+        jobIds: jobIdsParam
+          ? jobIdsParam.split(',').map((id) => id.trim()).filter(Boolean)
+          : undefined,
+        jobs: filterJobs,
+      }),
+    [jobId, jobIdsParam, filterJobs],
+  );
+  const { jobId: fetchJobId, jobIds: fetchJobIds } = useMemo(
+    () => toServerJobFetchParams(selectedJobIds),
+    [selectedJobIds],
+  );
+  const tabStatusValues = useMemo(
+    () => statusValuesForTaskListTab(tab),
+    [tab],
+  );
   const statusParam = useMemo(
-    () => columnFilterToValuesParam(statusFilterActive, statusFilter),
-    [statusFilterActive, statusFilter],
+    () =>
+      mergeStatusParamWithTab(
+        columnFilterToValuesParam(statusFilterActive, statusFilter),
+        tabStatusValues,
+      ),
+    [statusFilterActive, statusFilter, tabStatusValues],
   );
   const priorityParam = useMemo(
     () => columnFilterToValuesParam(priorityFilterActive, priorityFilter),
     [priorityFilterActive, priorityFilter],
+  );
+  const namesParam = useMemo(
+    () => columnFilterToValuesParam(nameFilterActive, nameFilter),
+    [nameFilterActive, nameFilter],
+  );
+  const taskTypesParam = useMemo(
+    () => columnFilterToValuesParam(typeFilterActive, typeFilter),
+    [typeFilterActive, typeFilter],
+  );
+  const assignedToUserIdsParam = useMemo(
+    () =>
+      columnFilterToAssigneeIdsParam(
+        assigneeFilterActive,
+        assigneeFilter,
+        filterOptions.assignees,
+      ),
+    [assigneeFilterActive, assigneeFilter, filterOptions.assignees],
   );
 
   const sortParam = `${columnSort.field}_${columnSort.order}`;
@@ -174,8 +240,24 @@ export function TasksListClient({
     return () => clearTimeout(t);
   }, [search]);
 
+  useEffect(() => {
+    fetchTaskFilterOptionsAction().then((opts) => {
+      setFilterOptions({
+        names: opts.names ?? [],
+        taskTypes: opts.taskTypes ?? [],
+        assignees: opts.assignees ?? [],
+      });
+    });
+  }, []);
+
   const load = useCallback(async () => {
-    if (statusParam === null || priorityParam === null) {
+    if (
+      statusParam === null ||
+      priorityParam === null ||
+      namesParam === null ||
+      taskTypesParam === null ||
+      assignedToUserIdsParam === null
+    ) {
       setTasks([]);
       setTotal(0);
       setLoading(false);
@@ -189,8 +271,12 @@ export function TasksListClient({
         search: debouncedSearch || undefined,
         status: statusParam || (overdue ? 'Open' : undefined),
         priority: priorityParam,
+        names: namesParam,
+        taskTypes: taskTypesParam,
+        assignedToUserIds: assignedToUserIdsParam,
         sort: sortParam,
-        jobId: jobId ?? undefined,
+        jobId: fetchJobId,
+        jobIds: fetchJobIds,
         assignedToUserId: assignedToUserId ?? undefined,
         overdue: overdue || undefined,
       });
@@ -199,12 +285,29 @@ export function TasksListClient({
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, page, sortParam, statusParam, priorityParam, jobId, overdue, assignedToUserId]);
+  }, [
+    debouncedSearch,
+    page,
+    sortParam,
+    statusParam,
+    priorityParam,
+    namesParam,
+    taskTypesParam,
+    assignedToUserIdsParam,
+    fetchJobId,
+    fetchJobIds,
+    overdue,
+    assignedToUserId,
+  ]);
 
   useEffect(() => {
     const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
     const priorityKey = priorityParam === null ? '__none__' : (priorityParam ?? '');
-    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${priorityKey}|${jobId ?? ''}|${overdue}|${assignedToUserId ?? ''}`;
+    const namesKey = namesParam === null ? '__none__' : (namesParam ?? '');
+    const typesKey = taskTypesParam === null ? '__none__' : (taskTypesParam ?? '');
+    const assigneesKey =
+      assignedToUserIdsParam === null ? '__none__' : (assignedToUserIdsParam ?? '');
+    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${priorityKey}|${namesKey}|${typesKey}|${assigneesKey}|${jobId ?? ''}|${jobIdsParam ?? ''}|${overdue}|${assignedToUserId ?? ''}`;
     const params = new URLSearchParams(searchParams.toString());
     params.set('search', debouncedSearch);
     params.set('tab', tab);
@@ -212,8 +315,14 @@ export function TasksListClient({
     params.set('sort', sortParam);
     if (statusParam) params.set('status', statusParam); else params.delete('status');
     if (priorityParam) params.set('priority', priorityParam); else params.delete('priority');
+    if (namesParam) params.set('names', namesParam); else params.delete('names');
+    if (taskTypesParam) params.set('taskTypes', taskTypesParam); else params.delete('taskTypes');
+    if (assignedToUserIdsParam) params.set('assignedToUserIds', assignedToUserIdsParam);
+    else params.delete('assignedToUserIds');
     if (jobId) params.set('jobId', jobId);
     else params.delete('jobId');
+    if (jobIdsParam) params.set('jobIds', jobIdsParam);
+    else params.delete('jobIds');
     if (overdue) params.set('overdue', 'true');
     else params.delete('overdue');
     if (assignedToUserId) params.set('assignedToUserId', assignedToUserId);
@@ -223,14 +332,29 @@ export function TasksListClient({
     lastFetchKeyRef.current = fetchKey;
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop: router.replace updates URL -> searchParams changes -> effect re-runs
-  }, [debouncedSearch, sortParam, tab, page, statusParam, priorityParam, jobId, overdue, assignedToUserId]);
+  }, [
+    debouncedSearch,
+    sortParam,
+    tab,
+    page,
+    statusParam,
+    priorityParam,
+    namesParam,
+    taskTypesParam,
+    assignedToUserIdsParam,
+    jobId,
+    jobIdsParam,
+    fetchJobId,
+    fetchJobIds,
+    overdue,
+    assignedToUserId,
+  ]);
 
   useEffect(() => {
     if (!openTaskId) return;
-    openEntityDrawer({
-      component: 'TaskDetailDrawer',
-      props: { taskId: openTaskId },
-    });
+    setSelectedTask(null);
+    setShowCreateTask(false);
+    setOpenTaskIdFromUrl(openTaskId);
     const params = new URLSearchParams(searchParams.toString());
     params.delete('open');
     router.replace(`/tasks?${params}`, { scroll: false });
@@ -249,7 +373,7 @@ export function TasksListClient({
 
   const handlePageChange = (newPage: number) => setPage(newPage);
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => { setSearch(e.target.value); setPage(1); };
-  const handleTabChange = (val: string) => { setTab(val as ListTab); setPage(1); };
+  const handleTabChange = (val: string) => { setTab(val as TaskListTab); setPage(1); };
 
   const uniquePriorities = useMemo(
     () => ['Low', 'Medium', 'High', 'Critical'],
@@ -257,35 +381,27 @@ export function TasksListClient({
   );
 
   const uniqueStatuses = useMemo(
-    () => ['Open', 'Completed', 'Failed'],
+    () => ['Open', 'In Progress', 'On Hold', 'Completed', 'Failed', 'Cancelled'],
     [],
   );
 
-  const uniqueTypes = useMemo(() => {
-    const names = new Set<string>();
-    for (const task of tasks) {
-      const name = refName(task.taskType)?.trim();
-      if (name && name !== '—') names.add(name);
-    }
-    return [...names].sort((a, b) => a.localeCompare(b));
-  }, [tasks]);
-
-  const uniqueNames = useMemo(
-    () => buildColumnFilterOptions(tasks.map((task) => task.name)),
-    [tasks],
+  const uniqueTypes = useMemo(
+    () => [...filterOptions.taskTypes].sort((a, b) => a.localeCompare(b)),
+    [filterOptions.taskTypes],
   );
 
-  const uniqueJobs = useMemo(
-    () =>
-      buildColumnFilterOptions(
-        tasks.map((task) => resolveJobName(task.jobId, jobNameById)),
-      ),
-    [tasks, jobNameById],
+  const uniqueNames = useMemo(
+    () => buildColumnFilterOptions(filterOptions.names),
+    [filterOptions.names],
   );
 
   const uniqueAssignees = useMemo(
-    () => buildColumnFilterOptions(tasks.map((task) => task.assigneeName)),
-    [tasks],
+    () =>
+      buildColumnFilterOptions(
+        filterOptions.assignees.map((a) => a.name),
+        { alwaysIncludeBlank: true },
+      ),
+    [filterOptions.assignees],
   );
 
   const togglePriority = (name: string) => {
@@ -344,13 +460,16 @@ export function TasksListClient({
   };
 
   const applyJobFilter = (next: Set<string>) => {
-    const committed = commitColumnFilterSelection({
+    const resolved = resolveServerJobFilterSelection({
       next,
-      optionCount: uniqueJobs.length,
+      options: uniqueJobs,
+      jobs: filterJobs,
     });
-    setJobFilter(committed.selected);
-    setJobFilterActive(committed.active);
     setPage(1);
+    const params = new URLSearchParams(searchParams.toString());
+    writeServerJobFilterParams(params, resolved);
+    params.set('page', '1');
+    router.replace(`/tasks?${params.toString()}`, { scroll: false });
   };
 
   const applyAssigneeFilter = (next: Set<string>) => {
@@ -363,93 +482,22 @@ export function TasksListClient({
     setPage(1);
   };
 
-  const visibleRows = useMemo(() => {
-    let rows = tasks;
-
-    if (tab !== 'all') {
-      rows = rows.filter((task) => {
-        const completed = isCompletedStatus(refName(task.status));
-        return tab === 'completed' ? completed : !completed;
-      });
-    }
-
-    if (nameFilterActive) {
-      if (nameFilter.size === 0) {
-        rows = [];
-      } else {
-        rows = rows.filter((task) => nameFilter.has(columnFilterKey(task.name)));
-      }
-    }
-
-    if (jobFilterActive) {
-      if (jobFilter.size === 0) {
-        rows = [];
-      } else {
-        rows = rows.filter((task) =>
-          jobFilter.has(columnFilterKey(resolveJobName(task.jobId, jobNameById))),
-        );
-      }
-    }
-
-    if (assigneeFilterActive) {
-      if (assigneeFilter.size === 0) {
-        rows = [];
-      } else {
-        rows = rows.filter((task) =>
-          assigneeFilter.has(columnFilterKey(task.assigneeName)),
-        );
-      }
-    }
-
-    if (typeFilterActive) {
-      if (typeFilter.size === 0) {
-        rows = [];
-      } else {
-        rows = rows.filter((task) => {
-          const name = refName(task.taskType)?.trim();
-          return name ? typeFilter.has(name) : false;
-        });
-      }
-    }
-
-    const query = debouncedSearch.trim().toLowerCase();
-    if (query) {
-      rows = rows.filter((task) => {
-        const name = (task.name ?? '').toLowerCase();
-        const type = refName(task.taskType).toLowerCase();
-        const assignee = (task.assigneeName ?? '').toLowerCase();
-        const jobName = resolveJobName(task.jobId, jobNameById).toLowerCase();
-        return (
-          name.includes(query) ||
-          type.includes(query) ||
-          assignee.includes(query) ||
-          jobName.includes(query)
-        );
-      });
-    }
-
-    return rows;
-  }, [
-    tasks,
-    tab,
-    nameFilterActive,
-    nameFilter,
-    jobFilterActive,
-    jobFilter,
-    assigneeFilterActive,
-    assigneeFilter,
-    typeFilterActive,
-    typeFilter,
-    debouncedSearch,
-    jobNameById,
-  ]);
+  const visibleRows = tasks;
 
   const breakdown = computeStatusBreakdown(visibleRows, (t) => refName(t.status));
 
   function handleDrawerClose(open: boolean) {
-    setShowCreateTask(open);
-    if (!open) load();
+    if (!open) {
+      setShowCreateTask(false);
+      setSelectedTask(null);
+      setOpenTaskIdFromUrl(null);
+      load();
+      return;
+    }
+    setShowCreateTask(true);
   }
+
+  const drawerOpen = showCreateTask || !!selectedTask || !!openTaskIdFromUrl;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
@@ -469,7 +517,11 @@ export function TasksListClient({
       <SetHeaderActions>
         <Button
           size="default"
-          onClick={() => setShowCreateTask(true)}
+          onClick={() => {
+            setSelectedTask(null);
+            setOpenTaskIdFromUrl(null);
+            setShowCreateTask(true);
+          }}
           className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
         >
           Create Task
@@ -565,9 +617,9 @@ export function TasksListClient({
                           : col.key === 'job'
                             ? {
                                 options: uniqueJobs,
-                                selected: jobFilter,
-                                active: jobFilterActive,
-                                onApply: applyJobFilter,
+                              selected: jobFilterActive ? jobFilter : new Set(uniqueJobs),
+                              active: jobFilterActive,
+                              onApply: applyJobFilter,
                                 menuTitle: 'Filter by job',
                                 itemNoun: { singular: 'job', plural: 'jobs' },
                               }
@@ -631,7 +683,11 @@ export function TasksListClient({
                   return (
                     <tr
                       key={task.id}
-                      onClick={() => setSelectedTask(task)}
+                      onClick={() => {
+                        setShowCreateTask(false);
+                        setOpenTaskIdFromUrl(null);
+                        setSelectedTask(task);
+                      }}
                       className="cursor-pointer transition-colors hover:bg-slate-50"
                     >
                       {isVisible('name') && (
@@ -686,19 +742,13 @@ export function TasksListClient({
       </div>
 
       <TaskFormDrawer
-        open={showCreateTask}
+        open={drawerOpen}
         onOpenChange={handleDrawerClose}
-        jobId={job?.id}
-        claimId={job?.claimId ?? parentClaim?.id}
-      />
-
-      <TaskDetailDrawer
-        open={!!selectedTask}
-        onOpenChange={(open) => {
-          if (!open) setSelectedTask(null);
-        }}
+        jobId={selectedTask?.jobId ?? job?.id}
+        claimId={selectedTask?.claimId ?? job?.claimId ?? parentClaim?.id}
+        jobs={jobs}
         task={selectedTask}
-        jobNameById={jobNameById}
+        taskId={openTaskIdFromUrl}
       />
     </div>
   );

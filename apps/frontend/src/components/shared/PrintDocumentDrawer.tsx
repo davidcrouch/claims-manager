@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -185,6 +186,11 @@ export function PrintDocumentDrawer({
     null,
   );
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
+  const [dataContextAvailable, setDataContextAvailable] = useState(false);
+  const [relatedOptions, setRelatedOptions] = useState<
+    Array<{ slug: string; label: string; description: string }>
+  >([]);
+  const [enabledSlugs, setEnabledSlugs] = useState<string[]>([]);
 
   const reset = useCallback(() => {
     setSelectedType(documentType);
@@ -194,6 +200,9 @@ export function PrintDocumentDrawer({
     setSelectedTemplateId('');
     setDestinationCategoryId(null);
     setFolderPickerOpen(false);
+    setDataContextAvailable(false);
+    setRelatedOptions([]);
+    setEnabledSlugs([]);
   }, [documentType]);
 
   useEffect(() => {
@@ -263,6 +272,57 @@ export function PrintDocumentDrawer({
       cancelled = true;
     };
   }, [open, jobId]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+
+    async function loadDataContext() {
+      try {
+        const res = await fetch(
+          `/api/document-templates/data-context/${encodeURIComponent(selectedType)}`,
+        );
+        if (!res.ok) {
+          if (!cancelled) {
+            setDataContextAvailable(false);
+            setRelatedOptions([]);
+            setEnabledSlugs([]);
+          }
+          return;
+        }
+        const data = await res.json();
+        if (cancelled) return;
+        if (!data.available || !data.definition) {
+          setDataContextAvailable(false);
+          setRelatedOptions([]);
+          setEnabledSlugs([]);
+          return;
+        }
+        setDataContextAvailable(true);
+        setRelatedOptions(
+          (data.definition.relatedEntities ?? []).map(
+            (r: { slug: string; label: string; description: string }) => ({
+              slug: r.slug,
+              label: r.label,
+              description: r.description,
+            }),
+          ),
+        );
+        setEnabledSlugs(Array.isArray(data.enabledSlugs) ? data.enabledSlugs : []);
+      } catch {
+        if (!cancelled) {
+          setDataContextAvailable(false);
+          setRelatedOptions([]);
+          setEnabledSlugs([]);
+        }
+      }
+    }
+
+    void loadDataContext();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, selectedType]);
 
   const assigned = useMemo(
     () => assignedFilesystemDocId(settings, selectedType),
@@ -368,6 +428,7 @@ export function PrintDocumentDrawer({
         entityId: isUuid(entityId) ? entityId : undefined,
         filesystemDocumentId: selectedTemplateId,
         destinationCategoryId: destinationCategoryId ?? undefined,
+        enabledSlugs: dataContextAvailable ? enabledSlugs : undefined,
       });
       if (result.format === 'docx') {
         toast.success(
@@ -529,6 +590,49 @@ export function PrintDocumentDrawer({
                   </>
                 )}
               </div>
+
+              {dataContextAvailable && relatedOptions.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Data scope</Label>
+                  <p className="text-xs text-slate-500">
+                    Choose which related records to include in this print.
+                  </p>
+                  <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-3">
+                    {relatedOptions.map((option) => {
+                      const checked = enabledSlugs.includes(option.slug);
+                      return (
+                        <label
+                          key={option.slug}
+                          className="flex cursor-pointer items-start gap-3"
+                        >
+                          <Checkbox
+                            checked={checked}
+                            disabled={generating}
+                            onCheckedChange={(v) => {
+                              setEnabledSlugs((prev) =>
+                                v === true
+                                  ? prev.includes(option.slug)
+                                    ? prev
+                                    : [...prev, option.slug]
+                                  : prev.filter((s) => s !== option.slug),
+                              );
+                            }}
+                            className="mt-0.5"
+                          />
+                          <span className="min-w-0">
+                            <span className="block text-sm font-medium text-slate-800">
+                              {option.label}
+                            </span>
+                            <span className="block text-xs text-slate-500">
+                              {option.description}
+                            </span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="print-destination">Save to folder</Label>

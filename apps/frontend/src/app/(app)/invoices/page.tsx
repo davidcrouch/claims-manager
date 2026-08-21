@@ -8,7 +8,7 @@ import type { Claim, Invoice, Job, PaginatedResponse, WorkOrder } from '@/types/
 export default async function InvoicesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; purchaseOrderId?: string; status?: string; sort?: string; jobId?: string }>;
+  searchParams: Promise<{ page?: string; purchaseOrderId?: string; status?: string; sort?: string; jobId?: string; search?: string }>;
 }) {
   const api = await getServerApiClient();
   if (!api) redirect('/api/auth/login');
@@ -28,6 +28,7 @@ export default async function InvoicesPage({
           purchaseOrderId: params.purchaseOrderId,
           status: params.status,
           sort: params.sort,
+          search: params.search,
           jobId: params.jobId,
         })
         .catch((err: unknown) => {

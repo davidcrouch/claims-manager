@@ -118,8 +118,8 @@ export function LoginPage({
               <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
                 <p className="mb-2">{error}</p>
                 <a
-                  href={startOverUrl || registerUrl}
-                  className="font-medium text-brand-600 hover:underline"
+                  href={startOverUrl || '/'}
+                  className="inline-flex items-center justify-center rounded-lg bg-brand-700 px-4 py-2 text-sm font-medium text-white hover:bg-brand-800"
                 >
                   Start over
                 </a>
@@ -134,8 +134,9 @@ export function LoginPage({
             <form
               id="loginForm"
               action={loginActionUrl}
-              method="POST"
+              method={uid === 'expired' || isSessionExpired ? 'GET' : 'POST'}
               className="w-full"
+              style={uid === 'expired' || isSessionExpired ? { display: 'none' } : undefined}
             >
               {appSlug != null && appSlug !== '' && (
                 <input type="hidden" name="app_slug" value={appSlug} />

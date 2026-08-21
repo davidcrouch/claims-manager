@@ -17,6 +17,7 @@ export class ReportsController {
     @Query('claimId') claimId?: string,
     @Query('status') status?: string,
     @Query('reportTypeId') reportTypeId?: string,
+    @Query('search') search?: string,
     @Query('sort') sort?: string,
   ) {
     return this.reportsService.findAll({
@@ -26,6 +27,7 @@ export class ReportsController {
       claimId,
       status,
       reportTypeId,
+      search,
       sort,
     });
   }

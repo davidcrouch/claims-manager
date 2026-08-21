@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { TrendingUp } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
@@ -12,25 +13,22 @@ import {
   StatusFilterMenu,
   TableEmptyRow,
   type SortOption,
-  compareDates,
-  compareValues,
+  type StatusOption,
+  buildSortString,
+  parseSort,
+  statusIdsKey,
   formatDate,
 } from '@/components/shared/list-filters';
-import type { AgingBucket, Invoice } from '@/types/api';
+import { fetchInvoicesAction } from '@/app/(app)/invoices/actions';
+import type { AgingBucket, Invoice, PaginatedResponse } from '@/types/api';
 
 const SORT_OPTIONS: SortOption[] = [
-  { key: 'due_date', label: 'Due Date' },
   { key: 'issue_date', label: 'Issue Date' },
-  { key: 'amount', label: 'Amount' },
-  { key: 'age', label: 'Age' },
+  { key: 'total_amount', label: 'Amount' },
   { key: 'invoice_number', label: 'Invoice #' },
 ];
-
-const STATUS_OPTIONS = [
-  { id: 'unpaid', name: 'Unpaid' },
-  { id: 'paid', name: 'Paid' },
-  { id: 'overdue', name: 'Overdue' },
-];
+const ALLOWED_SORT_FIELDS = SORT_OPTIONS.map((o) => o.key);
+const PAGE_SIZE = 100;
 
 function fmt(n: number) {
   return new Intl.NumberFormat(undefined, {
@@ -52,67 +50,102 @@ interface Props {
     totalOverdue: number;
     totalPaid: number;
   };
-  invoices: Invoice[];
+  initialInvoices: PaginatedResponse<Invoice> | { data: Invoice[]; total: number };
+  statusOptions: StatusOption[];
 }
 
-export function FinanceArClient({ summary, invoices }: Props) {
-  const [search, setSearch] = useState('');
-  const [sortField, setSortField] = useState('due_date');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+export function FinanceArClient({ summary, initialInvoices, statusOptions }: Props) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [data, setData] = useState<PaginatedResponse<Invoice>>(
+    'data' in initialInvoices
+      ? (initialInvoices as PaginatedResponse<Invoice>)
+      : { data: [], total: 0 },
+  );
+  const [search, setSearch] = useState(searchParams.get('search') ?? '');
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  const [sort, setSort] = useState(() => {
+    const parsed = parseSort({
+      sortParam: searchParams.get('sort'),
+      allowedFields: ALLOWED_SORT_FIELDS,
+      defaultField: 'issue_date',
+      defaultOrder: 'asc',
+    });
+    return buildSortString(parsed.field, parsed.order);
+  });
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const lastFetchKeyRef = useRef<string | null>(null);
+
+  const statusParam = useMemo(() => {
+    if (statusFilter.size === 0) return undefined;
+    if (statusFilter.size === statusOptions.length) return undefined;
+    return [...statusFilter].sort().join(',');
+  }, [statusFilter, statusOptions.length]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
+    setData(
+      'data' in initialInvoices
+        ? (initialInvoices as PaginatedResponse<Invoice>)
+        : { data: [], total: 0 },
+    );
+    lastFetchKeyRef.current = null;
+  }, [initialInvoices]);
+
+  useEffect(() => {
+    const statusKey = statusIdsKey(statusFilter);
+    const fetchKey = `${debouncedSearch}|${sort}|${statusKey}`;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('search', debouncedSearch);
+    params.set('sort', sort);
+    if (statusParam) params.set('status', statusParam);
+    else params.delete('status');
+    router.replace(`/finance/ar?${params}`, { scroll: false });
+
+    if (lastFetchKeyRef.current === fetchKey) return;
+    lastFetchKeyRef.current = fetchKey;
+
+    fetchInvoicesAction({
+      page: 1,
+      limit: PAGE_SIZE,
+      search: debouncedSearch || undefined,
+      sort,
+      status: statusParam,
+    }).then((res) => res && setData(res));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, sort, statusParam, statusFilter]);
+
+  const { field: sortField, order: sortOrder } = parseSort({
+    sortParam: sort,
+    allowedFields: ALLOWED_SORT_FIELDS,
+    defaultField: 'issue_date',
+    defaultOrder: 'asc',
+  });
 
   const handleSort = (field: string) => {
     if (sortField === field) {
-      setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'));
+      setSort(buildSortString(field, sortOrder === 'asc' ? 'desc' : 'asc'));
     } else {
-      setSortField(field);
-      setSortOrder(field === 'invoice_number' ? 'asc' : 'desc');
+      setSort(buildSortString(field, field === 'invoice_number' ? 'asc' : 'desc'));
     }
   };
 
-  const visibleRows = useMemo(() => {
-    let rows = invoices;
-
-    if (statusFilter.size > 0) {
-      rows = rows.filter((inv) => {
-        const name = inv.status?.name?.toLowerCase() ?? '';
-        return statusFilter.has(name);
-      });
-    }
-
-    const query = search.trim().toLowerCase();
-    if (query) {
-      rows = rows.filter((inv) =>
-        (inv.invoiceNumber ?? '').toLowerCase().includes(query),
-      );
-    }
-
-    const sorted = [...rows].sort((a, b) => {
-      switch (sortField) {
-        case 'invoice_number':
-          return compareValues(
-            a.invoiceNumber ?? '',
-            b.invoiceNumber ?? '',
-            sortOrder,
-          );
-        case 'amount':
-          return compareValues(
-            parseFloat(a.totalAmount ?? '0'),
-            parseFloat(b.totalAmount ?? '0'),
-            sortOrder,
-          );
-        case 'issue_date':
-          return compareDates(a.issueDate, b.issueDate, sortOrder);
-        case 'age':
-          return compareValues(daysSince(a.issueDate), daysSince(b.issueDate), sortOrder);
-        case 'due_date':
-        default:
-          return compareDates(a.issueDate, b.issueDate, sortOrder);
-      }
+  const setStatusChecked = (id: string, checked: boolean) => {
+    setStatusFilter((prev) => {
+      const working =
+        prev.size === 0 ? new Set(statusOptions.map((o) => o.id)) : new Set(prev);
+      if (checked) working.add(id);
+      else working.delete(id);
+      if (working.size === statusOptions.length) return new Set();
+      return working;
     });
+  };
 
-    return sorted;
-  }, [invoices, search, statusFilter, sortField, sortOrder]);
+  const visibleRows = data.data;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
@@ -120,8 +153,10 @@ export function FinanceArClient({ summary, invoices }: Props) {
         <ListPageHeader
           icon={TrendingUp}
           title="Accounts Receivable"
-          total={invoices.length}
+          total={data.total}
           showing={visibleRows.length}
+          search={debouncedSearch}
+          statusSelectedCount={statusFilter.size}
           accent="emerald"
           stats={[
             { label: 'Outstanding', value: fmt(summary.totalOutstanding) },
@@ -184,18 +219,15 @@ export function FinanceArClient({ summary, invoices }: Props) {
             onChange={setSearch}
           />
           <StatusFilterMenu
-            options={STATUS_OPTIONS}
-            selected={statusFilter}
-            onSelectionChange={(id, checked) => {
-              setStatusFilter((prev) => {
-                const next = new Set(prev);
-                if (checked) next.add(id);
-                else next.delete(id);
-                return next;
-              });
-            }}
+            options={statusOptions}
+            selected={
+              statusFilter.size === 0
+                ? new Set(statusOptions.map((o) => o.id))
+                : statusFilter
+            }
+            onSelectionChange={setStatusChecked}
             onClearAll={() => setStatusFilter(new Set())}
-            onSelectAll={() => setStatusFilter(new Set(STATUS_OPTIONS.map((o) => o.id)))}
+            onSelectAll={() => setStatusFilter(new Set())}
           />
         </div>
       </div>

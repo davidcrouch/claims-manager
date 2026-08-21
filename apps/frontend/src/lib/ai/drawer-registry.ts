@@ -115,7 +115,7 @@ export const drawerRegistry: Record<string, DrawerRegistryEntry> = {
       })),
   },
   TaskDetailDrawer: {
-    title: 'Task Detail',
+    title: 'Edit Task',
     loader: () =>
       import('@/components/tasks/TaskDetailDrawer').then((m) => ({
         default: m.TaskDetailDrawer as unknown as ComponentType<CanvasDrawerProps>,
@@ -126,6 +126,34 @@ export const drawerRegistry: Record<string, DrawerRegistryEntry> = {
     loader: () =>
       import('@/components/forms/AppointmentFormDrawer').then((m) => ({
         default: m.AppointmentFormDrawer as unknown as ComponentType<CanvasDrawerProps>,
+      })),
+  },
+  CatalogFormDrawer: {
+    title: 'Catalogue',
+    loader: () =>
+      import('@/components/catalog/CatalogFormDrawer').then((m) => ({
+        default: m.CatalogFormDrawer as unknown as ComponentType<CanvasDrawerProps>,
+      })),
+  },
+  CatalogItemFormDrawer: {
+    title: 'Catalogue item',
+    loader: () =>
+      import('@/components/catalog/CatalogItemFormDrawer').then((m) => ({
+        default: m.CatalogItemFormDrawer as unknown as ComponentType<CanvasDrawerProps>,
+      })),
+  },
+  CatalogCategoriesDrawer: {
+    title: 'Catalogue categories',
+    loader: () =>
+      import('@/components/catalog/CatalogCategoriesDrawer').then((m) => ({
+        default: m.CatalogCategoriesDrawer as unknown as ComponentType<CanvasDrawerProps>,
+      })),
+  },
+  CatalogBomDrawer: {
+    title: 'Catalogue BOM',
+    loader: () =>
+      import('@/components/catalog/CatalogBomDrawer').then((m) => ({
+        default: m.CatalogBomDrawer as unknown as ComponentType<CanvasDrawerProps>,
       })),
   },
 };

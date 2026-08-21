@@ -26,6 +26,14 @@ export class CatalogCategoryService {
     return this.categoriesRepo.findAll({ tenantId });
   }
 
+  async findById(params: { id: string }) {
+    const tenantId = this.getTenantId();
+    await this.bootstrapService.ensureDefaults({ tenantId });
+    const row = await this.categoriesRepo.findById({ tenantId, id: params.id });
+    if (!row) throw new NotFoundException('Category not found');
+    return row;
+  }
+
   async findTree(): Promise<CategoryTreeNode[]> {
     const flat = await this.findAll();
     const byParent = new Map<string | null, typeof flat>();

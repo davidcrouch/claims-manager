@@ -1,35 +1,36 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ConnectionResolverService } from '../external/connection-resolver.service';
+import { CredentialsCipher } from '../../common/credentials-cipher';
+
+interface TokenCacheEntry {
+  accessToken: string;
+  expiresAt: number;
+}
 
 /**
- * Dispatches domain events to external capability servers (more0-ensure).
+ * Dispatches domain events to the more0-ensure capability server.
  *
- * When More0 is production-ready, this service can be removed — More0
- * will receive events directly via its own webhook infrastructure.
+ * Resolves a `more0-ensure` integration connection for the tenant, obtains an
+ * OAuth2 access token via client_credentials, and POSTs the event to the
+ * webhook URL stored on the connection.
  */
 @Injectable()
 export class OutboundEventsService {
   private readonly logger = new Logger('OutboundEvents');
-  private readonly webhookUrl: string | null;
-  private readonly enabled: boolean;
+  private readonly tokenCache = new Map<string, TokenCacheEntry>();
+  private readonly audience: string;
 
-  constructor(private readonly config: ConfigService) {
-    this.webhookUrl = config.get<string>('CAPABILITY_WEBHOOK_URL', '');
-    this.enabled = !!this.webhookUrl;
-
-    if (this.enabled) {
-      this.logger.log(
-        `OutboundEvents — dispatching to ${this.webhookUrl}`,
-      );
-    } else {
-      this.logger.log(
-        'OutboundEvents — disabled (CAPABILITY_WEBHOOK_URL not set)',
-      );
-    }
+  constructor(
+    private readonly config: ConfigService,
+    @Optional() private readonly connectionResolver?: ConnectionResolverService,
+    @Optional() private readonly cipher?: CredentialsCipher,
+  ) {
+    this.audience = this.config.get<string>('AUTH_AUDIENCE', 'http://more0.ai');
   }
 
   /**
-   * Fire an event to the capability webhook endpoint.
+   * Fire an event to the more0-ensure webhook endpoint for the given tenant.
    * Non-blocking — errors are logged but do not propagate.
    */
   async emit(event: {
@@ -39,7 +40,8 @@ export class OutboundEventsService {
     tenantId: string;
     payload?: Record<string, unknown>;
   }): Promise<void> {
-    if (!this.enabled || !this.webhookUrl) return;
+    const resolved = await this.resolveEndpoint(event.tenantId);
+    if (!resolved) return;
 
     const body = {
       eventType: event.eventType,
@@ -50,7 +52,7 @@ export class OutboundEventsService {
       payload: event.payload ?? {},
     };
 
-    const url = `${this.webhookUrl}/claims-manager`;
+    const url = `${resolved.webhookUrl}/claims-manager`;
 
     this.logger.debug(
       `OutboundEvents.emit — ${event.eventType} ${event.entityType}:${event.entityId}`,
@@ -60,9 +62,16 @@ export class OutboundEventsService {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 10_000);
 
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (resolved.accessToken) {
+        headers['Authorization'] = `Bearer ${resolved.accessToken}`;
+      }
+
       const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(body),
         signal: controller.signal,
       });
@@ -81,7 +90,184 @@ export class OutboundEventsService {
     }
   }
 
+  // ── Workflow invocation ─────────────────────────────────────────
+
+  /**
+   * Invoke a workflow on the more0-ensure server for the given tenant.
+   * Uses the same connection resolution as event dispatch, but POSTs to
+   * the /api/v1/invoke endpoint instead of the webhook endpoint.
+   */
+  async invokeWorkflow(params: {
+    cap: string;
+    method?: string;
+    tenantId: string;
+    workflowParams: Record<string, unknown>;
+  }): Promise<void> {
+    const resolved = await this.resolveEndpoint(params.tenantId);
+    if (!resolved) return;
+
+    const invokeUrl = resolved.webhookUrl.replace(/\/webhooks$/, '/invoke');
+
+    const body = {
+      cap: params.cap,
+      method: params.method ?? 'start',
+      params: {
+        ...params.workflowParams,
+        tenantId: params.tenantId,
+      },
+    };
+
+    this.logger.log(
+      `OutboundEvents.invokeWorkflow — cap=${params.cap} entity=${params.workflowParams.entityId ?? params.workflowParams.jobId}`,
+    );
+
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10_000);
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (resolved.accessToken) {
+        headers['Authorization'] = `Bearer ${resolved.accessToken}`;
+      }
+
+      const response = await fetch(invokeUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timer);
+
+      if (!response.ok) {
+        this.logger.warn(
+          `OutboundEvents.invokeWorkflow — HTTP ${response.status} for cap=${params.cap}`,
+        );
+      }
+    } catch (err) {
+      this.logger.warn(
+        `OutboundEvents.invokeWorkflow — failed: ${(err as Error).message}`,
+      );
+    }
+  }
+
+  // ── Connection resolution + token acquisition ─────────────────
+
+  private async resolveEndpoint(
+    tenantId: string,
+  ): Promise<{ webhookUrl: string; accessToken: string | null } | null> {
+    if (!this.connectionResolver) {
+      this.logger.debug('OutboundEvents.resolveEndpoint — no connectionResolver');
+      return null;
+    }
+
+    const connection = await this.connectionResolver.resolveForTenant({
+      tenantId,
+      providerCode: 'more0-ensure',
+    });
+
+    if (!connection || !connection.isActive) {
+      return null;
+    }
+
+    const config = (connection.config ?? {}) as Record<string, unknown>;
+    const webhookUrl = (config.webhookUrl as string) ?? `${connection.baseUrl}/api/v1/webhooks`;
+
+    let accessToken: string | null = null;
+    try {
+      const rawCredentials = connection.credentials as Record<string, unknown> | string;
+      const decrypted =
+        typeof rawCredentials === 'string' && this.cipher
+          ? this.cipher.decryptJson(rawCredentials)
+          : (rawCredentials as Record<string, unknown>);
+
+      const clientId = decrypted?.clientId as string | undefined;
+      const clientSecret = decrypted?.clientSecret as string | undefined;
+      const authUrl = connection.authUrl;
+
+      if (clientId && clientSecret && authUrl) {
+        accessToken = await this.acquireOidcToken({
+          connectionId: connection.id,
+          clientId,
+          clientSecret,
+          authUrl,
+        });
+      }
+    } catch (err) {
+      this.logger.warn(
+        `OutboundEvents.resolveEndpoint — token acquisition failed: ${(err as Error).message}`,
+      );
+    }
+
+    return { webhookUrl, accessToken };
+  }
+
+  private async acquireOidcToken(params: {
+    connectionId: string;
+    clientId: string;
+    clientSecret: string;
+    authUrl: string;
+  }): Promise<string> {
+    const cached = this.tokenCache.get(params.connectionId);
+    if (cached && Date.now() < cached.expiresAt - 60_000) {
+      return cached.accessToken;
+    }
+
+    const body = new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: params.clientId,
+      client_secret: params.clientSecret,
+      resource: this.audience,
+    });
+
+    const response = await fetch(params.authUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    });
+
+    if (!response.ok) {
+      throw new Error(`OIDC token exchange failed: HTTP ${response.status}`);
+    }
+
+    const data = (await response.json()) as { access_token: string; expires_in: number };
+    const entry: TokenCacheEntry = {
+      accessToken: data.access_token,
+      expiresAt: Date.now() + data.expires_in * 1000,
+    };
+    this.tokenCache.set(params.connectionId, entry);
+
+    this.logger.debug(
+      `OutboundEvents.acquireOidcToken — token acquired for connection=${params.connectionId}`,
+    );
+
+    return entry.accessToken;
+  }
+
   // ── Convenience methods for common events ──────────────────────
+
+  async emitTaskCreated(params: {
+    taskId: string;
+    taskName: string;
+    jobId: string;
+    tenantId: string;
+    originType?: string;
+  }): Promise<void> {
+    await this.emit({
+      eventType: 'task.created',
+      entityType: 'job',
+      entityId: params.jobId,
+      tenantId: params.tenantId,
+      payload: {
+        taskId: params.taskId,
+        taskName: params.taskName,
+        jobId: params.jobId,
+        originType: params.originType,
+      },
+    });
+  }
 
   async emitTaskCompleted(params: {
     taskId: string;
@@ -230,6 +416,27 @@ export class OutboundEventsService {
       payload: {
         purchaseOrderId: params.purchaseOrderId,
         jobId: params.jobId,
+      },
+    });
+  }
+
+  async emitInvoiceApproved(params: {
+    invoiceId: string;
+    jobId: string;
+    tenantId: string;
+    purchaseOrderId?: string;
+    approvedAt?: string;
+  }): Promise<void> {
+    await this.emit({
+      eventType: 'invoice.approved',
+      entityType: 'job',
+      entityId: params.jobId,
+      tenantId: params.tenantId,
+      payload: {
+        invoiceId: params.invoiceId,
+        jobId: params.jobId,
+        purchaseOrderId: params.purchaseOrderId,
+        approvedAt: params.approvedAt ?? new Date().toISOString(),
       },
     });
   }

@@ -25,6 +25,9 @@ const LOG_PREFIX = 'auth-server:static-clients';
 /** Client ID for claims-manager frontend (Next.js app on port 5000). */
 export const CLAIMS_MANAGER_UI_CLIENT_ID = 'claims-manager-ui';
 
+/** Client ID for more0-ensure workflow engine (M2M service). */
+export const MORE0_ENSURE_SERVICE_CLIENT_ID = 'more0-ensure-service';
+
 export interface StaticClientConfig {
    client_id: string;
    client_secret?: string;
@@ -223,7 +226,31 @@ function buildClientFromTemplate(template: ClientTemplate): StaticClientConfig {
 
 /** Build the full static client list from templates + environment. */
 export function buildStaticClients(): StaticClientConfig[] {
-   const clients = CLIENT_TEMPLATES.map(buildClientFromTemplate);
+   const clients: StaticClientConfig[] = CLIENT_TEMPLATES.map(buildClientFromTemplate);
+
+   // M2M service client for more0-ensure workflow engine.
+   // Uses client_credentials grant to obtain tenant-scoped JWTs for calling
+   // claims-mcp tools. Secret comes from env (MORE0_ENSURE_CLIENT_SECRET) or
+   // falls back to a dev-only default.
+   const m2mSecret =
+      process.env.MORE0_ENSURE_CLIENT_SECRET?.trim() ||
+      (!isProduction() ? 'dev-more0-ensure-secret' : undefined);
+
+   if (m2mSecret) {
+      const m2mOrgId = process.env.MORE0_ENSURE_ORG_ID?.trim() || undefined;
+      clients.push({
+         client_id: MORE0_ENSURE_SERVICE_CLIENT_ID,
+         client_secret: m2mSecret,
+         redirect_uris: [],
+         grant_types: ['client_credentials'],
+         response_types: [],
+         token_endpoint_auth_method: 'client_secret_basic',
+         scope: 'openid',
+         ...(m2mOrgId ? { organization_id: m2mOrgId } : {}),
+         permissions: ['*'],
+      } as StaticClientConfig & Record<string, unknown>);
+   }
+
    console.info(
       {
          clientCount: clients.length,

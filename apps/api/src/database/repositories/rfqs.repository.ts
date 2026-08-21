@@ -1,5 +1,6 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, isNull, desc, asc, sql, inArray } from 'drizzle-orm';
+import { eq, and, isNull, desc, asc, sql, inArray, or, ilike } from 'drizzle-orm';
+import { normalizeListJobIds } from '../../common/list-job-filter';
 import { DRIZZLE } from '../drizzle.module';
 import type { DrizzleDB, DrizzleDbOrTx } from '../drizzle.module';
 import { rfqs } from '../schema';
@@ -50,10 +51,12 @@ export class RfqsRepository {
     page?: number;
     limit?: number;
     jobId?: string;
+    jobIds?: string[];
     quoteId?: string;
     /** Comma-separated status lookup IDs. */
     status?: string;
     vendorId?: string;
+    search?: string;
     sort?: string;
   }): Promise<{ data: RfqRow[]; total: number }> {
     const page = params.page ?? 1;
@@ -64,8 +67,13 @@ export class RfqsRepository {
       eq(rfqs.tenantId, params.tenantId),
       isNull(rfqs.deletedAt),
     );
-    if (params.jobId) {
-      whereClause = and(whereClause, eq(rfqs.jobId, params.jobId));
+    const jobIds = normalizeListJobIds({ jobId: params.jobId, jobIds: params.jobIds });
+    if (jobIds) {
+      if (jobIds.length === 0) return { data: [], total: 0 };
+      whereClause = and(
+        whereClause,
+        jobIds.length === 1 ? eq(rfqs.jobId, jobIds[0]) : inArray(rfqs.jobId, jobIds),
+      );
     }
     if (params.quoteId) {
       whereClause = and(whereClause, eq(rfqs.quoteId, params.quoteId));
@@ -77,6 +85,19 @@ export class RfqsRepository {
     }
     if (vendorIds.length > 0) {
       whereClause = and(whereClause, inArray(rfqs.vendorId, vendorIds));
+    }
+    if (params.search?.trim()) {
+      const term = `%${params.search.trim()}%`;
+      whereClause = and(
+        whereClause,
+        or(
+          ilike(rfqs.rfqNumber, term),
+          ilike(rfqs.name, term),
+          ilike(rfqs.rfqToName, term),
+          ilike(rfqs.note, term),
+          ilike(rfqs.sourceExternalReference, term),
+        )!,
+      );
     }
 
     const [data, countResult] = await Promise.all([

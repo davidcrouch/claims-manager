@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useEffect, useTransition } from 'react';
+import { useMemo, useState, useEffect, useTransition, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, Loader2, Mail, Phone, Search, Trash2, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -19,45 +19,24 @@ import {
   TableEmptyRow,
   compareValues,
   commitColumnFilterSelection,
+  columnFilterToIdsParam,
 } from '@/components/shared/list-filters';
 import { removeJobContactAction } from '@/app/(app)/jobs/mutations';
+import { fetchContactsAction } from '@/app/(app)/contacts/actions';
 import { ContactDetailDrawer } from '@/components/contacts/ContactDetailDrawer';
-import type { Job } from '@/types/api';
+import type { Contact, Job } from '@/types/api';
 
-type Dict = Record<string, unknown>;
-
-interface ContactRow {
-  id?: string;
-  firstName?: string;
-  lastName?: string;
-  name?: string;
-  email?: string;
-  mobilePhone?: string;
-  homePhone?: string;
-  workPhone?: string;
-  type?: string | { name?: string; externalReference?: string };
-  preferredMethodOfContact?: string | { name?: string };
-  notes?: string;
-}
-
-function contactName(c: ContactRow): string {
-  if (c.name) return c.name;
+function contactName(c: Contact): string {
   const parts = [c.firstName, c.lastName].filter(Boolean);
   return parts.join(' ').trim() || '—';
 }
 
-function contactType(c: ContactRow): string {
-  if (!c.type) return '—';
-  if (typeof c.type === 'string') return c.type;
-  return c.type.name ?? c.type.externalReference ?? '—';
-}
-
-function preferredMethod(c: ContactRow): string {
-  if (!c.preferredMethodOfContact) return '—';
-  if (typeof c.preferredMethodOfContact === 'string') {
-    return c.preferredMethodOfContact;
-  }
-  return c.preferredMethodOfContact.name ?? '—';
+function contactTypeName(
+  c: Contact,
+  typeOptions: Array<{ id: string; name?: string }>,
+): string {
+  if (!c.typeLookupId) return '—';
+  return typeOptions.find((t) => t.id === c.typeLookupId)?.name ?? '—';
 }
 
 type ContactSortField = 'name' | 'type' | 'email' | 'preferred';
@@ -71,48 +50,82 @@ const TABLE_COLUMNS: ColDef[] = [
   { key: 'preferred', label: 'Preferred' },
 ];
 
-function getSortValue(c: ContactRow, field: ContactSortField): string | null | undefined {
-  switch (field) {
-    case 'name': return contactName(c);
-    case 'type': return contactType(c);
-    case 'email': return c.email;
-    case 'preferred': return preferredMethod(c);
-    default: return null;
-  }
-}
-
-export function JobPartiesTab({ job }: { job: Job }) {
+export function JobPartiesTab({
+  job,
+  typeOptions = [],
+}: {
+  job: Job;
+  typeOptions?: Array<{ id: string; name?: string }>;
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const api = (job.apiPayload as Dict | undefined) ?? {};
-  const contacts = (api.contacts as ContactRow[] | undefined) ?? [];
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
   const [typeFilterActive, setTypeFilterActive] = useState(false);
-  const [confirmRemove, setConfirmRemove] = useState<ContactRow | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<Contact | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
-  const [selectedContact, setSelectedContact] = useState<ContactRow | null>(null);
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [columnSort, setColumnSort] = useState<{ field: ContactSortField; order: 'asc' | 'desc' }>({
     field: 'name',
     order: 'asc',
   });
+  const lastFetchKeyRef = useRef<string | null>(null);
+
+  const typeParam = useMemo(
+    () =>
+      columnFilterToIdsParam(
+        typeFilterActive,
+        typeFilter,
+        typeOptions.map((t) => ({ id: t.id, name: t.name?.trim() || 'Unknown' })),
+      ),
+    [typeFilterActive, typeFilter, typeOptions],
+  );
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
   }, [search]);
 
-  function requestRemove(contact: ContactRow) {
+  useEffect(() => {
+    const typeKey = typeParam === null ? '__none__' : (typeParam ?? '');
+    const fetchKey = `${job.id}|${debouncedSearch}|${typeKey}|${columnSort.field}_${columnSort.order}`;
+    if (lastFetchKeyRef.current === fetchKey) return;
+    lastFetchKeyRef.current = fetchKey;
+
+    if (typeParam === null) {
+      setContacts([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    fetchContactsAction({
+      jobId: job.id,
+      limit: 100,
+      search: debouncedSearch || undefined,
+      typeLookupIds: typeParam ? typeParam.split(',') : undefined,
+      sort:
+        columnSort.field === 'name' || columnSort.field === 'email'
+          ? `${columnSort.field}_${columnSort.order}`
+          : undefined,
+    })
+      .then((res) => setContacts(res.data))
+      .finally(() => setLoading(false));
+  }, [job.id, debouncedSearch, typeParam, columnSort]);
+
+  function requestRemove(contact: Contact) {
     if (!contact.id) return;
     setRemoveError(null);
     setConfirmRemove(contact);
   }
 
-  function openContactDetail(contact: ContactRow) {
+  function openContactDetail(contact: Contact) {
     setSelectedContact(contact);
     setDetailOpen(true);
   }
@@ -136,7 +149,9 @@ export function JobPartiesTab({ job }: { job: Job }) {
           return;
         }
         setConfirmRemove(null);
+        lastFetchKeyRef.current = null;
         router.refresh();
+        setContacts((prev) => prev.filter((c) => c.id !== contact.id));
       } finally {
         setRemovingId(null);
       }
@@ -150,14 +165,13 @@ export function JobPartiesTab({ job }: { job: Job }) {
     });
   };
 
-  const uniqueTypes = useMemo(() => {
-    const names = new Set<string>();
-    for (const c of contacts) {
-      const t = contactType(c).trim();
-      if (t && t !== '—') names.add(t);
-    }
-    return [...names].sort((a, b) => a.localeCompare(b));
-  }, [contacts]);
+  const uniqueTypes = useMemo(
+    () =>
+      [...new Set(typeOptions.map((t) => (t.name ?? '').trim()).filter(Boolean))].sort((a, b) =>
+        a.localeCompare(b),
+      ),
+    [typeOptions],
+  );
 
   const toggleType = (name: string) => {
     const working = typeFilterActive ? new Set(typeFilter) : new Set(uniqueTypes);
@@ -181,34 +195,23 @@ export function JobPartiesTab({ job }: { job: Job }) {
   };
 
   const visibleRows = useMemo(() => {
-    let rows = contacts;
-
-    if (typeFilterActive) {
-      if (typeFilter.size === 0) {
-        rows = [];
-      } else {
-        rows = rows.filter((c) => {
-          const t = contactType(c).trim();
-          return t && t !== '—' ? typeFilter.has(t) : false;
-        });
-      }
-    }
-
-    const query = debouncedSearch.trim().toLowerCase();
-    if (query) {
-      rows = rows.filter((c) => {
-        const name = contactName(c).toLowerCase();
-        const email = (c.email ?? '').toLowerCase();
-        return name.includes(query) || email.includes(query);
-      });
-    }
-
-    return [...rows].sort((a, b) => {
-      const aVal = getSortValue(a, columnSort.field);
-      const bVal = getSortValue(b, columnSort.field);
-      return compareValues(aVal, bVal, columnSort.order);
+    return [...contacts].sort((a, b) => {
+      const getVal = (c: Contact): string | null | undefined => {
+        switch (columnSort.field) {
+          case 'name': return contactName(c);
+          case 'type': return contactTypeName(c, typeOptions);
+          case 'email': return c.email;
+          case 'preferred': return null;
+          default: return null;
+        }
+      };
+      return compareValues(getVal(a), getVal(b), columnSort.order);
     });
-  }, [contacts, typeFilterActive, typeFilter, debouncedSearch, columnSort]);
+  }, [contacts, columnSort, typeOptions]);
+
+  if (loading) {
+    return <p className="text-sm text-slate-400">Loading...</p>;
+  }
 
   return (
     <div className="space-y-4">
@@ -298,7 +301,7 @@ export function JobPartiesTab({ job }: { job: Job }) {
                   <td className="px-4 py-3 font-medium text-slate-900">{contactName(c)}</td>
                   <td className="whitespace-nowrap px-4 py-3">
                     <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
-                      {contactType(c)}
+                      {contactTypeName(c, typeOptions)}
                     </span>
                   </td>
                   <td className="px-4 py-3">
@@ -315,9 +318,7 @@ export function JobPartiesTab({ job }: { job: Job }) {
                       <span className="text-slate-400">—</span>
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                    {preferredMethod(c)}
-                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-slate-600">—</td>
                   <td className="px-4 py-3 text-slate-600">
                     <div className="flex flex-col gap-0.5 text-xs">
                       {c.mobilePhone && (

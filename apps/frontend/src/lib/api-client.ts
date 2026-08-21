@@ -36,6 +36,9 @@ import type {
   DashboardInbox,
   RecentActivity,
   PaginatedResponse,
+  LineItemsPageQuery,
+  LineItemsPageResponse,
+  TaskTypeMapping,
   FinanceSummary,
   AgingBucket,
   Catalog,
@@ -56,6 +59,50 @@ import type {
   Assessment,
   OrganisationProfile,
 } from '@/types/api';
+
+function lineItemsPageQueryString(query?: LineItemsPageQuery): string {
+  const sp = new URLSearchParams();
+  if (query?.search) sp.set('search', query.search);
+  if (query?.groupIds?.length) sp.set('groupIds', query.groupIds.join(','));
+  if (query?.all) sp.set('all', 'true');
+  if (query?.page != null) sp.set('page', String(query.page));
+  if (query?.limit != null) sp.set('limit', String(query.limit));
+  const encoded = sp.toString();
+  return encoded ? `?${encoded}` : '';
+}
+
+export interface PublishQuoteResult {
+  quote: Quote | null;
+  publishMode: 'internal' | 'external';
+  provider?: {
+    confirmed: boolean;
+    providerReference?: string;
+    sentGroups: number;
+    sentItems: number;
+    sentCombos: number;
+    excludedItems?: number;
+    excludedCombos?: number;
+    warnings?: string[];
+  };
+}
+
+export interface EntityActivity {
+  id: string;
+  tenantId: string;
+  entityType: string;
+  entityId: string;
+  action: string;
+  actorType: 'user' | 'system' | 'provider';
+  actorId?: string | null;
+  actorName?: string | null;
+  summary: string;
+  detail: Record<string, unknown>;
+  relatedEntityType?: string | null;
+  relatedEntityId?: string | null;
+  source?: string | null;
+  sourceEventId?: string | null;
+  createdAt: string;
+}
 
 export interface ApiClientOptions {
   token?: string;
@@ -326,6 +373,8 @@ export function createApiClient(options?: ApiClientOptions) {
       status?: string;
       jobType?: string;
       assignedToUserId?: string;
+      assignedToUserIds?: string;
+      refs?: string;
     }): Promise<PaginatedResponse<Job>> {
       const sp = new URLSearchParams();
       if (params.page != null) sp.set('page', String(params.page));
@@ -336,7 +385,16 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params.status) sp.set('status', params.status ?? '');
       if (params.jobType) sp.set('jobType', params.jobType);
       if (params.assignedToUserId) sp.set('assignedToUserId', params.assignedToUserId);
+      if (params.assignedToUserIds) sp.set('assignedToUserIds', params.assignedToUserIds);
+      if (params.refs) sp.set('refs', params.refs);
       return fetchApi<PaginatedResponse<Job>>(`/jobs?${sp}`);
+    },
+
+    getJobFilterOptions(): Promise<{
+      refs: string[];
+      assignees: { id: string; name: string }[];
+    }> {
+      return fetchApi('/jobs/filter-options');
     },
 
     getJob(id: string): Promise<Job | null> {
@@ -360,7 +418,12 @@ export function createApiClient(options?: ApiClientOptions) {
       sort?: string;
       order?: 'asc' | 'desc';
       assignedToUserId?: string;
+      assignedToUserIds?: string;
+      names?: string;
+      taskTypes?: string;
       overdue?: boolean;
+      jobId?: string;
+      jobIds?: string[];
     }): Promise<PaginatedResponse<Task>> {
       const sp = new URLSearchParams();
       if (params?.page != null) sp.set('page', String(params.page));
@@ -371,8 +434,21 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params?.sort) sp.set('sort', params.sort);
       if (params?.order) sp.set('order', params.order);
       if (params?.assignedToUserId) sp.set('assignedToUserId', params.assignedToUserId);
+      if (params?.assignedToUserIds) sp.set('assignedToUserIds', params.assignedToUserIds);
+      if (params?.names) sp.set('names', params.names);
+      if (params?.taskTypes) sp.set('taskTypes', params.taskTypes);
       if (params?.overdue) sp.set('overdue', 'true');
+      if (params?.jobId) sp.set('jobId', params.jobId);
+      if (params?.jobIds?.length) sp.set('jobIds', params.jobIds.join(','));
       return fetchApi<PaginatedResponse<Task>>(`/tasks?${sp}`);
+    },
+
+    getTaskFilterOptions(): Promise<{
+      names: string[];
+      taskTypes: string[];
+      assignees: { id: string; name: string }[];
+    }> {
+      return fetchApi('/tasks/filter-options');
     },
 
     getJobTasks(jobId: string): Promise<Task[]> {
@@ -383,19 +459,98 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<Task | null>(`/tasks/${id}`);
     },
 
+    // -- Task type mappings (title → type) --
+
+    getTaskTypeMappings(params?: {
+      includeInactive?: boolean;
+    }): Promise<TaskTypeMapping[]> {
+      const sp = new URLSearchParams();
+      if (params?.includeInactive === false) sp.set('includeInactive', 'false');
+      const qs = sp.toString();
+      return fetchApi<TaskTypeMapping[]>(
+        `/task-type-mappings${qs ? `?${qs}` : ''}`,
+      );
+    },
+
+    getCanonicalTaskTypes(): Promise<string[]> {
+      return fetchApi<string[]>('/task-type-mappings/task-types');
+    },
+
+    createTaskTypeMapping(body: {
+      titlePattern: string;
+      taskType: string;
+      matchMode?: string;
+      priority?: number;
+      isActive?: boolean;
+    }): Promise<TaskTypeMapping> {
+      return fetchApi<TaskTypeMapping>('/task-type-mappings', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+
+    updateTaskTypeMapping(
+      id: string,
+      body: {
+        titlePattern?: string;
+        taskType?: string;
+        matchMode?: string;
+        priority?: number;
+        isActive?: boolean;
+      },
+    ): Promise<TaskTypeMapping> {
+      return fetchApi<TaskTypeMapping>(`/task-type-mappings/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      });
+    },
+
+    deleteTaskTypeMapping(id: string): Promise<{ success: boolean }> {
+      return fetchApi<{ success: boolean }>(`/task-type-mappings/${id}`, {
+        method: 'DELETE',
+      });
+    },
+
+    backfillTaskTypes(): Promise<{ updated: number; scanned: number }> {
+      return fetchApi<{ updated: number; scanned: number }>(
+        '/task-type-mappings/backfill',
+        { method: 'POST' },
+      );
+    },
+
     getMessages(params?: {
       page?: number;
       limit?: number;
       jobId?: string;
+      jobIds?: string[];
       claimId?: string;
+      readStatus?: string;
+      fromNames?: string;
+      toNames?: string;
+      search?: string;
+      sort?: string;
     }): Promise<PaginatedResponse<Message>> {
       const sp = new URLSearchParams();
       if (params?.page != null) sp.set('page', String(params.page));
       if (params?.limit != null) sp.set('limit', String(params.limit));
       if (params?.jobId) sp.set('jobId', params.jobId);
+      if (params?.jobIds?.length) sp.set('jobIds', params.jobIds.join(','));
       if (params?.claimId) sp.set('claimId', params.claimId);
+      if (params?.readStatus) sp.set('readStatus', params.readStatus);
+      if (params?.fromNames) sp.set('fromNames', params.fromNames);
+      if (params?.toNames) sp.set('toNames', params.toNames);
+      if (params?.search) sp.set('search', params.search);
+      if (params?.sort) sp.set('sort', params.sort);
       const qs = sp.toString();
       return fetchApi<PaginatedResponse<Message>>(`/messages${qs ? `?${qs}` : ''}`);
+    },
+
+    getMessageFilterOptions(): Promise<{
+      fromNames: string[];
+      toNames: string[];
+      statuses: ('Read' | 'Unread')[];
+    }> {
+      return fetchApi('/messages/filter-options');
     },
 
     getJobMessages(jobId: string): Promise<PaginatedResponse<Message>> {
@@ -415,19 +570,35 @@ export function createApiClient(options?: ApiClientOptions) {
       limit?: number;
       search?: string;
       status?: string;
+      location?: string;
+      appointmentTypeLookupIds?: string;
       sort?: string;
       order?: 'asc' | 'desc';
       jobId?: string;
+      jobIds?: string[];
     }): Promise<PaginatedResponse<Appointment>> {
       const sp = new URLSearchParams();
       if (params?.page != null) sp.set('page', String(params.page));
       if (params?.limit != null) sp.set('limit', String(params.limit));
       if (params?.search) sp.set('search', params.search);
       if (params?.status) sp.set('status', params.status);
+      if (params?.location) sp.set('location', params.location);
+      if (params?.appointmentTypeLookupIds) {
+        sp.set('appointmentTypeLookupIds', params.appointmentTypeLookupIds);
+      }
       if (params?.sort) sp.set('sort', params.sort);
       if (params?.order) sp.set('order', params.order);
       if (params?.jobId) sp.set('jobId', params.jobId);
+      if (params?.jobIds?.length) sp.set('jobIds', params.jobIds.join(','));
       return fetchApi<PaginatedResponse<Appointment>>(`/appointments?${sp}`);
+    },
+
+    getAppointmentFilterLocations(): Promise<string[]> {
+      return fetchApi<string[]>('/appointments/filter-locations');
+    },
+
+    getAppointmentFilterTypes(): Promise<{ id: string; name: string }[]> {
+      return fetchApi('/appointments/filter-types');
     },
 
     getJobAppointments(jobId: string): Promise<Appointment[]> {
@@ -483,20 +654,30 @@ export function createApiClient(options?: ApiClientOptions) {
       page?: number;
       limit?: number;
       jobId?: string;
+      jobIds?: string[];
       status?: string;
       statusId?: string;
       quoteType?: string;
+      assignedToUserIds?: string;
+      search?: string;
       sort?: string;
     }): Promise<PaginatedResponse<Quote>> {
       const sp = new URLSearchParams();
       if (params.page != null) sp.set('page', String(params.page));
       if (params.limit != null) sp.set('limit', String(params.limit));
       if (params.jobId) sp.set('jobId', params.jobId);
+      if (params.jobIds?.length) sp.set('jobIds', params.jobIds.join(','));
       if (params.status) sp.set('status', params.status);
       if (params.statusId) sp.set('statusId', params.statusId);
       if (params.quoteType) sp.set('quoteType', params.quoteType);
+      if (params.assignedToUserIds) sp.set('assignedToUserIds', params.assignedToUserIds);
+      if (params.search) sp.set('search', params.search);
       if (params.sort) sp.set('sort', params.sort);
       return fetchApi<PaginatedResponse<Quote>>(`/quotes?${sp}`);
+    },
+
+    getQuoteFilterAssignees(): Promise<{ id: string; name: string }[]> {
+      return fetchApi('/quotes/filter-assignees');
     },
 
     getQuote(id: string): Promise<Quote | null> {
@@ -507,16 +688,20 @@ export function createApiClient(options?: ApiClientOptions) {
       page?: number;
       limit?: number;
       jobId?: string;
+      jobIds?: string[];
       status?: string;
       vendorId?: string;
+      search?: string;
       sort?: string;
     }): Promise<PaginatedResponse<PurchaseOrder>> {
       const sp = new URLSearchParams();
       if (params.page != null) sp.set('page', String(params.page));
       if (params.limit != null) sp.set('limit', String(params.limit));
       if (params.jobId) sp.set('jobId', params.jobId);
+      if (params.jobIds?.length) sp.set('jobIds', params.jobIds.join(','));
       if (params.status) sp.set('status', params.status);
       if (params.vendorId) sp.set('vendorId', params.vendorId);
+      if (params.search) sp.set('search', params.search);
       if (params.sort) sp.set('sort', params.sort);
       return fetchApi<PaginatedResponse<PurchaseOrder>>(`/purchase-orders?${sp}`);
     },
@@ -576,16 +761,31 @@ export function createApiClient(options?: ApiClientOptions) {
       });
     },
 
-    getPurchaseOrderLineItems(poId: string): Promise<Array<Record<string, unknown>>> {
-      return fetchApi<Array<Record<string, unknown>>>(`/purchase-orders/${poId}/line-items`);
+    getPurchaseOrderLineItems(
+      poId: string,
+      query?: LineItemsPageQuery,
+    ): Promise<LineItemsPageResponse> {
+      return fetchApi<LineItemsPageResponse>(
+        `/purchase-orders/${poId}/line-items${lineItemsPageQueryString(query)}`,
+      );
     },
 
-    getWorkOrderLineItems(woId: string): Promise<Array<Record<string, unknown>>> {
-      return fetchApi<Array<Record<string, unknown>>>(`/work-orders/${woId}/line-items`);
+    getWorkOrderLineItems(
+      woId: string,
+      query?: LineItemsPageQuery,
+    ): Promise<LineItemsPageResponse> {
+      return fetchApi<LineItemsPageResponse>(
+        `/work-orders/${woId}/line-items${lineItemsPageQueryString(query)}`,
+      );
     },
 
-    getProposalLineItems(proposalId: string): Promise<Array<Record<string, unknown>>> {
-      return fetchApi<Array<Record<string, unknown>>>(`/proposals/${proposalId}/line-items`);
+    getProposalLineItems(
+      proposalId: string,
+      query?: LineItemsPageQuery,
+    ): Promise<LineItemsPageResponse> {
+      return fetchApi<LineItemsPageResponse>(
+        `/proposals/${proposalId}/line-items${lineItemsPageQueryString(query)}`,
+      );
     },
 
     getInvoices(params: {
@@ -594,7 +794,9 @@ export function createApiClient(options?: ApiClientOptions) {
       purchaseOrderId?: string;
       status?: string;
       sort?: string;
+      search?: string;
       jobId?: string;
+      jobIds?: string[];
     }): Promise<PaginatedResponse<Invoice>> {
       const sp = new URLSearchParams();
       if (params.page != null) sp.set('page', String(params.page));
@@ -602,7 +804,9 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params.purchaseOrderId) sp.set('purchaseOrderId', params.purchaseOrderId);
       if (params.status) sp.set('status', params.status);
       if (params.sort) sp.set('sort', params.sort);
+      if (params.search) sp.set('search', params.search);
       if (params.jobId) sp.set('jobId', params.jobId);
+      if (params.jobIds?.length) sp.set('jobIds', params.jobIds.join(','));
       return fetchApi<PaginatedResponse<Invoice>>(`/invoices?${sp}`);
     },
 
@@ -617,6 +821,7 @@ export function createApiClient(options?: ApiClientOptions) {
       claimId?: string;
       status?: string;
       reportTypeId?: string;
+      search?: string;
       sort?: string;
     }): Promise<PaginatedResponse<Report>> {
       const sp = new URLSearchParams();
@@ -626,6 +831,7 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params.claimId) sp.set('claimId', params.claimId);
       if (params.status) sp.set('status', params.status);
       if (params.reportTypeId) sp.set('reportTypeId', params.reportTypeId);
+      if (params.search) sp.set('search', params.search);
       if (params.sort) sp.set('sort', params.sort);
       return fetchApi<PaginatedResponse<Report>>(`/reports?${sp}`);
     },
@@ -651,11 +857,16 @@ export function createApiClient(options?: ApiClientOptions) {
       page?: number;
       limit?: number;
       search?: string;
+      linked?: boolean;
+      sort?: string;
     }): Promise<PaginatedResponse<Vendor>> {
       const sp = new URLSearchParams();
       if (params?.page != null) sp.set('page', String(params.page));
       if (params?.limit != null) sp.set('limit', String(params.limit));
       if (params?.search) sp.set('search', params.search);
+      if (params?.linked === true) sp.set('linked', 'true');
+      if (params?.linked === false) sp.set('linked', 'false');
+      if (params?.sort) sp.set('sort', params.sort);
       const qs = sp.toString();
       return fetchApi<PaginatedResponse<Vendor>>(qs ? `/vendors?${qs}` : '/vendors');
     },
@@ -745,8 +956,8 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<Quote>('/quotes', { method: 'POST', body: JSON.stringify(body) });
     },
 
-    publishQuote(id: string): Promise<Quote> {
-      return fetchApi<Quote>(`/quotes/${id}/publish`, { method: 'POST' });
+    publishQuote(id: string): Promise<PublishQuoteResult> {
+      return fetchApi<PublishQuoteResult>(`/quotes/${id}/publish`, { method: 'POST' });
     },
 
     approveQuote(id: string): Promise<{ quote: Quote; workOrderId: string }> {
@@ -807,7 +1018,10 @@ export function createApiClient(options?: ApiClientOptions) {
       search?: string;
       sort?: string;
       jobId?: string;
+      jobIds?: string[];
+      unlinkedOnly?: boolean;
       typeLookupIds?: string[];
+      archived?: boolean;
     }): Promise<PaginatedResponse<Contact>> {
       const sp = new URLSearchParams();
       if (params?.page != null) sp.set('page', String(params.page));
@@ -815,10 +1029,21 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params?.search) sp.set('search', params.search);
       if (params?.sort) sp.set('sort', params.sort);
       if (params?.jobId) sp.set('jobId', params.jobId);
+      if (params?.jobIds?.length) sp.set('jobIds', params.jobIds.join(','));
+      if (params?.unlinkedOnly) sp.set('unlinkedOnly', '1');
       if (params?.typeLookupIds?.length) {
         sp.set('typeLookupIds', params.typeLookupIds.join(','));
       }
+      if (params?.archived === true) sp.set('archived', 'true');
+      else if (params?.archived === false) sp.set('archived', 'false');
       return fetchApi<PaginatedResponse<Contact>>(`/contacts?${sp}`);
+    },
+
+    getContactFilterJobs(): Promise<{
+      jobs: Array<{ id: string; name?: string | null; externalReference?: string | null }>;
+      hasUnlinked: boolean;
+    }> {
+      return fetchApi(`/contacts/filter-jobs`);
     },
 
     getContact(id: string): Promise<Contact> {
@@ -835,6 +1060,24 @@ export function createApiClient(options?: ApiClientOptions) {
 
     createContact(body: Record<string, unknown>): Promise<Contact> {
       return fetchApi<Contact>('/contacts', { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    ensureMeContact(): Promise<{
+      id: string;
+      type: 'CONTACT';
+      name: string;
+      email?: string;
+    }> {
+      return fetchApi('/contacts/ensure-me', { method: 'POST', body: '{}' });
+    },
+
+    getMeContact(): Promise<{
+      id: string;
+      type: 'CONTACT';
+      name: string;
+      email?: string;
+    } | null> {
+      return fetchApi('/contacts/me');
     },
 
     searchContacts(
@@ -866,18 +1109,22 @@ export function createApiClient(options?: ApiClientOptions) {
       page?: number;
       limit?: number;
       jobId?: string;
+      jobIds?: string[];
       purchaseOrderId?: string;
       status?: string;
       workOrderType?: string;
+      search?: string;
       sort?: string;
     }): Promise<PaginatedResponse<WorkOrder>> {
       const sp = new URLSearchParams();
       if (params?.page != null) sp.set('page', String(params.page));
       if (params?.limit != null) sp.set('limit', String(params.limit));
       if (params?.jobId) sp.set('jobId', params.jobId);
+      if (params?.jobIds?.length) sp.set('jobIds', params.jobIds.join(','));
       if (params?.purchaseOrderId) sp.set('purchaseOrderId', params.purchaseOrderId);
       if (params?.status) sp.set('status', params.status);
       if (params?.workOrderType) sp.set('workOrderType', params.workOrderType);
+      if (params?.search) sp.set('search', params.search);
       if (params?.sort) sp.set('sort', params.sort);
       return fetchApi<PaginatedResponse<WorkOrder>>(`/work-orders?${sp}`);
     },
@@ -903,18 +1150,22 @@ export function createApiClient(options?: ApiClientOptions) {
       page?: number;
       limit?: number;
       jobId?: string;
+      jobIds?: string[];
       quoteId?: string;
       status?: string;
       vendorId?: string;
+      search?: string;
       sort?: string;
     }): Promise<PaginatedResponse<Rfq>> {
       const sp = new URLSearchParams();
       if (params?.page != null) sp.set('page', String(params.page));
       if (params?.limit != null) sp.set('limit', String(params.limit));
       if (params?.jobId) sp.set('jobId', params.jobId);
+      if (params?.jobIds?.length) sp.set('jobIds', params.jobIds.join(','));
       if (params?.quoteId) sp.set('quoteId', params.quoteId);
       if (params?.status) sp.set('status', params.status);
       if (params?.vendorId) sp.set('vendorId', params.vendorId);
+      if (params?.search) sp.set('search', params.search);
       if (params?.sort) sp.set('sort', params.sort);
       return fetchApi<PaginatedResponse<Rfq>>(`/rfqs?${sp}`);
     },
@@ -972,18 +1223,22 @@ export function createApiClient(options?: ApiClientOptions) {
       page?: number;
       limit?: number;
       jobId?: string;
+      jobIds?: string[];
       rfqId?: string;
       status?: string;
       vendorId?: string;
+      search?: string;
       sort?: string;
     }): Promise<PaginatedResponse<Proposal>> {
       const sp = new URLSearchParams();
       if (params?.page != null) sp.set('page', String(params.page));
       if (params?.limit != null) sp.set('limit', String(params.limit));
       if (params?.jobId) sp.set('jobId', params.jobId);
+      if (params?.jobIds?.length) sp.set('jobIds', params.jobIds.join(','));
       if (params?.rfqId) sp.set('rfqId', params.rfqId);
       if (params?.status) sp.set('status', params.status);
       if (params?.vendorId) sp.set('vendorId', params.vendorId);
+      if (params?.search) sp.set('search', params.search);
       if (params?.sort) sp.set('sort', params.sort);
       return fetchApi<PaginatedResponse<Proposal>>(`/proposals?${sp}`);
     },
@@ -1031,20 +1286,24 @@ export function createApiClient(options?: ApiClientOptions) {
       page?: number;
       limit?: number;
       jobId?: string;
+      jobIds?: string[];
       purchaseOrderId?: string;
       status?: string;
       vendorId?: string;
       invoiceId?: string;
+      search?: string;
       sort?: string;
     }): Promise<PaginatedResponse<Bill>> {
       const sp = new URLSearchParams();
       if (params?.page != null) sp.set('page', String(params.page));
       if (params?.limit != null) sp.set('limit', String(params.limit));
       if (params?.jobId) sp.set('jobId', params.jobId);
+      if (params?.jobIds?.length) sp.set('jobIds', params.jobIds.join(','));
       if (params?.purchaseOrderId) sp.set('purchaseOrderId', params.purchaseOrderId);
       if (params?.status) sp.set('status', params.status);
       if (params?.vendorId) sp.set('vendorId', params.vendorId);
       if (params?.invoiceId) sp.set('invoiceId', params.invoiceId);
+      if (params?.search) sp.set('search', params.search);
       if (params?.sort) sp.set('sort', params.sort);
       return fetchApi<PaginatedResponse<Bill>>(`/bills?${sp}`);
     },
@@ -1120,8 +1379,18 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<PaginatedResponse<WebhookEvent>>(`/providers/${code}/webhook-events?${sp}`);
     },
 
-    getConnections(): Promise<ConnectionSummary[]> {
-      return fetchApi<ConnectionSummary[]>('/connections');
+    getConnections(params?: {
+      search?: string;
+      isActive?: boolean;
+      sort?: string;
+    }): Promise<ConnectionSummary[]> {
+      const sp = new URLSearchParams();
+      if (params?.search) sp.set('search', params.search);
+      if (params?.isActive === true) sp.set('isActive', 'true');
+      if (params?.isActive === false) sp.set('isActive', 'false');
+      if (params?.sort) sp.set('sort', params.sort);
+      const qs = sp.toString();
+      return fetchApi<ConnectionSummary[]>(qs ? `/connections?${qs}` : '/connections');
     },
 
     getConnection(id: string): Promise<ConnectionDetail> {
@@ -1143,11 +1412,15 @@ export function createApiClient(options?: ApiClientOptions) {
       page?: number;
       limit?: number;
       status?: string;
+      search?: string;
+      sort?: string;
     }): Promise<PaginatedResponse<WebhookEvent>> {
       const sp = new URLSearchParams();
       if (params?.page != null) sp.set('page', String(params.page));
       if (params?.limit != null) sp.set('limit', String(params.limit));
       if (params?.status) sp.set('status', params.status);
+      if (params?.search) sp.set('search', params.search);
+      if (params?.sort) sp.set('sort', params.sort);
       return fetchApi<PaginatedResponse<WebhookEvent>>(`/connections/${id}/webhook-events?${sp}`);
     },
 
@@ -1159,6 +1432,15 @@ export function createApiClient(options?: ApiClientOptions) {
 
     getCatalog(id: string): Promise<Catalog> {
       return fetchApi<Catalog>(`/catalogs/${id}`);
+    },
+
+    getCatalogCategoryCounts(
+      id: string,
+      params?: { q?: string },
+    ): Promise<Array<{ categoryId: string | null; count: number }>> {
+      const sp = new URLSearchParams();
+      if (params?.q) sp.set('q', params.q);
+      return fetchApi(`/catalogs/${id}/category-counts?${sp}`);
     },
 
     createCatalog(body: { name: string; description?: string; type: string }): Promise<Catalog> {
@@ -1175,6 +1457,10 @@ export function createApiClient(options?: ApiClientOptions) {
       });
     },
 
+    deleteCatalog(id: string): Promise<Catalog> {
+      return fetchApi<Catalog>(`/catalogs/${id}`, { method: 'DELETE' });
+    },
+
     getCatalogTypes(): Promise<CatalogItemType[]> {
       return fetchApi<CatalogItemType[]>('/catalog/types');
     },
@@ -1183,11 +1469,16 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<CatalogCategory[]>('/catalog/categories/tree');
     },
 
+    getCatalogCategory(id: string): Promise<CatalogCategory> {
+      return fetchApi<CatalogCategory>(`/catalog/categories/${id}`);
+    },
+
     getCatalogItems(params?: {
       catalogId?: string;
       kind?: 'primitive' | 'assembly' | 'scope';
       typeId?: string;
       categoryId?: string;
+      categoryIds?: string[];
       q?: string;
       page?: number;
       limit?: number;
@@ -1198,6 +1489,7 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params?.kind) sp.set('kind', params.kind);
       if (params?.typeId) sp.set('typeId', params.typeId);
       if (params?.categoryId) sp.set('categoryId', params.categoryId);
+      if (params?.categoryIds?.length) sp.set('categoryIds', params.categoryIds.join(','));
       if (params?.q) sp.set('q', params.q);
       if (params?.page != null) sp.set('page', String(params.page));
       if (params?.limit != null) sp.set('limit', String(params.limit));
@@ -1256,6 +1548,19 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<CatalogCategory>('/catalog/categories', {
         method: 'POST',
         body: JSON.stringify(body),
+      });
+    },
+
+    updateCatalogCategory(id: string, body: Record<string, unknown>): Promise<CatalogCategory> {
+      return fetchApi<CatalogCategory>(`/catalog/categories/${id}`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+
+    deleteCatalogCategory(id: string): Promise<CatalogCategory> {
+      return fetchApi<CatalogCategory>(`/catalog/categories/${id}`, {
+        method: 'DELETE',
       });
     },
 
@@ -1335,8 +1640,11 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi(`/quotes/${quoteId}/groups`);
     },
 
-    getQuoteLineItems(quoteId: string): Promise<Array<Record<string, unknown>>> {
-      return fetchApi(`/quotes/${quoteId}/line-items`);
+    getQuoteLineItems(
+      quoteId: string,
+      query?: LineItemsPageQuery,
+    ): Promise<LineItemsPageResponse> {
+      return fetchApi(`/quotes/${quoteId}/line-items${lineItemsPageQueryString(query)}`);
     },
 
     ensureQuoteGroup(quoteId: string): Promise<{ id: string; description: string | null }> {
@@ -1441,13 +1749,17 @@ export function createApiClient(options?: ApiClientOptions) {
       page?: number;
       limit?: number;
       status?: string;
+      search?: string;
       jobId?: string;
+      jobIds?: string[];
     }): Promise<PaginatedResponse<Journal>> {
       const sp = new URLSearchParams();
       if (params?.page != null) sp.set('page', String(params.page));
       if (params?.limit != null) sp.set('limit', String(params.limit));
       if (params?.status) sp.set('status', params.status);
+      if (params?.search) sp.set('search', params.search);
       if (params?.jobId) sp.set('jobId', params.jobId);
+      if (params?.jobIds?.length) sp.set('jobIds', params.jobIds.join(','));
       return fetchApi<PaginatedResponse<Journal>>(`/journals?${sp}`);
     },
 
@@ -1455,8 +1767,20 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<Journal>(`/journals/${id}`);
     },
 
-    getJournalsByEntity(entityType: string, entityId: string): Promise<Journal[]> {
-      return fetchApi<Journal[]>(`/journals/entity/${entityType}/${entityId}`);
+    getJournalsByEntity(
+      entityType: string,
+      entityId: string,
+      params?: { search?: string; status?: string },
+    ): Promise<Journal[]> {
+      const sp = new URLSearchParams();
+      if (params?.search) sp.set('search', params.search);
+      if (params?.status) sp.set('status', params.status);
+      const qs = sp.toString();
+      return fetchApi<Journal[]>(
+        qs
+          ? `/journals/entity/${entityType}/${entityId}?${qs}`
+          : `/journals/entity/${entityType}/${entityId}`,
+      );
     },
 
     createJournal(data: {
@@ -1619,12 +1943,16 @@ export function createApiClient(options?: ApiClientOptions) {
       limit?: number;
       status?: string;
       jobId?: string;
+      jobIds?: string[];
+      search?: string;
     }): Promise<PaginatedResponse<Assessment>> {
       const sp = new URLSearchParams();
       if (params?.page != null) sp.set('page', String(params.page));
       if (params?.limit != null) sp.set('limit', String(params.limit));
       if (params?.status) sp.set('status', params.status);
       if (params?.jobId) sp.set('jobId', params.jobId);
+      if (params?.jobIds?.length) sp.set('jobIds', params.jobIds.join(','));
+      if (params?.search) sp.set('search', params.search);
       return fetchApi<PaginatedResponse<Assessment>>(`/assessments?${sp}`);
     },
 
@@ -1717,6 +2045,22 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi(`/notifications/entity/${entityType}/${entityId}/read`, {
         method: 'PATCH',
       });
+    },
+
+    // -- Activities --
+
+    getActivities(params: {
+      entityType: string;
+      entityId: string;
+      page?: number;
+      limit?: number;
+    }): Promise<{ data: EntityActivity[]; total: number }> {
+      const sp = new URLSearchParams();
+      sp.set('entityType', params.entityType);
+      sp.set('entityId', params.entityId);
+      if (params.page != null) sp.set('page', String(params.page));
+      if (params.limit != null) sp.set('limit', String(params.limit));
+      return fetchApi(`/activities?${sp}`);
     },
 
     // -- Filesystem --

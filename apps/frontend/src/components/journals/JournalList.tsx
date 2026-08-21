@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, X, Link2, Unlink } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -10,7 +10,6 @@ import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { JournalFormDrawer } from './JournalFormDrawer';
 import { JournalLinkDrawer } from './JournalLinkDrawer';
 import {
-  isArchivedStatus,
   compareDates,
   compareValues,
   formatDate,
@@ -18,6 +17,9 @@ import {
   SortableColumnHeader,
   TableEmptyRow,
   commitColumnFilterSelection,
+  columnFilterToValuesParam,
+  statusValuesForArchiveListTab,
+  mergeStatusParamWithTab,
 } from '@/components/shared/list-filters';
 import {
   ColumnSettingsHeaderCell,
@@ -28,7 +30,10 @@ import type { AddressPayload, Journal } from '@/types/api';
 export interface JournalListProps {
   entityType: string;
   entityId: string;
-  fetchJournals: () => Promise<Journal[]>;
+  fetchJournals: (params?: {
+    search?: string;
+    status?: string;
+  }) => Promise<Journal[]>;
   fetchAllJournals: () => Promise<Journal[]>;
   createJournal: (data: {
     name: string;
@@ -60,6 +65,8 @@ const TABLE_COLUMNS: ColDef[] = [
   { key: 'pages', label: 'Entries' },
   { key: 'updated_at', label: 'Updated' },
 ];
+
+const STATUS_OPTIONS = ['active', 'archived', 'deleted'];
 
 function getSortValue(j: Journal, field: JournalSortField): string | number | null | undefined {
   switch (field) {
@@ -100,31 +107,61 @@ export function JournalList({
     'journal-list',
     TABLE_COLUMNS,
   );
+  const lastFetchKeyRef = useRef<string | null>(null);
 
-  const loadJournals = () => {
-    setLoading(true);
-    fetchJournals()
-      .then((data) => setJournals(data))
-      .catch((err) => console.error('JournalList.loadJournals:', err))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => {
-    loadJournals();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entityType, entityId]);
+  const tabStatusValues = useMemo(
+    () => statusValuesForArchiveListTab(tab, STATUS_OPTIONS),
+    [tab],
+  );
+  const statusParam = useMemo(
+    () =>
+      mergeStatusParamWithTab(
+        columnFilterToValuesParam(statusFilterActive, statusFilter),
+        tabStatusValues,
+      ),
+    [statusFilterActive, statusFilter, tabStatusValues],
+  );
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
   }, [search]);
 
+  useEffect(() => {
+    const fetchKey = `${entityType}|${entityId}|${debouncedSearch}|${statusParam ?? ''}|${statusParam === null ? 'none' : ''}`;
+    if (lastFetchKeyRef.current === fetchKey) return;
+    lastFetchKeyRef.current = fetchKey;
+
+    if (statusParam === null) {
+      setJournals([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    fetchJournals({
+      search: debouncedSearch || undefined,
+      status: statusParam,
+    })
+      .then((data) => setJournals(data))
+      .catch((err) => console.error('JournalList.loadJournals:', err))
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchJournals identity changes each render from callers
+  }, [entityType, entityId, debouncedSearch, statusParam]);
+
   const handleCreatedAndLinked = (journal: Journal) => {
     setJournals((prev) => [journal, ...prev]);
   };
 
   const handleLinked = () => {
-    loadJournals();
+    lastFetchKeyRef.current = null;
+    setLoading(true);
+    fetchJournals({
+      search: debouncedSearch || undefined,
+      status: statusParam ?? undefined,
+    })
+      .then((data) => setJournals(data))
+      .finally(() => setLoading(false));
     setLinkDrawerOpen(false);
   };
 
@@ -145,14 +182,7 @@ export function JournalList({
     });
   };
 
-  const uniqueStatuses = useMemo(() => {
-    const names = new Set<string>();
-    for (const j of journals) {
-      const s = j.status?.trim();
-      if (s) names.add(s);
-    }
-    return [...names].sort((a, b) => a.localeCompare(b));
-  }, [journals]);
+  const uniqueStatuses = STATUS_OPTIONS;
 
   const toggleStatus = (name: string) => {
     const working = statusFilterActive
@@ -178,45 +208,15 @@ export function JournalList({
   };
 
   const visibleRows = useMemo(() => {
-    let rows = journals;
-
-    if (tab !== 'all') {
-      rows = rows.filter((j) => {
-        const archived = isArchivedStatus(j.status);
-        return tab === 'archived' ? archived : !archived;
-      });
-    }
-
-    if (statusFilterActive) {
-      if (statusFilter.size === 0) {
-        rows = [];
-      } else {
-        rows = rows.filter((j) => {
-          const s = j.status?.trim();
-          return s ? statusFilter.has(s) : false;
-        });
-      }
-    }
-
-    const query = debouncedSearch.trim().toLowerCase();
-    if (query) {
-      rows = rows.filter((j) => {
-        const name = (j.name ?? '').toLowerCase();
-        const desc = (j.description ?? '').toLowerCase();
-        const suburb = (j.addressSuburb ?? '').toLowerCase();
-        return name.includes(query) || desc.includes(query) || suburb.includes(query);
-      });
-    }
-
     const isDate = columnSort.field === 'updated_at';
-    return [...rows].sort((a, b) => {
+    return [...journals].sort((a, b) => {
       const aVal = getSortValue(a, columnSort.field);
       const bVal = getSortValue(b, columnSort.field);
       return isDate
         ? compareDates(aVal as string, bVal as string, columnSort.order)
         : compareValues(aVal, bVal, columnSort.order);
     });
-  }, [journals, tab, statusFilterActive, statusFilter, debouncedSearch, columnSort]);
+  }, [journals, columnSort]);
 
   if (loading) {
     return <p className="text-sm text-slate-400">Loading...</p>;

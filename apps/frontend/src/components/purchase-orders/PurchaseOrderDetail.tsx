@@ -8,7 +8,7 @@
  * §7 scalars / §8 adjustment+allocation / §9 line items / §10 payload fallback).
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import {
   ShoppingCart,
@@ -30,7 +30,6 @@ import {
   Receipt,
   User,
   Users,
-  Loader2,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -52,8 +51,7 @@ import { PrintButton } from '@/components/shared/PrintButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { jobDisplayName } from '@/components/shared/job-label';
 import { getPurchaseOrderLineItemsAction } from '@/app/(app)/purchase-orders/actions';
-import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
-import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
+import { PagedLineItemsTable } from '@/components/quotes/PagedLineItemsTable';
 
 // ---------- helpers ---------------------------------------------------------
 
@@ -445,64 +443,14 @@ function AllocationTab({ po }: { po: PurchaseOrder }) {
 }
 
 function LineItemsTab({ po }: { po: PurchaseOrder }) {
-  const [groups, setGroups] = useState<ApiGroup[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    const result = await getPurchaseOrderLineItemsAction(po.id);
-    if (result.success && result.groups) {
-      setGroups(result.groups as ApiGroup[]);
-    } else {
-      setError(result.error ?? 'Failed to load line items');
-    }
-    setLoading(false);
-  }, [po.id]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  if (loading) {
-    return (
-      <Card>
-        <CardContent className="flex items-center justify-center py-12">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (error) {
-    return (
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Line items</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-destructive">{error}</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (!groups || groups.length === 0) {
-    return (
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Line items</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            No line items found for this purchase order.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return <QuoteLineItemsTable groups={groups} readOnly />;
+  return (
+    <PagedLineItemsTable
+      documentId={po.id}
+      loadAction={getPurchaseOrderLineItemsAction}
+      emptyLabel="No line items found for this purchase order."
+      readOnly
+    />
+  );
 }
 
 function BillsTab() {

@@ -8,6 +8,22 @@ export interface PaginatedResponse<T> {
   total: number;
 }
 
+export interface LineItemsPageQuery {
+  search?: string;
+  groupIds?: string[];
+  page?: number;
+  limit?: number;
+  all?: boolean;
+}
+
+export interface LineItemsPageResponse {
+  groups: Array<Record<string, unknown>>;
+  total: number;
+  page: number;
+  limit: number;
+  groupSummaries: Array<{ id: string; label: string }>;
+}
+
 export interface LookupRef {
   id: string;
   name?: string;
@@ -499,13 +515,32 @@ export interface Task {
   claimId?: string | null;
   name: string;
   description?: string | null;
+  notes?: string | null;
   status?: string | LookupRef | null;
   taskType?: string | LookupRef | null;
   priority?: string | LookupRef | null;
+  startDate?: string | null;
   dueDate?: string | null;
+  reminderAt?: string | null;
+  estimatedHours?: string | number | null;
+  tags?: string[] | null;
   assignedToUserId?: string | null;
   assigneeName?: string | null;
+  originType?: string | null;
+  createdByUserId?: string | null;
   completedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface TaskTypeMapping {
+  id: string;
+  tenantId: string;
+  titlePattern: string;
+  matchMode: 'exact' | 'normalized' | 'prefix' | 'contains' | string;
+  taskType: string;
+  priority: number;
+  isActive: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -555,6 +590,13 @@ export interface Contact {
   contactPayload?: Record<string, unknown> | null;
   createdAt?: string;
   updatedAt?: string;
+  /** Jobs linked via job_contacts (list endpoint). */
+  relatedJobs?: Array<{
+    id: string;
+    name?: string | null;
+    externalReference?: string | null;
+    label?: string;
+  }>;
 }
 
 export interface ContactRelatedJob {
@@ -593,6 +635,8 @@ export interface Appointment {
   cancellationReason?: string | null;
   cancelledAt?: string | null;
   attendees?: AppointmentAttendee[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 /**
@@ -861,6 +905,7 @@ export interface Catalog {
   description: string | null;
   type: CatalogType;
   isActive: boolean;
+  isDefault: boolean;
   createdAt: string;
   updatedAt: string;
   itemCount?: number;
@@ -908,6 +953,7 @@ export interface CatalogItem {
   computedUnitCost: string | null;
   isActive: boolean;
   externalReference?: string | null;
+  providerCodes?: string[];
   components?: unknown[];
 }
 

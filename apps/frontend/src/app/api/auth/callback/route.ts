@@ -1,10 +1,63 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authConfig } from '@/lib/auth-config';
 import { verifyCookie } from '@/lib/auth-cookies';
+import { getApiBaseUrl } from '@/lib/env';
+import { cloudRunInvokerHeaders } from '@/lib/cloud-run-id-token';
 
 const LOG_PREFIX = 'frontend:api:auth:callback';
 
 const POST_LOGIN_REDIRECT_COOKIE = 'post_login_redirect_url';
+
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2 || !parts[1]) return null;
+    return JSON.parse(
+      Buffer.from(parts[1], 'base64url').toString('utf8'),
+    ) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+/** After login: ensure a contact exists for this user (non-fatal). */
+async function ensureUserContactOnLogin(accessToken: string): Promise<void> {
+  const payload = decodeJwtPayload(accessToken);
+  const tenantId =
+    (typeof payload?.organization_id === 'string'
+      ? payload.organization_id
+      : '') ||
+    process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID ||
+    '';
+
+  try {
+    const res = await fetch(`${getApiBaseUrl()}/contacts/ensure-me`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        ...(tenantId ? { 'x-tenant-id': tenantId } : {}),
+        ...(await cloudRunInvokerHeaders()),
+      },
+      body: '{}',
+      signal: AbortSignal.timeout(8_000),
+      cache: 'no-store',
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      console.warn(`${LOG_PREFIX} - ensure-me failed`, {
+        status: res.status,
+        body: text.slice(0, 300),
+      });
+      return;
+    }
+    console.info(`${LOG_PREFIX} - ensure-me ok`);
+  } catch (err) {
+    console.warn(`${LOG_PREFIX} - ensure-me error`, {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
@@ -126,6 +179,9 @@ export async function GET(req: NextRequest) {
       `${authConfig.oidcPostLogoutUri}/?error=${encodeURIComponent('No access token')}`,
     );
   }
+
+  // Ensure org contact for this user before they land in the app.
+  await ensureUserContactOnLogin(accessToken);
 
   const postLoginRedirect =
     req.cookies.get(POST_LOGIN_REDIRECT_COOKIE)?.value?.trim() || '';

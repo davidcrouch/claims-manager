@@ -1,5 +1,6 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, desc, isNull, sql, inArray } from 'drizzle-orm';
+import { eq, and, desc, isNull, sql, inArray, or, ilike } from 'drizzle-orm';
+import { normalizeListJobIds } from '../../common/list-job-filter';
 import { DRIZZLE, type DrizzleDB } from '../drizzle.module';
 import { journals, journalPages, journalEntityLinks } from '../schema';
 
@@ -17,7 +18,9 @@ export class JournalsRepository {
     page?: number;
     limit?: number;
     status?: string;
+    search?: string;
     jobId?: string;
+    jobIds?: string[];
   }): Promise<{ data: Array<JournalRow & { jobId: string | null; pageCount: number }>; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
@@ -31,18 +34,39 @@ export class JournalsRepository {
     if (statuses.length > 0) {
       whereClause = and(whereClause, inArray(journals.status, statuses));
     }
+    if (params.search?.trim()) {
+      const term = `%${params.search.trim()}%`;
+      whereClause = and(
+        whereClause,
+        or(
+          ilike(journals.name, term),
+          ilike(journals.description, term),
+          ilike(journals.addressSuburb, term),
+        )!,
+      );
+    }
 
-    if (params.jobId) {
+    const jobIds = normalizeListJobIds({ jobId: params.jobId, jobIds: params.jobIds });
+    if (jobIds) {
+      if (jobIds.length === 0) {
+        return { data: [], total: 0 };
+      }
+      const linkWhere =
+        jobIds.length === 1
+          ? and(
+              eq(journalEntityLinks.tenantId, params.tenantId),
+              eq(journalEntityLinks.entityType, 'Job'),
+              eq(journalEntityLinks.entityId, jobIds[0]),
+            )
+          : and(
+              eq(journalEntityLinks.tenantId, params.tenantId),
+              eq(journalEntityLinks.entityType, 'Job'),
+              inArray(journalEntityLinks.entityId, jobIds),
+            );
       const linked = await this.db
         .select({ journalId: journalEntityLinks.journalId })
         .from(journalEntityLinks)
-        .where(
-          and(
-            eq(journalEntityLinks.tenantId, params.tenantId),
-            eq(journalEntityLinks.entityType, 'Job'),
-            eq(journalEntityLinks.entityId, params.jobId),
-          ),
-        );
+        .where(linkWhere);
       const journalIds = linked.map((row) => row.journalId);
       if (journalIds.length === 0) {
         return { data: [], total: 0 };
@@ -124,6 +148,8 @@ export class JournalsRepository {
     tenantId: string;
     entityType: string;
     entityId: string;
+    search?: string;
+    status?: string;
   }): Promise<Array<JournalRow & { pageCount: number }>> {
     const links = await this.db
       .select({ journalId: journalEntityLinks.journalId })
@@ -139,17 +165,32 @@ export class JournalsRepository {
     if (links.length === 0) return [];
 
     const journalIds = links.map((l) => l.journalId);
+    let whereClause = and(
+      eq(journals.tenantId, params.tenantId),
+      inArray(journals.id, journalIds),
+      isNull(journals.deletedAt),
+    );
+    const statuses = params.status?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
+    if (statuses.length > 0) {
+      whereClause = and(whereClause, inArray(journals.status, statuses));
+    }
+    if (params.search?.trim()) {
+      const term = `%${params.search.trim()}%`;
+      whereClause = and(
+        whereClause,
+        or(
+          ilike(journals.name, term),
+          ilike(journals.description, term),
+          ilike(journals.addressSuburb, term),
+        )!,
+      );
+    }
+
     const [rows, pageCounts] = await Promise.all([
       this.db
         .select()
         .from(journals)
-        .where(
-          and(
-            eq(journals.tenantId, params.tenantId),
-            inArray(journals.id, journalIds),
-            isNull(journals.deletedAt),
-          ),
-        )
+        .where(whereClause)
         .orderBy(desc(journals.updatedAt)),
       this.getPageCounts({ tenantId: params.tenantId, journalIds }),
     ]);

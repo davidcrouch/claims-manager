@@ -7,10 +7,13 @@ import {
   CatalogCategoriesRepository,
   CatalogItemTypesRepository,
   CatalogItemsRepository,
+  CatalogsRepository,
 } from '../../../database/repositories';
 import { TenantContext } from '../../../tenant/tenant-context';
 import {
   isCatalogBomParentKind,
+  normalizeProviderCodes,
+  resolveCatalogItemProviderCodes,
   type CatalogItemKind,
   type CatalogPricingMode,
 } from '../catalog.utils';
@@ -21,6 +24,7 @@ import { CatalogAssemblyService } from './catalog-assembly.service';
 export class CatalogItemService {
   constructor(
     private readonly itemsRepo: CatalogItemsRepository,
+    private readonly catalogsRepo: CatalogsRepository,
     private readonly typesRepo: CatalogItemTypesRepository,
     private readonly categoriesRepo: CatalogCategoriesRepository,
     private readonly pricingService: CatalogPricingService,
@@ -37,18 +41,20 @@ export class CatalogItemService {
     kind?: CatalogItemKind;
     typeId?: string;
     categoryId?: string;
+    categoryIds?: string[];
     search?: string;
     page?: number;
     limit?: number;
     sort?: string;
   }) {
     const tenantId = this.getTenantId();
-    let categoryIds: string[] | undefined;
+    let categoryIds: string[] | undefined = params.categoryIds;
     if (params.categoryId) {
-      categoryIds = await this.categoriesRepo.findDescendantIds({
+      const descendants = await this.categoriesRepo.findDescendantIds({
         tenantId,
         categoryId: params.categoryId,
       });
+      categoryIds = [...new Set([...(categoryIds ?? []), ...descendants])];
     }
 
     return this.itemsRepo.findMany({
@@ -56,7 +62,7 @@ export class CatalogItemService {
       catalogId: params.catalogId,
       kind: params.kind,
       typeId: params.typeId,
-      categoryIds,
+      categoryIds: params.categoryIds ?? (params.categoryId ? [params.categoryId] : undefined),
       search: params.search,
       page: params.page,
       limit: params.limit,
@@ -98,6 +104,7 @@ export class CatalogItemService {
     effectiveFrom?: string;
     effectiveTo?: string;
     metadata?: Record<string, unknown>;
+    providerCodes?: string[];
   }) {
     const tenantId = this.getTenantId();
     await this.validateTypeAndCategories(tenantId, params.typeId, params.categoryId, params.subCategoryId);
@@ -116,6 +123,20 @@ export class CatalogItemService {
     });
     if (existing) throw new BadRequestException(`Catalog code already exists: ${params.code}`);
 
+    let catalogType: string | undefined;
+    if (params.catalogId) {
+      const catalog = await this.catalogsRepo.findById({
+        tenantId,
+        id: params.catalogId,
+      });
+      catalogType = catalog?.type;
+    }
+    const resolvedProviderCodes = resolveCatalogItemProviderCodes({
+      kind: params.kind,
+      providerCodes: params.providerCodes,
+      catalogType,
+    });
+
     const item = await this.itemsRepo.create({
       tenantId,
       data: {
@@ -130,12 +151,13 @@ export class CatalogItemService {
         unitTypeLookupId: params.unitTypeLookupId,
         unitCost: params.unitCost,
         buyCost: params.buyCost,
-        markupType: params.markupType,
-        markupValue: params.markupValue,
-        taxRate: params.taxRate,
+        markupType: params.markupType ?? 'percent',
+        markupValue: params.markupValue ?? '0.19',
+        taxRate: params.taxRate ?? '0.10',
         pricingMode: isCatalogBomParentKind(params.kind) ? (params.pricingMode ?? 'computed') : null,
         fixedUnitCost: params.fixedUnitCost,
         externalReference: params.externalReference,
+        providerCodes: resolvedProviderCodes,
         effectiveFrom: params.effectiveFrom,
         effectiveTo: params.effectiveTo,
         metadata: params.metadata ?? {},
@@ -170,6 +192,7 @@ export class CatalogItemService {
     isActive?: boolean;
     effectiveFrom?: string | null;
     effectiveTo?: string | null;
+    providerCodes?: string[];
   }) {
     const tenantId = this.getTenantId();
     const existing = await this.itemsRepo.findById({ tenantId, id: params.id });
@@ -211,6 +234,15 @@ export class CatalogItemService {
         isActive: params.isActive,
         effectiveFrom: params.effectiveFrom,
         effectiveTo: params.effectiveTo,
+        ...(params.providerCodes !== undefined
+          ? {
+              providerCodes: resolveCatalogItemProviderCodes({
+                kind: existing.kind,
+                providerCodes: params.providerCodes,
+                catalogType: null,
+              }),
+            }
+          : {}),
       },
     });
 

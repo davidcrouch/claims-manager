@@ -1,0 +1,27 @@
+slug: edit-catalog-item
+name: Edit catalogue item
+description: Open and update an existing primitive, assembly, or scope.
+triggerHints:
+  - edit catalogue item
+  - update assembly
+  - change item price
+  - rename catalog item
+instructionPrompt: |
+  1. Resolve the item (list_catalog_items / get_catalog_item). Kind cannot change after create.
+  2. Call open_catalog_item with itemId; fill_catalog_item as the user provides changes.
+  3. On confirmation, update_catalog_item. For BOM changes, use the manage-bom skill flow.
+requiredToolRefs:
+  - integration: Claims Filesystem
+    tool: list_catalog_items
+  - integration: Claims Filesystem
+    tool: get_catalog_item
+  - integration: Claims Filesystem
+    tool: open_catalog_item
+  - integration: Claims Filesystem
+    tool: fill_catalog_item
+  - integration: Claims Filesystem
+    tool: update_catalog_item
+category: catalog
+invocationMode: inline
+includeHistory: true
+visibility: org

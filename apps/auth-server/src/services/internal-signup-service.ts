@@ -16,7 +16,7 @@ import {
 } from '../db/services/index.js';
 import type { AccessContext } from '../schemas/index.js';
 import * as bcrypt from 'bcrypt';
-import { triggerSeedTenant } from './api-seed-client.js';
+import { triggerSeedTenant, triggerEnsureUserContact } from './api-seed-client.js';
 import {
   PublicOrgSignupDisabledError,
   PUBLIC_ORG_SIGNUP_DISABLED_CODE,
@@ -165,6 +165,24 @@ class InternalSignupService {
                   organizationId: result.organizationId,
                   error: message,
                }, 'auth-server:internal-signup:signup - triggerSeedTenant dispatch failed (non-fatal)');
+            }
+         }
+
+         if (result.organizationId && input.email) {
+            try {
+               triggerEnsureUserContact({
+                  tenantId: result.organizationId,
+                  email: input.email,
+                  name: input.name,
+               });
+            } catch (contactErr: unknown) {
+               const message =
+                  contactErr instanceof Error ? contactErr.message : String(contactErr);
+               log.warn({
+                  functionName,
+                  organizationId: result.organizationId,
+                  error: message,
+               }, 'auth-server:internal-signup:signup - triggerEnsureUserContact failed (non-fatal)');
             }
          }
 

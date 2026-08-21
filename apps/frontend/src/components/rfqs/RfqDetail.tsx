@@ -355,7 +355,7 @@ function ScopeItemsTab({
     if (!quoteId || estimateGroups) return;
     let cancelled = false;
     setEstimateLoading(true);
-    getQuoteLineItemsAction(quoteId)
+    getQuoteLineItemsAction(quoteId, { all: true })
       .then((result) => {
         if (cancelled) return;
         if (result.success && result.groups) {

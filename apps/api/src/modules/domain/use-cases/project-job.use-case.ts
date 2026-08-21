@@ -1,10 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { sql } from 'drizzle-orm';
 import type { ProjectionUseCase, ProjectionResult } from './use-case.interface';
 import type { DrizzleDbOrTx } from '../../../database/drizzle.module';
 import { JobTransformer } from '../transformers/job.transformer';
 import { EntityRelationshipService } from '../services/entity-relationship.service';
 import { LookupResolutionService } from '../services/lookup-resolution.service';
 import { ContactSyncService } from '../services/contact-sync.service';
+import { ExternalObjectService } from '../../external/external-object.service';
+import { ProjectAppointmentUseCase } from './project-appointment.use-case';
 import {
   JobsRepository,
   ExternalLinksRepository,
@@ -20,6 +23,8 @@ export class ProjectJobUseCase implements ProjectionUseCase {
     private readonly entityRelationship: EntityRelationshipService,
     private readonly lookupResolution: LookupResolutionService,
     private readonly contactSync: ContactSyncService,
+    private readonly externalObjectService: ExternalObjectService,
+    private readonly projectAppointment: ProjectAppointmentUseCase,
     private readonly jobsRepo: JobsRepository,
     private readonly externalLinksRepo: ExternalLinksRepository,
   ) {}
@@ -69,6 +74,18 @@ export class ProjectJobUseCase implements ProjectionUseCase {
     });
     if (resolvedParents.claim) result.entity.claimId = resolvedParents.claim;
     if (resolvedParents.vendor) result.entity.vendorId = resolvedParents.vendor;
+
+    // Resolve parentClaimId from customData.cwParentClaimId (CW UUID → internal claim ID)
+    const cwParentClaimId = (result.entity.customData as Record<string, unknown>)?.cwParentClaimId as string | undefined;
+    if (cwParentClaimId) {
+      const parentClaimResolved = await this.entityRelationship.resolveParents({
+        parentRefs: [{ entityType: 'claim', externalId: cwParentClaimId, required: false }],
+        tenantId,
+        connectionId,
+        tx,
+      });
+      if (parentClaimResolved.claim) result.entity.parentClaimId = parentClaimResolved.claim;
+    }
 
     // Record which provider connection created this job
     result.entity.connectionId = connectionId;
@@ -154,6 +171,81 @@ export class ProjectJobUseCase implements ProjectionUseCase {
         strategy: 'additive',
         tx,
       });
+    }
+
+    // 8. Snapshot assignees into custom_data (no job_assignees child table yet;
+    //    add job_assignees + extend AssigneeSyncService later if query/filter needed)
+    if (result.assignees && result.assignees.length > 0) {
+      const assigneesSnapshot = result.assignees.map((a) => ({
+        externalReference: a.externalReference,
+        displayName: a.displayName,
+        email: a.email,
+        type: a.assigneeTypeExternalReference,
+      }));
+      const currentCustomData = (result.entity.customData ?? {}) as Record<string, unknown>;
+      currentCustomData.assignees = assigneesSnapshot;
+      await this.jobsRepo.update({
+        id: jobId,
+        data: { customData: currentCustomData },
+        tx,
+      });
+    }
+
+    // 9. Project embedded appointments
+    // CW job payloads often include appointments[]. Those need a real
+    // external_objects row (UUID FK) — a synthetic "embedded:appointment:…"
+    // id is not a uuid and aborts the surrounding transaction.
+    const appointments = payload.appointments;
+    if (Array.isArray(appointments) && appointments.length > 0) {
+      for (const appt of appointments) {
+        const apptPayload = appt as Record<string, unknown>;
+        const cwApptId = apptPayload.id as string | undefined;
+        if (!cwApptId) continue;
+
+        // Ensure parent job resolves: embedded appts often omit jobId.
+        const cwJobExternalId =
+          typeof payload.id === 'string' ? payload.id : undefined;
+        const enrichedAppt: Record<string, unknown> = {
+          ...apptPayload,
+          id: apptPayload.id ?? cwApptId,
+          ...(cwJobExternalId && !apptPayload.jobId && !apptPayload.job
+            ? { jobId: cwJobExternalId }
+            : {}),
+        };
+
+        const savepoint = `embedded_appt_${cwApptId.replace(/-/g, '').slice(0, 16)}`;
+        try {
+          await tx.execute(sql.raw(`SAVEPOINT ${savepoint}`));
+          const { externalObject } = await this.externalObjectService.upsertFromFetch({
+            tenantId,
+            connectionId,
+            providerCode: 'crunchwork',
+            providerEntityType: 'appointment',
+            providerEntityId: cwApptId,
+            normalizedEntityType: 'appointment',
+            payload: enrichedAppt,
+            tx,
+          });
+
+          await this.projectAppointment.execute({
+            externalObject: externalObject as unknown as Record<string, unknown>,
+            tenantId,
+            connectionId,
+            tx,
+            parentOverrides: { jobId },
+          });
+          await tx.execute(sql.raw(`RELEASE SAVEPOINT ${savepoint}`));
+        } catch (err) {
+          try {
+            await tx.execute(sql.raw(`ROLLBACK TO SAVEPOINT ${savepoint}`));
+          } catch {
+            // savepoint may not exist if the failure was before SAVEPOINT
+          }
+          this.logger.warn(
+            `ProjectJobUseCase.execute — embedded appointment ${cwApptId} projection failed: ${(err as Error).message}`,
+          );
+        }
+      }
     }
 
     return { status: 'completed', internalEntityId: jobId, internalEntityType: 'job' };

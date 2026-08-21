@@ -28,9 +28,24 @@ export class ConnectionsController {
 
   @Get()
   @RequirePermission(P.integrations.read)
-  async findAll() {
+  async findAll(
+    @Query('search') search?: string,
+    @Query('isActive') isActive?: string,
+    @Query('sort') sort?: string,
+  ) {
     const tenantId = this.tenantContext.getTenantId();
-    return this.providersService.listTenantConnections({ tenantId });
+    const isActiveParam =
+      isActive === 'true' || isActive === '1'
+        ? true
+        : isActive === 'false' || isActive === '0'
+          ? false
+          : undefined;
+    return this.providersService.listTenantConnections({
+      tenantId,
+      search,
+      isActive: isActiveParam,
+      sort,
+    });
   }
 
   @Get(':id')
@@ -54,12 +69,16 @@ export class ConnectionsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('status') status?: string,
+    @Query('search') search?: string,
+    @Query('sort') sort?: string,
   ) {
     const tenantId = this.tenantContext.getTenantId();
     return this.providersService.findWebhookEventsByConnection({
       connectionId: id,
       tenantId,
       status,
+      search,
+      sort,
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
     });

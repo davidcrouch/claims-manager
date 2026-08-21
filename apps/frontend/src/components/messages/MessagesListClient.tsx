@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Mail, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
@@ -17,7 +17,7 @@ import {
   TableEmptyRow,
   commitColumnFilterSelection,
   buildColumnFilterOptions,
-  columnFilterKey,
+  columnFilterToValuesParam,
   type SortOption,
 } from '@/components/shared/list-filters';
 import {
@@ -28,8 +28,20 @@ import {
 import { TablePagination } from '@/components/shared/table-pagination';
 import { formatDateTime } from '@/components/shared/detail';
 import { resolveJobName } from '@/components/shared/job-label';
+import {
+  buildServerJobFilterOptions,
+  resolveServerJobFilterSelection,
+  selectedJobFilterLabels,
+  parseSelectedJobIds,
+  toServerJobFetchParams,
+  writeServerJobFilterParams,
+  jobFilterOptionsFromNameById,
+} from '@/components/shared/server-job-filter';
 import { MessageDetailDrawer } from '@/components/messages/MessageDetailDrawer';
-import { fetchMessagesAction } from '@/app/(app)/messages/actions';
+import {
+  fetchMessagesAction,
+  fetchMessageFilterOptionsAction,
+} from '@/app/(app)/messages/actions';
 import type { Job, Claim, Message } from '@/types/api';
 
 const SORT_OPTIONS: SortOption[] = [
@@ -94,24 +106,30 @@ export function MessagesListClient({
   parentClaim?: Claim | null;
   jobNameById?: Record<string, string>;
 } = {}) {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const jobId = searchParams.get('jobId') ?? job?.id ?? undefined;
+  const jobId = searchParams.get('jobId') ?? undefined;
+  const jobIdsParam = searchParams.get('jobIds') ?? undefined;
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sortField, setSortField] = useState('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [readFilter, setReadFilter] = useState<Set<string>>(new Set());
-  const [jobFilter, setJobFilter] = useState<Set<string>>(new Set());
-  const [jobFilterActive, setJobFilterActive] = useState(false);
   const [fromFilter, setFromFilter] = useState<Set<string>>(new Set());
   const [fromFilterActive, setFromFilterActive] = useState(false);
   const [toFilter, setToFilter] = useState<Set<string>>(new Set());
   const [toFilterActive, setToFilterActive] = useState(false);
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [statusFilterActive, setStatusFilterActive] = useState(false);
+  const [filterOptions, setFilterOptions] = useState<{
+    fromNames: string[];
+    toNames: string[];
+    statuses: ('Read' | 'Unread')[];
+  }>({ fromNames: [], toNames: [], statuses: ['Read', 'Unread'] });
   const [page, setPage] = useState(1);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -121,6 +139,62 @@ export function MessagesListClient({
     'messages',
     MESSAGES_COLUMNS,
   );
+
+  const selectedJobIds = useMemo(
+    () => parseSelectedJobIds(jobId, jobIdsParam),
+    [jobId, jobIdsParam],
+  );
+  const filterJobs = useMemo(
+    () => jobFilterOptionsFromNameById(jobNameById),
+    [jobNameById],
+  );
+  const uniqueJobs = useMemo(
+    () => buildServerJobFilterOptions(filterJobs),
+    [filterJobs],
+  );
+  const { selected: jobFilter, active: jobFilterActive } = useMemo(
+    () =>
+      selectedJobFilterLabels({
+        jobId,
+        jobIds: jobIdsParam
+          ? jobIdsParam.split(',').map((id) => id.trim()).filter(Boolean)
+          : undefined,
+        jobs: filterJobs,
+      }),
+    [jobId, jobIdsParam, filterJobs],
+  );
+  const { jobId: fetchJobId, jobIds: fetchJobIds } = useMemo(
+    () => toServerJobFetchParams(selectedJobIds),
+    [selectedJobIds],
+  );
+
+  const fromNamesParam = useMemo(
+    () => columnFilterToValuesParam(fromFilterActive, fromFilter),
+    [fromFilterActive, fromFilter],
+  );
+  const toNamesParam = useMemo(
+    () => columnFilterToValuesParam(toFilterActive, toFilter),
+    [toFilterActive, toFilter],
+  );
+  const readStatusParam = useMemo(() => {
+    if (statusFilterActive) {
+      return columnFilterToValuesParam(true, statusFilter);
+    }
+    if (readFilter.size === 0 || readFilter.size >= READ_OPTIONS.length) {
+      return undefined;
+    }
+    return [...readFilter]
+      .map((id) => (id === 'unread' ? 'Unread' : 'Read'))
+      .sort()
+      .join(',');
+  }, [statusFilterActive, statusFilter, readFilter]);
+
+  const sortParam = `${sortField}_${sortOrder}`;
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const openMessage = (message: Message) => {
     setSelectedMessage(message);
@@ -135,49 +209,85 @@ export function MessagesListClient({
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      if (
+        fromNamesParam === null ||
+        toNamesParam === null ||
+        readStatusParam === null
+      ) {
+        setMessages([]);
+        setTotal(0);
+        return;
+      }
       const res = await fetchMessagesAction({
         page,
         limit,
-        jobId,
+        jobId: fetchJobId,
+        jobIds: fetchJobIds,
+        fromNames: fromNamesParam,
+        toNames: toNamesParam,
+        readStatus: readStatusParam,
+        search: debouncedSearch || undefined,
+        sort: sortParam,
       });
       setMessages(res.data);
       setTotal(res.total);
     } finally {
       setLoading(false);
     }
-  }, [page, jobId]);
+  }, [
+    page,
+    fetchJobId,
+    fetchJobIds,
+    fromNamesParam,
+    toNamesParam,
+    readStatusParam,
+    debouncedSearch,
+    sortParam,
+  ]);
 
   useEffect(() => {
     load();
   }, [load]);
 
   useEffect(() => {
-    setPage(1);
-  }, [search, sortField, sortOrder, jobId, readFilter]);
+    fetchMessageFilterOptionsAction().then((opts) => {
+      setFilterOptions({
+        fromNames: opts.fromNames ?? [],
+        toNames: opts.toNames ?? [],
+        statuses: opts.statuses ?? ['Read', 'Unread'],
+      });
+    });
+  }, []);
 
-  const uniqueJobs = useMemo(
-    () =>
-      buildColumnFilterOptions(
-        messages.map((m) => resolveJobName(messageJobId(m), jobNameById ?? {})),
-        { alwaysIncludeBlank: true },
-      ),
-    [messages, jobNameById],
-  );
+  useEffect(() => {
+    setPage(1);
+  }, [
+    debouncedSearch,
+    sortField,
+    sortOrder,
+    jobId,
+    jobIdsParam,
+    fromNamesParam,
+    toNamesParam,
+    readStatusParam,
+  ]);
 
   const uniqueFrom = useMemo(
-    () =>
-      buildColumnFilterOptions(messages.map((m) => messageSender(m)), {
-        alwaysIncludeBlank: true,
-      }),
-    [messages],
+    () => buildColumnFilterOptions(filterOptions.fromNames),
+    [filterOptions.fromNames],
   );
 
   const uniqueTo = useMemo(
+    () => buildColumnFilterOptions(filterOptions.toNames),
+    [filterOptions.toNames],
+  );
+
+  const statusColumnOptions = useMemo(
     () =>
-      buildColumnFilterOptions(messages.map((m) => messageRecipient(m)), {
-        alwaysIncludeBlank: true,
-      }),
-    [messages],
+      filterOptions.statuses.length > 0
+        ? [...filterOptions.statuses]
+        : STATUS_FILTER_OPTIONS,
+    [filterOptions.statuses],
   );
 
   const handleSort = (field: string) => {
@@ -190,12 +300,16 @@ export function MessagesListClient({
   };
 
   const applyJobFilter = (next: Set<string>) => {
-    const committed = commitColumnFilterSelection({
+    const resolved = resolveServerJobFilterSelection({
       next,
-      optionCount: uniqueJobs.length,
+      options: uniqueJobs,
+      jobs: filterJobs,
     });
-    setJobFilter(committed.selected);
-    setJobFilterActive(committed.active);
+    setPage(1);
+    const params = new URLSearchParams(searchParams.toString());
+    writeServerJobFilterParams(params, resolved);
+    params.set('page', '1');
+    router.replace(`/messages?${params.toString()}`, { scroll: false });
   };
 
   const applyFromFilter = (next: Set<string>) => {
@@ -219,103 +333,13 @@ export function MessagesListClient({
   const applyStatusColumnFilter = (next: Set<string>) => {
     const committed = commitColumnFilterSelection({
       next,
-      optionCount: STATUS_FILTER_OPTIONS.length,
+      optionCount: statusColumnOptions.length,
     });
     setStatusFilter(committed.selected);
     setStatusFilterActive(committed.active);
   };
 
-  const visibleMessages = useMemo(() => {
-    let rows = [...messages];
-
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      rows = rows.filter((m) => {
-        const subject = (m.subject ?? '').toLowerCase();
-        const body = stripHtml(m.body ?? '').toLowerCase();
-        const from = messageSender(m).toLowerCase();
-        const jobName = resolveJobName(messageJobId(m), jobNameById ?? {}).toLowerCase();
-        return (
-          subject.includes(q) ||
-          body.includes(q) ||
-          from.includes(q) ||
-          jobName.includes(q)
-        );
-      });
-    }
-
-    if (readFilter.size > 0) {
-      rows = rows.filter((m) => {
-        const status = messageStatusLabel(m).toLowerCase();
-        return readFilter.has(status);
-      });
-    }
-
-    if (jobFilterActive) {
-      if (jobFilter.size === 0) {
-        rows = [];
-      } else {
-        rows = rows.filter((m) =>
-          jobFilter.has(
-            columnFilterKey(resolveJobName(messageJobId(m), jobNameById ?? {})),
-          ),
-        );
-      }
-    }
-
-    if (fromFilterActive) {
-      if (fromFilter.size === 0) {
-        rows = [];
-      } else {
-        rows = rows.filter((m) => fromFilter.has(columnFilterKey(messageSender(m))));
-      }
-    }
-
-    if (toFilterActive) {
-      if (toFilter.size === 0) {
-        rows = [];
-      } else {
-        rows = rows.filter((m) =>
-          toFilter.has(columnFilterKey(messageRecipient(m))),
-        );
-      }
-    }
-
-    if (statusFilterActive) {
-      if (statusFilter.size === 0) {
-        rows = [];
-      } else {
-        rows = rows.filter((m) => statusFilter.has(messageStatusLabel(m)));
-      }
-    }
-
-    rows.sort((a, b) => {
-      let cmp = 0;
-      if (sortField === 'subject') {
-        cmp = (a.subject ?? '').localeCompare(b.subject ?? '');
-      } else {
-        cmp = (a.createdAt ?? '').localeCompare(b.createdAt ?? '');
-      }
-      return sortOrder === 'asc' ? cmp : -cmp;
-    });
-
-    return rows;
-  }, [
-    messages,
-    search,
-    readFilter,
-    jobFilterActive,
-    jobFilter,
-    fromFilterActive,
-    fromFilter,
-    toFilterActive,
-    toFilter,
-    statusFilterActive,
-    statusFilter,
-    sortField,
-    sortOrder,
-    jobNameById,
-  ]);
+  const visibleMessages = messages;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
@@ -331,7 +355,7 @@ export function MessagesListClient({
         />
       </SetPageHeader>
       <SetHeaderActions>
-        {jobId ? (
+        {(fetchJobId || job?.id) ? (
           <Button
             size="default"
             onClick={() => setComposeOpen(true)}
@@ -353,7 +377,7 @@ export function MessagesListClient({
             onSort={handleSort}
           />
           <SearchInput
-            placeholder="Search messages by subject, sender, or job reference..."
+            placeholder="Search messages by subject or body..."
             value={search}
             onChange={setSearch}
           />
@@ -391,7 +415,7 @@ export function MessagesListClient({
                     onSort={handleSort}
                     filter={{
                       options: uniqueJobs,
-                      selected: jobFilter,
+                      selected: jobFilterActive ? jobFilter : new Set(uniqueJobs),
                       active: jobFilterActive,
                       onApply: applyJobFilter,
                       menuTitle: 'Filter by job',
@@ -447,7 +471,7 @@ export function MessagesListClient({
                     sortOrder={sortOrder}
                     onSort={handleSort}
                     filter={{
-                      options: STATUS_FILTER_OPTIONS,
+                      options: statusColumnOptions,
                       selected: statusFilter,
                       active: statusFilterActive,
                       onApply: applyStatusColumnFilter,
@@ -569,14 +593,14 @@ export function MessagesListClient({
         message={selectedMessage}
         jobNameById={jobNameById}
       />
-      {jobId && (
+      {(fetchJobId || job?.id) && (
         <MessageFormDrawer
           open={composeOpen}
           onOpenChange={(open) => {
             setComposeOpen(open);
             if (!open) void load();
           }}
-          jobId={jobId}
+          jobId={fetchJobId || job?.id || ''}
         />
       )}
     </div>

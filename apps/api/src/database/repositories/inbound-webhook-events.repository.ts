@@ -1,12 +1,30 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, or, and, desc, count as drizzleCount, max, inArray } from 'drizzle-orm';
+import { eq, or, and, desc, asc, count as drizzleCount, max, inArray, ilike } from 'drizzle-orm';
 import { DRIZZLE } from '../drizzle.module';
 import type { DrizzleDB, DrizzleDbOrTx } from '../drizzle.module';
 import { inboundWebhookEvents, integrationConnections } from '../schema';
 
 export type InboundWebhookEventRow = typeof inboundWebhookEvents.$inferSelect;
 export type InboundWebhookEventInsert = typeof inboundWebhookEvents.$inferInsert;
+
+function buildWebhookEventsOrderBy(sort?: string) {
+  switch (sort) {
+    case 'created_at_asc':
+      return [asc(inboundWebhookEvents.createdAt)];
+    case 'event_type_asc':
+      return [asc(inboundWebhookEvents.eventType)];
+    case 'event_type_desc':
+      return [desc(inboundWebhookEvents.eventType)];
+    case 'processing_status_asc':
+      return [asc(inboundWebhookEvents.processingStatus)];
+    case 'processing_status_desc':
+      return [desc(inboundWebhookEvents.processingStatus)];
+    case 'created_at_desc':
+    default:
+      return [desc(inboundWebhookEvents.createdAt)];
+  }
+}
 
 @Injectable()
 export class InboundWebhookEventsRepository {
@@ -144,6 +162,8 @@ export class InboundWebhookEventsRepository {
     connectionId: string;
     tenantId: string;
     status?: string;
+    search?: string;
+    sort?: string;
     page?: number;
     limit?: number;
   }): Promise<{ data: InboundWebhookEventRow[]; total: number }> {
@@ -157,16 +177,34 @@ export class InboundWebhookEventsRepository {
         eq(inboundWebhookEvents.payloadTenantId, params.tenantId),
       )!,
     )!;
-    const whereClause = params.status
-      ? and(ownership, eq(inboundWebhookEvents.processingStatus, params.status))!
-      : ownership;
+    let whereClause = ownership;
+    const statuses =
+      params.status?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
+    if (statuses.length === 1) {
+      whereClause = and(whereClause, eq(inboundWebhookEvents.processingStatus, statuses[0]))!;
+    } else if (statuses.length > 1) {
+      whereClause = and(
+        whereClause,
+        inArray(inboundWebhookEvents.processingStatus, statuses),
+      )!;
+    }
+    if (params.search?.trim()) {
+      const term = `%${params.search.trim()}%`;
+      whereClause = and(
+        whereClause,
+        or(
+          ilike(inboundWebhookEvents.eventType, term),
+          ilike(inboundWebhookEvents.payloadEntityId, term),
+        )!,
+      )!;
+    }
 
     const [data, countResult] = await Promise.all([
       this.db
         .select()
         .from(inboundWebhookEvents)
         .where(whereClause)
-        .orderBy(desc(inboundWebhookEvents.createdAt))
+        .orderBy(...buildWebhookEventsOrderBy(params.sort))
         .limit(limit)
         .offset(offset),
       this.db

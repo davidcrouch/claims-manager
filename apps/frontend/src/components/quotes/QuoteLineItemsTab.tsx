@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import type { Quote, CatalogType } from '@/types/api';
@@ -11,7 +11,8 @@ import { DeleteGroupDialog } from '@/components/quotes/DeleteGroupDialog';
 import { DeleteItemDialog } from '@/components/quotes/DeleteItemDialog';
 import type { CatalogDragPayload, GroupLabelDragPayload } from '@/components/catalog/catalog-drag';
 import type { ApiGroup, GroupDimensions } from '@/components/quotes/quote-line-items.types';
-import { getPayloadGroups } from '@/components/quotes/quote-line-items.utils';
+import { LINE_ITEMS_PAGE_SIZE } from '@/components/quotes/quote-line-items.utils';
+import { uiMarkupToStored, uiTaxToStored } from '@/lib/rates';
 import {
   addCatalogAssemblyToQuoteAction,
   addCatalogItemToQuoteAction,
@@ -26,6 +27,30 @@ import {
 } from '@/app/(app)/quotes/actions';
 
 const PREFIX = 'frontend:QuoteLineItemsTab';
+
+function findItemMarkupType(groups: ApiGroup[], itemId: string): string | undefined {
+  for (const g of groups) {
+    for (const item of g.items ?? []) {
+      if (item.id === itemId) return item.markupType;
+    }
+    for (const combo of g.combos ?? []) {
+      for (const item of combo.items ?? []) {
+        if (item.id === itemId) return item.markupType;
+      }
+    }
+    for (const scope of g.scopes ?? []) {
+      for (const item of scope.items ?? []) {
+        if (item.id === itemId) return item.markupType;
+      }
+      for (const combo of scope.combos ?? []) {
+        for (const item of combo.items ?? []) {
+          if (item.id === itemId) return item.markupType;
+        }
+      }
+    }
+  }
+  return undefined;
+}
 
 export function QuoteLineItemsTab({
   quote,
@@ -45,8 +70,13 @@ export function QuoteLineItemsTab({
   hideToolbarActions?: boolean;
 }) {
   const router = useRouter();
-  const payloadGroups = getPayloadGroups(quote);
-  const [dbGroups, setDbGroups] = useState<ApiGroup[] | null>(null);
+  const [dbGroups, setDbGroups] = useState<ApiGroup[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [groupSummaries, setGroupSummaries] = useState<Array<{ id: string; label: string }>>([]);
+  const [hiddenGroupIds, setHiddenGroupIds] = useState<Set<string>>(new Set());
   const [quantity, setQuantity] = useState('1');
   const [activeDropKey, setActiveDropKey] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -58,25 +88,59 @@ export function QuoteLineItemsTab({
   const [deletingItem, setDeletingItem] = useState<DeleteItemRequest | null>(null);
   const [structurallyDirty, setStructurallyDirty] = useState(false);
 
+  const visibleGroupIds = useMemo(() => {
+    if (hiddenGroupIds.size === 0 || groupSummaries.length === 0) return undefined;
+    return groupSummaries.map((group) => group.id).filter((id) => !hiddenGroupIds.has(id));
+  }, [hiddenGroupIds, groupSummaries]);
+
   const loadLineItems = useCallback(async () => {
-    const result = await getQuoteLineItemsAction(quote.id);
+    if (visibleGroupIds && visibleGroupIds.length === 0) {
+      setDbGroups([]);
+      setTotal(0);
+      return;
+    }
+    const result = await getQuoteLineItemsAction(quote.id, {
+      search: debouncedSearch || undefined,
+      groupIds: visibleGroupIds,
+      page,
+      limit: LINE_ITEMS_PAGE_SIZE,
+    });
     if (result.success && result.groups) {
       setDbGroups(result.groups as ApiGroup[]);
+      setTotal(result.total ?? 0);
+      if (result.groupSummaries) setGroupSummaries(result.groupSummaries);
     } else if (!result.success) {
       console.error(`${PREFIX}.loadLineItems — ${result.error}`);
       toast.error(result.error ?? 'Failed to load line items');
     }
-  }, [quote.id]);
+  }, [quote.id, debouncedSearch, visibleGroupIds, page]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, hiddenGroupIds]);
 
   useEffect(() => {
     void loadLineItems();
   }, [loadLineItems]);
 
-  const groups = dbGroups !== null ? dbGroups : payloadGroups;
+  const groups = dbGroups;
 
   function handleCatalogDrop(payload: CatalogDragPayload, groupId?: string, quoteComboId?: string) {
     if (payload.kind === 'scope' && quoteComboId) {
-      toast.error('Scopes cannot be nested inside other scopes');
+      toast.error('Scopes can only be added to groups');
+      return;
+    }
+    if (payload.kind === 'assembly' && !groupId) {
+      toast.error('Assemblies must be added to a group or scope');
+      return;
+    }
+    if (payload.kind === 'primitive' && !groupId && !quoteComboId) {
+      toast.error('Items must be added to a group, scope, or assembly');
       return;
     }
     startTransition(async () => {
@@ -106,7 +170,7 @@ export function QuoteLineItemsTab({
 
       toast.success(
         quoteComboId
-          ? `Added ${payload.code} to scope`
+          ? `Added ${payload.code} to ${payload.kind === 'primitive' ? 'parent' : 'scope'}`
           : `Added ${payload.code} to estimate`,
       );
       setStructurallyDirty(true);
@@ -277,7 +341,7 @@ export function QuoteLineItemsTab({
         } else {
           const itemId = rowKey.match(/-item-([0-9a-f-]{36})$/)?.[1];
           if (itemId) {
-            const taxValue = fields.tax ?? undefined;
+            const markupType = findItemMarkupType(groups, itemId);
             items.push({
               id: itemId,
               name: fields.name,
@@ -285,8 +349,11 @@ export function QuoteLineItemsTab({
               description: fields.description,
               quantity: fields.quantity,
               unitCost: fields.unitCost,
-              markupValue: fields.markupValue,
-              tax: taxValue,
+              markupValue:
+                fields.markupValue !== undefined
+                  ? uiMarkupToStored(markupType, fields.markupValue)
+                  : undefined,
+              tax: fields.tax !== undefined ? uiTaxToStored(fields.tax) : undefined,
               unitType: fields.unitType,
             });
           }
@@ -324,7 +391,11 @@ export function QuoteLineItemsTab({
   );
 
   function handleMoveGroup(groupId: string, direction: 'up' | 'down') {
-    const currentIds = groups.map((g) => g.id).filter(Boolean) as string[];
+    const currentIds = (
+      groupSummaries.length > 0
+        ? groupSummaries.map((group) => group.id)
+        : groups.map((g) => g.id)
+    ).filter(Boolean) as string[];
     const idx = currentIds.indexOf(groupId);
     if (idx < 0) return;
 
@@ -371,6 +442,18 @@ export function QuoteLineItemsTab({
 
       <QuoteLineItemsTable
         groups={groups}
+        paging={{
+          page,
+          pageSize: LINE_ITEMS_PAGE_SIZE,
+          total,
+          onPageChange: setPage,
+          groupSummaries,
+          hiddenGroupIds,
+          onHiddenGroupIdsChange: setHiddenGroupIds,
+          search,
+          onSearchChange: setSearch,
+          serverFiltered: true,
+        }}
         activeDropKey={readOnly ? null : activeDropKey}
         setActiveDropKey={readOnly ? undefined : setActiveDropKey}
         onCatalogDrop={readOnly ? undefined : handleCatalogDrop}

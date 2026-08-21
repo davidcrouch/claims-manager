@@ -1,4 +1,4 @@
-import type { ApiCombo, ApiGroup, FlatLineItemRow } from '@/components/quotes/quote-line-items.types';
+import type { ApiCombo, ApiGroup, ApiItem, ApiScope, FlatLineItemRow } from '@/components/quotes/quote-line-items.types';
 import type { Quote } from '@/types/api';
 import type { Dict } from '@/components/shared/detail';
 
@@ -118,7 +118,73 @@ export function normalizeLineItemGroups(groups: ApiGroup[]): ApiGroup[] {
   });
 }
 
-export function flattenGroups(groups: ApiGroup[]): FlatLineItemRow[] {
+export const LINE_ITEMS_PAGE_SIZE = 100;
+
+export type LineDisplayUnit =
+  | { kind: 'item'; groupIndex: number; item: ApiItem }
+  | { kind: 'combo'; groupIndex: number; combo: ApiCombo }
+  | { kind: 'scope'; groupIndex: number; scope: ApiScope }
+  | { kind: 'empty-group'; groupIndex: number };
+
+export function collectDisplayUnits(groups: ApiGroup[]): LineDisplayUnit[] {
+  const units: LineDisplayUnit[] = [];
+  groups.forEach((group, groupIndex) => {
+    const items = group.items ?? [];
+    const combos = group.combos ?? [];
+    const scopes = group.scopes ?? [];
+    if (items.length === 0 && combos.length === 0 && scopes.length === 0) {
+      units.push({ kind: 'empty-group', groupIndex });
+      return;
+    }
+    for (const item of items) {
+      units.push({ kind: 'item', groupIndex, item });
+    }
+    for (const combo of combos) {
+      units.push({ kind: 'combo', groupIndex, combo });
+    }
+    for (const scope of scopes) {
+      units.push({ kind: 'scope', groupIndex, scope });
+    }
+  });
+  return units;
+}
+
+export function paginateGroups(
+  groups: ApiGroup[],
+  page: number,
+  pageSize: number,
+): { groups: ApiGroup[]; totalUnits: number } {
+  const units = collectDisplayUnits(groups);
+  const totalUnits = units.length;
+  const start = Math.max(0, (page - 1) * pageSize);
+  const slice = units.slice(start, start + pageSize);
+  if (slice.length === 0) {
+    return { groups: [], totalUnits };
+  }
+
+  const rebuilt = new Map<number, ApiGroup>();
+  for (const unit of slice) {
+    const source = groups[unit.groupIndex];
+    let target = rebuilt.get(unit.groupIndex);
+    if (!target) {
+      target = { ...source, items: [], combos: [], scopes: [] };
+      rebuilt.set(unit.groupIndex, target);
+    }
+    if (unit.kind === 'empty-group') continue;
+    if (unit.kind === 'item') target.items = [...(target.items ?? []), unit.item];
+    else if (unit.kind === 'combo') target.combos = [...(target.combos ?? []), unit.combo];
+    else target.scopes = [...(target.scopes ?? []), unit.scope];
+  }
+
+  return {
+    groups: [...rebuilt.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([, group]) => group),
+    totalUnits,
+  };
+}
+
+export function flattenLineItems(groups: ApiGroup[]): FlatLineItemRow[] {
   const rows: FlatLineItemRow[] = [];
 
   groups.forEach((group, groupIndex) => {
@@ -174,6 +240,35 @@ export function flattenGroups(groups: ApiGroup[]): FlatLineItemRow[] {
   });
 
   return rows;
+}
+
+/** IDs used by RFQ/PO scope pickers — includes scopes and nested assemblies/items. */
+export function collectSelectableLineItemIds(groups: ApiGroup[]): string[] {
+  const ids: string[] = [];
+  for (const group of groups) {
+    for (const item of group.items ?? []) {
+      if (item.id) ids.push(item.id);
+    }
+    for (const combo of group.combos ?? []) {
+      if (combo.id) ids.push(combo.id);
+      for (const item of combo.items ?? []) {
+        if (item.id) ids.push(item.id);
+      }
+    }
+    for (const scope of group.scopes ?? []) {
+      if (scope.id) ids.push(scope.id);
+      for (const item of scope.items ?? []) {
+        if (item.id) ids.push(item.id);
+      }
+      for (const combo of scope.combos ?? []) {
+        if (combo.id) ids.push(combo.id);
+        for (const item of combo.items ?? []) {
+          if (item.id) ids.push(item.id);
+        }
+      }
+    }
+  }
+  return ids;
 }
 
 export function uniqueFilterOptions(

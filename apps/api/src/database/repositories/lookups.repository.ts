@@ -105,6 +105,30 @@ export class LookupsRepository {
     return row ?? null;
   }
 
+  async findByDomainAndNames(params: {
+    tenantId: string;
+    domain: string;
+    names: string[];
+  }): Promise<Map<string, string>> {
+    if (params.names.length === 0) return new Map();
+    const rows = await this.db
+      .select()
+      .from(lookupValues)
+      .where(
+        and(
+          eq(lookupValues.tenantId, params.tenantId),
+          eq(lookupValues.domain, params.domain),
+          inArray(lookupValues.name, params.names),
+          eq(lookupValues.isActive, true),
+        ),
+      );
+    const map = new Map<string, string>();
+    for (const row of rows) {
+      if (row.name) map.set(row.name, row.id);
+    }
+    return map;
+  }
+
   async findOrCreateByName(params: {
     tenantId: string;
     domain: string;

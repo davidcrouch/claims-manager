@@ -30,6 +30,8 @@ export async function fetchJobsAction(params: {
   sort?: string;
   status?: string;
   jobType?: string;
+  assignedToUserIds?: string;
+  refs?: string;
 }): Promise<PaginatedResponse<Job> | null> {
   const session = await getSession();
   if (!session.authenticated) return null;
@@ -46,7 +48,31 @@ export async function fetchJobsAction(params: {
     sort: params.sort,
     status: params.status,
     jobType: params.jobType,
+    assignedToUserIds: params.assignedToUserIds,
+    refs: params.refs,
   });
+}
+
+export async function fetchJobFilterOptionsAction(): Promise<{
+  refs: string[];
+  assignees: { id: string; name: string }[];
+}> {
+  const session = await getSession();
+  if (!session.authenticated) return { refs: [], assignees: [] };
+
+  const token = await getAccessToken();
+  if (!token) return { refs: [], assignees: [] };
+
+  const api = createApiClient({ token });
+  try {
+    return await api.getJobFilterOptions();
+  } catch (err) {
+    console.error(
+      'frontend:fetchJobFilterOptionsAction - getJobFilterOptions failed:',
+      err instanceof Error ? err.message : err,
+    );
+    return { refs: [], assignees: [] };
+  }
 }
 
 /** Lookups + first page of jobs for the job-switcher drawer on job detail. */

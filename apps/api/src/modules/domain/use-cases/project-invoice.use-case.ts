@@ -1,12 +1,16 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import type { ProjectionUseCase, ProjectionResult } from './use-case.interface';
 import type { DrizzleDbOrTx } from '../../../database/drizzle.module';
 import { InvoiceTransformer } from '../transformers/invoice.transformer';
 import { LookupResolutionService } from '../services/lookup-resolution.service';
 import { ExternalObjectService } from '../../external/external-object.service';
+import { OutboundEventsService } from '../../outbound-events/outbound-events.service';
 import {
   InvoicesRepository,
   ExternalLinksRepository,
+  LookupsRepository,
+  WorkOrdersRepository,
+  PurchaseOrdersRepository,
   type InvoiceInsert,
 } from '../../../database/repositories';
 
@@ -33,6 +37,10 @@ export class ProjectInvoiceUseCase implements ProjectionUseCase {
     private readonly invoicesRepo: InvoicesRepository,
     private readonly externalLinksRepo: ExternalLinksRepository,
     private readonly externalObjectService: ExternalObjectService,
+    private readonly lookupsRepo: LookupsRepository,
+    private readonly workOrdersRepo: WorkOrdersRepository,
+    private readonly purchaseOrdersRepo: PurchaseOrdersRepository,
+    @Optional() private readonly outboundEvents?: OutboundEventsService,
   ) {}
 
   async execute(params: {
@@ -110,7 +118,15 @@ export class ProjectInvoiceUseCase implements ProjectionUseCase {
     }
 
     let invoiceId: string;
+    let previousStatusLookupId: string | null | undefined;
+
     if (existingLink) {
+      const existingInvoice = await this.invoicesRepo.findOne({
+        id: existingLink.internalEntityId,
+        tenantId,
+      });
+      previousStatusLookupId = existingInvoice?.statusLookupId;
+
       await this.invoicesRepo.update({
         id: existingLink.internalEntityId,
         data: result.entity as Partial<InvoiceInsert>,
@@ -138,6 +154,76 @@ export class ProjectInvoiceUseCase implements ProjectionUseCase {
       });
     }
 
+    const newStatusLookupId = resolvedLookups['statusLookupId'];
+    if (newStatusLookupId && newStatusLookupId !== previousStatusLookupId) {
+      this.emitIfApproved({
+        statusLookupId: newStatusLookupId,
+        invoiceId,
+        tenantId,
+        workOrderId,
+        purchaseOrderId,
+      }).catch((err) =>
+        this.logger.warn(
+          `ProjectInvoiceUseCase.emitIfApproved — failed: ${(err as Error).message}`,
+        ),
+      );
+    }
+
     return { status: 'completed', internalEntityId: invoiceId, internalEntityType: 'invoice' };
+  }
+
+  private async emitIfApproved(params: {
+    statusLookupId: string;
+    invoiceId: string;
+    tenantId: string;
+    workOrderId?: string;
+    purchaseOrderId?: string;
+  }): Promise<void> {
+    if (!this.outboundEvents) return;
+
+    const lookup = await this.lookupsRepo.findOne({
+      id: params.statusLookupId,
+      tenantId: params.tenantId,
+    });
+    const statusName = (lookup?.name ?? '').toLowerCase();
+    if (statusName !== 'approved') return;
+
+    const jobId = await this.resolveJobId(params);
+    if (!jobId) {
+      this.logger.warn(
+        `ProjectInvoiceUseCase.emitIfApproved — no jobId for invoice=${params.invoiceId}`,
+      );
+      return;
+    }
+
+    this.outboundEvents.emitInvoiceApproved({
+      invoiceId: params.invoiceId,
+      jobId,
+      tenantId: params.tenantId,
+      purchaseOrderId: params.purchaseOrderId,
+      approvedAt: new Date().toISOString(),
+    }).catch(() => {});
+  }
+
+  private async resolveJobId(params: {
+    tenantId: string;
+    workOrderId?: string;
+    purchaseOrderId?: string;
+  }): Promise<string | null> {
+    if (params.workOrderId) {
+      const wo = await this.workOrdersRepo.findOne({
+        id: params.workOrderId,
+        tenantId: params.tenantId,
+      });
+      if (wo?.jobId) return wo.jobId;
+    }
+    if (params.purchaseOrderId) {
+      const po = await this.purchaseOrdersRepo.findOne({
+        id: params.purchaseOrderId,
+        tenantId: params.tenantId,
+      });
+      if (po?.jobId) return po.jobId;
+    }
+    return null;
   }
 }

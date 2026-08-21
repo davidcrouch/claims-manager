@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { CatalogSelectionService } from '../catalog/services/catalog-selection.service';
+import { parseLineItemsPageQuery } from '../catalog/line-items-page';
 import { AddCatalogAssemblyDto, AddCatalogPrimitiveDto } from '../catalog/dto/catalog.dto';
 import { PurchaseOrdersService } from './purchase-orders.service';
 import { ManualCaptureService, type CapturePurchaseOrderDto } from '../domain/services/manual-capture.service';
@@ -38,20 +39,27 @@ export class PurchaseOrdersController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('jobId') jobId?: string,
+    @Query('jobIds') jobIds?: string,
     @Query('status') status?: string,
     @Query('vendorId') vendorId?: string,
     @Query('ownershipStatus') ownershipStatus?: string,
     @Query('captureMethod') captureMethod?: string,
+    @Query('search') search?: string,
     @Query('sort') sort?: string,
   ) {
+    const jobIdList = jobIds
+      ? jobIds.split(',').map((id) => id.trim()).filter((id) => id.length > 0)
+      : undefined;
     return this.purchaseOrdersService.findAll({
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
       jobId,
+      jobIds: jobIdList && jobIdList.length > 0 ? jobIdList : undefined,
       status,
       vendorId,
       ownershipStatus,
       captureMethod,
+      search,
       sort,
     });
   }
@@ -79,8 +87,18 @@ export class PurchaseOrdersController {
 
   @Get(':id/line-items')
   @RequirePermission(P.procurement.read)
-  getLineItems(@Param('id') id: string) {
-    return this.catalogSelectionService.getPurchaseOrderLineItems({ purchaseOrderId: id });
+  getLineItems(
+    @Param('id') id: string,
+    @Query('search') search?: string,
+    @Query('groupIds') groupIds?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('all') all?: string,
+  ) {
+    return this.catalogSelectionService.getPurchaseOrderLineItems({
+      purchaseOrderId: id,
+      ...parseLineItemsPageQuery({ search, groupIds, page, limit, all }),
+    });
   }
 
   @Post(':id')

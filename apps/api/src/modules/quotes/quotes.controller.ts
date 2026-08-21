@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { CatalogSelectionService } from '../catalog/services/catalog-selection.service';
+import { parseLineItemsPageQuery } from '../catalog/line-items-page';
 import { CatalogMismatchService } from '../catalog/services/catalog-mismatch.service';
 import { AddCatalogAssemblyDto, AddCatalogPrimitiveDto } from '../catalog/dto/catalog.dto';
 import { CreateQuoteGroupDto, UpdateQuoteGroupDto, ReorderQuoteGroupsDto, UpdateQuoteLineItemsDto } from './dto/quote-group.dto';
@@ -35,24 +36,39 @@ export class QuotesController {
     });
   }
 
+  @Get('filter-assignees')
+  @RequirePermission(P.procurement.read)
+  async findFilterAssignees() {
+    return this.quotesService.findFilterAssignees();
+  }
+
   @Get()
   @RequirePermission(P.procurement.read)
   async findAll(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('jobId') jobId?: string,
+    @Query('jobIds') jobIds?: string,
     @Query('status') status?: string,
     @Query('statusId') statusId?: string,
     @Query('quoteType') quoteType?: string,
+    @Query('assignedToUserIds') assignedToUserIds?: string,
+    @Query('search') search?: string,
     @Query('sort') sort?: string,
   ) {
+    const jobIdList = jobIds
+      ? jobIds.split(',').map((id) => id.trim()).filter((id) => id.length > 0)
+      : undefined;
     return this.quotesService.findAll({
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
       jobId,
+      jobIds: jobIdList && jobIdList.length > 0 ? jobIdList : undefined,
       status,
       statusId,
       quoteType,
+      assignedToUserIds,
+      search,
       sort,
     });
   }
@@ -138,8 +154,18 @@ export class QuotesController {
 
   @Get(':id/line-items')
   @RequirePermission(P.procurement.read)
-  getQuoteLineItems(@Param('id') id: string) {
-    return this.catalogSelectionService.getQuoteLineItems({ quoteId: id });
+  getQuoteLineItems(
+    @Param('id') id: string,
+    @Query('search') search?: string,
+    @Query('groupIds') groupIds?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('all') all?: string,
+  ) {
+    return this.catalogSelectionService.getQuoteLineItems({
+      quoteId: id,
+      ...parseLineItemsPageQuery({ search, groupIds, page, limit, all }),
+    });
   }
 
   @Patch(':id/line-items')

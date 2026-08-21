@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, isNull, desc, asc, sql, inArray } from 'drizzle-orm';
+import { eq, and, isNull, desc, asc, sql, inArray, or, ilike } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { reports } from '../schema';
 
@@ -19,6 +19,10 @@ function buildReportsOrderBy(sort?: string) {
       return [asc(reports.title)];
     case 'title_desc':
       return [desc(reports.title)];
+    case 'reference_asc':
+      return [asc(reports.reference)];
+    case 'reference_desc':
+      return [desc(reports.reference)];
     case 'updated_at_desc':
     default:
       return [desc(reports.updatedAt)];
@@ -38,6 +42,7 @@ export class ReportsRepository {
     /** Comma-separated report status lookup IDs. */
     status?: string;
     reportTypeId?: string;
+    search?: string;
     sort?: string;
   }): Promise<{ data: ReportRow[]; total: number }> {
     const page = params.page ?? 1;
@@ -63,6 +68,13 @@ export class ReportsRepository {
       whereClause = and(
         whereClause,
         inArray(reports.reportTypeLookupId, reportTypeIds),
+      );
+    }
+    if (params.search?.trim()) {
+      const term = `%${params.search.trim()}%`;
+      whereClause = and(
+        whereClause,
+        or(ilike(reports.title, term), ilike(reports.reference, term))!,
       );
     }
 

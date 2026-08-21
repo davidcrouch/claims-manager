@@ -20,6 +20,12 @@ export class CatalogCategoriesController {
     return this.categoryService.findTree();
   }
 
+  @Get(':id')
+  @RequirePermission(P.catalogs.read)
+  findOne(@Param('id') id: string) {
+    return this.categoryService.findById({ id });
+  }
+
   @Post()
   @RequirePermission(P.catalogs.manage)
   create(@Body() body: CreateCatalogCategoryDto) {

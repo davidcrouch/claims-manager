@@ -1,0 +1,26 @@
+slug: import-catalog
+name: Import catalogue CSV
+description: Preview and import catalogue items from CSV into a selected catalogue.
+triggerHints:
+  - import catalogue
+  - import catalog csv
+  - bulk upload items
+  - catalogue template
+instructionPrompt: |
+  1. Confirm catalogId and catalogue type (get_catalog). Offer get_catalog_import_template if needed.
+  2. Ask the user for CSV content (or confirm they pasted it). Call preview_catalog_import first.
+  3. Summarise create/update/error counts. On explicit confirmation, import_catalog_csv.
+  Never import without showing the preview summary.
+requiredToolRefs:
+  - integration: Claims Filesystem
+    tool: get_catalog
+  - integration: Claims Filesystem
+    tool: get_catalog_import_template
+  - integration: Claims Filesystem
+    tool: preview_catalog_import
+  - integration: Claims Filesystem
+    tool: import_catalog_csv
+category: catalog
+invocationMode: inline
+includeHistory: true
+visibility: org

@@ -11,12 +11,13 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   type StatusOption,
   formatDate,
-  isArchivedStatus,
   commitColumnFilterSelection,
   columnFilterToIdsParam,
   ValueFilterMenu,
   SortableColumnHeader,
   TableEmptyRow,
+  statusIdsForArchiveListTab,
+  mergeStatusParamWithTab,
 } from '@/components/shared/list-filters';
 import { TablePagination } from '@/components/shared/table-pagination';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
@@ -109,9 +110,17 @@ export function ReportsListClient({
     TABLE_COLUMNS,
   );
   const lastFetchKeyRef = useRef<string | null>(null);
+  const tabStatusIds = useMemo(
+    () => statusIdsForArchiveListTab(tab, statusOptions),
+    [tab, statusOptions],
+  );
   const statusParam = useMemo(
-    () => columnFilterToIdsParam(statusFilterActive, statusFilter, statusOptions),
-    [statusFilterActive, statusFilter, statusOptions],
+    () =>
+      mergeStatusParamWithTab(
+        columnFilterToIdsParam(statusFilterActive, statusFilter, statusOptions),
+        tabStatusIds,
+      ),
+    [statusFilterActive, statusFilter, statusOptions, tabStatusIds],
   );
   const reportTypeParam = useMemo(
     () => columnFilterToIdsParam(typeFilterActive, typeFilter, reportTypes),
@@ -146,7 +155,14 @@ export function ReportsListClient({
       return;
     }
 
-    fetchReportsAction({ page, limit: PAGE_SIZE, sort: sortParam, status: statusParam, reportTypeId: reportTypeParam }).then(
+    fetchReportsAction({
+      page,
+      limit: PAGE_SIZE,
+      sort: sortParam,
+      status: statusParam,
+      reportTypeId: reportTypeParam,
+      search: debouncedSearch || undefined,
+    }).then(
       (res) => res && setData(res),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -234,18 +250,7 @@ export function ReportsListClient({
     itemNoun: { singular: 'type', plural: 'types' },
   };
 
-  const visibleRows = useMemo(() => {
-    let rows = data.data;
-
-    if (tab !== 'all') {
-      rows = rows.filter((r) => {
-        const archived = isArchivedStatus(r.status?.name);
-        return tab === 'archived' ? archived : !archived;
-      });
-    }
-
-    return rows;
-  }, [data.data, tab]);
+  const visibleRows = data.data;
 
   const breakdown = computeStatusBreakdown(
     visibleRows,

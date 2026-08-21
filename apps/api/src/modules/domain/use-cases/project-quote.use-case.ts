@@ -1,12 +1,15 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import type { ProjectionUseCase, ProjectionResult } from './use-case.interface';
 import type { DrizzleDbOrTx } from '../../../database/drizzle.module';
 import { QuoteTransformer } from '../transformers/quote.transformer';
 import { EntityRelationshipService } from '../services/entity-relationship.service';
 import { LookupResolutionService } from '../services/lookup-resolution.service';
+import { LineItemSyncService } from '../services/line-item-sync.service';
+import { ActivitiesService } from '../../activities/activities.service';
 import {
   QuotesRepository,
   ExternalLinksRepository,
+  LookupsRepository,
   type QuoteInsert,
 } from '../../../database/repositories';
 
@@ -18,8 +21,11 @@ export class ProjectQuoteUseCase implements ProjectionUseCase {
     private readonly transformer: QuoteTransformer,
     private readonly entityRelationship: EntityRelationshipService,
     private readonly lookupResolution: LookupResolutionService,
+    private readonly lineItemSync: LineItemSyncService,
     private readonly quotesRepo: QuotesRepository,
     private readonly externalLinksRepo: ExternalLinksRepository,
+    private readonly lookupsRepo: LookupsRepository,
+    @Optional() private readonly activitiesService?: ActivitiesService,
   ) {}
 
   async execute(params: {
@@ -69,7 +75,10 @@ export class ProjectQuoteUseCase implements ProjectionUseCase {
 
     // 5. Upsert
     let quoteId: string;
+    let previousStatusLookupId: string | null = null;
     if (existingLink) {
+      const existing = await this.quotesRepo.findOne({ id: existingLink.internalEntityId, tenantId, tx });
+      previousStatusLookupId = existing?.statusLookupId ?? null;
       await this.quotesRepo.update({ id: existingLink.internalEntityId, data: result.entity, tx });
       quoteId = existingLink.internalEntityId;
     } else {
@@ -91,7 +100,15 @@ export class ProjectQuoteUseCase implements ProjectionUseCase {
       quoteId = created.id;
     }
 
-    // 6. Upsert external link
+    // 6. Sync line items (groups → combos → items)
+    const lineItemChanges = await this.lineItemSync.syncQuoteItems({
+      quoteId,
+      tenantId,
+      payload,
+      tx,
+    });
+
+    // 7. Upsert external link
     await this.externalLinksRepo.upsert({
       data: {
         tenantId,
@@ -104,6 +121,52 @@ export class ProjectQuoteUseCase implements ProjectionUseCase {
       },
       tx,
     });
+
+    // 8. Log activities for status change and line scope updates
+    if (this.activitiesService) {
+      const newStatusLookupId = (result.entity as Record<string, unknown>).statusLookupId as string | undefined;
+      if (newStatusLookupId && newStatusLookupId !== previousStatusLookupId) {
+        const lookupMap = await this.lookupsRepo.findByIds({
+          ids: [newStatusLookupId, ...(previousStatusLookupId ? [previousStatusLookupId] : [])],
+          tenantId,
+        });
+        const newName = lookupMap.get(newStatusLookupId)?.name ?? 'Unknown';
+        const prevName = previousStatusLookupId ? (lookupMap.get(previousStatusLookupId)?.name ?? 'Unknown') : 'Draft';
+        this.activitiesService.log({
+          tenantId,
+          entityType: 'quote',
+          entityId: quoteId,
+          action: 'status_changed',
+          actorType: 'provider',
+          actorName: 'Insurer',
+          summary: `Status changed from ${prevName} to ${newName}`,
+          detail: { previousStatus: prevName, newStatus: newName },
+          source: 'provider',
+        }).catch(() => {});
+      }
+
+      if (lineItemChanges && lineItemChanges.scopeChanges.length > 0) {
+        const changes = lineItemChanges.scopeChanges;
+        const accepted = changes.filter((c) => c.newStatus?.toLowerCase() === 'accepted').length;
+        const rejected = changes.filter((c) => c.newStatus?.toLowerCase() === 'rejected').length;
+        const other = changes.length - accepted - rejected;
+        const parts: string[] = [];
+        if (accepted) parts.push(`${accepted} accepted`);
+        if (rejected) parts.push(`${rejected} rejected`);
+        if (other) parts.push(`${other} other`);
+        this.activitiesService.log({
+          tenantId,
+          entityType: 'quote',
+          entityId: quoteId,
+          action: 'line_scope_updated',
+          actorType: 'provider',
+          actorName: 'Insurer',
+          summary: `Insurer updated ${changes.length} line item(s): ${parts.join(', ')}`,
+          detail: { changes },
+          source: 'provider',
+        }).catch(() => {});
+      }
+    }
 
     return { status: 'completed', internalEntityId: quoteId, internalEntityType: 'quote' };
   }

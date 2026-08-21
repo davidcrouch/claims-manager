@@ -77,18 +77,25 @@ export function JobPageHeader({
             <Briefcase className="h-4 w-4 text-emerald-600" />
           </span>
           <div className="inline-flex max-w-full min-w-0 items-center gap-0.5">
-            <button
-              type="button"
-              onClick={() => setPickerOpen(true)}
-              className="group inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-md text-left outline-none transition-colors hover:text-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-500/40"
-              aria-haspopup="dialog"
-              aria-expanded={pickerOpen}
-              title="Switch job"
+            <Link
+              href={`/jobs/${job.id}`}
+              className="group min-w-0 max-w-full rounded-md outline-none transition-colors hover:text-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+              title="View job"
             >
               <h1 className="truncate text-lg font-semibold leading-tight uppercase underline-offset-4 group-hover:underline">
                 {title}
               </h1>
-              <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-emerald-700" />
+            </Link>
+            <button
+              type="button"
+              onClick={() => setPickerOpen(true)}
+              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+              aria-haspopup="dialog"
+              aria-expanded={pickerOpen}
+              title="Switch job"
+              aria-label="Switch job"
+            >
+              <ChevronsUpDown className="h-4 w-4" />
             </button>
             <button
               type="button"

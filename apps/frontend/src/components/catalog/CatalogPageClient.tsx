@@ -11,6 +11,7 @@ import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { ListPageHeader } from '@/components/layout/ListPageHeader';
 import { CatalogImportDialog } from '@/components/catalog/CatalogImportDialog';
 import { CatalogCategoriesDrawer } from '@/components/catalog/CatalogCategoriesDrawer';
+import { CatalogDeleteButton } from '@/components/catalog/CatalogDeleteButton';
 import { CatalogItemFormDrawer } from '@/components/catalog/CatalogItemFormDrawer';
 import { CatalogUnresolvedPanel } from '@/components/catalog/CatalogUnresolvedPanel';
 import { CatalogLineItemsTab } from '@/components/catalog/CatalogLineItemsTab';
@@ -110,11 +111,16 @@ export function CatalogPageClient({
           <Button
             size="default"
             onClick={() => setItemDrawerOpen(true)}
-            className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+            className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
           >
             <Plus className="h-3.5 w-3.5" />
             New Item
           </Button>
+          <CatalogDeleteButton
+            catalogId={catalogId}
+            catalogName={catalogName}
+            className="mr-3"
+          />
         </SetHeaderActions>
 
         <div className="flex shrink-0 flex-col border-b border-slate-200 bg-background px-6 pb-3">
@@ -180,6 +186,9 @@ export function CatalogPageClient({
         templateCsv={templateCsv}
         catalogId={catalogId}
         catalogType={catalogType}
+        onImportComplete={() => {
+          setReloadToken((n) => n + 1);
+        }}
       />
 
       <CatalogCategoriesDrawer

@@ -136,5 +136,31 @@ describe('JobTransformer', () => {
         }),
       );
     });
+
+    it('extracts contacts without externalReference when email/name present', () => {
+      const result = transformer.transform({
+        payload: {
+          ...basePayload,
+          contacts: [
+            {
+              firstName: 'Ada',
+              lastName: 'Lovelace',
+              email: 'ada@example.com',
+              mobilePhone: '0412 345 678',
+            },
+          ],
+        },
+        tenantId: 'test-tenant',
+      });
+      expect(result.contacts).toEqual([
+        expect.objectContaining({
+          firstName: 'Ada',
+          lastName: 'Lovelace',
+          email: 'ada@example.com',
+          mobilePhone: '0412 345 678',
+        }),
+      ]);
+      expect(result.contacts?.[0]?.externalReference).toBeUndefined();
+    });
   });
 });

@@ -19,6 +19,7 @@ import type { SeedResult } from '../../database/seeds/lib/runner';
 import { seedCatalogDevForTenant } from '../../database/seeds/entries/catalog-dev.seed';
 import { seedMcpForTenant } from '../../database/seeds/entries/mcp.seed';
 import { seedLookupsForTenant } from '../../database/seeds/entries/lookups.seed';
+import { seedTaskTypeMappingsForTenant } from '../../database/seeds/entries/task-type-mappings.seed';
 import {
   isEnsureConstructionOrg,
   seedCrunchworkStagingConnection,
@@ -111,6 +112,12 @@ export class InternalService {
         logger,
       });
 
+      const taskTypeMappingsResult = await seedTaskTypeMappingsForTenant({
+        db: this.db,
+        tenantId,
+        logger,
+      });
+
       let connectionInserted = 0;
       let connectionSkipped = 0;
       if (attachCrunchwork) {
@@ -128,15 +135,20 @@ export class InternalService {
           catalogResult.inserted +
           mcpResult.inserted +
           lookupsResult.inserted +
+          taskTypeMappingsResult.inserted +
           connectionInserted,
         updated:
-          catalogResult.updated + mcpResult.updated + lookupsResult.updated,
+          catalogResult.updated +
+          mcpResult.updated +
+          lookupsResult.updated +
+          taskTypeMappingsResult.updated,
         skipped:
           catalogResult.skipped +
           mcpResult.skipped +
           lookupsResult.skipped +
+          taskTypeMappingsResult.skipped +
           connectionSkipped,
-        notes: `tenant=${tenantId}; catalog; mcp; lookups${attachCrunchwork ? '; crunchwork-staging' : ''}`,
+        notes: `tenant=${tenantId}; catalog; mcp; lookups; task-type-mappings${attachCrunchwork ? '; crunchwork-staging' : ''}`,
       };
 
       this.logger.log(

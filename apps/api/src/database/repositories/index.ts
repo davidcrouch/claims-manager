@@ -281,6 +281,11 @@ export {
   type DocumentTemplateTransformVersionRow,
 } from './document-template-transforms.repository';
 export {
+  DocumentTemplateDataContextsRepository,
+  type DocumentTemplateDataContextRow,
+  type DocumentTemplateDataContextInsert,
+} from './document-template-data-contexts.repository';
+export {
   RfqSendRequestsRepository,
   type RfqSendRequestRow,
   type RfqSendRequestInsert,
@@ -292,3 +297,13 @@ export {
   type EmailTemplateRow,
   type EmailTemplateInsert,
 } from './email-templates.repository';
+export {
+  EntityActivitiesRepository,
+  type EntityActivityRow,
+  type EntityActivityInsert,
+} from './entity-activities.repository';
+export {
+  TaskTypeMappingsRepository,
+  type TaskTypeMappingRow,
+  type TaskTypeMappingInsert,
+} from './task-type-mappings.repository';

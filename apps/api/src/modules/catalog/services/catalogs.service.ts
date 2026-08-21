@@ -64,10 +64,25 @@ export class CatalogsService {
     return { ...catalog, itemCount };
   }
 
+  async categoryCounts(params: { id: string; search?: string }) {
+    const tenantId = this.getTenantId();
+    const catalog = await this.catalogsRepo.findById({
+      tenantId,
+      id: params.id,
+    });
+    if (!catalog) throw new NotFoundException('Catalogue not found');
+    return this.itemsRepo.countByCategory({
+      tenantId,
+      catalogId: params.id,
+      search: params.search,
+    });
+  }
+
   async create(params: {
     name: string;
     description?: string;
     type: CatalogType;
+    isDefault?: boolean;
   }) {
     const tenantId = this.getTenantId();
 
@@ -87,6 +102,17 @@ export class CatalogsService {
       );
     }
 
+    const existingCatalogs = await this.catalogsRepo.findAll({
+      tenantId,
+      activeOnly: false,
+    });
+    const makeDefault =
+      params.isDefault === true || existingCatalogs.length === 0;
+
+    if (makeDefault) {
+      await this.catalogsRepo.clearDefault({ tenantId });
+    }
+
     const catalog = await this.catalogsRepo.create({
       tenantId,
       data: {
@@ -94,11 +120,12 @@ export class CatalogsService {
         description: params.description,
         type: params.type,
         isActive: true,
+        isDefault: makeDefault,
       },
     });
 
     this.logger.log(
-      `CatalogsService.create — created catalogue id=${catalog.id} name="${catalog.name}" type=${catalog.type}`,
+      `CatalogsService.create — created catalogue id=${catalog.id} name="${catalog.name}" type=${catalog.type} isDefault=${catalog.isDefault}`,
     );
 
     return { ...catalog, itemCount: 0 };
@@ -108,7 +135,9 @@ export class CatalogsService {
     id: string;
     name?: string;
     description?: string;
+    type?: CatalogType;
     isActive?: boolean;
+    isDefault?: boolean;
   }) {
     const tenantId = this.getTenantId();
     const existing = await this.catalogsRepo.findById({
@@ -129,15 +158,34 @@ export class CatalogsService {
       }
     }
 
+    if (params.type != null && !VALID_CATALOG_TYPES.includes(params.type)) {
+      throw new BadRequestException(
+        `Invalid catalogue type: ${params.type}. Must be one of: ${VALID_CATALOG_TYPES.join(', ')}`,
+      );
+    }
+
+    if (params.isDefault === true) {
+      await this.catalogsRepo.clearDefault({
+        tenantId,
+        exceptId: params.id,
+      });
+    }
+
     const updated = await this.catalogsRepo.update({
       tenantId,
       id: params.id,
       data: {
         name: params.name,
         description: params.description,
+        type: params.type,
         isActive: params.isActive,
+        isDefault: params.isDefault,
       },
     });
+
+    this.logger.log(
+      `CatalogsService.update — id=${params.id} isDefault=${updated?.isDefault ?? params.isDefault}`,
+    );
 
     return updated;
   }

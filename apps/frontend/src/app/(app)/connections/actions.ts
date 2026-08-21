@@ -20,10 +20,14 @@ async function getApi() {
   return createApiClient({ token });
 }
 
-export async function fetchConnectionsAction(): Promise<ConnectionSummary[] | null> {
+export async function fetchConnectionsAction(params?: {
+  search?: string;
+  isActive?: boolean;
+  sort?: string;
+}): Promise<ConnectionSummary[] | null> {
   const api = await getApi();
   if (!api) return null;
-  return api.getConnections();
+  return api.getConnections(params);
 }
 
 export async function fetchConnectionAction(
@@ -36,7 +40,13 @@ export async function fetchConnectionAction(
 
 export async function fetchConnectionWebhookEventsAction(
   connectionId: string,
-  params?: { page?: number; limit?: number; status?: string },
+  params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    search?: string;
+    sort?: string;
+  },
 ): Promise<PaginatedResponse<WebhookEvent> | null> {
   const api = await getApi();
   if (!api) return null;

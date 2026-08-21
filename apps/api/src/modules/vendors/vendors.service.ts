@@ -28,6 +28,8 @@ export class VendorsService {
     page?: number;
     limit?: number;
     search?: string;
+    linked?: boolean;
+    sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
     return this.vendorsRepo.findAll({
@@ -35,6 +37,8 @@ export class VendorsService {
       page: params.page,
       limit: params.limit,
       search: params.search,
+      linked: params.linked,
+      sort: params.sort,
     });
   }
 

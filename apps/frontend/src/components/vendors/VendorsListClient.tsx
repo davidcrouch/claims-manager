@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Building2 } from 'lucide-react';
 import {
@@ -14,8 +14,6 @@ import {
   parseSort,
   statusIdsKey,
   parseStatusIdsFromSearchParam,
-  compareDates,
-  compareValues,
   formatDate,
 } from '@/components/shared/list-filters';
 import {
@@ -25,7 +23,10 @@ import {
 } from '@/components/shared/column-visibility';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { ListPageHeader } from '@/components/layout/ListPageHeader';
+import { fetchVendorsAction } from '@/app/(app)/vendors/actions';
 import type { Vendor, PaginatedResponse } from '@/types/api';
+
+const PAGE_SIZE = 20;
 
 const SORT_OPTIONS: SortOption[] = [
   { key: 'name', label: 'Name' },
@@ -56,7 +57,7 @@ export interface VendorsListClientProps {
 export function VendorsListClient({ initialData }: VendorsListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [data] = useState(initialData);
+  const [data, setData] = useState(initialData);
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [sort, setSort] = useState(() => {
@@ -71,6 +72,7 @@ export function VendorsListClient({ initialData }: VendorsListClientProps) {
   const [linkFilter, setLinkFilter] = useState<Set<string>>(() =>
     parseStatusIdsFromSearchParam(searchParams.get('link')),
   );
+  const lastFetchKeyRef = useRef<string | null>(null);
   const { isVisible, toggle, visibleCount } = useColumnVisibility(
     'vendors',
     TABLE_COLUMNS,
@@ -82,7 +84,13 @@ export function VendorsListClient({ initialData }: VendorsListClientProps) {
   }, [search]);
 
   useEffect(() => {
+    setData(initialData);
+    lastFetchKeyRef.current = null;
+  }, [initialData]);
+
+  useEffect(() => {
     const linkKey = statusIdsKey(linkFilter);
+    const fetchKey = `${debouncedSearch}|${sort}|${linkKey}`;
     const params = new URLSearchParams(searchParams.toString());
     params.set('search', debouncedSearch);
     params.set('sort', sort);
@@ -90,6 +98,25 @@ export function VendorsListClient({ initialData }: VendorsListClientProps) {
     if (linkKey) params.set('link', linkKey);
     else params.delete('link');
     router.replace(`/vendors?${params}`, { scroll: false });
+    if (lastFetchKeyRef.current === fetchKey) return;
+    lastFetchKeyRef.current = fetchKey;
+
+    const linked =
+      linkFilter.size === 1
+        ? [...linkFilter][0] === LINK_STATE_LINKED
+          ? true
+          : [...linkFilter][0] === LINK_STATE_UNLINKED
+            ? false
+            : undefined
+        : undefined;
+
+    fetchVendorsAction({
+      page: 1,
+      limit: PAGE_SIZE,
+      search: debouncedSearch || undefined,
+      sort,
+      linked,
+    }).then((res) => res && setData(res));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop: router.replace updates URL -> searchParams changes -> effect re-runs
   }, [debouncedSearch, sort, linkFilter]);
 
@@ -122,39 +149,7 @@ export function VendorsListClient({ initialData }: VendorsListClientProps) {
   const selectAllLinkStates = () =>
     setLinkFilter(new Set(LINK_STATE_OPTIONS.map((o) => o.id)));
 
-  const visibleRows = useMemo(() => {
-    const query = debouncedSearch.trim().toLowerCase();
-    let rows = data.data;
-
-    if (linkFilter.size > 0) {
-      rows = rows.filter((v) => {
-        const key = v.externalReference ? LINK_STATE_LINKED : LINK_STATE_UNLINKED;
-        return linkFilter.has(key);
-      });
-    }
-
-    if (query) {
-      rows = rows.filter((v) => {
-        const name = v.name.toLowerCase();
-        const ref = (v.externalReference ?? '').toLowerCase();
-        return name.includes(query) || ref.includes(query);
-      });
-    }
-
-    const sorted = [...rows].sort((a, b) => {
-      switch (activeSortField) {
-        case 'name':
-          return compareValues(a.name, b.name, sortOrder);
-        case 'created_at':
-          return compareDates(a.createdAt, b.createdAt, sortOrder);
-        case 'updated_at':
-        default:
-          return compareDates(a.updatedAt, b.updatedAt, sortOrder);
-      }
-    });
-
-    return sorted;
-  }, [data.data, debouncedSearch, linkFilter, activeSortField, sortOrder]);
+  const visibleRows = data.data;
 
   const withReferenceCount = useMemo(
     () =>

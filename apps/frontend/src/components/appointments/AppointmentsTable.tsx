@@ -26,6 +26,8 @@ const APPOINTMENT_COLUMNS: ColumnVisibilityDef[] = [
   { key: 'duration', label: 'Duration' },
   { key: 'status', label: 'Status' },
   { key: 'attendees', label: 'Attendees' },
+  { key: 'created_at', label: 'Created', defaultHidden: true },
+  { key: 'updated_at', label: 'Updated', defaultHidden: true },
 ];
 
 export function appointmentTypeName(a: Appointment): string {
@@ -209,6 +211,12 @@ export function AppointmentsTable({
                 {isVisible('attendees') && (
                   <th scope="col" className="px-4 py-2.5">Attendees</th>
                 )}
+                {isVisible('created_at') && (
+                  <SortableColumnHeader columnKey="created_at" label="Created" activeField={sortField ?? null} sortOrder={sortOrder} onSort={onSort ?? noopSort} />
+                )}
+                {isVisible('updated_at') && (
+                  <SortableColumnHeader columnKey="updated_at" label="Updated" activeField={sortField ?? null} sortOrder={sortOrder} onSort={onSort ?? noopSort} />
+                )}
               </>
             ) : (
               <>
@@ -238,6 +246,12 @@ export function AppointmentsTable({
                 )}
                 {isVisible('attendees') && (
                   <th scope="col" className="px-4 py-2.5">Attendees</th>
+                )}
+                {isVisible('created_at') && (
+                  <th scope="col" className="px-4 py-2.5">Created</th>
+                )}
+                {isVisible('updated_at') && (
+                  <th scope="col" className="px-4 py-2.5">Updated</th>
                 )}
               </>
             )}
@@ -313,6 +327,16 @@ export function AppointmentsTable({
                   {isVisible('attendees') && (
                     <td className="px-4 py-2.5 text-muted-foreground">
                       {attendees.length}
+                    </td>
+                  )}
+                  {isVisible('created_at') && (
+                    <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
+                      {formatDateTime(a.createdAt)}
+                    </td>
+                  )}
+                  {isVisible('updated_at') && (
+                    <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
+                      {formatDateTime(a.updatedAt)}
                     </td>
                   )}
                   <td className="px-2 py-3" aria-hidden />

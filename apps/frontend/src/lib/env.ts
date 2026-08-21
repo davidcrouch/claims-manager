@@ -36,7 +36,7 @@ export const env = {
     return getApiBaseUrl();
   },
   get authServerUrl() {
-    return readEnv('AUTH_SERVER_URL') ?? 'http://localhost:3280';
+    return readEnv('AUTH_SERVER_URL') ?? 'http://localhost:3285';
   },
   /** Server-only Google Maps/Places key for address autocomplete. */
   get googleMapsApiKey() {

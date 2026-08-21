@@ -17,9 +17,12 @@ export async function fetchAppointmentsAction(params?: {
   limit?: number;
   search?: string;
   status?: string;
+  location?: string;
+  appointmentTypeLookupIds?: string;
   sort?: string;
   order?: 'asc' | 'desc';
   jobId?: string;
+  jobIds?: string[];
 }): Promise<PaginatedResponse<Appointment>> {
   const api = await getApi();
   if (!api) return { data: [], total: 0 };
@@ -28,6 +31,30 @@ export async function fetchAppointmentsAction(params?: {
   } catch (err) {
     console.error('[fetchAppointmentsAction]', err);
     return { data: [], total: 0 };
+  }
+}
+
+export async function fetchAppointmentFilterLocationsAction(): Promise<string[]> {
+  const api = await getApi();
+  if (!api) return [];
+  try {
+    return await api.getAppointmentFilterLocations();
+  } catch (err) {
+    console.error('[fetchAppointmentFilterLocationsAction]', err);
+    return [];
+  }
+}
+
+export async function fetchAppointmentFilterTypesAction(): Promise<
+  { id: string; name: string }[]
+> {
+  const api = await getApi();
+  if (!api) return [];
+  try {
+    return await api.getAppointmentFilterTypes();
+  } catch (err) {
+    console.error('[fetchAppointmentFilterTypesAction]', err);
+    return [];
   }
 }
 

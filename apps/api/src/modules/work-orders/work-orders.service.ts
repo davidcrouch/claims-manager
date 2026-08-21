@@ -4,6 +4,8 @@ import {
   type WorkOrderViewRow,
 } from '../../database/repositories';
 import { TenantContext } from '../../tenant/tenant-context';
+import { LookupResolutionService } from '../domain/services/lookup-resolution.service';
+import { LOOKUP_DOMAINS } from '../domain/constants/lookup-domains';
 
 @Injectable()
 export class WorkOrdersService {
@@ -12,15 +14,18 @@ export class WorkOrdersService {
   constructor(
     private readonly workOrdersRepo: WorkOrdersRepository,
     private readonly tenantContext: TenantContext,
+    private readonly lookupResolution: LookupResolutionService,
   ) {}
 
   async findAll(params: {
     page?: number;
     limit?: number;
     jobId?: string;
+    jobIds?: string[];
     purchaseOrderId?: string;
     status?: string;
     workOrderType?: string;
+    search?: string;
     sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
@@ -29,9 +34,11 @@ export class WorkOrdersService {
       page: params.page,
       limit: params.limit,
       jobId: params.jobId,
+      jobIds: params.jobIds,
       purchaseOrderId: params.purchaseOrderId,
       status: params.status,
       workOrderType: params.workOrderType,
+      search: params.search,
       sort: params.sort,
     });
   }
@@ -91,11 +98,28 @@ export class WorkOrdersService {
 
   async create(params: { body: Record<string, unknown>; userId?: string }) {
     const tenantId = this.tenantContext.getTenantId();
-    const { createdByUserId: _c, updatedByUserId: _u, ...rest } = params.body;
+    const { createdByUserId: _c, updatedByUserId: _u, statusLookupId, ...rest } =
+      params.body;
+
+    let resolvedStatusId =
+      typeof statusLookupId === 'string' && statusLookupId.trim()
+        ? statusLookupId
+        : null;
+    if (!resolvedStatusId) {
+      resolvedStatusId = await this.lookupResolution.resolve({
+        tenantId,
+        domain: LOOKUP_DOMAINS.WORK_ORDER_STATUS,
+        externalReference: 'Open',
+        name: 'Open',
+        autoCreate: true,
+      });
+    }
+
     return this.workOrdersRepo.create({
       data: {
         ...rest,
         tenantId,
+        statusLookupId: resolvedStatusId,
         createdByUserId: params.userId ?? null,
         updatedByUserId: params.userId ?? null,
       } as any,

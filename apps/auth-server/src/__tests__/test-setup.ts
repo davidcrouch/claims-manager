@@ -65,7 +65,7 @@ jest.mock('oidc-provider', () => {
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = 'test-jwt-secret-key-for-testing-only';
 process.env.DCR_IAT_SIGNING_KEY = 'test-iat-signing-key-for-testing-only';
-process.env.OIDC_ISSUER = 'http://localhost:3280';
+process.env.OIDC_ISSUER = 'http://localhost:3285';
 process.env.UPSTASH_REDIS_REST_URL = 'redis://localhost:6379';
 process.env.MOREZERO_NODEJS_API_URL = 'http://localhost:3001';
 

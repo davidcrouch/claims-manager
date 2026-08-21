@@ -78,6 +78,14 @@ const CANVAS_TOOL_MAP: Record<string, string> = {
   fill_assessment_specialists: 'AssessmentSpecialistsDrawer',
   open_assessment_recommendation: 'AssessmentRecommendationDrawer',
   fill_assessment_recommendation: 'AssessmentRecommendationDrawer',
+  open_catalog: 'CatalogFormDrawer',
+  fill_catalog: 'CatalogFormDrawer',
+  open_catalog_item: 'CatalogItemFormDrawer',
+  fill_catalog_item: 'CatalogItemFormDrawer',
+  open_catalog_category: 'CatalogCategoriesDrawer',
+  fill_catalog_category: 'CatalogCategoriesDrawer',
+  open_catalog_bom: 'CatalogBomDrawer',
+  fill_catalog_bom: 'CatalogBomDrawer',
 };
 
 interface ResolvedMcpTools {

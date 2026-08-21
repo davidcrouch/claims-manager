@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Unplug, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -13,14 +13,14 @@ import {
   type StatusOption,
   buildSortString,
   parseSort,
-  compareDates,
-  compareValues,
+  statusIdsKey,
   formatDate,
 } from '@/components/shared/list-filters';
 import { ConnectionFormDrawer } from './ConnectionFormDrawer';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { ListPageHeader } from '@/components/layout/ListPageHeader';
+import { fetchConnectionsAction } from '@/app/(app)/connections/actions';
 import type { ConnectionSummary } from '@/types/api';
 
 const SORT_OPTIONS: SortOption[] = [
@@ -42,12 +42,15 @@ export interface ConnectionsPageClientProps {
   connections: ConnectionSummary[];
 }
 
-export function ConnectionsPageClient({ connections }: ConnectionsPageClientProps) {
+export function ConnectionsPageClient({ connections: initialConnections }: ConnectionsPageClientProps) {
   const router = useRouter();
+  const [connections, setConnections] = useState(initialConnections);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sort, setSort] = useState<string>(buildSortString('name', 'asc'));
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [createOpen, setCreateOpen] = useState(false);
+  const lastFetchKeyRef = useRef<string | null>(null);
 
   const { field: activeSortField, order: sortOrder } = parseSort({
     sortParam: sort,
@@ -55,6 +58,40 @@ export function ConnectionsPageClient({ connections }: ConnectionsPageClientProp
     defaultField: 'name',
     defaultOrder: 'asc',
   });
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
+    setConnections(initialConnections);
+    lastFetchKeyRef.current = null;
+  }, [initialConnections]);
+
+  useEffect(() => {
+    const statusKey = statusIdsKey(statusFilter);
+    const fetchKey = `${debouncedSearch}|${sort}|${statusKey}`;
+    if (lastFetchKeyRef.current === fetchKey) return;
+    lastFetchKeyRef.current = fetchKey;
+
+    const isActive =
+      statusFilter.size === 1
+        ? [...statusFilter][0] === STATUS_ACTIVE
+          ? true
+          : [...statusFilter][0] === STATUS_INACTIVE
+            ? false
+            : undefined
+        : undefined;
+
+    fetchConnectionsAction({
+      search: debouncedSearch || undefined,
+      sort,
+      isActive,
+    }).then((res) => {
+      if (res) setConnections(res);
+    });
+  }, [debouncedSearch, sort, statusFilter]);
 
   const handleSort = (field: string) => {
     if (activeSortField === field) {
@@ -78,48 +115,6 @@ export function ConnectionsPageClient({ connections }: ConnectionsPageClientProp
   const selectAllStatuses = () =>
     setStatusFilter(new Set(STATUS_OPTIONS.map((o) => o.id)));
 
-  const filtered = useMemo(() => {
-    let items = [...connections];
-
-    if (statusFilter.size > 0) {
-      items = items.filter((c) => {
-        const key = c.isActive ? STATUS_ACTIVE : STATUS_INACTIVE;
-        return statusFilter.has(key);
-      });
-    }
-
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      items = items.filter(
-        (c) =>
-          c.name.toLowerCase().includes(q) ||
-          c.providerName.toLowerCase().includes(q) ||
-          c.providerCode.toLowerCase().includes(q) ||
-          c.environment.toLowerCase().includes(q),
-      );
-    }
-
-    items.sort((a, b) => {
-      switch (activeSortField) {
-        case 'providerName':
-          return compareValues(a.providerName, b.providerName, sortOrder);
-        case 'lastEventAt':
-          return compareDates(a.lastEventAt, b.lastEventAt, sortOrder);
-        case 'totalWebhookEvents':
-          return compareValues(
-            a.totalWebhookEvents,
-            b.totalWebhookEvents,
-            sortOrder,
-          );
-        case 'name':
-        default:
-          return compareValues(a.name, b.name, sortOrder);
-      }
-    });
-
-    return items;
-  }, [connections, search, activeSortField, sortOrder, statusFilter]);
-
   const activeCount = connections.filter((c) => c.isActive).length;
   const inactiveCount = connections.length - activeCount;
   const totalEvents = connections.reduce(
@@ -142,8 +137,8 @@ export function ConnectionsPageClient({ connections }: ConnectionsPageClientProp
           icon={Unplug}
           title="Connections"
           total={connections.length}
-          showing={filtered.length}
-          search={search}
+          showing={connections.length}
+          search={debouncedSearch}
           statusSelectedCount={statusFilter.size}
           breakdown={breakdown}
           stats={[
@@ -218,17 +213,17 @@ export function ConnectionsPageClient({ connections }: ConnectionsPageClientProp
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filtered.length === 0 ? (
+              {connections.length === 0 ? (
                 <TableEmptyRow
                   colSpan={6}
                   label={
-                    connections.length === 0
-                      ? 'No connections configured yet.'
-                      : 'No connections match your filters.'
+                    debouncedSearch || statusFilter.size > 0
+                      ? 'No connections match your filters.'
+                      : 'No connections configured yet.'
                   }
                 />
               ) : (
-                filtered.map((conn) => (
+                connections.map((conn) => (
                   <tr
                     key={conn.id}
                     onClick={() => router.push(`/connections/${conn.id}`)}

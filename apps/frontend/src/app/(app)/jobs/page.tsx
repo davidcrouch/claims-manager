@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { getServerApiClient } from '@/lib/server-api';
 import { JobsPageClient } from '@/components/jobs/JobsPageClient';
+import { toJobFormClaimOption } from '@/components/forms/job-form-claim';
 import type { Job, PaginatedResponse } from '@/types/api';
 
 export default async function JobsPage({
@@ -21,8 +22,16 @@ export default async function JobsPage({
   const params = await searchParams;
   const emptyJobs: PaginatedResponse<Job> = { data: [], total: 0 };
 
-  const [initialJobs, jobTypesRes, jobTypesAllRes, statusLookupsRes, unreadJobIds, orgUsers, session] =
-    await Promise.all([
+  const [
+    initialJobs,
+    jobTypesRes,
+    jobTypesAllRes,
+    statusLookupsRes,
+    unreadJobIds,
+    orgUsers,
+    session,
+    claimsRes,
+  ] = await Promise.all([
     api
       .getJobs({
         page: parseInt(params.page ?? '1', 10),
@@ -56,6 +65,13 @@ export default async function JobsPage({
       return [] as { id: string; email?: string }[];
     }),
     getSession(),
+    api.getClaims({ limit: 100, sort: 'updated_at_desc' }).catch((err: unknown) => {
+      console.error(
+        'frontend:JobsPage - getClaims failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return { data: [], total: 0 };
+    }),
   ]);
 
   const email = session.identity?.email?.trim().toLowerCase();
@@ -81,12 +97,14 @@ export default async function JobsPage({
       name: row.name?.trim() ? row.name : 'Unknown',
     }),
   );
+  const claims = (claimsRes?.data ?? []).map(toJobFormClaimOption);
 
   return (
     <JobsPageClient
       initialData={initialJobs}
       jobTypes={jobTypes}
       jobTypeFilterOptions={jobTypeFilterOptions}
+      claims={claims}
       statusOptions={statusOptions}
       unreadJobIds={unreadJobIds}
       currentUserId={currentUserId}

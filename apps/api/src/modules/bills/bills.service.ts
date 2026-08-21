@@ -13,10 +13,12 @@ export class BillsService {
     page?: number;
     limit?: number;
     jobId?: string;
+    jobIds?: string[];
     purchaseOrderId?: string;
     status?: string;
     vendorId?: string;
     invoiceId?: string;
+    search?: string;
     sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
@@ -25,10 +27,12 @@ export class BillsService {
       page: params.page,
       limit: params.limit,
       jobId: params.jobId,
+      jobIds: params.jobIds,
       purchaseOrderId: params.purchaseOrderId,
       status: params.status,
       vendorId: params.vendorId,
       invoiceId: params.invoiceId,
+      search: params.search,
       sort: params.sort,
     });
   }

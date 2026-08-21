@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, isNull, desc, asc, sql, inArray, aliasedTable, getTableColumns } from 'drizzle-orm';
+import { eq, and, isNull, desc, asc, sql, inArray, aliasedTable, getTableColumns, or, ilike } from 'drizzle-orm';
+import { normalizeListJobIds } from '../../common/list-job-filter';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { workOrders, lookupValues } from '../schema';
 
@@ -65,11 +66,13 @@ export class WorkOrdersRepository {
     page?: number;
     limit?: number;
     jobId?: string;
+    jobIds?: string[];
     purchaseOrderId?: string;
     /** Comma-separated status lookup IDs. */
     status?: string;
     /** Comma-separated work order type lookup IDs. */
     workOrderType?: string;
+    search?: string;
     sort?: string;
   }): Promise<{ data: WorkOrderRow[]; total: number }> {
     const page = params.page ?? 1;
@@ -80,8 +83,13 @@ export class WorkOrdersRepository {
       eq(workOrders.tenantId, params.tenantId),
       isNull(workOrders.deletedAt),
     );
-    if (params.jobId) {
-      whereClause = and(whereClause, eq(workOrders.jobId, params.jobId));
+    const jobIds = normalizeListJobIds({ jobId: params.jobId, jobIds: params.jobIds });
+    if (jobIds) {
+      if (jobIds.length === 0) return { data: [], total: 0 };
+      whereClause = and(
+        whereClause,
+        jobIds.length === 1 ? eq(workOrders.jobId, jobIds[0]) : inArray(workOrders.jobId, jobIds),
+      );
     }
     if (params.purchaseOrderId) {
       whereClause = and(whereClause, eq(workOrders.purchaseOrderId, params.purchaseOrderId));
@@ -93,6 +101,20 @@ export class WorkOrdersRepository {
     }
     if (typeIds.length > 0) {
       whereClause = and(whereClause, inArray(workOrders.workOrderTypeLookupId, typeIds));
+    }
+    if (params.search?.trim()) {
+      const term = `%${params.search.trim()}%`;
+      whereClause = and(
+        whereClause,
+        or(
+          ilike(workOrders.workOrderNumber, term),
+          ilike(workOrders.name, term),
+          ilike(workOrders.externalId, term),
+          ilike(workOrders.sourceExternalReference, term),
+          ilike(workOrders.woForName, term),
+          ilike(workOrders.note, term),
+        )!,
+      );
     }
 
     const [data, countResult] = await Promise.all([

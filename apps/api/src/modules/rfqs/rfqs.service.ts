@@ -45,9 +45,11 @@ export class RfqsService {
     page?: number;
     limit?: number;
     jobId?: string;
+    jobIds?: string[];
     quoteId?: string;
     status?: string;
     vendorId?: string;
+    search?: string;
     sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
@@ -57,9 +59,11 @@ export class RfqsService {
       page: params.page,
       limit: params.limit,
       jobId: params.jobId,
+      jobIds: params.jobIds,
       quoteId: params.quoteId,
       status: params.status,
       vendorId: params.vendorId,
+      search: params.search,
       sort: params.sort,
     });
   }
@@ -90,12 +94,27 @@ export class RfqsService {
       selectedItemIds,
       createdByUserId: _c,
       updatedByUserId: _u,
+      statusLookupId: bodyStatusLookupId,
       ...rfqData
     } = params.body;
+
+    const draftStatus =
+      typeof bodyStatusLookupId === 'string' && bodyStatusLookupId
+        ? null
+        : await this.lookupsRepo.findOrCreateByName({
+            tenantId,
+            domain: 'rfq_status',
+            name: 'Draft',
+          });
+
     const rfq = await this.rfqsRepo.create({
       data: {
         ...rfqData,
         tenantId,
+        statusLookupId:
+          (typeof bodyStatusLookupId === 'string' && bodyStatusLookupId
+            ? bodyStatusLookupId
+            : draftStatus?.id) ?? null,
         createdByUserId: params.userId ?? null,
         updatedByUserId: params.userId ?? null,
       } as any,
@@ -543,7 +562,15 @@ export class RfqsService {
         (i) => i.quoteGroupId === group.id && i.id && selectedSet.has(i.id),
       );
       const groupCombos = sourceCombos.filter((c) => c.quoteGroupId === group.id);
-      const relevantCombos = groupCombos.filter((c) => selectedSet.has(c.id));
+      // Include a combo/scope when it is selected, or when any of its children are.
+      // Scope-backed items have quote_group_id null, so item-only selection must
+      // still pull in the parent combo or nothing is copied.
+      const relevantCombos = groupCombos.filter((c) => {
+        if (selectedSet.has(c.id)) return true;
+        return sourceComboItems.some(
+          (i) => i.quoteComboId === c.id && i.id && selectedSet.has(i.id),
+        );
+      });
 
       if (groupDirectItems.length === 0 && relevantCombos.length === 0) continue;
 
@@ -604,8 +631,12 @@ export class RfqsService {
           })
           .returning();
 
+        const includeAllChildren = selectedSet.has(combo.id);
         const comboChildItems = sourceComboItems.filter(
-          (i) => i.quoteComboId === combo.id && i.id && selectedSet.has(i.id),
+          (i) =>
+            i.quoteComboId === combo.id &&
+            !!i.id &&
+            (includeAllChildren || selectedSet.has(i.id)),
         );
 
         for (const item of comboChildItems) {

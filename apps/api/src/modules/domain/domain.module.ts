@@ -1,6 +1,8 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { ExternalModule } from '../external/external.module';
 import { WorkflowModule } from './workflows/workflow.module';
+import { ActivitiesModule } from '../activities/activities.module';
+import { TasksModule } from '../tasks/tasks.module';
 
 // Transformers
 import { ClaimTransformer } from './transformers/claim.transformer';
@@ -50,6 +52,8 @@ import { UseCaseRegistry } from './use-cases/use-case.registry';
   imports: [
     forwardRef(() => ExternalModule),
     forwardRef(() => WorkflowModule),
+    ActivitiesModule,
+    forwardRef(() => TasksModule),
   ],
   providers: [
     // Transformers

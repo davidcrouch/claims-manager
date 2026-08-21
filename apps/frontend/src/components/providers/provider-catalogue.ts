@@ -6,7 +6,7 @@
  * append the matching entry here.
  */
 
-export type ProviderCode = 'crunchwork';
+export type ProviderCode = 'crunchwork' | 'more0-ensure';
 
 export interface ProviderCatalogueEntry {
   code: ProviderCode;
@@ -19,6 +19,11 @@ export const PROVIDER_CATALOGUE: ProviderCatalogueEntry[] = [
     code: 'crunchwork',
     name: 'Crunchwork',
     description: 'Crunchwork Insurance claims management platform',
+  },
+  {
+    code: 'more0-ensure',
+    name: 'More0 Ensure',
+    description: 'Capability engine for insurance job workflows',
   },
 ];
 

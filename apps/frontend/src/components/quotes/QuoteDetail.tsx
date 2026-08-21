@@ -41,6 +41,8 @@ import {
   asBool,
   type Dict,
 } from '@/components/shared/detail';
+import { ActivityFeed } from '@/components/shared/ActivityFeed';
+import { useActivities } from '@/hooks/useActivities';
 import type {
   Quote,
   Job,
@@ -79,6 +81,7 @@ import {
   type EstimatePublishMode,
 } from '@/components/quotes/EstimatePublishWizard';
 import { EstimateApprovalWizard } from '@/components/quotes/EstimateApprovalWizard';
+import { WorkOrderFormDrawer } from '@/components/forms/WorkOrderFormDrawer';
 import { updateQuoteFieldsAction } from '@/app/(app)/quotes/actions';
 
 // ---------------------------------------------------------------------------
@@ -215,17 +218,30 @@ export function QuotePageHeader({
 // Placeholder Tabs
 // ---------------------------------------------------------------------------
 
-function ActivitiesTab() {
+function ActivitiesTab({ quoteId }: { quoteId: string }) {
+  const { activities, total, loading, error, page, setPage } = useActivities({
+    entityType: 'quote',
+    entityId: quoteId,
+    refreshInterval: 30_000,
+  });
+
   return (
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm">Activities</CardTitle>
       </CardHeader>
       <CardContent>
-        <p className="text-sm text-muted-foreground">
-          Tasks and appointments linked to this estimate will appear here once the
-          activities API is connected.
-        </p>
+        {error ? (
+          <p className="text-sm text-red-600 mb-3">Failed to load activities: {error}</p>
+        ) : null}
+        <ActivityFeed
+          activities={activities}
+          loading={loading}
+          total={total}
+          page={page}
+          onPageChange={setPage}
+          emptyMessage="No activity recorded for this estimate yet"
+        />
       </CardContent>
     </Card>
   );
@@ -291,6 +307,7 @@ export function QuoteDetail({
   const router = useRouter();
   const [tab, setTab] = useState<QuoteTab>('overview');
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [workOrderDrawerOpen, setWorkOrderDrawerOpen] = useState(false);
   const [publishWizardOpen, setPublishWizardOpen] = useState(false);
   const [approvalWizardOpen, setApprovalWizardOpen] = useState(false);
   const [lineItemsDirty, setLineItemsDirty] = useState(false);
@@ -459,6 +476,15 @@ export function QuoteDetail({
             Received Approval
           </Button>
         )}
+        {locked && (
+          <Button
+            size="default"
+            onClick={() => setWorkOrderDrawerOpen(true)}
+            className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+          >
+            Create Work Order
+          </Button>
+        )}
         <PrintButton documentType="quote" entityId={quote.id} jobId={job?.id} />
         <ArchiveEntityButton
           entityType="quote"
@@ -468,6 +494,11 @@ export function QuoteDetail({
           redirectTo={job ? `/quotes?jobId=${job.id}` : '/quotes'}
         />
       </SetHeaderActions>
+      <WorkOrderFormDrawer
+        open={workOrderDrawerOpen}
+        onOpenChange={setWorkOrderDrawerOpen}
+        jobId={job?.id ?? quote.jobId ?? undefined}
+      />
       <EstimatePublishWizard
         open={publishWizardOpen}
         onOpenChange={setPublishWizardOpen}
@@ -567,7 +598,7 @@ export function QuoteDetail({
             onDirtyChange={setPartiesDirty}
           />
         </div>
-        {tab === 'activities' && <ActivitiesTab />}
+        {tab === 'activities' && <ActivitiesTab quoteId={quote.id} />}
         {tab === 'communications' && <CommunicationsTab />}
         {tab === 'timeline' && <TimelineTab quote={quote} />}
         {tab === 'attachments' && <EntityAttachmentsTab entityId={quote.id} relatedRecordType="Quote" entityLabel="this estimate" />}
@@ -575,7 +606,9 @@ export function QuoteDetail({
           <JournalList
             entityType="Quote"
             entityId={quote.id}
-            fetchJournals={() => fetchJournalsByEntityAction('Quote', quote.id)}
+            fetchJournals={(params) =>
+              fetchJournalsByEntityAction('Quote', quote.id, params)
+            }
             fetchAllJournals={() => fetchJournalsListAction()}
             createJournal={(data) => createJournalAction(data)}
             linkJournal={(jId) => linkJournalAction(jId, 'Quote', quote.id)}

@@ -22,6 +22,7 @@ import { P } from '../../auth/permission-constants';
 import { DOCUMENT_TYPES, type DocumentType } from './types/document-types';
 import { getSourceJsonSchema, getAllSourceJsonSchemas } from './schemas/json-schema';
 import { TransformService } from './services/transform.service';
+import { DataContextService, enrichSourceSchemaWithDataContext } from './data-context';
 import { TRANSFORM_DEFAULTS } from './schemas/target/defaults';
 
 @ApiTags('Generated Documents')
@@ -32,6 +33,7 @@ export class DocumentGenerationController {
   constructor(
     private readonly documentGenService: DocumentGenerationService,
     private readonly transformService: TransformService,
+    private readonly dataContextService: DataContextService,
   ) {}
 
   @Post('generate')
@@ -47,6 +49,7 @@ export class DocumentGenerationController {
       templateId: dto.templateId,
       filesystemDocumentId: dto.filesystemDocumentId,
       destinationCategoryId: dto.destinationCategoryId,
+      enabledSlugs: dto.enabledSlugs,
       trigger: 'manual',
       userId,
     });
@@ -81,9 +84,17 @@ export class DocumentGenerationController {
     if (!(DOCUMENT_TYPES as readonly string[]).includes(documentType)) {
       return { error: `Unknown document type "${documentType}"` };
     }
+    const type = documentType as DocumentType;
+    const baseSchema = getSourceJsonSchema(type);
+    const contextConfig = await this.dataContextService.getConfig({ documentType: type });
+    const schema = enrichSourceSchemaWithDataContext({
+      documentType: type,
+      baseSchema,
+      enabledSlugs: contextConfig.available ? contextConfig.enabledSlugs : null,
+    });
     return {
       documentType,
-      schema: getSourceJsonSchema(documentType as DocumentType),
+      schema,
     };
   }
 
@@ -166,7 +177,7 @@ export class DocumentGenerationController {
   @ApiOperation({ summary: 'Run mapper to get sample source data for a real entity' })
   async getSampleData(
     @Param('documentType') documentType: string,
-    @Body() body: { entityId: string },
+    @Body() body: { entityId: string; enabledSlugs?: string[] },
   ) {
     this.assertValidDocumentType(documentType);
     if (!body.entityId) {
@@ -175,8 +186,59 @@ export class DocumentGenerationController {
     const data = await this.documentGenService.getSampleData({
       documentType: documentType as DocumentType,
       entityId: body.entityId,
+      enabledSlugs: body.enabledSlugs,
     });
     return { documentType, data };
+  }
+
+  @Get('data-context/:documentType')
+  @RequirePermission(P.documents.read)
+  @ApiOperation({
+    summary: 'Get data context definition and tenant enabled related-entity slugs',
+  })
+  async getDataContext(@Param('documentType') documentType: string) {
+    this.assertValidDocumentType(documentType);
+    const config = await this.dataContextService.getConfig({
+      documentType: documentType as DocumentType,
+    });
+    return { documentType, ...config };
+  }
+
+  @Put('data-context/:documentType')
+  @RequirePermission(P.documents.manage)
+  @ApiOperation({ summary: 'Update which related entities are enabled for a document type' })
+  async upsertDataContext(
+    @Param('documentType') documentType: string,
+    @Body() body: { enabledSlugs: string[] },
+  ) {
+    this.assertValidDocumentType(documentType);
+    if (!Array.isArray(body.enabledSlugs)) {
+      throw new BadRequestException('enabledSlugs must be an array of strings');
+    }
+    const row = await this.dataContextService.upsertConfig({
+      documentType: documentType as DocumentType,
+      enabledSlugs: body.enabledSlugs,
+    });
+    return { documentType, config: row };
+  }
+
+  @Post('data-context/:documentType/preview')
+  @RequirePermission(P.documents.read)
+  @ApiOperation({ summary: 'Resolve a data context envelope for a real entity' })
+  async previewDataContext(
+    @Param('documentType') documentType: string,
+    @Body() body: { entityId: string; enabledSlugs?: string[] },
+  ) {
+    this.assertValidDocumentType(documentType);
+    if (!body.entityId) {
+      throw new BadRequestException('entityId is required');
+    }
+    const result = await this.dataContextService.preview({
+      documentType: documentType as DocumentType,
+      entityId: body.entityId,
+      enabledSlugs: body.enabledSlugs,
+    });
+    return { documentType, ...result };
   }
 
   private assertValidDocumentType(documentType: string): asserts documentType is DocumentType {

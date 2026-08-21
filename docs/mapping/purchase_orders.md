@@ -296,18 +296,20 @@ The sections above are the **spec** (target state). As of the PO mapper's curren
 
 | Spec section | Gap in current mapper | Tracking |
 |---|---|---|
-| §2 `externalId` | The column `external_id` is currently populated from the CW `id` UUID instead of CW's `externalId` scalar. `externalId` therefore survives only in `purchase_order_payload`. | Fix alongside vendor / quote resolution. |
-| §3 `vendor_id`, `quote_id` | Neither FK is resolved; both columns stay null even when the CW payload includes `vendor` / `quoteRevisionId`. | Add `resolveFK` calls in the mapper. |
+| §2 `externalId` | ~~The column `external_id` is currently populated from the CW `id` UUID instead of CW's `externalId` scalar.~~ **Resolved.** Transformer now reads `payload.externalId` with CW `id` fallback. | Done. |
+| §3 `vendor_id`, `quote_id` | `vendor_id` resolved via parent ref. `quote_id` now resolved via `quoteRevisionId` parent ref. | Done. |
 | §3 skip-on-no-parent | ~~Resolved.~~ `ProjectPurchaseOrderUseCase` now returns `{ status: 'skipped', reason: 'skipped_no_parent' }` when both `jobId` and `claimId` are unresolved on first insert, matching the quote use case's pattern. The orchestrator marks the event for retry so the PO is created once its parent arrives. | Done. |
-| §5 `expiresInDays`, `service_window.*` duplicates | Only `start_date`/`end_date` are written; `start_time`/`end_time`/`expiresInDays` and the JSONB `service_window` bucket are not populated. | Extend `poData`. |
-| §6 party buckets | `po_to` / `po_for` / `po_from` are read as objects (`payload.poTo` / `.poFor` / `.poFrom`) but CW sends **flat** fields (`toName`, `forEmail`, …). As a result the buckets and the `po_to_email` / `po_for_name` promoted columns are always empty. | Collect flat `to*`/`for*`/`from*` keys into the buckets. |
-| §8 `adjustment_info`, `allocation_context` | Neither bucket is populated, even though the scalar columns `adjusted_total` / `adjusted_total_adjustment_amount` are. | Write the buckets alongside the scalars. |
-| §7 `total_amount` | Mapper reads `payload.totalAmount` but the CW field is `total`. Column stays null. | Read `payload.total`. |
-| §9.1 `group_label_lookup_id`, `dimensions`, `totals` | None of these are written on group rows today; `description` and `sort_index` are the only promoted fields. | Extend `syncLineItems`. |
-| §9.1 group-level `items[]` | Only `groups[].combos[].items[]` are iterated; `groups[].items[]` (standalone items directly under a group) are dropped from `purchase_order_items`. They remain in `group_payload` for audit. | Iterate both arrays. |
-| §9.2 `catalog_combo_id`, `quote_combo_id`, `totals` | Not written on combo rows. | Extend `syncLineItems`. |
-| §9.3 `unit_type_lookup_id`, `catalog_item_id`, `quote_line_item_id`, `markup_type`, `markup_value`, `reconciliation`, `manual_allocation`, `tags`, `note` | Not written on item rows. Only `name`, `description`, `category`, `sub_category`, `item_type`, `quantity`, `tax`, `unit_cost`, `buy_cost`, `sort_index`, `item_payload` are populated. | Extend `syncLineItems`. |
+| §5 `expiresInDays`, `service_window.*` duplicates | ~~Only `start_date`/`end_date` are written.~~ **Resolved.** `start_time`, `end_time`, and full `service_window` JSONB bucket now populated. | Done. |
+| §6 party buckets | ~~`po_to` / `po_for` / `po_from` are read as objects but CW sends flat fields.~~ **Resolved.** Transformer now collects flat `to*`/`for*`/`from*` keys into buckets + promoted scalars. | Done. |
+| §8 `adjustment_info`, `allocation_context` | ~~Neither bucket is populated.~~ **Resolved.** Both buckets now populated alongside scalar columns. | Done. |
+| §7 `total_amount` | ~~Mapper reads `payload.totalAmount` but the CW field is `total`.~~ **Resolved.** Reads `payload.total` with `totalAmount` fallback. | Done. |
+| §9.1 `group_label_lookup_id`, `dimensions`, `totals` | ~~Not written on group rows.~~ **Resolved.** All three now populated in `LineItemSyncService`. | Done. |
+| §9.1 group-level `items[]` | ~~Only combo items iterated.~~ **Resolved.** Both `groups[].items[]` and `groups[].combos[].items[]` now synced. | Done. |
+| §9.2 `catalog_combo_id`, `quote_combo_id`, `totals` | ~~Not written on combo rows.~~ **Resolved.** All three now populated. | Done. |
+| §9.3 promoted item columns | ~~Only basic columns populated.~~ **Resolved.** `catalog_item_id`, `quote_line_item_id`, `unit_type_lookup_id` (pending), `markup_type`, `markup_value`, `reconciliation`, `manual_allocation`, `tags`, `note` now extracted. `item_type` reads CW `type` (not `itemType`). `sort_index` uses CW `index`. | Done (unit_type_lookup_id resolution pending). |
 | §9.4 inline invoices | Not forwarded to `CrunchworkInvoiceMapper` from the PO mapper. Invoices arrive only through their own webhook stream in the meantime. | Wire the delegation (see discussion doc `002c-entity-mappers.md` §3.3 step 7). |
+| §4 bare-string lookups | ~~Only object form handled for `status` and `purchaseOrderType`.~~ **Resolved.** Transformer now handles bare strings via case-insensitive name match. | Done. |
+| §2 `createdBy` / `updatedBy` | ~~Not extracted.~~ **Resolved.** `createdBy.externalReference` → `created_by_user_id`, `updatedBy.externalReference` → `updated_by_user_id`. | Done. |
 
 Tracking each gap here keeps the mapping doc authoritative: every CW field from §3.3.8 has a declared home, and any that the mapper cannot yet write still survives in `purchase_order_payload`.
 

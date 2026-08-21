@@ -81,7 +81,7 @@ export function PublishEntityContext({
         <PublishSummaryRow label="Job" value={job ? jobDisplayName(job) : 'Not linked'} />
         <PublishSummaryRow label="Status" value={dash(job?.status?.name)} />
         <PublishSummaryRow label="Job type" value={dash(job?.jobType?.name)} />
-        <PublishSummaryRow label="NRMA / CW job ID" value={dash(job?.externalJobId ?? job?.externalReference)} />
+        <PublishSummaryRow label="Insurer / CW job ID" value={dash(job?.externalJobId ?? job?.externalReference)} />
         <PublishSummaryRow label="Request date" value={job?.requestDate ? formatDate(job.requestDate) : '—'} />
         <PublishSummaryRow label="Assignee" value={dash(job?.assigneeName)} />
         <PublishSummaryRow label="Make-safe required" value={yesNo(job?.makeSafeRequired)} />

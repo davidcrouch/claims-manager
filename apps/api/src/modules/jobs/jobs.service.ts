@@ -3,6 +3,8 @@ import {
   JobsRepository,
   ContactsRepository,
   LookupsRepository,
+  ClaimsRepository,
+  ClaimContactsRepository,
   type JobInsert,
   type JobViewRow,
 } from '../../database/repositories';
@@ -14,6 +16,14 @@ import { LookupResolver } from '../external/lookup-resolver.service';
 import { OutboundSyncService } from '../domain/outbound/outbound-sync.service';
 import { FilesystemService } from '../filesystem/filesystem.service';
 import { OutboundEventsService } from '../outbound-events/outbound-events.service';
+import {
+  asNonEmptyString,
+  buildCrunchworkJobCreateBody,
+  claimApiContactsToOutbound,
+  isCwUsableLookupRef,
+  lookupToCwObject,
+  type CwContactOutbound,
+} from './job-outbound.utils';
 
 type ContactInput = {
   contactId?: string;
@@ -25,6 +35,10 @@ type ContactInput = {
   workPhone?: string;
   notes?: string;
   typeLookupId?: string;
+  /** CW / partner external reference — used when seeding from claim contacts. */
+  externalReference?: string;
+  typeExternalReference?: string;
+  typeName?: string;
 };
 
 @Injectable()
@@ -35,7 +49,9 @@ export class JobsService {
     private readonly jobsRepo: JobsRepository,
     private readonly contactsRepo: ContactsRepository,
     private readonly jobContactsRepo: JobContactsRepository,
+    private readonly claimContactsRepo: ClaimContactsRepository,
     private readonly lookupsRepo: LookupsRepository,
+    private readonly claimsRepo: ClaimsRepository,
     private readonly tenantContext: TenantContext,
     private readonly outboundSync: OutboundSyncService,
     private readonly lookupResolver: LookupResolver,
@@ -88,6 +104,8 @@ export class JobsService {
     status?: string;
     jobType?: string;
     assignedToUserId?: string;
+    assignedToUserIds?: string;
+    refs?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
     this.logger.debug(`JobsService.findAll — tenantId=${tenantId} claimId=${params.claimId ?? 'all'}`);
@@ -101,8 +119,15 @@ export class JobsService {
       status: params.status,
       jobType: params.jobType,
       assignedToUserId: params.assignedToUserId,
+      assignedToUserIds: params.assignedToUserIds,
+      refs: params.refs,
     });
     return { data: result.data.map(this.shapeJobResponse), total: result.total };
+  }
+
+  async findFilterOptions() {
+    const tenantId = this.tenantContext.getTenantId();
+    return this.jobsRepo.findFilterOptions({ tenantId });
   }
 
   async findOne(params: { id: string }) {
@@ -141,15 +166,61 @@ export class JobsService {
       throw new BadRequestException('jobTypeLookupId is required');
     }
 
-    const contactsInput = Array.isArray(params.body.contacts)
-      ? (params.body.contacts as ContactInput[])
+    const body = { ...params.body };
+    const claimId =
+      typeof body.claimId === 'string' && body.claimId.trim()
+        ? body.claimId.trim()
+        : undefined;
+
+    const claim = claimId
+      ? await this.claimsRepo.findOne({ id: claimId, tenantId })
+      : null;
+    if (claimId && !claim) {
+      throw new BadRequestException(`Claim not found: ${claimId}`);
+    }
+
+    const claimApiPayload =
+      claim?.apiPayload && typeof claim.apiPayload === 'object' && !Array.isArray(claim.apiPayload)
+        ? (claim.apiPayload as Record<string, unknown>)
+        : null;
+    const claimCwContacts = claimApiContactsToOutbound(claimApiPayload);
+
+    let contactsInput = Array.isArray(body.contacts)
+      ? ([...body.contacts] as ContactInput[])
       : [];
+
+    // Always attach claim CW contacts when present so local job_contacts match
+    // what we publish to NRMA (inbound often omits contacts[].externalReference
+    // and only sends contacts[].id — we fall back to id).
+    if (claimCwContacts.length > 0) {
+      const seeded = claimCwContacts.map((c) => ({
+        externalReference: c.externalReference,
+        firstName: c.firstName,
+        lastName: c.lastName,
+        email: c.email,
+        mobilePhone: c.mobilePhone,
+        homePhone: c.homePhone,
+        workPhone: c.workPhone,
+        notes: c.notes,
+        typeExternalReference: c.type.externalReference,
+        typeName: c.type.name,
+      }));
+      const seededExt = new Set(seeded.map((c) => c.externalReference));
+      const extras = contactsInput.filter((c) => {
+        const ext = c.externalReference?.trim();
+        return !ext || !seededExt.has(ext);
+      });
+      contactsInput = [...seeded, ...extras];
+      this.logger.debug(
+        `JobsService.create — using ${seeded.length} claim contact(s)` +
+          (extras.length ? ` + ${extras.length} additional` : ''),
+      );
+    }
 
     this.logger.debug(
       `JobsService.create — tenantId=${tenantId} provider=${providerCode} connectionId=${connectionId} needsSync=${needsSync} contacts=${contactsInput.length}`,
     );
 
-    const body = { ...params.body };
     if (!body.statusLookupId && !(body.status as { id?: string } | undefined)?.id) {
       const pendingStatusId =
         (await this.lookupResolver.resolveByName({
@@ -172,6 +243,9 @@ export class JobsService {
         );
       }
     }
+
+    // Builder Make Safe jobs must publish with makeSafeRequired=true.
+    await this.applyMakeSafeRequiredDefault({ tenantId, body });
 
     const job = await this.db.transaction(async (tx) => {
       const resolvedContacts = await this.resolveContacts({
@@ -204,16 +278,38 @@ export class JobsService {
           },
           tx,
         });
+
+        // Keep claim↔contact join in sync when seeding from a claim
+        if (claimId) {
+          await this.claimContactsRepo.upsert({
+            data: {
+              tenantId,
+              claimId,
+              contactId: contact.contactId,
+              sortIndex: i,
+              sourcePayload: contact.snapshot,
+            },
+            tx,
+          });
+        }
       }
 
       if (needsSync) {
+        const outboundPayload = await this.buildOutboundCreatePayload({
+          tenantId,
+          body,
+          claim,
+          claimApiPayload,
+          claimCwContacts,
+          contactSnapshots: resolvedContacts.map((c) => c.snapshot),
+        });
         await this.outboundSync.enqueue({
           tenantId,
           connectionId,
           entityType: 'job',
           entityId: inserted.id,
           action: 'create',
-          payload: body,
+          payload: outboundPayload,
           idempotencyKey: `create:job:${inserted.id}`,
           tx,
         });
@@ -245,16 +341,150 @@ export class JobsService {
     }
 
     if (this.outboundEvents) {
+      const jobTypeLookupId = (params.body.jobTypeLookupId as string) ??
+        (params.body.jobType as { id?: string } | undefined)?.id ?? '';
+
       this.outboundEvents.emitJobCreated({
         jobId: job.id,
         tenantId,
-        jobType: (params.body.jobTypeLookupId as string) ?? '',
+        jobType: jobTypeLookupId,
         claimId: (params.body.claimId as string) ?? undefined,
         parentJobId: (params.body.parentJobId as string) ?? undefined,
       }).catch(() => {});
+
+      this.startWorkflowForJob(tenantId, job.id, jobTypeLookupId).catch(() => {});
     }
 
     return this.findOne({ id: job.id });
+  }
+
+  private static readonly WORKFLOW_CAP_MAP: Record<string, string> = {
+    'Builder Assessment': 'workflow.job.assessment',
+    'Builder Make Safe': 'workflow.job.make-safe',
+    'Builder - Scope of Works': 'workflow.job.works',
+  };
+
+  private static readonly WORKFLOW_PHASE_STATUS_MAP: Record<string, string> = {
+    'allocated': 'Allocated',
+    'contacted': 'Contacted',
+    'scheduled': 'Scheduled',
+    'awaiting_submission': 'Awaiting Submission',
+    'awaiting_review': 'Awaiting Review',
+    'awaiting_resubmission': 'Awaiting Resubmission',
+    'awaiting_scope': 'Awaiting Scope',
+    'scope_signed': 'Scope Signed',
+    'awaiting_excess': 'Awaiting Excess',
+    'excess_collected': 'Excess Collected',
+    'repairs_in_progress': 'Repairs In Progress',
+    'repairs_complete': 'Repairs Complete',
+    'certificate_uploaded': 'Repairs Complete',
+    'completion_confirmed': 'Repairs Complete',
+    'quote_finalized': 'Quote Finalized',
+    'cancelled': 'Cancelled',
+    'complete': 'Job Complete',
+  };
+
+  private async startWorkflowForJob(
+    tenantId: string,
+    jobId: string,
+    jobTypeLookupId: string,
+  ): Promise<void> {
+    if (!this.outboundEvents || !jobTypeLookupId) return;
+
+    try {
+      const lookupMap = await this.lookupsRepo.findByIds({
+        ids: [jobTypeLookupId],
+        tenantId,
+      });
+      const lookup = lookupMap.get(jobTypeLookupId);
+      if (!lookup || !lookup.name) return;
+
+      const cap = JobsService.WORKFLOW_CAP_MAP[lookup.name];
+      if (!cap) return;
+
+      const job = await this.jobsRepo.findOne({ id: jobId, tenantId });
+
+      const relatedLookups = await this.lookupsRepo.findByDomainAndNames({
+        tenantId,
+        domain: 'job_type',
+        names: ['Builder Make Safe', 'Builder - Scope of Works'],
+      });
+
+      const customData = (job?.customData ?? {}) as Record<string, unknown>;
+
+      this.logger.log(
+        `JobsService.startWorkflowForJob — jobId=${jobId} type="${lookup.name}" cap=${cap}`,
+      );
+
+      await this.outboundEvents.invokeWorkflow({
+        cap,
+        tenantId,
+        workflowParams: {
+          jobId,
+          entityType: 'job',
+          entityId: jobId,
+          requestDate: new Date().toISOString(),
+          claimId: job?.claimId ?? null,
+          collectExcess: job?.collectExcess ?? false,
+          excess: job?.excess ?? null,
+          claimRecommendation: (customData.claimRecommendation as string) ?? null,
+          lookups: {
+            makeSafeJobType: relatedLookups.get('Builder Make Safe') ?? null,
+            worksJobType: relatedLookups.get('Builder - Scope of Works') ?? null,
+          },
+        },
+      });
+    } catch (err) {
+      this.logger.warn(
+        `JobsService.startWorkflowForJob — failed for jobId=${jobId}: ${(err as Error).message}`,
+      );
+    }
+  }
+
+  async calculateWorkflowDates(params: {
+    id: string;
+    contactDate?: string;
+    attendanceDate?: string;
+  }): Promise<{ attendanceDueDate: string | null; submissionDueDate: string | null }> {
+    const tenantId = this.tenantContext.getTenantId();
+    const job = await this.jobsRepo.findOne({ id: params.id, tenantId });
+    if (!job) throw new BadRequestException('Job not found');
+
+    const ATTENDANCE_SLA_DAYS = 5;
+    const SUBMISSION_SLA_DAYS = 10;
+
+    let attendanceDueDate: string | null = null;
+    let submissionDueDate: string | null = null;
+
+    const customData = (job.customData ?? {}) as Record<string, unknown>;
+    const contactDate = params.contactDate
+      ?? (customData.contactDate as string | undefined);
+    const attendanceDate = params.attendanceDate
+      ?? (customData.attendanceDate as string | undefined);
+
+    if (contactDate) {
+      attendanceDueDate = JobsService.addBusinessDays(new Date(contactDate), ATTENDANCE_SLA_DAYS).toISOString();
+    }
+    if (attendanceDate) {
+      submissionDueDate = JobsService.addBusinessDays(new Date(attendanceDate), SUBMISSION_SLA_DAYS).toISOString();
+    }
+
+    this.logger.debug(
+      `JobsService.calculateWorkflowDates — jobId=${params.id} contactDate=${contactDate ?? 'none'} attendanceDate=${attendanceDate ?? 'none'} => attendanceDue=${attendanceDueDate ?? 'none'} submissionDue=${submissionDueDate ?? 'none'}`,
+    );
+
+    return { attendanceDueDate, submissionDueDate };
+  }
+
+  private static addBusinessDays(start: Date, days: number): Date {
+    const result = new Date(start);
+    let added = 0;
+    while (added < days) {
+      result.setDate(result.getDate() + 1);
+      const dow = result.getDay();
+      if (dow !== 0 && dow !== 6) added++;
+    }
+    return result;
   }
 
   async update(params: {
@@ -300,20 +530,93 @@ export class JobsService {
       return updated;
     });
 
+    const emittedFields = new Set<string>();
+
     if (this.outboundEvents && params.body.customData) {
       const custom = params.body.customData as Record<string, unknown>;
       const trackedFields = [
         'makeSafeRequired', 'scopeSignedDate', 'excessPaymentCollected',
         'workflowPhase', 'estimatedDatesSet', 'dateCustomerConfirmedCompletion',
+        'dateMakeSafeCompleted',
       ];
       for (const field of trackedFields) {
         if (custom[field] !== undefined) {
+          emittedFields.add(field);
           this.outboundEvents.emitFieldUpdated({
             entityType: 'job',
             entityId: params.id,
             tenantId,
             field,
             value: custom[field],
+          }).catch(() => {});
+        }
+      }
+
+      if (custom.workflowPhase !== undefined) {
+        const statusName = JobsService.WORKFLOW_PHASE_STATUS_MAP[custom.workflowPhase as string];
+        if (statusName) {
+          const statusId = await this.lookupResolver.resolveByName({
+            tenantId,
+            domain: 'job_status',
+            name: statusName,
+          });
+          if (statusId) {
+            await this.jobsRepo.update({
+              id: params.id,
+              data: { statusLookupId: statusId },
+            });
+          }
+        }
+      }
+    }
+
+    if (
+      this.outboundEvents &&
+      params.body.makeSafeRequired !== undefined &&
+      !emittedFields.has('makeSafeRequired')
+    ) {
+      const oldValue = (existing as Record<string, unknown>).makeSafeRequired;
+      const newValue = params.body.makeSafeRequired as boolean;
+      if (oldValue !== newValue) {
+        this.outboundEvents.emitFieldUpdated({
+          entityType: 'job',
+          entityId: params.id,
+          tenantId,
+          field: 'makeSafeRequired',
+          value: newValue,
+          previousValue: oldValue,
+        }).catch(() => {});
+      }
+    }
+
+    if (
+      this.outboundEvents &&
+      params.body.customData &&
+      !emittedFields.has('estimatedDatesSet')
+    ) {
+      const custom = params.body.customData as Record<string, unknown>;
+      if (custom.estimatedStartDate || custom.estimatedCompletionDate) {
+        const refreshed = await this.jobsRepo.findOne({ id: params.id, tenantId });
+        const merged = (refreshed?.customData ?? {}) as Record<string, unknown>;
+        if (merged.estimatedStartDate && merged.estimatedCompletionDate && !merged.estimatedDatesSet) {
+          await this.jobsRepo.update({
+            id: params.id,
+            data: {
+              customData: { ...merged, estimatedDatesSet: true },
+            },
+          });
+          this.outboundEvents.emit({
+            eventType: 'field.updated',
+            entityType: 'job',
+            entityId: params.id,
+            tenantId,
+            payload: {
+              field: 'estimatedDatesSet',
+              value: true,
+              estimatedStartDate: merged.estimatedStartDate,
+              estimatedCompletionDate: merged.estimatedCompletionDate,
+              scheduledAt: new Date().toISOString(),
+            },
           }).catch(() => {});
         }
       }
@@ -471,6 +774,30 @@ export class JobsService {
     return this.findOne({ id: params.id });
   }
 
+  private async applyMakeSafeRequiredDefault(params: {
+    tenantId: string;
+    body: Record<string, unknown>;
+  }): Promise<void> {
+    const nestedJobType = params.body.jobType as { id?: string } | undefined;
+    const jobTypeLookupId =
+      (params.body.jobTypeLookupId as string | undefined) ?? nestedJobType?.id;
+    if (!jobTypeLookupId) return;
+
+    const jobTypeLookup = await this.lookupsRepo.findOne({
+      id: jobTypeLookupId,
+      tenantId: params.tenantId,
+    });
+    const name = (jobTypeLookup?.name ?? '').trim().toLowerCase();
+    if (name !== 'builder make safe') return;
+
+    if (params.body.makeSafeRequired !== true) {
+      this.logger.debug(
+        'JobsService.applyMakeSafeRequiredDefault — forcing makeSafeRequired=true for Builder Make Safe',
+      );
+      params.body.makeSafeRequired = true;
+    }
+  }
+
   private async resolveContactType(
     tenantId: string,
     typeLookupId?: string | null,
@@ -484,6 +811,153 @@ export class JobsService {
       name: lookup.name ?? undefined,
       externalReference: lookup.externalReference ?? undefined,
     };
+  }
+
+  private async resolveTypeLookupId(params: {
+    tenantId: string;
+    typeExternalReference?: string;
+    typeName?: string;
+    tx: DrizzleDbOrTx;
+  }): Promise<string | null> {
+    const ext = params.typeExternalReference?.trim();
+    if (!ext) return null;
+    return (
+      (await this.lookupResolver.resolve({
+        tenantId: params.tenantId,
+        domain: 'contact_type',
+        externalReference: ext,
+        name: params.typeName?.trim() || ext,
+        autoCreate: true,
+        tx: params.tx,
+      })) ?? null
+    );
+  }
+
+  private async buildOutboundCreatePayload(params: {
+    tenantId: string;
+    body: Record<string, unknown>;
+    claim: Awaited<ReturnType<ClaimsRepository['findOne']>>;
+    claimApiPayload: Record<string, unknown> | null;
+    claimCwContacts: CwContactOutbound[];
+    contactSnapshots: Record<string, unknown>[];
+  }): Promise<Record<string, unknown>> {
+    const nestedJobType = params.body.jobType as { id?: string } | undefined;
+    const jobTypeLookupId =
+      (params.body.jobTypeLookupId as string | undefined) ?? nestedJobType?.id;
+    if (!jobTypeLookupId) {
+      throw new BadRequestException('jobTypeLookupId is required for Crunchwork sync');
+    }
+
+    const jobTypeLookup = await this.lookupsRepo.findOne({
+      id: jobTypeLookupId,
+      tenantId: params.tenantId,
+    });
+    const jobType = lookupToCwObject(jobTypeLookup);
+    if (!jobType) {
+      throw new BadRequestException(
+        `Job type lookup ${jobTypeLookupId} has no usable Crunchwork externalReference`,
+      );
+    }
+
+    const makeSafeRequired =
+      (jobTypeLookup?.name ?? '').trim().toLowerCase() === 'builder make safe'
+        ? true
+        : typeof params.body.makeSafeRequired === 'boolean'
+          ? params.body.makeSafeRequired
+          : undefined;
+
+    const cwClaimId =
+      asNonEmptyString(params.claimApiPayload?.id) ??
+      asNonEmptyString(params.claim?.externalReference);
+    if (!cwClaimId) {
+      throw new BadRequestException(
+        'Claim has no Crunchwork id/externalReference — cannot publish job to NRMA',
+      );
+    }
+
+    let status: { externalReference: string; name?: string } | null = null;
+    const statusLookupId = params.body.statusLookupId as string | undefined;
+    if (statusLookupId) {
+      const statusLookup = await this.lookupsRepo.findOne({
+        id: statusLookupId,
+        tenantId: params.tenantId,
+      });
+      status = lookupToCwObject(statusLookup);
+    }
+
+    const contactsFromSnapshots = this.snapshotsToOutboundContacts(
+      params.contactSnapshots,
+    );
+    const contacts =
+      params.claimCwContacts.length > 0
+        ? params.claimCwContacts
+        : contactsFromSnapshots;
+
+    if (contacts.length === 0) {
+      throw new BadRequestException(
+        'At least one Crunchwork contact (with externalReference and type) is required to publish a job to NRMA',
+      );
+    }
+
+    const address =
+      params.body.address &&
+      typeof params.body.address === 'object' &&
+      !Array.isArray(params.body.address)
+        ? (params.body.address as Record<string, unknown>)
+        : null;
+
+    return buildCrunchworkJobCreateBody({
+      cwClaimId,
+      jobType,
+      status,
+      contacts,
+      address,
+      makeSafeRequired,
+      collectExcess:
+        typeof params.body.collectExcess === 'boolean'
+          ? params.body.collectExcess
+          : undefined,
+      excess:
+        params.body.excess != null ? (params.body.excess as number | string) : null,
+      jobInstructions: asNonEmptyString(params.body.jobInstructions) ?? null,
+      requestDate: asNonEmptyString(params.body.requestDate) ?? null,
+    });
+  }
+
+  private snapshotsToOutboundContacts(
+    snapshots: Record<string, unknown>[],
+  ): CwContactOutbound[] {
+    const out: CwContactOutbound[] = [];
+    for (const snap of snapshots) {
+      const externalReference = asNonEmptyString(snap.externalReference);
+      if (!externalReference || !isCwUsableLookupRef(externalReference)) continue;
+
+      const typeObj = snap.type;
+      let typeExt: string | undefined;
+      let typeName: string | undefined;
+      if (typeObj && typeof typeObj === 'object' && !Array.isArray(typeObj)) {
+        const t = typeObj as Record<string, unknown>;
+        typeExt = asNonEmptyString(t.externalReference);
+        typeName = asNonEmptyString(t.name);
+      }
+      if (!typeExt || !isCwUsableLookupRef(typeExt)) continue;
+
+      out.push({
+        externalReference,
+        firstName: asNonEmptyString(snap.firstName),
+        lastName: asNonEmptyString(snap.lastName),
+        email: asNonEmptyString(snap.email),
+        mobilePhone: asNonEmptyString(snap.mobilePhone),
+        homePhone: asNonEmptyString(snap.homePhone),
+        workPhone: asNonEmptyString(snap.workPhone),
+        notes: asNonEmptyString(snap.notes),
+        type: {
+          externalReference: typeExt,
+          ...(typeName ? { name: typeName } : {}),
+        },
+      });
+    }
+    return out;
   }
 
   private async resolveContacts(params: {
@@ -508,6 +982,7 @@ export class JobsService {
         const type = await this.resolveContactType(params.tenantId, existing.typeLookupId);
         snapshot = {
           id: existing.id,
+          externalReference: existing.externalReference ?? undefined,
           firstName: existing.firstName ?? undefined,
           lastName: existing.lastName ?? undefined,
           email: existing.email ?? undefined,
@@ -517,12 +992,66 @@ export class JobsService {
           notes: existing.notes ?? undefined,
           ...(type ? { type } : {}),
         };
+      } else if (input.externalReference?.trim()) {
+        const externalReference = input.externalReference.trim();
+        const typeLookupId =
+          (await this.resolveTypeLookupId({
+            tenantId: params.tenantId,
+            typeExternalReference: input.typeExternalReference,
+            typeName: input.typeName,
+            tx: params.tx,
+          })) ??
+          (input.typeLookupId?.trim() || null);
+
+        const created = await this.contactsRepo.upsertByExternalReference({
+          data: {
+            tenantId: params.tenantId,
+            externalReference,
+            firstName: input.firstName?.trim() || null,
+            lastName: input.lastName?.trim() || null,
+            email: input.email?.trim() || null,
+            mobilePhone: input.mobilePhone?.trim() || null,
+            homePhone: input.homePhone?.trim() || null,
+            workPhone: input.workPhone?.trim() || null,
+            notes: input.notes?.trim() || null,
+            typeLookupId,
+          },
+          tx: params.tx,
+        });
+        contactId = created.id;
+        const type =
+          (await this.resolveContactType(params.tenantId, created.typeLookupId)) ??
+          (input.typeExternalReference
+            ? {
+                externalReference: input.typeExternalReference,
+                name: input.typeName ?? input.typeExternalReference,
+              }
+            : undefined);
+        snapshot = {
+          id: created.id,
+          externalReference,
+          firstName: created.firstName ?? undefined,
+          lastName: created.lastName ?? undefined,
+          email: created.email ?? undefined,
+          mobilePhone: created.mobilePhone ?? undefined,
+          homePhone: created.homePhone ?? undefined,
+          workPhone: created.workPhone ?? undefined,
+          notes: created.notes ?? undefined,
+          ...(type ? { type } : {}),
+        };
       } else {
         const firstName = input.firstName?.trim();
         if (!firstName) {
           throw new BadRequestException('Contact firstName is required when contactId is not provided');
         }
-        const typeLookupId = input.typeLookupId?.trim() || null;
+        const typeLookupId =
+          (await this.resolveTypeLookupId({
+            tenantId: params.tenantId,
+            typeExternalReference: input.typeExternalReference,
+            typeName: input.typeName,
+            tx: params.tx,
+          })) ??
+          (input.typeLookupId?.trim() || null);
         const created = await this.contactsRepo.create({
           data: {
             tenantId: params.tenantId,

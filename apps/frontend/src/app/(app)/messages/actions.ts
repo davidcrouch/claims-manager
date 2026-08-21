@@ -33,7 +33,13 @@ export async function fetchMessagesAction(params?: {
   page?: number;
   limit?: number;
   jobId?: string;
+  jobIds?: string[];
   claimId?: string;
+  readStatus?: string;
+  fromNames?: string;
+  toNames?: string;
+  search?: string;
+  sort?: string;
 }): Promise<{ data: Message[]; total: number }> {
   const api = await getApi();
   if (!api) return { data: [], total: 0 };
@@ -43,6 +49,21 @@ export async function fetchMessagesAction(params?: {
   } catch (err) {
     console.error('[messages/actions.fetchMessagesAction]', err);
     return { data: [], total: 0 };
+  }
+}
+
+export async function fetchMessageFilterOptionsAction(): Promise<{
+  fromNames: string[];
+  toNames: string[];
+  statuses: ('Read' | 'Unread')[];
+}> {
+  const api = await getApi();
+  if (!api) return { fromNames: [], toNames: [], statuses: ['Read', 'Unread'] };
+  try {
+    return await api.getMessageFilterOptions();
+  } catch (err) {
+    console.error('[messages/actions.fetchMessageFilterOptionsAction]', err);
+    return { fromNames: [], toNames: [], statuses: ['Read', 'Unread'] };
   }
 }
 

@@ -3,7 +3,7 @@
  * Loaded from env (server-side only; do not expose secrets to client).
  */
 
-const AUTH_SERVER_URL = process.env.AUTH_SERVER_URL || 'http://localhost:3280';
+const AUTH_SERVER_URL = process.env.AUTH_SERVER_URL || 'http://localhost:3285';
 const OIDC_ISSUER = process.env.OIDC_ISSUER || AUTH_SERVER_URL;
 const OIDC_CLIENT_ID = process.env.OIDC_CLIENT_ID || 'claims-manager-ui';
 const OIDC_CLIENT_SECRET = process.env.OIDC_CLIENT_SECRET || '';

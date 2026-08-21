@@ -21,6 +21,22 @@ export interface CatalogItemFormProps {
   onSuccess?: (id?: string) => void;
   onCancel?: () => void;
   onPendingChange?: (pending: boolean) => void;
+  /** Live field values from AI fill_catalog_item. */
+  code?: string;
+  name?: string;
+  description?: string;
+  kind?: 'primitive' | 'assembly' | 'scope' | string;
+  typeId?: string;
+  categoryId?: string;
+  unitTypeLookupId?: string;
+  unitCost?: string;
+  buyCost?: string;
+  markupType?: string;
+  markupValue?: string;
+  taxRate?: string;
+  pricingMode?: string;
+  fixedUnitCost?: string;
+  externalReference?: string;
 }
 
 function flattenCategories(
@@ -35,6 +51,11 @@ function flattenCategories(
   return out;
 }
 
+const KNOWN_PROVIDER_OPTIONS = [
+  { code: 'internal', label: 'Internal' },
+  { code: 'crunchwork', label: 'Crunchwork' },
+] as const;
+
 export function CatalogItemForm({
   item,
   catalogId,
@@ -46,6 +67,21 @@ export function CatalogItemForm({
   onSuccess,
   onCancel,
   onPendingChange,
+  code: codeProp,
+  name: nameProp,
+  description: descriptionProp,
+  kind: kindProp,
+  typeId: typeIdProp,
+  categoryId: categoryIdProp,
+  unitTypeLookupId: unitTypeLookupIdProp,
+  unitCost: unitCostProp,
+  buyCost: buyCostProp,
+  markupType: markupTypeProp,
+  markupValue: markupValueProp,
+  taxRate: taxRateProp,
+  pricingMode: pricingModeProp,
+  fixedUnitCost: fixedUnitCostProp,
+  externalReference: externalReferenceProp,
 }: CatalogItemFormProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -57,22 +93,63 @@ export function CatalogItemForm({
   }, [pending, onPendingChange]);
 
   const [form, setForm] = useState({
-    code: item?.code ?? '',
-    name: item?.name ?? '',
-    description: item?.description ?? '',
-    kind: item?.kind ?? 'primitive',
-    typeId: item?.typeId ?? types[0]?.id ?? '',
-    categoryId: item?.categoryId ?? '',
-    unitTypeLookupId: item?.unitTypeLookupId ?? '',
-    unitCost: item?.unitCost ?? '',
-    buyCost: item?.buyCost ?? '',
-    markupType: item?.markupType ?? '',
-    markupValue: item?.markupValue ?? '',
-    taxRate: item?.taxRate ?? '',
-    pricingMode: item?.pricingMode ?? 'computed',
-    fixedUnitCost: item?.fixedUnitCost ?? '',
-    externalReference: item?.externalReference ?? '',
+    code: codeProp ?? item?.code ?? '',
+    name: nameProp ?? item?.name ?? '',
+    description: descriptionProp ?? item?.description ?? '',
+    kind: (kindProp as 'primitive' | 'assembly' | 'scope') ?? item?.kind ?? 'primitive',
+    typeId: typeIdProp ?? item?.typeId ?? types[0]?.id ?? '',
+    categoryId: categoryIdProp ?? item?.categoryId ?? '',
+    unitTypeLookupId: unitTypeLookupIdProp ?? item?.unitTypeLookupId ?? '',
+    unitCost: unitCostProp ?? item?.unitCost ?? '',
+    buyCost: buyCostProp ?? item?.buyCost ?? '',
+    markupType: markupTypeProp ?? item?.markupType ?? 'percent',
+    markupValue: markupValueProp ?? item?.markupValue ?? '0.19',
+    taxRate: taxRateProp ?? item?.taxRate ?? '0.10',
+    pricingMode: pricingModeProp ?? item?.pricingMode ?? 'computed',
+    fixedUnitCost: fixedUnitCostProp ?? item?.fixedUnitCost ?? '',
+    externalReference: externalReferenceProp ?? item?.externalReference ?? '',
+    providerCodes: (item?.providerCodes?.length ? item.providerCodes : ['internal']) as string[],
   });
+
+  useEffect(() => {
+    setForm((prev) => ({
+      ...prev,
+      ...(codeProp != null ? { code: codeProp } : {}),
+      ...(nameProp != null ? { name: nameProp } : {}),
+      ...(descriptionProp != null ? { description: descriptionProp } : {}),
+      ...(kindProp != null && !item
+        ? { kind: kindProp as 'primitive' | 'assembly' | 'scope' }
+        : {}),
+      ...(typeIdProp != null ? { typeId: typeIdProp } : {}),
+      ...(categoryIdProp != null ? { categoryId: categoryIdProp } : {}),
+      ...(unitTypeLookupIdProp != null ? { unitTypeLookupId: unitTypeLookupIdProp } : {}),
+      ...(unitCostProp != null ? { unitCost: unitCostProp } : {}),
+      ...(buyCostProp != null ? { buyCost: buyCostProp } : {}),
+      ...(markupTypeProp != null ? { markupType: markupTypeProp } : {}),
+      ...(markupValueProp != null ? { markupValue: markupValueProp } : {}),
+      ...(taxRateProp != null ? { taxRate: taxRateProp } : {}),
+      ...(pricingModeProp != null ? { pricingMode: pricingModeProp } : {}),
+      ...(fixedUnitCostProp != null ? { fixedUnitCost: fixedUnitCostProp } : {}),
+      ...(externalReferenceProp != null ? { externalReference: externalReferenceProp } : {}),
+    }));
+  }, [
+    codeProp,
+    nameProp,
+    descriptionProp,
+    kindProp,
+    typeIdProp,
+    categoryIdProp,
+    unitTypeLookupIdProp,
+    unitCostProp,
+    buyCostProp,
+    markupTypeProp,
+    markupValueProp,
+    taxRateProp,
+    pricingModeProp,
+    fixedUnitCostProp,
+    externalReferenceProp,
+    item,
+  ]);
 
   const isAssembly = form.kind === 'assembly' || form.kind === 'scope';
 
@@ -100,6 +177,7 @@ export function CatalogItemForm({
         pricingMode: isAssembly ? form.pricingMode : undefined,
         fixedUnitCost: isAssembly && form.pricingMode === 'fixed' ? form.fixedUnitCost : undefined,
         externalReference: form.externalReference.trim() || undefined,
+        providerCodes: form.providerCodes,
       };
       if (!item && catalogId) body.catalogId = catalogId;
 
@@ -267,6 +345,35 @@ export function CatalogItemForm({
           </div>
         </div>
       )}
+
+      <div className="space-y-2">
+        <Label>Provider tags</Label>
+        <p className="text-xs text-muted-foreground">
+          Controls which external systems receive this item when an estimate is published.
+        </p>
+        <div className="flex flex-wrap gap-4">
+          {KNOWN_PROVIDER_OPTIONS.map((opt) => {
+            const checked = form.providerCodes.includes(opt.code);
+            return (
+              <label key={opt.code} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(e) => {
+                    setForm((prev) => {
+                      const next = new Set(prev.providerCodes);
+                      if (e.target.checked) next.add(opt.code);
+                      else next.delete(opt.code);
+                      return { ...prev, providerCodes: [...next] };
+                    });
+                  }}
+                />
+                {opt.label}
+              </label>
+            );
+          })}
+        </div>
+      </div>
 
       <div className="space-y-2">
         <Label htmlFor="externalReference">External reference (Crunchwork catalogue ID)</Label>

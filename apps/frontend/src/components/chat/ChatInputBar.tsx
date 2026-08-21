@@ -33,12 +33,11 @@ import {
   type FileProcessingError,
 } from '@/lib/ai/file-processing';
 import { DocumentAttachMenu } from './DocumentAttachMenu';
-import { RichTextInput, type RichTextInputRef } from './RichTextInput';
 
 interface ChatInputBarProps {
   input: string;
   onInputChange: (value: string) => void;
-  onSubmit: () => void;
+  onSubmit: (text?: string) => void;
   onStop: () => void;
   isLoading: boolean;
   isProcessingFiles?: boolean;
@@ -66,7 +65,6 @@ interface ChatInputBarProps {
   interimTranscript?: string;
   onToggleSpeech?: () => void;
   speechError?: string | null;
-  useRichText?: boolean;
 }
 
 function formatFileSize(bytes: number): string {
@@ -145,12 +143,10 @@ export function ChatInputBar({
   interimTranscript = '',
   onToggleSpeech,
   speechError,
-  useRichText = true,
 }: ChatInputBarProps) {
   const [showAgentMenu, setShowAgentMenu] = useState(false);
   const internalFileInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = externalFileInputRef ?? internalFileInputRef;
-  const richTextRef = useRef<RichTextInputRef>(null);
   const agentMenuRef = useRef<HTMLDivElement>(null);
   const selectedAgent = agents.find((a) => a.id === selectedAgentId) ?? agents[0];
   const busy = isLoading || isProcessingFiles;
@@ -177,19 +173,19 @@ export function ChatInputBar({
     return () => document.removeEventListener('keydown', handleShiftSpaceMic);
   }, [isSpeechSupported, onToggleSpeech]);
 
-  function handleFormSubmit() {
-    onSubmit();
+  function handleFormSubmit(overrideText?: string) {
+    const text = overrideText ?? input;
+    if (busy || (!text.trim() && !hasAttachments)) return;
+    onSubmit(text);
     if (inputRef?.current) {
       inputRef.current.style.height = 'auto';
     }
-    richTextRef.current?.clear();
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      if (!busy && (input.trim() || hasAttachments)) handleFormSubmit();
-    }
+    if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return;
+    e.preventDefault();
+    handleFormSubmit(e.currentTarget.value);
   }
 
   function handlePaste(e: ClipboardEvent) {
@@ -286,36 +282,6 @@ export function ChatInputBar({
           className="hidden"
         />
 
-        <div className="relative mb-2" ref={agentMenuRef}>
-          <button
-            type="button"
-            onClick={() => setShowAgentMenu(!showAgentMenu)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
-          >
-            <span
-              className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold text-white"
-              style={{ backgroundColor: selectedAgent?.avatarColor ?? '#64748b' }}
-            >
-              {(selectedAgent?.name ?? 'A').slice(0, 1).toUpperCase()}
-            </span>
-            {selectedAgent?.name ?? 'Agent'}
-            <ChevronDown className="h-3 w-3" />
-          </button>
-          {showAgentMenu && (
-            <div className="absolute bottom-full left-0 z-10 mb-1 max-h-72 min-w-[16rem] overflow-y-auto rounded-md border border-slate-200 bg-white py-1 shadow-lg">
-              {renderAgentGroup('Your agents', yourAgents)}
-              {renderAgentGroup('Organisation', orgAgents)}
-              {renderAgentGroup('Public', publicAgents)}
-              {yourAgents.length + orgAgents.length + publicAgents.length === 0 && (
-                <div className="px-3 py-2 text-xs text-slate-400">
-                  <Bot className="mr-1 inline h-3.5 w-3.5" />
-                  No agents
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
         {speechError && (
           <div className="mb-2 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
             <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
@@ -380,49 +346,36 @@ export function ChatInputBar({
           </div>
         )}
 
-        <div className="flex items-end gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2 py-2 focus-within:border-blue-300 focus-within:ring-1 focus-within:ring-blue-200">
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            onClick={() => {
-              onClearVisionError?.();
-              fileInputRef.current?.click();
-            }}
-            disabled={busy}
-            title={supportsVision ? 'Attach files' : 'Attach files (images disabled for this agent)'}
-            className="shrink-0"
-          >
-            <Paperclip className="h-4 w-4" />
-          </Button>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-2 focus-within:border-blue-300 focus-within:ring-1 focus-within:ring-blue-200">
+          <div className="flex items-start gap-1">
+            <div className="flex shrink-0 items-center gap-0.5 pt-0.5">
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                onClick={() => {
+                  onClearVisionError?.();
+                  fileInputRef.current?.click();
+                }}
+                disabled={busy}
+                title={supportsVision ? 'Attach files' : 'Attach files (images disabled for this agent)'}
+                className="h-8 w-8 shrink-0"
+              >
+                <Paperclip className="h-4 w-4" />
+              </Button>
 
-          {relatedRecordType && relatedRecordId && onAttachDocument && (
-            <DocumentAttachMenu
-              relatedRecordType={relatedRecordType}
-              relatedRecordId={relatedRecordId}
-              onAttach={onAttachDocument}
-              disabled={busy}
-              supportsVision={supportsVision}
-              onVisionBlocked={onVisionBlocked}
-            />
-          )}
+              {relatedRecordType && relatedRecordId && onAttachDocument && (
+                <DocumentAttachMenu
+                  relatedRecordType={relatedRecordType}
+                  relatedRecordId={relatedRecordId}
+                  onAttach={onAttachDocument}
+                  disabled={busy}
+                  supportsVision={supportsVision}
+                  onVisionBlocked={onVisionBlocked}
+                />
+              )}
+            </div>
 
-          {useRichText ? (
-            <RichTextInput
-              ref={richTextRef}
-              onSubmit={(text) => {
-                onInputChange(text);
-                setTimeout(() => handleFormSubmit(), 0);
-              }}
-              placeholder={
-                hasAttachments ? 'Add a message or send files…' : 'Ask about claims, jobs, invoices…'
-              }
-              disabled={busy}
-              onChange={onInputChange}
-              initialValue={input}
-              className="flex-1 py-1.5"
-            />
-          ) : (
             <textarea
               ref={inputRef}
               value={input}
@@ -436,44 +389,78 @@ export function ChatInputBar({
                 hasAttachments ? 'Add a message or send files…' : 'Ask about claims, jobs, invoices…'
               }
               rows={1}
-              className="max-h-[50vh] min-h-[36px] flex-1 resize-none bg-transparent py-1.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none"
+              className="max-h-[50vh] min-h-9 flex-1 resize-none bg-transparent py-1.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none"
               disabled={busy}
+              aria-label="Chat message input"
             />
-          )}
 
-          {isSpeechSupported && onToggleSpeech && (
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              onClick={onToggleSpeech}
-              disabled={busy}
-              title={isListening ? 'Stop listening (Shift+Space)' : 'Voice input (Shift+Space)'}
-              className={cn('shrink-0', isListening && 'text-red-500')}
-            >
-              {isListening ? <MicOff className="h-4 w-4 animate-pulse" /> : <Mic className="h-4 w-4" />}
-            </Button>
-          )}
+            <div className="flex shrink-0 items-center pt-0.5">
+              {isSpeechSupported && onToggleSpeech && (
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  onClick={onToggleSpeech}
+                  disabled={busy}
+                  title={isListening ? 'Stop listening (Shift+Space)' : 'Voice input (Shift+Space)'}
+                  className={cn('h-8 w-8 shrink-0', isListening && 'text-red-500')}
+                >
+                  {isListening ? <MicOff className="h-4 w-4 animate-pulse" /> : <Mic className="h-4 w-4" />}
+                </Button>
+              )}
+            </div>
+          </div>
 
-          {isLoading ? (
-            <Button type="button" size="icon" variant="secondary" onClick={onStop} title="Stop">
-              <Square className="h-4 w-4" />
-            </Button>
-          ) : isProcessingFiles ? (
-            <Button type="button" size="icon" disabled title="Processing files">
-              <Loader2 className="h-4 w-4 animate-spin" />
-            </Button>
-          ) : (
-            <Button
+          <div className="relative mt-1 flex items-center justify-between" ref={agentMenuRef}>
+            <button
               type="button"
-              size="icon"
-              onClick={() => handleFormSubmit()}
-              disabled={(!input.trim() && !hasAttachments) || isProcessingFiles}
-              title="Send"
+              onClick={() => setShowAgentMenu(!showAgentMenu)}
+              className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-xs text-slate-600 hover:bg-slate-100"
             >
-              <Send className="h-4 w-4" />
-            </Button>
-          )}
+              <span
+                className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold text-white"
+                style={{ backgroundColor: selectedAgent?.avatarColor ?? '#64748b' }}
+              >
+                {(selectedAgent?.name ?? 'A').slice(0, 1).toUpperCase()}
+              </span>
+              {selectedAgent?.name ?? 'Agent'}
+              <ChevronDown className="h-3 w-3" />
+            </button>
+            {showAgentMenu && (
+              <div className="absolute bottom-full left-0 z-10 mb-1 max-h-72 min-w-[16rem] overflow-y-auto rounded-md border border-slate-200 bg-white py-1 shadow-lg">
+                {renderAgentGroup('Your agents', yourAgents)}
+                {renderAgentGroup('Organisation', orgAgents)}
+                {renderAgentGroup('Public', publicAgents)}
+                {yourAgents.length + orgAgents.length + publicAgents.length === 0 && (
+                  <div className="px-3 py-2 text-xs text-slate-400">
+                    <Bot className="mr-1 inline h-3.5 w-3.5" />
+                    No agents
+                  </div>
+                )}
+              </div>
+            )}
+
+            {isLoading ? (
+              <Button type="button" size="icon" variant="secondary" onClick={onStop} title="Stop" className="h-8 w-8">
+                <Square className="h-4 w-4" />
+              </Button>
+            ) : isProcessingFiles ? (
+              <Button type="button" size="icon" disabled title="Processing files" className="h-8 w-8">
+                <Loader2 className="h-4 w-4 animate-spin" />
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                size="icon"
+                onClick={() => handleFormSubmit()}
+                disabled={(!input.trim() && !hasAttachments) || isProcessingFiles}
+                title="Send"
+                className="h-8 w-8"
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </div>
 
         <p className="mt-1.5 text-center text-[10px] text-slate-400">

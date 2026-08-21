@@ -16,6 +16,12 @@ import { P } from '../../auth/permission-constants';
 export class JobsController {
   constructor(private readonly jobsService: JobsService) {}
 
+  @Get('filter-options')
+  @RequirePermission(P.jobs.read)
+  async findFilterOptions() {
+    return this.jobsService.findFilterOptions();
+  }
+
   @Get()
   @RequirePermission(P.jobs.read)
   async findAll(
@@ -27,6 +33,8 @@ export class JobsController {
     @Query('status') status?: string,
     @Query('jobType') jobType?: string,
     @Query('assignedToUserId') assignedToUserId?: string,
+    @Query('assignedToUserIds') assignedToUserIds?: string,
+    @Query('refs') refs?: string,
   ) {
     return this.jobsService.findAll({
       page: page ? parseInt(page, 10) : 1,
@@ -37,6 +45,8 @@ export class JobsController {
       status,
       jobType,
       assignedToUserId,
+      assignedToUserIds,
+      refs,
     });
   }
 
@@ -71,6 +81,15 @@ export class JobsController {
     @Param('contactId', ParseUUIDPipe) contactId: string,
   ) {
     return this.jobsService.removeContact({ id, contactId });
+  }
+
+  @Post(':id/calculate-dates')
+  @RequirePermission(P.jobs.read)
+  async calculateDates(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { contactDate?: string; attendanceDate?: string },
+  ) {
+    return this.jobsService.calculateWorkflowDates({ id, ...body });
   }
 
   @Post(':id')

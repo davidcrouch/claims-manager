@@ -31,12 +31,21 @@ import {
   getGroupLabelDragData,
   hasCatalogDrag,
   hasGroupLabelDrag,
+  clearCatalogDrag,
+  shouldAcceptCatalogDragOver,
   type CatalogDragPayload,
   type GroupLabelDragPayload,
 } from '@/components/catalog/catalog-drag';
-import type { ApiCombo, ApiGroup, ApiItem, ApiScope, GroupDimensions } from '@/components/quotes/quote-line-items.types';
-import { groupLabel, normalizeLineItemGroups } from '@/components/quotes/quote-line-items.utils';
+import type { ApiCombo, ApiGroup, ApiItem, ApiScope, GroupDimensions, PublishStatus } from '@/components/quotes/quote-line-items.types';
+import { groupLabel, LINE_ITEMS_PAGE_SIZE, normalizeLineItemGroups, paginateGroups } from '@/components/quotes/quote-line-items.utils';
 import { cn } from '@/lib/utils';
+import {
+  isFixedMarkupType,
+  resolveMarkupAmount,
+  resolveTaxRate,
+  storedMarkupToUi,
+  storedTaxToUi,
+} from '@/lib/rates';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,6 +57,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
+import { TablePagination } from '@/components/shared/table-pagination';
 import { Label } from '@/components/ui/label';
 
 export type LineNoteTargetType = 'group' | 'combo' | 'item';
@@ -158,6 +168,53 @@ function lookupDisplay(l?: { name?: string; externalReference?: string }): strin
   return l.name ?? l.externalReference ?? '—';
 }
 
+function LineScopeStatusBadge({ status }: { status?: { name?: string; externalReference?: string } }) {
+  if (!status) return null;
+  const name = (status.name ?? status.externalReference ?? '').toLowerCase();
+  if (!name || name === 'pending') return null;
+
+  let cls = 'ml-2 inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide';
+  switch (name) {
+    case 'accepted':
+      cls += ' bg-green-100 text-green-700';
+      break;
+    case 'rejected':
+      cls += ' bg-red-100 text-red-700 line-through';
+      break;
+    case 'amended':
+      cls += ' bg-orange-100 text-orange-700';
+      break;
+    case 'referred':
+      cls += ' bg-yellow-100 text-yellow-700';
+      break;
+    default:
+      cls += ' bg-slate-100 text-slate-600';
+  }
+
+  return <span className={cls}>{status.name ?? status.externalReference}</span>;
+}
+
+function PublishStatusBadge({ status }: { status?: PublishStatus }) {
+  if (!status) return null;
+  let cls = 'ml-2 inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide';
+  let label: string;
+  switch (status) {
+    case 'excluded':
+      cls += ' bg-slate-200 text-slate-600';
+      label = 'not sent';
+      break;
+    case 'rejected':
+      cls += ' bg-red-100 text-red-700';
+      label = 'rejected by provider';
+      break;
+    case 'sent':
+      return null;
+    default:
+      return null;
+  }
+  return <span className={cls}>{label}</span>;
+}
+
 /* ---- Inline-edit types & helpers ---- */
 
 type EditableFieldKey = 'name' | 'component' | 'description' | 'quantity' | 'unitType' | 'unitCost' | 'markupValue' | 'tax';
@@ -243,8 +300,8 @@ function initItemInputs(item: ApiItem): Record<EditableFieldKey, string> {
     quantity: String(item.quantity ?? 0),
     unitType: item.unitType?.externalReference ?? '',
     unitCost: String(item.unitCost ?? 0),
-    markupValue: String(item.markupValue ?? 19),
-    tax: typeof item.tax === 'number' ? String(item.tax) : '0',
+    markupValue: String(storedMarkupToUi(item.markupType, item.markupValue)),
+    tax: String(storedTaxToUi(typeof item.tax === 'number' ? item.tax : 0)),
   };
 }
 
@@ -272,6 +329,32 @@ function initScopeInputs(scope: ApiScope): Record<EditableFieldKey, string> {
     markupValue: '0',
     tax: '0',
   };
+}
+
+/** Line total from stored decimal rates (or UI %-point edits). */
+function computeItemMoney(
+  item: ApiItem,
+  inputs: Record<string, string> | undefined,
+  showMarkup: boolean,
+  showGst: boolean,
+): { extended: number; markupAmt: number; gstAmt: number; total: number } {
+  const qty = inputs ? parseFloat(inputs.quantity) || 0 : (item.quantity ?? 0);
+  const uc = inputs ? parseFloat(inputs.unitCost) || 0 : (item.unitCost ?? 0);
+  const extended = qty * uc;
+  const markupAmt = resolveMarkupAmount({
+    markupType: item.markupType,
+    storedMarkupValue: item.markupValue,
+    editUiValue: inputs?.markupValue,
+    quantity: qty,
+    extended,
+  });
+  const taxRate = resolveTaxRate({
+    storedTax: item.tax,
+    editUiValue: inputs?.tax,
+  });
+  const gstAmt = (extended + markupAmt) * taxRate;
+  const total = extended + (showMarkup ? markupAmt : 0) + (showGst ? gstAmt : 0);
+  return { extended, markupAmt, gstAmt, total };
 }
 
 /* ---- Sub-components ---- */
@@ -355,12 +438,26 @@ function ItemRow({
 
   const qty = editInputs ? parseFloat(editInputs.quantity) || 0 : (item.quantity ?? 0);
   const unitCost = editInputs ? parseFloat(editInputs.unitCost) || 0 : (item.unitCost ?? 0);
-  const mkVal = editInputs ? parseFloat(editInputs.markupValue) || 0 : (item.markupValue ?? 19);
-  const taxPct = editInputs ? parseFloat(editInputs.tax) || 0 : (item.tax ?? 0);
+  const mkUi = editInputs
+    ? parseFloat(editInputs.markupValue) || 0
+    : storedMarkupToUi(item.markupType, item.markupValue);
+  const taxUi = editInputs
+    ? parseFloat(editInputs.tax) || 0
+    : storedTaxToUi(item.tax);
 
   const extended = qty * unitCost;
-  const markupAmt = item.markupType === 'fixed' ? mkVal * qty : extended * (mkVal / 100);
-  const gstAmt = (extended + markupAmt) * (taxPct / 100);
+  const markupAmt = resolveMarkupAmount({
+    markupType: item.markupType,
+    storedMarkupValue: item.markupValue,
+    editUiValue: editInputs?.markupValue,
+    quantity: qty,
+    extended,
+  });
+  const taxRate = resolveTaxRate({
+    storedTax: item.tax,
+    editUiValue: editInputs?.tax,
+  });
+  const gstAmt = (extended + markupAmt) * taxRate;
   const total = extended + (showMarkup ? markupAmt : 0) + (showGst ? gstAmt : 0);
 
   useEffect(() => {
@@ -529,6 +626,8 @@ function ItemRow({
                   internal
                 </span>
               )}
+              <LineScopeStatusBadge status={item.lineScopeStatus} />
+              <PublishStatusBadge status={item.publishStatus} />
             </div>
             {(item.description || editInputs?.description) && (
               <p className={cn('mt-0.5 line-clamp-1 text-xs text-slate-500', indented && 'pl-7')}>
@@ -646,7 +745,7 @@ function ItemRow({
             />
           ) : (
             <span className="font-mono text-slate-700">
-              {item.markupType === 'fixed' ? formatCurrency(mkVal) : `${mkVal}%`}
+              {isFixedMarkupType(item.markupType) ? formatCurrency(mkUi) : `${mkUi}%`}
             </span>
           )}
         </td>
@@ -667,7 +766,7 @@ function ItemRow({
             />
           ) : (
             <span className="font-mono text-slate-700">
-              {taxPct ? `${taxPct}%` : '—'}
+              {taxUi ? `${taxUi}%` : '—'}
             </span>
           )}
         </td>
@@ -777,6 +876,10 @@ function AssemblyBlock({
   showBulkSelect,
   bulkSelectedIds,
   onBulkToggle,
+  isCatalogDropActive,
+  onCatalogDragOver,
+  onCatalogDragLeave,
+  onCatalogDrop,
 }: {
   combo: ApiCombo;
   comboKey: string;
@@ -820,6 +923,10 @@ function AssemblyBlock({
   showBulkSelect?: boolean;
   bulkSelectedIds?: Set<string>;
   onBulkToggle?: (ids: string[]) => void;
+  isCatalogDropActive?: boolean;
+  onCatalogDragOver?: (e: React.DragEvent) => void;
+  onCatalogDragLeave?: (e: React.DragEvent) => void;
+  onCatalogDrop?: (e: React.DragEvent) => void;
 }) {
   const effectiveContentQty = contentShowQuantities ?? (showQuantities ?? true);
   const effectiveContentPrice = contentShowPricing ?? (showPricing ?? true);
@@ -855,17 +962,7 @@ function AssemblyBlock({
     for (let idx = 0; idx < comboItems.length; idx++) {
       const item = comboItems[idx];
       const itemKey = `${comboKey}-item-${item.id ?? idx}`;
-      const inputs = editInputs[itemKey];
-      const qty = inputs ? parseFloat(inputs.quantity) || 0 : (item.quantity ?? 0);
-      const uc = inputs ? parseFloat(inputs.unitCost) || 0 : (item.unitCost ?? 0);
-      const ext = qty * uc;
-      const mkVal = inputs ? parseFloat(inputs.markupValue) || 0 : (item.markupValue ?? 19);
-      const mkAmt = item.markupType === 'fixed' ? mkVal * qty : ext * (mkVal / 100);
-      const taxPct = inputs
-        ? parseFloat(inputs.tax) || 0
-        : (item.tax ?? 0);
-      const gstAmt = (ext + mkAmt) * (taxPct / 100);
-      sum += ext + (showMarkup ? mkAmt : 0) + (showGst ? gstAmt : 0);
+      sum += computeItemMoney(item, editInputs[itemKey], showMarkup, showGst).total;
     }
     return sum;
   }, [comboItems, comboKey, showMarkup, showGst, editInputs]);
@@ -909,18 +1006,45 @@ function AssemblyBlock({
         className={cn(
           'relative cursor-pointer transition-colors',
           showSelect && !comboPicked && 'opacity-40',
-          isEditing
-            ? comboRing
-            : dirtyRowKeys.has(comboKey)
-              ? 'bg-emerald-200 hover:bg-emerald-300'
-              : 'bg-slate-200 hover:bg-slate-300',
+          isCatalogDropActive
+            ? 'ring-2 ring-inset ring-amber-400 bg-amber-50/70'
+            : isEditing
+              ? comboRing
+              : dirtyRowKeys.has(comboKey)
+                ? 'bg-emerald-200 hover:bg-emerald-300'
+                : 'bg-slate-200 hover:bg-slate-300',
         )}
         draggable={!!showDragHandle}
         onDragStart={showDragHandle ? (e) => onDragStart?.(e, comboKey) : undefined}
-        onDragOver={showDragHandle ? (e) => { e.preventDefault(); onDragOver?.(e, comboKey); } : undefined}
-        onDragLeave={showDragHandle ? (e) => { (e.currentTarget as HTMLElement).style.borderTop = ''; } : undefined}
+        onDragOver={(e) => {
+          if (onCatalogDragOver) {
+            onCatalogDragOver(e);
+            if (e.defaultPrevented) return;
+          }
+          // Don't claim the drop for row reorder while a catalogue drag is active —
+          // invalid kinds must bubble to group/scope.
+          if (hasCatalogDrag(e.dataTransfer) || hasGroupLabelDrag(e.dataTransfer)) return;
+          if (showDragHandle) {
+            e.preventDefault();
+            onDragOver?.(e, comboKey);
+          }
+        }}
+        onDragLeave={(e) => {
+          onCatalogDragLeave?.(e);
+          if (showDragHandle) (e.currentTarget as HTMLElement).style.borderTop = '';
+        }}
         onDragEnd={showDragHandle ? onDragEnd : undefined}
-        onDrop={showDragHandle ? (e) => { e.preventDefault(); onDrop?.(e, comboKey); } : undefined}
+        onDrop={(e) => {
+          if (onCatalogDrop) {
+            onCatalogDrop(e);
+            if (e.defaultPrevented) return;
+          }
+          if (hasCatalogDrag(e.dataTransfer) || hasGroupLabelDrag(e.dataTransfer)) return;
+          if (showDragHandle) {
+            e.preventDefault();
+            onDrop?.(e, comboKey);
+          }
+        }}
         {...noteHover.handlers}
         onClick={(e) => {
           if (showSelect) {
@@ -1073,6 +1197,8 @@ function AssemblyBlock({
                   <span className="shrink-0 rounded-full bg-slate-300 px-2 py-0.5 text-[10px] font-medium text-slate-700">
                     {comboItemCount} item{comboItemCount !== 1 ? 's' : ''}
                   </span>
+                  <LineScopeStatusBadge status={combo.lineScopeStatus} />
+                  <PublishStatusBadge status={combo.publishStatus} />
                 </div>
                 {(combo.description || comboInputs?.description) && (
                   <p className="mt-0.5 line-clamp-1 text-xs text-slate-500">
@@ -1295,6 +1421,9 @@ function ScopeBlock({
   showBulkSelect,
   bulkSelectedIds,
   onBulkToggle,
+  activeDropKey,
+  setActiveDropKey,
+  onCatalogAssemblyDrop,
 }: {
   scope: ApiScope;
   scopeKey: string;
@@ -1344,6 +1473,9 @@ function ScopeBlock({
   showBulkSelect?: boolean;
   bulkSelectedIds?: Set<string>;
   onBulkToggle?: (ids: string[]) => void;
+  activeDropKey?: string | null;
+  setActiveDropKey?: (key: string | null) => void;
+  onCatalogAssemblyDrop?: (payload: CatalogDragPayload, assemblyId: string) => void;
 }) {
   const scopeName = scope.name ?? 'Scope';
   const scopeNote = scope.note;
@@ -1380,15 +1512,7 @@ function ScopeBlock({
   const scopeTotal = useMemo(() => {
     let sum = 0;
     function addItem(item: ApiItem, itemKey: string) {
-      const inputs = editInputs[itemKey];
-      const qty = inputs ? parseFloat(inputs.quantity) || 0 : (item.quantity ?? 0);
-      const uc = inputs ? parseFloat(inputs.unitCost) || 0 : (item.unitCost ?? 0);
-      const ext = qty * uc;
-      const mkVal = inputs ? parseFloat(inputs.markupValue) || 0 : (item.markupValue ?? 19);
-      const mkAmt = item.markupType === 'fixed' ? mkVal * qty : ext * (mkVal / 100);
-      const taxPct = inputs ? parseFloat(inputs.tax) || 0 : (item.tax ?? 0);
-      const gstAmt = (ext + mkAmt) * (taxPct / 100);
-      sum += ext + (showMarkup ? mkAmt : 0) + (showGst ? gstAmt : 0);
+      sum += computeItemMoney(item, editInputs[itemKey], showMarkup, showGst).total;
     }
     for (let idx = 0; idx < scopeItems.length; idx++) {
       const item = scopeItems[idx];
@@ -1811,6 +1935,8 @@ function ScopeBlock({
             const resolvedScopeAssembly = resolveChildVisibility
               ? resolveChildVisibility(comboKey, showQuantities ?? true, showPricing ?? true)
               : { showQuantities: showQuantities ?? true, showPricing: showPricing ?? true };
+            const assemblyDropKey = `assembly-drop-${combo.id ?? comboKey}`;
+            const isAssemblyDropActive = activeDropKey === assemblyDropKey;
             return (
               <AssemblyBlock
                 key={comboKey}
@@ -1856,6 +1982,41 @@ function ScopeBlock({
                 showBulkSelect={showBulkSelect}
                 bulkSelectedIds={bulkSelectedIds}
                 onBulkToggle={onBulkToggle}
+                isCatalogDropActive={isAssemblyDropActive}
+                onCatalogDragOver={
+                  !onCatalogAssemblyDrop || !combo.id
+                    ? undefined
+                    : (e) => {
+                        if (!shouldAcceptCatalogDragOver(e.dataTransfer, 'assembly')) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.dataTransfer.dropEffect = 'copy';
+                        setActiveDropKey?.(assemblyDropKey);
+                      }
+                }
+                onCatalogDragLeave={
+                  !onCatalogAssemblyDrop || !combo.id
+                    ? undefined
+                    : (e) => {
+                        if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                        if (activeDropKey === assemblyDropKey) setActiveDropKey?.(null);
+                      }
+                }
+                onCatalogDrop={
+                  !onCatalogAssemblyDrop || !combo.id
+                    ? undefined
+                    : (e) => {
+                        if (!shouldAcceptCatalogDragOver(e.dataTransfer, 'assembly')) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setActiveDropKey?.(null);
+                        const payload = getCatalogDragData(e.dataTransfer);
+                        if (!payload) return;
+                        if (isComboCollapsed) onToggleCombo(comboKey);
+                        onCatalogAssemblyDrop(payload, combo.id!);
+                        clearCatalogDrag();
+                      }
+                }
               />
             );
           })}
@@ -1880,8 +2041,25 @@ export interface LineItemSelection {
 
 export type { GroupDimensions };
 
+export interface LineItemsPaging {
+  page: number;
+  pageSize: number;
+  total: number;
+  onPageChange: (page: number) => void;
+  /** All groups for the filter dropdown when the current page is a subset. */
+  groupSummaries?: Array<{ id: string; label: string }>;
+  hiddenGroupIds?: Set<string>;
+  onHiddenGroupIdsChange?: (ids: Set<string>) => void;
+  /** Search is owned by the parent and applied server-side. */
+  search?: string;
+  onSearchChange?: (value: string) => void;
+  /** Parent already filtered; table should not re-filter by search/group. */
+  serverFiltered?: boolean;
+}
+
 export interface QuoteLineItemsTableProps {
   groups: ApiGroup[];
+  paging?: LineItemsPaging;
   activeDropKey?: string | null;
   setActiveDropKey?: (key: string | null) => void;
   onCatalogDrop?: (payload: CatalogDragPayload, groupId?: string, quoteComboId?: string) => void;
@@ -2174,6 +2352,7 @@ function modeLabels(mode: LineItemsMode) {
 
 export function QuoteLineItemsTable({
   groups: rawGroups,
+  paging,
   activeDropKey,
   setActiveDropKey,
   onCatalogDrop,
@@ -2214,6 +2393,7 @@ export function QuoteLineItemsTable({
   const [collapsedCombos, setCollapsedCombos] = useState<Set<string>>(new Set());
   const [collapsedScopes, setCollapsedScopes] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
+  const [clientPage, setClientPage] = useState(1);
   const [showMarkup, setShowMarkup] = useState(true);
   const [showGst, setShowGst] = useState(true);
   const [uncontrolledQuantities, setUncontrolledQuantities] = useState(true);
@@ -2412,20 +2592,6 @@ export function QuoteLineItemsTable({
     }
   };
 
-  const totalItems = useMemo(
-    () =>
-      groups.reduce(
-        (sum, g) =>
-          sum +
-          (g.items?.length ?? 0) +
-          (g.combos ?? []).reduce((cs, c) => cs + (c.items?.length ?? 0), 0) +
-          (g.scopes ?? []).reduce((ss, s) =>
-            ss + (s.items?.length ?? 0) + (s.combos ?? []).reduce((cs, c) => cs + (c.items?.length ?? 0), 0), 0),
-        0,
-      ),
-    [groups],
-  );
-
   const itemRowIndex = useMemo(() => {
     const rows: RowEntry[] = [];
     for (let gi = 0; gi < groups.length; gi++) {
@@ -2520,18 +2686,10 @@ export function QuoteLineItemsTable({
     let totalTax = 0;
 
     function addItem(item: ApiItem, rowKey: string) {
-      const inputs = editInputs[rowKey];
-      const qty = inputs ? parseFloat(inputs.quantity) || 0 : (item.quantity ?? 0);
-      const uc = inputs ? parseFloat(inputs.unitCost) || 0 : (item.unitCost ?? 0);
-      const cost = uc * qty;
-      extended += cost;
-      const mkVal = inputs ? parseFloat(inputs.markupValue) || 0 : (item.markupValue ?? 19);
-      const mkAmt = item.markupType === 'fixed' ? mkVal * qty : cost * (mkVal / 100);
-      markup += mkAmt;
-      const taxPct = inputs
-        ? parseFloat(inputs.tax) || 0
-        : (item.tax ?? 0);
-      totalTax += (cost + mkAmt) * (taxPct / 100);
+      const money = computeItemMoney(item, editInputs[rowKey], true, true);
+      extended += money.extended;
+      markup += money.markupAmt;
+      totalTax += money.gstAmt;
     }
 
     for (let gi = 0; gi < groups.length; gi++) {
@@ -2842,16 +3000,22 @@ export function QuoteLineItemsTable({
     return () => document.removeEventListener('mousedown', onMouseDown);
   }, [editState]);
 
-  const groupFilterActive = hiddenGroupIds.size > 0;
+  const serverFiltered = !!paging?.serverFiltered;
+  const searchValue = paging?.onSearchChange ? (paging.search ?? '') : searchTerm;
+  const filterGroupIds = paging?.hiddenGroupIds ?? hiddenGroupIds;
+
+  const groupFilterActive = filterGroupIds.size > 0;
 
   const filteredGroups = useMemo(() => {
+    if (serverFiltered) return groups;
+
     let result = groups;
 
-    if (hiddenGroupIds.size > 0) {
-      result = result.filter((g, i) => !hiddenGroupIds.has(g.id ?? `group-${i}`));
+    if (filterGroupIds.size > 0) {
+      result = result.filter((g, i) => !filterGroupIds.has(g.id ?? `group-${i}`));
     }
 
-    const term = searchTerm.trim().toLowerCase();
+    const term = searchValue.trim().toLowerCase();
     if (!term) return result;
 
     const matchesItem = (item: ApiItem) => {
@@ -2927,12 +3091,27 @@ export function QuoteLineItemsTable({
         return null;
       })
       .filter(Boolean) as ApiGroup[];
-  }, [groups, searchTerm, hiddenGroupIds]);
+  }, [groups, searchValue, filterGroupIds, serverFiltered]);
+
+  useEffect(() => {
+    setClientPage(1);
+  }, [searchValue, filterGroupIds]);
+
+  const pageSize = paging?.pageSize ?? LINE_ITEMS_PAGE_SIZE;
+  const currentPage = paging?.page ?? clientPage;
+  const paged = useMemo(() => {
+    if (serverFiltered) {
+      return { groups: filteredGroups, totalUnits: paging?.total ?? 0 };
+    }
+    return paginateGroups(filteredGroups, currentPage, pageSize);
+  }, [filteredGroups, currentPage, pageSize, serverFiltered, paging?.total]);
+  const pagedGroups = paged.groups;
+  const totalUnits = paged.totalUnits;
 
   const visibleRowIndex = useMemo(() => {
     const rows: RowEntry[] = [];
-    for (let gi = 0; gi < filteredGroups.length; gi++) {
-      const g = filteredGroups[gi];
+    for (let gi = 0; gi < pagedGroups.length; gi++) {
+      const g = pagedGroups[gi];
       const gId = g.id ?? `group-${gi}`;
       for (let ii = 0; ii < (g.items ?? []).length; ii++) {
         const item = g.items![ii];
@@ -2967,12 +3146,14 @@ export function QuoteLineItemsTable({
       }
     }
     return rows;
-  }, [filteredGroups]);
+  }, [pagedGroups]);
 
   const tableDropProps = isReadOnly ? {} : {
     onDragOver: (e: React.DragEvent) => {
-      if (!hasGroupLabelDrag(e.dataTransfer)) return;
+      // Groups only — top level
+      if (!shouldAcceptCatalogDragOver(e.dataTransfer, 'table')) return;
       e.preventDefault();
+      e.stopPropagation();
       if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
       setActiveDropKey?.('table-root');
     },
@@ -2981,17 +3162,19 @@ export function QuoteLineItemsTable({
       if (activeDropKey === 'table-root') setActiveDropKey?.(null);
     },
     onDrop: (e: React.DragEvent) => {
+      if (!shouldAcceptCatalogDragOver(e.dataTransfer, 'table')) return;
       e.preventDefault();
+      e.stopPropagation();
       setActiveDropKey?.(null);
       const labelPayload = getGroupLabelDragData(e.dataTransfer);
       if (labelPayload && onGroupLabelDrop) {
         onGroupLabelDrop(labelPayload);
-        return;
+        clearCatalogDrag();
       }
     },
   };
 
-  if (groups.length === 0) {
+  if (groups.length === 0 && (!paging || (paging.total === 0 && !searchValue && !groupFilterActive))) {
     return (
       <div
         className={cn(
@@ -3080,7 +3263,7 @@ export function QuoteLineItemsTable({
                     title={groupFilterActive ? `${labels.groupSingularCap} filter active` : `Filter ${labels.groupPlural}`}
                 >
                   <span className="text-sm font-semibold text-slate-800">
-                    {groups.length} {groups.length !== 1 ? labels.groupPlural : labels.groupSingular} &middot; {totalItems} {totalItems !== 1 ? labels.linePlural : labels.lineSingular}
+                    {totalUnits} {totalUnits !== 1 ? labels.linePlural : labels.lineSingular}
                   </span>
                   {groupFilterActive ? (
                     <Filter className="h-4 w-4 text-amber-500" />
@@ -3096,45 +3279,55 @@ export function QuoteLineItemsTable({
                     <button
                       type="button"
                       className="rounded px-1.5 py-0.5 text-xs font-medium text-blue-600 hover:bg-blue-50 transition-colors"
-                      onClick={() => setHiddenGroupIds(new Set())}
+                      onClick={() => {
+                        if (paging?.onHiddenGroupIdsChange) paging.onHiddenGroupIdsChange(new Set());
+                        else setHiddenGroupIds(new Set());
+                      }}
                     >
                       All
                     </button>
                     <button
                       type="button"
                       className="rounded px-1.5 py-0.5 text-xs font-medium text-blue-600 hover:bg-blue-50 transition-colors"
-                      onClick={() =>
-                        setHiddenGroupIds(
-                          new Set(groups.map((g, i) => g.id ?? `group-${i}`)),
-                        )
-                      }
+                      onClick={() => {
+                        const allIds = new Set(
+                          (paging?.groupSummaries?.length
+                            ? paging.groupSummaries.map((g) => g.id)
+                            : groups.map((g, i) => g.id ?? `group-${i}`)),
+                        );
+                        if (paging?.onHiddenGroupIdsChange) paging.onHiddenGroupIdsChange(allIds);
+                        else setHiddenGroupIds(allIds);
+                      }}
                     >
                       None
                     </button>
                   </div>
                 </div>
                 <DropdownMenuSeparator />
-                {groups.map((g, i) => {
-                  const gId = g.id ?? `group-${i}`;
-                  const label = groupLabel(g, i, labels.groupSingularCap);
-                  const isVisible = !hiddenGroupIds.has(gId);
+                {(paging?.groupSummaries?.length
+                  ? paging.groupSummaries
+                  : groups.map((g, i) => ({
+                      id: g.id ?? `group-${i}`,
+                      label: groupLabel(g, i, labels.groupSingularCap),
+                    }))
+                ).map((g) => {
+                  const isVisible = !filterGroupIds.has(g.id);
                   return (
                     <DropdownMenuItem
-                      key={gId}
+                      key={g.id}
                       onClick={(e) => {
                         e.preventDefault();
-                        setHiddenGroupIds((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(gId)) next.delete(gId);
-                          else next.add(gId);
-                          return next;
-                        });
+                        const next = new Set(filterGroupIds);
+                        if (next.has(g.id)) next.delete(g.id);
+                        else next.add(g.id);
+                        if (paging?.onHiddenGroupIdsChange) paging.onHiddenGroupIdsChange(next);
+                        else setHiddenGroupIds(next);
                       }}
                       closeOnClick={false}
                       className="justify-between"
                     >
                       <span className={cn('text-sm', !isVisible && 'text-slate-400')}>
-                        {label}
+                        {g.label}
                       </span>
                       {isVisible ? (
                         <CheckSquare className="h-4 w-4 text-blue-600 shrink-0" />
@@ -3149,20 +3342,26 @@ export function QuoteLineItemsTable({
           </span>
         </div>
         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-          {mode !== 'catalog' && (
+          {(mode !== 'catalog' || paging?.onSearchChange) && (
             <div className="relative w-96">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
               <Input
                 type="text"
                 placeholder="Search line items…"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                value={searchValue}
+                onChange={(e) => {
+                  if (paging?.onSearchChange) paging.onSearchChange(e.target.value);
+                  else setSearchTerm(e.target.value);
+                }}
                 className="h-8 border-slate-400 bg-white pl-8 pr-8 text-sm"
               />
-              {searchTerm && (
+              {searchValue && (
                 <button
                   type="button"
-                  onClick={() => setSearchTerm('')}
+                  onClick={() => {
+                    if (paging?.onSearchChange) paging.onSearchChange('');
+                    else setSearchTerm('');
+                  }}
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                 >
                   <X className="h-3.5 w-3.5" />
@@ -3287,16 +3486,19 @@ export function QuoteLineItemsTable({
         </div>
       )}
 
-      {searchTerm && filteredGroups.length === 0 && (
+      {searchValue && pagedGroups.length === 0 && totalUnits === 0 && (
         <div className="flex items-center justify-center rounded-lg border border-dashed border-slate-200 py-8 text-sm text-slate-400">
           No line items match &ldquo;{searchTerm}&rdquo;
         </div>
       )}
 
-      {filteredGroups.map((group, groupIndex) => {
+      {pagedGroups.length === 0 && (
+        <p className="py-8 text-center text-sm text-slate-500">No matching line items</p>
+      )}
+      {pagedGroups.map((group, groupIndex) => {
         const gId = group.id ?? `group-${groupIndex}`;
         const label = groupLabel(group, groupIndex, labels.groupSingularCap);
-        const isCollapsed = searchTerm ? false : collapsed.has(gId);
+        const isCollapsed = searchValue ? false : collapsed.has(gId);
         const dropKey = `group-drop-${gId}`;
         const isDropActive = activeDropKey === dropKey;
 
@@ -3307,17 +3509,7 @@ export function QuoteLineItemsTable({
         const resolvedGroup = resolveVisibility(gId, showQuantities, showPricing);
 
         function computeItemTotal(item: ApiItem, rowKey: string): number {
-          const inputs = editInputs[rowKey];
-          const qty = inputs ? parseFloat(inputs.quantity) || 0 : (item.quantity ?? 0);
-          const uc = inputs ? parseFloat(inputs.unitCost) || 0 : (item.unitCost ?? 0);
-          const ext = qty * uc;
-          const mkVal = inputs ? parseFloat(inputs.markupValue) || 0 : (item.markupValue ?? 19);
-          const mkAmt = item.markupType === 'fixed' ? mkVal * qty : ext * (mkVal / 100);
-          const taxPct = inputs
-            ? parseFloat(inputs.tax) || 0
-            : (item.tax ?? 0);
-          const gstAmt = (ext + mkAmt) * (taxPct / 100);
-          return ext + (showMarkup ? mkAmt : 0) + (showGst ? gstAmt : 0);
+          return computeItemMoney(item, editInputs[rowKey], showMarkup, showGst).total;
         }
 
         const standaloneTotal = standaloneItems.reduce((sum, it, idx) =>
@@ -3344,22 +3536,47 @@ export function QuoteLineItemsTable({
 
         const dropProps = isReadOnly ? {} : {
           onDragOver: (e: React.DragEvent) => {
-            if (hasGroupLabelDrag(e.dataTransfer)) return;
+            // Group labels always land at table root (not inside a group)
+            if (hasGroupLabelDrag(e.dataTransfer)) {
+              if (!onGroupLabelDrop) return;
+              e.preventDefault();
+              e.stopPropagation();
+              if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+              setActiveDropKey?.('table-root');
+              return;
+            }
+            // Scopes / assemblies / primitives → group
+            if (!shouldAcceptCatalogDragOver(e.dataTransfer, 'group')) return;
             e.preventDefault();
             if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
             setActiveDropKey?.(dropKey);
           },
           onDragLeave: (e: React.DragEvent) => {
             if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-            if (activeDropKey === dropKey) setActiveDropKey?.(null);
+            if (activeDropKey === dropKey || activeDropKey === 'table-root') {
+              setActiveDropKey?.(null);
+            }
           },
           onDrop: (e: React.DragEvent) => {
-            if (hasGroupLabelDrag(e.dataTransfer)) return;
+            if (hasGroupLabelDrag(e.dataTransfer)) {
+              e.preventDefault();
+              e.stopPropagation();
+              setActiveDropKey?.(null);
+              const labelPayload = getGroupLabelDragData(e.dataTransfer);
+              if (labelPayload && onGroupLabelDrop) {
+                onGroupLabelDrop(labelPayload);
+                clearCatalogDrag();
+              }
+              return;
+            }
+            if (!shouldAcceptCatalogDragOver(e.dataTransfer, 'group')) return;
             e.preventDefault();
+            e.stopPropagation();
             setActiveDropKey?.(null);
             const payload = getCatalogDragData(e.dataTransfer);
             if (!payload) return;
             onCatalogDrop?.(payload, group.id);
+            clearCatalogDrag();
           },
         };
 
@@ -3620,6 +3837,8 @@ export function QuoteLineItemsTable({
                           const comboItems = combo.items ?? [];
                           const comboItemCount = comboItems.length;
                           const resolvedAssembly = resolveVisibility(comboKey, resolvedGroup.showQuantities, resolvedGroup.showPricing);
+                          const assemblyDropKey = `assembly-drop-${combo.id ?? comboKey}`;
+                          const isAssemblyDropActive = activeDropKey === assemblyDropKey;
 
                           return (
                             <AssemblyBlock
@@ -3666,6 +3885,41 @@ export function QuoteLineItemsTable({
                               showBulkSelect={showBulkSelect}
                               bulkSelectedIds={bulkSelectedIds}
                               onBulkToggle={handleBulkToggle}
+                              isCatalogDropActive={isAssemblyDropActive}
+                              onCatalogDragOver={
+                                isReadOnly || !onCatalogDrop || !combo.id
+                                  ? undefined
+                                  : (e) => {
+                                      if (!shouldAcceptCatalogDragOver(e.dataTransfer, 'assembly')) return;
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      e.dataTransfer.dropEffect = 'copy';
+                                      setActiveDropKey?.(assemblyDropKey);
+                                    }
+                              }
+                              onCatalogDragLeave={
+                                isReadOnly || !onCatalogDrop || !combo.id
+                                  ? undefined
+                                  : (e) => {
+                                      if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                                      if (activeDropKey === assemblyDropKey) setActiveDropKey?.(null);
+                                    }
+                              }
+                              onCatalogDrop={
+                                isReadOnly || !onCatalogDrop || !combo.id
+                                  ? undefined
+                                  : (e) => {
+                                      if (!shouldAcceptCatalogDragOver(e.dataTransfer, 'assembly')) return;
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      setActiveDropKey?.(null);
+                                      const payload = getCatalogDragData(e.dataTransfer);
+                                      if (!payload) return;
+                                      if (isComboCollapsed) toggleCombo(comboKey);
+                                      onCatalogDrop(payload, group.id, combo.id);
+                                      clearCatalogDrag();
+                                    }
+                              }
                             />
                           );
                         })}
@@ -3687,8 +3941,9 @@ export function QuoteLineItemsTable({
                               ? {}
                               : {
                                   onDragOver: (e: React.DragEvent) => {
-                                    if (hasGroupLabelDrag(e.dataTransfer)) return;
-                                    if (!hasCatalogDrag(e.dataTransfer) && !e.dataTransfer.types.includes('text/plain')) {
+                                    // Only assemblies + primitives. Invalid kinds
+                                    // (e.g. scope) bubble to the parent group.
+                                    if (!shouldAcceptCatalogDragOver(e.dataTransfer, 'scope')) {
                                       return;
                                     }
                                     e.preventDefault();
@@ -3701,7 +3956,9 @@ export function QuoteLineItemsTable({
                                     if (activeDropKey === scopeDropKey) setActiveDropKey?.(null);
                                   },
                                   onDrop: (e: React.DragEvent) => {
-                                    if (hasGroupLabelDrag(e.dataTransfer)) return;
+                                    if (!shouldAcceptCatalogDragOver(e.dataTransfer, 'scope')) {
+                                      return;
+                                    }
                                     e.preventDefault();
                                     e.stopPropagation();
                                     setActiveDropKey?.(null);
@@ -3709,6 +3966,7 @@ export function QuoteLineItemsTable({
                                     if (!payload) return;
                                     if (isScopeCollapsed) toggleScope(scopeKey);
                                     onCatalogDrop(payload, group.id, scope.id);
+                                    clearCatalogDrag();
                                   },
                                 };
 
@@ -3785,6 +4043,15 @@ export function QuoteLineItemsTable({
                                     showBulkSelect={showBulkSelect}
                                     bulkSelectedIds={bulkSelectedIds}
                                     onBulkToggle={handleBulkToggle}
+                                    activeDropKey={activeDropKey}
+                                    setActiveDropKey={setActiveDropKey}
+                                    onCatalogAssemblyDrop={
+                                      isReadOnly || !onCatalogDrop
+                                        ? undefined
+                                        : (payload, assemblyId) => {
+                                            onCatalogDrop(payload, group.id, assemblyId);
+                                          }
+                                    }
                                   />
                                 </tbody>
                               </table>
@@ -3804,6 +4071,15 @@ export function QuoteLineItemsTable({
           </div>
         );
       })}
+      <TablePagination
+        page={currentPage}
+        pageSize={pageSize}
+        total={totalUnits}
+        onPageChange={(next) => {
+          if (paging?.onPageChange) paging.onPageChange(next);
+          else setClientPage(next);
+        }}
+      />
     </div>
   );
 }

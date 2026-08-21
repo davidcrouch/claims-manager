@@ -1,7 +1,7 @@
 'use server';
 
 import { getSession, getAccessToken } from '@/lib/auth';
-import { createApiClient, ApiError } from '@/lib/api-client';
+import { createApiClient, ApiError, type PublishQuoteResult } from '@/lib/api-client';
 import type { Quote, Invoice, Report, Task, Contact, WorkOrder, Rfq, Proposal, Bill, PurchaseOrder } from '@/types/api';
 
 async function getApi() {
@@ -24,12 +24,17 @@ export async function createQuoteAction(body: Record<string, unknown>): Promise<
   }
 }
 
-export async function publishQuoteAction(id: string): Promise<{ success: boolean; quote?: Quote; error?: string }> {
+export async function publishQuoteAction(id: string): Promise<{
+  success: boolean;
+  quote?: Quote;
+  publishResult?: PublishQuoteResult;
+  error?: string;
+}> {
   const api = await getApi();
   if (!api) return { success: false, error: 'Not authenticated' };
   try {
-    const quote = await api.publishQuote(id);
-    return { success: true, quote };
+    const result = await api.publishQuote(id);
+    return { success: true, quote: result.quote ?? undefined, publishResult: result };
   } catch (err) {
     console.error('[publishQuoteAction]', err);
     if (err instanceof ApiError) {
@@ -111,6 +116,21 @@ export async function createTaskAction(body: Record<string, unknown>): Promise<{
   }
 }
 
+export async function updateTaskAction(
+  id: string,
+  body: Record<string, unknown>,
+): Promise<{ success: boolean; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    await api.updateTask(id, body);
+    return { success: true };
+  } catch (err) {
+    console.error('[updateTaskAction]', err);
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to update task' };
+  }
+}
+
 export async function createAppointmentAction(body: Record<string, unknown>): Promise<{ success: boolean; error?: string }> {
   const api = await getApi();
   if (!api) return { success: false, error: 'Not authenticated' };
@@ -179,6 +199,39 @@ export async function createContactAction(body: Record<string, unknown>): Promis
   } catch (err) {
     console.error('[createContactAction]', err);
     return { success: false, error: err instanceof Error ? err.message : 'Failed to create contact' };
+  }
+}
+
+export async function ensureMeContactAction(): Promise<{
+  id: string;
+  type: 'CONTACT';
+  name: string;
+  email?: string;
+} | null> {
+  const api = await getApi();
+  if (!api) return null;
+  try {
+    return await api.ensureMeContact();
+  } catch (err) {
+    console.error('[ensureMeContactAction]', err);
+    return null;
+  }
+}
+
+/** Find the signed-in user's contact (no create). Used for appointment Assigned To. */
+export async function getMeContactAction(): Promise<{
+  id: string;
+  type: 'CONTACT';
+  name: string;
+  email?: string;
+} | null> {
+  const api = await getApi();
+  if (!api) return null;
+  try {
+    return await api.getMeContact();
+  } catch (err) {
+    console.error('[getMeContactAction]', err);
+    return null;
   }
 }
 

@@ -26,6 +26,7 @@ import { JobSelectField } from '@/components/forms/JobSelectField';
 import type { JobOption } from '@/components/shared/job-label';
 import type { Quote } from '@/types/api';
 import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
+import { collectSelectableLineItemIds } from '@/components/quotes/quote-line-items.utils';
 
 type WizardStep = 'details' | 'scope';
 
@@ -107,11 +108,11 @@ export function RfqFormDrawer({
     setLineItemsLoading(true);
     setError(null);
     try {
-      const result = await getQuoteLineItemsAction(quoteId);
+      const result = await getQuoteLineItemsAction(quoteId, { all: true });
       if (result.success && result.groups) {
         const parsed = result.groups as unknown as ApiGroup[];
         setGroups(parsed);
-        setSelectedItemIds(collectAllItemIds(parsed));
+        setSelectedItemIds(new Set(collectSelectableLineItemIds(parsed)));
       } else {
         setError(result.error ?? 'Failed to load estimate line items');
         setGroups([]);
@@ -414,20 +415,4 @@ export function RfqFormDrawer({
     <CreateSubmitOverlay phase={phase} entityLabel="RFQ" />
     </>
   );
-}
-
-function collectAllItemIds(groups: ApiGroup[]): Set<string> {
-  const ids = new Set<string>();
-  for (const group of groups) {
-    for (const item of group.items ?? []) {
-      if (item.id) ids.add(item.id);
-    }
-    for (const combo of group.combos ?? []) {
-      if (combo.id) ids.add(combo.id);
-      for (const item of combo.items ?? []) {
-        if (item.id) ids.add(item.id);
-      }
-    }
-  }
-  return ids;
 }

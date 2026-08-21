@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import {
+  Database,
   FileCode2,
   FileText,
   Files,
@@ -16,10 +17,13 @@ import type {
 } from '@/lib/api-client';
 import { TransformEditor } from './transform/TransformEditor';
 import { TemplateEditorTab } from './template/TemplateEditorTab';
+import { DataSourcesTab } from './data-context/DataSourcesTab';
+import { ReportBuilderButton } from './ReportBuilderButton';
 
-type TabValue = 'transform' | 'template';
+type TabValue = 'data-sources' | 'transform' | 'template';
 
 const TABS: Array<{ id: TabValue; label: string; icon: typeof FileCode2 }> = [
+  { id: 'data-sources', label: 'Data Sources', icon: Database },
   { id: 'transform', label: 'Transform', icon: FileCode2 },
   { id: 'template', label: 'Template', icon: FileText },
 ];
@@ -38,7 +42,7 @@ export function DocumentTemplateDetailClient({
   folderSetting: initialFolder,
 }: DocumentTemplateDetailClientProps) {
   const [setting, setSetting] = useState(initialSetting);
-  const [activeTab, setActiveTab] = useState<TabValue>('transform');
+  const [activeTab, setActiveTab] = useState<TabValue>('data-sources');
 
   const isDefault = setting.documentType === 'default';
 
@@ -57,6 +61,14 @@ export function DocumentTemplateDetailClient({
             <h1 className="truncate text-lg font-semibold leading-tight">
               {setting.label}
             </h1>
+            {!isDefault && (
+              <div className="ml-auto">
+                <ReportBuilderButton
+                  documentType={setting.documentType}
+                  label={setting.label}
+                />
+              </div>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pl-20 text-xs">
             <div className="flex items-baseline gap-1.5">
@@ -99,6 +111,23 @@ export function DocumentTemplateDetailClient({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4">
+          {activeTab === 'data-sources' && (
+            isDefault ? (
+              <div className="rounded-lg border border-slate-200 bg-white px-5 py-6">
+                <h2 className="text-sm font-semibold text-slate-900">Data sources</h2>
+                <p className="mt-2 max-w-2xl text-sm text-slate-500">
+                  The default/fallback scenario does not support data context configuration.
+                  Configure data sources on individual document type pages instead.
+                </p>
+              </div>
+            ) : (
+              <DataSourcesTab
+                documentType={setting.documentType}
+                label={setting.label}
+              />
+            )
+          )}
+
           {activeTab === 'transform' && (
             isDefault ? (
               <div className="rounded-lg border border-slate-200 bg-white px-5 py-6">

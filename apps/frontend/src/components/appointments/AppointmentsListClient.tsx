@@ -15,18 +15,27 @@ import {
   StatusFilterMenu,
   commitColumnFilterSelection,
   buildColumnFilterOptions,
-  columnFilterKey,
+  columnFilterToIdsParam,
   type SortOption,
 } from '@/components/shared/list-filters';
 import { TablePagination } from '@/components/shared/table-pagination';
 import {
   AppointmentsTable,
-  appointmentTypeName,
 } from '@/components/appointments/AppointmentsTable';
 import { AppointmentFormDrawer } from '@/components/forms/AppointmentFormDrawer';
-import { resolveJobName, type JobOption } from '@/components/shared/job-label';
+import { type JobOption } from '@/components/shared/job-label';
+import {
+  buildServerJobFilterOptions,
+  resolveServerJobFilterSelection,
+  selectedJobFilterLabels,
+  parseSelectedJobIds,
+  toServerJobFetchParams,
+  writeServerJobFilterParams,
+} from '@/components/shared/server-job-filter';
 import {
   fetchAppointmentsAction,
+  fetchAppointmentFilterLocationsAction,
+  fetchAppointmentFilterTypesAction,
 } from '@/app/(app)/appointments/actions';
 import { useEntityDrawer } from '@/components/layout/EntityDrawerHost';
 import type { Appointment, Job, Claim } from '@/types/api';
@@ -63,24 +72,28 @@ export function AppointmentsListClient({
   const [sortField, setSortField] = useState('start_date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
-  const [statusNameFilter, setStatusNameFilter] = useState<Set<string>>(new Set());
-  const [statusNameFilterActive, setStatusNameFilterActive] = useState(false);
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
   const [typeFilterActive, setTypeFilterActive] = useState(false);
-  const [jobFilter, setJobFilter] = useState<Set<string>>(new Set());
-  const [jobFilterActive, setJobFilterActive] = useState(false);
+  const [typeOptions, setTypeOptions] = useState<{ id: string; name: string }[]>(
+    [],
+  );
   const [locationFilter, setLocationFilter] = useState<Set<string>>(new Set());
   const [locationFilterActive, setLocationFilterActive] = useState(false);
+  const [locationOptions, setLocationOptions] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
   const limit = 20;
-  const statusParam = useMemo(
-    () => [...statusFilter].sort().join(',') || undefined,
-    [statusFilter],
-  );
+  const statusParam = useMemo(() => {
+    if (statusFilter.has('__none__')) return '__none__';
+    if (statusFilter.size === 0 || statusFilter.size === STATUS_OPTIONS.length) {
+      return undefined;
+    }
+    return [...statusFilter].sort().join(',');
+  }, [statusFilter]);
 
   const jobId = searchParams.get('jobId') ?? undefined;
+  const jobIdsParam = searchParams.get('jobIds') ?? undefined;
   const openAppointmentId = searchParams.get('open');
   const jobNameById = useMemo(() => {
     const map: Record<string, string> = {};
@@ -88,32 +101,122 @@ export function AppointmentsListClient({
     return map;
   }, [jobs]);
 
+  const filterJobs = useMemo(
+    () => jobs.map((j) => ({ id: j.id, label: j.label })),
+    [jobs],
+  );
+  const uniqueJobs = useMemo(
+    () => buildServerJobFilterOptions(filterJobs),
+    [filterJobs],
+  );
+  const selectedJobIds = useMemo(
+    () => parseSelectedJobIds(jobId, jobIdsParam),
+    [jobId, jobIdsParam],
+  );
+  const { selected: jobFilter, active: jobFilterActive } = useMemo(
+    () =>
+      selectedJobFilterLabels({
+        jobId,
+        jobIds: jobIdsParam
+          ? jobIdsParam.split(',').map((id) => id.trim()).filter(Boolean)
+          : undefined,
+        jobs: filterJobs,
+      }),
+    [jobId, jobIdsParam, filterJobs],
+  );
+  const { jobId: fetchJobId, jobIds: fetchJobIds } = useMemo(
+    () => toServerJobFetchParams(selectedJobIds),
+    [selectedJobIds],
+  );
+
+  const statusColumnActive =
+    statusFilter.has('__none__') ||
+    (statusFilter.size > 0 && statusFilter.size < STATUS_OPTIONS.length);
+  const statusColumnSelected = statusFilter.has('__none__')
+    ? new Set<string>()
+    : statusFilter.size === 0
+      ? new Set(STATUS_OPTIONS.map((o) => o.name))
+      : statusFilter;
+
+  const locationParam = useMemo(() => {
+    if (!locationFilterActive) return undefined;
+    if (locationFilter.size === 0) return '__none__';
+    if (
+      locationOptions.length > 0 &&
+      locationFilter.size >= locationOptions.length
+    ) {
+      return undefined;
+    }
+    return [...locationFilter].sort().join(',');
+  }, [locationFilterActive, locationFilter, locationOptions]);
+
+  const appointmentTypeLookupIdsParam = useMemo(
+    () => columnFilterToIdsParam(typeFilterActive, typeFilter, typeOptions),
+    [typeFilterActive, typeFilter, typeOptions],
+  );
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      if (
+        statusParam === '__none__' ||
+        locationParam === '__none__' ||
+        appointmentTypeLookupIdsParam === null
+      ) {
+        setAppointments([]);
+        setTotal(0);
+        return;
+      }
       const res = await fetchAppointmentsAction({
         page,
         limit,
         search: search || undefined,
         status: statusParam,
+        location: locationParam,
+        appointmentTypeLookupIds: appointmentTypeLookupIdsParam,
         sort: sortField,
         order: sortOrder,
-        jobId,
+        jobId: fetchJobId,
+        jobIds: fetchJobIds,
       });
       setAppointments(res.data);
       setTotal(res.total);
     } finally {
       setLoading(false);
     }
-  }, [page, search, sortField, sortOrder, statusParam, jobId]);
+  }, [
+    page,
+    search,
+    sortField,
+    sortOrder,
+    statusParam,
+    locationParam,
+    appointmentTypeLookupIdsParam,
+    fetchJobId,
+    fetchJobIds,
+  ]);
 
   useEffect(() => {
     load();
   }, [load]);
 
   useEffect(() => {
+    fetchAppointmentFilterLocationsAction().then(setLocationOptions);
+    fetchAppointmentFilterTypesAction().then(setTypeOptions);
+  }, []);
+
+  useEffect(() => {
     setPage(1);
-  }, [search, sortField, sortOrder, statusParam]);
+  }, [
+    search,
+    sortField,
+    sortOrder,
+    statusParam,
+    locationParam,
+    appointmentTypeLookupIdsParam,
+    jobId,
+    jobIdsParam,
+  ]);
 
   useEffect(() => {
     if (!openAppointmentId) return;
@@ -160,26 +263,18 @@ export function AppointmentsListClient({
     [],
   );
 
-  const uniqueTypes = useMemo(() => {
-    const names = new Set<string>();
-    for (const a of appointments) {
-      const name = appointmentTypeName(a).trim();
-      if (name && name !== '—') names.add(name);
-    }
-    return [...names].sort((a, b) => a.localeCompare(b));
-  }, [appointments]);
-
-  const uniqueJobs = useMemo(
+  const uniqueTypes = useMemo(
     () =>
-      buildColumnFilterOptions(
-        appointments.map((a) => resolveJobName(a.jobId, jobNameById)),
+      [...new Set(typeOptions.map((t) => t.name.trim()).filter(Boolean))].sort(
+        (a, b) => a.localeCompare(b),
       ),
-    [appointments, jobNameById],
+    [typeOptions],
   );
 
+
   const uniqueLocations = useMemo(
-    () => buildColumnFilterOptions(appointments.map((a) => a.location)),
-    [appointments],
+    () => buildColumnFilterOptions(locationOptions, { alwaysIncludeBlank: false }),
+    [locationOptions],
   );
 
   const applyStatusNameFilter = (next: Set<string>) => {
@@ -187,8 +282,13 @@ export function AppointmentsListClient({
       next,
       optionCount: uniqueStatuses.length,
     });
-    setStatusNameFilter(committed.selected);
-    setStatusNameFilterActive(committed.active);
+    if (!committed.active) {
+      setStatusFilter(new Set());
+    } else if (committed.selected.size === 0) {
+      setStatusFilter(new Set(['__none__']));
+    } else {
+      setStatusFilter(committed.selected);
+    }
     setPage(1);
   };
 
@@ -203,13 +303,16 @@ export function AppointmentsListClient({
   };
 
   const applyJobFilter = (next: Set<string>) => {
-    const committed = commitColumnFilterSelection({
+    const resolved = resolveServerJobFilterSelection({
       next,
-      optionCount: uniqueJobs.length,
+      options: uniqueJobs,
+      jobs: filterJobs,
     });
-    setJobFilter(committed.selected);
-    setJobFilterActive(committed.active);
     setPage(1);
+    const params = new URLSearchParams(searchParams.toString());
+    writeServerJobFilterParams(params, resolved);
+    const qs = params.toString();
+    router.replace(qs ? `/appointments?${qs}` : '/appointments', { scroll: false });
   };
 
   const applyLocationFilter = (next: Set<string>) => {
@@ -222,64 +325,7 @@ export function AppointmentsListClient({
     setPage(1);
   };
 
-  const visibleAppointments = useMemo(() => {
-    let rows = appointments;
-
-    if (statusNameFilterActive) {
-      if (statusNameFilter.size === 0) {
-        rows = [];
-      } else {
-        rows = rows.filter((a) => {
-          const name = a.status?.trim();
-          return name ? statusNameFilter.has(name) : false;
-        });
-      }
-    }
-
-    if (typeFilterActive) {
-      if (typeFilter.size === 0) {
-        rows = [];
-      } else {
-        rows = rows.filter((a) => {
-          const name = appointmentTypeName(a).trim();
-          return name && name !== '—' ? typeFilter.has(name) : false;
-        });
-      }
-    }
-
-    if (jobFilterActive) {
-      if (jobFilter.size === 0) {
-        rows = [];
-      } else {
-        rows = rows.filter((a) =>
-          jobFilter.has(columnFilterKey(resolveJobName(a.jobId, jobNameById))),
-        );
-      }
-    }
-
-    if (locationFilterActive) {
-      if (locationFilter.size === 0) {
-        rows = [];
-      } else {
-        rows = rows.filter((a) =>
-          locationFilter.has(columnFilterKey(a.location)),
-        );
-      }
-    }
-
-    return rows;
-  }, [
-    appointments,
-    statusNameFilterActive,
-    statusNameFilter,
-    typeFilterActive,
-    typeFilter,
-    jobFilterActive,
-    jobFilter,
-    locationFilterActive,
-    locationFilter,
-    jobNameById,
-  ]);
+  const visibleAppointments = appointments;
 
   const breakdown = computeStatusBreakdown(visibleAppointments, (a) => a.status);
 
@@ -350,8 +396,8 @@ export function AppointmentsListClient({
           jobNameById={jobNameById}
           statusColumnFilter={{
             options: uniqueStatuses,
-            selected: statusNameFilter,
-            active: statusNameFilterActive,
+            selected: statusColumnSelected,
+            active: statusColumnActive,
             onApply: applyStatusNameFilter,
             menuTitle: 'Filter by status',
             itemNoun: { singular: 'status', plural: 'statuses' },
@@ -366,7 +412,7 @@ export function AppointmentsListClient({
           }}
           jobColumnFilter={{
             options: uniqueJobs,
-            selected: jobFilter,
+            selected: jobFilterActive ? jobFilter : new Set(uniqueJobs),
             active: jobFilterActive,
             onApply: applyJobFilter,
             menuTitle: 'Filter by job',

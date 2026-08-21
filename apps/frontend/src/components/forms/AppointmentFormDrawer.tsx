@@ -36,7 +36,7 @@ import {
   CreateSubmitOverlay,
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
-import { createAppointmentAction, updateAppointmentAction, searchContactsAction } from '@/app/(app)/mutations';
+import { createAppointmentAction, updateAppointmentAction, searchContactsAction, getMeContactAction } from '@/app/(app)/mutations';
 import { fetchAppointmentAction } from '@/app/(app)/appointments/actions';
 import { JobSelectField } from '@/components/forms/JobSelectField';
 import type { JobOption } from '@/components/shared/job-label';
@@ -121,6 +121,19 @@ export interface JobParty {
   type?: string | { name?: string; externalReference?: string };
 }
 
+export type AppointmentCreateDefaults = Partial<{
+  name: string;
+  appointmentType: string;
+  location: string;
+  timezone: string;
+  startDate: string;
+  startTime: string;
+  endDate: string;
+  endTime: string;
+  address: string;
+  description: string;
+}>;
+
 export interface AppointmentFormDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -129,7 +142,11 @@ export interface AppointmentFormDrawerProps {
   /** Job options for list-page create flow. */
   jobs?: JobOption[];
   jobParties?: JobParty[];
+  /** Prefill Contacts when opening create from job detail. */
+  defaultSelectedParties?: JobParty[];
   defaultAddress?: string;
+  /** Prefill create-mode fields (ignored when editing). */
+  createDefaults?: AppointmentCreateDefaults;
   appointment?: Appointment;
   /** Fetch-by-id when opened from Schedule, chat, or MCP (edit mode). */
   appointmentId?: string | null;
@@ -314,7 +331,9 @@ export function AppointmentFormDrawer({
   jobId,
   jobs,
   jobParties = [],
+  defaultSelectedParties,
   defaultAddress,
+  createDefaults,
   appointment: appointmentProp,
   appointmentId,
   onSuccess,
@@ -406,26 +425,59 @@ export function AppointmentFormDrawer({
       });
       setAssignees([]);
       setSelectedParties([]);
-    } else {
-      const today = todayDateString();
-      form.reset({
-        jobId: jobId ?? '',
-        name: '',
-        appointmentType: 'Inspection',
-        location: 'ONSITE',
-        timezone: 'Australia/Brisbane',
-        startDate: today,
-        startTime: '19:15',
-        endDate: today,
-        endTime: '20:15',
-        address: defaultAddress ?? '',
-        description: '',
-      });
-      setAssignees([]);
-      setSelectedParties([]);
+      setError(null);
+      return;
     }
+
+    const today = todayDateString();
+    const startDate = createDefaults?.startDate ?? today;
+    const startTime = createDefaults?.startTime ?? '19:15';
+    const endDate = createDefaults?.endDate ?? startDate;
+    const endTime = createDefaults?.endTime ?? oneHourLater(startTime);
+    form.reset({
+      jobId: jobId ?? '',
+      name: createDefaults?.name ?? '',
+      appointmentType: createDefaults?.appointmentType ?? 'Inspection',
+      location: createDefaults?.location ?? 'ONSITE',
+      timezone: createDefaults?.timezone ?? 'Australia/Brisbane',
+      startDate,
+      startTime,
+      endDate,
+      endTime,
+      address: createDefaults?.address ?? defaultAddress ?? '',
+      description: createDefaults?.description ?? '',
+    });
+    setSelectedParties(defaultSelectedParties ?? []);
+    setAssignees([]);
     setError(null);
-  }, [open, jobId, defaultAddress, form, appointment, loadingAppointment, appointmentId]);
+
+    let cancelled = false;
+    void getMeContactAction().then((me) => {
+      if (cancelled || !me) return;
+      setAssignees([
+        {
+          id: me.id,
+          type: 'CONTACT',
+          name: me.name,
+          email: me.email,
+        },
+      ]);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    open,
+    jobId,
+    defaultAddress,
+    createDefaults,
+    defaultSelectedParties,
+    form,
+    appointment,
+    loadingAppointment,
+    appointmentId,
+  ]);
 
   const searchContacts = useCallback(
     async (q: string): Promise<PersonRef[]> => {

@@ -17,6 +17,8 @@ export async function fetchAssessmentsAction(params?: {
   limit?: number;
   status?: string;
   jobId?: string;
+  jobIds?: string[];
+  search?: string;
 }): Promise<PaginatedResponse<Assessment>> {
   const api = await getApi();
   if (!api) return { data: [], total: 0 };
@@ -26,6 +28,8 @@ export async function fetchAssessmentsAction(params?: {
       limit: params?.limit ?? 20,
       status: params?.status,
       jobId: params?.jobId,
+      jobIds: params?.jobIds,
+      search: params?.search,
     });
   } catch (err) {
     console.error('[assessments/actions.fetchAssessmentsAction]', err);

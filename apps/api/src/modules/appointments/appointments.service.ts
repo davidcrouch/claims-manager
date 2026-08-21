@@ -34,12 +34,25 @@ export class AppointmentsService {
     limit?: number;
     search?: string;
     status?: string;
+    location?: string;
+    appointmentTypeLookupIds?: string;
     sort?: string;
     order?: 'asc' | 'desc';
     jobId?: string;
+    jobIds?: string[];
   }) {
     const tenantId = this.tenantContext.getTenantId();
     return this.appointmentsRepo.findAll({ tenantId, ...params });
+  }
+
+  async findFilterLocations() {
+    const tenantId = this.tenantContext.getTenantId();
+    return this.appointmentsRepo.findDistinctLocations({ tenantId });
+  }
+
+  async findFilterTypes() {
+    const tenantId = this.tenantContext.getTenantId();
+    return this.appointmentsRepo.findFilterTypes({ tenantId });
   }
 
   async findOne(params: { id: string }) {

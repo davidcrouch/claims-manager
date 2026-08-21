@@ -11,6 +11,7 @@ import {
 import { TenantContext } from '../../tenant/tenant-context';
 import { CrunchworkService } from '../../crunchwork/crunchwork.service';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
+import { OutboundEventsService } from '../outbound-events/outbound-events.service';
 import { CreateAssessmentDto } from './dto/create-assessment.dto';
 import { UpdateAssessmentDto } from './dto/update-assessment.dto';
 import {
@@ -39,12 +40,20 @@ export class AssessmentsService {
     private readonly tenantContext: TenantContext,
     private readonly crunchworkService: CrunchworkService,
     @Optional() private readonly connectionResolver?: ConnectionResolverService,
+    @Optional() private readonly outboundEvents?: OutboundEventsService,
   ) {}
 
-  async findAll(params: { page?: number; limit?: number; status?: string; jobId?: string }) {
+  async findAll(params: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    jobId?: string;
+    jobIds?: string[];
+    search?: string;
+  }) {
     const tenantId = this.tenantContext.getTenantId();
     this.logger.debug(
-      `[AssessmentsService.findAll] tenantId=${tenantId} jobId=${params.jobId ?? 'none'}`,
+      `[AssessmentsService.findAll] tenantId=${tenantId} jobId=${params.jobId ?? 'none'} jobIds=${params.jobIds?.length ?? 0}`,
     );
     return this.assessmentsRepo.findAll({ tenantId, ...params });
   }
@@ -228,6 +237,16 @@ export class AssessmentsService {
         updatedByUserId: params.userId ?? assessment.updatedByUserId,
       },
     });
+
+    if (this.outboundEvents && job.id) {
+      this.outboundEvents.emitDocumentUploaded({
+        documentId: assessment.id,
+        jobId: job.id,
+        tenantId,
+        documentType: 'Assessment Report',
+        uploadedAt: new Date().toISOString(),
+      }).catch(() => {});
+    }
 
     return updated ?? assessment;
   }

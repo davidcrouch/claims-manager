@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import type { ProjectionUseCase, ProjectionResult } from './use-case.interface';
 import type { DrizzleDbOrTx } from '../../../database/drizzle.module';
 import { TaskTransformer } from '../transformers/task.transformer';
@@ -9,6 +9,7 @@ import {
   ExternalLinksRepository,
   type TaskInsert,
 } from '../../../database/repositories';
+import { TaskTypeMappingsService } from '../../tasks/task-type-mappings.service';
 
 @Injectable()
 export class ProjectTaskUseCase implements ProjectionUseCase {
@@ -19,6 +20,7 @@ export class ProjectTaskUseCase implements ProjectionUseCase {
     private readonly entityRelationship: EntityRelationshipService,
     private readonly tasksRepo: TasksRepository,
     private readonly externalLinksRepo: ExternalLinksRepository,
+    @Optional() private readonly taskTypeMappings?: TaskTypeMappingsService,
   ) {}
 
   async execute(params: {
@@ -91,6 +93,13 @@ export class ProjectTaskUseCase implements ProjectionUseCase {
       (result.entity as Record<string, unknown>).relatedEntityId = resolvedEntityId;
     }
 
+    // Infer taskType from title when not explicitly set on the payload entity
+    await this.applyInferredTaskType({
+      tenantId,
+      entity: result.entity as Record<string, unknown>,
+      existingTaskId: existingLink?.internalEntityId,
+    });
+
     // 4. Upsert
     let taskId: string;
     if (existingLink) {
@@ -122,5 +131,41 @@ export class ProjectTaskUseCase implements ProjectionUseCase {
     }
 
     return { status: 'completed', internalEntityId: taskId, internalEntityType: 'task' };
+  }
+
+  private async applyInferredTaskType(params: {
+    tenantId: string;
+    entity: Record<string, unknown>;
+    existingTaskId?: string;
+  }): Promise<void> {
+    if (!this.taskTypeMappings) return;
+
+    const explicit =
+      typeof params.entity.taskType === 'string' ? params.entity.taskType.trim() : '';
+    if (explicit) return;
+
+    // On update, preserve an existing type if already set
+    if (params.existingTaskId) {
+      const existing = await this.tasksRepo.findOne({
+        id: params.existingTaskId,
+        tenantId: params.tenantId,
+      });
+      const existingType =
+        typeof existing?.taskType === 'string' ? existing.taskType.trim() : '';
+      if (existingType) return;
+    }
+
+    const title =
+      typeof params.entity.name === 'string' ? params.entity.name : undefined;
+    const resolved = await this.taskTypeMappings.resolveFromTitle({
+      tenantId: params.tenantId,
+      title,
+    });
+    if (!resolved) return;
+
+    params.entity.taskType = resolved;
+    this.logger.log(
+      `ProjectTaskUseCase.applyInferredTaskType — title="${title}" → type="${resolved}"`,
+    );
   }
 }

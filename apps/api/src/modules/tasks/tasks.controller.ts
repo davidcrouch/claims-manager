@@ -8,31 +8,50 @@ import { P } from '../../auth/permission-constants';
 export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
+  @Get('filter-options')
+  @RequirePermission(P.workflows.read)
+  async findFilterOptions() {
+    return this.tasksService.findFilterOptions();
+  }
+
   @Get()
   @RequirePermission(P.workflows.read)
   async findAll(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('jobId') jobId?: string,
+    @Query('jobIds') jobIds?: string,
     @Query('claimId') claimId?: string,
     @Query('status') status?: string,
     @Query('priority') priority?: string,
     @Query('entityType') entityType?: string,
     @Query('entityId') entityId?: string,
     @Query('assignedToUserId') assignedToUserId?: string,
+    @Query('assignedToUserIds') assignedToUserIds?: string,
+    @Query('search') search?: string,
+    @Query('names') names?: string,
+    @Query('taskTypes') taskTypes?: string,
     @Query('overdue') overdue?: string,
     @Query('sort') sort?: string,
   ) {
+    const jobIdList = jobIds
+      ? jobIds.split(',').map((id) => id.trim()).filter((id) => id.length > 0)
+      : undefined;
     return this.tasksService.findAll({
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
       jobId,
+      jobIds: jobIdList && jobIdList.length > 0 ? jobIdList : undefined,
       claimId,
       status,
       priority,
       entityType,
       entityId,
       assignedToUserId,
+      assignedToUserIds,
+      search,
+      names,
+      taskTypes,
       overdue: overdue === 'true' || overdue === '1',
       sort,
     });

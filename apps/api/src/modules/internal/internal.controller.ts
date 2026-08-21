@@ -1,14 +1,3 @@
-/**
- * InternalController
- *
- * Service-to-service surface protected by a shared-secret header
- * (`x-internal-token`). Only auth-server is expected to call these
- * routes. Never expose publicly; Caddy does not route `/internal/*` by
- * default, and the compose stack only exposes api-server on the internal
- * network.
- *
- * The prefix is `/api/v1/internal` (the global API prefix applies).
- */
 import {
   Body,
   Controller,
@@ -22,6 +11,8 @@ import { Public } from '../../auth/decorators/public.decorator';
 import { InternalTokenGuard } from './internal-token.guard';
 import { InternalService, type SeedTenantOutcome } from './internal.service';
 import { SeedTenantDto } from './seed-tenant.dto';
+import { EnsureUserContactDto } from './ensure-user-contact.dto';
+import { ContactsService } from '../contacts/contacts.service';
 
 const LOG = 'InternalController';
 
@@ -31,7 +22,10 @@ const LOG = 'InternalController';
 export class InternalController {
   private readonly logger = new Logger(LOG);
 
-  constructor(private readonly internalService: InternalService) {}
+  constructor(
+    private readonly internalService: InternalService,
+    private readonly contactsService: ContactsService,
+  ) {}
 
   /**
    * Seed a newly provisioned tenant. Intended to be called by auth-server
@@ -80,6 +74,38 @@ export class InternalController {
       );
       // Still 202 — signup must not fail because of a seed hiccup.
       return { status: 'seeded', tenantId: dto.tenantId };
+    }
+  }
+
+  /**
+   * Ensure a contacts row exists for a user after signup / invite accept.
+   * Best-effort: never fails the auth-server caller hard — returns 202.
+   */
+  @Post('ensure-user-contact')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async ensureUserContact(@Body() dto: EnsureUserContactDto): Promise<{
+    status: 'ok' | 'error';
+    contactId?: string;
+  }> {
+    const fn = 'ensureUserContact';
+    this.logger.log(
+      `[${LOG}.${fn}] tenantId=${dto.tenantId} email=${dto.email}`,
+    );
+    try {
+      const contact = await this.contactsService.ensureFromPerson({
+        tenantId: dto.tenantId,
+        email: dto.email,
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        name: dto.name,
+      });
+      return { status: 'ok', contactId: contact.id };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(
+        `[${LOG}.${fn}] failed tenantId=${dto.tenantId} error=${message}`,
+      );
+      return { status: 'error' };
     }
   }
 }

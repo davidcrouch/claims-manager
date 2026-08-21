@@ -72,7 +72,17 @@ export class CatalogItemsRepository {
       conditions.push(eq(catalogItems.typeId, params.typeId));
     }
     if (params.categoryIds && params.categoryIds.length > 0) {
-      conditions.push(inArray(catalogItems.categoryId, params.categoryIds));
+      const hasUncategorized = params.categoryIds.includes('__uncategorized__');
+      const realIds = params.categoryIds.filter((id) => id !== '__uncategorized__');
+      if (hasUncategorized && realIds.length > 0) {
+        conditions.push(
+          or(inArray(catalogItems.categoryId, realIds), isNull(catalogItems.categoryId))!,
+        );
+      } else if (hasUncategorized) {
+        conditions.push(isNull(catalogItems.categoryId));
+      } else {
+        conditions.push(inArray(catalogItems.categoryId, realIds));
+      }
     }
     if (params.isActive !== undefined) {
       conditions.push(eq(catalogItems.isActive, params.isActive));
@@ -108,6 +118,37 @@ export class CatalogItemsRepository {
     ]);
 
     return { data, total: countResult[0]?.count ?? 0 };
+  }
+
+  async countByCategory(params: {
+    tenantId: string;
+    catalogId: string;
+    search?: string;
+  }): Promise<Array<{ categoryId: string | null; count: number }>> {
+    const conditions = [
+      eq(catalogItems.tenantId, params.tenantId),
+      eq(catalogItems.catalogId, params.catalogId),
+      isNull(catalogItems.deletedAt),
+      eq(catalogItems.isActive, true),
+    ];
+    if (params.search?.trim()) {
+      const term = `%${params.search.trim()}%`;
+      conditions.push(
+        or(
+          ilike(catalogItems.code, term),
+          ilike(catalogItems.name, term),
+          ilike(catalogItems.description, term),
+        )!,
+      );
+    }
+    return this.db
+      .select({
+        categoryId: catalogItems.categoryId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(catalogItems)
+      .where(and(...conditions))
+      .groupBy(catalogItems.categoryId);
   }
 
   async findById(params: {
@@ -200,8 +241,29 @@ export class CatalogItemsRepository {
     return row ?? null;
   }
 
+  /** Bulk-fetch provider_codes for a set of catalog item IDs. */
+  async findProviderCodes(params: {
+    tenantId: string;
+    ids: string[];
+  }): Promise<Map<string, string[]>> {
+    if (params.ids.length === 0) return new Map();
+    const rows = await this.db
+      .select({ id: catalogItems.id, providerCodes: catalogItems.providerCodes })
+      .from(catalogItems)
+      .where(
+        and(
+          eq(catalogItems.tenantId, params.tenantId),
+          inArray(catalogItems.id, params.ids),
+        ),
+      );
+    const map = new Map<string, string[]>();
+    for (const row of rows) {
+      map.set(row.id, Array.isArray(row.providerCodes) ? row.providerCodes : []);
+    }
+    return map;
+  }
+
   /**
-   * Bulk-fetch external references for a set of catalog item IDs.
    * Returns a Map of internalId -> externalReference (only items that have one).
    */
   async findExternalReferences(params: {

@@ -103,6 +103,31 @@ export function registerJobsTools(server: McpServer, api: ClaimsApiClient): void
   );
 
   server.tool(
+    'calculate_dates',
+    categoryDesc(CAT, 'Calculate SLA-based workflow dates for a job (attendanceDueDate, submissionDueDate).'),
+    {
+      jobId: z.string().describe('Job UUID'),
+      contactDate: z.string().optional().describe('ISO date when customer was contacted (for attendanceDueDate)'),
+      attendanceDate: z.string().optional().describe('ISO date of site attendance (for submissionDueDate)'),
+    },
+    async (args) => {
+      try {
+        return toolResult(
+          await api.request(`/jobs/${args.jobId}/calculate-dates`, {
+            method: 'POST',
+            body: {
+              contactDate: args.contactDate,
+              attendanceDate: args.attendanceDate,
+            },
+          }),
+        );
+      } catch (err) {
+        return toolError(err);
+      }
+    },
+  );
+
+  server.tool(
     'add_job_contacts',
     categoryDesc(CAT, 'Add contacts to a job.'),
     {

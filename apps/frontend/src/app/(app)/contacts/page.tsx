@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { ContactsListClient } from '@/components/contacts/ContactsListClient';
-import { buildJobNameById } from '@/components/shared/job-label';
+import { buildJobNameById, jobDisplayName } from '@/components/shared/job-label';
 import type { PaginatedResponse, Contact, Job, Claim } from '@/types/api';
 
 export const metadata = { title: 'Contacts — EnsureOS' };
@@ -9,30 +9,41 @@ export const metadata = { title: 'Contacts — EnsureOS' };
 export default async function ContactsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ jobId?: string }>;
+  searchParams: Promise<{ jobId?: string; jobIds?: string; unlinkedOnly?: string }>;
 }) {
   const api = await getServerApiClient();
   if (!api) redirect('/api/auth/login');
 
   const params = await searchParams;
+  const jobIds = params.jobIds
+    ? params.jobIds.split(',').map((id) => id.trim()).filter(Boolean)
+    : undefined;
+  const unlinkedOnly = params.unlinkedOnly === '1' || params.unlinkedOnly === 'true';
 
   const empty: PaginatedResponse<Contact> = { data: [], total: 0 };
-  const emptyJobs: PaginatedResponse<Job> = { data: [], total: 0 };
 
-  const [contactsRes, jobsRes] = await Promise.all([
-    api.getContacts().catch((err: unknown) => {
+  const [contactsRes, filterJobsRes] = await Promise.all([
+    api
+      .getContacts({
+        jobId: params.jobId,
+        jobIds: jobIds && jobIds.length > 0 ? jobIds : undefined,
+        unlinkedOnly: unlinkedOnly || undefined,
+        // ContactsListClient defaults to Active tab
+        archived: false,
+      })
+      .catch((err: unknown) => {
+        console.error(
+          'frontend:ContactsPage - getContacts failed:',
+          err instanceof Error ? err.message : err,
+        );
+        return empty;
+      }),
+    api.getContactFilterJobs().catch((err: unknown) => {
       console.error(
-        'frontend:ContactsPage - getContacts failed:',
+        'frontend:ContactsPage - getContactFilterJobs failed:',
         err instanceof Error ? err.message : err,
       );
-      return empty;
-    }),
-    api.getJobs({ limit: 100 }).catch((err: unknown) => {
-      console.error(
-        'frontend:ContactsPage - getJobs failed:',
-        err instanceof Error ? err.message : err,
-      );
-      return emptyJobs;
+      return { jobs: [], hasUnlinked: false };
     }),
   ]);
 
@@ -51,12 +62,33 @@ export default async function ContactsPage({
     }
   }
 
+  const filterJobs = filterJobsRes.jobs ?? [];
+  const jobNameById = buildJobNameById(
+    filterJobs.map((j) => ({
+      id: j.id,
+      name: j.name ?? undefined,
+      externalReference: j.externalReference ?? undefined,
+    })),
+  );
+  if (job) {
+    jobNameById[job.id] = jobDisplayName(job);
+  }
+
   return (
     <ContactsListClient
       initialData={contactsRes ?? empty}
       job={job}
       parentClaim={parentClaim}
-      jobNameById={buildJobNameById(jobsRes?.data ?? [])}
+      jobNameById={jobNameById}
+      filterJobs={filterJobs.map((j) => ({
+        id: j.id,
+        label: jobDisplayName({
+          id: j.id,
+          name: j.name ?? undefined,
+          externalReference: j.externalReference ?? undefined,
+        }),
+      }))}
+      hasUnlinkedContacts={Boolean(filterJobsRes.hasUnlinked)}
     />
   );
 }

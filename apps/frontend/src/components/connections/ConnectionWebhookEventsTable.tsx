@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -12,8 +12,6 @@ import {
   type StatusOption,
   buildSortString,
   parseSort,
-  compareDates,
-  compareValues,
 } from '@/components/shared/list-filters';
 import { fetchConnectionWebhookEventsAction } from '@/app/(app)/connections/actions';
 import type { WebhookEvent, PaginatedResponse } from '@/types/api';
@@ -82,27 +80,42 @@ export function ConnectionWebhookEventsTable({
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sort, setSort] = useState<string>(
     buildSortString('created_at', 'desc'),
   );
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const lastFetchKeyRef = useRef<string | null>(null);
   const limit = 20;
 
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const statusParam = useMemo(() => {
+    if (statusFilter.size === 0) return undefined;
+    if (statusFilter.size === STATUS_OPTIONS.length) return undefined;
+    return [...statusFilter].sort().join(',');
+  }, [statusFilter]);
+
   const fetchEvents = useCallback(async () => {
+    const fetchKey = `${connectionId}|${page}|${debouncedSearch}|${sort}|${statusParam ?? ''}`;
+    if (lastFetchKeyRef.current === fetchKey) return;
+    lastFetchKeyRef.current = fetchKey;
+
     setLoading(true);
-    // Backend accepts a single status; pass it only when exactly one is
-    // selected. Multi-select status is filtered client-side on the page.
-    const serverStatus =
-      statusFilter.size === 1 ? [...statusFilter][0] : undefined;
     const result = await fetchConnectionWebhookEventsAction(connectionId, {
       page,
       limit,
-      status: serverStatus,
+      status: statusParam,
+      search: debouncedSearch || undefined,
+      sort,
     });
     setData(result);
     setLoading(false);
-  }, [connectionId, page, statusFilter]);
+  }, [connectionId, page, debouncedSearch, sort, statusParam]);
 
   useEffect(() => {
     void fetchEvents();
@@ -121,14 +134,19 @@ export function ConnectionWebhookEventsTable({
       const defaultOrder = field === 'created_at' ? 'desc' : 'asc';
       setSort(buildSortString(field, defaultOrder));
     }
+    setPage(1);
   };
 
   const setStatusChecked = (id: string, checked: boolean) => {
     setStatusFilter((prev) => {
-      const next = new Set(prev);
-      if (checked) next.add(id);
-      else next.delete(id);
-      return next;
+      const working =
+        prev.size === 0
+          ? new Set(STATUS_OPTIONS.map((o) => o.id))
+          : new Set(prev);
+      if (checked) working.add(id);
+      else working.delete(id);
+      if (working.size === STATUS_OPTIONS.length) return new Set();
+      return working;
     });
     setPage(1);
   };
@@ -139,45 +157,11 @@ export function ConnectionWebhookEventsTable({
   };
 
   const selectAllStatuses = () => {
-    setStatusFilter(new Set(STATUS_OPTIONS.map((o) => o.id)));
+    setStatusFilter(new Set());
     setPage(1);
   };
 
-  const visibleRows = useMemo(() => {
-    let rows = data?.data ?? [];
-
-    if (statusFilter.size > 1) {
-      rows = rows.filter((e) => statusFilter.has(e.processingStatus));
-    }
-
-    const q = search.trim().toLowerCase();
-    if (q) {
-      rows = rows.filter(
-        (e) =>
-          e.eventType.toLowerCase().includes(q) ||
-          (e.payloadEntityId ?? '').toLowerCase().includes(q),
-      );
-    }
-
-    const sorted = [...rows].sort((a, b) => {
-      switch (activeSortField) {
-        case 'event_type':
-          return compareValues(a.eventType, b.eventType, sortOrder);
-        case 'processing_status':
-          return compareValues(
-            a.processingStatus,
-            b.processingStatus,
-            sortOrder,
-          );
-        case 'created_at':
-        default:
-          return compareDates(a.createdAt, b.createdAt, sortOrder);
-      }
-    });
-
-    return sorted;
-  }, [data, search, statusFilter, activeSortField, sortOrder]);
-
+  const visibleRows = data?.data ?? [];
   const totalPages = data ? Math.max(1, Math.ceil(data.total / limit)) : 1;
 
   return (
@@ -193,12 +177,19 @@ export function ConnectionWebhookEventsTable({
         <SearchInput
           placeholder="Search by event type or entity ID..."
           value={search}
-          onChange={setSearch}
+          onChange={(value) => {
+            setSearch(value);
+            setPage(1);
+          }}
         />
 
         <StatusFilterMenu
           options={STATUS_OPTIONS}
-          selected={statusFilter}
+          selected={
+            statusFilter.size === 0
+              ? new Set(STATUS_OPTIONS.map((o) => o.id))
+              : statusFilter
+          }
           onSelectionChange={setStatusChecked}
           onClearAll={clearStatuses}
           onSelectAll={selectAllStatuses}

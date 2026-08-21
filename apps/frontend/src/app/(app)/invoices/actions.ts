@@ -11,7 +11,9 @@ export async function fetchInvoicesAction(params: {
   purchaseOrderId?: string;
   status?: string;
   sort?: string;
+  search?: string;
   jobId?: string;
+  jobIds?: string[];
 }): Promise<PaginatedResponse<Invoice> | null> {
   const session = await getSession();
   if (!session.authenticated) return null;
@@ -26,6 +28,8 @@ export async function fetchInvoicesAction(params: {
     purchaseOrderId: params.purchaseOrderId,
     status: params.status,
     sort: params.sort,
+    search: params.search,
     jobId: params.jobId,
+    jobIds: params.jobIds,
   });
 }

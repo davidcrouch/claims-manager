@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -17,7 +17,6 @@ import {
   Plus,
   User,
   Users,
-  Loader2,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -41,8 +40,7 @@ import type { WorkOrder, Job } from '@/types/api';
 import { PrintButton } from '@/components/shared/PrintButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { jobDisplayName } from '@/components/shared/job-label';
-import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
-import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
+import { PagedLineItemsTable } from '@/components/quotes/PagedLineItemsTable';
 import { groupsFromDocumentPayload } from '@/components/quotes/quote-line-items.utils';
 import { getWorkOrderLineItemsAction } from '@/app/(app)/work-orders/actions';
 import { EntityAttachmentsTab } from '@/components/shared/EntityAttachmentsTab';
@@ -443,70 +441,15 @@ function PartiesTab({ wo }: { wo: WorkOrder }) {
 }
 
 function LineItemsTab({ wo }: { wo: WorkOrder }) {
-  const [groups, setGroups] = useState<ApiGroup[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    const fallback = groupsFromDocumentPayload(wo.workOrderPayload as Record<string, unknown> | null);
-    const result = await getWorkOrderLineItemsAction(wo.id);
-    if (result.success && result.groups && result.groups.length > 0) {
-      setGroups(result.groups as ApiGroup[]);
-      setError(null);
-    } else if (fallback.length > 0) {
-      setGroups(fallback);
-      setError(null);
-    } else {
-      setGroups([]);
-      setError(result.error ?? null);
-    }
-    setLoading(false);
-  }, [wo.id, wo.workOrderPayload]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  if (loading) {
-    return (
-      <Card>
-        <CardContent className="flex items-center justify-center py-12">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (error && (!groups || groups.length === 0)) {
-    return (
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Line items</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-destructive">{error}</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (!groups || groups.length === 0) {
-    return (
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Line Items</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            No line items found for this work order.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return <QuoteLineItemsTable groups={groups} readOnly />;
+  return (
+    <PagedLineItemsTable
+      documentId={wo.id}
+      loadAction={getWorkOrderLineItemsAction}
+      fallbackGroups={groupsFromDocumentPayload(wo.workOrderPayload as Record<string, unknown> | null)}
+      emptyLabel="No line items found for this work order."
+      readOnly
+    />
+  );
 }
 
 function ActivitiesTab() {

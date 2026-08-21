@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, ne, sql } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { catalogs, catalogItems } from '../schema';
 
@@ -28,7 +28,7 @@ export class CatalogsRepository {
       .select()
       .from(catalogs)
       .where(and(...conditions))
-      .orderBy(desc(catalogs.createdAt));
+      .orderBy(desc(catalogs.isDefault), desc(catalogs.createdAt));
   }
 
   async findById(params: {
@@ -93,6 +93,26 @@ export class CatalogsRepository {
     return row ?? null;
   }
 
+  /** Clear default flag on other catalogues for this tenant (optionally keep one). */
+  async clearDefault(params: {
+    tenantId: string;
+    exceptId?: string;
+    tx?: DrizzleDbOrTx;
+  }): Promise<void> {
+    const db = params.tx ?? this.db;
+    const conditions = [
+      eq(catalogs.tenantId, params.tenantId),
+      eq(catalogs.isDefault, true),
+    ];
+    if (params.exceptId) {
+      conditions.push(ne(catalogs.id, params.exceptId));
+    }
+    await db
+      .update(catalogs)
+      .set({ isDefault: false, updatedAt: new Date() })
+      .where(and(...conditions));
+  }
+
   async deactivate(params: {
     tenantId: string;
     id: string;
@@ -101,7 +121,7 @@ export class CatalogsRepository {
     return this.update({
       tenantId: params.tenantId,
       id: params.id,
-      data: { isActive: false },
+      data: { isActive: false, isDefault: false },
       tx: params.tx,
     });
   }

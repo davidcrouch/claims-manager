@@ -7,7 +7,7 @@ import type { Job, PaginatedResponse, PurchaseOrder, Claim } from '@/types/api';
 export default async function PurchaseOrdersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; jobId?: string; status?: string; vendorId?: string; sort?: string }>;
+  searchParams: Promise<{ page?: string; jobId?: string; status?: string; vendorId?: string; sort?: string; search?: string }>;
 }) {
   const api = await getServerApiClient();
   if (!api) redirect('/api/auth/login');
@@ -24,6 +24,7 @@ export default async function PurchaseOrdersPage({
         status: params.status,
         vendorId: params.vendorId,
         sort: params.sort,
+        search: params.search,
       })
       .catch((err: unknown) => {
         console.error(

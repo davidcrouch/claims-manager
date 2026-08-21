@@ -1,4 +1,5 @@
 import { redirect, notFound } from 'next/navigation';
+import { getSession } from '@/lib/auth';
 import { getServerApiClient } from '@/lib/server-api';
 import { loadClaim } from '@/lib/cached-entity-loaders';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
@@ -25,7 +26,7 @@ export default async function ClaimDetailPage({
   const api = await getServerApiClient();
   if (!api) redirect('/api/auth/login');
 
-  const [claim, jobsRes] = await Promise.all([
+  const [claim, jobsRes, jobTypesRes, orgUsers, session] = await Promise.all([
     loadClaim(id),
     api.getJobs({ claimId: id, limit: 50 }).catch((err: unknown) => {
       console.error(
@@ -34,11 +35,35 @@ export default async function ClaimDetailPage({
       );
       return { data: [], total: 0 };
     }),
+    Promise.all([
+      api.getLookupsByDomain('job_type', { providerCode: 'direct' }).catch(() => []),
+      api.getLookupsByDomain('job_type', { providerCode: 'crunchwork' }).catch(() => []),
+    ]).then(([direct, crunchwork]) => [...direct, ...crunchwork]),
+    api.listOrgUsersForSelect().catch((err: unknown) => {
+      console.error(
+        'frontend:ClaimDetailPage - listOrgUsersForSelect failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return [] as { id: string; email?: string }[];
+    }),
+    getSession(),
   ]);
 
   if (!claim) {
     notFound();
   }
+
+  const email = session.identity?.email?.trim().toLowerCase();
+  const sub = session.identity?.sub;
+  const currentUserId =
+    orgUsers.find((u) => email && u.email?.trim().toLowerCase() === email)?.id ??
+    (sub && orgUsers.some((u) => u.id === sub) ? sub : null);
+
+  const jobTypes = (Array.isArray(jobTypesRes) ? jobTypesRes : []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    providerCode: row.providerCode ?? null,
+  }));
 
   const claimWithJobs = { ...claim, jobs: jobsRes?.data ?? [] };
 
@@ -47,7 +72,11 @@ export default async function ClaimDetailPage({
       <SetPageHeader>
         <ClaimPageHeader claim={claimWithJobs} />
       </SetPageHeader>
-      <ClaimDetail claim={claimWithJobs} />
+      <ClaimDetail
+        claim={claimWithJobs}
+        jobTypes={jobTypes}
+        currentUserId={currentUserId}
+      />
     </>
   );
 }

@@ -12,20 +12,25 @@ export const metadata: Metadata = {
 export default async function JournalsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; status?: string; jobId?: string }>;
+  searchParams: Promise<{ page?: string; status?: string; search?: string; jobId?: string; jobIds?: string }>;
 }) {
   const api = await getServerApiClient();
   if (!api) redirect('/api/auth/login');
 
   const params = await searchParams;
   const emptyJobs: PaginatedResponse<Job> = { data: [], total: 0 };
+  const jobIds = params.jobIds
+    ? params.jobIds.split(',').map((id) => id.trim()).filter(Boolean)
+    : undefined;
 
   const [result, jobsRes] = await Promise.all([
     api.getJournals({
       page: parseInt(params.page ?? '1', 10),
       limit: 20,
       status: params.status,
+      search: params.search,
       jobId: params.jobId,
+      jobIds,
     }).catch((err: unknown) => {
       console.error(
         'frontend:JournalsPage - getJournals failed:',

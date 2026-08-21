@@ -146,16 +146,32 @@ export class ClaimTransformer implements EntityTransformer<ClaimInsert> {
     if (Array.isArray(payload.contacts)) {
       for (const entry of payload.contacts) {
         if (!isPlainObject(entry)) continue;
-        const extRef = asString(entry.externalReference);
-        if (!extRef) continue;
+        const extRef = asString(entry.externalReference) ?? asString(entry.id);
+        const firstName = asString(entry.firstName);
+        const lastName = asString(entry.lastName);
+        const email = asString(entry.email);
+        const mobilePhone = asString(entry.mobilePhone);
+        const homePhone = asString(entry.homePhone);
+        const workPhone = asString(entry.workPhone);
+        // Keep contacts that have any identity signal (ext-ref, email, phone, or full name)
+        if (
+          !extRef &&
+          !email &&
+          !mobilePhone &&
+          !homePhone &&
+          !workPhone &&
+          !(firstName && lastName)
+        ) {
+          continue;
+        }
         contacts.push({
-          externalReference: extRef,
-          firstName: asString(entry.firstName),
-          lastName: asString(entry.lastName),
-          email: asString(entry.email),
-          mobilePhone: asString(entry.mobilePhone),
-          homePhone: asString(entry.homePhone),
-          workPhone: asString(entry.workPhone),
+          externalReference: extRef ?? undefined,
+          firstName,
+          lastName,
+          email,
+          mobilePhone,
+          homePhone,
+          workPhone,
           notes: asString(entry.notes),
           typeDomain: 'contact_type',
           typeField: entry.type,

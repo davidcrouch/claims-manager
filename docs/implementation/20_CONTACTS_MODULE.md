@@ -52,50 +52,23 @@ export class ContactsService {
 
 ### 20.4 Deduplication Logic
 
-Contacts are deduplicated by `(tenant_id, external_reference)`:
+Contacts are shared people rows. Identity match is a cascade (first hit wins,
+tenant-scoped):
 
-```typescript
-async upsertFromApi(params: {
-  tenantId: string;
-  apiContact: CrunchworkContactDto;
-}): Promise<Contact> {
-  const existing = await this.contactRepo.findOne({
-    where: {
-      tenantId: params.tenantId,
-      externalReference: params.apiContact.externalReference,
-    },
-  });
+1. `external_reference`
+2. email (case-insensitive)
+3. any phone (mobile / home / work, digits-normalized)
+4. first name + last name (case-insensitive)
 
-  const contactData = {
-    tenantId: params.tenantId,
-    externalReference: params.apiContact.externalReference,
-    firstName: params.apiContact.firstName,
-    lastName: params.apiContact.lastName,
-    email: params.apiContact.email,
-    mobilePhone: params.apiContact.mobilePhone,
-    homePhone: params.apiContact.homePhone,
-    workPhone: params.apiContact.workPhone,
-    notes: params.apiContact.notes,
-    contactPayload: params.apiContact,
-  };
+On match, **fill empty fields only** (do not overwrite non-empty scalars). Always
+apply inbound `external_reference` and `contact_payload` when provided. On miss,
+create a new `contacts` row. Link via join tables:
 
-  // Resolve lookup values for type and preferredMethodOfContact
-  if (params.apiContact.type?.externalReference) {
-    contactData.typeLookupId = await this.lookupsService.resolveOrCreate({
-      domain: LookupDomain.CONTACT_TYPE,
-      externalReference: params.apiContact.type.externalReference,
-      name: params.apiContact.type.name,
-    });
-  }
+- `claim_contacts` — many-to-many claim ↔ contact
+- `job_contacts` — many-to-many job ↔ contact
 
-  if (existing) {
-    await this.contactRepo.update(existing.id, contactData);
-    return { ...existing, ...contactData };
-  }
-
-  return this.contactRepo.save(contactData);
-}
-```
+Implemented by `ContactSyncService` during claim/job projection (not a standalone
+`upsertFromApi` on the HTTP contacts module).
 
 ### 20.5 Contact Response DTO
 
@@ -118,14 +91,17 @@ export class ContactResponseDto {
 
 ### 20.6 Integration with Claims and Jobs
 
-The ClaimsSyncService and JobsSyncService call `ContactsService.upsertFromApi()` for each contact in the API response, then create the appropriate join table entries (`claim_contacts` or `job_contacts`).
+`ProjectClaimUseCase` / `ProjectJobUseCase` call `ContactSyncService.syncForEntity()`
+for each extracted contact, which upserts the shared `contacts` row then the
+join row (`claim_contacts` or `job_contacts`).
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] Contacts deduplicated by `(tenant_id, external_reference)`
-- [ ] Contact data updated on each sync from API
-- [ ] Contact type and preferred method resolved via lookups
-- [ ] Contacts queryable by claim or job
-- [ ] Full contact payload preserved in JSONB
+- [x] Contacts matched by identity cascade (ext-ref → email → phone → name)
+- [x] Missing details filled on sync without overwriting existing values
+- [x] Contact type and preferred method resolved via lookups
+- [x] Contacts linked to claims/jobs via `claim_contacts` / `job_contacts`
+- [x] Full contact payload preserved in JSONB
+- [x] Contacts without `externalReference` still sync when email/phone/name present

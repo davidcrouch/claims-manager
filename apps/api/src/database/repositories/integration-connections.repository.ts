@@ -56,11 +56,15 @@ export class IntegrationConnectionsRepository {
     return row ?? null;
   }
 
-  async findAll(params: { tenantId: string }): Promise<IntegrationConnectionRow[]> {
-    return this.db
-      .select()
-      .from(integrationConnections)
-      .where(eq(integrationConnections.tenantId, params.tenantId));
+  async findAll(params: {
+    tenantId: string;
+    isActive?: boolean;
+  }): Promise<IntegrationConnectionRow[]> {
+    let whereClause = eq(integrationConnections.tenantId, params.tenantId);
+    if (params.isActive === true || params.isActive === false) {
+      whereClause = and(whereClause, eq(integrationConnections.isActive, params.isActive))!;
+    }
+    return this.db.select().from(integrationConnections).where(whereClause);
   }
 
   async create(params: {

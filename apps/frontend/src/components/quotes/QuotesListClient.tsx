@@ -3,26 +3,35 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { FileSpreadsheet, Search, X } from 'lucide-react';
-import { fetchQuotesAction } from '@/app/(app)/quotes/actions';
+import { fetchQuotesAction, fetchQuoteFilterAssigneesAction } from '@/app/(app)/quotes/actions';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   type StatusOption,
-  isArchivedStatus,
   commitColumnFilterSelection,
   columnFilterToIdsParam,
-  columnFilterKey,
+  columnFilterToAssigneeIdsParam,
+  statusIdsForArchiveListTab,
+  mergeStatusParamWithTab,
   buildColumnFilterOptions,
   ValueFilterMenu,
 } from '@/components/shared/list-filters';
-import { resolveJobName } from '@/components/shared/job-label';
+import {
+  buildServerJobFilterOptions,
+  resolveServerJobFilterSelection,
+  selectedJobFilterLabels,
+  parseSelectedJobIds,
+  toServerJobFetchParams,
+  writeServerJobFilterParams,
+  jobFilterOptionsFromNameById,
+} from '@/components/shared/server-job-filter';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import {
   EntityPageHeader,
 } from '@/components/shared/EntityPageHeader';
 import { computeStatusBreakdown } from '@/components/layout/ListPageHeader';
 import { TablePagination } from '@/components/shared/table-pagination';
-import { QuotesTable, type QuoteSortField, getEstimateTypeName, resolveEstimateListAssigneeName } from './QuotesTable';
+import { QuotesTable, type QuoteSortField } from './QuotesTable';
 import type { Quote, PaginatedResponse, Job, Claim } from '@/types/api';
 
 type ListTab = 'active' | 'archived' | 'all';
@@ -56,7 +65,8 @@ export function QuotesListClient({
 }: QuotesListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const jobId = searchParams.get('jobId');
+  const jobId = searchParams.get('jobId') ?? undefined;
+  const jobIdsParam = searchParams.get('jobIds') ?? undefined;
   const [data, setData] = useState(initialData);
 
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
@@ -74,18 +84,64 @@ export function QuotesListClient({
   const [typeFilterActive, setTypeFilterActive] = useState(false);
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [statusFilterActive, setStatusFilterActive] = useState(false);
-  const [jobFilter, setJobFilter] = useState<Set<string>>(new Set());
-  const [jobFilterActive, setJobFilterActive] = useState(false);
   const [assigneeFilter, setAssigneeFilter] = useState<Set<string>>(new Set());
   const [assigneeFilterActive, setAssigneeFilterActive] = useState(false);
+  const [assigneeOptions, setAssigneeOptions] = useState<
+    { id: string; name: string }[]
+  >([]);
   const lastFetchKeyRef = useRef<string | null>(null);
+
+  const selectedJobIds = useMemo(
+    () => parseSelectedJobIds(jobId, jobIdsParam),
+    [jobId, jobIdsParam],
+  );
+  const filterJobs = useMemo(
+    () => jobFilterOptionsFromNameById(jobNameById),
+    [jobNameById],
+  );
+  const uniqueJobs = useMemo(
+    () => buildServerJobFilterOptions(filterJobs),
+    [filterJobs],
+  );
+  const { selected: jobFilter, active: jobFilterActive } = useMemo(
+    () =>
+      selectedJobFilterLabels({
+        jobId,
+        jobIds: jobIdsParam
+          ? jobIdsParam.split(',').map((id) => id.trim()).filter(Boolean)
+          : undefined,
+        jobs: filterJobs,
+      }),
+    [jobId, jobIdsParam, filterJobs],
+  );
+  const { jobId: fetchJobId, jobIds: fetchJobIds } = useMemo(
+    () => toServerJobFetchParams(selectedJobIds),
+    [selectedJobIds],
+  );
+  const tabStatusIds = useMemo(
+    () => statusIdsForArchiveListTab(tab, statusOptions),
+    [tab, statusOptions],
+  );
   const statusParam = useMemo(
-    () => columnFilterToIdsParam(statusFilterActive, statusFilter, statusOptions),
-    [statusFilterActive, statusFilter, statusOptions],
+    () =>
+      mergeStatusParamWithTab(
+        columnFilterToIdsParam(statusFilterActive, statusFilter, statusOptions),
+        tabStatusIds,
+      ),
+    [statusFilterActive, statusFilter, statusOptions, tabStatusIds],
   );
   const quoteTypeParam = useMemo(
     () => columnFilterToIdsParam(typeFilterActive, typeFilter, quoteTypes),
     [typeFilterActive, typeFilter, quoteTypes],
+  );
+  const assignedToUserIdsParam = useMemo(
+    () =>
+      columnFilterToAssigneeIdsParam(
+        assigneeFilterActive,
+        assigneeFilter,
+        assigneeOptions,
+      ),
+    [assigneeFilterActive, assigneeFilter, assigneeOptions],
   );
 
   const sortParam = `${columnSort.field}_${columnSort.order}`;
@@ -94,6 +150,10 @@ export function QuotesListClient({
     const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
   }, [search]);
+
+  useEffect(() => {
+    fetchQuoteFilterAssigneesAction().then(setAssigneeOptions);
+  }, []);
 
   // URL sync — skip no-op replace so a create→detail router.push is not cancelled
   // when the list remounts after the create server action refreshes the page.
@@ -107,21 +167,41 @@ export function QuotesListClient({
     else params.delete('status');
     if (quoteTypeParam) params.set('quoteType', quoteTypeParam);
     else params.delete('quoteType');
+    if (assignedToUserIdsParam) params.set('assignedToUserIds', assignedToUserIdsParam);
+    else params.delete('assignedToUserIds');
     if (jobId) params.set('jobId', jobId);
     else params.delete('jobId');
+    if (jobIdsParam) params.set('jobIds', jobIdsParam);
+    else params.delete('jobIds');
     const next = params.toString();
     if (next === searchParams.toString()) return;
     router.replace(`/quotes?${next}`, { scroll: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop: router.replace updates URL -> searchParams changes -> effect re-runs
-  }, [debouncedSearch, sortParam, tab, page, statusParam, quoteTypeParam, jobId]);
+  }, [
+    debouncedSearch,
+    sortParam,
+    tab,
+    page,
+    statusParam,
+    quoteTypeParam,
+    assignedToUserIdsParam,
+    jobId,
+    jobIdsParam,
+  ]);
 
   useEffect(() => {
     const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
     const typeKey = quoteTypeParam === null ? '__none__' : (quoteTypeParam ?? '');
-    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${typeKey}|${jobId ?? ''}`;
+    const assigneesKey =
+      assignedToUserIdsParam === null ? '__none__' : (assignedToUserIdsParam ?? '');
+    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${typeKey}|${assigneesKey}|${jobId ?? ''}|${jobIdsParam ?? ''}`;
     if (lastFetchKeyRef.current === fetchKey) return;
     lastFetchKeyRef.current = fetchKey;
-    if (statusParam === null || quoteTypeParam === null) {
+    if (
+      statusParam === null ||
+      quoteTypeParam === null ||
+      assignedToUserIdsParam === null
+    ) {
       setData({ data: [], total: 0 });
       return;
     }
@@ -131,9 +211,24 @@ export function QuotesListClient({
       sort: sortParam,
       status: statusParam,
       quoteType: quoteTypeParam,
-      jobId: jobId ?? undefined,
+      assignedToUserIds: assignedToUserIdsParam,
+      jobId: fetchJobId,
+      jobIds: fetchJobIds,
+      search: debouncedSearch || undefined,
     }).then((res) => res && setData(res));
-  }, [debouncedSearch, sortParam, tab, page, statusParam, quoteTypeParam, jobId]);
+  }, [
+    debouncedSearch,
+    sortParam,
+    tab,
+    page,
+    statusParam,
+    quoteTypeParam,
+    assignedToUserIdsParam,
+    jobId,
+    jobIdsParam,
+    fetchJobId,
+    fetchJobIds,
+  ]);
 
   const handleColumnSort = (field: QuoteSortField) => {
     setColumnSort((prev) => {
@@ -155,22 +250,13 @@ export function QuotesListClient({
     [quoteTypes],
   );
 
-  const uniqueJobs = useMemo(
-    () =>
-      buildColumnFilterOptions(
-        data.data.map((row) => resolveJobName(row.jobId, jobNameById)),
-      ),
-    [data.data, jobNameById],
-  );
-
   const uniqueAssignees = useMemo(
     () =>
       buildColumnFilterOptions(
-        data.data.map((row) =>
-          resolveEstimateListAssigneeName(row, jobAssigneeNameById),
-        ),
+        assigneeOptions.map((a) => a.name),
+        { alwaysIncludeBlank: true },
       ),
-    [data.data, jobAssigneeNameById],
+    [assigneeOptions],
   );
 
   const uniqueStatuses = useMemo(() => {
@@ -222,13 +308,16 @@ export function QuotesListClient({
   };
 
   const applyJobFilter = (next: Set<string>) => {
-    const committed = commitColumnFilterSelection({
+    const resolved = resolveServerJobFilterSelection({
       next,
-      optionCount: uniqueJobs.length,
+      options: uniqueJobs,
+      jobs: filterJobs,
     });
-    setJobFilter(committed.selected);
-    setJobFilterActive(committed.active);
     setPage(1);
+    const params = new URLSearchParams(searchParams.toString());
+    writeServerJobFilterParams(params, resolved);
+    params.set('page', '1');
+    router.replace(`/quotes?${params.toString()}`, { scroll: false });
   };
 
   const applyAssigneeFilter = (next: Set<string>) => {
@@ -241,55 +330,7 @@ export function QuotesListClient({
     setPage(1);
   };
 
-  const visibleRows = useMemo(() => {
-    const query = debouncedSearch.trim().toLowerCase();
-    let rows = data.data;
-
-    if (tab !== 'all') {
-      rows = rows.filter((q) => {
-        const archived = isArchivedStatus(q.status?.name);
-        return tab === 'archived' ? archived : !archived;
-      });
-    }
-
-    if (jobFilterActive) {
-      if (jobFilter.size === 0) rows = [];
-      else rows = rows.filter((row) =>
-        jobFilter.has(columnFilterKey(resolveJobName(row.jobId, jobNameById))),
-      );
-    }
-
-    if (assigneeFilterActive) {
-      if (assigneeFilter.size === 0) rows = [];
-      else rows = rows.filter((row) =>
-        assigneeFilter.has(
-          columnFilterKey(
-            resolveEstimateListAssigneeName(row, jobAssigneeNameById),
-          ),
-        ),
-      );
-    }
-
-    if (query) {
-      rows = rows.filter((q) => {
-        const num = (q.quoteNumber ?? '').toLowerCase();
-        const name = (q.name ?? '').toLowerCase();
-        return num.includes(query) || name.includes(query);
-      });
-    }
-
-    return rows;
-  }, [
-    data.data,
-    debouncedSearch,
-    tab,
-    jobFilterActive,
-    jobFilter,
-    jobNameById,
-    assigneeFilterActive,
-    assigneeFilter,
-    jobAssigneeNameById,
-  ]);
+  const visibleRows = data.data;
 
   const breakdown = computeStatusBreakdown(visibleRows, (q) => q.status?.name);
   const totalValue = useMemo(() => {
@@ -408,7 +449,7 @@ export function QuotesListClient({
             }}
             jobColumnFilter={{
               options: uniqueJobs,
-              selected: jobFilter,
+              selected: jobFilterActive ? jobFilter : new Set(uniqueJobs),
               active: jobFilterActive,
               onApply: applyJobFilter,
               menuTitle: 'Filter by job',

@@ -9,16 +9,26 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   type StatusOption,
   formatDate,
-  isArchivedStatus,
   commitColumnFilterSelection,
   columnFilterToIdsParam,
-  columnFilterKey,
-  buildColumnFilterOptions,
+
+
   ValueFilterMenu,
   SortableColumnHeader,
   TableEmptyRow,
+  statusIdsForArchiveListTab,
+  mergeStatusParamWithTab,
 } from '@/components/shared/list-filters';
 import { resolveJobName } from '@/components/shared/job-label';
+import {
+  buildServerJobFilterOptions,
+  resolveServerJobFilterSelection,
+  selectedJobFilterLabels,
+  parseSelectedJobIds,
+  toServerJobFetchParams,
+  writeServerJobFilterParams,
+  jobFilterOptionsFromNameById,
+} from '@/components/shared/server-job-filter';
 import { TablePagination } from '@/components/shared/table-pagination';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import {
@@ -83,7 +93,8 @@ export function RfqsListClient({
 }: RfqsListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const jobId = searchParams.get('jobId');
+  const jobId = searchParams.get('jobId') ?? undefined;
+  const jobIdsParam = searchParams.get('jobIds') ?? undefined;
   const [data, setData] = useState(initialData);
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [debouncedSearch, setDebouncedSearch] = useState(search);
@@ -100,16 +111,49 @@ export function RfqsListClient({
   const [vendorFilterActive, setVendorFilterActive] = useState(false);
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [statusFilterActive, setStatusFilterActive] = useState(false);
-  const [jobFilter, setJobFilter] = useState<Set<string>>(new Set());
-  const [jobFilterActive, setJobFilterActive] = useState(false);
   const { isVisible, toggle, visibleCount } = useColumnVisibility(
     'rfqs',
     TABLE_COLUMNS,
   );
   const lastFetchKeyRef = useRef<string | null>(null);
+  const selectedJobIds = useMemo(
+    () => parseSelectedJobIds(jobId, jobIdsParam),
+    [jobId, jobIdsParam],
+  );
+  const filterJobs = useMemo(
+    () => jobFilterOptionsFromNameById(jobNameById),
+    [jobNameById],
+  );
+  const uniqueJobs = useMemo(
+    () => buildServerJobFilterOptions(filterJobs),
+    [filterJobs],
+  );
+  const { selected: jobFilter, active: jobFilterActive } = useMemo(
+    () =>
+      selectedJobFilterLabels({
+        jobId,
+        jobIds: jobIdsParam
+          ? jobIdsParam.split(',').map((id) => id.trim()).filter(Boolean)
+          : undefined,
+        jobs: filterJobs,
+      }),
+    [jobId, jobIdsParam, filterJobs],
+  );
+  const { jobId: fetchJobId, jobIds: fetchJobIds } = useMemo(
+    () => toServerJobFetchParams(selectedJobIds),
+    [selectedJobIds],
+  );
+  const tabStatusIds = useMemo(
+    () => statusIdsForArchiveListTab(tab, statusOptions),
+    [tab, statusOptions],
+  );
   const statusParam = useMemo(
-    () => columnFilterToIdsParam(statusFilterActive, statusFilter, statusOptions),
-    [statusFilterActive, statusFilter, statusOptions],
+    () =>
+      mergeStatusParamWithTab(
+        columnFilterToIdsParam(statusFilterActive, statusFilter, statusOptions),
+        tabStatusIds,
+      ),
+    [statusFilterActive, statusFilter, statusOptions, tabStatusIds],
   );
   const vendorParam = useMemo(
     () => columnFilterToIdsParam(vendorFilterActive, vendorFilter, vendorOptions),
@@ -126,7 +170,7 @@ export function RfqsListClient({
   useEffect(() => {
     const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
     const vendorKey = vendorParam === null ? '__none__' : (vendorParam ?? '');
-    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${vendorKey}|${jobId ?? ''}`;
+    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${vendorKey}|${jobId ?? ''}|${jobIdsParam ?? ''}`;
     const params = new URLSearchParams(searchParams.toString());
     params.set('search', debouncedSearch);
     params.set('tab', tab);
@@ -136,6 +180,8 @@ export function RfqsListClient({
     if (vendorParam) params.set('vendorId', vendorParam); else params.delete('vendorId');
     if (jobId) params.set('jobId', jobId);
     else params.delete('jobId');
+    if (jobIdsParam) params.set('jobIds', jobIdsParam);
+    else params.delete('jobIds');
     router.replace(`/rfqs?${params}`, { scroll: false });
     if (lastFetchKeyRef.current === fetchKey) return;
     lastFetchKeyRef.current = fetchKey;
@@ -143,9 +189,9 @@ export function RfqsListClient({
       setData({ data: [], total: 0 });
       return;
     }
-    fetchRfqsAction({ page, limit: PAGE_SIZE, sort: sortParam, status: statusParam, vendorId: vendorParam, jobId: jobId ?? undefined }).then((res) => res && setData(res));
+    fetchRfqsAction({ page, limit: PAGE_SIZE, sort: sortParam, status: statusParam, vendorId: vendorParam, jobId: fetchJobId, jobIds: fetchJobIds, search: debouncedSearch || undefined }).then((res) => res && setData(res));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop: router.replace updates URL -> searchParams changes -> effect re-runs
-  }, [debouncedSearch, sortParam, tab, page, statusParam, vendorParam, jobId]);
+  }, [debouncedSearch, sortParam, tab, page, statusParam, vendorParam, jobId, jobIdsParam, fetchJobId, fetchJobIds]);
 
   const handleColumnSort = (field: RfqSortField) => {
     setColumnSort((prev) => {
@@ -163,13 +209,6 @@ export function RfqsListClient({
 
   const uniqueVendors = useMemo(() => [...new Set(vendorOptions.map((vendor) => vendor.name.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [vendorOptions]);
 
-  const uniqueJobs = useMemo(
-    () =>
-      buildColumnFilterOptions(
-        data.data.map((row) => resolveJobName(row.jobId, jobNameById)),
-      ),
-    [data.data, jobNameById],
-  );
 
   const uniqueStatuses = useMemo(() => {
     const fromOptions = statusOptions
@@ -220,13 +259,16 @@ export function RfqsListClient({
   };
 
   const applyJobFilter = (next: Set<string>) => {
-    const committed = commitColumnFilterSelection({
+    const resolved = resolveServerJobFilterSelection({
       next,
-      optionCount: uniqueJobs.length,
+      options: uniqueJobs,
+      jobs: filterJobs,
     });
-    setJobFilter(committed.selected);
-    setJobFilterActive(committed.active);
     setPage(1);
+    const params = new URLSearchParams(searchParams.toString());
+    writeServerJobFilterParams(params, resolved);
+    params.set('page', '1');
+    router.replace(`/rfqs?${params.toString()}`, { scroll: false });
   };
 
   const statusFilterProps = {
@@ -249,42 +291,14 @@ export function RfqsListClient({
 
   const jobFilterProps = {
     options: uniqueJobs,
-    selected: jobFilter,
+    selected: jobFilterActive ? jobFilter : new Set(uniqueJobs),
     active: jobFilterActive,
     onApply: applyJobFilter,
     menuTitle: 'Filter by job',
     itemNoun: { singular: 'job', plural: 'jobs' },
   };
 
-  const visibleRows = useMemo(() => {
-    const query = debouncedSearch.trim().toLowerCase();
-    let rows = data.data;
-
-    if (tab !== 'all') {
-      rows = rows.filter((rfq) => {
-        const archived = isArchivedStatus(rfq.status?.name);
-        return tab === 'archived' ? archived : !archived;
-      });
-    }
-
-    if (jobFilterActive) {
-      if (jobFilter.size === 0) rows = [];
-      else rows = rows.filter((row) =>
-        jobFilter.has(columnFilterKey(resolveJobName(row.jobId, jobNameById))),
-      );
-    }
-
-    if (query) {
-      rows = rows.filter((rfq) => {
-        const num = (rfq.rfqNumber ?? '').toLowerCase();
-        const name = (rfq.name ?? '').toLowerCase();
-        const vendor = (rfq.rfqToName ?? '').toLowerCase();
-        return num.includes(query) || name.includes(query) || vendor.includes(query);
-      });
-    }
-
-    return rows;
-  }, [data.data, debouncedSearch, tab, jobFilterActive, jobFilter, jobNameById]);
+  const visibleRows = data.data;
 
   const breakdown = computeStatusBreakdown(
     visibleRows,

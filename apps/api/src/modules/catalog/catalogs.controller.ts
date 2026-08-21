@@ -14,6 +14,10 @@ class CreateCatalogDto {
 
   @IsIn(['crunchwork', 'internal'])
   type!: 'crunchwork' | 'internal';
+
+  @IsOptional()
+  @IsBoolean()
+  isDefault?: boolean;
 }
 
 class UpdateCatalogDto {
@@ -26,8 +30,16 @@ class UpdateCatalogDto {
   description?: string;
 
   @IsOptional()
+  @IsIn(['crunchwork', 'internal'])
+  type?: 'crunchwork' | 'internal';
+
+  @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isDefault?: boolean;
 }
 
 @Controller('catalogs')
@@ -44,6 +56,12 @@ export class CatalogsController {
   @RequirePermission(P.catalogs.read)
   findOne(@Param('id') id: string) {
     return this.catalogsService.findOne({ id });
+  }
+
+  @Get(':id/category-counts')
+  @RequirePermission(P.catalogs.read)
+  categoryCounts(@Param('id') id: string, @Query('q') q?: string) {
+    return this.catalogsService.categoryCounts({ id, search: q });
   }
 
   @Post()

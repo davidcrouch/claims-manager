@@ -16,12 +16,19 @@ export class AssessmentsController {
     @Query('limit') limit?: string,
     @Query('status') status?: string,
     @Query('jobId') jobId?: string,
+    @Query('jobIds') jobIds?: string,
+    @Query('search') search?: string,
   ) {
+    const jobIdList = jobIds
+      ? jobIds.split(',').map((id) => id.trim()).filter((id) => id.length > 0)
+      : undefined;
     return this.assessmentsService.findAll({
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
       status,
       jobId,
+      jobIds: jobIdList && jobIdList.length > 0 ? jobIdList : undefined,
+      search,
     });
   }
 

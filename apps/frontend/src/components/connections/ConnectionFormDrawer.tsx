@@ -21,6 +21,7 @@ import {
   type ProviderCode,
 } from '@/components/providers/provider-catalogue';
 import { CrunchworkConnectionCreateForm } from '@/components/providers/crunchwork/CrunchworkConnectionCreateForm';
+import { More0EnsureConnectionCreateForm } from '@/components/providers/more0-ensure/More0EnsureConnectionCreateForm';
 import type { ConnectionSummary } from '@/types/api';
 
 export interface ConnectionFormDrawerProps {
@@ -138,6 +139,15 @@ export function ConnectionFormDrawer({
 
           {selectedCode === 'crunchwork' && (
             <CrunchworkConnectionCreateForm
+              connectionName={connectionName}
+              environment={environment}
+              onCancel={close}
+              onCreated={handleCreated}
+            />
+          )}
+
+          {selectedCode === 'more0-ensure' && (
+            <More0EnsureConnectionCreateForm
               connectionName={connectionName}
               environment={environment}
               onCancel={close}

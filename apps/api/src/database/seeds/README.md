@@ -14,7 +14,7 @@ staging connection) that make the app usable in dev and staging.
 |---|---|---|
 | `filesystem-default` | **Platform** (`tenant_id = NULL`) | Creates Company + Project filesystem templates (`Company` is `is_default=true`). Available to all tenants at FS setup. |
 | `ensure-construction` | **Tenant** | Upserts organisation **Ensure Construction Pty Ltd** and its Crunchwork **staging** integration connection (encrypted credentials). |
-| `catalog-dev` | **Tenant** | Catalogue types, categories, unit types, Crunchwork v1 + Building Repairs catalogues for Ensure Construction (CLI) or a given tenant (signup). |
+| `catalog-dev` | **Tenant** | Catalogue item types, trade categories, and unit_type lookups for Ensure Construction (CLI) or a given tenant (signup). Does **not** seed catalogues/items — import those manually. |
 | `lookups` | **Tenant** | Status/type lookup values and Crunchwork group labels for Ensure Construction (CLI) or a given tenant (signup). |
 
 > **Document templates** — uploading `.docx` files from `data/templates/` and assigning
@@ -135,7 +135,7 @@ seeds/
 | Table / concern | Seeded? | Why |
 |---|---|---|
 | `filesystem_template` (platform) | Yes — `filesystem-default` | Template for tenant FS setup |
-| Catalogue types/items | Yes — `catalog-dev` | Per-tenant starter catalogue |
+| Catalogue types/categories | Yes — `catalog-dev` | Per-tenant basics only (no catalogues/items) |
 | Lookup values + CW group labels | Yes — `lookups` | Job/claim statuses and Create Job types |
 | `organizations` | Yes — `ensure-construction` only | Bootstrap tenant for staging/dev |
 | `integration_connections` | Yes — Crunchwork staging for Ensure Construction | Encrypted; not applied to other tenants |

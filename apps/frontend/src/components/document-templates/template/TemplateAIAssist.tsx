@@ -31,11 +31,10 @@ export function TemplateAIAssistButton() {
         summary: [
           `You are helping the user edit a Word document template for the "${documentType}" document type.`,
           '',
-          'This template uses the docx-templates engine syntax:',
+          'This template uses the Docxtemplater engine syntax:',
           '- `{fieldName}` — insert a merge field value',
           '- `{#items}...{/items}` — loop over an array',
-          '- `{%if condition}...{%endif}` — conditional section',
-          '- `{%raw}...{%endraw}` — literal output (escaping)',
+          '- Expressions via `{= price * quantity}` (JavaScript-like parser)',
           '',
           'The expression parser supports JavaScript-like expressions inside `{...}` tags.',
           '',

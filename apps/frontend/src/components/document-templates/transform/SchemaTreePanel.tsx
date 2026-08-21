@@ -33,7 +33,13 @@ export function SchemaTreePanel({ title, schema, className = '' }: SchemaTreePan
         <div className="p-2">
           {schema.properties ? (
             Object.entries(schema.properties).map(([key, prop]) => (
-              <SchemaNode key={key} name={key} property={prop} depth={0} />
+              <SchemaNode
+                key={key}
+                name={key}
+                property={prop}
+                depth={0}
+                defaultExpanded={key === '_context'}
+              />
             ))
           ) : (
             <p className="px-2 py-1 text-sm text-slate-400">Empty schema</p>
@@ -48,16 +54,18 @@ function SchemaNode({
   name,
   property,
   depth,
+  defaultExpanded,
 }: {
   name: string;
   property: JsonSchemaProperty;
   depth: number;
+  defaultExpanded?: boolean;
 }) {
   const hasChildren =
     (property.type === 'object' && property.properties) ||
     (property.type === 'array' && property.items);
 
-  const [expanded, setExpanded] = useState(depth < 2);
+  const [expanded, setExpanded] = useState(defaultExpanded ?? depth < 2);
 
   const TypeIcon = getTypeIcon(property.type);
 

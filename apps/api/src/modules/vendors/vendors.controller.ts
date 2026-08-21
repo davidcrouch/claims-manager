@@ -13,11 +13,21 @@ export class VendorsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
+    @Query('linked') linked?: string,
+    @Query('sort') sort?: string,
   ) {
+    const linkedParam =
+      linked === 'true' || linked === '1'
+        ? true
+        : linked === 'false' || linked === '0'
+          ? false
+          : undefined;
     return this.vendorsService.findAll({
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
       search,
+      linked: linkedParam,
+      sort,
     });
   }
 

@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { UsersRepository } from '../../database/repositories/users.repository';
 import { AuthServerClient } from '../auth-server/auth-server.client';
+import { ContactsService } from '../contacts/contacts.service';
 import type {
   AvailableRoleDto,
   InviteUserInput,
@@ -33,6 +34,7 @@ export class UserManagementService {
   constructor(
     private readonly usersRepository: UsersRepository,
     private readonly authServerClient: AuthServerClient,
+    private readonly contactsService: ContactsService,
   ) {}
 
   async listOrgMembers(organizationId: string): Promise<OrgMemberDto[]> {
@@ -97,6 +99,19 @@ export class UserManagementService {
       },
       accessToken,
     );
+
+    try {
+      await this.contactsService.ensureFromPerson({
+        tenantId: organizationId,
+        email: invited.email || email,
+        firstName: invited.givenName ?? input.givenName,
+        lastName: invited.familyName ?? input.familyName,
+      });
+    } catch (err) {
+      this.log.warn(
+        `${LOG_PREFIX}:inviteUser - ensure contact failed for ${email}: ${(err as Error).message}`,
+      );
+    }
 
     const members = await this.listOrgMembers(organizationId);
     const member = members.find((m) => m.id === invited.userId);

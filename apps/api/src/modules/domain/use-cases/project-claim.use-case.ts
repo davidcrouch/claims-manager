@@ -117,6 +117,9 @@ export class ProjectClaimUseCase implements ProjectionUseCase {
 
     // 6. Sync contacts
     if (result.contacts && result.contacts.length > 0) {
+      this.logger.log(
+        `ProjectClaimUseCase.execute — syncing ${result.contacts.length} contact(s) for claimId=${claimId}`,
+      );
       await this.contactSync.syncForEntity({
         entityType: 'claim',
         entityId: claimId,
@@ -125,6 +128,10 @@ export class ProjectClaimUseCase implements ProjectionUseCase {
         strategy: 'additive',
         tx,
       });
+    } else {
+      this.logger.debug(
+        `ProjectClaimUseCase.execute — no contacts extracted for claimId=${claimId}`,
+      );
     }
 
     // 7. Sync assignees

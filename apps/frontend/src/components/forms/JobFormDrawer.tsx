@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
-import { Briefcase, ChevronRight, Loader2 } from 'lucide-react';
+import { Briefcase, ChevronRight, FileText, Loader2, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -30,7 +30,11 @@ import {
   type JobContactRef,
 } from '@/components/forms/JobContactsPicker';
 import { createJobAction } from '@/app/(app)/jobs/mutations';
-import { OrgUserSelect } from '@/components/forms/OrgUserSelect';
+import {
+  OrgUserSelect,
+  type OrgUserOption,
+} from '@/components/forms/OrgUserSelect';
+import { listOrgUsersForSelectAction } from '@/app/(app)/mutations';
 import {
   CreateSubmitOverlay,
   navigateToCreated,
@@ -40,14 +44,27 @@ import {
   AddressAutocompleteInput,
   type AddressSuggestion,
 } from '@/components/shared/AddressAutocompleteInput';
-import type { Contact, Job } from '@/types/api';
+import { formatAddress, formatDate } from '@/components/shared/detail';
+import {
+  PublishSummaryCard,
+  PublishSummaryRow,
+} from '@/components/shared/PublishEntityContext';
+import type { Claim, Contact, Job } from '@/types/api';
+import {
+  toJobFormClaimOption,
+  type JobFormClaimOption,
+} from '@/components/forms/job-form-claim';
 
-type WizardStep = 'details' | 'contacts';
+export type { JobFormClaimOption };
+export { toJobFormClaimOption };
 
-const STEPS: WizardStep[] = ['details', 'contacts'];
+type WizardStep = 'details' | 'contacts' | 'review';
+
+const STEPS: WizardStep[] = ['details', 'contacts', 'review'];
 const STEP_LABELS: Record<WizardStep, string> = {
   details: 'Job Details',
   contacts: 'Contacts',
+  review: 'Review & publish',
 };
 
 type JobProvider = 'internal' | 'crunchwork';
@@ -59,6 +76,7 @@ const JOB_PROVIDERS: { value: JobProvider; label: string; apiCode: string }[] = 
 
 const detailsSchema = z.object({
   provider: z.enum(['internal', 'crunchwork']),
+  claimId: z.string().optional(),
   name: z.string().min(1, 'Name is required'),
   jobTypeId: z.string().min(1, 'Job type is required'),
   filesystemTemplateId: z.string().optional(),
@@ -79,7 +97,61 @@ type DetailsValues = z.infer<typeof detailsSchema>;
 
 const AU_STATES = ['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA'] as const;
 
+const NONE_CLAIM_VALUE = '__none__';
+
+const BUILDER_MAKE_SAFE_TYPE_NAME = 'builder make safe';
+
 type ProjectTemplateOption = { id: string; name: string; isDefault?: boolean };
+
+function isBuilderMakeSafeJobTypeName(name?: string | null): boolean {
+  return (name ?? '').trim().toLowerCase() === BUILDER_MAKE_SAFE_TYPE_NAME;
+}
+
+function resolveDefaultJobTypeId(
+  jobTypes: { id: string; name?: string; providerCode?: string | null }[],
+  providerApiCode: string,
+  defaultJobTypeName?: string | null,
+): string {
+  const needle = defaultJobTypeName?.trim().toLowerCase();
+  if (!needle) return '';
+  return (
+    jobTypes.find((jt) => {
+      if (jt.providerCode && jt.providerCode !== providerApiCode) return false;
+      return (jt.name ?? '').trim().toLowerCase() === needle;
+    })?.id ?? ''
+  );
+}
+
+function jobTypeNameById(
+  jobTypes: { id: string; name?: string; providerCode?: string | null }[],
+  jobTypeId: string,
+): string | undefined {
+  return jobTypes.find((jt) => jt.id === jobTypeId)?.name;
+}
+
+function addressFromClaimOption(
+  claim: JobFormClaimOption | undefined,
+): Pick<
+  DetailsValues,
+  | 'unitNumber'
+  | 'streetNumber'
+  | 'streetName'
+  | 'suburb'
+  | 'state'
+  | 'postcode'
+  | 'country'
+> {
+  const a = claim?.address;
+  return {
+    unitNumber: a?.unitNumber ?? '',
+    streetNumber: a?.streetNumber ?? '',
+    streetName: a?.streetName ?? '',
+    suburb: a?.suburb ?? '',
+    state: a?.state ?? '',
+    postcode: a?.postcode ?? '',
+    country: a?.country ?? 'Australia',
+  };
+}
 
 function normalizeProjectTemplates(payload: unknown): ProjectTemplateOption[] {
   const rows = Array.isArray(payload)
@@ -126,6 +198,14 @@ export interface JobFormDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   jobTypes: { id: string; name?: string; providerCode?: string | null }[];
+  /** Claims available in the Claim dropdown (optional link). */
+  claims?: JobFormClaimOption[];
+  /** Pre-select this claim when the drawer opens. */
+  claimId?: string | null;
+  /** Rich claim record for the review/publish summary (optional). */
+  claimPreview?: Claim | null;
+  /** Prefill Job Type by lookup name (e.g. "Builder Make Safe"). */
+  defaultJobTypeName?: string | null;
   /** Signed-in org user — Assigned defaults to this person. */
   currentUserId?: string | null;
   /** Called after a job is created so the parent list can refetch. */
@@ -136,6 +216,10 @@ export function JobFormDrawer({
   open,
   onOpenChange,
   jobTypes,
+  claims = [],
+  claimId: initialClaimId,
+  claimPreview,
+  defaultJobTypeName,
   currentUserId,
   onSuccess,
 }: JobFormDrawerProps) {
@@ -150,29 +234,43 @@ export function JobFormDrawer({
   const [projectTemplates, setProjectTemplates] = useState<ProjectTemplateOption[]>(
     [],
   );
+  const [orgUsers, setOrgUsers] = useState<OrgUserOption[]>([]);
+
+  const buildDefaults = useCallback((): DetailsValues => {
+    // Claim-linked creates are intended for NRMA (Crunchwork) publish.
+    const provider: JobProvider = initialClaimId ? 'crunchwork' : 'internal';
+    const providerApiCode =
+      JOB_PROVIDERS.find((p) => p.value === provider)?.apiCode ?? 'direct';
+    const claimId = initialClaimId ?? '';
+    const selected = claims.find((c) => c.id === claimId);
+    const jobTypeId = resolveDefaultJobTypeId(
+      jobTypes,
+      providerApiCode,
+      defaultJobTypeName,
+    );
+    const jobTypeName =
+      jobTypeNameById(jobTypes, jobTypeId) ?? defaultJobTypeName ?? '';
+    return {
+      provider,
+      claimId,
+      name: '',
+      jobTypeId,
+      filesystemTemplateId: '',
+      jobInstructions: '',
+      makeSafeRequired: isBuilderMakeSafeJobTypeName(jobTypeName),
+      excess: '',
+      ...addressFromClaimOption(selected),
+      assignedToUserId: currentUserId ?? '',
+    };
+  }, [claims, currentUserId, defaultJobTypeName, initialClaimId, jobTypes]);
 
   const form = useForm<DetailsValues>({
     resolver: standardSchemaResolver(detailsSchema),
-    defaultValues: {
-      provider: 'internal',
-      name: '',
-      jobTypeId: '',
-      filesystemTemplateId: '',
-      jobInstructions: '',
-      makeSafeRequired: false,
-      excess: '',
-      unitNumber: '',
-      streetNumber: '',
-      streetName: '',
-      suburb: '',
-      state: '',
-      postcode: '',
-      country: 'Australia',
-      assignedToUserId: currentUserId ?? '',
-    },
+    defaultValues: buildDefaults(),
   });
 
   const provider = form.watch('provider');
+  const claimId = form.watch('claimId');
   const jobTypeId = form.watch('jobTypeId');
   const filesystemTemplateId = form.watch('filesystemTemplateId');
   const stateValue = form.watch('state');
@@ -194,6 +292,15 @@ export function JobFormDrawer({
         filteredJobTypes.map((jt) => [jt.id, jt.name ?? jt.id]),
       ) as Record<string, string>,
     [filteredJobTypes],
+  );
+
+  const claimItems = useMemo(
+    () =>
+      ({
+        [NONE_CLAIM_VALUE]: 'None',
+        ...Object.fromEntries(claims.map((c) => [c.id, c.label])),
+      }) as Record<string, string>,
+    [claims],
   );
 
   const providerItems = useMemo(
@@ -218,18 +325,33 @@ export function JobFormDrawer({
     [projectTemplates],
   );
 
-  const reset = useCallback(() => {
+  const clearTransientState = useCallback(() => {
     setStep('details');
     setError(null);
     resetPhase();
     setContacts([]);
     setContactDrawerOpen(false);
-    form.reset();
-  }, [form, resetPhase]);
+    setAddressSearch('');
+  }, [resetPhase]);
 
   useEffect(() => {
-    if (!open) reset();
-  }, [open, reset]);
+    if (!open) {
+      clearTransientState();
+      return;
+    }
+    form.reset(buildDefaults());
+  }, [open, buildDefaults, clearTransientState, form]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    listOrgUsersForSelectAction().then((rows) => {
+      if (!cancelled) setOrgUsers(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -269,14 +391,39 @@ export function JobFormDrawer({
     // is in progress so the list does not flash underneath.
     if (!next && (contactDrawerOpen || busy)) return;
     onOpenChange(next);
-    if (!next) reset();
+    if (!next) clearTransientState();
   }
 
-  async function handleNext() {
+  function applyClaimAddress(nextClaimId: string) {
+    const selected = claims.find((c) => c.id === nextClaimId);
+    if (!selected?.address) return;
+    const addr = addressFromClaimOption(selected);
+    form.setValue('unitNumber', addr.unitNumber);
+    form.setValue('streetNumber', addr.streetNumber);
+    form.setValue('streetName', addr.streetName);
+    form.setValue('suburb', addr.suburb);
+    form.setValue('state', addr.state);
+    form.setValue('postcode', addr.postcode);
+    form.setValue('country', addr.country);
+    setAddressSearch('');
+  }
+
+  async function handleNextFromDetails() {
     const valid = await form.trigger();
     if (!valid) return;
     setError(null);
     setStep('contacts');
+  }
+
+  function handleNextFromContacts() {
+    setError(null);
+    const values = form.getValues();
+    if (values.provider === 'crunchwork' && !values.claimId?.trim()) {
+      setError('A claim is required when publishing the job to NRMA.');
+      setStep('details');
+      return;
+    }
+    setStep('review');
   }
 
   function addContact(contact: JobContactRef) {
@@ -297,6 +444,41 @@ export function JobFormDrawer({
     setContacts((prev) => prev.filter((c) => c.key !== key));
   }
 
+  const watchedValues = form.watch();
+  const publishesToNrma = watchedValues.provider === 'crunchwork';
+
+  const selectedJobTypeName =
+    filteredJobTypes.find((jt) => jt.id === watchedValues.jobTypeId)?.name ??
+    watchedValues.jobTypeId;
+  const selectedClaimOption = claims.find((c) => c.id === watchedValues.claimId);
+  const reviewClaim =
+    claimPreview && claimPreview.id === watchedValues.claimId
+      ? claimPreview
+      : null;
+  const assigneeName =
+    orgUsers.find((u) => u.id === watchedValues.assignedToUserId)?.name ??
+    (watchedValues.assignedToUserId ? watchedValues.assignedToUserId : 'Unassigned');
+  const siteAddress = formatAddress(
+    {
+      unitNumber: watchedValues.unitNumber,
+      streetNumber: watchedValues.streetNumber,
+      streetName: watchedValues.streetName,
+      suburb: watchedValues.suburb,
+      state: watchedValues.state,
+      postcode: watchedValues.postcode,
+      country: watchedValues.country,
+    },
+    { full: true },
+  );
+  const folderTemplateName = watchedValues.filesystemTemplateId
+    ? projectTemplateLabel(
+        projectTemplates.find((t) => t.id === watchedValues.filesystemTemplateId) ?? {
+          id: watchedValues.filesystemTemplateId,
+          name: watchedValues.filesystemTemplateId,
+        },
+      )
+    : '—';
+
   async function handleSubmit() {
     const valid = await form.trigger();
     if (!valid) {
@@ -307,6 +489,11 @@ export function JobFormDrawer({
     const values = form.getValues();
     const apiProvider =
       JOB_PROVIDERS.find((p) => p.value === values.provider)?.apiCode ?? 'direct';
+    if (apiProvider === 'crunchwork' && !values.claimId?.trim()) {
+      setError('A claim is required when publishing the job to NRMA.');
+      setStep('details');
+      return;
+    }
     startCreating();
     setError(null);
 
@@ -320,12 +507,14 @@ export function JobFormDrawer({
       country: values.country?.trim() || undefined,
     };
     const hasAddress = Object.values(address).some(Boolean);
+    const linkedClaimId = values.claimId?.trim() || undefined;
 
     try {
       const result = await createJobAction(
         {
           name: values.name.trim(),
           jobTypeLookupId: values.jobTypeId,
+          ...(linkedClaimId ? { claimId: linkedClaimId } : {}),
           jobInstructions: values.jobInstructions?.trim() || undefined,
           makeSafeRequired: values.makeSafeRequired ?? false,
           excess: values.excess ? parseFloat(values.excess) : undefined,
@@ -379,8 +568,20 @@ export function JobFormDrawer({
       open={open}
       onOpenChange={handleOpenChange}
       title="Create Job"
-      description="Add site details first, then optionally attach contacts."
-      icon={<Briefcase className="h-5 w-5" />}
+      description={
+        step === 'review'
+          ? publishesToNrma
+            ? 'Review the claim and job summary, then send this job to NRMA.'
+            : 'Review the claim and job summary, then create the job.'
+          : 'Add site details first, then optionally attach contacts, then review before creating.'
+      }
+      icon={
+        step === 'review' && publishesToNrma ? (
+          <Send className="h-5 w-5 text-amber-600" />
+        ) : (
+          <Briefcase className="h-5 w-5" />
+        )
+      }
       preventClose={busy}
     >
       <div className="border-b border-slate-200 px-12 py-3">
@@ -407,6 +608,32 @@ export function JobFormDrawer({
           <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
             <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:col-span-2 md:grid-cols-3">
               <div className="space-y-2">
+                <Label htmlFor="job-claimId">Claim</Label>
+                <Select
+                  value={claimId ? claimId : NONE_CLAIM_VALUE}
+                  onValueChange={(v) => {
+                    const next =
+                      !v || v === NONE_CLAIM_VALUE ? '' : v;
+                    form.setValue('claimId', next, { shouldValidate: false });
+                    if (next) applyClaimAddress(next);
+                  }}
+                  items={claimItems}
+                >
+                  <SelectTrigger id="job-claimId" className="w-full">
+                    <SelectValue placeholder="Select claim (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE_CLAIM_VALUE}>None</SelectItem>
+                    {claims.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="job-name">Name</Label>
                 <Input
                   id="job-name"
@@ -424,9 +651,17 @@ export function JobFormDrawer({
                 <Label htmlFor="jobTypeId">Job Type</Label>
                 <Select
                   value={jobTypeId || null}
-                  onValueChange={(v) =>
-                    form.setValue('jobTypeId', v ?? '', { shouldValidate: true })
-                  }
+                  onValueChange={(v) => {
+                    const nextId = v ?? '';
+                    form.setValue('jobTypeId', nextId, { shouldValidate: true });
+                    form.setValue(
+                      'makeSafeRequired',
+                      isBuilderMakeSafeJobTypeName(
+                        jobTypeNameById(jobTypes, nextId),
+                      ),
+                      { shouldValidate: false },
+                    );
+                  }}
                   items={jobTypeItems}
                 >
                   <SelectTrigger id="jobTypeId" className="w-full">
@@ -505,10 +740,29 @@ export function JobFormDrawer({
                 <Select
                   value={provider}
                   onValueChange={(v) => {
-                    form.setValue('provider', (v as JobProvider) ?? 'internal', {
+                    const nextProvider = (v as JobProvider) ?? 'internal';
+                    form.setValue('provider', nextProvider, {
                       shouldValidate: true,
                     });
-                    form.setValue('jobTypeId', '', { shouldValidate: false });
+                    const nextApiCode =
+                      JOB_PROVIDERS.find((p) => p.value === nextProvider)
+                        ?.apiCode ?? 'direct';
+                    const nextJobTypeId = resolveDefaultJobTypeId(
+                      jobTypes,
+                      nextApiCode,
+                      defaultJobTypeName,
+                    );
+                    form.setValue('jobTypeId', nextJobTypeId, {
+                      shouldValidate: false,
+                    });
+                    form.setValue(
+                      'makeSafeRequired',
+                      isBuilderMakeSafeJobTypeName(
+                        jobTypeNameById(jobTypes, nextJobTypeId) ??
+                          defaultJobTypeName,
+                      ),
+                      { shouldValidate: false },
+                    );
                   }}
                   items={providerItems}
                 >
@@ -645,11 +899,150 @@ export function JobFormDrawer({
           />
         )}
 
+        {step === 'review' && (
+          <div className="mx-auto max-w-2xl space-y-4">
+            {publishesToNrma ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-950">
+                <p className="font-medium">This will be pushed to NRMA</p>
+                <p className="mt-2 text-amber-900/80">
+                  Submitting creates the job in Crunchwork for NRMA against the
+                  selected claim. This cannot be undone from this screen.
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-950">
+                <p className="font-medium">This job will be created internally</p>
+                <p className="mt-2 text-amber-900/80">
+                  The job stays in EnsureOS and is not sent to NRMA. Switch the
+                  provider to Crunchwork on the previous steps if you need it
+                  published externally.
+                </p>
+              </div>
+            )}
+
+            <PublishSummaryCard title="Job summary">
+              <PublishSummaryRow
+                label="Name"
+                value={watchedValues.name.trim() || '—'}
+              />
+              <PublishSummaryRow
+                label="Job type"
+                value={selectedJobTypeName?.trim() || '—'}
+              />
+              <PublishSummaryRow
+                label="Provider"
+                value={publishesToNrma ? 'Crunchwork (NRMA)' : 'Internal'}
+              />
+              <PublishSummaryRow label="Assignee" value={assigneeName} />
+              <PublishSummaryRow
+                label="Make-safe required"
+                value={watchedValues.makeSafeRequired ? 'Yes' : 'No'}
+              />
+              <PublishSummaryRow
+                label="Excess"
+                value={
+                  watchedValues.excess?.trim()
+                    ? watchedValues.excess.trim()
+                    : '—'
+                }
+              />
+              <PublishSummaryRow
+                label="Document folders"
+                value={folderTemplateName}
+              />
+              <PublishSummaryRow
+                label="Contacts"
+                value={
+                  contacts.length === 0
+                    ? 'None'
+                    : `${contacts.length} contact${contacts.length === 1 ? '' : 's'}`
+                }
+              />
+              <PublishSummaryRow
+                label="Site address"
+                value={siteAddress.trim() || '—'}
+              />
+              <PublishSummaryRow
+                label="Instructions"
+                value={watchedValues.jobInstructions?.trim() || '—'}
+              />
+            </PublishSummaryCard>
+
+            <PublishSummaryCard title="Claim">
+              <PublishSummaryRow
+                label="Claim number"
+                value={
+                  reviewClaim?.claimNumber ??
+                  reviewClaim?.externalReference ??
+                  selectedClaimOption?.label ??
+                  'Not linked'
+                }
+              />
+              <PublishSummaryRow
+                label="Insurer reference"
+                value={reviewClaim?.externalClaimId?.trim() || '—'}
+              />
+              <PublishSummaryRow
+                label="Status"
+                value={reviewClaim?.status?.name?.trim() || '—'}
+              />
+              <PublishSummaryRow
+                label="Policy name"
+                value={reviewClaim?.policyName?.trim() || '—'}
+              />
+              <PublishSummaryRow
+                label="Policy number"
+                value={reviewClaim?.policyNumber?.trim() || '—'}
+              />
+              <PublishSummaryRow
+                label="Date of loss"
+                value={
+                  reviewClaim?.dateOfLoss
+                    ? formatDate(reviewClaim.dateOfLoss)
+                    : '—'
+                }
+              />
+              <PublishSummaryRow
+                label="Loss description"
+                value={reviewClaim?.incidentDescription?.trim() || '—'}
+              />
+              <PublishSummaryRow
+                label="Risk address"
+                value={
+                  reviewClaim
+                    ? formatAddress(
+                        (reviewClaim.address as Record<string, unknown> | undefined) ??
+                          {},
+                        {
+                          full: true,
+                          fallback: {
+                            suburb: reviewClaim.addressSuburb,
+                            state: reviewClaim.addressState,
+                            postcode: reviewClaim.addressPostcode,
+                            country: reviewClaim.addressCountry,
+                          },
+                        },
+                      ).trim() ||
+                      siteAddress.trim() ||
+                      '—'
+                    : selectedClaimOption?.address
+                      ? formatAddress(selectedClaimOption.address, {
+                          full: true,
+                        }).trim() ||
+                        siteAddress.trim() ||
+                        '—'
+                      : siteAddress.trim() || '—'
+                }
+              />
+            </PublishSummaryCard>
+          </div>
+        )}
+
         <BottomFormDrawerError error={error} />
       </BottomFormDrawerBody>
 
       <BottomFormDrawerFooter>
-        {step === 'contacts' && (
+        {step !== 'details' && (
           <Button
             type="button"
             variant="outline"
@@ -658,7 +1051,7 @@ export function JobFormDrawer({
             disabled={busy}
             onClick={() => {
               setError(null);
-              setStep('details');
+              setStep(step === 'review' ? 'contacts' : 'details');
             }}
           >
             Back
@@ -674,20 +1067,39 @@ export function JobFormDrawer({
           Cancel
         </Button>
         {step === 'details' ? (
-          <Button type="button" size="lg" onClick={handleNext}>
+          <Button type="button" size="lg" onClick={() => void handleNextFromDetails()}>
+            Next
+            <ChevronRight className="ml-1 h-4 w-4" />
+          </Button>
+        ) : step === 'contacts' ? (
+          <Button type="button" size="lg" onClick={handleNextFromContacts}>
             Next
             <ChevronRight className="ml-1 h-4 w-4" />
           </Button>
         ) : (
-          <Button type="button" size="lg" disabled={busy} onClick={handleSubmit}>
+          <Button
+            type="button"
+            size="lg"
+            disabled={busy}
+            onClick={() => void handleSubmit()}
+            className="bg-blue-600 text-white hover:bg-blue-500"
+          >
             {busy ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                {submitPhase === 'opening' ? 'Opening...' : 'Creating...'}
-              </>
+              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+            ) : publishesToNrma ? (
+              <Send className="mr-1.5 h-4 w-4" />
             ) : (
-              'Create Job'
+              <FileText className="mr-1.5 h-4 w-4" />
             )}
+            {busy
+              ? submitPhase === 'opening'
+                ? 'Opening...'
+                : publishesToNrma
+                  ? 'Sending to NRMA…'
+                  : 'Creating...'
+              : publishesToNrma
+                ? 'Submit to NRMA'
+                : 'Create Job'}
           </Button>
         )}
       </BottomFormDrawerFooter>

@@ -32,6 +32,22 @@ import { CatalogOutboundService } from '../catalog/services/catalog-outbound.ser
 import { CatalogSelectionService } from '../catalog/services/catalog-selection.service';
 import { DocumentIssuanceService } from '../domain/services/document-issuance.service';
 import { OutboundEventsService } from '../outbound-events/outbound-events.service';
+import { ActivitiesService } from '../activities/activities.service';
+
+export interface PublishResult {
+  quote: Record<string, unknown> | null;
+  publishMode: 'internal' | 'external';
+  provider?: {
+    confirmed: boolean;
+    providerReference?: string;
+    sentGroups: number;
+    sentItems: number;
+    sentCombos: number;
+    excludedItems?: number;
+    excludedCombos?: number;
+    warnings?: string[];
+  };
+}
 @Injectable()
 export class QuotesService {
   private readonly logger = new Logger('QuotesService');
@@ -52,6 +68,7 @@ export class QuotesService {
     @Optional() private readonly connectionResolver?: ConnectionResolverService,
     @Optional() private readonly catalogOutbound?: CatalogOutboundService,
     @Optional() private readonly outboundEvents?: OutboundEventsService,
+    @Optional() private readonly activitiesService?: ActivitiesService,
   ) {}
 
   private async resolvePublishedStatus(params: { tenantId: string }): Promise<{
@@ -234,9 +251,12 @@ export class QuotesService {
     page?: number;
     limit?: number;
     jobId?: string;
+    jobIds?: string[];
     status?: string;
     statusId?: string;
     quoteType?: string;
+    assignedToUserIds?: string;
+    search?: string;
     sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
@@ -245,12 +265,20 @@ export class QuotesService {
       page: params.page,
       limit: params.limit,
       jobId: params.jobId,
+      jobIds: params.jobIds,
       status: params.status,
       statusId: params.statusId,
       quoteType: params.quoteType,
+      assignedToUserIds: params.assignedToUserIds,
+      search: params.search,
       sort: params.sort,
     });
     return { data: result.data.map(this.shapeQuoteResponse), total: result.total };
+  }
+
+  async findFilterAssignees() {
+    const tenantId = this.tenantContext.getTenantId();
+    return this.quotesRepo.findFilterAssignees({ tenantId });
   }
 
   async findOne(params: { id: string }) {
@@ -419,7 +447,7 @@ export class QuotesService {
     return this.quotesRepo.create({ data: insertData });
   }
 
-  async publish(params: { id: string; userId?: string }) {
+  async publish(params: { id: string; userId?: string }): Promise<PublishResult> {
     const tenantId = this.tenantContext.getTenantId();
     const existing = await this.quotesRepo.findOne({ id: params.id, tenantId });
     if (!existing) {
@@ -457,8 +485,46 @@ export class QuotesService {
         userId: params.userId ?? 'system',
         recipientOrganisationId: existing.recipientOrganisationId,
       });
+
+      if (this.outboundEvents && existing.jobId) {
+        const quoteType = await this.resolveQuoteType({
+          quoteId: params.id,
+          tenantId,
+        });
+        const autoApprovalContext = await this.resolveAutoApprovalContext({
+          quoteId: params.id,
+          jobId: existing.jobId,
+          tenantId,
+        });
+
+        this.outboundEvents.emitQuotePublished({
+          quoteId: params.id,
+          jobId: existing.jobId,
+          tenantId,
+          publishedAt: new Date().toISOString(),
+          quoteType,
+          ...autoApprovalContext,
+        }).catch(() => {});
+      }
+
+      this.activitiesService?.log({
+        tenantId,
+        entityType: 'quote',
+        entityId: params.id,
+        action: 'published',
+        actorType: 'user',
+        actorId: params.userId,
+        summary: 'Published estimate internally',
+        detail: { publishMode: 'internal', previousStatus: 'Draft', newStatus: 'Pending' },
+        relatedEntityType: existing.jobId ? 'job' : undefined,
+        relatedEntityId: existing.jobId ?? undefined,
+      }).catch(() => {});
+
       const updated = await this.quotesRepo.findOne({ id: params.id, tenantId });
-      return updated ? this.shapeQuoteResponse(updated) : null;
+      return {
+        quote: updated ? this.shapeQuoteResponse(updated) : null,
+        publishMode: 'internal',
+      };
     }
 
     if (existing.jobId && !job?.externalReference) {
@@ -502,12 +568,22 @@ export class QuotesService {
           : { externalReference: String(qt), name: String(qt) };
     }
 
-    const groups = await this.catalogSelectionService.buildOutboundQuoteGroups({
+    const providerCode =
+      (job as JobViewRow | null | undefined)?.connectionProviderCode ?? undefined;
+    const buildResult = await this.catalogSelectionService.buildOutboundQuoteGroups({
       quoteId: params.id,
+      providerCode,
     });
-    if (groups.length > 0) {
-      outboundBody.groups = groups;
+    const { groups, sentItemIds, sentComboIds, excludedItemIds, excludedComboIds, excludedItemNames, excludedComboNames } = buildResult;
+    if (groups.length === 0) {
+      throw new BadRequestException(
+        providerCode
+          ? `Cannot publish to ${providerCode}: no estimate lines are tagged for that provider. ` +
+            `Add catalogue items that include provider tag "${providerCode}", or retag existing items.`
+          : 'Cannot publish: estimate has no groups to send.',
+      );
     }
+    outboundBody.groups = groups;
 
     const enriched = this.catalogOutbound
       ? await this.catalogOutbound.enrichPayload({ tenantId, body: outboundBody })
@@ -530,6 +606,12 @@ export class QuotesService {
     this.logger.log(
       `QuotesService.publish — draft quote uploaded to Crunchwork (cwQuoteId=${cwQuoteId})`,
     );
+
+    this.assertCrunchworkGroupsHaveContent({
+      sentGroups: groups,
+      cwResponse: createObj,
+      cwQuoteId,
+    });
 
     // Provider-facing status remains Published; local estimate status is Pending.
     const publishedStatus = await this.resolvePublishedStatus({ tenantId });
@@ -563,6 +645,16 @@ export class QuotesService {
     });
 
     await this.quotesRepo.update({ id: params.id, data: updateData });
+
+    // Stamp publish_status on items and combos
+    await this.stampPublishStatuses({
+      sentItemIds,
+      sentComboIds,
+      excludedItemIds,
+      excludedComboIds,
+      cwResponse: createObj,
+    });
+
     await this.maybeIssueCrossTenantProposal({
       quoteId: params.id,
       tenantId,
@@ -572,15 +664,388 @@ export class QuotesService {
     const updated = await this.quotesRepo.findOne({ id: params.id, tenantId });
 
     if (this.outboundEvents && existing.jobId) {
+      const quoteType = await this.resolveQuoteType({
+        quoteId: params.id,
+        tenantId,
+      });
+      const autoApprovalContext = await this.resolveAutoApprovalContext({
+        quoteId: params.id,
+        jobId: existing.jobId,
+        tenantId,
+      });
+
       this.outboundEvents.emitQuotePublished({
         quoteId: params.id,
         jobId: existing.jobId,
         tenantId,
         publishedAt: new Date().toISOString(),
+        quoteType,
+        ...autoApprovalContext,
       }).catch(() => {});
     }
 
-    return updated ? this.shapeQuoteResponse(updated) : null;
+    const sentGroups = groups.length;
+    const sentItems = groups.reduce(
+      (n, g) => n + (Array.isArray((g as any).items) ? (g as any).items.length : 0), 0,
+    );
+    const sentCombos = groups.reduce(
+      (n, g) => n + (Array.isArray((g as any).combos) ? (g as any).combos.length : 0), 0,
+    );
+
+    const excludedItems = excludedItemIds.length;
+    const excludedCombos = excludedComboIds.length;
+
+    this.activitiesService?.log({
+      tenantId,
+      entityType: 'quote',
+      entityId: params.id,
+      action: 'published',
+      actorType: 'user',
+      actorId: params.userId,
+      summary: `Published estimate to provider (${sentItems} items in ${sentGroups} groups` +
+        (excludedItems > 0 ? `, ${excludedItems} item${excludedItems > 1 ? 's' : ''} excluded` : '') + ')',
+      detail: {
+        publishMode: 'external',
+        providerReference: cwQuoteId,
+        sentGroups,
+        sentCombos,
+        sentItems,
+        excludedItems,
+        excludedCombos,
+        ...(excludedItemNames.length > 0 ? { excludedItemNames } : {}),
+        ...(excludedComboNames.length > 0 ? { excludedScopeNames: excludedComboNames } : {}),
+        previousStatus: 'Draft',
+        newStatus: 'Pending',
+      },
+      relatedEntityType: existing.jobId ? 'job' : undefined,
+      relatedEntityId: existing.jobId ?? undefined,
+      source: 'internal',
+    }).catch(() => {});
+
+    return {
+      quote: updated ? this.shapeQuoteResponse(updated) : null,
+      publishMode: 'external',
+      provider: {
+        confirmed: true,
+        providerReference: cwQuoteId,
+        sentGroups,
+        sentItems,
+        sentCombos,
+        excludedItems,
+        excludedCombos,
+      },
+    };
+  }
+
+  /**
+   * CW rejects publish when any group has neither items nor combos.
+   * After draft create, verify groups still have content — CW silently drops
+   * some lines (e.g. rejected catalogue/unit refs) and can leave empty rooms.
+   */
+  private assertCrunchworkGroupsHaveContent(params: {
+    sentGroups: Record<string, unknown>[];
+    cwResponse: Record<string, unknown>;
+    cwQuoteId: string;
+  }): void {
+    const cwGroups = Array.isArray(params.cwResponse.groups)
+      ? (params.cwResponse.groups as Record<string, unknown>[])
+      : [];
+    if (cwGroups.length === 0) return;
+
+    const emptyLabels: string[] = [];
+    const keptNames = new Set<string>();
+    for (const group of cwGroups) {
+      const items = Array.isArray(group.items) ? (group.items as Record<string, unknown>[]) : [];
+      const combos = Array.isArray(group.combos) ? (group.combos as Record<string, unknown>[]) : [];
+      for (const item of items) {
+        if (typeof item.name === 'string') keptNames.add(item.name);
+      }
+      for (const combo of combos) {
+        if (typeof combo.name === 'string') keptNames.add(combo.name);
+        const comboItems = Array.isArray(combo.items)
+          ? (combo.items as Record<string, unknown>[])
+          : [];
+        for (const item of comboItems) {
+          if (typeof item.name === 'string') keptNames.add(item.name);
+        }
+      }
+      if (items.length === 0 && combos.length === 0) {
+        const label = group.groupLabel as { name?: string; externalReference?: string } | undefined;
+        emptyLabels.push(label?.name ?? label?.externalReference ?? String(group.id ?? 'unknown'));
+      }
+    }
+
+    if (emptyLabels.length === 0) return;
+
+    const sentNames: string[] = [];
+    for (const group of params.sentGroups) {
+      const items = Array.isArray(group.items) ? (group.items as Record<string, unknown>[]) : [];
+      for (const item of items) {
+        if (typeof item.name === 'string') sentNames.push(item.name);
+      }
+      const combos = Array.isArray(group.combos) ? (group.combos as Record<string, unknown>[]) : [];
+      for (const combo of combos) {
+        const comboItems = Array.isArray(combo.items)
+          ? (combo.items as Record<string, unknown>[])
+          : [];
+        for (const item of comboItems) {
+          if (typeof item.name === 'string') sentNames.push(item.name);
+        }
+      }
+    }
+    const dropped = sentNames.filter((n) => !keptNames.has(n));
+
+    this.logger.warn(
+      `QuotesService.assertCrunchworkGroupsHaveContent — cwQuoteId=${params.cwQuoteId} ` +
+        `emptyGroups=${emptyLabels.join('|')} droppedItems=${dropped.join('|')}`,
+    );
+
+    throw new BadRequestException(
+      `Crunchwork rejected one or more estimate lines, leaving empty group(s): ${emptyLabels.join(', ')}. ` +
+        (dropped.length > 0
+          ? `Lines not retained by Crunchwork: ${dropped.join('; ')}. `
+          : '') +
+        'Check catalogue item and unit mappings for those lines, then try again.',
+    );
+  }
+
+  /**
+   * Stamps publish_status on quote items and combos after publishing.
+   * Compares what was sent vs the CW response to detect rejected items.
+   */
+  private async stampPublishStatuses(params: {
+    sentItemIds: string[];
+    sentComboIds: string[];
+    excludedItemIds: string[];
+    excludedComboIds: string[];
+    cwResponse: Record<string, unknown>;
+  }): Promise<void> {
+    const { sentItemIds, sentComboIds, excludedItemIds, excludedComboIds, cwResponse } = params;
+
+    // Detect rejected items by comparing sent IDs against what CW returned
+    const cwGroups = Array.isArray(cwResponse.groups) ? cwResponse.groups as Record<string, unknown>[] : [];
+    const returnedItemExtRefs = new Set<string>();
+    const returnedComboExtRefs = new Set<string>();
+
+    for (const group of cwGroups) {
+      const items = Array.isArray(group.items) ? group.items as Record<string, unknown>[] : [];
+      for (const item of items) {
+        if (typeof item.id === 'string') returnedItemExtRefs.add(item.id);
+      }
+      const combos = Array.isArray(group.combos) ? group.combos as Record<string, unknown>[] : [];
+      for (const combo of combos) {
+        if (typeof combo.id === 'string') returnedComboExtRefs.add(combo.id);
+        const comboItems = Array.isArray(combo.items) ? combo.items as Record<string, unknown>[] : [];
+        for (const item of comboItems) {
+          if (typeof item.id === 'string') returnedItemExtRefs.add(item.id);
+        }
+      }
+    }
+
+    // If CW returned groups, check for rejected items (sent but not in response).
+    // If CW didn't return groups in its response, we can't determine rejection — mark all as sent.
+    const canDetectRejected = cwGroups.length > 0;
+
+    // Stamp excluded items
+    if (excludedItemIds.length > 0) {
+      await this.db
+        .update(quoteItems)
+        .set({ publishStatus: 'excluded' })
+        .where(inArray(quoteItems.id, excludedItemIds));
+    }
+    if (excludedComboIds.length > 0) {
+      await this.db
+        .update(quoteCombos)
+        .set({ publishStatus: 'excluded' })
+        .where(inArray(quoteCombos.id, excludedComboIds));
+    }
+
+    // Stamp sent items — if CW returned items, cross-reference to detect rejected
+    if (sentItemIds.length > 0) {
+      if (canDetectRejected) {
+        // Look up externalReference for sent items to cross-check against CW response
+        const sentRows = await this.db
+          .select({ id: quoteItems.id, externalReference: quoteItems.externalReference })
+          .from(quoteItems)
+          .where(inArray(quoteItems.id, sentItemIds));
+
+        const confirmedIds: string[] = [];
+        const rejectedIds: string[] = [];
+        for (const row of sentRows) {
+          if (row.externalReference && returnedItemExtRefs.has(row.externalReference)) {
+            confirmedIds.push(row.id);
+          } else if (row.externalReference && !returnedItemExtRefs.has(row.externalReference)) {
+            rejectedIds.push(row.id);
+          } else {
+            // No externalReference yet — assume sent (can't cross-check)
+            confirmedIds.push(row.id);
+          }
+        }
+
+        if (confirmedIds.length > 0) {
+          await this.db
+            .update(quoteItems)
+            .set({ publishStatus: 'sent' })
+            .where(inArray(quoteItems.id, confirmedIds));
+        }
+        if (rejectedIds.length > 0) {
+          this.logger.warn(
+            `QuotesService.stampPublishStatuses — ${rejectedIds.length} items rejected by CW`,
+          );
+          await this.db
+            .update(quoteItems)
+            .set({ publishStatus: 'rejected' })
+            .where(inArray(quoteItems.id, rejectedIds));
+        }
+      } else {
+        await this.db
+          .update(quoteItems)
+          .set({ publishStatus: 'sent' })
+          .where(inArray(quoteItems.id, sentItemIds));
+      }
+    }
+
+    // Stamp sent combos
+    if (sentComboIds.length > 0) {
+      if (canDetectRejected) {
+        const sentComboRows = await this.db
+          .select({ id: quoteCombos.id, externalReference: quoteCombos.externalReference })
+          .from(quoteCombos)
+          .where(inArray(quoteCombos.id, sentComboIds));
+
+        const confirmedIds: string[] = [];
+        const rejectedIds: string[] = [];
+        for (const row of sentComboRows) {
+          if (row.externalReference && returnedComboExtRefs.has(row.externalReference)) {
+            confirmedIds.push(row.id);
+          } else if (row.externalReference && !returnedComboExtRefs.has(row.externalReference)) {
+            rejectedIds.push(row.id);
+          } else {
+            confirmedIds.push(row.id);
+          }
+        }
+
+        if (confirmedIds.length > 0) {
+          await this.db
+            .update(quoteCombos)
+            .set({ publishStatus: 'sent' })
+            .where(inArray(quoteCombos.id, confirmedIds));
+        }
+        if (rejectedIds.length > 0) {
+          this.logger.warn(
+            `QuotesService.stampPublishStatuses — ${rejectedIds.length} combos rejected by CW`,
+          );
+          await this.db
+            .update(quoteCombos)
+            .set({ publishStatus: 'rejected' })
+            .where(inArray(quoteCombos.id, rejectedIds));
+        }
+      } else {
+        await this.db
+          .update(quoteCombos)
+          .set({ publishStatus: 'sent' })
+          .where(inArray(quoteCombos.id, sentComboIds));
+      }
+    }
+  }
+
+  private async resolveQuoteType(params: {
+    quoteId: string;
+    tenantId: string;
+  }): Promise<string | undefined> {
+    const logPrefix = 'QuotesService.resolveQuoteType';
+    try {
+      const quote = await this.quotesRepo.findOne({
+        id: params.quoteId,
+        tenantId: params.tenantId,
+      });
+      if (!quote) return undefined;
+
+      if (quote.quoteTypeLookupId) {
+        const lookupMap = await this.lookupsRepo.findByIds({
+          ids: [quote.quoteTypeLookupId],
+          tenantId: params.tenantId,
+        });
+        const lookup = lookupMap.get(quote.quoteTypeLookupId);
+        if (lookup?.name) {
+          return lookup.name.toLowerCase();
+        }
+      }
+
+      const custom = (quote.customData ?? {}) as Record<string, unknown>;
+      if (typeof custom.quoteType === 'string' && custom.quoteType) {
+        return custom.quoteType.toLowerCase();
+      }
+
+      return 'original';
+    } catch (err) {
+      this.logger.warn(
+        `${logPrefix} — failed: ${(err as Error).message}`,
+      );
+      return undefined;
+    }
+  }
+
+  private async resolveAutoApprovalContext(params: {
+    quoteId: string;
+    jobId: string;
+    tenantId: string;
+  }): Promise<{
+    claimRecommendation?: string;
+    autoApprovalApplies?: boolean;
+    claimDecision?: string;
+    withinDelegateAuthority?: boolean;
+  }> {
+    const logPrefix = 'QuotesService.resolveAutoApprovalContext';
+    try {
+      const job = await this.jobsRepo.findOne({
+        id: params.jobId,
+        tenantId: params.tenantId,
+      });
+      if (!job) return {};
+
+      const customData = (job.customData ?? {}) as Record<string, unknown>;
+      const claimRecommendation = customData.claimRecommendation as string | undefined;
+      const autoApprovalApplies = customData.autoApprovalApplies as boolean | undefined;
+      const claimDecision = customData.claimDecision as string | undefined;
+
+      let withinDelegateAuthority: boolean | undefined;
+
+      if (autoApprovalApplies) {
+        const quote = await this.quotesRepo.findOne({
+          id: params.quoteId,
+          tenantId: params.tenantId,
+        });
+        if (quote) {
+          const quoteTotal = quote.totalAmount
+            ? parseFloat(String(quote.totalAmount))
+            : 0;
+          const delegateLimit = customData.delegateAuthorityLimit
+            ? parseFloat(String(customData.delegateAuthorityLimit))
+            : null;
+
+          if (delegateLimit !== null) {
+            withinDelegateAuthority = quoteTotal <= delegateLimit;
+          }
+        }
+      }
+
+      this.logger.debug(
+        `${logPrefix} — job=${params.jobId} recommendation=${claimRecommendation ?? 'none'} autoApproval=${autoApprovalApplies ?? 'none'} decision=${claimDecision ?? 'none'} withinAuthority=${withinDelegateAuthority ?? 'none'}`,
+      );
+
+      return {
+        claimRecommendation,
+        autoApprovalApplies,
+        claimDecision,
+        withinDelegateAuthority,
+      };
+    } catch (err) {
+      this.logger.warn(
+        `${logPrefix} — failed: ${(err as Error).message}`,
+      );
+      return {};
+    }
   }
 
   /**

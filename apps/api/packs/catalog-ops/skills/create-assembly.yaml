@@ -1,0 +1,39 @@
+slug: create-assembly
+name: Create assembly
+description: Create an assembly kit and compose its BOM from primitive items only.
+triggerHints:
+  - create assembly
+  - new kit
+  - assembly bom
+  - build assembly
+instructionPrompt: |
+  Hierarchy: assemblies contain **primitives only** (never assemblies or scopes).
+
+  1. Confirm catalogId. Call open_catalog_item with kind=assembly and pricingMode (default computed).
+  2. Gather code, name, category, pricing; fill_catalog_item after each answer.
+  3. On confirmation, create_catalog_item. Note the new assembly id.
+  4. Locate or create primitive components (list_catalog_items kind=primitive).
+  5. Call open_catalog_bom for the assembly. Suggest lines with fill_catalog_bom.
+  6. On confirmation, replace_catalog_item_components or add_catalog_item_component.
+  7. Optionally refresh_catalog_item_cost.
+requiredToolRefs:
+  - integration: Claims Filesystem
+    tool: open_catalog_item
+  - integration: Claims Filesystem
+    tool: fill_catalog_item
+  - integration: Claims Filesystem
+    tool: create_catalog_item
+  - integration: Claims Filesystem
+    tool: list_catalog_items
+  - integration: Claims Filesystem
+    tool: open_catalog_bom
+  - integration: Claims Filesystem
+    tool: fill_catalog_bom
+  - integration: Claims Filesystem
+    tool: replace_catalog_item_components
+  - integration: Claims Filesystem
+    tool: add_catalog_item_component
+category: catalog
+invocationMode: inline
+includeHistory: true
+visibility: org

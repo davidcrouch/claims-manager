@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { CatalogSelectionService } from '../catalog/services/catalog-selection.service';
+import { parseLineItemsPageQuery } from '../catalog/line-items-page';
 import { AddCatalogAssemblyDto, AddCatalogPrimitiveDto } from '../catalog/dto/catalog.dto';
 import { WorkOrdersService } from './work-orders.service';
 import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
@@ -19,18 +20,25 @@ export class WorkOrdersController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('jobId') jobId?: string,
+    @Query('jobIds') jobIds?: string,
     @Query('purchaseOrderId') purchaseOrderId?: string,
     @Query('status') status?: string,
     @Query('workOrderType') workOrderType?: string,
+    @Query('search') search?: string,
     @Query('sort') sort?: string,
   ) {
+    const jobIdList = jobIds
+      ? jobIds.split(',').map((id) => id.trim()).filter((id) => id.length > 0)
+      : undefined;
     return this.workOrdersService.findAll({
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
       jobId,
+      jobIds: jobIdList && jobIdList.length > 0 ? jobIdList : undefined,
       purchaseOrderId,
       status,
       workOrderType,
+      search,
       sort,
     });
   }
@@ -49,8 +57,18 @@ export class WorkOrdersController {
 
   @Get(':id/line-items')
   @RequirePermission(P.procurement.read)
-  getLineItems(@Param('id') id: string) {
-    return this.catalogSelectionService.getWorkOrderLineItems({ workOrderId: id });
+  getLineItems(
+    @Param('id') id: string,
+    @Query('search') search?: string,
+    @Query('groupIds') groupIds?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('all') all?: string,
+  ) {
+    return this.catalogSelectionService.getWorkOrderLineItems({
+      workOrderId: id,
+      ...parseLineItemsPageQuery({ search, groupIds, page, limit, all }),
+    });
   }
 
   @Get(':id')

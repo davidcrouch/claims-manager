@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, isNull, desc, asc, sql, inArray } from 'drizzle-orm';
+import { eq, and, isNull, desc, asc, sql, inArray, or, ilike, getTableColumns } from 'drizzle-orm';
+import { normalizeListJobIds } from '../../common/list-job-filter';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
-import { purchaseOrders } from '../schema';
+import { purchaseOrders, vendors } from '../schema';
 
 export type PurchaseOrderRow = typeof purchaseOrders.$inferSelect;
 export type PurchaseOrderInsert = typeof purchaseOrders.$inferInsert;
@@ -50,11 +51,13 @@ export class PurchaseOrdersRepository {
     page?: number;
     limit?: number;
     jobId?: string;
+    jobIds?: string[];
     /** Comma-separated status lookup IDs. */
     status?: string;
     vendorId?: string;
     ownershipStatus?: string;
     captureMethod?: string;
+    search?: string;
     sort?: string;
   }): Promise<{ data: PurchaseOrderRow[]; total: number }> {
     const page = params.page ?? 1;
@@ -65,8 +68,15 @@ export class PurchaseOrdersRepository {
       eq(purchaseOrders.tenantId, params.tenantId),
       isNull(purchaseOrders.deletedAt),
     );
-    if (params.jobId) {
-      whereClause = and(whereClause, eq(purchaseOrders.jobId, params.jobId));
+    const jobIds = normalizeListJobIds({ jobId: params.jobId, jobIds: params.jobIds });
+    if (jobIds) {
+      if (jobIds.length === 0) return { data: [], total: 0 };
+      whereClause = and(
+        whereClause,
+        jobIds.length === 1
+          ? eq(purchaseOrders.jobId, jobIds[0])
+          : inArray(purchaseOrders.jobId, jobIds),
+      );
     }
     const statusIds = params.status?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
     const vendorIds = params.vendorId?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
@@ -82,11 +92,25 @@ export class PurchaseOrdersRepository {
     if (params.captureMethod) {
       whereClause = and(whereClause, eq(purchaseOrders.captureMethod, params.captureMethod));
     }
+    if (params.search?.trim()) {
+      const term = `%${params.search.trim()}%`;
+      whereClause = and(
+        whereClause,
+        or(
+          ilike(purchaseOrders.purchaseOrderNumber, term),
+          ilike(purchaseOrders.name, term),
+          ilike(purchaseOrders.externalId, term),
+          ilike(purchaseOrders.poForName, term),
+          ilike(vendors.name, term),
+        )!,
+      );
+    }
 
     const [data, countResult] = await Promise.all([
       this.db
-        .select()
+        .select(getTableColumns(purchaseOrders))
         .from(purchaseOrders)
+        .leftJoin(vendors, eq(purchaseOrders.vendorId, vendors.id))
         .where(whereClause)
         .orderBy(...buildPurchaseOrdersOrderBy(params.sort))
         .limit(limit)
@@ -94,6 +118,7 @@ export class PurchaseOrdersRepository {
       this.db
         .select({ count: sql<number>`count(*)::int` })
         .from(purchaseOrders)
+        .leftJoin(vendors, eq(purchaseOrders.vendorId, vendors.id))
         .where(whereClause),
     ]);
 

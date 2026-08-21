@@ -19,6 +19,9 @@ export async function createJobAction(
     const api = createApiClient({ token });
     const job = await api.createJob(body, options);
     revalidatePath('/jobs');
+    if (typeof body.claimId === 'string' && body.claimId) {
+      revalidatePath(`/claims/${body.claimId}`);
+    }
     return { success: true, job };
   } catch (err) {
     console.error('[jobs:createJobAction]', err);

@@ -35,7 +35,8 @@ export default async function JobDetailPage({
   // Fire-and-forget: mark any unread notifications for this job as read
   api.markEntityNotificationsRead('job', id).catch(() => {});
 
-  const [parentClaim, statusOptions, jobTypeOptions] = await Promise.all([
+  const [parentClaim, statusOptions, jobTypeOptions, contactTypeOptions, reportStatusOptions, reportTypeOptions] =
+    await Promise.all([
     job.claimId ? loadClaim(job.claimId) : Promise.resolve(null as Claim | null),
     api
       .getLookupsByDomain('job_status', { providerCode: 'crunchwork' })
@@ -55,7 +56,18 @@ export default async function JobDetailPage({
         );
         return [] as Awaited<ReturnType<typeof api.getLookupsByDomain>>;
       }),
+    api.getLookupsByDomain('contact_type').catch(() => []),
+    api.getLookupsByDomain('report_status').catch(() => []),
+    api.getLookupsByDomain('report_type').catch(() => []),
   ]);
+
+  const toOptions = (
+    rows: Awaited<ReturnType<typeof api.getLookupsByDomain>>,
+  ) =>
+    (Array.isArray(rows) ? rows : []).map((row) => ({
+      id: row.id,
+      name: row.name?.trim() ? row.name : 'Unknown',
+    }));
 
   return (
     <>
@@ -67,6 +79,9 @@ export default async function JobDetailPage({
         parentClaim={parentClaim}
         statusOptions={statusOptions}
         jobTypeOptions={jobTypeOptions}
+        contactTypeOptions={toOptions(contactTypeOptions)}
+        reportStatusOptions={toOptions(reportStatusOptions)}
+        reportTypeOptions={toOptions(reportTypeOptions)}
       />
     </>
   );

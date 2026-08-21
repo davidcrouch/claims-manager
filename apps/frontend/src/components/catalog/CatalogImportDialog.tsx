@@ -32,6 +32,8 @@ export interface CatalogImportDialogProps {
   /** When set, the dialog is controlled and the built-in trigger is hidden. */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** Called after a successful import so the parent can reload line items. */
+  onImportComplete?: () => void;
 }
 
 type WizardStep = 'catalog' | 'select' | 'review' | 'confirm' | 'importing' | 'report';
@@ -93,9 +95,11 @@ export function CatalogImportDialog({
   catalogType: initialCatalogType,
   open: openProp,
   onOpenChange,
+  onImportComplete,
 }: CatalogImportDialogProps) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const isControlled = openProp !== undefined;
   const open = isControlled ? openProp : uncontrolledOpen;
@@ -217,7 +221,70 @@ export function CatalogImportDialog({
     const lines = source.trim().split(/\r?\n/);
     const header = lines[0];
     const kept = lines.slice(1).filter((_, idx) => importable.has(idx + 2));
-    return [header, ...kept].join('\n');
+    const sorted = sortCsvDataLinesByParent(header, kept);
+    return [header, ...sorted].join('\n');
+  }
+
+  /** Parents before children so chunked imports still resolve Parent ids. */
+  function sortCsvDataLinesByParent(headerLine: string, dataLines: string[]): string[] {
+    const headers = parseCsvLineSimple(headerLine).map((h) => h.trim().toLowerCase());
+    const parentIdx = ['parent', 'parent_id', 'parent_code']
+      .map((name) => headers.indexOf(name))
+      .find((i) => i >= 0);
+    const idIdx = headers.indexOf('id');
+    const codeIdx = headers.indexOf('code');
+    if (parentIdx === undefined || parentIdx < 0) return dataLines;
+
+    const parsed = dataLines.map((line, order) => {
+      const cells = parseCsvLineSimple(line);
+      const code = String(cells[codeIdx] || cells[idIdx] || '').trim();
+      const parent = String(cells[parentIdx] || '').trim();
+      return { line, order, code, parent };
+    });
+
+    const codeToItem = new Map(parsed.filter((p) => p.code).map((p) => [p.code.toLowerCase(), p]));
+    const pending = new Set(parsed);
+    const ordered: typeof parsed = [];
+    const visiting = new Set<(typeof parsed)[number]>();
+
+    const visit = (item: (typeof parsed)[number]) => {
+      if (!pending.has(item) || visiting.has(item)) return;
+      visiting.add(item);
+      if (item.parent) {
+        const parent = codeToItem.get(item.parent.toLowerCase());
+        if (parent && pending.has(parent)) visit(parent);
+      }
+      visiting.delete(item);
+      pending.delete(item);
+      ordered.push(item);
+    };
+
+    for (const item of parsed) visit(item);
+    return ordered.map((p) => p.line);
+  }
+
+  function parseCsvLineSimple(line: string): string[] {
+    const cells: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (ch === ',' && !inQuotes) {
+        cells.push(current);
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+    cells.push(current);
+    return cells;
   }
 
   async function runImport() {
@@ -265,6 +332,7 @@ export function CatalogImportDialog({
         });
       }
       setImportResult(aggregate);
+      onImportComplete?.();
       router.refresh();
     } catch (err) {
       setImportError(err instanceof Error ? err.message : 'Import failed');
@@ -423,21 +491,50 @@ export function CatalogImportDialog({
                 <span className="font-medium capitalize">{selectedCatalogType}</span> column format.
               </p>
               <div
-                className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-200 bg-slate-50/50 px-6 py-12 text-center"
-                onDragOver={(e) => e.preventDefault()}
+                role="button"
+                tabIndex={0}
+                aria-label="Drop CSV here or click to choose a file"
+                className={`relative flex min-h-48 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-6 py-12 text-center transition-colors ${
+                  isDragOver
+                    ? 'border-primary bg-primary/5'
+                    : 'border-slate-200 bg-slate-50/50 hover:border-primary/50 hover:bg-slate-50'
+                }`}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsDragOver(true);
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsDragOver(false);
+                }}
                 onDrop={(e) => {
                   e.preventDefault();
+                  e.stopPropagation();
+                  setIsDragOver(false);
                   const file = e.dataTransfer.files[0];
                   if (file) void handleFileSelect(file);
+                }}
+                onClick={() => fileInputRef.current?.click()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    fileInputRef.current?.click();
+                  }
                 }}
               >
                 <Upload className="mb-3 h-10 w-10 text-muted-foreground/50" />
                 <p className="text-sm font-medium">Drop CSV here or choose a file</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Click anywhere in this area to browse
+                </p>
                 <input
                   ref={fileInputRef}
                   type="file"
                   accept=".csv,text/csv"
-                  className="mt-4 text-sm"
+                  className="sr-only"
+                  tabIndex={-1}
                   onChange={(e) => void handleFileSelect(e.target.files?.[0] ?? null)}
                 />
                 {fileName && (

@@ -36,13 +36,20 @@ export class JournalsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('status') status?: string,
+    @Query('search') search?: string,
     @Query('jobId') jobId?: string,
+    @Query('jobIds') jobIds?: string,
   ) {
+    const jobIdList = jobIds
+      ? jobIds.split(',').map((id) => id.trim()).filter((id) => id.length > 0)
+      : undefined;
     return this.journalsService.findAll({
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
       status,
+      search,
       jobId,
+      jobIds: jobIdList && jobIdList.length > 0 ? jobIdList : undefined,
     });
   }
 
@@ -51,8 +58,10 @@ export class JournalsController {
   async findByEntity(
     @Param('entityType') entityType: string,
     @Param('entityId', ParseUUIDPipe) entityId: string,
+    @Query('search') search?: string,
+    @Query('status') status?: string,
   ) {
-    return this.journalsService.findByEntity({ entityType, entityId });
+    return this.journalsService.findByEntity({ entityType, entityId, search, status });
   }
 
   @Get(':id')

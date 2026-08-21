@@ -19,16 +19,17 @@ This plan covers database schema, API module, domain services, document integrat
 
 | Decision | Choice |
 |----------|--------|
-| **Master data** | claims-manager catalogue is authoritative |
-| **Item model** | Single `catalog_items` table; `kind = 'primitive' \| 'assembly'` |
+| **Item model** | Single `catalog_items` table; `kind = 'primitive' \| 'assembly' \| 'scope'` (scope added in migration `0047`) |
 | **Types** | Dedicated `catalog_item_types` table (material, labour, equipment, vendor, other) |
-| **Categories** | Dedicated `catalog_categories` table; self-referential `parent_category_id`; unlimited depth (typically 2–4 levels) |
+| **Categories** | Dedicated `catalog_categories` table; self-referential `parent_category_id`; unlimited depth (typically 2–4 levels). Categories may contain any item kind. |
 | **Units** | Reuse `lookup_values` domain `unit_type` (existing on line-item tables) |
 | **Pricing (v1)** | Default `unit_cost` / `buy_cost` on `catalog_items`; **no** separate price-list table |
-| **Assembly pricing** | `computed` (default), `fixed`, or `cost_plus`; cache computed cost on the assembly row |
-| **Assembly explosion** | **One level** when adding to a document: combo header + direct BOM children as lines; nested assemblies appear as single kit lines |
+| **Assembly / scope pricing** | `computed` (default), `fixed`, or `cost_plus`; cache computed cost on the parent row |
+| **BOM nesting** | **Assembly → primitives only**. **Scope → assemblies and/or primitives**. Scopes never nest. See `57_CATALOGUE_CHAT_UX.md`. |
+| **Assembly explosion** | **One level** when adding to a document: combo header + direct BOM children as lines; nested assemblies under a scope appear as single kit lines |
 | **Document snapshot** | Copy name, description, type, category, unit, costs, markup to document lines; never re-read live catalogue prices on issued documents |
 | **External sync** | `external_reference` on catalogue rows + optional `external_entity_links`; inbound unknown IDs → review queue, not auto-create |
+| **Chat UX** | Capability pack `catalog-ops` + native canvas drawers (open/fill MCP tools). See `57_CATALOGUE_CHAT_UX.md`. |
 
 ---
 
@@ -191,10 +192,14 @@ create index idx_catalog_bom_component on catalog_assembly_components (tenant_id
 
 **Rules enforced in application code (not DB):**
 
-- `assembly_id` must reference a row where `kind = 'assembly'`.
-- `component_id` may be primitive or assembly (nested BOM).
+- Parent (`assembly_id`) must reference a row where `kind` is `assembly` or `scope`.
+- **Assembly** BOM: `component_id` must be `primitive` only.
+- **Scope** BOM: `component_id` may be `primitive` or `assembly` (not `scope`).
+- Scopes cannot be nested under assemblies or scopes.
 - No circular references (recursive CTE cycle check on insert/update).
 - Same component may appear on multiple lines (no unique on `(assembly_id, component_id)`).
+
+Helpers: `isAllowedBomComponent` / `bomComponentRuleMessage` in `apps/api/src/modules/catalog/catalog.utils.ts`.
 
 ### 3.5 FK backfill on existing line-item tables
 

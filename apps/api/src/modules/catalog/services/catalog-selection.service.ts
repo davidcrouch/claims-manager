@@ -30,14 +30,24 @@ import { TenantContext } from '../../../tenant/tenant-context';
 import {
   buildComboPayload,
   buildItemSnapshotFields,
+  catalogItemAllowsProvider,
   computeLineTotals,
   formatDecimal,
+  hoistProviderCombos,
   isCatalogBomParentKind,
+  isPercentMarkupType,
   isScopeComboPayload,
   parentComboIdFromPayload,
   parseDecimal,
+  rateToPercentPoints,
+  coerceToRateString,
 } from '../catalog.utils';
 import { CatalogPricingService } from './catalog-pricing.service';
+import {
+  emptyLineItemsPage,
+  paginateAssembledLineItems,
+  type LineItemsPageQuery,
+} from '../line-items-page';
 
 /** Crunchwork Insurance REST API requires catalogItemId / catalogComboId as UUIDs. */
 const CW_CATALOG_UUID_RE =
@@ -606,7 +616,7 @@ export class CatalogSelectionService {
         if (item.quantity !== undefined) updates.quantity = item.quantity;
         if (item.unitCost !== undefined) updates.unitCost = item.unitCost;
         if (item.markupValue !== undefined) updates.markupValue = item.markupValue;
-        if (item.tax !== undefined) updates.tax = item.tax;
+        if (item.tax !== undefined) updates.tax = coerceToRateString(item.tax);
         if (item.unitType !== undefined) {
           const lookupId = item.unitType ? unitLookupMap.get(item.unitType.toUpperCase()) : null;
           updates.unitTypeLookupId = lookupId ?? null;
@@ -645,10 +655,12 @@ export class CatalogSelectionService {
     return { updated: params.items.length + params.combos.length };
   }
 
-  async getQuoteLineItems(params: { quoteId: string }) {
+  async getQuoteLineItems(params: { quoteId: string } & LineItemsPageQuery) {
     const tenantId = this.getTenantId();
     const groups = await this.listQuoteGroups({ quoteId: params.quoteId });
-    if (groups.length === 0) return [];
+    if (groups.length === 0) {
+      return emptyLineItemsPage(params);
+    }
 
     const groupIds = groups.map((g) => g.id);
 
@@ -657,7 +669,7 @@ export class CatalogSelectionService {
       if (g.groupLabelLookupId) lookupIds.add(g.groupLabelLookupId);
     }
 
-    const combos = await this.db
+    let combos = await this.db
       .select()
       .from(quoteCombos)
       .where(
@@ -670,7 +682,7 @@ export class CatalogSelectionService {
       .orderBy(quoteCombos.sortIndex);
 
     const comboIds = combos.map((c) => c.id);
-    const directItems =
+    let directItems =
       groupIds.length > 0
         ? await this.db
             .select()
@@ -685,7 +697,7 @@ export class CatalogSelectionService {
             .orderBy(quoteItems.sortIndex)
         : [];
 
-    const comboItems =
+    let comboItems =
       comboIds.length > 0
         ? await this.db
             .select()
@@ -728,7 +740,7 @@ export class CatalogSelectionService {
       comboItemsByCombo.set(item.quoteComboId, list);
     }
 
-    return groups.map((group, index) => {
+    const assembled = groups.map((group, index) => {
       const dimensions = (group.dimensions as Record<string, unknown>) ?? {};
       const groupTotals = (group.totals as Record<string, unknown>) ?? {};
       const groupCombos = combosByGroup.get(group.id) ?? [];
@@ -757,6 +769,7 @@ export class CatalogSelectionService {
           quantity: combo.quantity ? parseDecimal(combo.quantity) : undefined,
           catalogComboId: combo.catalogComboId,
           catalogScopeId: combo.catalogComboId,
+          publishStatus: combo.publishStatus ?? undefined,
           subTotal: asNumber(comboTotals.subTotal),
           totalTax: asNumber(comboTotals.totalTax),
           total: asNumber(comboTotals.total),
@@ -786,9 +799,10 @@ export class CatalogSelectionService {
         scopes: nested.scopes,
       };
     });
+    return paginateAssembledLineItems(assembled, params);
   }
 
-  async getPurchaseOrderLineItems(params: { purchaseOrderId: string }) {
+  async getPurchaseOrderLineItems(params: { purchaseOrderId: string } & LineItemsPageQuery) {
     const tenantId = this.getTenantId();
     const groups = await this.db
       .select()
@@ -802,7 +816,9 @@ export class CatalogSelectionService {
       )
       .orderBy(purchaseOrderGroups.sortIndex);
 
-    if (groups.length === 0) return [];
+    if (groups.length === 0) {
+      return emptyLineItemsPage(params);
+    }
 
     const groupIds = groups.map((g) => g.id);
 
@@ -882,7 +898,7 @@ export class CatalogSelectionService {
       comboItemsByCombo.set(item.purchaseOrderComboId, list);
     }
 
-    return groups.map((group, index) => {
+    const assembled = groups.map((group, index) => {
       const dimensions = (group.dimensions as Record<string, unknown>) ?? {};
       const groupTotals = (group.totals as Record<string, unknown>) ?? {};
       const groupCombos = combosByGroup.get(group.id) ?? [];
@@ -939,9 +955,10 @@ export class CatalogSelectionService {
         scopes: nested.scopes,
       };
     });
+    return paginateAssembledLineItems(assembled, params);
   }
 
-  async getWorkOrderLineItems(params: { workOrderId: string }) {
+  async getWorkOrderLineItems(params: { workOrderId: string } & LineItemsPageQuery) {
     const tenantId = this.getTenantId();
     const groups = await this.db
       .select()
@@ -955,7 +972,9 @@ export class CatalogSelectionService {
       )
       .orderBy(workOrderGroups.sortIndex);
 
-    if (groups.length === 0) return [];
+    if (groups.length === 0) {
+      return emptyLineItemsPage(params);
+    }
 
     const groupIds = groups.map((g) => g.id);
 
@@ -1035,7 +1054,7 @@ export class CatalogSelectionService {
       comboItemsByCombo.set(item.workOrderComboId, list);
     }
 
-    return groups.map((group, index) => {
+    const assembled = groups.map((group, index) => {
       const dimensions = (group.dimensions as Record<string, unknown>) ?? {};
       const groupTotals = (group.totals as Record<string, unknown>) ?? {};
       const groupCombos = combosByGroup.get(group.id) ?? [];
@@ -1092,6 +1111,7 @@ export class CatalogSelectionService {
         scopes: nested.scopes,
       };
     });
+    return paginateAssembledLineItems(assembled, params);
   }
 
   private mapWorkOrderItemRow(
@@ -1171,14 +1191,25 @@ export class CatalogSelectionService {
   /**
    * Builds the `groups` array shaped for the Crunchwork POST /quotes body.
    * Resolves all lookup IDs to their external references.
+   * Returns the outbound payload along with metadata about which items were sent vs excluded.
    */
-  async buildOutboundQuoteGroups(params: { quoteId: string }): Promise<Record<string, unknown>[]> {
+  async buildOutboundQuoteGroups(params: { quoteId: string; providerCode?: string }): Promise<{
+    groups: Record<string, unknown>[];
+    sentItemIds: string[];
+    sentComboIds: string[];
+    excludedItemIds: string[];
+    excludedComboIds: string[];
+    excludedItemNames: string[];
+    excludedComboNames: Array<{ name: string; kind: 'assembly' | 'scope' }>;
+  }> {
     const tenantId = this.getTenantId();
     const groups = await this.listQuoteGroups({ quoteId: params.quoteId });
-    if (groups.length === 0) return [];
+    if (groups.length === 0) {
+      return { groups: [], sentItemIds: [], sentComboIds: [], excludedItemIds: [], excludedComboIds: [], excludedItemNames: [], excludedComboNames: [] };
+    }
 
     const groupIds = groups.map((g) => g.id);
-    const combos = await this.db
+    let combos = await this.db
       .select()
       .from(quoteCombos)
       .where(
@@ -1191,7 +1222,7 @@ export class CatalogSelectionService {
       .orderBy(quoteCombos.sortIndex);
 
     const comboIds = combos.map((c) => c.id);
-    const directItems =
+    let directItems =
       groupIds.length > 0
         ? await this.db
             .select()
@@ -1206,7 +1237,7 @@ export class CatalogSelectionService {
             .orderBy(quoteItems.sortIndex)
         : [];
 
-    const comboItems =
+    let comboItems =
       comboIds.length > 0
         ? await this.db
             .select()
@@ -1221,13 +1252,124 @@ export class CatalogSelectionService {
             .orderBy(quoteItems.sortIndex)
         : [];
 
-    const allItems = [...directItems, ...comboItems];
+    const catalogIdsForProvider = new Set<string>();
+    for (const item of [...directItems, ...comboItems]) {
+      if (item.catalogItemId) catalogIdsForProvider.add(item.catalogItemId);
+    }
+    for (const combo of combos) {
+      if (combo.catalogComboId) catalogIdsForProvider.add(combo.catalogComboId);
+    }
+    const catalogProviderMap = await this.itemsRepo.findProviderCodes({
+      tenantId,
+      ids: [...catalogIdsForProvider],
+    });
+
+    const allowsCatalogLink = (localCatalogItemId: string | null | undefined): boolean => {
+      if (!params.providerCode) return true;
+      if (!localCatalogItemId) return true;
+      return catalogItemAllowsProvider(
+        catalogProviderMap.get(localCatalogItemId),
+        params.providerCode,
+      );
+    };
+
+    let strippedCount = 0;
+    let keptCount = 0;
+    const excludedItemIds: string[] = [];
+    const excludedItemNames: string[] = [];
+    const filterLinked = <T extends { id: string; name?: string | null; catalogItemId?: string | null }>(rows: T[]): T[] => {
+      const out: T[] = [];
+      for (const row of rows) {
+        if (allowsCatalogLink(row.catalogItemId)) {
+          out.push(row);
+          keptCount += 1;
+        } else {
+          strippedCount += 1;
+          excludedItemIds.push(row.id);
+          excludedItemNames.push(row.name ?? '(unnamed)');
+        }
+      }
+      return out;
+    };
+
+    directItems = filterLinked(directItems);
+    comboItems = filterLinked(comboItems);
+
+    const comboItemsByComboId = new Map<string, typeof comboItems>();
+    for (const item of comboItems) {
+      if (!item.quoteComboId) continue;
+      const list = comboItemsByComboId.get(item.quoteComboId) ?? [];
+      list.push(item);
+      comboItemsByComboId.set(item.quoteComboId, list);
+    }
+
+    // Provider combos must themselves be tagged for the provider. Scopes / untagged
+    // shells are stripped and their children recursively hoisted to the parent
+    // (group or kept ancestor combo) so CW never receives empty combo shells.
+    const keepComboForProvider = (combo: (typeof combos)[number]): boolean => {
+      if (!params.providerCode) return true;
+      if (!combo.catalogComboId) return false;
+      return allowsCatalogLink(combo.catalogComboId);
+    };
+
+    const combosByGroup = new Map<string, typeof combos>();
+    for (const combo of combos) {
+      const list = combosByGroup.get(combo.quoteGroupId) ?? [];
+      list.push(combo);
+      combosByGroup.set(combo.quoteGroupId, list);
+    }
+    const directItemsByGroup = new Map<string, typeof directItems>();
+    for (const item of directItems) {
+      if (!item.quoteGroupId) continue;
+      const list = directItemsByGroup.get(item.quoteGroupId) ?? [];
+      list.push(item);
+      directItemsByGroup.set(item.quoteGroupId, list);
+    }
+
+    type KeptCombo = {
+      combo: (typeof combos)[number];
+      items: typeof comboItems;
+    };
+    const keptCombosByGroup = new Map<string, KeptCombo[]>();
+    let strippedComboCount = 0;
+    const excludedComboIds: string[] = [];
+    const excludedComboNames: Array<{ name: string; kind: 'assembly' | 'scope' }> = [];
+
+    for (const [groupId, groupCombos] of combosByGroup) {
+      const hoisted = hoistProviderCombos({
+        combos: groupCombos,
+        itemsByComboId: comboItemsByComboId,
+        keepCombo: keepComboForProvider,
+      });
+      strippedComboCount += hoisted.strippedComboCount;
+      excludedComboIds.push(...hoisted.strippedComboIds);
+      excludedComboNames.push(...hoisted.strippedComboMeta);
+      keptCombosByGroup.set(groupId, hoisted.kept);
+      if (hoisted.groupItems.length > 0) {
+        const existing = directItemsByGroup.get(groupId) ?? [];
+        directItemsByGroup.set(groupId, [...existing, ...hoisted.groupItems]);
+      }
+    }
+
+    if (params.providerCode) {
+      const keptComboCount = [...keptCombosByGroup.values()].reduce((n, list) => n + list.length, 0);
+      this.logger.log(
+        `CatalogSelectionService.buildOutboundQuoteGroups — provider=${params.providerCode} ` +
+          `keptItems=${keptCount} strippedItems=${strippedCount} ` +
+          `keptCombos=${keptComboCount} strippedCombos=${strippedComboCount}`,
+      );
+    }
+
+    const allItems = [
+      ...[...directItemsByGroup.values()].flat(),
+      ...[...keptCombosByGroup.values()].flatMap((list) => list.flatMap((k) => k.items)),
+    ];
     const lookupIds = new Set<string>();
     for (const g of groups) {
       if (g.groupLabelLookupId) lookupIds.add(g.groupLabelLookupId);
     }
-    for (const c of combos) {
-      if (c.lineScopeStatusLookupId) lookupIds.add(c.lineScopeStatusLookupId);
+    for (const kept of [...keptCombosByGroup.values()].flat()) {
+      if (kept.combo.lineScopeStatusLookupId) lookupIds.add(kept.combo.lineScopeStatusLookupId);
     }
     for (const item of allItems) {
       if (item.lineScopeStatusLookupId) lookupIds.add(item.lineScopeStatusLookupId);
@@ -1246,46 +1388,19 @@ export class CatalogSelectionService {
       return { name: lv.name, externalReference: lv.externalReference };
     };
 
-    const combosByGroup = new Map<string, typeof combos>();
-    for (const combo of combos) {
-      const list = combosByGroup.get(combo.quoteGroupId) ?? [];
-      list.push(combo);
-      combosByGroup.set(combo.quoteGroupId, list);
-    }
-    const directItemsByGroup = new Map<string, typeof directItems>();
-    for (const item of directItems) {
-      if (!item.quoteGroupId) continue;
-      const list = directItemsByGroup.get(item.quoteGroupId) ?? [];
-      list.push(item);
-      directItemsByGroup.set(item.quoteGroupId, list);
-    }
-    const comboItemsByCombo = new Map<string, typeof comboItems>();
-    for (const item of comboItems) {
-      if (!item.quoteComboId) continue;
-      const list = comboItemsByCombo.get(item.quoteComboId) ?? [];
-      list.push(item);
-      comboItemsByCombo.set(item.quoteComboId, list);
-    }
-
     const catalogItemIds = new Set<string>();
     for (const item of allItems) {
       if (item.catalogItemId) catalogItemIds.add(item.catalogItemId);
     }
-    for (const combo of combos) {
-      if (combo.catalogComboId) catalogItemIds.add(combo.catalogComboId);
+    for (const kept of [...keptCombosByGroup.values()].flat()) {
+      if (kept.combo.catalogComboId && keepComboForProvider(kept.combo)) {
+        catalogItemIds.add(kept.combo.catalogComboId);
+      }
     }
     const catalogExtRefMap = await this.itemsRepo.findExternalReferences({
       tenantId,
       ids: [...catalogItemIds],
     });
-
-    const seenCatalogItemRefs = new Map<string, number>();
-    for (const item of allItems) {
-      if (!item.catalogItemId) continue;
-      const ref = catalogExtRefMap.get(item.catalogItemId);
-      if (!ref || !CW_CATALOG_UUID_RE.test(ref)) continue;
-      seenCatalogItemRefs.set(ref, (seenCatalogItemRefs.get(ref) ?? 0) + 1);
-    }
 
     const resolveCwCatalogId = (
       localCatalogItemId: string | null,
@@ -1301,9 +1416,9 @@ export class CatalogSelectionService {
         );
         return undefined;
       }
-      if (field === 'catalogItemId' && (seenCatalogItemRefs.get(extRef) ?? 0) > 1) {
-        return undefined;
-      }
+      // Same CW catalogue UUID may appear on multiple lines (e.g. cornice in
+      // Bathroom and Kitchen). Always keep catalogItemId — uniqueness is per
+      // quote line, not per catalogue product.
       return extRef;
     };
 
@@ -1317,16 +1432,27 @@ export class CatalogSelectionService {
       if (row.name) result.name = row.name;
       if (row.description) result.description = row.description;
       if (row.itemType) result.type = normaliseCwItemType(row.itemType);
-      if (row.category) result.category = row.category;
-      if (row.subCategory) result.subCategory = row.subCategory;
+      // When linked to a CW catalogue item, omit category/subCategory — CW silently
+      // drops lines if these conflict with the catalogue item's own category
+      // (observed for e.g. "Heating and cooling" + air-con catalogue UUIDs).
+      if (!cwCatalogItemId) {
+        if (row.category) result.category = row.category;
+        if (row.subCategory) result.subCategory = row.subCategory;
+      }
       result.index = row.sortIndex;
       if (row.quantity) result.quantity = parseDecimal(row.quantity);
-      if (row.tax) result.tax = parseDecimal(row.tax);
+      if (row.tax) result.tax = rateToPercentPoints(parseDecimal(row.tax));
       if (row.unitCost) result.unitCost = parseDecimal(row.unitCost);
       if (row.buyCost) result.buyCost = parseDecimal(row.buyCost);
       const cwMarkup = normaliseCwMarkupType(row.markupType);
       if (cwMarkup) result.markupType = cwMarkup;
-      if (row.markupValue) result.markupValue = parseDecimal(row.markupValue);
+      if (row.markupValue) {
+        const mk = parseDecimal(row.markupValue);
+        result.markupValue =
+          cwMarkup === 'Percentage' || (!cwMarkup && isPercentMarkupType(row.markupType))
+            ? rateToPercentPoints(mk)
+            : mk;
+      }
       if (row.internal != null) result.internal = row.internal;
       if (row.note) result.note = row.note;
       const tags = Array.isArray(row.tags) ? (row.tags as string[]) : [];
@@ -1338,13 +1464,31 @@ export class CatalogSelectionService {
       return result;
     };
 
-    return groups
+    const sentItemIds: string[] = [];
+    const sentComboIds: string[] = [];
+
+    for (const items of directItemsByGroup.values()) {
+      for (const item of items) sentItemIds.push(item.id);
+    }
+    for (const keptList of keptCombosByGroup.values()) {
+      for (const { combo, items } of keptList) {
+        sentComboIds.push(combo.id);
+        for (const item of items) sentItemIds.push(item.id);
+      }
+    }
+
+    const outboundGroups = groups
       .map((group) => {
         const dims = (group.dimensions as Record<string, unknown>) ?? {};
-        const groupCombos = combosByGroup.get(group.id) ?? [];
+        const groupKeptCombos = keptCombosByGroup.get(group.id) ?? [];
         const groupDirectItems = (directItemsByGroup.get(group.id) ?? []).map(mapItem);
+        // CW treats `index` as unique within a group. After stripping internal scopes,
+        // hoisted children often all still have sortIndex 0 — resequence so none collide.
+        groupDirectItems.forEach((item, i) => {
+          item.index = i;
+        });
 
-        if (groupDirectItems.length === 0 && groupCombos.length === 0) {
+        if (groupDirectItems.length === 0 && groupKeptCombos.length === 0) {
           return null;
         }
 
@@ -1367,34 +1511,57 @@ export class CatalogSelectionService {
 
         if (groupDirectItems.length > 0) result.items = groupDirectItems;
 
-        if (groupCombos.length > 0) {
-          result.combos = groupCombos.map((combo) => {
-            const comboResult: Record<string, unknown> = {};
-            if (combo.externalReference) comboResult.id = combo.externalReference;
-            const cwCatalogComboId = resolveCwCatalogId(
-              combo.catalogComboId,
-              'catalogComboId',
-            );
-            if (cwCatalogComboId) {
-              comboResult.catalogComboId = cwCatalogComboId;
-            }
-            if (combo.name) comboResult.name = combo.name;
-            if (combo.description) comboResult.description = combo.description;
-            if (combo.category) comboResult.category = combo.category;
-            if (combo.subCategory) comboResult.subCategory = combo.subCategory;
-            comboResult.index = combo.sortIndex;
-            if (combo.quantity) comboResult.quantity = parseDecimal(combo.quantity);
-            const lss = resolveLookup(combo.lineScopeStatusLookupId);
-            if (lss) comboResult.lineScopeStatus = lss;
-            const items = (comboItemsByCombo.get(combo.id) ?? []).map(mapItem);
-            if (items.length > 0) comboResult.items = items;
-            return comboResult;
-          });
+        if (groupKeptCombos.length > 0) {
+          const mappedCombos = groupKeptCombos
+            .map(({ combo, items: comboItemRows }, comboIndex) => {
+              const comboResult: Record<string, unknown> = {};
+              if (combo.externalReference) comboResult.id = combo.externalReference;
+              const cwCatalogComboId = resolveCwCatalogId(
+                combo.catalogComboId,
+                'catalogComboId',
+              );
+              if (cwCatalogComboId) {
+                comboResult.catalogComboId = cwCatalogComboId;
+              }
+              if (combo.name) comboResult.name = combo.name;
+              if (combo.description) comboResult.description = combo.description;
+              if (!cwCatalogComboId) {
+                if (combo.category) comboResult.category = combo.category;
+                if (combo.subCategory) comboResult.subCategory = combo.subCategory;
+              }
+              comboResult.index = comboIndex;
+              if (combo.quantity) comboResult.quantity = parseDecimal(combo.quantity);
+              const lss = resolveLookup(combo.lineScopeStatusLookupId);
+              if (lss) comboResult.lineScopeStatus = lss;
+              const items = comboItemRows.map(mapItem);
+              items.forEach((item, i) => {
+                item.index = i;
+              });
+              if (items.length > 0) comboResult.items = items;
+              return comboResult;
+            })
+            .filter((comboResult) => {
+              const items = comboResult.items;
+              if (Array.isArray(items) && items.length > 0) return true;
+              return typeof comboResult.catalogComboId === 'string' && !!comboResult.catalogComboId;
+            });
+          if (mappedCombos.length > 0) result.combos = mappedCombos;
         }
 
+        if (!result.items && !result.combos) return null;
         return result;
       })
       .filter((g): g is Record<string, unknown> => g !== null);
+
+    return {
+      groups: outboundGroups,
+      sentItemIds,
+      sentComboIds,
+      excludedItemIds,
+      excludedComboIds,
+      excludedItemNames,
+      excludedComboNames,
+    };
   }
 
   private mapQuoteItemRow(
@@ -1430,6 +1597,7 @@ export class CatalogSelectionService {
         : undefined,
       catalogItemId: row.catalogItemId,
       internal: row.internal ?? undefined,
+      publishStatus: row.publishStatus ?? undefined,
       mismatches,
       tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
       note: row.note,

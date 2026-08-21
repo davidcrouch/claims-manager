@@ -55,10 +55,27 @@ export async function fetchJobPurchaseOrdersAction(jobId: string): Promise<Purch
   return api.getJobPurchaseOrders(jobId);
 }
 
-export async function fetchJobReportsAction(jobId: string): Promise<Report[] | null> {
+export async function fetchJobReportsAction(
+  jobId: string,
+  params?: {
+    search?: string;
+    status?: string;
+    reportTypeId?: string;
+    sort?: string;
+    limit?: number;
+  },
+): Promise<Report[] | null> {
   const api = await getApi();
   if (!api) return null;
-  return api.getJobReports(jobId);
+  const res = await api.getReports({
+    jobId,
+    limit: params?.limit ?? 100,
+    search: params?.search,
+    status: params?.status,
+    reportTypeId: params?.reportTypeId,
+    sort: params?.sort,
+  });
+  return res.data;
 }
 
 export async function fetchJobAppointmentsAction(jobId: string): Promise<Appointment[] | null> {

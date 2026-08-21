@@ -1,11 +1,12 @@
-import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import type { DrizzleDbOrTx } from '../../../database/drizzle.module';
 import type { RawContact } from '../transformers/transformer.interface';
 import { ContactsRepository, type ContactInsert } from '../../../database/repositories';
-import { ClaimContactsRepository, type ClaimContactInsert } from '../../../database/repositories';
+import { ClaimContactsRepository } from '../../../database/repositories';
 import { LookupResolutionService } from './lookup-resolution.service';
-import { JobContactsRepository, type JobContactInsert } from '../../../database/repositories/job-contacts.repository';
+import { JobContactsRepository } from '../../../database/repositories/job-contacts.repository';
 import { nameFromLookup } from '../transformers/transform-utils';
+import { hasContactIdentity, isBlankContactValue } from '../../../common/contact-identity';
 
 type EntityJoinRepo = {
   upsert(params: { data: Record<string, unknown>; tx?: DrizzleDbOrTx }): Promise<unknown>;
@@ -19,20 +20,26 @@ export class ContactSyncService implements OnModuleInit {
   constructor(
     private readonly contactsRepo: ContactsRepository,
     private readonly lookupResolution: LookupResolutionService,
-    @Optional() private readonly claimContactsRepo?: ClaimContactsRepository,
-    @Optional() private readonly jobContactsRepo?: JobContactsRepository,
+    private readonly claimContactsRepo: ClaimContactsRepository,
+    private readonly jobContactsRepo: JobContactsRepository,
   ) {}
 
   onModuleInit(): void {
-    if (this.claimContactsRepo) this.joinRepos['claim'] = this.claimContactsRepo;
-    if (this.jobContactsRepo) this.joinRepos['job'] = this.jobContactsRepo;
+    this.joinRepos['claim'] = this.claimContactsRepo;
+    this.joinRepos['job'] = this.jobContactsRepo;
     this.logger.log(
-      `ContactSyncService.onModuleInit — join repos: ${Object.keys(this.joinRepos).join(', ') || '(none)'}`,
+      `ContactSyncService.onModuleInit — join repos: ${Object.keys(this.joinRepos).join(', ')}`,
     );
   }
 
   registerJoinRepo(entityType: string, repo: EntityJoinRepo): void {
     this.joinRepos[entityType] = repo;
+  }
+
+  private resolveJoinRepo(entityType: string): EntityJoinRepo | undefined {
+    if (entityType === 'claim') return this.claimContactsRepo;
+    if (entityType === 'job') return this.jobContactsRepo;
+    return this.joinRepos[entityType];
   }
 
   async syncForEntity(params: {
@@ -43,21 +50,43 @@ export class ContactSyncService implements OnModuleInit {
     strategy: 'additive' | 'replace';
     tx: DrizzleDbOrTx;
   }): Promise<void> {
-    const joinRepo = this.joinRepos[params.entityType];
+    const joinRepo = this.resolveJoinRepo(params.entityType);
     if (!joinRepo) {
-      this.logger.warn(
+      this.logger.error(
+        `ContactSyncService.syncForEntity — no join repo for entityType=${params.entityType}; refusing to drop contacts`,
+      );
+      throw new Error(
         `ContactSyncService.syncForEntity — no join repo registered for entityType=${params.entityType}`,
       );
-      return;
     }
 
-    let sortIndex = 0;
-    for (const raw of params.contacts) {
-      if (!raw.externalReference) continue;
+    this.logger.log(
+      `ContactSyncService.syncForEntity — ${params.entityType}=${params.entityId} contacts=${params.contacts.length} strategy=${params.strategy}`,
+    );
 
-      // Resolve contact type lookup
+    let sortIndex = 0;
+    let linked = 0;
+    for (const raw of params.contacts) {
+      if (
+        !hasContactIdentity({
+          externalReference: raw.externalReference,
+          email: raw.email,
+          mobilePhone: raw.mobilePhone,
+          homePhone: raw.homePhone,
+          workPhone: raw.workPhone,
+          firstName: raw.firstName,
+          lastName: raw.lastName,
+        })
+      ) {
+        this.logger.debug(
+          `ContactSyncService.syncForEntity — skipping contact with no identity signals for ${params.entityType}=${params.entityId}`,
+        );
+        continue;
+      }
+
+      // Resolve contact type lookup (ignore empty CW lookup stubs)
       let typeLookupId: string | undefined;
-      if (raw.typeField) {
+      if (this.hasResolvableLookup(raw.typeField)) {
         const resolved = await this.lookupResolution.resolveField({
           tenantId: params.tenantId,
           domain: raw.typeDomain ?? 'contact_type',
@@ -67,9 +96,8 @@ export class ContactSyncService implements OnModuleInit {
         typeLookupId = resolved ?? undefined;
       }
 
-      // Resolve preferred contact method lookup
       let preferredMethodLookupId: string | undefined;
-      if (raw.preferredMethodField) {
+      if (this.hasResolvableLookup(raw.preferredMethodField)) {
         const resolved = await this.lookupResolution.resolveField({
           tenantId: params.tenantId,
           domain: raw.preferredMethodDomain ?? 'contact_method',
@@ -79,26 +107,64 @@ export class ContactSyncService implements OnModuleInit {
         preferredMethodLookupId = resolved ?? undefined;
       }
 
-      // Upsert contact row
-      const contact = await this.contactsRepo.upsertByExternalReference({
-        data: {
-          tenantId: params.tenantId,
-          externalReference: raw.externalReference,
-          firstName: raw.firstName,
-          lastName: raw.lastName,
-          email: raw.email,
-          mobilePhone: raw.mobilePhone,
-          homePhone: raw.homePhone,
-          workPhone: raw.workPhone,
-          notes: raw.notes,
-          typeLookupId,
-          preferredContactMethodLookupId: preferredMethodLookupId,
-          contactPayload: raw.sourcePayload,
-        },
+      const inbound: ContactInsert = {
+        tenantId: params.tenantId,
+        externalReference: raw.externalReference?.trim() || null,
+        firstName: raw.firstName,
+        lastName: raw.lastName,
+        email: isBlankContactValue(raw.email) ? null : raw.email!.trim(),
+        mobilePhone: raw.mobilePhone,
+        homePhone: raw.homePhone,
+        workPhone: raw.workPhone,
+        notes: raw.notes,
+        typeLookupId,
+        preferredContactMethodLookupId: preferredMethodLookupId,
+        contactPayload: raw.sourcePayload,
+      };
+
+      let contact = await this.contactsRepo.findMatchingContact({
+        tenantId: params.tenantId,
+        externalReference: inbound.externalReference,
+        email: inbound.email,
+        mobilePhone: inbound.mobilePhone,
+        homePhone: inbound.homePhone,
+        workPhone: inbound.workPhone,
+        firstName: inbound.firstName,
+        lastName: inbound.lastName,
         tx: params.tx,
       });
 
-      // Build join table data
+      if (contact) {
+        contact = await this.contactsRepo.mergeFillBlanks({
+          existing: contact,
+          data: inbound,
+          tx: params.tx,
+        });
+      } else {
+        // Email unique: if create would collide, treat that row as the match
+        if (inbound.email) {
+          const byEmail = await this.contactsRepo.findByEmail({
+            tenantId: params.tenantId,
+            email: inbound.email,
+            tx: params.tx,
+          });
+          if (byEmail) {
+            contact = await this.contactsRepo.mergeFillBlanks({
+              existing: byEmail,
+              data: inbound,
+              tx: params.tx,
+            });
+          }
+        }
+
+        if (!contact) {
+          contact = await this.contactsRepo.create({
+            data: inbound,
+            tx: params.tx,
+          });
+        }
+      }
+
       const entityIdField = `${params.entityType}Id`;
       await joinRepo.upsert({
         data: {
@@ -116,6 +182,26 @@ export class ContactSyncService implements OnModuleInit {
       });
 
       sortIndex += 1;
+      linked += 1;
     }
+
+    this.logger.log(
+      `ContactSyncService.syncForEntity — linked ${linked}/${params.contacts.length} contacts for ${params.entityType}=${params.entityId}`,
+    );
+  }
+
+  /** True when CW sent a lookup object/string that can actually be resolved. */
+  private hasResolvableLookup(field: unknown): boolean {
+    if (field == null) return false;
+    if (typeof field === 'string') return field.trim().length > 0;
+    if (typeof field === 'object' && !Array.isArray(field)) {
+      const obj = field as Record<string, unknown>;
+      const ext =
+        (typeof obj.externalReference === 'string' && obj.externalReference.trim()) ||
+        (typeof obj.id === 'string' && obj.id.trim()) ||
+        '';
+      return ext.length > 0;
+    }
+    return false;
   }
 }

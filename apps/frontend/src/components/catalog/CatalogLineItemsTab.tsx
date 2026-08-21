@@ -9,6 +9,8 @@ import { EditGroupDialog } from '@/components/quotes/EditGroupDialog';
 import { DeleteGroupDialog } from '@/components/quotes/DeleteGroupDialog';
 import { DeleteItemDialog } from '@/components/quotes/DeleteItemDialog';
 import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
+import { LINE_ITEMS_PAGE_SIZE } from '@/components/quotes/quote-line-items.utils';
+import { uiMarkupToStored, uiTaxToStored } from '@/lib/rates';
 import {
   getCatalogGroupedItemsAction,
   saveCatalogLineItemsAction,
@@ -16,6 +18,31 @@ import {
 } from '@/app/(app)/admin/catalog/actions';
 
 const PREFIX = 'frontend:CatalogLineItemsTab';
+
+function findCatalogItemMarkupType(groups: ApiGroup[], catalogItemId: string): string | undefined {
+  for (const g of groups) {
+    for (const item of g.items ?? []) {
+      if (item.catalogItemId === catalogItemId || item.id === catalogItemId) return item.markupType;
+    }
+    for (const combo of g.combos ?? []) {
+      if (combo.catalogComboId === catalogItemId || combo.id === catalogItemId) return undefined;
+      for (const item of combo.items ?? []) {
+        if (item.catalogItemId === catalogItemId || item.id === catalogItemId) return item.markupType;
+      }
+    }
+    for (const scope of g.scopes ?? []) {
+      for (const item of scope.items ?? []) {
+        if (item.catalogItemId === catalogItemId || item.id === catalogItemId) return item.markupType;
+      }
+      for (const combo of scope.combos ?? []) {
+        for (const item of combo.items ?? []) {
+          if (item.catalogItemId === catalogItemId || item.id === catalogItemId) return item.markupType;
+        }
+      }
+    }
+  }
+  return undefined;
+}
 
 function mapCatalogGroupsToApiGroups(
   groups: Awaited<ReturnType<typeof getCatalogGroupedItemsAction>>['groups'],
@@ -139,6 +166,10 @@ export function CatalogLineItemsTab({
 }) {
   const router = useRouter();
   const [groups, setGroups] = useState<ApiGroup[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [groupSummaries, setGroupSummaries] = useState<Array<{ id: string; label: string }>>([]);
+  const [hiddenGroupIds, setHiddenGroupIds] = useState<Set<string>>(new Set());
   const [initialLoad, setInitialLoad] = useState(true);
   const [pending, startTransition] = useTransition();
   const [structurallyDirty, setStructurallyDirty] = useState(false);
@@ -149,11 +180,27 @@ export function CatalogLineItemsTab({
   const [deletingGroupId, setDeletingGroupId] = useState<string | null>(null);
   const [deletingItem, setDeletingItem] = useState<DeleteItemRequest | null>(null);
 
+  const visibleCategoryIds = useMemo(() => {
+    if (hiddenGroupIds.size === 0 || groupSummaries.length === 0) return undefined;
+    const visible = groupSummaries.map((g) => g.id).filter((id) => !hiddenGroupIds.has(id));
+    return visible;
+  }, [hiddenGroupIds, groupSummaries]);
+
   const loadGroupedItems = useCallback(async () => {
     try {
-      const result = await getCatalogGroupedItemsAction(catalogId);
+      const result = await getCatalogGroupedItemsAction({
+        catalogId,
+        search: search || undefined,
+        categoryIds: visibleCategoryIds,
+        page,
+        limit: LINE_ITEMS_PAGE_SIZE,
+      });
       if (result.success && result.groups) {
         setGroups(mapCatalogGroupsToApiGroups(result.groups));
+        setTotal(result.total ?? 0);
+        if (result.groupSummaries) {
+          setGroupSummaries(result.groupSummaries.map((g) => ({ id: g.id, label: g.label })));
+        }
       } else if (!result.success) {
         console.error(`${PREFIX}.loadGroupedItems — ${result.error}`);
         toast.error(result.error ?? 'Failed to load catalogue items');
@@ -161,87 +208,15 @@ export function CatalogLineItemsTab({
     } finally {
       setInitialLoad(false);
     }
-  }, [catalogId]);
+  }, [catalogId, search, visibleCategoryIds, page]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, hiddenGroupIds]);
 
   useEffect(() => {
     void loadGroupedItems();
   }, [loadGroupedItems, reloadToken]);
-
-  const filteredGroups = useMemo(() => {
-    const term = (search ?? '').trim().toLowerCase();
-    if (!term) return groups;
-
-    return groups
-      .map((group) => {
-        const filteredItems = (group.items ?? []).filter(
-          (item) =>
-            (item.name ?? '').toLowerCase().includes(term) ||
-            (item.component ?? '').toLowerCase().includes(term) ||
-            (item.description ?? '').toLowerCase().includes(term),
-        );
-        const filteredCombos = (group.combos ?? [])
-          .map((combo) => {
-            const comboMatch =
-              (combo.name ?? '').toLowerCase().includes(term) ||
-              (combo.component ?? '').toLowerCase().includes(term);
-            const matchingItems = (combo.items ?? []).filter(
-              (item) =>
-                (item.name ?? '').toLowerCase().includes(term) ||
-                (item.component ?? '').toLowerCase().includes(term) ||
-                (item.description ?? '').toLowerCase().includes(term),
-            );
-            if (comboMatch || matchingItems.length > 0) {
-              return { ...combo, items: comboMatch ? combo.items : matchingItems };
-            }
-            return null;
-          })
-          .filter(Boolean) as typeof group.combos;
-        const filteredScopes = (group.scopes ?? [])
-          .map((scope) => {
-            const scopeMatch =
-              (scope.name ?? '').toLowerCase().includes(term) ||
-              (scope.component ?? '').toLowerCase().includes(term) ||
-              'scope'.includes(term);
-            const matchingItems = (scope.items ?? []).filter(
-              (item) =>
-                (item.name ?? '').toLowerCase().includes(term) ||
-                (item.component ?? '').toLowerCase().includes(term) ||
-                (item.description ?? '').toLowerCase().includes(term),
-            );
-            const matchingCombos = (scope.combos ?? [])
-              .map((combo) => {
-                const comboMatch =
-                  (combo.name ?? '').toLowerCase().includes(term) ||
-                  (combo.component ?? '').toLowerCase().includes(term);
-                const comboMatchingItems = (combo.items ?? []).filter(
-                  (item) =>
-                    (item.name ?? '').toLowerCase().includes(term) ||
-                    (item.component ?? '').toLowerCase().includes(term) ||
-                    (item.description ?? '').toLowerCase().includes(term),
-                );
-                if (comboMatch || comboMatchingItems.length > 0) {
-                  return { ...combo, items: comboMatch ? combo.items : comboMatchingItems };
-                }
-                return null;
-              })
-              .filter(Boolean) as typeof scope.combos;
-            if (scopeMatch || matchingItems.length > 0 || (matchingCombos && matchingCombos.length > 0)) {
-              return {
-                ...scope,
-                items: scopeMatch ? scope.items : matchingItems,
-                combos: scopeMatch ? scope.combos : matchingCombos,
-              };
-            }
-            return null;
-          })
-          .filter(Boolean) as typeof group.scopes;
-        if (filteredItems.length > 0 || (filteredCombos && filteredCombos.length > 0) || (filteredScopes && filteredScopes.length > 0)) {
-          return { ...group, items: filteredItems, combos: filteredCombos, scopes: filteredScopes };
-        }
-        return null;
-      })
-      .filter(Boolean) as ApiGroup[];
-  }, [groups, search]);
 
   function handleDeleteItem(request: DeleteItemRequest) {
     setDeletingItem(request);
@@ -366,14 +341,18 @@ export function CatalogLineItemsTab({
           const [, assemblyId, lineId] = bomMatch;
           const catalogItemId = bomItemIdMap.get(lineId);
           if (catalogItemId) {
+            const markupType = findCatalogItemMarkupType(groups, catalogItemId);
             items.push({
               id: catalogItemId,
               name: fields.name,
               description: fields.description,
               unitType: fields.unitType,
               unitCost: fields.unitCost,
-              markupValue: fields.markupValue,
-              tax: fields.tax,
+              markupValue:
+                fields.markupValue !== undefined
+                  ? uiMarkupToStored(markupType, fields.markupValue)
+                  : undefined,
+              tax: fields.tax !== undefined ? uiTaxToStored(fields.tax) : undefined,
             });
           }
           if (fields.quantity !== undefined && catalogItemId) {
@@ -388,14 +367,18 @@ export function CatalogLineItemsTab({
           const itemId = rowKey.match(/-item-([0-9a-f-]{36})$/)?.[1];
           if (itemId) {
             const catalogItemId = bomItemIdMap.get(itemId) ?? itemId;
+            const markupType = findCatalogItemMarkupType(groups, catalogItemId);
             items.push({
               id: catalogItemId,
               name: fields.name,
               description: fields.description,
               unitType: fields.unitType,
               unitCost: fields.unitCost,
-              markupValue: fields.markupValue,
-              tax: fields.tax,
+              markupValue:
+                fields.markupValue !== undefined
+                  ? uiMarkupToStored(markupType, fields.markupValue)
+                  : undefined,
+              tax: fields.tax !== undefined ? uiTaxToStored(fields.tax) : undefined,
             });
             const scopeBomMatch = rowKey.match(/-scope-([0-9a-f-]{36})-item-([0-9a-f-]{36})$/);
             if (scopeBomMatch && fields.quantity !== undefined) {
@@ -461,7 +444,17 @@ export function CatalogLineItemsTab({
     <div className="space-y-4">
       <CreateSubmitOverlay phase={initialLoad ? 'loading' : 'idle'} entityLabel="catalogue" />
       <QuoteLineItemsTable
-        groups={filteredGroups}
+        groups={groups}
+        paging={{
+          page,
+          pageSize: LINE_ITEMS_PAGE_SIZE,
+          total,
+          onPageChange: setPage,
+          groupSummaries,
+          hiddenGroupIds,
+          onHiddenGroupIdsChange: setHiddenGroupIds,
+          serverFiltered: true,
+        }}
         onEditGroup={(id) => setEditingGroupId(id)}
         onDeleteGroup={(id) => setDeletingGroupId(id)}
         onDeleteItem={handleDeleteItem}

@@ -167,7 +167,7 @@ export default function createAuthRoutes(
    /**
     * Derive the base URL from the incoming request so that redirects stay on
     * the same origin the browser is using (important when behind a reverse
-    * proxy such as auth.more0.dev → localhost:3280).  Falls back to the
+    * proxy such as auth.more0.dev → localhost:3285).  Falls back to the
     * static BASE_URL env var when headers are absent.
     */
    function getRequestBaseUrl(req: Request): string {
@@ -186,26 +186,21 @@ export default function createAuthRoutes(
 
    /**
     * Derive a "start over" URL that restarts the OIDC flow from the client app.
-    * Tries the OIDC interaction first (to find the originating app), then falls
-    * back to the first interactive static client's origin.
+    * Must hit `/api/auth/login` (not the app origin alone): `/` is often public
+    * and will not begin a new interaction.
     */
    async function getStartOverUrl(uid: string, req: Request, res: Response): Promise<string> {
       try {
          const details = await provider.interactionDetails(req, res);
          const redirectUri = details.params.redirect_uri as string | undefined;
          if (redirectUri) {
-            return new URL(redirectUri).origin;
+            const origin = new URL(redirectUri).origin;
+            return `${origin}/api/auth/login?returnTo=${encodeURIComponent('/dashboard')}`;
          }
       } catch {
          // Interaction expired – fall through to static-client fallback
       }
-      const interactiveClient = getStaticClients().find(
-         c => c.redirect_uris.length > 0 && c.grant_types.includes('authorization_code')
-      );
-      if (interactiveClient) {
-         try { return new URL(interactiveClient.redirect_uris[0]).origin; } catch {}
-      }
-      return '/';
+      return appLoginUrl();
    }
 
    /**
@@ -1631,10 +1626,11 @@ export default function createAuthRoutes(
             errorCode: err.code
          }, 'Login submission error');
 
-         // Handle specific OIDC errors with redirects for form submissions
+         // Handle specific OIDC errors with redirects for form submissions.
+         // Do not keep a dead interaction UID (e.g. "expired") — restart OIDC.
          if (err.name === 'SessionNotFound') {
             log.warn({ functionName: 'login-submit', uid: req.params.uid }, 'Interaction session not found');
-            return res.redirect(`/login?interaction=${req.params.uid}&error=${encodeURIComponent('Session not found or expired. Please try again.')}`);
+            return res.redirect(303, appLoginUrl());
          }
 
          // Handle x-forwarded-proto errors (common in reverse proxy setups)
@@ -3285,16 +3281,17 @@ export default function createAuthRoutes(
          const uid = req.params.uid;
          log.warn({ uid }, 'auth-server:auth-routes:error-handler - Interaction session not found');
 
-         const startOverUrl = await getStartOverUrl(uid || '', req, res);
+         // Fresh OIDC entry — posting to /interaction/expired/login always fails.
+         const startOverUrl = appLoginUrl();
          const baseUrl = getRequestBaseUrl(req);
 
          const html = renderPage(
             React.createElement(LoginPage, {
-               uid: uid || '',
+               uid: 'expired',
                error: 'Your session has expired. Please sign in again.',
-               googleAuthUrl: `${baseUrl}/login/google/start?interaction=expired`,
-               microsoftAuthUrl: getMicrosoftOAuthConfig() ? `${baseUrl}/login/microsoft/start?interaction=expired` : undefined,
-               loginActionUrl: `${baseUrl}/interaction/expired/login`,
+               googleAuthUrl: startOverUrl,
+               microsoftAuthUrl: startOverUrl,
+               loginActionUrl: startOverUrl,
                registerUrl: `${baseUrl}/register`,
                resetPasswordUrl: `${baseUrl}/reset-password`,
                startOverUrl,

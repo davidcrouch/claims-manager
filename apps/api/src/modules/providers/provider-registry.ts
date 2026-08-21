@@ -26,6 +26,13 @@ export const PROVIDER_REGISTRY: ProviderRegistryEntry[] = [
     metadata: {},
   },
   {
+    code: 'more0-ensure',
+    name: 'More0 Ensure',
+    description: 'Capability engine for insurance job workflows (Assessment, Make Safe, Works)',
+    isActive: true,
+    metadata: { authType: 'client_credentials' },
+  },
+  {
     code: 'direct',
     name: 'Direct',
     description: 'Local operations without an external provider',

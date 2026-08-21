@@ -8,15 +8,23 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   formatDate,
-  isArchivedStatus,
   ValueFilterMenu,
   SortableColumnHeader,
   commitColumnFilterSelection,
   columnFilterToValuesParam,
-  columnFilterKey,
-  buildColumnFilterOptions,
+  statusValuesForArchiveListTab,
+  mergeStatusParamWithTab,
   TableEmptyRow,
 } from '@/components/shared/list-filters';
+import {
+  buildServerJobFilterOptions,
+  resolveServerJobFilterSelection,
+  selectedJobFilterLabels,
+  parseSelectedJobIds,
+  toServerJobFetchParams,
+  writeServerJobFilterParams,
+  jobFilterOptionsFromNameById,
+} from '@/components/shared/server-job-filter';
 import { TablePagination } from '@/components/shared/table-pagination';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
@@ -63,23 +71,6 @@ const TABLE_COLUMNS: ColDef[] = [
   { key: 'updated_at', label: 'Updated' },
 ];
 
-function getJournalSortValue(
-  j: Journal,
-  field: JournalSortField,
-): string | number | null | undefined {
-  switch (field) {
-    case 'name': return j.name;
-    case 'status': return j.status;
-    case 'job': return j.jobId;
-    case 'description': return j.description;
-    case 'location': return j.addressSuburb;
-    case 'pages': return j.pageCount ?? 0;
-    case 'created_at': return j.createdAt;
-    case 'updated_at': return j.updatedAt;
-    default: return null;
-  }
-}
-
 export interface JournalsPageClientProps {
   initialData: PaginatedResponse<Journal> | { data: Journal[]; total: number };
   job?: Job | null;
@@ -99,7 +90,8 @@ export function JournalsPageClient({
 }: JournalsPageClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const jobId = searchParams.get('jobId');
+  const jobId = searchParams.get('jobId') ?? undefined;
+  const jobIdsParam = searchParams.get('jobIds') ?? undefined;
   const [data, setData] = useState<PaginatedResponse<Journal>>(
     'data' in initialData ? initialData as PaginatedResponse<Journal> : { data: [], total: 0 },
   );
@@ -113,17 +105,55 @@ export function JournalsPageClient({
   });
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [statusFilterActive, setStatusFilterActive] = useState(false);
-  const [jobFilter, setJobFilter] = useState<Set<string>>(new Set());
-  const [jobFilterActive, setJobFilterActive] = useState(false);
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
   const { isVisible, toggle, visibleCount } = useColumnVisibility(
     'journals',
     TABLE_COLUMNS,
   );
   const lastFetchKeyRef = useRef<string | null>(null);
+  const uniqueStatuses = useMemo(
+    () => ['active', 'archived', 'deleted'],
+    [],
+  );
+  const tabStatusValues = useMemo(
+    () => statusValuesForArchiveListTab(tab, uniqueStatuses),
+    [tab, uniqueStatuses],
+  );
   const statusParam = useMemo(
-    () => columnFilterToValuesParam(statusFilterActive, statusFilter),
-    [statusFilterActive, statusFilter],
+    () =>
+      mergeStatusParamWithTab(
+        columnFilterToValuesParam(statusFilterActive, statusFilter),
+        tabStatusValues,
+      ),
+    [statusFilterActive, statusFilter, tabStatusValues],
+  );
+
+  const selectedJobIds = useMemo(
+    () => parseSelectedJobIds(jobId, jobIdsParam),
+    [jobId, jobIdsParam],
+  );
+  const filterJobs = useMemo(
+    () => jobFilterOptionsFromNameById(jobNameById),
+    [jobNameById],
+  );
+  const uniqueJobs = useMemo(
+    () => buildServerJobFilterOptions(filterJobs),
+    [filterJobs],
+  );
+  const { selected: jobFilter, active: jobFilterActive } = useMemo(
+    () =>
+      selectedJobFilterLabels({
+        jobId,
+        jobIds: jobIdsParam
+          ? jobIdsParam.split(',').map((id) => id.trim()).filter(Boolean)
+          : undefined,
+        jobs: filterJobs,
+      }),
+    [jobId, jobIdsParam, filterJobs],
+  );
+  const { jobId: fetchJobId, jobIds: fetchJobIds } = useMemo(
+    () => toServerJobFetchParams(selectedJobIds),
+    [selectedJobIds],
   );
 
   useEffect(() => {
@@ -133,13 +163,17 @@ export function JournalsPageClient({
 
   useEffect(() => {
     const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
-    const fetchKey = `${debouncedSearch}|${tab}|${page}|${statusKey}|${jobId ?? ''}`;
+    const fetchKey = `${debouncedSearch}|${tab}|${page}|${statusKey}|${jobId ?? ''}|${jobIdsParam ?? ''}`;
 
     const params = new URLSearchParams(searchParams.toString());
     params.set('page', String(page));
+    if (debouncedSearch) params.set('search', debouncedSearch);
+    else params.delete('search');
     if (statusParam) params.set('status', statusParam); else params.delete('status');
     if (jobId) params.set('jobId', jobId);
     else params.delete('jobId');
+    if (jobIdsParam) params.set('jobIds', jobIdsParam);
+    else params.delete('jobIds');
     const next = params.toString();
     // Skip no-op replace so create→detail navigation is not cancelled on remount.
     if (next !== searchParams.toString()) {
@@ -154,9 +188,16 @@ export function JournalsPageClient({
       return;
     }
 
-    fetchJournalsAction({ page, limit: PAGE_SIZE, status: statusParam, jobId: jobId ?? undefined }).then((res) => setData(res));
+    fetchJournalsAction({
+      page,
+      limit: PAGE_SIZE,
+      status: statusParam,
+      search: debouncedSearch || undefined,
+      jobId: fetchJobId,
+      jobIds: fetchJobIds,
+    }).then((res) => setData(res));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop: router.replace updates URL -> searchParams changes -> effect re-runs
-  }, [debouncedSearch, tab, page, statusParam, jobId]);
+  }, [debouncedSearch, tab, page, statusParam, jobId, jobIdsParam, fetchJobId, fetchJobIds]);
 
   const handleCreated = (journal: Journal) => {
     setData((prev) => ({ data: [journal, ...prev.data], total: prev.total + 1 }));
@@ -176,19 +217,6 @@ export function JournalsPageClient({
   const handleSearchChange = (value: string) => { setSearch(value); setPage(1); };
   const handleTabChange = (val: string) => { setTab(val as ListTab); setPage(1); };
   const handlePageChange = (newPage: number) => setPage(newPage);
-
-  const uniqueStatuses = useMemo(
-    () => ['active', 'archived', 'deleted'],
-    [],
-  );
-
-  const uniqueJobs = useMemo(
-    () =>
-      buildColumnFilterOptions(
-        data.data.map((row) => resolveJobName(row.jobId, jobNameById)),
-      ),
-    [data.data, jobNameById],
-  );
 
   const toggleStatus = (name: string) => {
     const working = statusFilterActive
@@ -216,34 +244,19 @@ export function JournalsPageClient({
   };
 
   const applyJobFilter = (next: Set<string>) => {
-    const committed = commitColumnFilterSelection({
+    const resolved = resolveServerJobFilterSelection({
       next,
-      optionCount: uniqueJobs.length,
+      options: uniqueJobs,
+      jobs: filterJobs,
     });
-    setJobFilter(committed.selected);
-    setJobFilterActive(committed.active);
     setPage(1);
+    const params = new URLSearchParams(searchParams.toString());
+    writeServerJobFilterParams(params, resolved);
+    params.set('page', '1');
+    router.replace(`/journals?${params.toString()}`, { scroll: false });
   };
 
-  const visibleRows = useMemo(() => {
-    let rows = data.data;
-
-    if (tab !== 'all') {
-      rows = rows.filter((j) => {
-        const archived = isArchivedStatus(j.status);
-        return tab === 'archived' ? archived : !archived;
-      });
-    }
-
-    if (jobFilterActive) {
-      if (jobFilter.size === 0) rows = [];
-      else rows = rows.filter((row) =>
-        jobFilter.has(columnFilterKey(resolveJobName(row.jobId, jobNameById))),
-      );
-    }
-
-    return rows;
-  }, [data.data, tab, jobFilterActive, jobFilter, jobNameById]);
+  const visibleRows = data.data;
 
   const breakdown = computeStatusBreakdown(visibleRows, (j) => j.status);
 
@@ -345,7 +358,7 @@ export function JournalsPageClient({
                         col.key === 'job'
                           ? {
                               options: uniqueJobs,
-                              selected: jobFilter,
+                              selected: jobFilterActive ? jobFilter : new Set(uniqueJobs),
                               active: jobFilterActive,
                               onApply: applyJobFilter,
                               menuTitle: 'Filter by job',

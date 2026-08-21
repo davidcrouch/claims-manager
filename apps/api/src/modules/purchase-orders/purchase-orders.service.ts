@@ -30,10 +30,12 @@ export class PurchaseOrdersService {
     page?: number;
     limit?: number;
     jobId?: string;
+    jobIds?: string[];
     status?: string;
     vendorId?: string;
     ownershipStatus?: string;
     captureMethod?: string;
+    search?: string;
     sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
@@ -42,10 +44,12 @@ export class PurchaseOrdersService {
       page: params.page,
       limit: params.limit,
       jobId: params.jobId,
+      jobIds: params.jobIds,
       status: params.status,
       vendorId: params.vendorId,
       ownershipStatus: params.ownershipStatus,
       captureMethod: params.captureMethod,
+      search: params.search,
       sort: params.sort,
     });
   }

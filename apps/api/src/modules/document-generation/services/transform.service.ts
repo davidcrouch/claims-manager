@@ -10,8 +10,29 @@ import type { DocumentType } from '../types/document-types';
 import type { TemplateData } from '../types/document-types';
 import { TRANSFORM_DEFAULTS } from '../schemas/target/defaults';
 import { getSourceJsonSchema } from '../schemas/json-schema';
+import { DataContextService } from '../data-context';
+import { enrichSourceSchemaWithDataContext } from '../data-context/enrich-source-schema';
+
+import { formatCurrency, formatDate } from '../data-mappers/base.mapper';
 
 const JSONATA_TIMEOUT_MS = 10_000;
+
+function yn(value: unknown): string {
+  return value === true || value === 'true' || value === 'Yes' ? 'Yes' : 'No';
+}
+
+function registerTransformFunctions(expression: ReturnType<typeof jsonata>): void {
+  expression.registerFunction('formatDate', (value: unknown) =>
+    formatDate(value as Date | string | null | undefined),
+  );
+  expression.registerFunction('formatCurrency', (value: unknown) =>
+    formatCurrency(value as string | number | null | undefined),
+  );
+  expression.registerFunction('yn', (value: unknown) => yn(value));
+  expression.registerFunction('str', (value: unknown) =>
+    value == null ? '' : String(value),
+  );
+}
 
 @Injectable()
 export class TransformService {
@@ -20,6 +41,7 @@ export class TransformService {
   constructor(
     private readonly tenantContext: TenantContext,
     private readonly transformsRepo: DocumentTemplateTransformsRepository,
+    private readonly dataContextService: DataContextService,
   ) {}
 
   async getTransform(params: {
@@ -44,7 +66,16 @@ export class TransformService {
   }> {
     const row = await this.getTransform(params);
     const defaults = TRANSFORM_DEFAULTS[params.documentType];
-    const sourceSchema = getSourceJsonSchema(params.documentType);
+    const baseSchema = getSourceJsonSchema(params.documentType);
+
+    const contextConfig = await this.dataContextService.getConfig({
+      documentType: params.documentType,
+    });
+    const sourceSchema = enrichSourceSchemaWithDataContext({
+      documentType: params.documentType,
+      baseSchema,
+      enabledSlugs: contextConfig.available ? contextConfig.enabledSlugs : null,
+    });
 
     return {
       jsonataRules: row?.jsonataRules ?? defaults?.jsonataRules ?? null,
@@ -102,6 +133,7 @@ export class TransformService {
     const logPrefix = 'TransformService.evaluateJsonata';
     try {
       const expression = jsonata(params.jsonataRules);
+      registerTransformFunctions(expression);
       const evaluatePromise = expression.evaluate(params.sourceData);
       const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('JSONata evaluation timed out')), JSONATA_TIMEOUT_MS),

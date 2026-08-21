@@ -8,6 +8,9 @@ systemPrompt: |
 integrationRefs:
   - Claims Documents
 enabledTools:
+  - list_data_context
+  - update_data_context
+  - preview_data_envelope
   - get_source_schemas
   - get_source_schema
   - get_transform

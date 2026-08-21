@@ -155,21 +155,36 @@ Any **unknown** key present in the CW response but not listed anywhere in this d
 
 ### 7.1 `contacts` + `claim_contacts`
 
+`contacts` is the shared people table. `claim_contacts` is the many-to-many join
+between a claim and a contact (`(claim_id, contact_id)`, unique). The same
+contact may also be linked to jobs via `job_contacts`.
+
 For each element in CW `contacts[]`:
 
-1. Upsert a row in `contacts` keyed by `(tenant_id, external_reference)` where `external_reference = contacts[].externalReference`.
-2. Upsert a row in `claim_contacts` keyed by `(claim_id, contact_id)`.
+1. **Match** an existing `contacts` row (tenant-scoped), first hit wins:
+   1. `externalReference` (when present; CW `id` may be used as a fallback key in the transformer)
+   2. email (case-insensitive)
+   3. any of mobile / home / work phone (digits-normalized)
+   4. first name + last name (case-insensitive)
+2. If no match: **create** a `contacts` row with all available details. Contacts
+   without `externalReference` are still synced when email, phone, or full name
+   is present. If create would violate `UQ_contacts_tenant_email`, treat the
+   colliding row as the match and merge instead.
+3. If match: **merge fill-blanks** — set empty scalar fields from inbound; never
+   overwrite a non-empty value. Always set/update `external_reference` and
+   `contact_payload` when inbound provides them.
+4. Upsert a row in `claim_contacts` keyed by `(claim_id, contact_id)`.
 
 | CW field | Destination |
 |---|---|
-| `contacts[].id` | _ignored_ (CW internal) |
+| `contacts[].id` | Fallback identity key when `externalReference` is absent (also kept in payloads) |
 | `contacts[].firstName` | `contacts.first_name` |
 | `contacts[].lastName` | `contacts.last_name` |
 | `contacts[].email` | `contacts.email` |
 | `contacts[].homePhone` | `contacts.home_phone` |
 | `contacts[].mobilePhone` | `contacts.mobile_phone` |
 | `contacts[].workPhone` | `contacts.work_phone` |
-| `contacts[].externalReference` | `contacts.external_reference` (required; fail record if missing) |
+| `contacts[].externalReference` | `contacts.external_reference` (optional; identity cascade also uses email/phone/name) |
 | `contacts[].type.externalReference` | `contacts.type_lookup_id` via `contact_type` lookup domain |
 | `contacts[].type.name` | `claim_contacts.source_payload.typeName` |
 | `contacts[].preferredMethodOfContact.externalReference` | `contacts.preferred_contact_method_lookup_id` via `contact_method` domain |
@@ -207,7 +222,7 @@ The **entire** CW claim response (post any normalisation we do on keys) is store
 
 | CW field | Reason |
 |---|---|
-| `id` on every nested object (`status.id`, `account.id`, `catCode.id`, `lossType.id`, `lossSubType.id`, `claimDecision.id`, `priority.id`, `policyType.id`, `lineOfBusiness.id`, `contacts[].id`, `assignees[].id`) | CW-internal identifiers; we key on `externalReference` instead. Preserved in `api_payload`. |
+| `id` on every nested object (`status.id`, `account.id`, `catCode.id`, `lossType.id`, `lossSubType.id`, `claimDecision.id`, `priority.id`, `policyType.id`, `lineOfBusiness.id`, `assignees[].id`) | CW-internal identifiers; we key on `externalReference` instead. Preserved in `api_payload`. (`contacts[].id` is used only as a fallback identity key when `externalReference` is absent.) |
 | `tenantId` | See §2 — tenant is derived from the connection. |
 | `contacts[].preferredMethodOfContact.name` / `type.name` (when `.externalReference` is already captured) | Kept in `claim_contacts.source_payload` for display only. |
 
@@ -241,12 +256,13 @@ the full spec above inside a single transaction supplied by
   are resolved by a case-insensitive name lookup against the same domain; on
   miss the raw string is stored under `custom_data.<field>Raw` and the FK is
   left `null`.
-- **`contacts[]` sync is additive.** The mapper upserts `contacts` (shared
-  table, keyed on `(tenant_id, external_reference)`) and `claim_contacts`
-  (keyed on `(claim_id, contact_id)`) but **never prunes** — a contact
-  disappearing from a later CW payload does not remove the join row. This
-  protects replay idempotence and avoids truncating legitimate relationships
-  when CW emits a partial payload.
+- **`contacts[]` sync is additive.** `ContactSyncService` matches shared
+  `contacts` rows via the identity cascade (ext-ref → email → phone → name),
+  creates or fill-blank merges, then upserts `claim_contacts` (keyed on
+  `(claim_id, contact_id)`) but **never prunes** — a contact disappearing from
+  a later CW payload does not remove the join row. This protects replay
+  idempotence and avoids truncating legitimate relationships when CW emits a
+  partial payload.
 - **`claim_assignees[]` sync prunes.** Rows whose `external_reference` is not
   present in the latest CW payload (and rows with a null `external_reference`)
   are deleted inside the same transaction. Assignees are claim-scoped state

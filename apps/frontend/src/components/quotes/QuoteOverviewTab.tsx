@@ -522,6 +522,10 @@ export const QuoteOverviewTab = forwardRef(function QuoteOverviewTab(
         </SectionCard>
       </div>
 
+      {quote.externalReference && statusName !== 'Draft' && (
+        <InsurerReviewCard quote={quote} statusName={statusName} />
+      )}
+
       {(editing || quote.note) && (
         <Card>
           <CardHeader className="pb-2">
@@ -547,3 +551,42 @@ export const QuoteOverviewTab = forwardRef(function QuoteOverviewTab(
     </div>
   );
 });
+
+function InsurerReviewCard({ quote, statusName }: { quote: Quote; statusName: string }) {
+  const isApproved = statusName.toLowerCase() === 'approved';
+  const isPending = statusName.toLowerCase() === 'pending';
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+          Insurer Review
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center gap-3">
+          <div className={`h-3 w-3 rounded-full ${isApproved ? 'bg-green-500' : isPending ? 'bg-amber-400 animate-pulse' : 'bg-slate-400'}`} />
+          <div>
+            <p className="text-sm font-medium">
+              {isApproved ? 'Approved by insurer' : isPending ? 'Awaiting insurer review' : `Status: ${statusName}`}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {isPending
+                ? 'The estimate has been submitted. Line item decisions will appear in the Take Off tab when the insurer responds.'
+                : isApproved
+                  ? 'The insurer has approved this estimate. Check the Take Off tab for per-line decisions.'
+                  : 'Check the Activities tab for the latest insurer actions.'
+              }
+            </p>
+          </div>
+        </div>
+        {quote.externalReference && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Provider reference: <span className="font-mono">{quote.externalReference}</span>
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}

@@ -16,6 +16,7 @@ import {
 import { TenantContext } from '../../tenant/tenant-context';
 import { CrunchworkService } from '../../crunchwork/crunchwork.service';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
+import { MESSAGE_SUBJECTS, isMessageSubject } from './message-subjects';
 
 @Injectable()
 export class MessagesService {
@@ -75,9 +76,17 @@ export class MessagesService {
     page?: number;
     limit?: number;
     jobId?: string;
+    jobIds?: string[];
     claimId?: string;
     fromJobId?: string;
     toJobId?: string;
+    readStatus?: string;
+    fromUserIds?: string;
+    toUserIds?: string;
+    fromNames?: string;
+    toNames?: string;
+    search?: string;
+    sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
     return this.messagesRepo.findAll({
@@ -85,10 +94,23 @@ export class MessagesService {
       page: params.page,
       limit: params.limit,
       jobId: params.jobId,
+      jobIds: params.jobIds,
       claimId: params.claimId,
       fromJobId: params.fromJobId,
       toJobId: params.toJobId,
+      readStatus: params.readStatus,
+      fromUserIds: params.fromUserIds,
+      toUserIds: params.toUserIds,
+      fromNames: params.fromNames,
+      toNames: params.toNames,
+      search: params.search,
+      sort: params.sort,
     });
+  }
+
+  async findFilterOptions() {
+    const tenantId = this.tenantContext.getTenantId();
+    return this.messagesRepo.findFilterOptions({ tenantId });
   }
 
   async findOne(params: { id: string }) {
@@ -132,14 +154,26 @@ export class MessagesService {
       throw new BadRequestException(`${logPrefix} — message text is required`);
     }
 
-    // CW maps messageType.externalReference to an internal lookup. Known
-    // IAG staging values are "General" and "Status Update" — "Message" is not mapped.
+    const subjectRaw =
+      typeof params.body.subject === 'string' ? params.body.subject.trim() : '';
+    if (!subjectRaw) {
+      throw new BadRequestException(`${logPrefix} — subject is required`);
+    }
+    if (!isMessageSubject(subjectRaw)) {
+      throw new BadRequestException(
+        `${logPrefix} — subject must be one of: ${MESSAGE_SUBJECTS.join(', ')}`,
+      );
+    }
+    const subject = subjectRaw;
+
+    // CW maps messageType.externalReference to an internal lookup. Subject
+    // values are the allowed external references (API-validated, not DB).
     const messageTypeExtRef =
       (params.body.messageType as { externalReference?: string } | undefined)?.externalReference ??
       (typeof params.body.messageTypeExternalReference === 'string'
         ? params.body.messageTypeExternalReference
         : undefined) ??
-      'General';
+      subject;
 
     const cwBody: Record<string, unknown> = {
       messageType: { externalReference: messageTypeExtRef },
@@ -165,9 +199,6 @@ export class MessagesService {
 
     const apiObj = apiMessage as Record<string, unknown>;
     const cwMessageId = typeof apiObj.id === 'string' ? apiObj.id : undefined;
-    const subject =
-      (typeof params.body.subject === 'string' ? params.body.subject : undefined) ??
-      (typeof apiObj.subject === 'string' ? apiObj.subject : undefined);
     const bodyText =
       (typeof apiObj.text === 'string' ? apiObj.text : undefined) ??
       (typeof apiObj.body === 'string' ? apiObj.body : undefined) ??
@@ -179,7 +210,7 @@ export class MessagesService {
       fromJobId: internalFromJobId ?? null,
       toClaimId: internalToClaimId ?? null,
       toJobId: internalToJobId ?? null,
-      subject: subject ?? null,
+      subject: subject,
       body: bodyText,
       acknowledgementRequired: params.body.acknowledgementRequired === true,
       createdByUserId: params.userId ?? null,

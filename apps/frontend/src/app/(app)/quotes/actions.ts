@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { getSession, getAccessToken } from '@/lib/auth';
 import { createApiClient, ApiError } from '@/lib/api-client';
-import type { PaginatedResponse, Quote, Attachment, QuotePartyPayload } from '@/types/api';
+import type { PaginatedResponse, Quote, Attachment, QuotePartyPayload, LineItemsPageQuery } from '@/types/api';
 
 async function getApi() {
   const session = await getSession();
@@ -26,9 +26,11 @@ export async function fetchQuotesAction(params: {
   limit?: number;
   search?: string;
   jobId?: string;
+  jobIds?: string[];
   status?: string;
   statusId?: string;
   quoteType?: string;
+  assignedToUserIds?: string;
   sort?: string;
 }): Promise<PaginatedResponse<Quote> | null> {
   const api = await getApi();
@@ -38,11 +40,27 @@ export async function fetchQuotesAction(params: {
     page: params.page ?? 1,
     limit: params.limit ?? 20,
     jobId: params.jobId,
+    jobIds: params.jobIds,
     status: params.status,
     statusId: params.statusId,
     quoteType: params.quoteType,
+    assignedToUserIds: params.assignedToUserIds,
+    search: params.search,
     sort: params.sort,
   });
+}
+
+export async function fetchQuoteFilterAssigneesAction(): Promise<
+  { id: string; name: string }[]
+> {
+  const api = await getApi();
+  if (!api) return [];
+  try {
+    return await api.getQuoteFilterAssignees();
+  } catch (err) {
+    console.error('[quotes/actions.fetchQuoteFilterAssigneesAction]', err);
+    return [];
+  }
 }
 
 export async function deleteQuoteAction(quoteId: string): Promise<{
@@ -118,19 +136,34 @@ export async function scanQuoteCatalogMismatchesAction(quoteId: string): Promise
   }
 }
 
-export async function getQuoteLineItemsAction(quoteId: string): Promise<{
+export async function getQuoteLineItemsAction(
+  quoteId: string,
+  query?: LineItemsPageQuery,
+): Promise<{
   success: boolean;
   groups?: Array<Record<string, unknown>>;
+  total?: number;
+  page?: number;
+  limit?: number;
+  groupSummaries?: Array<{ id: string; label: string }>;
   error?: string;
 }> {
+  const PREFIX = 'quotes/actions.getQuoteLineItemsAction';
   const api = await getApi();
   if (!api) return { success: false, error: 'Not authenticated' };
 
   try {
-    const groups = await api.getQuoteLineItems(quoteId);
-    return { success: true, groups };
+    const page = await api.getQuoteLineItems(quoteId, query);
+    return {
+      success: true,
+      groups: page.groups,
+      total: page.total,
+      page: page.page,
+      limit: page.limit,
+      groupSummaries: page.groupSummaries,
+    };
   } catch (err) {
-    console.error('[quotes/actions.getQuoteLineItemsAction]', err);
+    console.error(`[${PREFIX}]`, err);
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to load line items',

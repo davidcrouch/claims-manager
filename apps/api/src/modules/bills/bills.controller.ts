@@ -14,20 +14,27 @@ export class BillsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('jobId') jobId?: string,
+    @Query('jobIds') jobIds?: string,
     @Query('purchaseOrderId') purchaseOrderId?: string,
     @Query('status') status?: string,
     @Query('vendorId') vendorId?: string,
     @Query('invoiceId') invoiceId?: string,
+    @Query('search') search?: string,
     @Query('sort') sort?: string,
   ) {
+    const jobIdList = jobIds
+      ? jobIds.split(',').map((id) => id.trim()).filter((id) => id.length > 0)
+      : undefined;
     return this.billsService.findAll({
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
       jobId,
+      jobIds: jobIdList && jobIdList.length > 0 ? jobIdList : undefined,
       purchaseOrderId,
       status,
       vendorId,
       invoiceId,
+      search,
       sort,
     });
   }

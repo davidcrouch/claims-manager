@@ -396,6 +396,7 @@ export const quoteCombos = pgTable(
     subCategory: text('sub_category'),
     quantity: numeric('quantity', { precision: 14, scale: 4 }),
     sortIndex: integer('sort_index').notNull().default(0),
+    publishStatus: text('publish_status'),
     totals: jsonb('totals').notNull().default({}),
     comboPayload: jsonb('combo_payload').notNull().default({}),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -440,6 +441,7 @@ export const quoteItems = pgTable(
     committedCost: numeric('committed_cost', { precision: 14, scale: 4 }),
     sortIndex: integer('sort_index').notNull().default(0),
     internal: boolean('internal'),
+    publishStatus: text('publish_status'),
     note: text('note'),
     tags: jsonb('tags').notNull().default([]),
     mismatches: jsonb('mismatches').notNull().default([]),
@@ -728,7 +730,13 @@ export const tasks = pgTable(
     jobId: uuid('job_id').references(() => jobs.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     description: text('description'),
+    taskType: text('task_type'),
+    startDate: timestamp('start_date', { withTimezone: true }),
     dueDate: timestamp('due_date', { withTimezone: true }),
+    reminderAt: timestamp('reminder_at', { withTimezone: true }),
+    estimatedHours: numeric('estimated_hours', { precision: 8, scale: 2 }),
+    notes: text('notes'),
+    tags: jsonb('tags').$type<string[]>().notNull().default([]),
     priority: text('priority').notNull().default('Low'),
     status: text('status').notNull().default('Open'),
     taskPayload: jsonb('task_payload').notNull().default({}),
@@ -750,7 +758,10 @@ export const tasks = pgTable(
       )`,
     ),
     check('chk_task_priority', sql`priority IN ('Low','Medium','High','Critical')`),
-    check('chk_task_status', sql`status IN ('Open','Completed','Failed')`),
+    check(
+      'chk_task_status',
+      sql`status IN ('Open','In Progress','On Hold','Completed','Failed','Cancelled')`,
+    ),
     index('idx_tasks_entity').on(t.tenantId, t.relatedEntityType, t.relatedEntityId),
     index('idx_tasks_claim').on(t.tenantId, t.claimId),
     index('idx_tasks_job').on(t.tenantId, t.jobId),
@@ -1265,6 +1276,7 @@ export const workOrders = pgTable(
     claimId: uuid('claim_id').references(() => claims.id, { onDelete: 'cascade' }),
     jobId: uuid('job_id').references(() => jobs.id, { onDelete: 'cascade' }),
     vendorId: uuid('vendor_id').references(() => vendors.id),
+    quoteId: uuid('quote_id').references(() => quotes.id),
     sourceTenantId: uuid('source_tenant_id'),
     sourceOrganisationId: uuid('source_organisation_id').references(() => organizations.id),
     sourceExternalReference: text('source_external_reference'),
@@ -1287,6 +1299,12 @@ export const workOrders = pgTable(
     woForName: text('wo_for_name'),
     totalAmount: numeric('total_amount', { precision: 14, scale: 2 }),
     adjustedTotal: numeric('adjusted_total', { precision: 14, scale: 2 }),
+    adjustedTotalAdjustmentAmount: numeric('adjusted_total_adjustment_amount', {
+      precision: 14,
+      scale: 2,
+    }),
+    adjustmentInfo: jsonb('adjustment_info').notNull().default({}),
+    allocationContext: jsonb('allocation_context').notNull().default({}),
     workOrderPayload: jsonb('work_order_payload').notNull().default({}),
     sourceVersionNumber: integer('source_version_number').notNull().default(1),
     latestAvailableVersion: integer('latest_available_version').notNull().default(1),
@@ -1344,6 +1362,7 @@ export const workOrderCombos = pgTable(
     catalogComboId: uuid('catalog_combo_id').references((): AnyPgColumn => catalogItems.id, {
       onDelete: 'set null',
     }),
+    quoteComboId: uuid('quote_combo_id'),
     name: text('name'),
     description: text('description'),
     category: text('category'),
@@ -1378,6 +1397,7 @@ export const workOrderItems = pgTable(
     catalogItemId: uuid('catalog_item_id').references((): AnyPgColumn => catalogItems.id, {
       onDelete: 'set null',
     }),
+    quoteLineItemId: uuid('quote_line_item_id'),
     unitTypeLookupId: uuid('unit_type_lookup_id'),
     name: text('name'),
     description: text('description'),
@@ -1391,6 +1411,7 @@ export const workOrderItems = pgTable(
     markupType: text('markup_type'),
     markupValue: numeric('markup_value', { precision: 14, scale: 4 }),
     reconciliation: numeric('reconciliation', { precision: 14, scale: 4 }),
+    manualAllocation: boolean('manual_allocation'),
     sortIndex: integer('sort_index').notNull().default(0),
     note: text('note'),
     tags: jsonb('tags').notNull().default([]),
@@ -1873,11 +1894,15 @@ export const catalogs = pgTable(
     description: text('description'),
     type: text('type').notNull().default('internal'),
     isActive: boolean('is_active').notNull().default(true),
+    isDefault: boolean('is_default').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex('UQ_catalogs_tenant_name').on(t.tenantId, t.name),
+    uniqueIndex('UQ_catalogs_tenant_default')
+      .on(t.tenantId)
+      .where(sql`is_default = true`),
     index('idx_catalogs_tenant').on(t.tenantId, t.isActive),
     check('chk_catalogs_type', sql`type IN ('crunchwork', 'internal')`),
   ],
@@ -1960,6 +1985,8 @@ export const catalogItems = pgTable(
     computedUnitCost: numeric('computed_unit_cost', { precision: 14, scale: 4 }),
     computedCostAt: timestamp('computed_cost_at', { withTimezone: true }),
     externalReference: text('external_reference'),
+    /** Provider affinity tags used to filter outbound publish payloads (e.g. crunchwork, internal). */
+    providerCodes: text('provider_codes').array().notNull().default([]),
     isActive: boolean('is_active').notNull().default(true),
     effectiveFrom: date('effective_from'),
     effectiveTo: date('effective_to'),
@@ -1978,6 +2005,7 @@ export const catalogItems = pgTable(
     index('idx_catalog_items_category').on(t.tenantId, t.categoryId),
     index('idx_catalog_items_kind').on(t.tenantId, t.kind),
     index('idx_catalog_items_catalog').on(t.tenantId, t.catalogId, t.isActive, t.deletedAt),
+    index('idx_catalog_items_provider_codes').using('gin', t.providerCodes),
     check('chk_catalog_items_kind', sql`kind IN ('primitive', 'assembly', 'scope')`),
     check(
       'chk_catalog_items_primitive_unit',
@@ -3356,6 +3384,27 @@ export const documentTemplateTransformVersions = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Document Template Data Contexts (per-tenant related-entity enablement)
+// ---------------------------------------------------------------------------
+export const documentTemplateDataContexts = pgTable(
+  'document_template_data_contexts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade', onUpdate: 'cascade' }),
+    documentType: text('document_type').notNull(),
+    enabledSlugs: jsonb('enabled_slugs').$type<string[]>().notNull().default([]),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('UQ_doc_data_context_tenant_type').on(t.tenantId, t.documentType),
+    index('idx_doc_data_contexts_tenant_type').on(t.tenantId, t.documentType),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // RFQ Send Requests (batch records for sending RFQs to suppliers)
 // ---------------------------------------------------------------------------
 export const rfqSendRequests = pgTable(
@@ -3432,5 +3481,68 @@ export const emailTemplates = pgTable(
   },
   (t) => [
     uniqueIndex('email_templates_tenant_type_uidx').on(t.tenantId, t.templateType),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Task type mappings (title pattern → canonical task type)
+// ---------------------------------------------------------------------------
+export const taskTypeMappings = pgTable(
+  'task_type_mappings',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade', onUpdate: 'cascade' }),
+    titlePattern: text('title_pattern').notNull(),
+    matchMode: text('match_mode').notNull().default('normalized'),
+    taskType: text('task_type').notNull(),
+    priority: integer('priority').notNull().default(100),
+    isActive: boolean('is_active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check(
+      'chk_task_type_mapping_match_mode',
+      sql`match_mode IN ('exact','normalized','prefix','contains')`,
+    ),
+    unique('UQ_task_type_mappings_tenant_pattern_mode').on(
+      t.tenantId,
+      t.titlePattern,
+      t.matchMode,
+    ),
+    index('idx_task_type_mappings_tenant_active').on(t.tenantId, t.isActive, t.priority),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Entity Activities (unified audit / activity feed)
+// ---------------------------------------------------------------------------
+export const entityActivities = pgTable(
+  'entity_activities',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    entityType: text('entity_type').notNull(),
+    entityId: uuid('entity_id').notNull(),
+    action: text('action').notNull(),
+    actorType: text('actor_type').notNull().default('user'),
+    actorId: text('actor_id'),
+    actorName: text('actor_name'),
+    summary: text('summary').notNull(),
+    detail: jsonb('detail').notNull().default({}),
+    relatedEntityType: text('related_entity_type'),
+    relatedEntityId: uuid('related_entity_id'),
+    source: text('source').default('internal'),
+    sourceEventId: uuid('source_event_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_entity_activities_tenant_entity').on(t.tenantId, t.entityType, t.entityId, t.createdAt),
+    index('idx_entity_activities_entity_action').on(t.entityId, t.action),
+    index('idx_entity_activities_actor').on(t.tenantId, t.actorType, t.actorId),
   ],
 );

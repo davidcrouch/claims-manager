@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, isNull, desc, asc, sql, inArray } from 'drizzle-orm';
+import { eq, and, isNull, desc, asc, sql, inArray, or, ilike } from 'drizzle-orm';
+import { normalizeListJobIds } from '../../common/list-job-filter';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { proposals } from '../schema';
 
@@ -50,10 +51,12 @@ export class ProposalsRepository {
     page?: number;
     limit?: number;
     jobId?: string;
+    jobIds?: string[];
     rfqId?: string;
     /** Comma-separated status lookup IDs. */
     status?: string;
     vendorId?: string;
+    search?: string;
     sort?: string;
   }): Promise<{ data: ProposalRow[]; total: number }> {
     const page = params.page ?? 1;
@@ -64,8 +67,13 @@ export class ProposalsRepository {
       eq(proposals.tenantId, params.tenantId),
       isNull(proposals.deletedAt),
     );
-    if (params.jobId) {
-      whereClause = and(whereClause, eq(proposals.jobId, params.jobId));
+    const jobIds = normalizeListJobIds({ jobId: params.jobId, jobIds: params.jobIds });
+    if (jobIds) {
+      if (jobIds.length === 0) return { data: [], total: 0 };
+      whereClause = and(
+        whereClause,
+        jobIds.length === 1 ? eq(proposals.jobId, jobIds[0]) : inArray(proposals.jobId, jobIds),
+      );
     }
     if (params.rfqId) {
       whereClause = and(whereClause, eq(proposals.rfqId, params.rfqId));
@@ -77,6 +85,19 @@ export class ProposalsRepository {
     }
     if (vendorIds.length > 0) {
       whereClause = and(whereClause, inArray(proposals.vendorId, vendorIds));
+    }
+    if (params.search?.trim()) {
+      const term = `%${params.search.trim()}%`;
+      whereClause = and(
+        whereClause,
+        or(
+          ilike(proposals.proposalNumber, term),
+          ilike(proposals.name, term),
+          ilike(proposals.reference, term),
+          ilike(proposals.proposalFromName, term),
+          ilike(proposals.proposalToName, term),
+        )!,
+      );
     }
 
     const [data, countResult] = await Promise.all([

@@ -1,0 +1,35 @@
+slug: create-item
+name: Create item
+description: Create a priced leaf (primitive) catalogue item with unit and category.
+triggerHints:
+  - create item
+  - add catalogue item
+  - new priced item
+  - add material
+  - add labour item
+  - create primitive
+instructionPrompt: |
+  Create a catalogue **item** (kind=primitive — a priced leaf line).
+
+  1. Confirm catalogId (list_catalogs). Resolve typeId (list_catalog_types) and categoryId (get_catalog_categories_tree).
+  2. Call open_catalog_item with kind=primitive and any known fields.
+  3. Gather code, name, unit type, costs/markup as needed; after each answer call fill_catalog_item.
+  4. On user confirmation, create_catalog_item. Report the new id.
+  Rules: Items (primitives) require unitTypeLookupId. Do not invent prices.
+requiredToolRefs:
+  - integration: Claims Filesystem
+    tool: list_catalogs
+  - integration: Claims Filesystem
+    tool: list_catalog_types
+  - integration: Claims Filesystem
+    tool: get_catalog_categories_tree
+  - integration: Claims Filesystem
+    tool: open_catalog_item
+  - integration: Claims Filesystem
+    tool: fill_catalog_item
+  - integration: Claims Filesystem
+    tool: create_catalog_item
+category: catalog
+invocationMode: inline
+includeHistory: true
+visibility: org

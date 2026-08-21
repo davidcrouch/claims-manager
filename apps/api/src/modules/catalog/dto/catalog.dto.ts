@@ -151,6 +151,12 @@ export class CreateCatalogItemDto {
   @IsOptional()
   @IsString()
   effectiveTo?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  providerCodes?: string[];
+
 }
 
 export class UpdateCatalogItemDto {
@@ -225,6 +231,12 @@ export class UpdateCatalogItemDto {
   @IsOptional()
   @IsString()
   effectiveTo?: string | null;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  providerCodes?: string[];
+
 }
 
 export class BomLineDto {

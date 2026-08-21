@@ -12,7 +12,11 @@ import {
 import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
 import { TenantContext } from '../../../tenant/tenant-context';
 import { CatalogPricingService } from './catalog-pricing.service';
-import { isCatalogBomParentKind } from '../catalog.utils';
+import {
+  bomComponentRuleMessage,
+  isAllowedBomComponent,
+  isCatalogBomParentKind,
+} from '../catalog.utils';
 
 @Injectable()
 export class CatalogAssemblyService {
@@ -226,8 +230,10 @@ export class CatalogAssemblyService {
       id: params.componentId,
     });
     if (!component) throw new BadRequestException('Component not found');
-    if (component.kind === 'scope') {
-      throw new BadRequestException('Scopes cannot be nested inside assemblies or scopes');
+    if (!isAllowedBomComponent(assembly.kind, component.kind)) {
+      throw new BadRequestException(
+        bomComponentRuleMessage(assembly.kind, component.kind),
+      );
     }
 
     const cycle = await this.bomRepo.wouldCreateCycle({

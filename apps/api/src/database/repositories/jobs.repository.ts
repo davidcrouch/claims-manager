@@ -1,10 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
 import { eq, and, isNull, desc, asc, sql, gte, ilike, or, inArray, notInArray, aliasedTable, getTableColumns } from 'drizzle-orm';
+import { normalizeListUserIds, parseCsvFilterValues } from '../../common/list-job-filter';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { jobs, lookupValues, vendors, integrationConnections, users } from '../schema';
 
 const assigneeJoinOn = sql`${jobs.assignedToUserId} = ${users.id}::text`;
+
+/** Matches frontend jobListRef: name ?? externalJobId ?? externalReference ?? id */
+const jobDisplayRef = sql`COALESCE(${jobs.name}, ${jobs.externalJobId}, ${jobs.externalReference}, ${jobs.id}::text)`;
 
 function buildJobOrderBy(sort?: string) {
   switch (sort) {
@@ -66,6 +70,9 @@ export class JobsRepository {
     /** Comma-separated job type lookup IDs */
     jobType?: string;
     assignedToUserId?: string;
+    assignedToUserIds?: string;
+    /** Comma-separated display refs (name / externalJobId / externalReference / id) */
+    refs?: string;
   }): Promise<{ data: JobViewRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
@@ -115,8 +122,38 @@ export class JobsRepository {
       whereParts.push(inArray(jobs.jobTypeLookupId, jobTypeIds));
     }
 
-    if (params.assignedToUserId) {
-      whereParts.push(eq(jobs.assignedToUserId, params.assignedToUserId));
+    const refs = parseCsvFilterValues(params.refs);
+    if (refs) {
+      if (refs.length === 0) {
+        return { data: [], total: 0 };
+      }
+      whereParts.push(
+        sql`${jobDisplayRef} IN (${sql.join(
+          refs.map((ref) => sql`${ref}`),
+          sql`, `,
+        )})`,
+      );
+    }
+
+    const assigneeIds = normalizeListUserIds({
+      userId: params.assignedToUserId,
+      userIds: params.assignedToUserIds,
+    });
+    if (assigneeIds) {
+      if (assigneeIds.length === 0) {
+        return { data: [], total: 0 };
+      }
+      const includeBlank = assigneeIds.includes('__blank__');
+      const realIds = assigneeIds.filter((id) => id !== '__blank__');
+      if (includeBlank && realIds.length > 0) {
+        whereParts.push(
+          or(isNull(jobs.assignedToUserId), inArray(jobs.assignedToUserId, realIds))!,
+        );
+      } else if (includeBlank) {
+        whereParts.push(isNull(jobs.assignedToUserId));
+      } else {
+        whereParts.push(inArray(jobs.assignedToUserId, realIds));
+      }
     }
 
     const whereClause = and(...whereParts);
@@ -170,6 +207,41 @@ export class JobsRepository {
 
     const total = countResult[0]?.count ?? 0;
     return { data: data as JobViewRow[], total };
+  }
+
+  async findFilterOptions(params: { tenantId: string }): Promise<{
+    refs: string[];
+    assignees: { id: string; name: string }[];
+  }> {
+    const tenantWhere = and(eq(jobs.tenantId, params.tenantId), isNull(jobs.deletedAt));
+
+    const [refRows, assigneeRows] = await Promise.all([
+      this.db
+        .selectDistinct({ ref: jobDisplayRef })
+        .from(jobs)
+        .where(tenantWhere)
+        .orderBy(asc(jobDisplayRef)),
+      this.db
+        .selectDistinct({ id: jobs.assignedToUserId, name: users.name })
+        .from(jobs)
+        .leftJoin(users, assigneeJoinOn)
+        .where(
+          and(
+            tenantWhere,
+            sql`${jobs.assignedToUserId} IS NOT NULL AND btrim(${jobs.assignedToUserId}) <> ''`,
+          ),
+        )
+        .orderBy(asc(users.name)),
+    ]);
+
+    return {
+      refs: refRows
+        .map((r) => String(r.ref ?? '').trim())
+        .filter(Boolean),
+      assignees: assigneeRows
+        .filter((r): r is { id: string; name: string | null } => !!r.id)
+        .map((r) => ({ id: r.id, name: (r.name ?? '').trim() || r.id })),
+    };
   }
 
   async findOne(params: {
@@ -358,6 +430,39 @@ export class JobsRepository {
       .where(eq(jobs.id, params.id))
       .returning();
     return updated ?? null;
+  }
+
+  async findJobsWithPassedAttendanceDate(params: {
+    now: Date;
+  }): Promise<Array<{
+    id: string;
+    tenantId: string;
+    attendanceDate: string;
+    customData: Record<string, unknown>;
+  }>> {
+    const rows = await this.db
+      .select({
+        id: jobs.id,
+        tenantId: jobs.tenantId,
+        customData: jobs.customData,
+      })
+      .from(jobs)
+      .where(
+        and(
+          isNull(jobs.deletedAt),
+          sql`${jobs.customData}->>'workflowPhase' = 'scheduled'`,
+          sql`${jobs.customData}->>'attendanceDate' IS NOT NULL`,
+          sql`(${jobs.customData}->>'attendanceDate')::timestamptz <= ${params.now}`,
+          sql`(${jobs.customData}->>'attendanceDateEventEmitted') IS NULL`,
+        ),
+      );
+
+    return rows.map((r) => ({
+      id: r.id,
+      tenantId: r.tenantId,
+      attendanceDate: ((r.customData as Record<string, unknown>)?.attendanceDate ?? '') as string,
+      customData: (r.customData ?? {}) as Record<string, unknown>,
+    }));
   }
 
   async countByTenant(params: { tenantId: string }): Promise<number> {

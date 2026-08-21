@@ -456,6 +456,83 @@
       "when": 1789500000000,
       "tag": "0065_schedule_events_received_dates",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1789600000000,
+      "tag": "0066_task_commercial_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1789700000000,
+      "tag": "0067_document_template_data_contexts",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1789800000000,
+      "tag": "0068_catalog_item_provider_codes",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1789900000000,
+      "tag": "0069_catalog_item_provider_codes_both",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1790000000000,
+      "tag": "0070_catalog_item_provider_codes_by_catalog",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1790100000000,
+      "tag": "0071_ensure_primitives_crunchwork",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1790200000000,
+      "tag": "0072_wo_parity_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1790300000000,
+      "tag": "0073_entity_activities",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1790400000000,
+      "tag": "0074_line_item_publish_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1790500000000,
+      "tag": "0075_catalog_is_default",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1790600000000,
+      "tag": "0076_task_type_mappings",
+      "breakpoints": true
     }
   ]
 }

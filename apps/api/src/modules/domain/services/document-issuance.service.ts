@@ -6,6 +6,9 @@ import {
   purchaseOrderGroups,
   purchaseOrderCombos,
   purchaseOrderItems,
+  workOrderGroups as workOrderGroupsTable,
+  workOrderCombos as workOrderCombosTable,
+  workOrderItems as workOrderItemsTable,
   quotes,
   quoteGroups,
   quoteCombos,
@@ -15,6 +18,7 @@ import {
   proposalItems,
   invoices,
   rfqs,
+  lookupValues,
 } from '../../../database/schema';
 import {
   WorkOrdersRepository,
@@ -30,6 +34,7 @@ import { VersioningService } from './versioning.service';
 import { LineItemSyncService } from './line-item-sync.service';
 import { VisibilityService } from './visibility.service';
 import { LookupResolutionService } from './lookup-resolution.service';
+import { LOOKUP_DOMAINS } from '../constants/lookup-domains';
 
 export interface IssuanceResult {
   versionNumber: number;
@@ -184,6 +189,11 @@ export class DocumentIssuanceService {
 
     const lineItems: unknown[] = [];
     for (const group of groups) {
+      const groupItems = await tx
+        .select()
+        .from(purchaseOrderItems)
+        .where(eq(purchaseOrderItems.purchaseOrderGroupId, group.id));
+
       const combos = await tx
         .select()
         .from(purchaseOrderCombos)
@@ -198,7 +208,7 @@ export class DocumentIssuanceService {
         comboData.push({ ...combo, items });
       }
 
-      lineItems.push({ ...group, combos: comboData });
+      lineItems.push({ ...group, combos: comboData, items: groupItems });
     }
 
     return { entity: entity as unknown as Record<string, unknown>, lineItems };
@@ -287,12 +297,46 @@ export class DocumentIssuanceService {
   private async createWorkOrderFromPO(params: {
     sourceDocumentId: string;
     sourceEntity: Record<string, unknown>;
+    sourceLineItems: unknown[];
     sourceTenantId: string;
     recipientTenantId: string;
     versionNumber: number;
     tx: DrizzleDbOrTx;
   }): Promise<string> {
     const src = params.sourceEntity;
+    const tx = params.tx;
+
+    // Never copy purchase_order_status IDs onto work orders — Active/Archived
+    // list tabs filter by work_order_status lookup IDs only.
+    const statusLookupId = await this.resolveWorkOrderStatusFromPo({
+      tenantId: params.recipientTenantId,
+      poStatusLookupId: src.statusLookupId as string | undefined,
+      tx,
+    });
+
+    // Resolve WO type from PO type lookup
+    let workOrderTypeLookupId: string | null = null;
+    if (src.purchaseOrderTypeLookupId) {
+      const [typeRow] = await tx
+        .select({ name: lookupValues.name })
+        .from(lookupValues)
+        .where(eq(lookupValues.id, src.purchaseOrderTypeLookupId as string))
+        .limit(1);
+      if (typeRow?.name) {
+        workOrderTypeLookupId = await this.lookupResolution.resolve({
+          tenantId: params.recipientTenantId,
+          domain: LOOKUP_DOMAINS.WORK_ORDER_TYPE,
+          externalReference: typeRow.name,
+          name: typeRow.name,
+          autoCreate: true,
+          tx,
+        });
+      }
+    }
+
+    const poFrom = (src.poFrom as Record<string, unknown>) ?? {};
+    const poTo = (src.poTo as Record<string, unknown>) ?? {};
+    const poFor = (src.poFor as Record<string, unknown>) ?? {};
 
     const woData: Partial<WorkOrderInsert> = {
       tenantId: params.recipientTenantId,
@@ -300,22 +344,32 @@ export class DocumentIssuanceService {
       claimId: src.claimId as string | undefined,
       jobId: src.jobId as string | undefined,
       vendorId: src.vendorId as string | undefined,
+      quoteId: src.quoteId as string | undefined,
       sourceTenantId: params.sourceTenantId,
       sourceOrganisationId: (src.issuerOrganisationId as string) ?? params.sourceTenantId,
       sourceExternalReference: src.externalId as string | undefined,
       originType: 'tenant',
       workOrderNumber: src.purchaseOrderNumber as string | undefined,
       name: src.name as string | undefined,
-      statusLookupId: src.statusLookupId as string | undefined,
+      statusLookupId: statusLookupId ?? undefined,
+      workOrderTypeLookupId: workOrderTypeLookupId ?? undefined,
       startDate: src.startDate as string | undefined,
       endDate: src.endDate as string | undefined,
+      startTime: src.startTime as string | undefined,
+      endTime: src.endTime as string | undefined,
       note: src.note as string | undefined,
       // Perspective swap: PO's "to" becomes WO's "from" and vice versa
-      woTo: (src.poFrom as Record<string, unknown>) ?? {},
-      woFor: (src.poFor as Record<string, unknown>) ?? {},
-      woFrom: (src.poTo as Record<string, unknown>) ?? {},
+      woTo: poFrom,
+      woFor: poFor,
+      woFrom: poTo,
+      woToEmail: (poFrom as Record<string, string>).email ?? undefined,
+      woForName: (poFor as Record<string, string>).name ?? undefined,
+      serviceWindow: (src.serviceWindow as Record<string, unknown>) ?? {},
       totalAmount: src.totalAmount as string | undefined,
       adjustedTotal: src.adjustedTotal as string | undefined,
+      adjustedTotalAdjustmentAmount: src.adjustedTotalAdjustmentAmount as string | undefined,
+      adjustmentInfo: (src.adjustmentInfo as Record<string, unknown>) ?? {},
+      allocationContext: (src.allocationContext as Record<string, unknown>) ?? {},
       workOrderPayload: src.purchaseOrderPayload as Record<string, unknown> ?? {},
       sourceVersionNumber: params.versionNumber,
       latestAvailableVersion: params.versionNumber,
@@ -324,10 +378,167 @@ export class DocumentIssuanceService {
 
     const created = await this.workOrdersRepo.create({
       data: woData as WorkOrderInsert,
-      tx: params.tx,
+      tx,
     });
 
+    await this.copyPoLineItemsToWorkOrder({
+      workOrderId: created.id,
+      recipientTenantId: params.recipientTenantId,
+      sourceLineItems: params.sourceLineItems,
+      tx,
+    });
+
+    this.logger.log(
+      `DocumentIssuanceService.createWorkOrderFromPO — created WO=${created.id} from PO=${params.sourceDocumentId}`,
+    );
+
     return created.id;
+  }
+
+  private async copyPoLineItemsToWorkOrder(params: {
+    workOrderId: string;
+    recipientTenantId: string;
+    sourceLineItems: unknown[];
+    tx: DrizzleDbOrTx;
+  }): Promise<void> {
+    const { workOrderId, recipientTenantId, sourceLineItems, tx } = params;
+
+    for (const rawGroup of sourceLineItems) {
+      const group = rawGroup as Record<string, unknown>;
+
+      const [woGroup] = await tx
+        .insert(workOrderGroupsTable)
+        .values({
+          tenantId: recipientTenantId,
+          workOrderId,
+          groupLabelLookupId: (group.groupLabelLookupId as string) ?? null,
+          description: (group.description as string) ?? null,
+          dimensions: (group.dimensions as Record<string, unknown>) ?? {},
+          totals: (group.totals as Record<string, unknown>) ?? {},
+          sortIndex: (group.sortIndex as number) ?? 0,
+          groupPayload: (group.groupPayload as Record<string, unknown>) ?? {},
+        })
+        .returning();
+
+      const groupItems = Array.isArray(group.items) ? group.items : [];
+      for (const rawItem of groupItems) {
+        const item = rawItem as Record<string, unknown>;
+        await tx.insert(workOrderItemsTable).values(this.mapPoItemToWoItem({
+          item,
+          recipientTenantId,
+          workOrderGroupId: woGroup.id,
+          workOrderComboId: null,
+        }));
+      }
+
+      const combos = Array.isArray(group.combos) ? group.combos : [];
+      for (const rawCombo of combos) {
+        const combo = rawCombo as Record<string, unknown>;
+
+        const [woCombo] = await tx
+          .insert(workOrderCombosTable)
+          .values({
+            tenantId: recipientTenantId,
+            workOrderGroupId: woGroup.id,
+            catalogComboId: (combo.catalogComboId as string) ?? null,
+            quoteComboId: (combo.quoteComboId as string) ?? null,
+            name: (combo.name as string) ?? null,
+            description: (combo.description as string) ?? null,
+            category: (combo.category as string) ?? null,
+            subCategory: (combo.subCategory as string) ?? null,
+            quantity: (combo.quantity as string) ?? null,
+            sortIndex: (combo.sortIndex as number) ?? 0,
+            totals: (combo.totals as Record<string, unknown>) ?? {},
+            comboPayload: (combo.comboPayload as Record<string, unknown>) ?? {},
+          })
+          .returning();
+
+        const comboItems = Array.isArray(combo.items) ? combo.items : [];
+        for (const rawItem of comboItems) {
+          const item = rawItem as Record<string, unknown>;
+          await tx.insert(workOrderItemsTable).values(this.mapPoItemToWoItem({
+            item,
+            recipientTenantId,
+            workOrderGroupId: null,
+            workOrderComboId: woCombo.id,
+          }));
+        }
+      }
+    }
+  }
+
+  private mapPoItemToWoItem(params: {
+    item: Record<string, unknown>;
+    recipientTenantId: string;
+    workOrderGroupId: string | null;
+    workOrderComboId: string | null;
+  }) {
+    const { item, recipientTenantId, workOrderGroupId, workOrderComboId } = params;
+    return {
+      tenantId: recipientTenantId,
+      workOrderGroupId,
+      workOrderComboId,
+      catalogItemId: (item.catalogItemId as string) ?? null,
+      quoteLineItemId: (item.quoteLineItemId as string) ?? null,
+      unitTypeLookupId: (item.unitTypeLookupId as string) ?? null,
+      name: (item.name as string) ?? null,
+      description: (item.description as string) ?? null,
+      category: (item.category as string) ?? null,
+      subCategory: (item.subCategory as string) ?? null,
+      itemType: (item.itemType as string) ?? null,
+      quantity: (item.quantity as string) ?? null,
+      tax: (item.tax as string) ?? null,
+      unitCost: (item.unitCost as string) ?? null,
+      buyCost: (item.buyCost as string) ?? null,
+      markupType: (item.markupType as string) ?? null,
+      markupValue: (item.markupValue as string) ?? null,
+      reconciliation: (item.reconciliation as string) ?? null,
+      manualAllocation: (item.manualAllocation as boolean) ?? null,
+      sortIndex: (item.sortIndex as number) ?? 0,
+      note: (item.note as string) ?? null,
+      tags: (item.tags as unknown[]) ?? [],
+      totals: (item.totals as Record<string, unknown>) ?? {},
+      itemPayload: (item.itemPayload as Record<string, unknown>) ?? {},
+    };
+  }
+
+  /** Map PO status name → work_order_status name/ref for the recipient tenant. */
+  private mapPoStatusToWorkOrderStatus(poStatusName: string | null | undefined): {
+    name: string;
+    externalReference: string;
+  } {
+    const raw = (poStatusName ?? 'Open').trim();
+    const key = raw.toLowerCase();
+    if (key === 'issued') return { name: 'Open', externalReference: 'Open' };
+    if (key === 'cancelled' || key === 'closed') {
+      return { name: 'Archived', externalReference: 'Archived' };
+    }
+    return { name: raw || 'Open', externalReference: raw || 'Open' };
+  }
+
+  private async resolveWorkOrderStatusFromPo(params: {
+    tenantId: string;
+    poStatusLookupId?: string;
+    tx: DrizzleDbOrTx;
+  }): Promise<string | null> {
+    let poStatusName: string | null = null;
+    if (params.poStatusLookupId) {
+      const [row] = await params.tx
+        .select({ name: lookupValues.name })
+        .from(lookupValues)
+        .where(eq(lookupValues.id, params.poStatusLookupId))
+        .limit(1);
+      poStatusName = row?.name ?? null;
+    }
+    const mapped = this.mapPoStatusToWorkOrderStatus(poStatusName);
+    return this.lookupResolution.resolve({
+      tenantId: params.tenantId,
+      domain: LOOKUP_DOMAINS.WORK_ORDER_STATUS,
+      externalReference: mapped.externalReference,
+      name: mapped.name,
+      autoCreate: true,
+      tx: params.tx,
+    });
   }
 
   private async createProposalFromQuote(params: {

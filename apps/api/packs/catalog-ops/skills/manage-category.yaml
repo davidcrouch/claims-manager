@@ -1,0 +1,31 @@
+slug: manage-category
+name: Manage catalogue category
+description: Create, rename, or deactivate categories that organise all item kinds.
+triggerHints:
+  - create category
+  - catalogue category
+  - rename category
+  - category tree
+  - add category
+instructionPrompt: |
+  1. Call open_catalog_category (loads the category tree).
+  2. For a new category: gather code, name, optional parent; fill_catalog_category; on confirm create_catalog_category.
+  3. For rename/deactivate: update_catalog_category or delete_catalog_category (blocked if children exist).
+  Categories may contain primitives, assemblies, and scopes.
+requiredToolRefs:
+  - integration: Claims Filesystem
+    tool: get_catalog_categories_tree
+  - integration: Claims Filesystem
+    tool: open_catalog_category
+  - integration: Claims Filesystem
+    tool: fill_catalog_category
+  - integration: Claims Filesystem
+    tool: create_catalog_category
+  - integration: Claims Filesystem
+    tool: update_catalog_category
+  - integration: Claims Filesystem
+    tool: delete_catalog_category
+category: catalog
+invocationMode: inline
+includeHistory: true
+visibility: org

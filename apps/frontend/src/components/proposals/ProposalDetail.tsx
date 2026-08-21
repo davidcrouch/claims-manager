@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -14,7 +14,6 @@ import {
   Package,
   ClipboardList,
   MessageSquare,
-  Loader2,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -36,8 +35,7 @@ import type { Proposal, Job, Rfq, Quote } from '@/types/api';
 import { PrintButton } from '@/components/shared/PrintButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { jobDisplayName } from '@/components/shared/job-label';
-import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
-import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
+import { PagedLineItemsTable } from '@/components/quotes/PagedLineItemsTable';
 import { groupsFromDocumentPayload } from '@/components/quotes/quote-line-items.utils';
 import { getProposalLineItemsAction } from '@/app/(app)/proposals/actions';
 
@@ -379,70 +377,15 @@ function OverviewTab({
 }
 
 function LineItemsTab({ proposal }: { proposal: Proposal }) {
-  const [groups, setGroups] = useState<ApiGroup[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    const fallback = groupsFromDocumentPayload(proposal.proposalPayload);
-    const result = await getProposalLineItemsAction(proposal.id);
-    if (result.success && result.groups && result.groups.length > 0) {
-      setGroups(result.groups as ApiGroup[]);
-      setError(null);
-    } else if (fallback.length > 0) {
-      setGroups(fallback);
-      setError(null);
-    } else {
-      setGroups([]);
-      setError(result.error ?? null);
-    }
-    setLoading(false);
-  }, [proposal.id, proposal.proposalPayload]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  if (loading) {
-    return (
-      <Card>
-        <CardContent className="flex items-center justify-center py-12">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (error && (!groups || groups.length === 0)) {
-    return (
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Line items</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-destructive">{error}</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (!groups || groups.length === 0) {
-    return (
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Line Items</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            No line items found for this proposal.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return <QuoteLineItemsTable groups={groups} readOnly />;
+  return (
+    <PagedLineItemsTable
+      documentId={proposal.id}
+      loadAction={getProposalLineItemsAction}
+      fallbackGroups={groupsFromDocumentPayload(proposal.proposalPayload)}
+      emptyLabel="No line items found for this proposal."
+      readOnly
+    />
+  );
 }
 
 function ActivitiesTab() {

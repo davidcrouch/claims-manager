@@ -165,4 +165,78 @@ export function registerTransformTools(server: McpServer, api: ClaimsApiClient):
       }
     },
   );
+
+  server.tool(
+    'list_data_context',
+    categoryDesc(
+      CAT,
+      'Get the data context definition and enabled related-entity slugs for a document type.',
+    ),
+    {
+      documentType: z.string().describe('Document type slug (e.g. assessment, quote)'),
+    },
+    async ({ documentType }) => {
+      try {
+        return toolResult(
+          await api.request(`/generated-documents/data-context/${documentType}`),
+        );
+      } catch (err) {
+        return toolError(err);
+      }
+    },
+  );
+
+  server.tool(
+    'update_data_context',
+    categoryDesc(
+      CAT,
+      'Update which related entities are enabled for a document type data context.',
+    ),
+    {
+      documentType: z.string().describe('Document type slug'),
+      enabledSlugs: z
+        .array(z.string())
+        .describe('Related entity slugs to enable (e.g. job, claim, quotes)'),
+    },
+    async ({ documentType, enabledSlugs }) => {
+      try {
+        return toolResult(
+          await api.request(`/generated-documents/data-context/${documentType}`, {
+            method: 'PUT',
+            body: { enabledSlugs },
+          }),
+        );
+      } catch (err) {
+        return toolError(err);
+      }
+    },
+  );
+
+  server.tool(
+    'preview_data_envelope',
+    categoryDesc(
+      CAT,
+      'Resolve a nested data context envelope for a real entity (optional enabledSlugs override).',
+    ),
+    {
+      documentType: z.string().describe('Document type slug'),
+      entityId: z.string().describe('Entity UUID'),
+      enabledSlugs: z
+        .array(z.string())
+        .optional()
+        .describe('Optional related-entity slugs to include for this preview'),
+    },
+    async ({ documentType, entityId, enabledSlugs }) => {
+      try {
+        return toolResult(
+          await api.request(`/generated-documents/data-context/${documentType}/preview`, {
+            method: 'POST',
+            body: { entityId, enabledSlugs },
+          }),
+        );
+      } catch (err) {
+        return toolError(err);
+      }
+    },
+  );
 }

@@ -21,6 +21,14 @@ export class CatalogTypeService {
     return this.typesRepo.findAll({ tenantId });
   }
 
+  async findById(params: { id: string }) {
+    const tenantId = this.getTenantId();
+    await this.bootstrapService.ensureDefaults({ tenantId });
+    const row = await this.typesRepo.findById({ tenantId, id: params.id });
+    if (!row) throw new NotFoundException('Catalog type not found');
+    return row;
+  }
+
   async create(params: { code: string; name: string; sortIndex?: number }) {
     const tenantId = this.getTenantId();
     return this.typesRepo.create({
@@ -52,5 +60,9 @@ export class CatalogTypeService {
     });
     if (!row) throw new NotFoundException('Catalog type not found');
     return row;
+  }
+
+  async deactivate(params: { id: string }) {
+    return this.update({ id: params.id, isActive: false });
   }
 }

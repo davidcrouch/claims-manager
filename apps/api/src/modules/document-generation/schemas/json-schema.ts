@@ -1,11 +1,13 @@
 import type { DocumentType } from '../types/document-types';
 import { SOURCE_SCHEMAS } from './index';
 
-interface JsonSchemaProperty {
+export interface JsonSchemaProperty {
   type: string;
-  items?: JsonSchemaObject;
+  description?: string;
+  items?: JsonSchemaObject | JsonSchemaProperty;
   properties?: Record<string, JsonSchemaProperty>;
   additionalProperties?: boolean | JsonSchemaProperty;
+  required?: string[];
 }
 
 export interface JsonSchemaObject {

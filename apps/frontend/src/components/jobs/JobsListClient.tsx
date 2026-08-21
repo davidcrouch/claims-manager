@@ -12,15 +12,15 @@ import {
   ListPageHeader,
   computeStatusBreakdown,
 } from '@/components/layout/ListPageHeader';
-import { fetchJobsAction } from '@/app/(app)/jobs/actions';
-import type { Job, PaginatedResponse } from '@/types/api';
 import {
   type StatusOption,
   formatDate,
-  isArchivedStatus,
   commitColumnFilterSelection,
   columnFilterToIdsParam,
-  columnFilterKey,
+  columnFilterToValuesParam,
+  columnFilterToAssigneeIdsParam,
+  statusIdsForArchiveListTab,
+  mergeStatusParamWithTab,
   buildColumnFilterOptions,
   ValueFilterMenu,
   SortableColumnHeader,
@@ -33,6 +33,8 @@ import {
 } from '@/components/shared/column-visibility';
 import { ListArchiveButton, LIST_ARCHIVE_TH_CLASS, LIST_ARCHIVE_TD_CLASS, LIST_ARCHIVE_SPACER_TD_CLASS } from '@/components/shared/ListArchiveButton';
 import { formatAddress } from '@/components/shared/detail';
+import { fetchJobsAction, fetchJobFilterOptionsAction } from '@/app/(app)/jobs/actions';
+import type { Job, PaginatedResponse } from '@/types/api';
 
 const PAGE_SIZE = 20;
 
@@ -47,6 +49,10 @@ function jobListAddress(job: Job): string {
   return formatAddress(job.address as Record<string, unknown> | undefined, {
     fallback: { suburb: job.addressSuburb },
   });
+}
+
+function jobListRef(job: Job): string {
+  return job.name ?? job.externalJobId ?? job.externalReference ?? job.id;
 }
 
 type JobSortField =
@@ -67,7 +73,7 @@ interface ColDef {
 }
 
 const TABLE_COLUMNS: ColDef[] = [
-  { key: 'external_reference', label: 'Job Ref', locked: true },
+  { key: 'external_reference', label: 'Job Ref', locked: true, filterable: true },
   { key: 'status', label: 'Status', filterable: true },
   { key: 'job_type', label: 'Type', filterable: true },
   { key: 'assignee', label: 'Assigned', filterable: true },
@@ -134,8 +140,14 @@ export function JobsListClient({
   const [typeFilterActive, setTypeFilterActive] = useState(false);
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [statusFilterActive, setStatusFilterActive] = useState(false);
+  const [refFilter, setRefFilter] = useState<Set<string>>(new Set());
+  const [refFilterActive, setRefFilterActive] = useState(false);
   const [assigneeFilter, setAssigneeFilter] = useState<Set<string>>(new Set());
   const [assigneeFilterActive, setAssigneeFilterActive] = useState(false);
+  const [filterOptions, setFilterOptions] = useState<{
+    refs: string[];
+    assignees: { id: string; name: string }[];
+  }>({ refs: [], assignees: [] });
   const { isVisible, toggle, visibleCount } = useColumnVisibility(
     'jobs',
     TABLE_COLUMNS,
@@ -167,41 +179,51 @@ export function JobsListClient({
     [typeOptions],
   );
 
-  /** Status IDs implied by Active / Archived tab (undefined = All). */
-  const tabStatusIds = useMemo(() => {
-    if (tab === 'all') return undefined;
-    const ids = statusOptions
-      .filter((s) => {
-        const archived = isArchivedStatus(s.name);
-        return tab === 'archived' ? archived : !archived;
-      })
-      .map((s) => s.id);
-    return ids.length > 0 ? ids.sort().join(',') : undefined;
-  }, [tab, statusOptions]);
+  const tabStatusIds = useMemo(
+    () => statusIdsForArchiveListTab(tab, statusOptions),
+    [tab, statusOptions],
+  );
 
-  const statusParam = useMemo(() => {
-    const column = columnFilterToIdsParam(
-      statusFilterActive,
-      statusFilter,
-      statusOptions,
-    );
-    if (column === null) return null;
-    if (!tabStatusIds) return column;
-    if (!column) return tabStatusIds;
-    const tabSet = new Set(tabStatusIds.split(','));
-    const intersect = column.split(',').filter((id) => tabSet.has(id));
-    return intersect.length > 0 ? intersect.join(',') : null;
-  }, [statusFilterActive, statusFilter, statusOptions, tabStatusIds]);
+  const statusParam = useMemo(
+    () =>
+      mergeStatusParamWithTab(
+        columnFilterToIdsParam(statusFilterActive, statusFilter, statusOptions),
+        tabStatusIds,
+      ),
+    [statusFilterActive, statusFilter, statusOptions, tabStatusIds],
+  )
 
   const jobTypeParam = useMemo(
     () => columnFilterToIdsParam(typeFilterActive, typeFilter, typeOptions),
     [typeFilterActive, typeFilter, typeOptions],
+  );
+  const refsParam = useMemo(
+    () => columnFilterToValuesParam(refFilterActive, refFilter),
+    [refFilterActive, refFilter],
+  );
+  const assignedToUserIdsParam = useMemo(
+    () =>
+      columnFilterToAssigneeIdsParam(
+        assigneeFilterActive,
+        assigneeFilter,
+        filterOptions.assignees,
+      ),
+    [assigneeFilterActive, assigneeFilter, filterOptions.assignees],
   );
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
   }, [search]);
+
+  useEffect(() => {
+    fetchJobFilterOptionsAction().then((opts) => {
+      setFilterOptions({
+        refs: opts.refs ?? [],
+        assignees: opts.assignees ?? [],
+      });
+    });
+  }, []);
 
   // After create (or other external refresh), jump to page 1 so the new row is visible.
   useEffect(() => {
@@ -224,21 +246,43 @@ export function JobsListClient({
     else params.delete('status');
     if (jobTypeParam) params.set('jobType', jobTypeParam);
     else params.delete('jobType');
+    if (refsParam) params.set('refs', refsParam);
+    else params.delete('refs');
+    if (assignedToUserIdsParam) params.set('assignedToUserIds', assignedToUserIdsParam);
+    else params.delete('assignedToUserIds');
     const next = params.toString();
     if (next === searchParams.toString()) return;
     router.replace(`/jobs?${next}`, { scroll: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, sortParam, tab, page, statusParam, jobTypeParam, isPicker]);
+  }, [
+    debouncedSearch,
+    sortParam,
+    tab,
+    page,
+    statusParam,
+    jobTypeParam,
+    refsParam,
+    assignedToUserIdsParam,
+    isPicker,
+  ]);
 
   useEffect(() => {
     const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
     const typeKey = jobTypeParam === null ? '__none__' : (jobTypeParam ?? '');
-    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${typeKey}|${refreshNonce}`;
+    const refsKey = refsParam === null ? '__none__' : (refsParam ?? '');
+    const assigneesKey =
+      assignedToUserIdsParam === null ? '__none__' : (assignedToUserIdsParam ?? '');
+    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${typeKey}|${refsKey}|${assigneesKey}|${refreshNonce}`;
 
     if (lastFetchKeyRef.current === fetchKey) return;
     lastFetchKeyRef.current = fetchKey;
 
-    if (statusParam === null || jobTypeParam === null) {
+    if (
+      statusParam === null ||
+      jobTypeParam === null ||
+      refsParam === null ||
+      assignedToUserIdsParam === null
+    ) {
       setData({ data: [], total: 0 });
       return;
     }
@@ -251,6 +295,8 @@ export function JobsListClient({
       sort: sortParam,
       status: statusParam,
       jobType: jobTypeParam,
+      refs: refsParam,
+      assignedToUserIds: assignedToUserIdsParam,
     }).then((res) => {
       if (!cancelled && res) setData(res);
     });
@@ -263,7 +309,17 @@ export function JobsListClient({
         lastFetchKeyRef.current = null;
       }
     };
-  }, [debouncedSearch, sortParam, tab, page, statusParam, jobTypeParam, refreshNonce]);
+  }, [
+    debouncedSearch,
+    sortParam,
+    tab,
+    page,
+    statusParam,
+    jobTypeParam,
+    refsParam,
+    assignedToUserIdsParam,
+    refreshNonce,
+  ]);
 
   const handleColumnSort = (field: JobSortField) => {
     setColumnSort((prev) => {
@@ -322,10 +378,29 @@ export function JobsListClient({
     setPage(1);
   };
 
-  const uniqueAssignees = useMemo(
-    () => buildColumnFilterOptions(data.data.map((job) => job.assigneeName)),
-    [data.data],
+  const uniqueRefs = useMemo(
+    () => buildColumnFilterOptions(filterOptions.refs),
+    [filterOptions.refs],
   );
+
+  const uniqueAssignees = useMemo(
+    () =>
+      buildColumnFilterOptions(
+        filterOptions.assignees.map((a) => a.name),
+        { alwaysIncludeBlank: true },
+      ),
+    [filterOptions.assignees],
+  );
+
+  const applyRefFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueRefs.length,
+    });
+    setRefFilter(committed.selected);
+    setRefFilterActive(committed.active);
+    setPage(1);
+  };
 
   const applyAssigneeFilter = (next: Set<string>) => {
     const committed = commitColumnFilterSelection({
@@ -337,18 +412,18 @@ export function JobsListClient({
     setPage(1);
   };
 
-  const visibleRows = useMemo(() => {
-    let rows = data.data;
-    if (assigneeFilterActive) {
-      if (assigneeFilter.size === 0) return [];
-      rows = rows.filter((job) =>
-        assigneeFilter.has(columnFilterKey(job.assigneeName)),
-      );
-    }
-    return rows;
-  }, [data.data, assigneeFilterActive, assigneeFilter]);
+  const visibleRows = data.data;
 
   const breakdown = computeStatusBreakdown(visibleRows, (j) => j.status?.name);
+
+  const refFilterProps = {
+    options: uniqueRefs,
+    selected: refFilter,
+    active: refFilterActive,
+    onApply: applyRefFilter,
+    menuTitle: 'Filter by job ref',
+    itemNoun: { singular: 'job ref', plural: 'job refs' },
+  };
 
   const statusFilterProps = {
     options: statusNames,
@@ -475,13 +550,15 @@ export function JobsListClient({
                       sortOrder={columnSort.order}
                       onSort={handleColumnSort}
                       filter={
-                        col.key === 'status'
-                          ? statusFilterProps
-                          : col.key === 'job_type'
-                            ? typeFilterProps
-                            : col.key === 'assignee'
-                              ? assigneeFilterProps
-                              : undefined
+                        col.key === 'external_reference'
+                          ? refFilterProps
+                          : col.key === 'status'
+                            ? statusFilterProps
+                            : col.key === 'job_type'
+                              ? typeFilterProps
+                              : col.key === 'assignee'
+                                ? assigneeFilterProps
+                                : undefined
                       }
                     />
                   ))}
@@ -502,7 +579,7 @@ export function JobsListClient({
                   <TableEmptyRow colSpan={visibleCount + (isPicker ? 1 : 2)} label="No jobs found." />
                 ) : (
                   visibleRows.map((job) => {
-                  const ref = job.name ?? job.externalJobId ?? job.externalReference ?? job.id;
+                  const ref = jobListRef(job);
                   const statusName = job.status?.name ?? 'Unknown';
                   const jobTypeName = job.jobType?.name ?? '';
                   const isUnread = unreadSet.has(job.id);

@@ -481,7 +481,7 @@
   Lay summary: Finished wiring the sign-in cloud service with the secrets and identity settings it needs to issue secure sessions.
   **Complete auth-server Cloud Run environment with OIDC and JWKS secrets.** Added the remaining staging environment variables so the sign-in service can load OpenID and key-set secrets at runtime.
   Connected secret references required for token signing and discovery endpoints on Cloud Run.
-  Aligns staging auth configuration with the Shore-parity identity model introduced earlier.
+  Aligns staging auth configuration with the More0-parity identity model introduced earlier.
   Reduces bring-up guesswork for operators deploying auth revisions.
   Supports end-to-end login against the Cloud Run-hosted sign-in service.
 
@@ -556,10 +556,10 @@
 - `2026-08-02` `da322cf` **62 h**
   `234 files | +28652 -296 | Tier 2 standard / Tier 3 complex / Tier 4 deep integration | Heavy orchestration`
   Lay summary: Staff can chat with an in-product assistant that uses company tools, saved skills, and partner connections, with admin controls for who may use what.
-  **Agentic AI platform with chat, skills, MCP integrations, and Shore-aligned RBAC.** Delivered end-to-end **AI chat** so staff can ask questions, attach files, and complete assisted workflows inside the claims workspace.
+  **Agentic AI platform with chat, skills, MCP integrations, and More0-aligned RBAC.** Delivered end-to-end **AI chat** so staff can ask questions, attach files, and complete assisted workflows inside the claims workspace.
   Added **agents and skills administration** so organisations can configure assistants, tool access, and reusable procedures without engineering changes for each request.
   Integrated **MCP connections** including claims-domain and Microsoft Graph tool servers so the assistant can act on jobs, contacts, mail, calendar, and related records under controlled credentials.
-  Extended the **sign-in and permission model** with Shore-aligned roles and permission checks so AI and admin features respect organisation access rules.
+  Extended the **sign-in and permission model** with More0-aligned roles and permission checks so AI and admin features respect organisation access rules.
   Shipped **conversation memory, sharing, feedback, and audit** surfaces so assisted activity is reviewable and retainable for operations.
   Delivered the matching **website chat drawer, admin screens, and connection management** so day-to-day use and oversight stay in one product.
   Outcome: a production-ready assistant foundation that combines chat, tools, skills, and access control for claims operations.
@@ -888,3 +888,14 @@
   Staff can reorder quote lines, see make-safe and excess as clear yes/no markers, and get a loading message on the catalogue.
   Builder make-safe, assessment, and works guides plus related reference files now live in one Crunchwork folder.
   Sample flood, fire, and roof-leak job photos and notes were added for training and walkthroughs.
+
+- `2026-08-22` `PENDING` **48 h**
+  `430 files | +32892 −4797 | Tier 2 standard / Tier 3 complex / Tier 4 deep integration | Heavy orchestration`
+  Lay summary: Staff can build reports from live job data, manage the product catalogue in chat, see a history of changes on each record, and run builder assessment, make-safe, and repair jobs with less manual follow-up.
+  **Catalogue, reports, activity history, and builder job workflows in one delivery.**
+  Staff can import and edit catalogue items, assemblies, and bills of materials, and ask the in-product assistant for help with those tasks.
+  Report templates pull live job, quote, and invoice details so printed documents stay accurate without re-typing.
+  Each job and related record now shows a history of what changed, who did it, and when.
+  Builder assessment, make-safe, and repair-works jobs move through dates, documents, and partner updates with less re-keying.
+  Publishing estimates and jobs gives clearer on-screen feedback, and people on a job stay aligned across contacts and messages.
+  Task types, work-order details, and stronger sign-in complete the day-to-day operating set.

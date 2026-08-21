@@ -5,7 +5,7 @@
 **Mapper:** `apps/api/src/modules/external/mappers/crunchwork-quote.mapper.ts`
 **Last aligned with:** Insurance REST API v17 (exported 2026-03-04)
 
-> **Coverage status:** The full contract is documented below and the schema has every column the contract needs (migration `0006_quote_schema_alignment` added the missing `external_reference` columns, lookup FKs, parent cascades, child indexes, and the `(tenant_id, external_reference)` unique index on `quotes`). The current **mapper** is still a stub that only promotes the parent resolution keys (`id`, `jobId`, `claimId`, `quoteNumber`, `name`, `reference`, `note`) and preserves the rest inside `api_payload`. Every field below marked "promoted" or "child row" other than those is part of the mapper backlog; update this doc **before** you add promotion logic.
+> **Coverage status:** Full — mapper matches spec. All scalar columns on `quotes` (§5), party buckets (§4), JSONB buckets (§6), lookup resolution (§3), user references, and the three-level group/combo/item child sync (§7–§9) are implemented. See §12 for remaining minor backlog items (lookup seeding, soft-delete flag).
 
 ---
 
@@ -320,36 +320,58 @@ Nothing else from §3.3.6 is unmapped.
 
 ## 12. Implementation notes
 
-`CrunchworkQuoteMapper`
-(`apps/api/src/modules/external/mappers/crunchwork-quote.mapper.ts`) currently
-implements **only the minimum subset** required to resolve the parent and
-persist the raw payload. The following items are the mapper backlog before this
-doc can be marked "Full — mapper matches spec":
+`QuoteTransformer`
+(`apps/api/src/modules/domain/transformers/quote.transformer.ts`) and
+`LineItemSyncService`
+(`apps/api/src/modules/domain/services/line-item-sync.service.ts`) now
+implement the full field mapping described in this document.
 
-- **Promote all scalar columns on `quotes`** listed in §5 and the `quote_to` /
-  `quote_for` / `quote_from` promoted columns in §4.
-- **Resolve `status` / `quoteType` lookups** in §3 (log `UNRESOLVED_LOOKUP`
-  against `external_reference_resolution_log`; leave FK null on miss).
-- **Sync group / combo / item children** per §7–§9 inside the same transaction
-  provided by `InProcessProjectionService`. Schema-level support is in place
-  (`external_reference` columns + `UQ_quote_*_parent_extref` unique indexes on
-  all three child tables as of migration `0006_quote_schema_alignment`).
-- **Pruning.** Once §7–§9 land, follow the same additive rules as `claims` for
-  shared child tables, but prune groups / combos / items whose CW id is absent
-  from the latest payload (they are per-quote state; stale rows mislead
-  operational reads). Historical payloads remain in `quotes.api_payload`.
-- **Parent fallback.** The current mapper already handles the `skipped_no_parent`
-  case (§10) — keep this behaviour intact when expanding coverage.
-- **Lookup domains to seed.** `quote_status` is already in
-  `apps/api/src/database/seeds/entries/sample-data.seed.ts`. `quote_type`,
-  `group_label`, `line_scope_status`, and `unit_type` are not yet seeded and
-  will need stub entries (or lazy `UNRESOLVED_LOOKUP` logging) before the
-  mapper starts resolving them.
+### Completed
 
-Skip conditions for the current stub: the mapper returns
-`{ skipped: 'skipped_no_parent' }` when neither a job nor a claim external link
-exists yet. The orchestrator records this as `completed_unmapped` so the
-sweep / parent-event retry can pick it up later.
+- **All scalar columns on `quotes`** listed in §5 are promoted (`name`,
+  `reference`, `note`, `expiresInDays`, `subTotal`, `totalTax`, `totalAmount`,
+  `estimatedStartDate`, `estimatedCompletionDate`, `isAutoApproved`).
+- **Party buckets** (`quote_to`, `quote_for`, `quote_from`) populated from
+  flat `to*`/`for*`/`from*` CW keys per §4, with promoted scalars
+  `quoteToEmail`, `quoteToName`, `quoteForName`.
+- **JSONB buckets** `schedule_info` (§6.2), `approval_info` (§6.3), and
+  `custom_data` (§6.4) populated with all documented fields.
+- **User references** `created_by_user_id` / `updated_by_user_id` extracted
+  from `createdBy.externalReference` / `updatedBy.externalReference`.
+- **`status` / `quoteType` lookups** resolved via `LookupResolutionService`
+  with `autoCreate: true` (§3).
+- **Group / combo / item sync** (`syncQuoteItems` in `LineItemSyncService`)
+  uses the destroy-and-rebuild pattern per §7–§9. Cascading deletes on
+  `quote_groups` remove child combos and items. The method is wired into
+  `ProjectQuoteUseCase` and runs inside the same transaction.
+  - Groups: `external_reference`, `group_label_lookup_id` (resolved via
+    `group_label` domain), `description`, `dimensions`, `totals`,
+    `sort_index`, `group_payload`.
+  - Combos: `external_reference`, `catalog_combo_id`,
+    `line_scope_status_lookup_id` (resolved via `line_scope_status` domain),
+    `name`, `component`, `description`, `category`, `sub_category`,
+    `quantity`, `totals` (unitCost, markupValue, subTotal, totalTax, total,
+    allocatedCost, committedCost), `sort_index`, `combo_payload`.
+  - Items: `external_reference`, `catalog_item_id`,
+    `line_scope_status_lookup_id`, `unit_type_lookup_id` (resolved via
+    `unit_type` domain), `name`, `component`, `description`, `category`,
+    `sub_category`, `item_type`, `quantity`, `tax`, `unit_cost`, `buy_cost`,
+    `markup_type`, `markup_value`, `allocated_cost`, `committed_cost`,
+    `internal`, `note`, `tags`, `mismatches`, `totals`, `sort_index`,
+    `item_payload`.
+- **Parent fallback.** The mapper handles the `skipped_no_parent` case (§10)
+  — this behaviour is preserved.
+
+### Remaining backlog
+
+- **Lookup domain seeding.** `quote_status` is already seeded.
+  `quote_type`, `group_label`, `line_scope_status`, and `unit_type` are
+  auto-created on first encounter via `autoCreate: true` but do not yet
+  have pre-seeded entries in `sample-data.seed.ts`.
+- **Soft-delete honouring.** The `delete` flag on combos / items (§8, §9) is
+  not yet honoured during ingest; the destroy-and-rebuild approach means stale
+  rows are implicitly removed. If incremental / partial updates are added
+  later, the `deleted_at` column will need explicit handling.
 
 ## Conventions
 

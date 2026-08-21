@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { TrendingDown } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
@@ -12,25 +13,23 @@ import {
   StatusFilterMenu,
   TableEmptyRow,
   type SortOption,
-  compareDates,
-  compareValues,
+  type StatusOption,
+  buildSortString,
+  parseSort,
+  statusIdsKey,
   formatDate,
 } from '@/components/shared/list-filters';
-import type { AgingBucket, Bill } from '@/types/api';
+import { fetchBillsAction } from '@/app/(app)/bills/actions';
+import type { AgingBucket, Bill, PaginatedResponse } from '@/types/api';
 
 const SORT_OPTIONS: SortOption[] = [
   { key: 'due_date', label: 'Due Date' },
-  { key: 'received', label: 'Received' },
-  { key: 'amount', label: 'Amount' },
-  { key: 'age', label: 'Age' },
+  { key: 'received_date', label: 'Received' },
+  { key: 'total_amount', label: 'Amount' },
   { key: 'bill_number', label: 'Bill #' },
 ];
-
-const STATUS_OPTIONS = [
-  { id: 'unpaid', name: 'Unpaid' },
-  { id: 'paid', name: 'Paid' },
-  { id: 'overdue', name: 'Overdue' },
-];
+const ALLOWED_SORT_FIELDS = SORT_OPTIONS.map((o) => o.key);
+const PAGE_SIZE = 100;
 
 function fmt(n: number) {
   return new Intl.NumberFormat(undefined, {
@@ -52,67 +51,102 @@ interface Props {
     totalOverdue: number;
     totalPaid: number;
   };
-  bills: Bill[];
+  initialBills: PaginatedResponse<Bill> | { data: Bill[]; total: number };
+  statusOptions: StatusOption[];
 }
 
-export function FinanceApClient({ summary, bills }: Props) {
-  const [search, setSearch] = useState('');
-  const [sortField, setSortField] = useState('due_date');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+export function FinanceApClient({ summary, initialBills, statusOptions }: Props) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [data, setData] = useState<PaginatedResponse<Bill>>(
+    'data' in initialBills
+      ? (initialBills as PaginatedResponse<Bill>)
+      : { data: [], total: 0 },
+  );
+  const [search, setSearch] = useState(searchParams.get('search') ?? '');
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  const [sort, setSort] = useState(() => {
+    const parsed = parseSort({
+      sortParam: searchParams.get('sort'),
+      allowedFields: ALLOWED_SORT_FIELDS,
+      defaultField: 'due_date',
+      defaultOrder: 'asc',
+    });
+    return buildSortString(parsed.field, parsed.order);
+  });
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const lastFetchKeyRef = useRef<string | null>(null);
+
+  const statusParam = useMemo(() => {
+    if (statusFilter.size === 0) return undefined;
+    if (statusFilter.size === statusOptions.length) return undefined;
+    return [...statusFilter].sort().join(',');
+  }, [statusFilter, statusOptions.length]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
+    setData(
+      'data' in initialBills
+        ? (initialBills as PaginatedResponse<Bill>)
+        : { data: [], total: 0 },
+    );
+    lastFetchKeyRef.current = null;
+  }, [initialBills]);
+
+  useEffect(() => {
+    const statusKey = statusIdsKey(statusFilter);
+    const fetchKey = `${debouncedSearch}|${sort}|${statusKey}`;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('search', debouncedSearch);
+    params.set('sort', sort);
+    if (statusParam) params.set('status', statusParam);
+    else params.delete('status');
+    router.replace(`/finance/ap?${params}`, { scroll: false });
+
+    if (lastFetchKeyRef.current === fetchKey) return;
+    lastFetchKeyRef.current = fetchKey;
+
+    fetchBillsAction({
+      page: 1,
+      limit: PAGE_SIZE,
+      search: debouncedSearch || undefined,
+      sort,
+      status: statusParam,
+    }).then((res) => res && setData(res));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, sort, statusParam, statusFilter]);
+
+  const { field: sortField, order: sortOrder } = parseSort({
+    sortParam: sort,
+    allowedFields: ALLOWED_SORT_FIELDS,
+    defaultField: 'due_date',
+    defaultOrder: 'asc',
+  });
 
   const handleSort = (field: string) => {
     if (sortField === field) {
-      setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'));
+      setSort(buildSortString(field, sortOrder === 'asc' ? 'desc' : 'asc'));
     } else {
-      setSortField(field);
-      setSortOrder(field === 'bill_number' ? 'asc' : 'desc');
+      setSort(buildSortString(field, field === 'bill_number' ? 'asc' : 'desc'));
     }
   };
 
-  const visibleRows = useMemo(() => {
-    let rows = bills;
-
-    if (statusFilter.size > 0) {
-      rows = rows.filter((bill) => {
-        const name = bill.status?.name?.toLowerCase() ?? '';
-        return statusFilter.has(name);
-      });
-    }
-
-    const query = search.trim().toLowerCase();
-    if (query) {
-      rows = rows.filter((bill) =>
-        (bill.billNumber ?? '').toLowerCase().includes(query),
-      );
-    }
-
-    const sorted = [...rows].sort((a, b) => {
-      switch (sortField) {
-        case 'bill_number':
-          return compareValues(
-            a.billNumber ?? '',
-            b.billNumber ?? '',
-            sortOrder,
-          );
-        case 'amount':
-          return compareValues(
-            parseFloat(a.totalAmount ?? '0'),
-            parseFloat(b.totalAmount ?? '0'),
-            sortOrder,
-          );
-        case 'received':
-          return compareDates(a.receivedDate ?? a.issueDate, b.receivedDate ?? b.issueDate, sortOrder);
-        case 'age':
-          return compareValues(daysSince(a.issueDate), daysSince(b.issueDate), sortOrder);
-        case 'due_date':
-        default:
-          return compareDates(a.dueDate ?? a.issueDate, b.dueDate ?? b.issueDate, sortOrder);
-      }
+  const setStatusChecked = (id: string, checked: boolean) => {
+    setStatusFilter((prev) => {
+      const working =
+        prev.size === 0 ? new Set(statusOptions.map((o) => o.id)) : new Set(prev);
+      if (checked) working.add(id);
+      else working.delete(id);
+      if (working.size === statusOptions.length) return new Set();
+      return working;
     });
+  };
 
-    return sorted;
-  }, [bills, search, statusFilter, sortField, sortOrder]);
+  const visibleRows = data.data;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
@@ -120,8 +154,10 @@ export function FinanceApClient({ summary, bills }: Props) {
         <ListPageHeader
           icon={TrendingDown}
           title="Accounts Payable"
-          total={bills.length}
+          total={data.total}
           showing={visibleRows.length}
+          search={debouncedSearch}
+          statusSelectedCount={statusFilter.size}
           accent="rose"
           stats={[
             { label: 'Payable', value: fmt(summary.totalOutstanding) },
@@ -184,18 +220,15 @@ export function FinanceApClient({ summary, bills }: Props) {
             onChange={setSearch}
           />
           <StatusFilterMenu
-            options={STATUS_OPTIONS}
-            selected={statusFilter}
-            onSelectionChange={(id, checked) => {
-              setStatusFilter((prev) => {
-                const next = new Set(prev);
-                if (checked) next.add(id);
-                else next.delete(id);
-                return next;
-              });
-            }}
+            options={statusOptions}
+            selected={
+              statusFilter.size === 0
+                ? new Set(statusOptions.map((o) => o.id))
+                : statusFilter
+            }
+            onSelectionChange={setStatusChecked}
             onClearAll={() => setStatusFilter(new Set())}
-            onSelectAll={() => setStatusFilter(new Set(STATUS_OPTIONS.map((o) => o.id)))}
+            onSelectAll={() => setStatusFilter(new Set())}
           />
         </div>
       </div>

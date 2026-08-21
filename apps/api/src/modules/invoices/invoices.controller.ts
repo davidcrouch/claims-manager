@@ -15,17 +15,24 @@ export class InvoicesController {
     @Query('limit') limit?: string,
     @Query('purchaseOrderId') purchaseOrderId?: string,
     @Query('jobId') jobId?: string,
+    @Query('jobIds') jobIds?: string,
     @Query('status') status?: string,
     @Query('statusId') statusId?: string,
+    @Query('search') search?: string,
     @Query('sort') sort?: string,
   ) {
+    const jobIdList = jobIds
+      ? jobIds.split(',').map((id) => id.trim()).filter((id) => id.length > 0)
+      : undefined;
     return this.invoicesService.findAll({
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
       purchaseOrderId,
       jobId,
+      jobIds: jobIdList && jobIdList.length > 0 ? jobIdList : undefined,
       status,
       statusId,
+      search,
       sort,
     });
   }

@@ -54,6 +54,7 @@ export interface AISettings {
 export interface Agent extends AISettings {
   id: string;
   name: string;
+  slug?: string;
   type?: AgentType;
   chatEnabled?: boolean;
   isDefault?: boolean;

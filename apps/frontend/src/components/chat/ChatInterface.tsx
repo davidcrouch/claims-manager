@@ -33,7 +33,6 @@ interface ChatInterfaceProps {
   relatedRecordType?: string;
   relatedRecordId?: string;
   startWithMic?: boolean;
-  useRichText?: boolean;
 }
 
 export function ChatInterface({
@@ -50,7 +49,6 @@ export function ChatInterface({
   relatedRecordType,
   relatedRecordId,
   startWithMic,
-  useRichText = true,
 }: ChatInterfaceProps) {
   const [input, setInput] = useState('');
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
@@ -257,16 +255,17 @@ export function ChatInterface({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isStreaming, isLoading, messages, handleStop]);
 
-  const submitMessage = useCallback(async () => {
+  const submitMessage = useCallback(async (overrideText?: string) => {
+    const trimmed = (overrideText ?? input).trim();
     if (
-      (!input.trim() && fileUpload.selectedFiles.length === 0 && pendingAttachmentParts.length === 0)
+      (!trimmed && fileUpload.selectedFiles.length === 0 && pendingAttachmentParts.length === 0)
       || isLoading
       || fileUpload.isProcessingFiles
     ) {
       return;
     }
 
-    const text = input.trim() || 'Please analyze the attached file(s).';
+    const text = trimmed || 'Please analyze the attached file(s).';
     let fileParts: FilePart[] = [...pendingAttachmentParts];
 
     if (fileUpload.selectedFiles.length > 0) {
@@ -421,7 +420,6 @@ export function ChatInterface({
         interimTranscript={interimTranscript}
         onToggleSpeech={toggleSpeech}
         speechError={speechError}
-        useRichText={useRichText}
       />
 
       <MessageAuditDrawer

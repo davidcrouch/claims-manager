@@ -10,6 +10,10 @@ export async function fetchContactsAction(params?: {
   search?: string;
   sort?: string;
   jobId?: string;
+  jobIds?: string[];
+  unlinkedOnly?: boolean;
+  typeLookupIds?: string[];
+  archived?: boolean;
 }): Promise<PaginatedResponse<Contact>> {
   const session = await getSession();
   if (!session.authenticated) return { data: [], total: 0 };
@@ -25,6 +29,10 @@ export async function fetchContactsAction(params?: {
       search: params?.search,
       sort: params?.sort,
       jobId: params?.jobId,
+      jobIds: params?.jobIds,
+      unlinkedOnly: params?.unlinkedOnly,
+      typeLookupIds: params?.typeLookupIds,
+      archived: params?.archived,
     });
   } catch (err) {
     console.error('[contacts/actions.fetchContactsAction]', err);

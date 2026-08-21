@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
 import { useEditor, EditorContent } from '@tiptap/react';
@@ -17,8 +17,15 @@ import {
   Strikethrough,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   BottomFormDrawer,
   BottomFormDrawerBody,
@@ -28,8 +35,25 @@ import {
 import { createMessageAction } from '@/app/(app)/jobs/[id]/actions';
 import { cn } from '@/lib/utils';
 
+/** Keep in sync with apps/api/src/modules/messages/message-subjects.ts */
+const MESSAGE_SUBJECTS = [
+  'Contentious claim',
+  'General',
+  'Repair Update',
+  'Status Update',
+  'Customer Complaint - Supplier Services',
+  'Vulnerable Customer',
+  'Customer Complaint - Insurance Services',
+  'Cancellation Request',
+  'Cash Settlement Request',
+  'Update Required',
+] as const;
+
 const messageFormSchema = z.object({
-  subject: z.string().min(1, 'Subject is required'),
+  subject: z.enum(MESSAGE_SUBJECTS, {
+    error: 'Subject is required',
+  }),
+  acknowledgementRequired: z.boolean(),
 });
 
 type MessageFormValues = z.infer<typeof messageFormSchema>;
@@ -114,7 +138,8 @@ export function MessageFormDrawer({
   const form = useForm<MessageFormValues>({
     resolver: standardSchemaResolver(messageFormSchema),
     defaultValues: {
-      subject: '',
+      subject: undefined,
+      acknowledgementRequired: false,
     },
   });
 
@@ -136,7 +161,7 @@ export function MessageFormDrawer({
     editorProps: {
       attributes: {
         class: cn(
-          'min-h-[160px] max-h-[40vh] overflow-y-auto px-3 py-2 text-sm focus:outline-none',
+          'min-h-[320px] max-h-[80vh] overflow-y-auto px-3 py-2 text-sm focus:outline-none',
           'prose prose-sm max-w-none prose-p:my-1 prose-p:leading-relaxed',
           'prose-ul:my-1 prose-ol:my-1 prose-li:my-0',
         ),
@@ -158,6 +183,7 @@ export function MessageFormDrawer({
       const payload: Record<string, unknown> = {
         subject: values.subject,
         text: body,
+        acknowledgementRequired: values.acknowledgementRequired,
       };
       if (jobId) {
         payload.fromJobId = jobId;
@@ -173,7 +199,7 @@ export function MessageFormDrawer({
       const result = await createMessageAction(payload);
       if (result.success) {
         onOpenChange(false);
-        form.reset();
+        form.reset({ subject: undefined, acknowledgementRequired: false });
         editor?.commands.clearContent();
         router.refresh();
       } else {
@@ -204,18 +230,53 @@ export function MessageFormDrawer({
       >
         <BottomFormDrawerBody>
           <div className="grid grid-cols-1 gap-x-6 gap-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="subject">Subject</Label>
-              <Input
-                id="subject"
-                {...form.register('subject')}
-                placeholder="Message subject"
-              />
-              {form.formState.errors.subject && (
-                <p className="text-sm text-destructive">
-                  {form.formState.errors.subject.message}
-                </p>
-              )}
+            <div className="flex flex-wrap items-center gap-x-8 gap-y-4">
+              <div className="w-1/2 min-w-0 space-y-2">
+                <Label htmlFor="subject">Subject</Label>
+                <Controller
+                  control={form.control}
+                  name="subject"
+                  render={({ field }) => (
+                    <Select
+                      value={field.value ?? null}
+                      onValueChange={(v) => field.onChange(v ?? undefined)}
+                    >
+                      <SelectTrigger id="subject" className="w-full">
+                        <SelectValue placeholder="Select subject" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MESSAGE_SUBJECTS.map((subject) => (
+                          <SelectItem key={subject} value={subject}>
+                            {subject}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                {form.formState.errors.subject && (
+                  <p className="text-sm text-destructive">
+                    {form.formState.errors.subject.message}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Controller
+                  control={form.control}
+                  name="acknowledgementRequired"
+                  render={({ field }) => (
+                    <Switch
+                      id="acknowledgementRequired"
+                      checked={field.value}
+                      onCheckedChange={(v) => field.onChange(!!v)}
+                    />
+                  )}
+                />
+                <Label htmlFor="acknowledgementRequired" className="cursor-pointer">
+                  Requires Acknowledgement
+                </Label>
+              </div>
             </div>
 
             <div className="space-y-2">

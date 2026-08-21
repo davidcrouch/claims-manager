@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, desc, asc, sql, inArray } from 'drizzle-orm';
+import { eq, and, desc, asc, sql, inArray, or, ilike } from 'drizzle-orm';
+import { normalizeListJobIds } from '../../common/list-job-filter';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { invoices } from '../schema';
 
@@ -47,10 +48,12 @@ export class InvoicesRepository {
     limit?: number;
     purchaseOrderId?: string;
     jobId?: string;
+    jobIds?: string[];
     /** Comma-separated status lookup IDs. */
     status?: string;
     /** @deprecated Use status. */
     statusId?: string;
+    search?: string;
     sort?: string;
   }): Promise<{ data: InvoiceRow[]; total: number }> {
     const page = params.page ?? 1;
@@ -65,11 +68,27 @@ export class InvoicesRepository {
     if (params.purchaseOrderId) {
       whereClause = and(whereClause, eq(invoices.purchaseOrderId, params.purchaseOrderId))!;
     }
-    if (params.jobId) {
-      whereClause = and(whereClause, eq(invoices.jobId, params.jobId))!;
+    const jobIds = normalizeListJobIds({ jobId: params.jobId, jobIds: params.jobIds });
+    if (jobIds) {
+      if (jobIds.length === 0) return { data: [], total: 0 };
+      whereClause = and(
+        whereClause,
+        jobIds.length === 1 ? eq(invoices.jobId, jobIds[0]) : inArray(invoices.jobId, jobIds),
+      )!;
     }
     if (statusIds.length > 0) {
       whereClause = and(whereClause, inArray(invoices.statusLookupId, statusIds))!;
+    }
+    if (params.search?.trim()) {
+      const term = `%${params.search.trim()}%`;
+      whereClause = and(
+        whereClause,
+        or(
+          ilike(invoices.invoiceNumber, term),
+          ilike(invoices.sourceExternalReference, term),
+          ilike(invoices.comments, term),
+        )!,
+      )!;
     }
 
     const [data, countResult] = await Promise.all([

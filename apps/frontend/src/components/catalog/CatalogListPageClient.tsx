@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { BookOpen, FolderPlus, Library, Package, Plus } from 'lucide-react';
+import { BookOpen, FolderPlus, Library, Package, Plus, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
@@ -26,7 +26,8 @@ const TYPE_BADGES: Record<string, { label: string; className: string }> = {
 };
 
 export function CatalogListPageClient({ catalogs }: CatalogListPageClientProps) {
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editingCatalog, setEditingCatalog] = useState<Catalog | null>(null);
 
   return (
     <>
@@ -37,7 +38,7 @@ export function CatalogListPageClient({ catalogs }: CatalogListPageClientProps) 
       <SetHeaderActions>
         <Button
           size="default"
-          onClick={() => setDrawerOpen(true)}
+          onClick={() => setCreateOpen(true)}
           className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
         >
           <Plus className="h-3.5 w-3.5" />
@@ -53,7 +54,7 @@ export function CatalogListPageClient({ catalogs }: CatalogListPageClientProps) 
             Create a catalogue to organise your items. You can have separate
             catalogues for Crunchwork imports and internal rates.
           </p>
-          <Button className="mt-6" onClick={() => setDrawerOpen(true)}>
+          <Button className="mt-6" onClick={() => setCreateOpen(true)}>
             <FolderPlus className="mr-1 h-4 w-4" />
             Create first catalogue
           </Button>
@@ -63,49 +64,83 @@ export function CatalogListPageClient({ catalogs }: CatalogListPageClientProps) 
           {catalogs.map((catalog) => {
             const badge = TYPE_BADGES[catalog.type] ?? TYPE_BADGES.internal;
             return (
-              <Link
+              <div
                 key={catalog.id}
-                href={`/admin/catalog/${catalog.id}`}
-                className="group flex flex-col rounded-lg border border-border bg-background p-5 shadow-sm transition-colors hover:border-amber-300 hover:shadow-md"
+                className="group relative flex flex-col rounded-lg border border-border bg-background p-5 shadow-sm transition-colors hover:border-amber-300 hover:shadow-md"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <h3 className="truncate font-semibold group-hover:text-amber-700">
-                      {catalog.name}
-                    </h3>
-                    {catalog.description && (
-                      <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
-                        {catalog.description}
-                      </p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-2 top-2 h-8 w-8 text-muted-foreground hover:text-foreground"
+                  aria-label={`Settings for ${catalog.name}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setEditingCatalog(catalog);
+                  }}
+                >
+                  <Settings className="h-4 w-4" />
+                </Button>
+
+                <Link
+                  href={`/admin/catalog/${catalog.id}`}
+                  className="flex min-w-0 flex-1 flex-col pr-8"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="truncate font-semibold group-hover:text-amber-700">
+                        {catalog.name}
+                      </h3>
+                      {catalog.description && (
+                        <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
+                          {catalog.description}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span
+                      className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${badge.className}`}
+                    >
+                      {badge.label}
+                    </span>
+                    {catalog.isDefault && (
+                      <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">
+                        Default
+                      </span>
                     )}
                   </div>
-                  <span
-                    className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${badge.className}`}
-                  >
-                    {badge.label}
-                  </span>
-                </div>
-                <div className="mt-4 flex items-center gap-4 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <Package className="h-3.5 w-3.5" />
-                    {catalog.itemCount ?? 0} items
-                  </span>
-                  <span>
-                    Updated{' '}
-                    {new Date(catalog.updatedAt).toLocaleDateString('en-AU', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric',
-                    })}
-                  </span>
-                </div>
-              </Link>
+                  <div className="mt-4 flex items-center gap-4 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <Package className="h-3.5 w-3.5" />
+                      {catalog.itemCount ?? 0} items
+                    </span>
+                    <span>
+                      Updated{' '}
+                      {new Date(catalog.updatedAt).toLocaleDateString('en-AU', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                      })}
+                    </span>
+                  </div>
+                </Link>
+              </div>
             );
           })}
         </div>
       )}
 
-      <CatalogFormDrawer open={drawerOpen} onOpenChange={setDrawerOpen} />
+      <CatalogFormDrawer open={createOpen} onOpenChange={setCreateOpen} />
+
+      <CatalogFormDrawer
+        open={!!editingCatalog}
+        onOpenChange={(open) => {
+          if (!open) setEditingCatalog(null);
+        }}
+        catalog={editingCatalog ?? undefined}
+      />
     </>
   );
 }

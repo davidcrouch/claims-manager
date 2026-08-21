@@ -6,6 +6,7 @@ import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { PrintButton } from '@/components/shared/PrintButton';
 import { JobsListClient } from './JobsListClient';
 import { JobFormDrawer } from '@/components/forms/JobFormDrawer';
+import type { JobFormClaimOption } from '@/components/forms/job-form-claim';
 import type { Job, PaginatedResponse } from '@/types/api';
 
 export interface JobsPageClientProps {
@@ -13,6 +14,8 @@ export interface JobsPageClientProps {
   jobTypes: { id: string; name?: string; providerCode?: string | null }[];
   /** All job_type lookups for list filtering (any provider). Falls back to jobTypes. */
   jobTypeFilterOptions?: { id: string; name: string }[];
+  /** Claims for the Create Job claim dropdown. */
+  claims?: JobFormClaimOption[];
   statusOptions: { id: string; name: string }[];
   unreadJobIds?: string[];
   currentUserId?: string | null;
@@ -22,6 +25,7 @@ export function JobsPageClient({
   initialData,
   jobTypes,
   jobTypeFilterOptions,
+  claims = [],
   statusOptions,
   unreadJobIds,
   currentUserId,
@@ -52,6 +56,7 @@ export function JobsPageClient({
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
         jobTypes={jobTypes}
+        claims={claims}
         currentUserId={currentUserId}
         onSuccess={() => {
           // Force the list to refetch when we return from the new job page.

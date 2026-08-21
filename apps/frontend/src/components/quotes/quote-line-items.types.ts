@@ -4,6 +4,8 @@ export interface ApiLookup {
   externalReference?: string;
 }
 
+export type PublishStatus = 'sent' | 'excluded' | 'rejected' | null;
+
 export interface ApiItem {
   id?: string;
   name?: string;
@@ -24,6 +26,7 @@ export interface ApiItem {
   note?: string | null;
   catalogItemId?: string;
   internal?: boolean;
+  publishStatus?: PublishStatus;
   mismatches?: Array<{ property?: string; catalogValue?: string }>;
   tags?: string[];
   lineScopeStatus?: ApiLookup;
@@ -48,6 +51,7 @@ export interface ApiCombo {
   catalogComboId?: string;
   parentComboId?: string;
   comboPayload?: Record<string, unknown>;
+  publishStatus?: PublishStatus;
   lineScopeStatus?: ApiLookup;
   items?: ApiItem[];
   subTotal?: number;

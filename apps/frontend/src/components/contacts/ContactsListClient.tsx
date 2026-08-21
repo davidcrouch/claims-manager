@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -16,6 +16,7 @@ import {
   TableEmptyRow,
   commitColumnFilterSelection,
   buildColumnFilterOptions,
+  COLUMN_FILTER_BLANK,
   columnFilterKey,
   formatDate,
   isArchivedStatus,
@@ -83,6 +84,9 @@ export interface ContactsListClientProps {
   job?: Job | null;
   parentClaim?: Claim | null;
   jobNameById?: Record<string, string>;
+  /** Jobs that actually have contacts — drives Job column filter options. */
+  filterJobs?: Array<{ id: string; label: string }>;
+  hasUnlinkedContacts?: boolean;
 }
 
 export function ContactsListClient({
@@ -90,7 +94,10 @@ export function ContactsListClient({
   job,
   parentClaim,
   jobNameById,
+  filterJobs = [],
+  hasUnlinkedContacts = false,
 }: ContactsListClientProps) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [data, setData] = useState(initialData);
   const [search, setSearch] = useState('');
@@ -102,8 +109,6 @@ export function ContactsListClient({
     field: 'name',
     order: 'asc',
   });
-  const [jobFilter, setJobFilter] = useState<Set<string>>(new Set());
-  const [jobFilterActive, setJobFilterActive] = useState(false);
   const { isVisible, toggle, visibleCount } = useColumnVisibility(
     'contacts',
     TABLE_COLUMNS,
@@ -112,6 +117,45 @@ export function ContactsListClient({
 
   const sortParam = `${columnSort.field}_${columnSort.order}`;
   const jobId = searchParams.get('jobId') ?? undefined;
+  const jobIdsParam = searchParams.get('jobIds') ?? undefined;
+  const unlinkedOnly =
+    searchParams.get('unlinkedOnly') === '1' ||
+    searchParams.get('unlinkedOnly') === 'true';
+
+  const selectedJobIds = useMemo(() => {
+    if (jobIdsParam) {
+      return jobIdsParam.split(',').map((id) => id.trim()).filter(Boolean);
+    }
+    if (jobId) return [jobId];
+    return [] as string[];
+  }, [jobId, jobIdsParam]);
+
+  const labelById = useMemo(() => {
+    const map: Record<string, string> = { ...(jobNameById ?? {}) };
+    for (const j of filterJobs) {
+      if (j.label.trim()) map[j.id] = j.label.trim();
+    }
+    return map;
+  }, [jobNameById, filterJobs]);
+
+  const uniqueJobs = useMemo(() => {
+    const labels = filterJobs.map((j) => j.label);
+    return buildColumnFilterOptions(labels, {
+      alwaysIncludeBlank: hasUnlinkedContacts,
+    });
+  }, [filterJobs, hasUnlinkedContacts]);
+
+  const jobFilter = useMemo(() => {
+    if (unlinkedOnly) return new Set([COLUMN_FILTER_BLANK]);
+    if (selectedJobIds.length === 0) return new Set<string>();
+    return new Set(
+      selectedJobIds
+        .map((id) => columnFilterKey(resolveJobName(id, labelById) || labelById[id] || id))
+        .filter(Boolean),
+    );
+  }, [unlinkedOnly, selectedJobIds, labelById]);
+
+  const jobFilterActive = unlinkedOnly || selectedJobIds.length > 0;
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -119,7 +163,11 @@ export function ContactsListClient({
   }, [search]);
 
   useEffect(() => {
-    const fetchKey = `${debouncedSearch}|${page}|${sortParam}|${jobId ?? ''}`;
+    const archivedParam =
+      tab === 'archived' ? true : tab === 'active' ? false : undefined;
+    const archivedKey =
+      archivedParam === true ? '1' : archivedParam === false ? '0' : '';
+    const fetchKey = `${debouncedSearch}|${page}|${sortParam}|${tab}|${archivedKey}|${jobId ?? ''}|${jobIdsParam ?? ''}|${unlinkedOnly ? '1' : ''}`;
     if (lastFetchKeyRef.current === fetchKey) return;
     lastFetchKeyRef.current = fetchKey;
 
@@ -128,45 +176,108 @@ export function ContactsListClient({
       limit: PAGE_SIZE,
       search: debouncedSearch || undefined,
       sort: sortParam,
-      jobId,
+      jobId: selectedJobIds.length === 1 && !unlinkedOnly ? selectedJobIds[0] : undefined,
+      jobIds:
+        selectedJobIds.length > 1 && !unlinkedOnly ? selectedJobIds : undefined,
+      unlinkedOnly: unlinkedOnly || undefined,
+      archived: archivedParam,
     }).then((res) => setData(res));
-  }, [debouncedSearch, page, sortParam, jobId]);
+  }, [
+    debouncedSearch,
+    page,
+    sortParam,
+    tab,
+    jobId,
+    jobIdsParam,
+    unlinkedOnly,
+    selectedJobIds,
+  ]);
 
-  const uniqueJobs = useMemo(() => {
-    const values =
-      jobNameById && Object.keys(jobNameById).length > 0
-        ? Object.values(jobNameById)
-        : [resolveJobName(jobId, jobNameById)];
-    // Contacts list may be unscoped (no job on row) — always offer Blank.
-    return buildColumnFilterOptions(values, { alwaysIncludeBlank: true });
-  }, [jobNameById, jobId]);
+  useEffect(() => {
+    setData(initialData);
+  }, [initialData]);
 
   const applyJobFilter = (next: Set<string>) => {
     const committed = commitColumnFilterSelection({
       next,
       optionCount: uniqueJobs.length,
     });
-    setJobFilter(committed.selected);
-    setJobFilterActive(committed.active);
     setPage(1);
-  };
 
-  const visibleRows = useMemo(() => {
-    let rows = data.data;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('jobId');
+    params.delete('jobIds');
+    params.delete('unlinkedOnly');
 
-    if (tab !== 'all') {
-      rows = rows.filter((contact) => {
-        const archived = isContactArchived(contact);
-        return tab === 'archived' ? archived : !archived;
-      });
+    if (!committed.active) {
+      const qs = params.toString();
+      router.push(qs ? `/contacts?${qs}` : '/contacts');
+      return;
     }
 
-    if (!jobFilterActive) return rows;
-    if (jobFilter.size === 0) return [];
-    const rowJob = columnFilterKey(resolveJobName(jobId, jobNameById));
-    if (!jobFilter.has(rowJob)) return [];
-    return rows;
-  }, [data.data, tab, jobFilterActive, jobFilter, jobId, jobNameById]);
+    if (committed.selected.size === 0) {
+      // Explicit empty selection → show no rows via empty jobIds
+      params.set('jobIds', '__none__');
+      router.push(`/contacts?${params.toString()}`);
+      return;
+    }
+
+    const wantsBlank = committed.selected.has(COLUMN_FILTER_BLANK);
+    const selectedLabels = new Set(
+      [...committed.selected]
+        .filter((label) => label !== COLUMN_FILTER_BLANK)
+        .map((label) => label.trim()),
+    );
+    const ids = filterJobs
+      .filter((j) => selectedLabels.has(j.label.trim()))
+      .map((j) => j.id);
+
+    if (wantsBlank && ids.length === 0) {
+      params.set('unlinkedOnly', '1');
+    } else if (!wantsBlank && ids.length === 1) {
+      params.set('jobId', ids[0]);
+    } else if (!wantsBlank && ids.length > 1) {
+      params.set('jobIds', ids.join(','));
+    } else if (wantsBlank && ids.length > 0) {
+      // Blank + jobs: show jobs only (blank is exclusive server-side)
+      if (ids.length === 1) params.set('jobId', ids[0]);
+      else params.set('jobIds', ids.join(','));
+    }
+
+    router.push(`/contacts?${params.toString()}`);
+  };
+
+  const visibleRows = data.data;
+
+  const jobColumnLabel = useMemo(() => {
+    if (unlinkedOnly) return COLUMN_FILTER_BLANK;
+    if (selectedJobIds.length === 1) {
+      return (
+        resolveJobName(selectedJobIds[0], labelById) ||
+        labelById[selectedJobIds[0]] ||
+        '—'
+      );
+    }
+    if (selectedJobIds.length > 1) {
+      return `${selectedJobIds.length} jobs`;
+    }
+    return '—';
+  }, [unlinkedOnly, selectedJobIds, labelById]);
+
+  const formatContactJobs = (contact: Contact): string => {
+    // When filtered to one job, show that job for clarity
+    if (selectedJobIds.length === 1) {
+      return jobColumnLabel;
+    }
+    const related = contact.relatedJobs ?? [];
+    if (related.length === 0) return COLUMN_FILTER_BLANK;
+    if (related.length === 1) {
+      return related[0].label?.trim() || related[0].name?.trim() || related[0].id;
+    }
+    const first =
+      related[0].label?.trim() || related[0].name?.trim() || related[0].id;
+    return `${first} +${related.length - 1}`;
+  };
 
   const handleColumnSort = (field: ContactSortField) => {
     setColumnSort((prev) => {
@@ -248,7 +359,9 @@ export function ContactsListClient({
                       col.key === 'job'
                         ? {
                             options: uniqueJobs,
-                            selected: jobFilter,
+                            selected: jobFilterActive
+                              ? jobFilter
+                              : new Set(uniqueJobs.map(columnFilterKey)),
                             active: jobFilterActive,
                             onApply: applyJobFilter,
                             menuTitle: 'Filter by job',
@@ -276,7 +389,7 @@ export function ContactsListClient({
                   >
                     {isVisible('job') && (
                       <td className="px-4 py-3 text-slate-600">
-                        {resolveJobName(jobId, jobNameById)}
+                        {formatContactJobs(contact)}
                       </td>
                     )}
                     {isVisible('name') && (

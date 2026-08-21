@@ -21,20 +21,35 @@ export async function fetchTasksAction(params?: {
   sort?: string;
   order?: 'asc' | 'desc';
   jobId?: string;
+  jobIds?: string[];
   assignedToUserId?: string;
+  assignedToUserIds?: string;
+  names?: string;
+  taskTypes?: string;
   overdue?: boolean;
 }): Promise<PaginatedResponse<Task>> {
   const api = await getApi();
   if (!api) return { data: [], total: 0 };
   try {
-    if (params?.jobId) {
-      const tasks = await api.getJobTasks(params.jobId);
-      return { data: tasks, total: tasks.length };
-    }
     return await api.getTasks(params);
   } catch (err) {
     console.error('[tasks/actions fetchTasksAction]', err);
     return { data: [], total: 0 };
+  }
+}
+
+export async function fetchTaskFilterOptionsAction(): Promise<{
+  names: string[];
+  taskTypes: string[];
+  assignees: { id: string; name: string }[];
+}> {
+  const api = await getApi();
+  if (!api) return { names: [], taskTypes: [], assignees: [] };
+  try {
+    return await api.getTaskFilterOptions();
+  } catch (err) {
+    console.error('[tasks/actions.fetchTaskFilterOptionsAction]', err);
+    return { names: [], taskTypes: [], assignees: [] };
   }
 }
 

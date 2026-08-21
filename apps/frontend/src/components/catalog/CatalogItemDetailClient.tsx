@@ -127,6 +127,7 @@ export function CatalogItemDetailClient({
           {(item.kind === 'assembly' || item.kind === 'scope') && (
             <CatalogBomEditor
               assemblyId={item.id}
+              parentKind={item.kind}
               components={components}
               candidateItems={allItems.filter((i) => i.id !== item.id)}
             />

@@ -406,7 +406,6 @@ export function ChatDrawer({
                       onBranch={handleBranch}
                       relatedRecordType={relatedEntityType}
                       relatedRecordId={relatedEntityId}
-                      useRichText
                     />
                   </div>
 

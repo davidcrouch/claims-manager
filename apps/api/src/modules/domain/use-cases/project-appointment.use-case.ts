@@ -25,6 +25,8 @@ export class ProjectAppointmentUseCase implements ProjectionUseCase {
     tenantId: string;
     connectionId: string;
     tx: DrizzleDbOrTx;
+    /** When projecting from a parent (e.g. job webhook), skip re-resolving. */
+    parentOverrides?: { jobId?: string };
   }): Promise<ProjectionResult> {
     const { tenantId, connectionId, tx } = params;
     const payload = (params.externalObject.latestPayload ?? {}) as Record<string, unknown>;
@@ -55,13 +57,17 @@ export class ProjectAppointmentUseCase implements ProjectionUseCase {
     }
 
     // 3. Resolve parents
-    const resolvedParents = await this.entityRelationship.resolveParents({
-      parentRefs: result.parentRefs,
-      tenantId,
-      connectionId,
-      tx,
-    });
-    if (resolvedParents.job) (result.entity as Record<string, unknown>).jobId = resolvedParents.job;
+    if (params.parentOverrides?.jobId) {
+      (result.entity as Record<string, unknown>).jobId = params.parentOverrides.jobId;
+    } else {
+      const resolvedParents = await this.entityRelationship.resolveParents({
+        parentRefs: result.parentRefs,
+        tenantId,
+        connectionId,
+        tx,
+      });
+      if (resolvedParents.job) (result.entity as Record<string, unknown>).jobId = resolvedParents.job;
+    }
 
     // 4. Upsert
     let appointmentId: string;

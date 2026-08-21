@@ -6,6 +6,7 @@ integrationRefs:
   - Claims Documents
 agents:
   - file: agents/doc-ops.yaml
+  - file: agents/report-builder.yaml
 skills:
   - file: skills/transform-preview.yaml
   - file: skills/template-assign.yaml

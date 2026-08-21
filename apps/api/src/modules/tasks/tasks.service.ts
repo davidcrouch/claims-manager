@@ -4,6 +4,7 @@ import { TenantContext } from '../../tenant/tenant-context';
 import { CrunchworkService } from '../../crunchwork/crunchwork.service';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
 import { OutboundEventsService } from '../outbound-events/outbound-events.service';
+import { TaskTypeMappingsService } from './task-type-mappings.service';
 
 function parseOptionalUserId(value: unknown): string | null | undefined {
   if (value === undefined) return undefined;
@@ -12,6 +13,61 @@ function parseOptionalUserId(value: unknown): string | null | undefined {
   const trimmed = value.trim();
   if (!trimmed || trimmed === '__unassigned__') return null;
   return trimmed;
+}
+
+function parseOptionalText(value: unknown): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+function parseOptionalDate(value: unknown): Date | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  if (typeof value !== 'string') return undefined;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return undefined;
+  return parsed;
+}
+
+function parseOptionalNumeric(value: unknown): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n) || n < 0) return undefined;
+  return String(n);
+}
+
+function parseTags(value: unknown): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (Array.isArray(value)) {
+    return value
+      .filter((item): item is string => typeof item === 'string')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  if (typeof value !== 'string') return [];
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function completedAtForStatus(
+  status: string | undefined,
+  previousCompletedAt?: Date | string | null,
+): Date | null | undefined {
+  if (!status) return undefined;
+  if (status === 'Completed') {
+    if (previousCompletedAt) return undefined;
+    return new Date();
+  }
+  if (status === 'Open' || status === 'In Progress' || status === 'On Hold') {
+    return null;
+  }
+  return undefined;
 }
 
 @Injectable()
@@ -24,6 +80,7 @@ export class TasksService {
     private readonly crunchworkService: CrunchworkService,
     @Optional() private readonly connectionResolver?: ConnectionResolverService,
     @Optional() private readonly outboundEvents?: OutboundEventsService,
+    @Optional() private readonly taskTypeMappings?: TaskTypeMappingsService,
   ) {}
 
   private async resolveConnectionId(tenantId: string): Promise<string> {
@@ -35,16 +92,40 @@ export class TasksService {
     return connection.id;
   }
 
+  private async inferTaskType(params: {
+    tenantId: string;
+    name: string | null | undefined;
+    explicitType: string | null | undefined;
+  }): Promise<string | undefined> {
+    if (params.explicitType) return params.explicitType;
+    if (!this.taskTypeMappings || !params.name) return undefined;
+    const resolved = await this.taskTypeMappings.resolveFromTitle({
+      tenantId: params.tenantId,
+      title: params.name,
+    });
+    if (resolved) {
+      this.logger.debug(
+        `TasksService.inferTaskType — title="${params.name}" → type="${resolved}"`,
+      );
+    }
+    return resolved ?? undefined;
+  }
+
   async findAll(params: {
     page?: number;
     limit?: number;
     jobId?: string;
+    jobIds?: string[];
     claimId?: string;
     status?: string;
     priority?: string;
     entityType?: string;
     entityId?: string;
     assignedToUserId?: string;
+    assignedToUserIds?: string;
+    search?: string;
+    names?: string;
+    taskTypes?: string;
     overdue?: boolean;
     sort?: string;
   }) {
@@ -54,15 +135,25 @@ export class TasksService {
       page: params.page,
       limit: params.limit,
       jobId: params.jobId,
+      jobIds: params.jobIds,
       claimId: params.claimId,
       status: params.status,
       priority: params.priority,
       entityType: params.entityType,
       entityId: params.entityId,
       assignedToUserId: params.assignedToUserId,
+      assignedToUserIds: params.assignedToUserIds,
+      search: params.search,
+      names: params.names,
+      taskTypes: params.taskTypes,
       overdue: params.overdue,
       sort: params.sort,
     });
+  }
+
+  async findFilterOptions() {
+    const tenantId = this.tenantContext.getTenantId();
+    return this.tasksRepo.findFilterOptions({ tenantId });
   }
 
   async findOne(params: { id: string }) {
@@ -111,10 +202,30 @@ export class TasksService {
     }
 
     const assignedToUserId = parseOptionalUserId(params.body.assignedToUserId) ?? undefined;
+    const status = (parseOptionalText(params.body.status) ?? 'Open') as string;
+    const name = (params.body.name as string) ?? undefined;
+    const explicitType = parseOptionalText(params.body.taskType) ?? undefined;
+    const inferredType = await this.inferTaskType({
+      tenantId,
+      name,
+      explicitType,
+    });
+
     this.logger.debug(
       `TasksService.create — tenantId=${tenantId} assignedToUserId=${assignedToUserId ?? 'none'}`,
     );
 
+    const localFields: Partial<TaskInsert> = {
+      taskType: inferredType,
+      startDate: parseOptionalDate(params.body.startDate) ?? undefined,
+      reminderAt: parseOptionalDate(params.body.reminderAt) ?? undefined,
+      estimatedHours: parseOptionalNumeric(params.body.estimatedHours) ?? undefined,
+      notes: parseOptionalText(params.body.notes) ?? undefined,
+      tags: parseTags(params.body.tags) ?? [],
+      completedAt: completedAtForStatus(status) ?? undefined,
+    };
+
+    let created: Awaited<ReturnType<typeof this.tasksRepo.create>>;
     try {
       const connectionId = await this.resolveConnectionId(tenantId);
       const apiTask = await this.crunchworkService.createTask({
@@ -130,15 +241,26 @@ export class TasksService {
         claimId: (apiObj.claimId ?? claimId) as string,
         jobId: (apiObj.jobId ?? jobId) as string,
         name: (apiObj.name ?? params.body?.name) as string,
-        description: apiObj.description as string,
-        dueDate: apiObj.dueDate ? new Date(apiObj.dueDate as string) : undefined,
+        description: (apiObj.description ?? params.body.description) as string,
+        dueDate: apiObj.dueDate
+          ? new Date(apiObj.dueDate as string)
+          : parseOptionalDate(params.body.dueDate) ?? undefined,
         priority: (apiObj.priority ?? params.body?.priority ?? 'Low') as string,
-        status: (apiObj.status ?? 'Open') as string,
+        status: (apiObj.status ?? status) as string,
         assignedToUserId,
         createdByUserId: params.userId ?? null,
         taskPayload: apiTask as Record<string, unknown>,
+        ...localFields,
       };
-      return this.tasksRepo.create({ data: insertData });
+      // Re-infer if CW returned a different name and type still empty
+      if (!insertData.taskType && insertData.name) {
+        insertData.taskType = await this.inferTaskType({
+          tenantId,
+          name: insertData.name,
+          explicitType: undefined,
+        });
+      }
+      created = await this.tasksRepo.create({ data: insertData });
     } catch {
       const insertData: TaskInsert = {
         tenantId,
@@ -148,15 +270,28 @@ export class TasksService {
         jobId: jobId as string,
         name: params.body.name as string,
         description: params.body.description as string,
-        dueDate: params.body.dueDate ? new Date(params.body.dueDate as string) : undefined,
+        dueDate: parseOptionalDate(params.body.dueDate) ?? undefined,
         priority: (params.body.priority as string) ?? 'Low',
-        status: 'Open',
+        status,
         assignedToUserId,
         createdByUserId: params.userId ?? null,
         taskPayload: {},
+        ...localFields,
       };
-      return this.tasksRepo.create({ data: insertData });
+      created = await this.tasksRepo.create({ data: insertData });
     }
+
+    if (this.outboundEvents && created && jobId) {
+      this.outboundEvents.emitTaskCreated({
+        taskId: (created as Record<string, unknown>).id as string,
+        taskName: (created as Record<string, unknown>).name as string,
+        jobId,
+        tenantId,
+        originType: (params.body.originType as string) ?? 'user',
+      }).catch(() => {});
+    }
+
+    return created;
   }
 
   async update(params: { id: string; body: Record<string, unknown> }) {
@@ -173,25 +308,74 @@ export class TasksService {
       localPatch.name = params.body.name as string;
     }
     if (params.body.description !== undefined) {
-      localPatch.description = (params.body.description as string) || null;
+      localPatch.description = parseOptionalText(params.body.description) ?? null;
     }
     if (params.body.priority !== undefined) {
       localPatch.priority = params.body.priority as string;
     }
     if (params.body.dueDate !== undefined) {
-      localPatch.dueDate = params.body.dueDate
-        ? new Date(params.body.dueDate as string)
-        : null;
+      localPatch.dueDate = parseOptionalDate(params.body.dueDate) ?? null;
+    }
+    if (params.body.startDate !== undefined) {
+      localPatch.startDate = parseOptionalDate(params.body.startDate) ?? null;
+    }
+    if (params.body.reminderAt !== undefined) {
+      localPatch.reminderAt = parseOptionalDate(params.body.reminderAt) ?? null;
+    }
+    if (params.body.estimatedHours !== undefined) {
+      localPatch.estimatedHours = parseOptionalNumeric(params.body.estimatedHours) ?? null;
+    }
+    if (params.body.notes !== undefined) {
+      localPatch.notes = parseOptionalText(params.body.notes) ?? null;
+    }
+    if (params.body.tags !== undefined) {
+      localPatch.tags = parseTags(params.body.tags) ?? [];
+    }
+    if (params.body.taskType !== undefined) {
+      localPatch.taskType = parseOptionalText(params.body.taskType) ?? null;
     }
     if (params.body.status !== undefined) {
       localPatch.status = params.body.status as string;
+      const completedAt = completedAtForStatus(
+        localPatch.status,
+        existing.completedAt as Date | string | null,
+      );
+      if (completedAt !== undefined) {
+        localPatch.completedAt = completedAt;
+      }
+    }
+    if (params.body.jobId !== undefined) {
+      const nextJobId = parseOptionalText(params.body.jobId);
+      localPatch.jobId = nextJobId;
+      if (nextJobId) {
+        localPatch.relatedEntityType = 'Job';
+        localPatch.relatedEntityId = nextJobId;
+      }
+    }
+    if (params.body.claimId !== undefined) {
+      localPatch.claimId = parseOptionalText(params.body.claimId);
+    }
+
+    // If type still unset after patch, try infer from (new or existing) name
+    const nextName = (localPatch.name ?? existing.name) as string;
+    const nextType =
+      localPatch.taskType !== undefined
+        ? localPatch.taskType
+        : ((existing.taskType as string | null) ?? null);
+    if (!nextType?.trim()) {
+      const inferred = await this.inferTaskType({
+        tenantId,
+        name: nextName,
+        explicitType: undefined,
+      });
+      if (inferred) localPatch.taskType = inferred;
     }
 
     this.logger.debug(
       `TasksService.update — id=${params.id} assignedToUserId=${assignedToUserId === undefined ? 'unchanged' : assignedToUserId ?? 'none'}`,
     );
 
-    let updated: typeof existing;
+    let updated = existing;
     try {
       const connectionId = await this.resolveConnectionId(tenantId);
       const apiTask = await this.crunchworkService.updateTask({
@@ -201,7 +385,7 @@ export class TasksService {
       });
 
       const apiObj = apiTask as Record<string, unknown>;
-      updated = await this.tasksRepo.update({
+      const row = await this.tasksRepo.update({
         id: params.id,
         data: {
           ...localPatch,
@@ -209,15 +393,20 @@ export class TasksService {
           status: (apiObj.status as string) ?? localPatch.status ?? existing.status,
         },
       });
+      if (row) updated = { ...existing, ...row };
     } catch {
       if (Object.keys(localPatch).length === 0) return existing;
-      updated = await this.tasksRepo.update({
+      const row = await this.tasksRepo.update({
         id: params.id,
         data: localPatch,
       });
+      if (row) updated = { ...existing, ...row };
     }
 
-    this.emitStatusChange(existing, updated);
+    this.emitStatusChange(
+      existing as unknown as Record<string, unknown>,
+      updated as unknown as Record<string, unknown>,
+    );
     return updated;
   }
 

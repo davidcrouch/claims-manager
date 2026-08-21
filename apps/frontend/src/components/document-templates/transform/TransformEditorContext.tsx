@@ -156,6 +156,7 @@ export function TransformEditorProvider({
       }
 
       const expression = jsonata(jsonataRules);
+      registerPreviewFunctions(expression);
       const result = await Promise.race([
         expression.evaluate(sourceData),
         new Promise<never>((_, reject) =>
@@ -249,6 +250,32 @@ export function TransformEditorProvider({
     <TransformEditorCtx.Provider value={value}>
       {children}
     </TransformEditorCtx.Provider>
+  );
+}
+
+function registerPreviewFunctions(expression: ReturnType<typeof jsonata>): void {
+  const formatDate = (value: unknown): string => {
+    if (value == null || value === '') return '';
+    const d = value instanceof Date ? value : new Date(String(value));
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-AU', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  };
+  const formatCurrency = (value: unknown): string => {
+    const num = typeof value === 'string' ? parseFloat(value) : Number(value ?? 0);
+    if (Number.isNaN(num)) return '$0.00';
+    return `$${num.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+  expression.registerFunction('formatDate', formatDate);
+  expression.registerFunction('formatCurrency', formatCurrency);
+  expression.registerFunction('yn', (value: unknown) =>
+    value === true || value === 'true' || value === 'Yes' ? 'Yes' : 'No',
+  );
+  expression.registerFunction('str', (value: unknown) =>
+    value == null ? '' : String(value),
   );
 }
 

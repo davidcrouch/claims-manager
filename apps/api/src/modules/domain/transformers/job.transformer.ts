@@ -5,6 +5,7 @@ import type {
   LookupRequest,
   ParentRef,
   RawContact,
+  RawAssignee,
 } from './transformer.interface';
 import type { JobInsert } from '../../../database/repositories';
 import {
@@ -26,6 +27,7 @@ export class JobTransformer implements EntityTransformer<JobInsert> {
     const lookups: LookupRequest[] = [];
     const parentRefs: ParentRef[] = [];
     const contacts: RawContact[] = [];
+    const assignees: RawAssignee[] = [];
 
     if (!payload.id) {
       return {
@@ -35,6 +37,27 @@ export class JobTransformer implements EntityTransformer<JobInsert> {
         skip: 'payload.id is missing — not a valid job object',
       };
     }
+
+    // ── custom_data: merge CW customData + promoted CW fields + unknown keys
+    const customData: Record<string, unknown> = {
+      ...(isPlainObject(payload.customData) ? (payload.customData as Record<string, unknown>) : {}),
+    };
+
+    if (payload.updatedAtDate !== undefined) customData.cwUpdatedAtDate = payload.updatedAtDate;
+    if (payload.createdAtDate !== undefined) customData.cwCreatedAtDate = payload.createdAtDate;
+    if (asString(payload.externalReference)) customData.insurerExternalReference = asString(payload.externalReference);
+    if (payload.estimatedStartDate !== undefined) customData.estimatedStartDate = payload.estimatedStartDate;
+    if (payload.estimatedCompletionDate !== undefined) customData.estimatedCompletionDate = payload.estimatedCompletionDate;
+    if (payload.estimatedDeliveryDate !== undefined) customData.estimatedDeliveryDate = payload.estimatedDeliveryDate;
+    if (payload.claimRecommendation !== undefined) customData.claimRecommendation = payload.claimRecommendation;
+    if (payload.approvalLimitApplicable !== undefined) customData.approvalLimitApplicable = payload.approvalLimitApplicable;
+    if (asString(payload.internalAllocatedVendorJobId)) customData.internalAllocatedVendorJobId = asString(payload.internalAllocatedVendorJobId);
+    if (asString(payload.internalAllocatedVendorJobReference)) customData.internalAllocatedVendorJobReference = asString(payload.internalAllocatedVendorJobReference);
+    if (payload.lastSubmissionDate !== undefined) customData.lastSubmissionDate = payload.lastSubmissionDate;
+    if (payload.firstSubmissionDate !== undefined) customData.firstSubmissionDate = payload.firstSubmissionDate;
+    if (asString(payload.reference)) customData.reference = asString(payload.reference);
+
+    this.collectUnknownKeys(payload, customData);
 
     const entity: Partial<JobInsert> = {
       tenantId,
@@ -46,9 +69,7 @@ export class JobTransformer implements EntityTransformer<JobInsert> {
       makeSafeRequired: asBool(payload.makeSafeRequired),
       jobInstructions: asString(payload.jobInstructions) ?? asString(payload.instructions),
       apiPayload: payload,
-      customData: isPlainObject(payload.customData)
-        ? (payload.customData as Record<string, unknown>)
-        : {},
+      customData,
     };
 
     // ── Address ─────────────────────────────────────────────────────
@@ -73,6 +94,14 @@ export class JobTransformer implements EntityTransformer<JobInsert> {
         required: true,
         nestedPayload: nestedClaim,
       });
+    }
+
+    // ── parentClaimId (vendor allocation hierarchy) ─
+    // Resolved in the use case via external_links lookup against 'claim' entity type.
+    // Stored on entity.customData so the use case can extract and resolve it.
+    const cwParentClaimId = asString(payload.parentClaimId);
+    if (cwParentClaimId) {
+      customData.cwParentClaimId = cwParentClaimId;
     }
 
     // ── Parent: Vendor (optional) ───────────────────────────────────
@@ -119,16 +148,32 @@ export class JobTransformer implements EntityTransformer<JobInsert> {
     if (Array.isArray(payload.contacts)) {
       for (const entry of payload.contacts) {
         if (!isPlainObject(entry)) continue;
-        const extRef = asString(entry.externalReference);
-        if (!extRef) continue;
+        const extRef = asString(entry.externalReference) ?? asString(entry.id);
+        const firstName = asString(entry.firstName);
+        const lastName = asString(entry.lastName);
+        const email = asString(entry.email);
+        const mobilePhone = asString(entry.mobilePhone);
+        const homePhone = asString(entry.homePhone);
+        const workPhone = asString(entry.workPhone);
+        if (
+          !extRef &&
+          !email &&
+          !mobilePhone &&
+          !homePhone &&
+          !workPhone &&
+          !(firstName && lastName)
+        ) {
+          continue;
+        }
         contacts.push({
-          externalReference: extRef,
-          firstName: asString(entry.firstName),
-          lastName: asString(entry.lastName),
-          email: asString(entry.email),
-          mobilePhone: asString(entry.mobilePhone),
-          homePhone: asString(entry.homePhone),
-          workPhone: asString(entry.workPhone),
+          externalReference: extRef ?? undefined,
+          firstName,
+          lastName,
+          email,
+          mobilePhone,
+          homePhone,
+          workPhone,
+          notes: asString(entry.notes),
           typeDomain: 'contact_type',
           typeField: entry.type,
           typeExternalReference: isPlainObject(entry.type)
@@ -144,8 +189,27 @@ export class JobTransformer implements EntityTransformer<JobInsert> {
       }
     }
 
+    // ── Assignees ───────────────────────────────────────────────────
+    if (Array.isArray(payload.assignees)) {
+      for (const entry of payload.assignees) {
+        if (!isPlainObject(entry)) continue;
+        const extRef = asString(entry.externalReference) ?? asString(entry.id);
+        if (!extRef) continue;
+        assignees.push({
+          externalReference: extRef,
+          displayName: asString(entry.name) ?? asString(entry.displayName),
+          email: asString(entry.email),
+          assigneeTypeDomain: 'assignee_type',
+          assigneeTypeField: entry.type,
+          assigneeTypeExternalReference: isPlainObject(entry.type)
+            ? asString(entry.type.externalReference)
+            : undefined,
+          sourcePayload: entry,
+        });
+      }
+    }
+
     // ── JSONB blocks ────────────────────────────────────────────────
-    // CW sends these as top-level keys, not nested objects.
     entity.vendorSnapshot = extractObject(payload, 'vendor') ?? {};
 
     entity.temporaryAccommodationDetails = this.buildTemporaryAccommodation(payload);
@@ -159,6 +223,7 @@ export class JobTransformer implements EntityTransformer<JobInsert> {
       lookups,
       parentRefs,
       contacts: contacts.length > 0 ? contacts : undefined,
+      assignees: assignees.length > 0 ? assignees : undefined,
     };
   }
 
@@ -251,4 +316,42 @@ export class JobTransformer implements EntityTransformer<JobInsert> {
     }
     return out;
   }
+
+  private collectUnknownKeys(
+    payload: Record<string, unknown>,
+    customData: Record<string, unknown>,
+  ): void {
+    for (const key of Object.keys(payload)) {
+      if (JOB_KNOWN_PAYLOAD_KEYS.has(key)) continue;
+      if (key in customData) continue;
+      customData[key] = payload[key];
+    }
+  }
 }
+
+const JOB_KNOWN_PAYLOAD_KEYS = new Set<string>([
+  'id', 'tenantId', 'externalReference', 'claimId', 'claim', 'parentClaimId',
+  'vendor', 'jobType', 'type', 'status',
+  'address', 'siteAddress',
+  'requestDate', 'collectExcess', 'excess', 'makeSafeRequired',
+  'jobInstructions', 'instructions',
+  'contacts', 'assignees', 'appointments',
+  'customData', 'updatedAtDate', 'createdAtDate',
+  'estimatedStartDate', 'estimatedCompletionDate', 'estimatedDeliveryDate',
+  'claimRecommendation', 'approvalLimitApplicable', 'reference',
+  'internalAllocatedVendorJobId', 'internalAllocatedVendorJobReference',
+  'lastSubmissionDate', 'firstSubmissionDate',
+  // TA keys
+  'emergency', 'habitableProperty', 'estimatedStayStartDate', 'estimatedStayEndDate',
+  'numberOfAdults', 'numberOfChildren', 'numberOfBedrooms', 'numberOfCots',
+  'numberOfVehicles', 'petsInformation',
+  // Specialist keys
+  'isSpecificSpecialistRequired', 'specialistCategory', 'specialistReport',
+  'specialistBusinessName', 'locationOfDamage', 'typeOfDamage',
+  // Rectification keys
+  'originalJobReference', 'originalJobType', 'paidJob',
+  // Audit keys
+  'auditType',
+  // Mobility keys
+  'mobilityConsiderations',
+]);
