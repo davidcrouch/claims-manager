@@ -889,7 +889,7 @@
   Builder make-safe, assessment, and works guides plus related reference files now live in one Crunchwork folder.
   Sample flood, fire, and roof-leak job photos and notes were added for training and walkthroughs.
 
-- `2026-08-22` `PENDING` **48 h**
+- `2026-08-22` `e380aed` **48 h**
   `430 files | +32892 −4797 | Tier 2 standard / Tier 3 complex / Tier 4 deep integration | Heavy orchestration`
   Lay summary: Staff can build reports from live job data, manage the product catalogue in chat, see a history of changes on each record, and run builder assessment, make-safe, and repair jobs with less manual follow-up.
   **Catalogue, reports, activity history, and builder job workflows in one delivery.**
