@@ -77,13 +77,22 @@ describe('ProvidersService', () => {
 
       const result = await service.findAll(tenantId);
 
-      expect(result).toHaveLength(2);
+      expect(result).toHaveLength(3);
       expect(result).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             id: 'crunchwork',
             code: 'crunchwork',
             name: 'Crunchwork',
+            connectionCount: 1,
+            totalWebhookEvents: 7,
+            recentErrorCount: 2,
+            lastEventAt: '2026-01-02T03:04:05.000Z',
+          }),
+          expect.objectContaining({
+            id: 'more0-ensure',
+            code: 'more0-ensure',
+            name: 'More0 Ensure',
             connectionCount: 1,
             totalWebhookEvents: 7,
             recentErrorCount: 2,
