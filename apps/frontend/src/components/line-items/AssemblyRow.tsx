@@ -88,8 +88,8 @@ export const AssemblyRow = memo(function AssemblyRow({
   const isEditing = editState?.rowKey === comboKey;
   const comboInputs = editInputs[comboKey] ?? null;
   const isDirty = dirtyRowKeys.has(comboKey);
-  const comboName = combo.name ?? 'Assembly';
-  const comboComponent = displayLabelText(combo.component);
+  const comboName = comboInputs?.name || combo.name || 'Assembly';
+  const comboComponent = displayLabelText(comboInputs?.component ?? combo.component);
 
   const comboPickIds = [
     ...(combo.id ? [combo.id] : []),
@@ -272,7 +272,7 @@ export const AssemblyRow = memo(function AssemblyRow({
                 onClick={(e) => e.stopPropagation()}
               />
             ) : (
-              combo.quantity ?? ''
+              comboInputs?.quantity ?? combo.quantity ?? ''
             )}
           </span>
         )}

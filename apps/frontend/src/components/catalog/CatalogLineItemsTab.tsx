@@ -455,7 +455,8 @@ export function CatalogLineItemsTab({
     onDeleteScope: handleDeleteScope,
     onMoveGroupUp: (id: string) => handleMoveGroup(id, 'up'),
     onMoveGroupDown: (id: string) => handleMoveGroup(id, 'down'),
-  }), [handleDeleteCombo, handleDeleteScope, loadGroupedItems]);
+    onDirtyChange: handleTableDirtyChange,
+  }), [handleDeleteCombo, handleDeleteScope, loadGroupedItems, handleTableDirtyChange]);
 
   return (
     <div className="space-y-4">

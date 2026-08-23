@@ -49,17 +49,33 @@ export function useLineItemEdit(
   const handleInputChange = useCallback(
     (rowKey: string, field: EditableFieldKey, value: string) => {
       setEditInputs((prev) => {
+        const patch = (key: string): Record<EditableFieldKey, string> => {
+          const existing = prev[key];
+          if (existing) return { ...existing, [field]: value };
+          const entry = rowIndex.find((e) => e.key === key);
+          if (!entry) {
+            return { [field]: value } as Record<EditableFieldKey, string>;
+          }
+          const base =
+            entry.kind === 'item'
+              ? initItemInputs(entry.item)
+              : entry.kind === 'scope'
+                ? initScopeInputs(entry.scope)
+                : initComboInputs(entry.combo);
+          return { ...base, [field]: value };
+        };
+
         if (selectedRows.size > 1 && selectedRows.has(rowKey)) {
           const next = { ...prev };
           for (const key of selectedRows) {
-            if (next[key]) next[key] = { ...next[key], [field]: value };
+            next[key] = patch(key);
           }
           return next;
         }
-        return { ...prev, [rowKey]: { ...prev[rowKey], [field]: value } };
+        return { ...prev, [rowKey]: patch(rowKey) };
       });
     },
-    [setEditInputs, selectedRows],
+    [setEditInputs, selectedRows, rowIndex],
   );
 
   const initRow = useCallback(

@@ -96,9 +96,9 @@ export const ScopeCard = memo(function ScopeCard({
   const isEditing = editState?.rowKey === scopeKey;
   const scopeInputs = editInputs[scopeKey] ?? null;
   const isDirty = dirtyRowKeys.has(scopeKey);
-  const scopeName = scope.name ?? 'Scope';
-  const scopeComponent = displayLabelText(scope.component);
-  const scopeDescription = displayLabelText(scope.description);
+  const scopeName = scopeInputs?.name || scope.name || 'Scope';
+  const scopeComponent = displayLabelText(scopeInputs?.component ?? scope.component);
+  const scopeDescription = displayLabelText(scopeInputs?.description ?? scope.description);
 
   const totalChildLines =
     visibleScopeItems.length +
@@ -297,7 +297,7 @@ export const ScopeCard = memo(function ScopeCard({
                 onClick={(e) => e.stopPropagation()}
               />
             ) : (
-              scope.quantity ?? ''
+              scopeInputs?.quantity ?? scope.quantity ?? ''
             )}
           </span>
         )}

@@ -45,6 +45,7 @@ import {
   LINE_ITEMS_PAGE_SIZE,
 } from '@/components/line-items';
 import { swapGroups, applyReorderParams } from './lib/reorder';
+import { parseRowKey } from './lib/row-keys';
 
 const PREFIX = 'frontend:QuoteLineItemsTabV2';
 
@@ -337,35 +338,43 @@ export const QuoteLineItemsTabV2 = forwardRef(function QuoteLineItemsTabV2(
       const combos: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string }> = [];
 
       for (const [rowKey, fields] of Object.entries(edits)) {
-        const isScope = rowKey.includes('-scope-') && !rowKey.includes('-combo-') && !rowKey.includes('-item-');
-        const isCombo = rowKey.includes('-combo-') && !rowKey.includes('-item-');
-
-        if (isScope) {
-          const scopeId = rowKey.match(/-scope-([0-9a-f-]{36})$/)?.[1];
-          if (scopeId) combos.push({ id: scopeId, name: fields.name, component: fields.component, description: fields.description, quantity: fields.quantity });
-        } else if (isCombo) {
-          const comboId = rowKey.match(/-combo-([0-9a-f-]{36})$/)?.[1];
-          if (comboId) combos.push({ id: comboId, name: fields.name, component: fields.component, description: fields.description, quantity: fields.quantity });
-        } else {
-          const itemId = rowKey.match(/-item-([0-9a-f-]{36})$/)?.[1];
-          if (itemId) {
-            const markupType = findItemMarkupType(dbGroups, itemId);
-            items.push({
-              id: itemId,
-              name: fields.name,
-              component: fields.component,
-              description: fields.description,
-              quantity: fields.quantity,
-              unitCost: fields.unitCost,
-              markupValue: fields.markupValue !== undefined ? uiMarkupToStored(markupType, fields.markupValue) : undefined,
-              tax: fields.tax !== undefined ? uiTaxToStored(fields.tax) : undefined,
-              unitType: fields.unitType,
-            });
-          }
+        const parsed = parseRowKey(rowKey);
+        if (!parsed) {
+          console.warn(`${PREFIX}.handleSave — unparsed row key`, rowKey);
+          continue;
         }
+
+        if (parsed.type === 'scope' || parsed.type === 'assembly') {
+          combos.push({
+            id: parsed.id,
+            name: fields.name,
+            component: fields.component,
+            description: fields.description,
+            quantity: fields.quantity,
+          });
+          continue;
+        }
+
+        const markupType = findItemMarkupType(dbGroups, parsed.id);
+        items.push({
+          id: parsed.id,
+          name: fields.name,
+          component: fields.component,
+          description: fields.description,
+          quantity: fields.quantity,
+          unitCost: fields.unitCost,
+          markupValue: fields.markupValue !== undefined ? uiMarkupToStored(markupType, fields.markupValue) : undefined,
+          tax: fields.tax !== undefined ? uiTaxToStored(fields.tax) : undefined,
+          unitType: fields.unitType,
+        });
       }
 
       if (items.length === 0 && combos.length === 0) {
+        if (Object.keys(edits).length > 0) {
+          console.error(`${PREFIX}.handleSave — edits present but no items/combos parsed`, Object.keys(edits));
+          onSaveStateChangeRef.current?.('error', 'Failed to save line items');
+          return;
+        }
         setStructurallyDirty(false);
         onSaveStateChangeRef.current?.('saved');
         return;
@@ -389,8 +398,21 @@ export const QuoteLineItemsTabV2 = forwardRef(function QuoteLineItemsTabV2(
       setStructurallyDirty(false);
       onSaveStateChangeRef.current?.('saved');
       await loadLineItems();
+      setResetEditsKey((k) => k + 1);
     });
   }, [quote.id, dbGroups, loadLineItems]);
+
+  const latestEditsRef = useRef<Record<string, Record<EditableFieldKey, string>>>({});
+  const saveRef = useRef(handleSave);
+  saveRef.current = handleSave;
+
+  const handleTableDirtyChange = useCallback(
+    (dirty: boolean, edits: Record<string, Record<EditableFieldKey, string>>) => {
+      latestEditsRef.current = edits;
+      onDirtyChange?.(dirty, () => saveRef.current(latestEditsRef.current));
+    },
+    [onDirtyChange],
+  );
 
   // --- Imperative handle ---
 
@@ -422,6 +444,7 @@ export const QuoteLineItemsTabV2 = forwardRef(function QuoteLineItemsTabV2(
     onReorderLineItems: readOnly ? undefined : handleReorderLineItems,
     onMoveLineItem: readOnly ? undefined : handleMoveLineItem,
     onDuplicateLineItem: readOnly ? undefined : handleDuplicateLineItem,
+    onDirtyChange: handleTableDirtyChange,
   }), [
     readOnly,
     handleSave,
@@ -437,6 +460,7 @@ export const QuoteLineItemsTabV2 = forwardRef(function QuoteLineItemsTabV2(
     handleReorderLineItems,
     handleMoveLineItem,
     handleDuplicateLineItem,
+    handleTableDirtyChange,
     onDrawerOpenChange,
   ]);
 

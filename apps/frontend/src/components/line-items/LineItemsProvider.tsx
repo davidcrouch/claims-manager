@@ -4,8 +4,8 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
-  useReducer,
   useRef,
   useState,
   type ReactNode,
@@ -391,6 +391,10 @@ export function LineItemsProvider({
   // --- Dirty change notification ---
   const actionsRef = useRef(actions);
   actionsRef.current = actions;
+
+  useEffect(() => {
+    actionsRef.current.onDirtyChange?.(edit.isDirty, edit.dirtyEdits);
+  }, [edit.isDirty, edit.dirtyEdits]);
 
   // --- Context value ---
   const value: LineItemsContextValue = useMemo(

@@ -213,6 +213,19 @@ export const ItemRow = memo(function ItemRow({
   const category = [item.category, item.subCategory].filter(Boolean).join(' / ') || '—';
   const itemDropHighlight = useDropTargetHighlight(rowKey);
 
+  const displayName = inputs?.name ?? item.name ?? '';
+  const displayComponent = inputs?.component ?? item.component;
+  const displayDescription = inputs?.description ?? item.description;
+  const displayQty = inputs?.quantity ?? String(item.quantity ?? 0);
+  const displayUnitType = inputs?.unitType || item.unitType?.externalReference || item.unitType?.name || '—';
+  const displayUnitCost = inputs ? (parseFloat(inputs.unitCost) || 0) : (item.unitCost ?? 0);
+  const displayMarkup = inputs
+    ? (parseFloat(inputs.markupValue) || 0)
+    : isFixedMarkupType(item.markupType)
+      ? (item.markupValue ?? 0)
+      : storedMarkupToUi(item.markupType, item.markupValue);
+  const displayTax = inputs ? (parseFloat(inputs.tax) || 0) : storedTaxToUi(typeof item.tax === 'number' ? item.tax : 0);
+
   return (
     <>
       {noteHover.popup}
@@ -318,9 +331,9 @@ export const ItemRow = memo(function ItemRow({
         ) : (
           <div className={cn('min-w-0', indented && 'pl-7')}>
             <div className="truncate text-sm font-medium text-slate-900">
-              {item.name || '—'}
-              {item.component && (
-                <span className="font-normal text-slate-600"> — {item.component}</span>
+              {displayName || '—'}
+              {displayComponent && (
+                <span className="font-normal text-slate-600"> — {displayComponent}</span>
               )}
               {item.internal && (
                 <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] font-normal uppercase tracking-wide text-muted-foreground">
@@ -330,7 +343,7 @@ export const ItemRow = memo(function ItemRow({
               <LineScopeStatusBadge status={item.lineScopeStatus} />
               <PublishStatusBadge status={item.publishStatus} />
             </div>
-            {item.description && <div className="truncate text-xs text-slate-400">{item.description}</div>}
+            {displayDescription && <div className="truncate text-xs text-slate-400">{displayDescription}</div>}
             {item.catalogMissing && (
               <span className="mt-0.5 inline-flex items-center gap-1 rounded bg-orange-100 px-1.5 py-0.5 text-[10px] text-orange-700" title="This item references a catalogue entry that does not exist locally.">
                 <AlertTriangle className="h-3 w-3" />
@@ -375,7 +388,7 @@ export const ItemRow = memo(function ItemRow({
             />
           ) : (
             <span className="block text-right font-mono text-sm text-slate-700">
-              {item.quantity ?? 0}
+              {displayQty}
             </span>
           )}
         </td>
@@ -401,7 +414,7 @@ export const ItemRow = memo(function ItemRow({
             </select>
           ) : (
             <span className="block text-right text-xs text-slate-500">
-              {item.unitType?.externalReference ?? item.unitType?.name ?? '—'}
+              {displayUnitType}
             </span>
           )}
         </td>
@@ -423,7 +436,7 @@ export const ItemRow = memo(function ItemRow({
             />
           ) : (
             <span className="block text-right font-mono text-sm text-slate-700">
-              {formatCurrency(item.unitCost ?? 0)}
+              {formatCurrency(displayUnitCost)}
             </span>
           )}
         </td>
@@ -453,8 +466,8 @@ export const ItemRow = memo(function ItemRow({
           ) : (
             <span className="block text-right font-mono text-sm text-slate-700">
               {isFixedMarkupType(item.markupType)
-                ? formatCurrency(item.markupValue ?? 0)
-                : `${storedMarkupToUi(item.markupType, item.markupValue)}%`}
+                ? formatCurrency(displayMarkup)
+                : `${displayMarkup}%`}
             </span>
           )}
         </td>
@@ -476,7 +489,7 @@ export const ItemRow = memo(function ItemRow({
             />
           ) : (
             <span className="block text-right font-mono text-sm text-slate-700">
-              {storedTaxToUi(item.tax)}%
+              {displayTax}%
             </span>
           )}
         </td>

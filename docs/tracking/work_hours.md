@@ -928,3 +928,12 @@
   Job people are chosen more clearly on the job screen and those contacts are included when the job is sent to the partner workflow.
   Document output and partner updates stay in step with the latest line groups, parties, and job dates.
 
+- `2026-08-24` `pending` **1 h**
+  `9 files | +116 −49 | Tier 2 standard | Moderate orchestration`
+  Lay summary: Quote and catalogue line edits now stay on screen and save correctly, including when several lines are changed together.
+  **Fixed quote and catalogue line editing so typed changes stay visible and actually save.**
+  Staff can edit names, quantities, costs, and related fields on quote and catalogue lines and see those values on screen immediately.
+  Saving now writes the edited groups and items correctly instead of dropping some changes.
+  Editing several selected lines at once fills in the full set of fields so nothing is left blank.
+  The same behaviour applies on the catalogue line list as on quotes.
+
