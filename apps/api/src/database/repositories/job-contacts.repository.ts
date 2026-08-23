@@ -11,6 +11,7 @@ export type ContactRelatedJobRow = {
   jobId: string;
   name: string | null;
   externalReference: string | null;
+  externalJobId: string | null;
   addressSuburb: string | null;
   addressState: string | null;
   statusName: string | null;
@@ -34,13 +35,21 @@ export class JobContactsRepository {
   async findJobsWithContacts(params: {
     tenantId: string;
     tx?: DrizzleDbOrTx;
-  }): Promise<Array<{ id: string; name: string | null; externalReference: string | null }>> {
+  }): Promise<
+    Array<{
+      id: string;
+      name: string | null;
+      externalReference: string | null;
+      externalJobId: string | null;
+    }>
+  > {
     const db = params.tx ?? this.db;
     const rows = await db
       .select({
         id: jobs.id,
         name: jobs.name,
         externalReference: jobs.externalReference,
+        externalJobId: jobs.externalJobId,
       })
       .from(jobContacts)
       .innerJoin(jobs, eq(jobs.id, jobContacts.jobId))
@@ -51,7 +60,7 @@ export class JobContactsRepository {
           isNull(jobs.deletedAt),
         ),
       )
-      .groupBy(jobs.id, jobs.name, jobs.externalReference)
+      .groupBy(jobs.id, jobs.name, jobs.externalReference, jobs.externalJobId)
       .orderBy(jobs.name);
 
     return rows;
@@ -62,7 +71,15 @@ export class JobContactsRepository {
     contactIds: string[];
     tx?: DrizzleDbOrTx;
   }): Promise<
-    Record<string, Array<{ id: string; name: string | null; externalReference: string | null }>>
+    Record<
+      string,
+      Array<{
+        id: string;
+        name: string | null;
+        externalReference: string | null;
+        externalJobId: string | null;
+      }>
+    >
   > {
     if (params.contactIds.length === 0) return {};
     const db = params.tx ?? this.db;
@@ -72,6 +89,7 @@ export class JobContactsRepository {
         id: jobs.id,
         name: jobs.name,
         externalReference: jobs.externalReference,
+        externalJobId: jobs.externalJobId,
       })
       .from(jobContacts)
       .innerJoin(jobs, eq(jobs.id, jobContacts.jobId))
@@ -86,7 +104,12 @@ export class JobContactsRepository {
 
     const out: Record<
       string,
-      Array<{ id: string; name: string | null; externalReference: string | null }>
+      Array<{
+        id: string;
+        name: string | null;
+        externalReference: string | null;
+        externalJobId: string | null;
+      }>
     > = {};
     for (const row of rows) {
       const list = out[row.contactId] ?? (out[row.contactId] = []);
@@ -94,6 +117,7 @@ export class JobContactsRepository {
         id: row.id,
         name: row.name,
         externalReference: row.externalReference,
+        externalJobId: row.externalJobId,
       });
     }
     return out;
@@ -140,6 +164,7 @@ export class JobContactsRepository {
         jobId: jobs.id,
         name: jobs.name,
         externalReference: jobs.externalReference,
+        externalJobId: jobs.externalJobId,
         addressSuburb: jobs.addressSuburb,
         addressState: jobs.addressState,
         statusName: statusLookup.name,

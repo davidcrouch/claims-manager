@@ -23,12 +23,15 @@ import {
   partiesEqual,
   type PartyDraft,
   type QuoteEditPending,
+  type QuotePartiesSnapshot,
 } from '@/components/quotes/quote-edit.types';
 
 export interface QuotePartiesTabHandle {
   getPendingUpdate: () => QuoteEditPending | null;
+  getBaseline: () => QuotePartiesSnapshot;
+  applyDraft: (snapshot: QuotePartiesSnapshot) => void;
   reset: () => void;
-  markClean: () => void;
+  markClean: (saved?: QuoteEditPending | null) => void;
   isDirty: () => boolean;
 }
 
@@ -206,7 +209,7 @@ export const QuotePartiesTab = forwardRef(function QuotePartiesTab(
 
   useEffect(() => {
     onDirtyChange?.(isDirty);
-  }, [isDirty, onDirtyChange]);
+  }, [isDirty, onDirtyChange, toDraft, forDraft, fromDraft]);
 
   const buildPending = (): QuoteEditPending | null => {
     if (!isDirty) return null;
@@ -227,7 +230,19 @@ export const QuotePartiesTab = forwardRef(function QuotePartiesTab(
     setFromDraft(fromBase);
   };
 
-  const markClean = () => {
+  const applyDraft = (snapshot: QuotePartiesSnapshot) => {
+    setToDraft(snapshot.quoteTo);
+    setForDraft(snapshot.quoteFor);
+    setFromDraft(snapshot.quoteFrom);
+  };
+
+  const markClean = (saved?: QuoteEditPending | null) => {
+    if (saved) {
+      if (saved.quoteTo) setToBase(partyToDraft(saved.quoteTo));
+      if (saved.quoteFor) setForBase(partyToDraft(saved.quoteFor));
+      if (saved.quoteFrom) setFromBase(partyToDraft(saved.quoteFrom));
+      return;
+    }
     setToBase(toDraft);
     setForBase(forDraft);
     setFromBase(fromDraft);
@@ -237,6 +252,12 @@ export const QuotePartiesTab = forwardRef(function QuotePartiesTab(
     ref,
     () => ({
       getPendingUpdate: buildPending,
+      getBaseline: () => ({
+        quoteTo: toBase,
+        quoteFor: forBase,
+        quoteFrom: fromBase,
+      }),
+      applyDraft,
       reset,
       markClean,
       isDirty: () => isDirty,

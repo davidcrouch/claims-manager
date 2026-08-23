@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { TrendingDown } from 'lucide-react';
@@ -20,6 +20,11 @@ import {
   formatDate,
 } from '@/components/shared/list-filters';
 import { fetchBillsAction } from '@/app/(app)/bills/actions';
+import {
+  createListFetchSession,
+  replaceListQueryIfNeeded,
+  useListPageData,
+} from '@/components/shared/use-list-page-data';
 import type { AgingBucket, Bill, PaginatedResponse } from '@/types/api';
 
 const SORT_OPTIONS: SortOption[] = [
@@ -58,7 +63,7 @@ interface Props {
 export function FinanceApClient({ summary, initialBills, statusOptions }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [data, setData] = useState<PaginatedResponse<Bill>>(
+  const { data, setData, beginFetch, abortFetch } = useListPageData<PaginatedResponse<Bill>>(
     'data' in initialBills
       ? (initialBills as PaginatedResponse<Bill>)
       : { data: [], total: 0 },
@@ -75,7 +80,6 @@ export function FinanceApClient({ summary, initialBills, statusOptions }: Props)
     return buildSortString(parsed.field, parsed.order);
   });
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
-  const lastFetchKeyRef = useRef<string | null>(null);
 
   const statusParam = useMemo(() => {
     if (statusFilter.size === 0) return undefined;
@@ -89,26 +93,28 @@ export function FinanceApClient({ summary, initialBills, statusOptions }: Props)
   }, [search]);
 
   useEffect(() => {
-    setData(
-      'data' in initialBills
-        ? (initialBills as PaginatedResponse<Bill>)
-        : { data: [], total: 0 },
-    );
-    lastFetchKeyRef.current = null;
-  }, [initialBills]);
-
-  useEffect(() => {
     const statusKey = statusIdsKey(statusFilter);
     const fetchKey = `${debouncedSearch}|${sort}|${statusKey}`;
     const params = new URLSearchParams(searchParams.toString());
-    params.set('search', debouncedSearch);
-    params.set('sort', sort);
+    if (debouncedSearch) params.set('search', debouncedSearch);
+    else params.delete('search');
+    if (sort !== 'due_date_asc') params.set('sort', sort);
+    else params.delete('sort');
     if (statusParam) params.set('status', statusParam);
     else params.delete('status');
-    router.replace(`/finance/ap?${params}`, { scroll: false });
+    if (
+      !replaceListQueryIfNeeded({
+        router,
+        pathname: '/finance/ap',
+        currentQuery: searchParams.toString(),
+        nextQuery: params.toString(),
+      })
+    ) {
+      return;
+    }
 
-    if (lastFetchKeyRef.current === fetchKey) return;
-    lastFetchKeyRef.current = fetchKey;
+    const session = createListFetchSession({ fetchKey, beginFetch, abortFetch });
+    if (!session) return;
 
     fetchBillsAction({
       page: 1,
@@ -116,9 +122,11 @@ export function FinanceApClient({ summary, initialBills, statusOptions }: Props)
       search: debouncedSearch || undefined,
       sort,
       status: statusParam,
-    }).then((res) => res && setData(res));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, sort, statusParam, statusFilter]);
+    }).then((res) => {
+      if (!session.cancelled && res) setData(res);
+    });
+    return session.cleanup;
+  }, [debouncedSearch, sort, statusParam, statusFilter, searchParams, router, beginFetch, abortFetch]);
 
   const { field: sortField, order: sortOrder } = parseSort({
     sortParam: sort,

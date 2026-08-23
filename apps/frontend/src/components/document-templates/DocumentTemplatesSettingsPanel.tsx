@@ -110,13 +110,13 @@ const TEMPLATE_GROUPS: TemplateGroupDef[] = [
       'claim',
       'claims_list',
       'job_details',
-      'scope_of_work',
       'jobs_list',
       'journal',
       'journals_list',
       'assessment',
       'assessments_list',
       'quote',
+      'scope_of_work',
       'quotes_list',
       'work_order',
       'work_orders_list',
@@ -562,8 +562,8 @@ function TemplateTable({
                     </div>
                     <p className="mt-0.5 truncate text-xs text-slate-500">{row.description}</p>
                   </td>
-                  <td className="w-[1%] whitespace-nowrap px-3 py-2 align-middle">
-                    <div className="flex items-center justify-end gap-1">
+                  <td className="w-[1%] px-3 py-2 align-middle">
+                    <div className="flex min-w-0 items-center justify-end gap-1">
                       <Select
                         value={selectedId || undefined}
                         onValueChange={(value) => {
@@ -572,12 +572,16 @@ function TemplateTable({
                         items={docItems}
                         disabled={busy || docxDocuments.length === 0}
                       >
-                        <SelectTrigger size="sm" className="w-44 max-w-full">
+                        <SelectTrigger size="sm" className="w-44 max-w-full min-w-0">
                           <SelectValue placeholder="Select .docx…" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent
+                          align="end"
+                          alignItemWithTrigger={false}
+                          className="max-h-[min(24rem,var(--available-height))] min-w-80 w-max max-w-[min(28rem,var(--available-width))]"
+                        >
                           {docxDocuments.map((doc) => (
-                            <SelectItem key={doc.id} value={doc.id}>
+                            <SelectItem key={doc.id} value={doc.id} title={doc.fileName}>
                               {doc.fileName}
                             </SelectItem>
                           ))}

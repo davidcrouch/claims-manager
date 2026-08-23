@@ -36,6 +36,16 @@ describe('data-context definitions', () => {
     expect(slugs).not.toContain('claim');
   });
 
+  it('defaults job, claim, contacts, and claim_contacts on for scope_of_work', () => {
+    const slugs = getDefaultEnabledSlugs('scope_of_work');
+    expect(getContextDefinition('scope_of_work')?.primaryEntity.entityType).toBe('Quote');
+    expect(slugs).toContain('job');
+    expect(slugs).toContain('claim');
+    expect(slugs).toContain('contacts');
+    expect(slugs).toContain('claim_contacts');
+    expect(slugs).not.toContain('quotes');
+  });
+
   it('uses unique related slugs within each definition', () => {
     for (const def of Object.values(CONTEXT_DEFINITIONS)) {
       if (!def) continue;

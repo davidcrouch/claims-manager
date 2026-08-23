@@ -65,9 +65,58 @@ export class AppointmentsService {
     return this.appointmentsRepo.findByJob({ jobId: params.jobId, tenantId });
   }
 
+  private pickStructuredAddress(
+    value: unknown,
+  ): Record<string, unknown> | undefined {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return undefined;
+    }
+
+    const source = value as Record<string, unknown>;
+    const asText = (key: string): string | undefined => {
+      const raw = source[key];
+      return typeof raw === 'string' && raw.trim() ? raw.trim() : undefined;
+    };
+
+    const picked: Record<string, unknown> = {};
+    for (const key of [
+      'unitNumber',
+      'streetNumber',
+      'streetName',
+      'postcode',
+      'state',
+      'country',
+    ] as const) {
+      const text = asText(key);
+      if (text) picked[key] = text;
+    }
+
+    const city = asText('city') ?? asText('suburb');
+    if (city) picked.city = city;
+
+    return Object.keys(picked).length > 0 ? picked : undefined;
+  }
+
+  private resolveOutboundAddress(
+    bodyAddress: unknown,
+    jobAddress?: unknown,
+  ): Record<string, unknown> | undefined {
+    const fromBody = this.pickStructuredAddress(bodyAddress);
+    if (fromBody) return fromBody;
+
+    if (typeof bodyAddress === 'string' && bodyAddress.trim()) {
+      const fromJob = this.pickStructuredAddress(jobAddress);
+      if (fromJob) return fromJob;
+      return undefined;
+    }
+
+    return this.pickStructuredAddress(jobAddress);
+  }
+
   private buildOutboundBody(
     body: Record<string, unknown>,
     cwJobId: string | null,
+    jobAddress?: unknown,
   ): Record<string, unknown> {
     const outbound: Record<string, unknown> = { ...body };
 
@@ -77,7 +126,6 @@ export class AppointmentsService {
 
     if (typeof body.appointmentType === 'string') {
       outbound.appointmentType = {
-        name: body.appointmentType,
         externalReference: body.appointmentType,
       };
     }
@@ -96,6 +144,29 @@ export class AppointmentsService {
       });
     }
 
+    const outboundAddress = this.resolveOutboundAddress(body.address, jobAddress);
+    if (outboundAddress && body.location === 'ONSITE') {
+      outbound.address = outboundAddress;
+    } else {
+      delete outbound.address;
+    }
+
+    if (!outbound.customData || typeof outbound.customData !== 'object' || Array.isArray(outbound.customData)) {
+      outbound.customData = {};
+    }
+
+    const description =
+      typeof body.description === 'string' && body.description.trim()
+        ? body.description.trim()
+        : undefined;
+    if (description) {
+      outbound.customData = {
+        ...(outbound.customData as Record<string, unknown>),
+        description,
+      };
+    }
+    delete outbound.description;
+
     return outbound;
   }
 
@@ -110,7 +181,11 @@ export class AppointmentsService {
     const cwJobId = (job?.apiPayload as Record<string, unknown>)?.id as string | undefined;
 
     const connectionId = await this.resolveConnectionId(tenantId);
-    const outboundBody = this.buildOutboundBody(params.body, cwJobId ?? null);
+    const outboundBody = this.buildOutboundBody(
+      params.body,
+      cwJobId ?? null,
+      job?.address,
+    );
 
     let apiAppointment: Record<string, unknown> = {};
     try {
@@ -170,7 +245,11 @@ export class AppointmentsService {
     const cwJobId = (job?.apiPayload as Record<string, unknown>)?.id as string | undefined;
 
     const connectionId = await this.resolveConnectionId(tenantId);
-    const outboundBody = this.buildOutboundBody(params.body, cwJobId ?? null);
+    const outboundBody = this.buildOutboundBody(
+      params.body,
+      cwJobId ?? null,
+      job?.address,
+    );
 
     const apiAppointment = await this.crunchworkService.updateAppointment({
       connectionId,

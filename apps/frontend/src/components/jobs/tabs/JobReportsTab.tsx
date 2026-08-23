@@ -1,12 +1,16 @@
 'use client';
 
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ReportFormDrawer } from '@/components/forms/ReportFormDrawer';
 import { fetchJobReportsAction } from '@/app/(app)/jobs/[id]/actions';
+import {
+  createListFetchSession,
+  useListFetchGate,
+} from '@/components/shared/use-list-page-data';
 import {
   compareDates,
   compareValues,
@@ -80,7 +84,7 @@ export function JobReportsTab({
     field: 'updated_at',
     order: 'desc',
   });
-  const lastFetchKeyRef = useRef<string | null>(null);
+  const { beginFetch, abortFetch, invalidateFetch } = useListFetchGate();
 
   const normalizedStatuses = useMemo(
     () =>
@@ -125,13 +129,13 @@ export function JobReportsTab({
     const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
     const typeKey = reportTypeParam === null ? '__none__' : (reportTypeParam ?? '');
     const fetchKey = `${jobId}|${tab}|${debouncedSearch}|${statusKey}|${typeKey}`;
-    if (lastFetchKeyRef.current === fetchKey) return;
-    lastFetchKeyRef.current = fetchKey;
+    const session = createListFetchSession({ fetchKey, beginFetch, abortFetch });
+    if (!session) return;
 
     if (statusParam === null || reportTypeParam === null) {
       setReports([]);
       setLoading(false);
-      return;
+      return session.cleanup;
     }
 
     setLoading(true);
@@ -142,9 +146,14 @@ export function JobReportsTab({
       sort: 'updated_at_desc',
       limit: 100,
     })
-      .then((data) => setReports(data ?? []))
-      .finally(() => setLoading(false));
-  }, [jobId, tab, debouncedSearch, statusParam, reportTypeParam]);
+      .then((data) => {
+        if (!session.cancelled) setReports(data ?? []);
+      })
+      .finally(() => {
+        if (!session.cancelled) setLoading(false);
+      });
+    return session.cleanup;
+  }, [jobId, tab, debouncedSearch, statusParam, reportTypeParam, beginFetch, abortFetch]);
 
   const handleColumnSort = (field: ReportSortField) => {
     setColumnSort((prev) => {
@@ -200,7 +209,7 @@ export function JobReportsTab({
   };
 
   const reload = () => {
-    lastFetchKeyRef.current = null;
+    invalidateFetch();
     setLoading(true);
     fetchJobReportsAction(jobId, {
       search: debouncedSearch || undefined,

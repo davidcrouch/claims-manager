@@ -1,4 +1,5 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Injectable, Inject, Logger } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import type { ProjectionUseCase, ProjectionResult } from './use-case.interface';
 import type { DrizzleDbOrTx } from '../../../database/drizzle.module';
 import { TaskTransformer } from '../transformers/task.transformer';
@@ -15,12 +16,15 @@ import { TaskTypeMappingsService } from '../../tasks/task-type-mappings.service'
 export class ProjectTaskUseCase implements ProjectionUseCase {
   private readonly logger = new Logger('ProjectTaskUseCase');
 
+  // Explicit @Inject on every param: SWC collapses constructor types to Object.
+  // TaskTypeMappingsService is request-scoped (via TenantContext) so we resolve
+  // it lazily through ModuleRef to keep this use case singleton-scoped.
   constructor(
-    private readonly transformer: TaskTransformer,
-    private readonly entityRelationship: EntityRelationshipService,
-    private readonly tasksRepo: TasksRepository,
-    private readonly externalLinksRepo: ExternalLinksRepository,
-    @Optional() private readonly taskTypeMappings?: TaskTypeMappingsService,
+    @Inject(TaskTransformer) private readonly transformer: TaskTransformer,
+    @Inject(EntityRelationshipService) private readonly entityRelationship: EntityRelationshipService,
+    @Inject(TasksRepository) private readonly tasksRepo: TasksRepository,
+    @Inject(ExternalLinksRepository) private readonly externalLinksRepo: ExternalLinksRepository,
+    @Inject(ModuleRef) private readonly moduleRef: ModuleRef,
   ) {}
 
   async execute(params: {
@@ -42,9 +46,16 @@ export class ProjectTaskUseCase implements ProjectionUseCase {
     // 2. Transform
     const result = this.transformer.transform({ payload, tenantId });
 
-    // 3. Resolve parents
+    // 3. Resolve parents.
+    // For updates, relax required→false so we don't block on missing parents;
+    // for new tasks the transformer's required:true lets resolveParents throw
+    // ParentNotProjectedError directly, engaging inline recovery.
+    const parentRefs = existingLink
+      ? result.parentRefs.map((r) => ({ ...r, required: false }))
+      : result.parentRefs;
+
     const resolvedParents = await this.entityRelationship.resolveParents({
-      parentRefs: result.parentRefs,
+      parentRefs,
       tenantId,
       connectionId,
       tx,
@@ -55,33 +66,20 @@ export class ProjectTaskUseCase implements ProjectionUseCase {
     if (claimId) (result.entity as Record<string, unknown>).claimId = claimId;
     if (jobId) (result.entity as Record<string, unknown>).jobId = jobId;
 
-    // For new tasks, every parent referenced in the payload must be resolved
-    // so we don't silently drop the job (or claim) link.
-    if (!existingLink) {
-      const unresolvedRefs = result.parentRefs.filter(
-        (ref) => !resolvedParents[ref.entityType],
+    // Defensive fallback: if resolveParents didn't throw (e.g. no parentRefs
+    // in the payload at all) but this is a new task with no parent, throw so
+    // the retry machinery can attempt recovery.
+    if (!existingLink && !claimId && !jobId) {
+      throw new ParentNotProjectedError(
+        'task',
+        externalObjectId,
+        result.parentRefs.map((r) => ({
+          internalEntityType: r.entityType,
+          providerEntityType: r.entityType,
+          providerEntityId: r.externalId,
+        })),
+        `Task ${externalObjectId} requires at least one parent (job or claim)`,
       );
-      if (unresolvedRefs.length > 0) {
-        throw new ParentNotProjectedError(
-          'task',
-          externalObjectId,
-          unresolvedRefs.map((r) => ({
-            internalEntityType: r.entityType,
-            providerEntityType: r.entityType,
-            providerEntityId: r.externalId,
-          })),
-          `Task ${externalObjectId} cannot be created: unresolved parents ` +
-            unresolvedRefs.map((r) => `${r.entityType}:${r.externalId}`).join(', '),
-        );
-      }
-      if (!claimId && !jobId) {
-        throw new ParentNotProjectedError(
-          'task',
-          externalObjectId,
-          [],
-          `Task ${externalObjectId} requires at least one parent (job or claim)`,
-        );
-      }
     }
 
     // Derive relatedEntityType / relatedEntityId only when at least one
@@ -138,7 +136,13 @@ export class ProjectTaskUseCase implements ProjectionUseCase {
     entity: Record<string, unknown>;
     existingTaskId?: string;
   }): Promise<void> {
-    if (!this.taskTypeMappings) return;
+    let taskTypeMappings: TaskTypeMappingsService | undefined;
+    try {
+      taskTypeMappings = await this.moduleRef.resolve(TaskTypeMappingsService);
+    } catch {
+      return;
+    }
+    if (!taskTypeMappings) return;
 
     const explicit =
       typeof params.entity.taskType === 'string' ? params.entity.taskType.trim() : '';
@@ -157,7 +161,7 @@ export class ProjectTaskUseCase implements ProjectionUseCase {
 
     const title =
       typeof params.entity.name === 'string' ? params.entity.name : undefined;
-    const resolved = await this.taskTypeMappings.resolveFromTitle({
+    const resolved = await taskTypeMappings.resolveFromTitle({
       tenantId: params.tenantId,
       title,
     });

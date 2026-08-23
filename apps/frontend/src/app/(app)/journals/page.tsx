@@ -1,17 +1,17 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { JournalsPageClient } from '@/components/journals/JournalsPageClient';
-import { buildJobNameById, toJobOptions } from '@/components/shared/job-label';
+import {buildJobNameById, toJobOptions,
+  mergeCurrentJobIntoNameById,
+  mergeCurrentJobIntoOptions } from '@/components/shared/job-label';
 import type { Metadata } from 'next';
 import type { Job, Claim, PaginatedResponse } from '@/types/api';
 
 export const metadata: Metadata = {
-  title: 'Journals | EnsureOS',
-};
+  title: 'Journals | EnsureOS' };
 
 export default async function JournalsPage({
-  searchParams,
-}: {
+  searchParams }: {
   searchParams: Promise<{ page?: string; status?: string; search?: string; jobId?: string; jobIds?: string }>;
 }) {
   const api = await getServerApiClient();
@@ -30,8 +30,7 @@ export default async function JournalsPage({
       status: params.status,
       search: params.search,
       jobId: params.jobId,
-      jobIds,
-    }).catch((err: unknown) => {
+      jobIds }).catch((err: unknown) => {
       console.error(
         'frontend:JournalsPage - getJournals failed:',
         err instanceof Error ? err.message : err,
@@ -69,8 +68,8 @@ export default async function JournalsPage({
       initialData={result}
       job={job}
       parentClaim={parentClaim}
-      jobNameById={buildJobNameById(jobs)}
-      jobs={toJobOptions(jobs)}
+      jobNameById={mergeCurrentJobIntoNameById(buildJobNameById(jobs), job)}
+      jobs={mergeCurrentJobIntoOptions(toJobOptions(jobs), job)}
     />
   );
 }

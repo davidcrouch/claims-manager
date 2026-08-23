@@ -1,9 +1,11 @@
-import { Injectable, Optional, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, Optional, BadRequestException, Logger, Inject } from '@nestjs/common';
 import { PurchaseOrdersRepository } from '../../database/repositories';
+import { DRIZZLE, type DrizzleDB } from '../../database/drizzle.module';
 import { TenantContext } from '../../tenant/tenant-context';
 import { CrunchworkService } from '../../crunchwork/crunchwork.service';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
 import { OutboundEventsService } from '../outbound-events/outbound-events.service';
+import { RecordNumberService } from '../../common/record-number/record-number.service';
 
 @Injectable()
 export class PurchaseOrdersService {
@@ -13,6 +15,8 @@ export class PurchaseOrdersService {
     private readonly purchaseOrdersRepo: PurchaseOrdersRepository,
     private readonly tenantContext: TenantContext,
     private readonly crunchworkService: CrunchworkService,
+    private readonly recordNumberService: RecordNumberService,
+    @Inject(DRIZZLE) private readonly db: DrizzleDB,
     @Optional() private readonly connectionResolver?: ConnectionResolverService,
     @Optional() private readonly outboundEvents?: OutboundEventsService,
   ) {}
@@ -67,14 +71,36 @@ export class PurchaseOrdersService {
   async create(params: { body: Record<string, unknown>; userId?: string }) {
     const tenantId = this.tenantContext.getTenantId();
     this.logger.log(`api:PurchaseOrdersService.create tenantId=${tenantId}`);
-    const { createdByUserId: _c, updatedByUserId: _u, ...rest } = params.body;
-    return this.purchaseOrdersRepo.create({
-      data: {
-        ...rest,
+    const {
+      createdByUserId: _c,
+      updatedByUserId: _u,
+      internalNumber: bodyInternalNumber,
+      purchaseOrderNumber: bodyPurchaseOrderNumber,
+      ...rest
+    } = params.body;
+
+    return this.db.transaction(async (tx) => {
+      const internalNumber = await this.recordNumberService.resolve({
         tenantId,
-        createdByUserId: params.userId ?? null,
-        updatedByUserId: params.userId ?? null,
-      } as any,
+        entity: 'purchase_order',
+        explicit: bodyInternalNumber,
+        tx,
+      });
+      const purchaseOrderNumber = this.recordNumberService.isBlank(bodyPurchaseOrderNumber)
+        ? null
+        : String(bodyPurchaseOrderNumber).trim();
+
+      return this.purchaseOrdersRepo.create({
+        data: {
+          ...rest,
+          tenantId,
+          internalNumber,
+          purchaseOrderNumber,
+          createdByUserId: params.userId ?? null,
+          updatedByUserId: params.userId ?? null,
+        } as any,
+        tx,
+      });
     });
   }
 

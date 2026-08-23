@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { TrendingUp } from 'lucide-react';
@@ -20,6 +20,11 @@ import {
   formatDate,
 } from '@/components/shared/list-filters';
 import { fetchInvoicesAction } from '@/app/(app)/invoices/actions';
+import {
+  createListFetchSession,
+  replaceListQueryIfNeeded,
+  useListPageData,
+} from '@/components/shared/use-list-page-data';
 import type { AgingBucket, Invoice, PaginatedResponse } from '@/types/api';
 
 const SORT_OPTIONS: SortOption[] = [
@@ -57,7 +62,7 @@ interface Props {
 export function FinanceArClient({ summary, initialInvoices, statusOptions }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [data, setData] = useState<PaginatedResponse<Invoice>>(
+  const { data, setData, beginFetch, abortFetch } = useListPageData<PaginatedResponse<Invoice>>(
     'data' in initialInvoices
       ? (initialInvoices as PaginatedResponse<Invoice>)
       : { data: [], total: 0 },
@@ -74,7 +79,6 @@ export function FinanceArClient({ summary, initialInvoices, statusOptions }: Pro
     return buildSortString(parsed.field, parsed.order);
   });
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
-  const lastFetchKeyRef = useRef<string | null>(null);
 
   const statusParam = useMemo(() => {
     if (statusFilter.size === 0) return undefined;
@@ -88,26 +92,28 @@ export function FinanceArClient({ summary, initialInvoices, statusOptions }: Pro
   }, [search]);
 
   useEffect(() => {
-    setData(
-      'data' in initialInvoices
-        ? (initialInvoices as PaginatedResponse<Invoice>)
-        : { data: [], total: 0 },
-    );
-    lastFetchKeyRef.current = null;
-  }, [initialInvoices]);
-
-  useEffect(() => {
     const statusKey = statusIdsKey(statusFilter);
     const fetchKey = `${debouncedSearch}|${sort}|${statusKey}`;
     const params = new URLSearchParams(searchParams.toString());
-    params.set('search', debouncedSearch);
-    params.set('sort', sort);
+    if (debouncedSearch) params.set('search', debouncedSearch);
+    else params.delete('search');
+    if (sort !== 'issue_date_asc') params.set('sort', sort);
+    else params.delete('sort');
     if (statusParam) params.set('status', statusParam);
     else params.delete('status');
-    router.replace(`/finance/ar?${params}`, { scroll: false });
+    if (
+      !replaceListQueryIfNeeded({
+        router,
+        pathname: '/finance/ar',
+        currentQuery: searchParams.toString(),
+        nextQuery: params.toString(),
+      })
+    ) {
+      return;
+    }
 
-    if (lastFetchKeyRef.current === fetchKey) return;
-    lastFetchKeyRef.current = fetchKey;
+    const session = createListFetchSession({ fetchKey, beginFetch, abortFetch });
+    if (!session) return;
 
     fetchInvoicesAction({
       page: 1,
@@ -115,9 +121,11 @@ export function FinanceArClient({ summary, initialInvoices, statusOptions }: Pro
       search: debouncedSearch || undefined,
       sort,
       status: statusParam,
-    }).then((res) => res && setData(res));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, sort, statusParam, statusFilter]);
+    }).then((res) => {
+      if (!session.cancelled && res) setData(res);
+    });
+    return session.cleanup;
+  }, [debouncedSearch, sort, statusParam, statusFilter, searchParams, router, beginFetch, abortFetch]);
 
   const { field: sortField, order: sortOrder } = parseSort({
     sortParam: sort,

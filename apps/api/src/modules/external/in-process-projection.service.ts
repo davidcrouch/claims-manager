@@ -56,8 +56,21 @@ export class InProcessProjectionService {
     const useCase = this.useCaseRegistry.get(params.providerEntityType);
 
     if (!useCase) {
+      const registered = this.useCaseRegistry.listRegistered();
+      if (registered.length === 0) {
+        // Registry is empty — likely a startup timing issue where the webhook
+        // was dispatched before UseCaseRegistry.onModuleInit completed. Throw
+        // so the orchestrator can schedule a retry rather than permanently
+        // marking the event completed_unmapped.
+        throw new Error(
+          `${logPrefix} — UseCaseRegistry has no registered use cases (startup timing issue); ` +
+            `cannot process entityType=${params.providerEntityType}`,
+        );
+      }
+
       this.logger.warn(
-        `${logPrefix} — no use case registered for entityType=${params.providerEntityType}; marking skipped_no_mapper`,
+        `${logPrefix} — no use case registered for entityType=${params.providerEntityType}; ` +
+          `registered=[${registered.join(', ')}]; marking skipped_no_mapper`,
       );
       await this.processingLogRepo.updateStatus({
         id: params.processingLogId,
@@ -73,11 +86,9 @@ export class InProcessProjectionService {
       return { status: 'skipped_no_mapper' };
     }
 
-    if (useCase) {
-      this.logger.log(
-        `${logPrefix} — using domain use case for entityType=${params.providerEntityType}`,
-      );
-    }
+    this.logger.log(
+      `${logPrefix} — using domain use case for entityType=${params.providerEntityType}`,
+    );
 
     const externalObject = await this.externalObjectsRepo.findById({
       id: params.externalObjectId,

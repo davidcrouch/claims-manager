@@ -1,6 +1,7 @@
 import { Injectable, Inject, Logger, NotFoundException } from '@nestjs/common';
-import { and, eq, isNull, aliasedTable } from 'drizzle-orm';
+import { and, eq, inArray, isNull, aliasedTable } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
+import { readContactTypeLookupIds } from '../../../common/contact-types';
 import {
   assessments,
   appointments,
@@ -121,7 +122,8 @@ export class ContextResolver {
         related.viaJoin,
         parentId,
       );
-      return rows.map((row) =>
+      const enriched = await this.enrichContacts(tenantId, rows);
+      return enriched.map((row) =>
         this.pickFields(
           row,
           related.fields.map((f) => f.key),
@@ -353,6 +355,55 @@ export class ContextResolver {
         and(eq(claimContacts.tenantId, tenantId), eq(claimContacts.claimId, parentId)),
       );
     return rows.map((r) => r.contact as unknown as Row);
+  }
+
+  private async enrichContacts(tenantId: string, rows: Row[]): Promise<Row[]> {
+    if (rows.length === 0) return [];
+
+    const allTypeIds = [
+      ...new Set(
+        rows.flatMap((contact) =>
+          readContactTypeLookupIds({
+            typeLookupId: contact.typeLookupId as string | null | undefined,
+            contactPayload: contact.contactPayload,
+          }),
+        ),
+      ),
+    ];
+
+    const lookupNames = new Map<string, string>();
+    if (allTypeIds.length > 0) {
+      const lookups = await this.db
+        .select({ id: lookupValues.id, name: lookupValues.name })
+        .from(lookupValues)
+        .where(and(eq(lookupValues.tenantId, tenantId), inArray(lookupValues.id, allTypeIds)));
+      for (const lookup of lookups) {
+        lookupNames.set(lookup.id, lookup.name ?? '');
+      }
+    }
+
+    return rows.map((contact) => {
+      const typeIds = readContactTypeLookupIds({
+        typeLookupId: contact.typeLookupId as string | null | undefined,
+        contactPayload: contact.contactPayload,
+      });
+      const typeNames = typeIds
+        .map((id) => lookupNames.get(id) ?? '')
+        .filter((name) => name.length > 0);
+      const normalized = typeNames.map((name) => name.toLowerCase());
+      const isInsured = normalized.includes('insured');
+      const isTenant = normalized.some(
+        (name) => name === 'tenant' || name === 'occupant',
+      );
+
+      return {
+        ...contact,
+        typeName: typeNames[0] ?? '',
+        typeNames,
+        isInsured,
+        isTenant,
+      };
+    });
   }
 
   private tableFor(entityType: string): any | null {

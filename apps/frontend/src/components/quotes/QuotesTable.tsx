@@ -5,11 +5,12 @@ import {
   ColumnSettingsHeaderCell,
   useColumnVisibility,
 } from '@/components/shared/column-visibility';
-import { resolveJobName } from '@/components/shared/job-label';
+import { JobCellLink } from '@/components/shared/JobCellLink';
 import { resolveDetailAssignee } from '@/components/shared/DetailAssignee';
 import { ListArchiveButton, LIST_ARCHIVE_TH_CLASS, LIST_ARCHIVE_TD_CLASS, LIST_ARCHIVE_SPACER_TD_CLASS } from '@/components/shared/ListArchiveButton';
-import { StatusBadge } from '@/components/ui/status-badge';
+import { entityDisplayLabel } from '@/components/shared/entity-label';
 import { TypeBadge } from '@/components/ui/type-badge';
+import { StatusBadge } from '@/components/ui/status-badge';
 import type { Quote } from '@/types/api';
 
 type Dict = Record<string, unknown>;
@@ -182,7 +183,12 @@ export function QuotesTable({
             <TableEmptyRow colSpan={colSpan} label="No estimates found." />
           ) : (
             quotes.map((quote) => {
-            const num = quote.quoteNumber ?? quote.name ?? quote.id;
+            const num = entityDisplayLabel(
+              quote.internalNumber,
+              quote.quoteNumber,
+              quote.name,
+              quote.id,
+            );
             const statusName = quote.status?.name ?? 'Unknown';
             const estimateType = getEstimateTypeName(quote);
             return (
@@ -198,7 +204,7 @@ export function QuotesTable({
                 )}
                 {isVisible('job') && (
                   <td className="px-4 py-3 text-slate-600">
-                    {resolveJobName(quote.jobId, jobNameById)}
+                    <JobCellLink jobId={quote.jobId} jobNameById={jobNameById} />
                   </td>
                 )}
                 {isVisible('assignee') && (

@@ -31,6 +31,7 @@ import type { Claim, Invoice, Job } from '@/types/api';
 import { PrintButton } from '@/components/shared/PrintButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { jobDisplayName } from '@/components/shared/job-label';
+import { EntityDetailTitle, entityArchiveLabel } from '@/components/shared/EntityDetailTitle';
 import { JournalList } from '@/components/journals/JournalList';
 import {
   fetchJournalsByEntityAction,
@@ -62,7 +63,6 @@ export function InvoicePageHeader({
   claim?: Claim | null;
 }) {
   const [publishWizardOpen, setPublishWizardOpen] = useState(false);
-  const title = invoice.invoiceNumber ?? invoice.id;
   const statusName = invoice.status?.name ?? 'Unknown';
   const canPublish = !invoice.sourceExternalReference;
   const publishMode: InvoicePublishMode =
@@ -86,7 +86,12 @@ export function InvoicePageHeader({
           entityType="invoice"
           entityId={invoice.id}
           statusName={statusName}
-          entityLabel={title}
+          entityLabel={entityArchiveLabel(
+            invoice.internalNumber,
+            null,
+            invoice.invoiceNumber,
+            invoice.id,
+          )}
           redirectTo={job ? `/invoices?jobId=${job.id}` : '/invoices'}
         />
       </SetHeaderActions>
@@ -104,7 +109,11 @@ export function InvoicePageHeader({
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-teal-100">
             <Receipt className="h-4 w-4 text-teal-600" />
           </span>
-          <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
+          <EntityDetailTitle
+            internalNumber={invoice.internalNumber}
+            secondaryLabel={invoice.invoiceNumber}
+            fallbackId={invoice.id}
+          />
           <StatusBadge status={statusName} />
           {invoice.purchaseOrderId && (
             <Link

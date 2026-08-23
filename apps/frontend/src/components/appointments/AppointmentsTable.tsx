@@ -14,7 +14,7 @@ import {
   type ColumnVisibilityDef,
 } from '@/components/shared/column-visibility';
 import { formatDateTime } from '@/components/shared/detail';
-import { resolveJobName } from '@/components/shared/job-label';
+import { JobCellLink } from '@/components/shared/JobCellLink';
 import type { Appointment, AppointmentAttendee } from '@/types/api';
 
 const APPOINTMENT_COLUMNS: ColumnVisibilityDef[] = [
@@ -294,7 +294,7 @@ export function AppointmentsTable({
                   )}
                   {isVisible('job') && (
                     <td className="px-4 py-2.5 text-slate-600">
-                      {resolveJobName(a.jobId, jobNameById)}
+                      <JobCellLink jobId={a.jobId} jobNameById={jobNameById} />
                     </td>
                   )}
                   {isVisible('type') && (

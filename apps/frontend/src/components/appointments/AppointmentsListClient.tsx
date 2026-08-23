@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { CalendarCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -16,27 +16,22 @@ import {
   commitColumnFilterSelection,
   buildColumnFilterOptions,
   columnFilterToIdsParam,
-  type SortOption,
-} from '@/components/shared/list-filters';
+  type SortOption } from '@/components/shared/list-filters';
 import { TablePagination } from '@/components/shared/table-pagination';
 import {
-  AppointmentsTable,
-} from '@/components/appointments/AppointmentsTable';
+  AppointmentsTable } from '@/components/appointments/AppointmentsTable';
 import { AppointmentFormDrawer } from '@/components/forms/AppointmentFormDrawer';
-import { type JobOption } from '@/components/shared/job-label';
-import {
-  buildServerJobFilterOptions,
+import { type JobOption, jobDisplayName } from '@/components/shared/job-label';
+import { buildServerJobFilterOptions,
   resolveServerJobFilterSelection,
   selectedJobFilterLabels,
   parseSelectedJobIds,
   toServerJobFetchParams,
-  writeServerJobFilterParams,
-} from '@/components/shared/server-job-filter';
+  writeServerJobFilterParams, buildListJobFilterOptions } from '@/components/shared/server-job-filter';
 import {
   fetchAppointmentsAction,
   fetchAppointmentFilterLocationsAction,
-  fetchAppointmentFilterTypesAction,
-} from '@/app/(app)/appointments/actions';
+  fetchAppointmentFilterTypesAction } from '@/app/(app)/appointments/actions';
 import { useEntityDrawer } from '@/components/layout/EntityDrawerHost';
 import type { Appointment, Job, Claim } from '@/types/api';
 
@@ -56,8 +51,7 @@ const STATUS_OPTIONS = [
 export function AppointmentsListClient({
   jobs = [],
   job,
-  parentClaim,
-}: {
+  parentClaim }: {
   jobs?: JobOption[];
   job?: Job | null;
   parentClaim?: Claim | null;
@@ -83,6 +77,7 @@ export function AppointmentsListClient({
   const [page, setPage] = useState(1);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
+  const loadGenRef = useRef(0);
   const limit = 20;
   const statusParam = useMemo(() => {
     if (statusFilter.has('__none__')) return '__none__';
@@ -102,8 +97,14 @@ export function AppointmentsListClient({
   }, [jobs]);
 
   const filterJobs = useMemo(
-    () => jobs.map((j) => ({ id: j.id, label: j.label })),
-    [jobs],
+    () =>
+      buildListJobFilterOptions({
+        jobs: jobs.map((j) => ({ id: j.id, label: j.label })),
+        currentJob: job
+          ? { id: job.id, label: jobDisplayName(job) }
+          : null,
+        jobId }),
+    [jobs, job, jobId],
   );
   const uniqueJobs = useMemo(
     () => buildServerJobFilterOptions(filterJobs),
@@ -120,8 +121,7 @@ export function AppointmentsListClient({
         jobIds: jobIdsParam
           ? jobIdsParam.split(',').map((id) => id.trim()).filter(Boolean)
           : undefined,
-        jobs: filterJobs,
-      }),
+        jobs: filterJobs }),
     [jobId, jobIdsParam, filterJobs],
   );
   const { jobId: fetchJobId, jobIds: fetchJobIds } = useMemo(
@@ -156,6 +156,7 @@ export function AppointmentsListClient({
   );
 
   const load = useCallback(async () => {
+    const gen = ++loadGenRef.current;
     setLoading(true);
     try {
       if (
@@ -163,6 +164,7 @@ export function AppointmentsListClient({
         locationParam === '__none__' ||
         appointmentTypeLookupIdsParam === null
       ) {
+        if (gen !== loadGenRef.current) return;
         setAppointments([]);
         setTotal(0);
         return;
@@ -177,12 +179,12 @@ export function AppointmentsListClient({
         sort: sortField,
         order: sortOrder,
         jobId: fetchJobId,
-        jobIds: fetchJobIds,
-      });
+        jobIds: fetchJobIds });
+      if (gen !== loadGenRef.current) return;
       setAppointments(res.data);
       setTotal(res.total);
     } finally {
-      setLoading(false);
+      if (gen === loadGenRef.current) setLoading(false);
     }
   }, [
     page,
@@ -222,8 +224,7 @@ export function AppointmentsListClient({
     if (!openAppointmentId) return;
     openEntityDrawer({
       component: 'AppointmentFormDrawer',
-      props: { appointmentId: openAppointmentId },
-    });
+      props: { appointmentId: openAppointmentId } });
     const params = new URLSearchParams(searchParams.toString());
     params.delete('open');
     const qs = params.toString();
@@ -280,8 +281,7 @@ export function AppointmentsListClient({
   const applyStatusNameFilter = (next: Set<string>) => {
     const committed = commitColumnFilterSelection({
       next,
-      optionCount: uniqueStatuses.length,
-    });
+      optionCount: uniqueStatuses.length });
     if (!committed.active) {
       setStatusFilter(new Set());
     } else if (committed.selected.size === 0) {
@@ -295,8 +295,7 @@ export function AppointmentsListClient({
   const applyTypeFilter = (next: Set<string>) => {
     const committed = commitColumnFilterSelection({
       next,
-      optionCount: uniqueTypes.length,
-    });
+      optionCount: uniqueTypes.length });
     setTypeFilter(committed.selected);
     setTypeFilterActive(committed.active);
     setPage(1);
@@ -306,8 +305,7 @@ export function AppointmentsListClient({
     const resolved = resolveServerJobFilterSelection({
       next,
       options: uniqueJobs,
-      jobs: filterJobs,
-    });
+      jobs: filterJobs });
     setPage(1);
     const params = new URLSearchParams(searchParams.toString());
     writeServerJobFilterParams(params, resolved);
@@ -318,8 +316,7 @@ export function AppointmentsListClient({
   const applyLocationFilter = (next: Set<string>) => {
     const committed = commitColumnFilterSelection({
       next,
-      optionCount: uniqueLocations.length,
-    });
+      optionCount: uniqueLocations.length });
     setLocationFilter(committed.selected);
     setLocationFilterActive(committed.active);
     setPage(1);
@@ -400,32 +397,28 @@ export function AppointmentsListClient({
             active: statusColumnActive,
             onApply: applyStatusNameFilter,
             menuTitle: 'Filter by status',
-            itemNoun: { singular: 'status', plural: 'statuses' },
-          }}
+            itemNoun: { singular: 'status', plural: 'statuses' } }}
           typeColumnFilter={{
             options: uniqueTypes,
             selected: typeFilter,
             active: typeFilterActive,
             onApply: applyTypeFilter,
             menuTitle: 'Filter by type',
-            itemNoun: { singular: 'type', plural: 'types' },
-          }}
+            itemNoun: { singular: 'type', plural: 'types' } }}
           jobColumnFilter={{
             options: uniqueJobs,
             selected: jobFilterActive ? jobFilter : new Set(uniqueJobs),
             active: jobFilterActive,
             onApply: applyJobFilter,
             menuTitle: 'Filter by job',
-            itemNoun: { singular: 'job', plural: 'jobs' },
-          }}
+            itemNoun: { singular: 'job', plural: 'jobs' } }}
           locationColumnFilter={{
             options: uniqueLocations,
             selected: locationFilter,
             active: locationFilterActive,
             onApply: applyLocationFilter,
             menuTitle: 'Filter by location',
-            itemNoun: { singular: 'location', plural: 'locations' },
-          }}
+            itemNoun: { singular: 'location', plural: 'locations' } }}
         />
 
         {!loading && (

@@ -9,6 +9,14 @@ export type MobilityOption = {
   externalReference: string;
 };
 
+export type JobOverviewDraft = {
+  attendanceDate: string;
+  statusLookupId: string;
+  statusExternalReference: string;
+  jobInstructions: string;
+  vendorExtRef: string;
+};
+
 /** Draft fields collected from Overview + Type Details before save. */
 export type JobEditPending = {
   bookedDate?: string | null;

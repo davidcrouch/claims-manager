@@ -59,7 +59,7 @@ const DOCUMENT_TYPE_TO_FILE: Record<AssignableTemplateType, string> = {
   message: 'SCOPE OF WORK.docx',
   journal: 'SCOPE OF WORK.docx',
   vendor: 'SCOPE OF WORK.docx',
-  assessment: 'SCOPE OF WORK.docx',
+  assessment: 'ASSESSMENT.docx',
   document: 'SCOPE OF WORK.docx',
   jobs_list: 'SCOPE OF WORK.docx',
   quotes_list: 'SCOPE OF WORK.docx',

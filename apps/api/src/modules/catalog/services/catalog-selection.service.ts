@@ -573,6 +573,339 @@ export class CatalogSelectionService {
     return this.listQuoteGroups({ quoteId: params.quoteId });
   }
 
+  async reorderQuoteLineItems(params: {
+    quoteId: string;
+    items?: Array<{ id: string; sortIndex: number }>;
+    combos?: Array<{ id: string; sortIndex: number }>;
+  }) {
+    const tenantId = this.getTenantId();
+    const logPrefix = 'CatalogSelectionService.reorderQuoteLineItems';
+
+    await this.db.transaction(async (tx) => {
+      if (params.items && params.items.length > 0) {
+        for (const entry of params.items) {
+          await tx
+            .update(quoteItems)
+            .set({ sortIndex: entry.sortIndex, updatedAt: new Date() })
+            .where(
+              and(eq(quoteItems.id, entry.id), eq(quoteItems.tenantId, tenantId), isNull(quoteItems.deletedAt)),
+            );
+        }
+        this.logger.debug(`${logPrefix} — reordered ${params.items.length} items`);
+      }
+
+      if (params.combos && params.combos.length > 0) {
+        for (const entry of params.combos) {
+          await tx
+            .update(quoteCombos)
+            .set({ sortIndex: entry.sortIndex, updatedAt: new Date() })
+            .where(
+              and(eq(quoteCombos.id, entry.id), eq(quoteCombos.tenantId, tenantId), isNull(quoteCombos.deletedAt)),
+            );
+        }
+        this.logger.debug(`${logPrefix} — reordered ${params.combos.length} combos`);
+      }
+    });
+
+    return { success: true };
+  }
+
+  async moveQuoteLineItem(params: {
+    quoteId: string;
+    itemId?: string;
+    comboId?: string;
+    targetGroupId: string;
+    targetComboId?: string;
+    insertAtIndex?: number;
+  }) {
+    const tenantId = this.getTenantId();
+    const logPrefix = 'CatalogSelectionService.moveQuoteLineItem';
+
+    if (!params.itemId && !params.comboId) {
+      throw new BadRequestException('Either itemId or comboId must be provided');
+    }
+
+    const [targetGroup] = await this.db
+      .select({ id: quoteGroups.id })
+      .from(quoteGroups)
+      .where(
+        and(
+          eq(quoteGroups.id, params.targetGroupId),
+          eq(quoteGroups.tenantId, tenantId),
+          eq(quoteGroups.quoteId, params.quoteId),
+        ),
+      )
+      .limit(1);
+    if (!targetGroup) throw new NotFoundException('Target group not found');
+
+    if (params.targetComboId) {
+      const [targetCombo] = await this.db
+        .select({ id: quoteCombos.id, comboPayload: quoteCombos.comboPayload })
+        .from(quoteCombos)
+        .where(
+          and(
+            eq(quoteCombos.id, params.targetComboId),
+            eq(quoteCombos.tenantId, tenantId),
+            isNull(quoteCombos.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (!targetCombo) throw new NotFoundException('Target combo not found');
+    }
+
+    await this.db.transaction(async (tx) => {
+      if (params.itemId) {
+        const [item] = await tx
+          .select({ id: quoteItems.id, quoteGroupId: quoteItems.quoteGroupId, quoteComboId: quoteItems.quoteComboId })
+          .from(quoteItems)
+          .where(and(eq(quoteItems.id, params.itemId), eq(quoteItems.tenantId, tenantId), isNull(quoteItems.deletedAt)))
+          .limit(1);
+        if (!item) throw new NotFoundException('Item not found');
+
+        if (params.insertAtIndex !== undefined) {
+          const parentFilter = params.targetComboId
+            ? eq(quoteItems.quoteComboId, params.targetComboId)
+            : and(eq(quoteItems.quoteGroupId, params.targetGroupId), isNull(quoteItems.quoteComboId));
+          await tx
+            .update(quoteItems)
+            .set({ sortIndex: sql`${quoteItems.sortIndex} + 1` })
+            .where(and(parentFilter, eq(quoteItems.tenantId, tenantId), isNull(quoteItems.deletedAt), sql`${quoteItems.sortIndex} >= ${params.insertAtIndex}`));
+        }
+
+        const updates: Record<string, unknown> = { updatedAt: new Date() };
+        if (params.targetComboId) {
+          updates.quoteGroupId = null;
+          updates.quoteComboId = params.targetComboId;
+        } else {
+          updates.quoteGroupId = params.targetGroupId;
+          updates.quoteComboId = null;
+        }
+        if (params.insertAtIndex !== undefined) {
+          updates.sortIndex = params.insertAtIndex;
+        }
+        await tx.update(quoteItems).set(updates).where(eq(quoteItems.id, params.itemId));
+        this.logger.debug(`${logPrefix} — moved item ${params.itemId} to group=${params.targetGroupId} combo=${params.targetComboId ?? 'none'} at=${params.insertAtIndex ?? 'end'}`);
+      }
+
+      if (params.comboId) {
+        const [combo] = await tx
+          .select({ id: quoteCombos.id, quoteGroupId: quoteCombos.quoteGroupId, comboPayload: quoteCombos.comboPayload })
+          .from(quoteCombos)
+          .where(and(eq(quoteCombos.id, params.comboId), eq(quoteCombos.tenantId, tenantId), isNull(quoteCombos.deletedAt)))
+          .limit(1);
+        if (!combo) throw new NotFoundException('Combo not found');
+
+        const isScope = isScopeComboPayload(combo.comboPayload);
+        if (isScope && params.targetComboId) {
+          throw new BadRequestException('Scopes cannot be placed inside another combo');
+        }
+
+        if (params.insertAtIndex !== undefined) {
+          await tx
+            .update(quoteCombos)
+            .set({ sortIndex: sql`${quoteCombos.sortIndex} + 1` })
+            .where(
+              and(
+                eq(quoteCombos.quoteGroupId, params.targetGroupId),
+                eq(quoteCombos.tenantId, tenantId),
+                isNull(quoteCombos.deletedAt),
+                sql`${quoteCombos.sortIndex} >= ${params.insertAtIndex}`,
+              ),
+            );
+        }
+
+        const updates: Record<string, unknown> = {
+          quoteGroupId: params.targetGroupId,
+          updatedAt: new Date(),
+        };
+        if (params.targetComboId) {
+          updates.comboPayload = buildComboPayload({
+            kind: 'assembly',
+            parentComboId: params.targetComboId,
+          });
+        } else {
+          const currentParent = parentComboIdFromPayload(combo.comboPayload);
+          if (currentParent) {
+            updates.comboPayload = buildComboPayload({
+              kind: isScope ? 'scope' : 'assembly',
+              parentComboId: undefined,
+            });
+          }
+        }
+        if (params.insertAtIndex !== undefined) {
+          updates.sortIndex = params.insertAtIndex;
+        }
+        await tx.update(quoteCombos).set(updates).where(eq(quoteCombos.id, params.comboId));
+        this.logger.debug(`${logPrefix} — moved combo ${params.comboId} to group=${params.targetGroupId} combo=${params.targetComboId ?? 'none'} at=${params.insertAtIndex ?? 'end'}`);
+      }
+    });
+
+    return { success: true };
+  }
+
+  async duplicateQuoteLineItem(params: {
+    quoteId: string;
+    itemId?: string;
+    comboId?: string;
+    targetGroupId: string;
+    targetComboId?: string;
+    insertAtIndex?: number;
+  }) {
+    const tenantId = this.getTenantId();
+    const logPrefix = 'CatalogSelectionService.duplicateQuoteLineItem';
+
+    if (!params.itemId && !params.comboId) {
+      throw new BadRequestException('Either itemId or comboId must be provided');
+    }
+
+    const [targetGroup] = await this.db
+      .select({ id: quoteGroups.id })
+      .from(quoteGroups)
+      .where(
+        and(
+          eq(quoteGroups.id, params.targetGroupId),
+          eq(quoteGroups.tenantId, tenantId),
+          eq(quoteGroups.quoteId, params.quoteId),
+        ),
+      )
+      .limit(1);
+    if (!targetGroup) throw new NotFoundException('Target group not found');
+
+    return this.db.transaction(async (tx) => {
+      if (params.itemId) {
+        const [source] = await tx
+          .select()
+          .from(quoteItems)
+          .where(and(eq(quoteItems.id, params.itemId), eq(quoteItems.tenantId, tenantId), isNull(quoteItems.deletedAt)))
+          .limit(1);
+        if (!source) throw new NotFoundException('Source item not found');
+
+        const insertIdx = params.insertAtIndex ?? (source.sortIndex + 1);
+        const parentFilter = params.targetComboId
+          ? eq(quoteItems.quoteComboId, params.targetComboId)
+          : and(eq(quoteItems.quoteGroupId, params.targetGroupId), isNull(quoteItems.quoteComboId));
+        await tx
+          .update(quoteItems)
+          .set({ sortIndex: sql`${quoteItems.sortIndex} + 1` })
+          .where(and(parentFilter, eq(quoteItems.tenantId, tenantId), isNull(quoteItems.deletedAt), sql`${quoteItems.sortIndex} >= ${insertIdx}`));
+
+        const { id, createdAt, updatedAt, deletedAt, externalReference, ...fields } = source;
+        const [copy] = await tx
+          .insert(quoteItems)
+          .values({
+            ...fields,
+            quoteGroupId: params.targetComboId ? null : params.targetGroupId,
+            quoteComboId: params.targetComboId ?? null,
+            sortIndex: insertIdx,
+            externalReference: null,
+          })
+          .returning({ id: quoteItems.id });
+        this.logger.debug(`${logPrefix} — duplicated item ${params.itemId} → ${copy.id}`);
+        return { success: true, newId: copy.id };
+      }
+
+      if (params.comboId) {
+        const [source] = await tx
+          .select()
+          .from(quoteCombos)
+          .where(and(eq(quoteCombos.id, params.comboId), eq(quoteCombos.tenantId, tenantId), isNull(quoteCombos.deletedAt)))
+          .limit(1);
+        if (!source) throw new NotFoundException('Source combo not found');
+
+        const isScope = isScopeComboPayload(source.comboPayload);
+        if (isScope && params.targetComboId) {
+          throw new BadRequestException('Scopes cannot be placed inside another combo');
+        }
+
+        const insertIdx = params.insertAtIndex ?? (source.sortIndex + 1);
+        await tx
+          .update(quoteCombos)
+          .set({ sortIndex: sql`${quoteCombos.sortIndex} + 1` })
+          .where(
+            and(
+              eq(quoteCombos.quoteGroupId, params.targetGroupId),
+              eq(quoteCombos.tenantId, tenantId),
+              isNull(quoteCombos.deletedAt),
+              sql`${quoteCombos.sortIndex} >= ${insertIdx}`,
+            ),
+          );
+
+        const newPayload = params.targetComboId
+          ? buildComboPayload({ kind: 'assembly', parentComboId: params.targetComboId })
+          : buildComboPayload({ kind: isScope ? 'scope' : 'assembly' });
+
+        const { id: _id, createdAt: _ca, updatedAt: _ua, deletedAt: _da, externalReference: _er, ...comboFields } = source;
+        const [comboCopy] = await tx
+          .insert(quoteCombos)
+          .values({
+            ...comboFields,
+            quoteGroupId: params.targetGroupId,
+            comboPayload: newPayload,
+            sortIndex: insertIdx,
+            externalReference: null,
+          })
+          .returning({ id: quoteCombos.id });
+
+        const childItems = await tx
+          .select()
+          .from(quoteItems)
+          .where(and(eq(quoteItems.quoteComboId, params.comboId), eq(quoteItems.tenantId, tenantId), isNull(quoteItems.deletedAt)));
+
+        for (const childItem of childItems) {
+          const { id: _cid, createdAt: _cca, updatedAt: _cua, deletedAt: _cda, externalReference: _cer, ...itemFields } = childItem;
+          await tx.insert(quoteItems).values({
+            ...itemFields,
+            quoteGroupId: null,
+            quoteComboId: comboCopy.id,
+            externalReference: null,
+          });
+        }
+
+        const childCombos = await tx
+          .select()
+          .from(quoteCombos)
+          .where(and(eq(quoteCombos.quoteGroupId, source.quoteGroupId), eq(quoteCombos.tenantId, tenantId), isNull(quoteCombos.deletedAt)));
+        const nestedCombos = childCombos.filter((c) => parentComboIdFromPayload(c.comboPayload) === params.comboId);
+
+        for (const nested of nestedCombos) {
+          const { id: _nid, createdAt: _nca, updatedAt: _nua, deletedAt: _nda, externalReference: _ner, ...nestedFields } = nested;
+          const nestedPayload = buildComboPayload({
+            kind: isScopeComboPayload(nested.comboPayload) ? 'scope' : 'assembly',
+            parentComboId: comboCopy.id,
+          });
+          const [nestedCopy] = await tx
+            .insert(quoteCombos)
+            .values({
+              ...nestedFields,
+              quoteGroupId: params.targetGroupId,
+              comboPayload: nestedPayload,
+              externalReference: null,
+            })
+            .returning({ id: quoteCombos.id });
+
+          const nestedItems = await tx
+            .select()
+            .from(quoteItems)
+            .where(and(eq(quoteItems.quoteComboId, nested.id), eq(quoteItems.tenantId, tenantId), isNull(quoteItems.deletedAt)));
+          for (const ni of nestedItems) {
+            const { id: _niid, createdAt: _nica, updatedAt: _niua, deletedAt: _nida, externalReference: _nier, ...niFields } = ni;
+            await tx.insert(quoteItems).values({
+              ...niFields,
+              quoteGroupId: null,
+              quoteComboId: nestedCopy.id,
+              externalReference: null,
+            });
+          }
+        }
+
+        this.logger.debug(`${logPrefix} — duplicated combo ${params.comboId} → ${comboCopy.id} (${childItems.length} items, ${nestedCombos.length} nested combos)`);
+        return { success: true, newId: comboCopy.id };
+      }
+
+      return { success: true };
+    });
+  }
+
   async updateQuoteLineItems(params: {
     quoteId: string;
     items: Array<{
@@ -788,6 +1121,7 @@ export class CatalogSelectionService {
         length: asNumber(dimensions.length),
         width: asNumber(dimensions.width),
         height: asNumber(dimensions.height),
+        perimeter: asNumber(dimensions.perimeter),
         index: group.sortIndex,
         subTotal: asNumber(groupTotals.subTotal),
         totalTax: asNumber(groupTotals.totalTax),
@@ -944,6 +1278,7 @@ export class CatalogSelectionService {
         length: asNumber(dimensions.length),
         width: asNumber(dimensions.width),
         height: asNumber(dimensions.height),
+        perimeter: asNumber(dimensions.perimeter),
         index: group.sortIndex,
         subTotal: asNumber(groupTotals.subTotal),
         totalTax: asNumber(groupTotals.totalTax),
@@ -1100,6 +1435,7 @@ export class CatalogSelectionService {
         length: asNumber(dimensions.length),
         width: asNumber(dimensions.width),
         height: asNumber(dimensions.height),
+        perimeter: asNumber(dimensions.perimeter),
         index: group.sortIndex,
         subTotal: asNumber(groupTotals.subTotal),
         totalTax: asNumber(groupTotals.totalTax),
@@ -1142,6 +1478,7 @@ export class CatalogSelectionService {
         ? { id: unitTypeLookup.id, name: unitTypeLookup.name, externalReference: unitTypeLookup.externalReference }
         : undefined,
       catalogItemId: row.catalogItemId,
+      catalogMissing: hasMissingCatalogRef(row) || undefined,
       tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
       note: row.note,
       subTotal: asNumber(totals.subTotal),
@@ -1178,6 +1515,7 @@ export class CatalogSelectionService {
         ? { id: unitTypeLookup.id, name: unitTypeLookup.name, externalReference: unitTypeLookup.externalReference }
         : undefined,
       catalogItemId: row.catalogItemId,
+      catalogMissing: hasMissingCatalogRef(row) || undefined,
       reconciliation: row.reconciliation ? parseDecimal(row.reconciliation) : undefined,
       manualAllocation: row.manualAllocation ?? undefined,
       tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
@@ -1507,6 +1845,7 @@ export class CatalogSelectionService {
         if (dims.length) result.length = dims.length;
         if (dims.width) result.width = dims.width;
         if (dims.height) result.height = dims.height;
+        if (dims.perimeter) result.perimeter = dims.perimeter;
         result.index = group.sortIndex;
 
         if (groupDirectItems.length > 0) result.items = groupDirectItems;
@@ -1596,6 +1935,7 @@ export class CatalogSelectionService {
         ? { id: unitTypeLookup.id, name: unitTypeLookup.name, externalReference: unitTypeLookup.externalReference }
         : undefined,
       catalogItemId: row.catalogItemId,
+      catalogMissing: hasMissingCatalogRef(row) || undefined,
       internal: row.internal ?? undefined,
       publishStatus: row.publishStatus ?? undefined,
       mismatches,
@@ -1886,6 +2226,14 @@ export class CatalogSelectionService {
       unitCost: price.unitCost,
     });
   }
+}
+
+function hasMissingCatalogRef(row: { catalogItemId: string | null; itemPayload: unknown }): boolean {
+  if (row.catalogItemId) return false;
+  const payload = row.itemPayload;
+  if (typeof payload !== 'object' || payload === null) return false;
+  const id = (payload as Record<string, unknown>).catalogItemId;
+  return typeof id === 'string' && id.length > 0;
 }
 
 function asNumber(value: unknown): number | undefined {

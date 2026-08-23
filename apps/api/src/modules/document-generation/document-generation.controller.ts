@@ -156,7 +156,8 @@ export class DocumentGenerationController {
     if (!body.jsonataRules || !body.sourceData) {
       throw new BadRequestException('Both sourceData and jsonataRules are required');
     }
-    return this.transformService.evaluateJsonata({
+    return this.transformService.previewTransform({
+      documentType: documentType as DocumentType,
       jsonataRules: body.jsonataRules,
       sourceData: body.sourceData,
     });

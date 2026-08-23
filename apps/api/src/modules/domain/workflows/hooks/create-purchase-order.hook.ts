@@ -4,6 +4,7 @@ import { DRIZZLE, type DrizzleDB } from '../../../../database/drizzle.module';
 import { proposals, purchaseOrders } from '../../../../database/schema';
 import { PurchaseOrdersRepository } from '../../../../database/repositories';
 import { LookupResolutionService } from '../../services/lookup-resolution.service';
+import { RecordNumberService } from '../../../../common/record-number/record-number.service';
 import type { OnEnterHook, WorkflowContext } from '../workflow.interface';
 
 @Injectable()
@@ -15,6 +16,7 @@ export class CreatePurchaseOrderHook implements OnEnterHook {
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
     private readonly purchaseOrdersRepo: PurchaseOrdersRepository,
     private readonly lookupResolution: LookupResolutionService,
+    private readonly recordNumberService: RecordNumberService,
   ) {}
 
   async execute(context: WorkflowContext): Promise<void> {
@@ -47,6 +49,12 @@ export class CreatePurchaseOrderHook implements OnEnterHook {
       tx: context.tx,
     });
 
+    const internalNumber = await this.recordNumberService.next({
+      tenantId: context.tenantId,
+      entity: 'purchase_order',
+      tx: context.tx,
+    });
+
     const poData = {
       tenantId: context.tenantId,
       claimId: proposal.claimId,
@@ -54,7 +62,8 @@ export class CreatePurchaseOrderHook implements OnEnterHook {
       vendorId,
       issuerOrganisationId: context.tenantId,
       recipientOrganisationId: proposal.sourceOrganisationId ?? null,
-      purchaseOrderNumber: `PO-${proposal.proposalNumber ?? proposal.id.slice(0, 8)}`,
+      internalNumber,
+      purchaseOrderNumber: proposal.proposalNumber ?? null,
       name: proposal.name ? `PO for ${proposal.name}` : 'Auto-generated PO',
       statusLookupId,
       totalAmount: proposal.totalAmount,

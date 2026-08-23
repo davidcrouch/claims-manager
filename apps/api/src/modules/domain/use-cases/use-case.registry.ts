@@ -51,8 +51,9 @@ export class UseCaseRegistry implements OnModuleInit {
           );
         }
       } catch (err) {
-        this.logger.warn(
+        this.logger.error(
           `UseCaseRegistry.onModuleInit — ${entityType} unavailable: ${(err as Error).message}`,
+          (err as Error).stack,
         );
       }
     }

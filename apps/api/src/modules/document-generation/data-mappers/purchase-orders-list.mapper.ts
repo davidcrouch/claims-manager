@@ -3,7 +3,7 @@ import { eq, and, isNull, desc } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
 import { purchaseOrders, organizations } from '../../../database/schema';
 import type { DataMapper } from './base.mapper';
-import { formatDate, formatCurrency } from './base.mapper';
+import { formatDate, formatCurrency, displayRecordNumber, internalNumberField } from './base.mapper';
 import type { TemplateData } from '../types/document-types';
 
 @Injectable()
@@ -24,7 +24,8 @@ export class PurchaseOrdersListMapper implements DataMapper {
       .limit(500);
 
     const items = rows.map((p) => ({
-      po_number: p.purchaseOrderNumber ?? '',
+      po_number: displayRecordNumber(p.internalNumber, p.purchaseOrderNumber),
+      internal_number: internalNumberField(p.internalNumber),
       name: p.name ?? '',
       date: formatDate(p.startDate),
       total_amount: formatCurrency(p.totalAmount),

@@ -370,7 +370,7 @@ export class DashboardService {
         items: workOrders.data.map((row) => ({
           id: row.id,
           entityType: 'work_order',
-          title: humanizeTitle('Work order', row.workOrderNumber, row.name),
+          title: humanizeTitle('Work order', row.internalNumber, row.workOrderNumber, row.name),
           subtitle: jobSubtitle(jobById.get(row.jobId ?? '')),
           status: lookupName(woLookups, row.statusLookupId),
           dueAt: row.startDate ?? null,
@@ -408,7 +408,7 @@ export class DashboardService {
         items: rfqs.data.map((row) => ({
           id: row.id,
           entityType: 'rfq',
-          title: humanizeTitle('RFQ', row.rfqNumber, row.name),
+          title: humanizeTitle('RFQ', row.internalNumber, row.rfqNumber, row.name),
           subtitle: jobSubtitle(jobById.get(row.jobId ?? '')) ?? row.rfqToName ?? undefined,
           status: lookupName(rfqLookups, row.statusLookupId),
           dueAt: row.dueDate ? new Date(row.dueDate).toISOString() : null,
@@ -427,7 +427,7 @@ export class DashboardService {
         items: quotes.data.map((row) => ({
           id: row.id,
           entityType: 'quote',
-          title: humanizeTitle('Estimate', row.quoteNumber, row.name, row.reference),
+          title: humanizeTitle('Estimate', row.internalNumber, row.quoteNumber, row.name, row.reference),
           subtitle: jobSubtitle(jobById.get(row.jobId ?? '')),
           status: row.statusName ?? lookupName(quoteLookups, row.statusLookupId),
           dueAt: row.quoteDate ? new Date(row.quoteDate).toISOString() : null,

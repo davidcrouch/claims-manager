@@ -1,14 +1,15 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { TasksListClient } from '@/components/tasks/TasksListClient';
-import { buildJobNameById, toJobOptions } from '@/components/shared/job-label';
+import {buildJobNameById, toJobOptions,
+  mergeCurrentJobIntoNameById,
+  mergeCurrentJobIntoOptions } from '@/components/shared/job-label';
 import type { Job, Claim, PaginatedResponse } from '@/types/api';
 
 export const metadata = { title: 'Tasks — EnsureOS' };
 
 export default async function TasksPage({
-  searchParams,
-}: {
+  searchParams }: {
   searchParams: Promise<{
     page?: string;
     search?: string;
@@ -49,12 +50,21 @@ export default async function TasksPage({
     }
   }
 
+  const jobNameById = mergeCurrentJobIntoNameById(
+    buildJobNameById(jobsRes?.data ?? []),
+    job,
+  );
+  const jobs = mergeCurrentJobIntoOptions(
+    toJobOptions(jobsRes?.data ?? []),
+    job,
+  );
+
   return (
     <TasksListClient
       job={job}
       parentClaim={parentClaim}
-      jobNameById={buildJobNameById(jobsRes?.data ?? [])}
-      jobs={toJobOptions(jobsRes?.data ?? [])}
+      jobNameById={jobNameById}
+      jobs={jobs}
     />
   );
 }

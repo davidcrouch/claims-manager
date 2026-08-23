@@ -141,6 +141,27 @@ export function buildColumnFilterOptions(
 }
 
 /**
+ * Disambiguate duplicate display names so checkbox filters map 1:1 to ids
+ * (same failure mode as Job column labels).
+ */
+export function withUniqueNamedFilterOptions<T extends { id: string; name: string }>(
+  options: T[],
+): T[] {
+  const bases = options.map((o) => ({
+    option: o,
+    base: (o.name ?? '').trim() || o.id,
+  }));
+  const counts = new Map<string, number>();
+  for (const row of bases) {
+    counts.set(row.base, (counts.get(row.base) ?? 0) + 1);
+  }
+  return bases.map(({ option, base }) => ({
+    ...option,
+    name: (counts.get(base) ?? 0) > 1 ? `${base} (${option.id.slice(0, 8)})` : base,
+  }));
+}
+
+/**
  * Build API filter param from applied column filter state.
  * - inactive → undefined (no query filter)
  * - active + empty → null (match nothing; caller should short-circuit to empty results)
@@ -447,9 +468,22 @@ export function isArchivedStatus(name: string | null | undefined): boolean {
 
 export type ArchiveListTab = 'active' | 'archived' | 'all';
 
+const VALID_ARCHIVE_TABS = new Set<ArchiveListTab>(['active', 'archived', 'all']);
+
+/** Parse `?tab=` for Active / Archived / All list pages. */
+export function parseArchiveListTab(
+  param: string | null | undefined,
+): ArchiveListTab {
+  if (param && VALID_ARCHIVE_TABS.has(param as ArchiveListTab)) {
+    return param as ArchiveListTab;
+  }
+  return 'active';
+}
+
 /**
  * Status lookup IDs implied by Active / Archived / All tabs.
  * - all → undefined (no tab constraint)
+ * - options not loaded yet (empty array) → undefined (defer filter; avoid empty Active)
  * - active/archived with no matching lookups → null (empty result set)
  */
 export function statusIdsForArchiveListTab(
@@ -457,6 +491,7 @@ export function statusIdsForArchiveListTab(
   statusOptions: { id: string; name: string }[],
 ): string | undefined | null {
   if (tab === 'all') return undefined;
+  if (statusOptions.length === 0) return undefined;
   const ids = statusOptions
     .filter((s) => {
       const archived = isArchivedStatus(s.name);
@@ -469,12 +504,14 @@ export function statusIdsForArchiveListTab(
 /**
  * String status values implied by Active / Archived / All tabs
  * (journals, assessments, etc.).
+ * Empty `allStatuses` defers the tab filter (same as statusIdsForArchiveListTab).
  */
 export function statusValuesForArchiveListTab(
   tab: ArchiveListTab,
   allStatuses: string[],
 ): string | undefined | null {
   if (tab === 'all') return undefined;
+  if (allStatuses.length === 0) return undefined;
   const values = allStatuses.filter((s) => {
     const archived = isArchivedStatus(s);
     return tab === 'archived' ? archived : !archived;
@@ -494,20 +531,32 @@ export function mergeStatusParamWithTab(
   if (tabStatus === null) return null;
   if (!tabStatus) return columnStatus;
   if (!columnStatus) return tabStatus;
-  const tabSet = new Set(tabStatus.split(',').filter(Boolean));
-  const intersect = columnStatus.split(',').filter((id) => tabSet.has(id));
+  const tabSet = new Set(
+    tabStatus
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+  const intersect = columnStatus
+    .split(',')
+    .map((s) => s.trim())
+    .filter((id) => id && tabSet.has(id));
   return intersect.length > 0 ? intersect.join(',') : null;
 }
 
 export type TaskListTab = 'open' | 'completed' | 'all';
 
-/** Status string values implied by Open / Completed / All task list tabs. */
+/**
+ * Status string values implied by Open / Completed / All task list tabs.
+ * Open includes in-progress variants used by synced/local tasks; Completed is
+ * terminal statuses. Values must match `tasks.status` text exactly (comma-CSV).
+ */
 export function statusValuesForTaskListTab(
   tab: TaskListTab,
 ): string | undefined {
   if (tab === 'all') return undefined;
-  if (tab === 'completed') return 'Cancelled,Completed,Failed';
-  return 'In Progress,On Hold,Open';
+  if (tab === 'completed') return 'Completed,Failed,Cancelled';
+  return 'Open,In Progress,On Hold';
 }
 
 export function ValueFilterMenu(props: {

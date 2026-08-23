@@ -75,7 +75,7 @@ export function ReportBuilderButton({ documentType, label }: ReportBuilderButton
         const list = Array.isArray(tags.tags) ? tags.tags : [];
         templateTagsSummary =
           list.length > 0
-            ? `Current merge tags:\n${list.map((t: string) => `  - {${t}}`).join('\n')}`
+            ? `Current merge tags:\n${list.map((t: string) => `  - <<${t}>>`).join('\n')}`
             : 'No merge tags found in the assigned template.';
       }
     } catch {
@@ -91,9 +91,9 @@ export function ReportBuilderButton({ documentType, label }: ReportBuilderButton
         summary: [
           `You are helping build the full report pipeline for "${label}" (${documentType}).`,
           '',
-          'Pipeline parts: (1) data sources / related entities, (2) JSONata transform, (3) Word template with Docxtemplater tags.',
+          'Pipeline parts: (1) data sources / related entities, (2) JSONata transform, (3) Word template with docx-templates tags.',
           '',
-          'Docxtemplater syntax: {field}, {#items}...{/items}, {= expression}.',
+          'docx-templates syntax: <<field>>, <<FOR item IN items>>...<<END-FOR item>>, <<IF condition>>...<<END-IF>>.',
           '',
           '## Data sources',
           dataContextSummary,

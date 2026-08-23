@@ -1,7 +1,9 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { WorkOrdersPageClient } from '@/components/work-orders/WorkOrdersPageClient';
-import { buildJobNameById, toJobOptions } from '@/components/shared/job-label';
+import {buildJobNameById, toJobOptions,
+  mergeCurrentJobIntoNameById,
+  mergeCurrentJobIntoOptions } from '@/components/shared/job-label';
 import type { Job, Claim, PaginatedResponse, WorkOrder } from '@/types/api';
 
 export const metadata = { title: 'Work Orders — EnsureOS' };
@@ -28,8 +30,7 @@ function resolveStatusForTab(
 }
 
 export default async function WorkOrdersPage({
-  searchParams,
-}: {
+  searchParams }: {
   searchParams: Promise<{
     page?: string;
     sort?: string;
@@ -66,13 +67,11 @@ export default async function WorkOrdersPage({
   const statusOptions = (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map(
     (row) => ({
       id: row.id,
-      name: row.name?.trim() ? row.name : 'Unknown',
-    }),
+      name: row.name?.trim() ? row.name : 'Unknown' }),
   );
   const workOrderTypes = (Array.isArray(typeLookupsRes) ? typeLookupsRes : []).map((row) => ({
     id: row.id,
-    name: row.name?.trim() ? row.name : 'Unknown',
-  }));
+    name: row.name?.trim() ? row.name : 'Unknown' }));
 
   const resolvedStatus = resolveStatusForTab(tab, params.status, statusOptions);
 
@@ -84,8 +83,7 @@ export default async function WorkOrdersPage({
       status: resolvedStatus,
       workOrderType: params.workOrderType,
       jobId: params.jobId,
-      search: params.search,
-    })
+      search: params.search })
     .catch((err: unknown) => {
       console.error(
         'frontend:WorkOrdersPage - getWorkOrders failed:',
@@ -110,7 +108,7 @@ export default async function WorkOrdersPage({
   }
 
   const jobs = jobsRes?.data ?? [];
-  const jobNameById = buildJobNameById(jobs);
+  const jobNameById = mergeCurrentJobIntoNameById(buildJobNameById(jobs), job);
 
   return (
     <WorkOrdersPageClient
@@ -118,7 +116,7 @@ export default async function WorkOrdersPage({
       statusOptions={statusOptions}
       workOrderTypes={workOrderTypes}
       jobNameById={jobNameById}
-      jobs={toJobOptions(jobs)}
+      jobs={mergeCurrentJobIntoOptions(toJobOptions(jobs), job)}
       job={job}
       parentClaim={parentClaim}
     />

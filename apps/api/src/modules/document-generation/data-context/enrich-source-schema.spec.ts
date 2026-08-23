@@ -60,6 +60,33 @@ describe('enrichSourceSchemaWithDataContext', () => {
     expect(result.properties?._context?.properties?.groups?.type).toBe('array');
   });
 
+  it('includes groups for scope of work documents with quote as primary', () => {
+    const result = enrichSourceSchemaWithDataContext({
+      documentType: 'scope_of_work',
+      baseSchema: emptyBase,
+      enabledSlugs: null,
+    });
+    const context = result.properties?._context;
+    expect(context?.properties?.groups?.type).toBe('array');
+    expect(context?.properties?.quote).toBeDefined();
+    expect(context?.properties?.job).toBeDefined();
+    expect(context?.properties?.claim).toBeDefined();
+    expect(context?.properties?.contacts).toBeDefined();
+  });
+
+  it('includes computed totals for RFQ documents', () => {
+    const result = enrichSourceSchemaWithDataContext({
+      documentType: 'rfq',
+      baseSchema: emptyBase,
+      enabledSlugs: ['job'],
+    });
+    const totals = result.properties?._context?.properties?._totals;
+    expect(totals?.type).toBe('object');
+    expect(totals?.properties?.subtotal?.type).toBe('number');
+    expect(totals?.properties?.tax?.type).toBe('number');
+    expect(totals?.properties?.total?.type).toBe('number');
+  });
+
   it('does not mutate the cached base schema', () => {
     const base = {
       type: 'object' as const,

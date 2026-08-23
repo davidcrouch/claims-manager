@@ -202,6 +202,21 @@ export async function createContactAction(body: Record<string, unknown>): Promis
   }
 }
 
+export async function updateContactAction(
+  id: string,
+  body: Record<string, unknown>,
+): Promise<{ success: boolean; contact?: Contact; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const contact = await api.updateContact(id, body);
+    return { success: true, contact };
+  } catch (err) {
+    console.error('[updateContactAction]', err);
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to update contact' };
+  }
+}
+
 export async function ensureMeContactAction(): Promise<{
   id: string;
   type: 'CONTACT';

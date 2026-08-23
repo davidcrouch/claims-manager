@@ -1,10 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
 import { eq, and, or, ilike, asc, desc, sql, inArray, notExists } from 'drizzle-orm';
-import {
-  buildContactFillBlanksUpdate,
-  normalizePhoneDigits,
-} from '../../common/contact-identity';
+import { buildContactFillBlanksUpdate, normalizePhoneDigits } from '../../common/contact-identity';
 import { DRIZZLE } from '../drizzle.module';
 import type { DrizzleDB, DrizzleDbOrTx } from '../drizzle.module';
 import { contacts, jobContacts } from '../schema';
@@ -52,8 +49,8 @@ export class ContactsRepository {
     /** Contacts with no job_contacts rows */
     unlinkedOnly?: boolean;
     typeLookupIds?: string[];
-    /** Filter by archived state derived from contact_payload */
-    archived?: boolean;
+    /** Comma-separated status values to match against contact_payload->>'status' */
+    status?: string;
   }): Promise<{ data: ContactRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
@@ -73,22 +70,42 @@ export class ContactsRepository {
       : eq(contacts.tenantId, params.tenantId);
 
     if (params.typeLookupIds && params.typeLookupIds.length > 0) {
+      const filterIds = params.typeLookupIds;
       whereClause = and(
         whereClause,
-        inArray(contacts.typeLookupId, params.typeLookupIds),
+        or(
+          inArray(contacts.typeLookupId, filterIds),
+          sql`EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements_text(
+              CASE jsonb_typeof(${contacts.contactPayload}->'typeLookupIds')
+                WHEN 'array' THEN ${contacts.contactPayload}->'typeLookupIds'
+                ELSE '[]'::jsonb
+              END
+            ) AS elem(value)
+            WHERE elem.value IN (${sql.join(
+              filterIds.map((id) => sql`${id}`),
+              sql`, `,
+            )})
+          )`,
+        ),
       );
     }
 
-    if (params.archived === true || params.archived === false) {
-      const archivedPayload = sql`(
-        (${contacts.contactPayload}->>'archived') = 'true'
-        OR nullif(btrim(${contacts.contactPayload}->>'archivedAt'), '') IS NOT NULL
-        OR lower(coalesce(${contacts.contactPayload}->>'status', '')) IN ('archived', 'closed', 'removed')
-      )`;
-      whereClause = and(
-        whereClause,
-        params.archived ? archivedPayload : sql`NOT (${archivedPayload})`,
-      );
+    if (params.status) {
+      const statusValues = params.status
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean);
+      if (statusValues.length > 0) {
+        whereClause = and(
+          whereClause,
+          sql`lower(coalesce(${contacts.contactPayload}->>'status', 'active')) IN (${sql.join(
+            statusValues.map((s) => sql`${s}`),
+            sql`, `,
+          )})`,
+        );
+      }
     }
 
     const jobIds =
@@ -122,9 +139,12 @@ export class ContactsRepository {
         .select({ contactId: jobContacts.contactId })
         .from(jobContacts)
         .where(
-          jobIds.length === 1
-            ? eq(jobContacts.jobId, jobIds[0])
-            : inArray(jobContacts.jobId, jobIds),
+          and(
+            eq(jobContacts.tenantId, params.tenantId),
+            jobIds.length === 1
+              ? eq(jobContacts.jobId, jobIds[0])
+              : inArray(jobContacts.jobId, jobIds),
+          ),
         );
       const contactIds = [...new Set(linked.map((row) => row.contactId))];
       if (contactIds.length === 0) {

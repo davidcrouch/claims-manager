@@ -9,8 +9,8 @@ import {
   organizations,
 } from '../../../database/schema';
 import type { DataMapper } from './base.mapper';
-import { formatCurrency, formatDate } from './base.mapper';
-import { buildTemplateGroups } from './line-items.helper';
+import { formatCurrency, formatDate, displayRecordNumber, internalNumberField } from './base.mapper';
+import { buildTemplateGroups, fetchGroupLabelNameMap } from './line-items.helper';
 import type { TemplateData } from '../types/document-types';
 
 @Injectable()
@@ -51,6 +51,7 @@ export class QuoteMapper implements DataMapper {
     const quoteFrom = quote.quoteFrom as Record<string, unknown>;
     const quoteFor = quote.quoteFor as Record<string, unknown>;
 
+    const groupLabelNames = await fetchGroupLabelNameMap(this.db, groups);
     const groupData = buildTemplateGroups({
       groups,
       combos: combos.map((c) => ({ ...c, groupId: c.quoteGroupId })),
@@ -59,11 +60,13 @@ export class QuoteMapper implements DataMapper {
         groupId: i.quoteGroupId,
         comboId: i.quoteComboId,
       })),
+      groupLabelNames,
     });
 
     return {
       company_name: org?.name ?? '',
-      quote_number: quote.quoteNumber ?? '',
+      quote_number: displayRecordNumber(quote.internalNumber, quote.quoteNumber),
+      internal_number: internalNumberField(quote.internalNumber),
       quote_name: quote.name ?? '',
       quote_date: formatDate(quote.quoteDate),
       quote_reference: quote.reference ?? '',

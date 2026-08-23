@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Receipt, Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -15,28 +15,31 @@ import {
   mergeStatusParamWithTab,
   ValueFilterMenu,
   SortableColumnHeader,
-  TableEmptyRow,
-} from '@/components/shared/list-filters';
-import { resolveJobName } from '@/components/shared/job-label';
-import {
-  buildServerJobFilterOptions,
+  TableEmptyRow } from '@/components/shared/list-filters';
+import { jobDisplayName } from '@/components/shared/job-label';
+import { JobCellLink } from '@/components/shared/JobCellLink';
+import { buildServerJobFilterOptions,
   resolveServerJobFilterSelection,
   selectedJobFilterLabels,
   parseSelectedJobIds,
   toServerJobFetchParams,
   writeServerJobFilterParams,
-  jobFilterOptionsFromNameById,
-} from '@/components/shared/server-job-filter';
+  syncServerJobFilterParams,
+  buildListJobFilterOptions } from '@/components/shared/server-job-filter';
+import {
+  createListFetchSession,
+  replaceListQueryIfNeeded,
+  useListPageData } from '@/components/shared/use-list-page-data';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { EntityPageHeader, type EntityBreakdownItem } from '@/components/shared/EntityPageHeader';
 import { computeStatusBreakdown } from '@/components/layout/ListPageHeader';
 import { fetchInvoicesAction } from '@/app/(app)/invoices/actions';
-import { TablePagination } from '@/components/shared/table-pagination';
+import { entityDisplayLabel } from '@/components/shared/entity-label';
 import {
   ColumnSettingsHeaderCell,
-  useColumnVisibility,
-} from '@/components/shared/column-visibility';
+  useColumnVisibility } from '@/components/shared/column-visibility';
 import { ListArchiveButton, LIST_ARCHIVE_TH_CLASS, LIST_ARCHIVE_TD_CLASS, LIST_ARCHIVE_SPACER_TD_CLASS } from '@/components/shared/ListArchiveButton';
+import { TablePagination } from '@/components/shared/table-pagination';
 import type { Claim, Invoice, Job, PaginatedResponse } from '@/types/api';
 import { formatCurrency } from '@/components/shared/detail';
 
@@ -85,13 +88,12 @@ export function InvoicesListClient({
   jobNameById,
   headerAction,
   job,
-  parentClaim,
-}: InvoicesListClientProps) {
+  parentClaim }: InvoicesListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const jobId = searchParams.get('jobId') ?? undefined;
   const jobIdsParam = searchParams.get('jobIds') ?? undefined;
-  const [data, setData] = useState(initialData);
+  const { data, setData, beginFetch, abortFetch } = useListPageData(initialData);
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [tab, setTab] = useState<ListTab>(() => parseTab(searchParams.get('tab')));
@@ -101,8 +103,7 @@ export function InvoicesListClient({
   });
   const [columnSort, setColumnSort] = useState<{ field: InvSortField; order: 'asc' | 'desc' }>({
     field: 'updated_at',
-    order: 'desc',
-  });
+    order: 'desc' });
   const [statusNameFilter, setStatusNameFilter] = useState<Set<string>>(new Set());
   const [statusFilterActive, setStatusFilterActive] = useState(false);
 
@@ -111,8 +112,14 @@ export function InvoicesListClient({
     [jobId, jobIdsParam],
   );
   const filterJobs = useMemo(
-    () => jobFilterOptionsFromNameById(jobNameById),
-    [jobNameById],
+    () =>
+      buildListJobFilterOptions({
+        jobNameById,
+        currentJob: job
+          ? { id: job.id, label: jobDisplayName(job) }
+          : null,
+        jobId }),
+    [jobNameById, job, jobId],
   );
   const uniqueJobs = useMemo(
     () => buildServerJobFilterOptions(filterJobs),
@@ -125,8 +132,7 @@ export function InvoicesListClient({
         jobIds: jobIdsParam
           ? jobIdsParam.split(',').map((id) => id.trim()).filter(Boolean)
           : undefined,
-        jobs: filterJobs,
-      }),
+        jobs: filterJobs }),
     [jobId, jobIdsParam, filterJobs],
   );
   const { jobId: fetchJobId, jobIds: fetchJobIds } = useMemo(
@@ -138,7 +144,6 @@ export function InvoicesListClient({
     TABLE_COLUMNS,
   );
 
-  const lastFetchKeyRef = useRef<string | null>(null);
   const tabStatusIds = useMemo(
     () => statusIdsForArchiveListTab(tab, statusOptions),
     [tab, statusOptions],
@@ -164,24 +169,35 @@ export function InvoicesListClient({
     const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${jobId ?? ''}|${jobIdsParam ?? ''}`;
 
     const params = new URLSearchParams(searchParams.toString());
-    params.set('search', debouncedSearch);
-    params.set('tab', tab);
-    params.set('page', String(page));
-    params.set('sort', sortParam);
+    if (debouncedSearch) params.set('search', debouncedSearch);
+    else params.delete('search');
+    if (tab !== 'active') params.set('tab', tab);
+    else params.delete('tab');
+    if (page > 1) params.set('page', String(page));
+    else params.delete('page');
+    if (sortParam !== 'updated_at_desc') params.set('sort', sortParam);
+    else params.delete('sort');
     if (statusParam) params.set('status', statusParam);
     else params.delete('status');
-    if (jobId) params.set('jobId', jobId);
-    else params.delete('jobId');
-    if (jobIdsParam) params.set('jobIds', jobIdsParam);
-    else params.delete('jobIds');
-    router.replace(`/invoices?${params}`, { scroll: false });
+    syncServerJobFilterParams(params, jobId, jobIdsParam);
+    const next = params.toString();
+    if (
+      !replaceListQueryIfNeeded({
+        router,
+        pathname: '/invoices',
+        currentQuery: searchParams.toString(),
+        nextQuery: next,
+      })
+    ) {
+      return;
+    }
 
-    if (lastFetchKeyRef.current === fetchKey) return;
-    lastFetchKeyRef.current = fetchKey;
+    const session = createListFetchSession({ fetchKey, beginFetch, abortFetch });
+    if (!session) return;
 
     if (statusParam === null) {
       setData({ data: [], total: 0 });
-      return;
+      return session.cleanup;
     }
 
     fetchInvoicesAction({
@@ -191,10 +207,11 @@ export function InvoicesListClient({
       status: statusParam,
       jobId: fetchJobId,
       jobIds: fetchJobIds,
-      search: debouncedSearch || undefined,
-    }).then((res) => res && setData(res));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop: router.replace updates URL -> searchParams changes -> effect re-runs
-  }, [debouncedSearch, sortParam, tab, page, statusParam, jobId, jobIdsParam, fetchJobId, fetchJobIds]);
+      search: debouncedSearch || undefined }).then((res) => {
+      if (!session.cancelled && res) setData(res);
+    });
+    return session.cleanup;
+  }, [debouncedSearch, sortParam, tab, page, statusParam, jobId, jobIdsParam, fetchJobId, fetchJobIds, searchParams, router, beginFetch, abortFetch]);
 
   const handleColumnSort = (field: InvSortField) => {
     setColumnSort((prev) => {
@@ -243,8 +260,7 @@ export function InvoicesListClient({
     else working.add(name);
     const committed = commitColumnFilterSelection({
       next: working,
-      optionCount: uniqueStatuses.length,
-    });
+      optionCount: uniqueStatuses.length });
     setStatusNameFilter(committed.selected);
     setStatusFilterActive(committed.active);
     setPage(1);
@@ -253,8 +269,7 @@ export function InvoicesListClient({
   const applyStatusFilter = (next: Set<string>) => {
     const committed = commitColumnFilterSelection({
       next,
-      optionCount: uniqueStatuses.length,
-    });
+      optionCount: uniqueStatuses.length });
     setStatusNameFilter(committed.selected);
     setStatusFilterActive(committed.active);
     setPage(1);
@@ -264,8 +279,7 @@ export function InvoicesListClient({
     const resolved = resolveServerJobFilterSelection({
       next,
       options: uniqueJobs,
-      jobs: filterJobs,
-    });
+      jobs: filterJobs });
     setPage(1);
     const params = new URLSearchParams(searchParams.toString());
     writeServerJobFilterParams(params, resolved);
@@ -285,8 +299,7 @@ export function InvoicesListClient({
     return sum.toLocaleString(undefined, {
       style: 'currency',
       currency: 'AUD',
-      maximumFractionDigits: 0,
-    });
+      maximumFractionDigits: 0 });
   }, [visibleRows]);
 
   return (
@@ -386,8 +399,7 @@ export function InvoicesListClient({
                               active: jobFilterActive,
                               onApply: applyJobFilter,
                               menuTitle: 'Filter by job',
-                              itemNoun: { singular: 'job', plural: 'jobs' },
-                            }
+                              itemNoun: { singular: 'job', plural: 'jobs' } }
                           : col.key === 'status'
                             ? {
                                 options: uniqueStatuses,
@@ -395,8 +407,7 @@ export function InvoicesListClient({
                                 active: statusFilterActive,
                                 onApply: applyStatusFilter,
                                 menuTitle: 'Filter by status',
-                                itemNoun: { singular: 'status', plural: 'statuses' },
-                              }
+                                itemNoun: { singular: 'status', plural: 'statuses' } }
                             : undefined
                       }
                     />
@@ -416,7 +427,7 @@ export function InvoicesListClient({
                   <TableEmptyRow colSpan={visibleCount + 2} label="No invoices found." />
                 ) : (
                   visibleRows.map((inv) => {
-                  const num = inv.invoiceNumber ?? inv.id;
+                  const num = entityDisplayLabel(inv.internalNumber, inv.invoiceNumber, inv.id);
                   const statusName = inv.status?.name ?? 'Unknown';
                   return (
                     <tr
@@ -435,7 +446,7 @@ export function InvoicesListClient({
                       )}
                       {isVisible('job') && (
                         <td className="px-4 py-3 text-slate-600">
-                          {resolveJobName(inv.jobId, jobNameById)}
+                          <JobCellLink jobId={inv.jobId} jobNameById={jobNameById} />
                         </td>
                       )}
                       {isVisible('status') && (
@@ -476,8 +487,7 @@ export function InvoicesListClient({
                             setData((prev) => ({
                               ...prev,
                               data: prev.data.filter((row) => row.id !== id),
-                              total: Math.max(0, prev.total - 1),
-                            }));
+                              total: Math.max(0, prev.total - 1) }));
                           }}
                         />
                       </td>

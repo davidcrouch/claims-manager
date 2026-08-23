@@ -3,7 +3,7 @@ import { eq, and, isNull, aliasedTable } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
 import { jobs, claims, organizations, lookupValues } from '../../../database/schema';
 import type { DataMapper } from './base.mapper';
-import { formatCurrency, formatDate, formatAddress } from './base.mapper';
+import { formatCurrency, formatDate, formatAddress, internalNumberField } from './base.mapper';
 import type { TemplateData } from '../types/document-types';
 
 @Injectable()
@@ -66,6 +66,7 @@ export class JobMapper implements DataMapper {
     return {
       company_name: org?.name ?? '',
       job_name: job.name ?? '',
+      internal_number: internalNumberField(job.internalNumber),
       job_reference: job.externalReference ?? job.externalJobId ?? '',
       job_status: row.statusName ?? '',
       job_type: row.jobTypeName ?? '',

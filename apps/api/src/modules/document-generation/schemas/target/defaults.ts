@@ -53,11 +53,18 @@ const scopeTargetProps = {
   combos: { type: 'array', items: { type: 'object', properties: comboTargetProps } },
 };
 
+const groupDimensionsTargetProps = {
+  length: { type: 'string', description: 'Group length' },
+  width: { type: 'string', description: 'Group width' },
+  height: { type: 'string', description: 'Group height' },
+};
+
 const groupedDocSchema = (prefix: string, extraProps: Record<string, unknown> = {}) => ({
   type: 'object',
   properties: {
     company: { type: 'string', description: 'Company name' },
     [`${prefix}_number`]: { type: 'string', description: `${prefix} number` },
+    internal_number: { type: 'string', description: 'Tenant internal record number' },
     name: { type: 'string', description: `${prefix} name` },
     date: { type: 'string', description: 'Primary date' },
     note: { type: 'string', description: 'Notes / comments' },
@@ -75,6 +82,7 @@ const groupedDocSchema = (prefix: string, extraProps: Record<string, unknown> = 
           name: { type: 'string' },
           note: { type: 'string' },
           subtotal: { type: 'string' },
+          dimensions: { type: 'object', properties: groupDimensionsTargetProps },
           items: { type: 'array', items: { type: 'object', properties: itemTargetProps } },
           combos: { type: 'array', items: { type: 'object', properties: comboTargetProps } },
           scopes: { type: 'array', items: { type: 'object', properties: scopeTargetProps } },
@@ -87,14 +95,82 @@ const groupedDocSchema = (prefix: string, extraProps: Record<string, unknown> = 
 
 const itemJsonata = `{ "name": item_name, "description": item_description, "category": item_category, "quantity": item_quantity, "unit_cost": item_unit_cost, "tax": item_tax, "total": item_total, "note": item_note }`;
 
-const comboJsonata = `{ "name": combo_name, "description": combo_description, "quantity": combo_quantity, "subtotal": combo_subtotal, "note": combo_note, "items": items.(${itemJsonata}) }`;
+const asArray = (field: string) => `($exists(${field}) ? ${field} : [])`;
 
-const scopeJsonata = `{ "name": scope_name, "description": scope_description, "quantity": scope_quantity, "subtotal": scope_subtotal, "note": scope_note, "items": items.(${itemJsonata}), "combos": combos.(${comboJsonata}) }`;
+/** JSONata unwraps single-element sequences; docx-templates FOR requires arrays. */
+const mapArray = (field: string, mapExpr: string) =>
+  `$append([], ${asArray(field)}.(${mapExpr}))`;
 
-const groupedItemsJsonata = `groups.{ "name": group_name, "note": group_note, "subtotal": group_subtotal, "items": items.(${itemJsonata}), "combos": combos.(${comboJsonata}), "scopes": scopes.(${scopeJsonata}) }`;
+const comboJsonata = `{ "name": combo_name, "description": combo_description, "quantity": combo_quantity, "subtotal": combo_subtotal, "note": combo_note, "items": ${mapArray('items', itemJsonata)} }`;
+
+const scopeJsonata = `{ "name": scope_name, "description": scope_description, "quantity": scope_quantity, "subtotal": scope_subtotal, "note": scope_note, "items": ${mapArray('items', itemJsonata)}, "combos": ${mapArray('combos', comboJsonata)} }`;
+
+const groupJsonataFields =
+  `"name": group_name, "note": group_note, "subtotal": group_subtotal, "dimensions": { "length": group_length, "width": group_width, "height": group_height, "perimeter": group_perimeter }`;
+
+const groupedItemsJsonata = `$append([], groups.{ ${groupJsonataFields}, "items": ${mapArray('items', itemJsonata)}, "combos": ${mapArray('combos', comboJsonata)}, "scopes": ${mapArray('scopes', scopeJsonata)} })`;
 
 /** Groups live under `_context.groups` for data-context document types. */
-const groupedItemsJsonataCtx = `_context.groups.{ "name": group_name, "note": group_note, "subtotal": group_subtotal, "items": items.(${itemJsonata}), "combos": combos.(${comboJsonata}), "scopes": scopes.(${scopeJsonata}) }`;
+const groupedItemsJsonataCtx = `$append([], ($exists(_context.groups) ? _context.groups : []).{ ${groupJsonataFields}, "items": ${mapArray('items', itemJsonata)}, "combos": ${mapArray('combos', comboJsonata)}, "scopes": ${mapArray('scopes', scopeJsonata)} })`;
+
+const preferInternalNumber = (ctx: string, externalField: string) =>
+  `(${ctx}.internalNumber ? ${ctx}.internalNumber : ${ctx}.${externalField})`;
+
+const PARTY_CONTACT_VARS = `
+  $pickInsured := function($list) { $count($list) > 0 ? $list[isInsured][0] : null };
+  $pickTenant := function($list) { $count($list) > 0 ? $list[isTenant][0] : null };
+  $insuredContact := $pickInsured(_context.contacts) ? $pickInsured(_context.contacts) : $pickInsured(_context.claim_contacts);
+  $tenantContact := $pickTenant(_context.contacts) ? $pickTenant(_context.contacts) : $pickTenant(_context.claim_contacts);
+  $client := {
+    "name": $contactName($insuredContact),
+    "address_line1": $jobAddressLine1(_context.job),
+    "address_line2": $jobAddressLine2(_context.job),
+    "home_phone": $contactPhone($insuredContact),
+    "mobile_phone": $contactMobile($insuredContact),
+    "other_phone": "",
+    "email": $contactEmail($insuredContact)
+  };
+  $tenant := {
+    "name": $contactName($tenantContact),
+    "address_line1": "",
+    "address_line2": "",
+    "home_phone": $contactPhone($tenantContact),
+    "mobile_phone": $contactMobile($tenantContact),
+    "other_phone": "",
+    "email": $contactEmail($tenantContact)
+  };
+`;
+
+const partyContactTargetProps = {
+  client: {
+    type: 'object',
+    properties: {
+      name: { type: 'string' },
+      address_line1: { type: 'string' },
+      address_line2: { type: 'string' },
+      home_phone: { type: 'string' },
+      mobile_phone: { type: 'string' },
+      other_phone: { type: 'string' },
+      email: { type: 'string' },
+    },
+  },
+  tenant: {
+    type: 'object',
+    properties: {
+      name: { type: 'string' },
+      address_line1: { type: 'string' },
+      address_line2: { type: 'string' },
+      home_phone: { type: 'string' },
+      mobile_phone: { type: 'string' },
+      other_phone: { type: 'string' },
+      email: { type: 'string' },
+    },
+  },
+};
+
+function withPartyContacts(body: string): string {
+  return `(\n${PARTY_CONTACT_VARS}\n${body}\n)`;
+}
 
 export const TRANSFORM_DEFAULTS: Record<DocumentType, TransformDefault> = {
   // ── Detail: Grouped financial documents (data-context source) ────────
@@ -102,7 +178,8 @@ export const TRANSFORM_DEFAULTS: Record<DocumentType, TransformDefault> = {
   quote: {
     jsonataRules: `{
   "company": _context.organization.name,
-  "quote_number": _context.quote.quoteNumber,
+  "quote_number": ${preferInternalNumber('_context.quote', 'quoteNumber')},
+  "internal_number": _context.quote.internalNumber,
   "name": _context.quote.name,
   "date": $formatDate(_context.quote.quoteDate),
   "reference": _context.quote.reference,
@@ -131,31 +208,38 @@ export const TRANSFORM_DEFAULTS: Record<DocumentType, TransformDefault> = {
   },
 
   purchase_order: {
-    jsonataRules: `{
+    jsonataRules: withPartyContacts(`{
   "company": _context.organization.name,
-  "po_number": _context.purchase_order.purchaseOrderNumber,
+  "po_number": ${preferInternalNumber('_context.purchase_order', 'purchaseOrderNumber')},
+  "internal_number": _context.purchase_order.internalNumber,
   "name": _context.purchase_order.name,
+  "date": $formatDate($now()),
   "start_date": $formatDate(_context.purchase_order.startDate),
   "end_date": $formatDate(_context.purchase_order.endDate),
   "note": _context.purchase_order.note,
   "to": {
     "name": _context.purchase_order.poTo.name,
     "email": _context.purchase_order.poToEmail,
-    "address": _context.purchase_order.poTo.address
+    "address": _context.purchase_order.poTo.address,
+    "address_line1": _context.purchase_order.poTo.address ? _context.purchase_order.poTo.address : "",
+    "address_line2": ""
   },
   "from": { "name": _context.purchase_order.poFrom.name, "address": _context.purchase_order.poFrom.address },
   "for_name": _context.purchase_order.poForName ? _context.purchase_order.poForName : _context.purchase_order.poFor.name,
   "total": $formatCurrency(_context.purchase_order.totalAmount),
   "adjusted_total": $formatCurrency(_context.purchase_order.adjustedTotal),
+  "client": $client,
+  "tenant": $tenant,
   "groups": ${groupedItemsJsonataCtx}
-}`,
-    targetSchema: groupedDocSchema('po', { adjusted_total: { type: 'string' } }),
+}`),
+    targetSchema: groupedDocSchema('po', { adjusted_total: { type: 'string' }, ...partyContactTargetProps }),
   },
 
   work_order: {
-    jsonataRules: `{
+    jsonataRules: withPartyContacts(`{
   "company": _context.organization.name,
-  "wo_number": _context.work_order.workOrderNumber,
+  "wo_number": ${preferInternalNumber('_context.work_order', 'workOrderNumber')},
+  "internal_number": _context.work_order.internalNumber,
   "name": _context.work_order.name,
   "start_date": $formatDate(_context.work_order.startDate),
   "end_date": $formatDate(_context.work_order.endDate),
@@ -164,15 +248,23 @@ export const TRANSFORM_DEFAULTS: Record<DocumentType, TransformDefault> = {
   "to": {
     "name": _context.work_order.woTo.name,
     "email": _context.work_order.woToEmail,
-    "address": _context.work_order.woTo.address
+    "address": _context.work_order.woTo.address,
+    "address_line1": _context.work_order.woTo.address ? _context.work_order.woTo.address : "",
+    "address_line2": ""
   },
   "from": { "name": _context.work_order.woFrom.name, "address": _context.work_order.woFrom.address },
   "for_name": _context.work_order.woForName ? _context.work_order.woForName : _context.work_order.woFor.name,
   "total": $formatCurrency(_context.work_order.totalAmount),
   "adjusted_total": $formatCurrency(_context.work_order.adjustedTotal),
+  "client": $client,
+  "tenant": $tenant,
   "groups": ${groupedItemsJsonataCtx}
-}`,
-    targetSchema: groupedDocSchema('wo', { scope: { type: 'string' }, adjusted_total: { type: 'string' } }),
+}`),
+    targetSchema: groupedDocSchema('wo', {
+      scope: { type: 'string' },
+      adjusted_total: { type: 'string' },
+      ...partyContactTargetProps,
+    }),
   },
 
   proposal: {
@@ -199,9 +291,10 @@ export const TRANSFORM_DEFAULTS: Record<DocumentType, TransformDefault> = {
   },
 
   rfq: {
-    jsonataRules: `{
+    jsonataRules: withPartyContacts(`{
   "company": _context.organization.name,
-  "rfq_number": _context.rfq.rfqNumber,
+  "rfq_number": ${preferInternalNumber('_context.rfq', 'rfqNumber')},
+  "internal_number": _context.rfq.internalNumber,
   "name": _context.rfq.name,
   "note": _context.rfq.note,
   "sent_date": $formatDate(_context.rfq.sentDate),
@@ -209,16 +302,35 @@ export const TRANSFORM_DEFAULTS: Record<DocumentType, TransformDefault> = {
   "received_date": $formatDate(_context.rfq.receivedDate),
   "include_pricing": $yn(_context.rfq.includePricing),
   "include_quantities": $yn(_context.rfq.includeQuantities),
+  "subtotal": $formatCurrency(_context._totals.subtotal),
+  "tax": $formatCurrency(_context._totals.tax),
+  "total": $formatCurrency(_context._totals.total),
   "to": {
     "name": _context.rfq.rfqToName ? _context.rfq.rfqToName : _context.rfq.rfqTo.name,
-    "email": _context.rfq.rfqToEmail ? _context.rfq.rfqToEmail : _context.rfq.rfqTo.email
+    "email": _context.rfq.rfqToEmail ? _context.rfq.rfqToEmail : _context.rfq.rfqTo.email,
+    "company": _context.rfq.rfqTo.company ? _context.rfq.rfqTo.company : (_context.rfq.rfqToName ? _context.rfq.rfqToName : _context.rfq.rfqTo.name),
+    "address_line1": _context.rfq.rfqTo.address ? _context.rfq.rfqTo.address : "",
+    "address_line2": ""
   },
   "from": { "name": _context.rfq.rfqFrom.name },
+  "client": $client,
+  "tenant": $tenant,
   "groups": ${groupedItemsJsonataCtx}
-}`,
+}`),
     targetSchema: groupedDocSchema('rfq', {
       sent_date: { type: 'string' }, due_date: { type: 'string' }, received_date: { type: 'string' },
       include_pricing: { type: 'string' }, include_quantities: { type: 'string' },
+      to: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          email: { type: 'string' },
+          company: { type: 'string' },
+          address_line1: { type: 'string' },
+          address_line2: { type: 'string' },
+        },
+      },
+      ...partyContactTargetProps,
     }),
   },
 
@@ -227,7 +339,8 @@ export const TRANSFORM_DEFAULTS: Record<DocumentType, TransformDefault> = {
   invoice: {
     jsonataRules: `{
   "company": _context.organization.name,
-  "number": _context.invoice.invoiceNumber,
+  "number": ${preferInternalNumber('_context.invoice', 'invoiceNumber')},
+  "internal_number": _context.invoice.internalNumber,
   "date": $formatDate(_context.invoice.issueDate),
   "received": $formatDate(_context.invoice.receivedDate),
   "notes": _context.invoice.comments,
@@ -236,18 +349,19 @@ export const TRANSFORM_DEFAULTS: Record<DocumentType, TransformDefault> = {
   "total": $formatCurrency(_context.invoice.totalAmount),
   "excess": $formatCurrency(_context.invoice.excessAmount),
   "po": {
-    "number": _context.purchase_order.purchaseOrderNumber,
+    "number": ${preferInternalNumber('_context.purchase_order', 'purchaseOrderNumber')},
+    "internal_number": _context.purchase_order.internalNumber,
     "name": _context.purchase_order.name
   }
 }`,
     targetSchema: {
       type: 'object',
       properties: {
-        company: { type: 'string' }, number: { type: 'string' },
+        company: { type: 'string' }, number: { type: 'string' }, internal_number: { type: 'string' },
         date: { type: 'string' }, received: { type: 'string' }, notes: { type: 'string' },
         subtotal: { type: 'string' }, tax: { type: 'string' }, total: { type: 'string' },
         excess: { type: 'string' },
-        po: { type: 'object', properties: { number: { type: 'string' }, name: { type: 'string' } } },
+        po: { type: 'object', properties: { number: { type: 'string' }, internal_number: { type: 'string' }, name: { type: 'string' } } },
       },
     },
   },
@@ -285,6 +399,7 @@ export const TRANSFORM_DEFAULTS: Record<DocumentType, TransformDefault> = {
     jsonataRules: `{
   "company": _context.organization.name,
   "name": _context.job.name,
+  "internal_number": _context.job.internalNumber,
   "reference": _context.job.externalReference ? _context.job.externalReference : _context.job.externalJobId,
   "status": _context.job.statusName,
   "type": _context.job.jobTypeName,
@@ -308,7 +423,7 @@ export const TRANSFORM_DEFAULTS: Record<DocumentType, TransformDefault> = {
     targetSchema: {
       type: 'object',
       properties: {
-        company: { type: 'string' }, name: { type: 'string' }, reference: { type: 'string' },
+        company: { type: 'string' }, name: { type: 'string' }, internal_number: { type: 'string' }, reference: { type: 'string' },
         status: { type: 'string' }, type: { type: 'string' }, request_date: { type: 'string' },
         excess: { type: 'string' }, make_safe: { type: 'string' }, instructions: { type: 'string' },
         address: { type: 'string' }, suburb: { type: 'string' }, state: { type: 'string' }, postcode: { type: 'string' },
@@ -321,20 +436,30 @@ export const TRANSFORM_DEFAULTS: Record<DocumentType, TransformDefault> = {
   },
 
   scope_of_work: {
-    jsonataRules: `{
+    jsonataRules: `(
+  $pickInsured := function($list) { $count($list) > 0 ? $list[isInsured][0] : null };
+  $insuredContact := $pickInsured(_context.contacts) ? $pickInsured(_context.contacts) : $pickInsured(_context.claim_contacts);
+  {
   "company": _context.organization.name,
-  "name": _context.job.name,
-  "reference": _context.job.externalReference ? _context.job.externalReference : _context.job.externalJobId,
+  "name": _context.quote.name,
+  "internal_number": _context.quote.internalNumber,
+  "reference": _context.quote.reference ? _context.quote.reference : ${preferInternalNumber('_context.quote', 'quoteNumber')},
   "status": _context.job.statusName,
   "type": _context.job.jobTypeName,
   "request_date": $formatDate(_context.job.requestDate),
   "excess": $formatCurrency(_context.job.excess),
   "make_safe": $yn(_context.job.makeSafeRequired),
   "instructions": _context.job.jobInstructions,
-  "address": _context.job.address,
+  "address": $jobAddressLine1(_context.job),
   "suburb": _context.job.addressSuburb,
   "state": _context.job.addressState,
   "postcode": _context.job.addressPostcode,
+  "insured": {
+    "name": $contactName($insuredContact),
+    "phone": $contactPhone($insuredContact),
+    "mobile": $contactMobile($insuredContact),
+    "email": $contactEmail($insuredContact)
+  },
   "claim": {
     "number": _context.claim.claimNumber,
     "reference": _context.claim.externalReference,
@@ -342,19 +467,25 @@ export const TRANSFORM_DEFAULTS: Record<DocumentType, TransformDefault> = {
     "incident": _context.claim.incidentDescription
   },
   "scope": _context.job.jobInstructions,
-  "date": $formatDate($now())
-}`,
+  "date": $formatDate($now()),
+  "groups": ${groupedItemsJsonataCtx}
+}
+)`,
     targetSchema: {
       type: 'object',
       properties: {
-        company: { type: 'string' }, name: { type: 'string' }, reference: { type: 'string' },
+        company: { type: 'string' }, name: { type: 'string' }, internal_number: { type: 'string' }, reference: { type: 'string' },
         status: { type: 'string' }, type: { type: 'string' }, request_date: { type: 'string' },
         excess: { type: 'string' }, make_safe: { type: 'string' }, instructions: { type: 'string' },
         address: { type: 'string' }, suburb: { type: 'string' }, state: { type: 'string' }, postcode: { type: 'string' },
+        insured: { type: 'object', properties: {
+          name: { type: 'string' }, phone: { type: 'string' }, mobile: { type: 'string' }, email: { type: 'string' },
+        }},
         claim: { type: 'object', properties: {
           number: { type: 'string' }, reference: { type: 'string' }, date_of_loss: { type: 'string' }, incident: { type: 'string' },
         }},
         scope: { type: 'string' }, date: { type: 'string' },
+        groups: groupedDocSchema('quote').properties.groups,
       },
     },
   },
@@ -510,7 +641,7 @@ export const TRANSFORM_DEFAULTS: Record<DocumentType, TransformDefault> = {
     targetSchema: {
       type: 'object',
       properties: {
-        company: { type: 'string' }, name: { type: 'string' }, reference: { type: 'string' },
+        company: { type: 'string' }, name: { type: 'string' }, internal_number: { type: 'string' }, reference: { type: 'string' },
         phone: { type: 'string' }, after_hours_phone: { type: 'string' },
         postcode: { type: 'string' }, state: { type: 'string' }, city: { type: 'string' },
         country: { type: 'string' }, active: { type: 'string' }, date: { type: 'string' },
@@ -529,38 +660,45 @@ export const TRANSFORM_DEFAULTS: Record<DocumentType, TransformDefault> = {
   $dmg := $a.damage ? $a.damage : {};
   $ms := $a.makeSafe ? $a.makeSafe : {};
   $ta := $a.temporaryAccommodation ? $a.temporaryAccommodation : {};
+  $sp := $a.specialists ? $a.specialists : {};
   $rec := $a.recommendation ? $a.recommendation : {};
   $details := $haz.hazardDetails ? $haz.hazardDetails : {};
+  $structures := $str($bld.additionalStructures);
   {
     "company_name": _context.organization.name,
     "assessment_name": $a.name,
     "status": $a.status,
     "job_name": $job.name,
     "job_reference": $job.externalReference,
-    "claim_recommendation": $str($rec.claimRecommendation),
+    "address_attended": $yn($att.addressAttended),
+    "other_address": $str($att.otherAddress),
+    "date_booked": $formatDate($att.siteAttendanceDate),
+    "persons_attending": $str($att.personsAttending),
+    "builder_estimator_name": $str($att.builderEstimatorName),
+    "builder_estimator_phone": $str($att.builderEstimatorPhone),
+    "iag_inspection_required": $yn($att.insuranceAssessorAttended),
+    "insurance_assessor_name": $str($att.insuranceAssessorName),
+    "insurance_assessor_phone": $str($att.insuranceAssessorPhone),
+    "occupancy_type": $str($att.occupancyType),
+    "square_metres": $str($bld.houseM2),
+    "building_age": $str($bld.estimatedBuildYear),
+    "building_type": $str($bld.buildingType),
     "design_type": $str($bld.designType),
     "construction": $str($bld.constructionType),
     "roof_type": $str($bld.roofType),
-    "building_type": $str($bld.buildingType),
-    "make_safe": $yn($ms.makeSafeRequired),
-    "make_safe_type": $str($ms.makeSafeType),
+    "additional_structures": $structures,
+    "other_structures": $str($bld.otherStructures),
     "squares": $str($bld.squares),
-    "building_age": $str($bld.estimatedBuildYear),
-    "square_metres": $str($bld.houseM2),
-    "date_booked": $formatDate($att.siteAttendanceDate),
-    "overall_condition_acceptable": $yn($bld.propertyCondition),
-    "iag_inspection_required": $yn($att.insuranceAssessorAttended),
-    "make_safe_completion_date": $formatDate($ms.dateMakeSafeCompleted),
     "main_roof_damage": $yn($bld.mainHouseRoofDamage),
-    "date_main_roof_repaired": $formatDate($ms.dateMainRoofRepaired),
+    "overall_condition_acceptable": $yn($bld.propertyCondition),
+    "furniture_removal_storage": $yn($bld.furnitureRemovalStorage),
+    "detached_garage": $contains($structures, "Garage") ? "Yes" : "No",
+    "sheds": $contains($structures, "Shed") ? "Yes" : "No",
+    "swimming_pool": $contains($structures, "Pool") ? "Yes" : "No",
+    "detached_granny_flat": $contains($structures, "Granny") ? "Yes" : "No",
     "habitable": $yn($hab.habitable),
-    "mould": $contains($lowercase($str($haz.environmentalHazards)), "mould") ? "Yes" : "No",
-    "asbestos_on_site": $contains($lowercase($str($haz.safetyHazards)), "asbestos") ? "Yes" : "No",
-    "detached_garage": $contains($str($bld.additionalStructures), "Garage") ? "Yes" : "No",
-    "sheds": $contains($str($bld.additionalStructures), "Shed") ? "Yes" : "No",
-    "swimming_pool": $contains($str($bld.additionalStructures), "Pool") ? "Yes" : "No",
-    "detached_granny_flat": $contains($str($bld.additionalStructures), "Granny") ? "Yes" : "No",
-    "damage_caused_by_listed_event": $str($dmg.hasDamageCoveredByPolicy),
+    "uninhabitable_reason": $str($hab.uninhabitableReason),
+    "other_uninhabitable_reason": $str($hab.otherUninhabitableReason),
     "hazard_pool_fencing": $yn($details.poolFencing.flagged),
     "hazard_pool_fencing_comment": $str($details.poolFencing.comment),
     "hazard_electrical_gas": $yn($details.electrical.flagged),
@@ -570,18 +708,44 @@ export const TRANSFORM_DEFAULTS: Record<DocumentType, TransformDefault> = {
     "hazard_structural": $yn($details.structural.flagged),
     "hazard_structural_comment": $str($details.structural.comment),
     "hazard_other": $str($details.other) ? $str($details.other) : $str($haz.safetyHazards),
-    "temp_accom_required_immediately": $yn($ta.requiredImmediately),
-    "temp_accom_immediate_estimate_days": $str($ta.immediateEstimateDays),
-    "temp_repairs_to_make_livable": $str($ta.tempRepairsToMakeLivable),
-    "temp_accom_required_during_repairs": $yn($ta.requiredDuringRepairs),
-    "temp_accom_repairs_estimate_days": $str($ta.repairsEstimateDays),
-    "work_while_in_accommodation": $str($ta.workWhileInAccommodation),
-    "client_discussion": $str($rec.clientDiscussions),
+    "safety_hazards": $str($haz.safetyHazards),
+    "environmental_hazards": $str($haz.environmentalHazards),
+    "mould": $contains($lowercase($str($haz.environmentalHazards)), "mould") ? "Yes" : "No",
+    "asbestos_on_site": $contains($lowercase($str($haz.safetyHazards)), "asbestos") ? "Yes" : "No",
     "resultant_damage": $str($dmg.damageObserved),
     "cause_of_damage": $str($dmg.causeOfDamage),
+    "damage_caused_by_listed_event": $str($dmg.hasDamageCoveredByPolicy),
+    "pre_existing_maintenance_issues": $yn($dmg.preExistingMaintenanceIssues),
+    "pre_existing_relate_damage": $str($dmg.preExistingRelateDamage),
     "maintenance_related_issues": $str($dmg.maintenanceDefectIssues),
+    "works_required_to_address_damage": $str($dmg.worksRequiredToAddressDamage),
+    "make_safe": $yn($ms.makeSafeRequired),
+    "make_safe_type": $str($ms.makeSafeType),
+    "make_safe_completion_date": $formatDate($ms.dateMakeSafeCompleted),
+    "date_main_roof_repaired": $formatDate($ms.dateMainRoofRepaired),
+    "temp_accom_required": $str($ta.required),
+    "temp_accom_estimated_amount": $str($ta.estimatedAmount),
+    "temp_accom_estimated_duration": $str($ta.estimatedDuration),
+    "temp_accom_required_immediately": $yn($ta.requiredImmediately),
+    "temp_accom_immediate_estimate_days": $str($ta.immediateEstimateDays),
+    "temp_accom_required_during_repairs": $yn($ta.requiredDuringRepairs),
+    "temp_accom_repairs_estimate_days": $str($ta.repairsEstimateDays),
+    "temp_repairs_to_make_livable": $str($ta.tempRepairsToMakeLivable),
+    "work_while_in_accommodation": $str($ta.workWhileInAccommodation),
+    "specialist_required": $yn($sp.specialistRequired),
+    "specialist_type": $str($sp.specialistType),
+    "claim_recommendation": $str($rec.claimRecommendation),
+    "cost_estimate_for_repairs": $str($rec.costEstimateForRepairs),
+    "estimated_repair_time": $str($rec.estimatedRepairTime),
+    "estimated_repair_duration": $str($rec.estimatedRepairDuration),
+    "insured_advised": $yn($rec.hasInsuredAdvised),
+    "client_willing_to_proceed": $yn($rec.clientWillingToProceed),
+    "customer_arranged_repairs": $yn($rec.customerArrangedRepairs),
+    "arranged_repair_comments": $str($rec.arrangedRepairComments),
+    "client_discussion": $str($rec.clientDiscussions),
     "comments": $str($rec.specialNotes),
     "variances_of_scope": $str($rec.conclusion),
+    "builder_licenses": $str($rec.builderLicenses),
     "created_at": $formatDate($a.createdAt),
     "report_date": $formatDate($now())
   }
@@ -607,24 +771,24 @@ export const TRANSFORM_DEFAULTS: Record<DocumentType, TransformDefault> = {
   // ── List reports ─────────────────────────────────────────────────────
 
   jobs_list: {
-    jsonataRules: listJsonata(`{ "name": name, "reference": reference, "date": request_date, "suburb": suburb, "state": state }`),
+    jsonataRules: listJsonata(`{ "name": name, "internal_number": internal_number, "reference": reference, "date": request_date, "suburb": suburb, "state": state }`),
     targetSchema: listTargetSchema({
-      name: { type: 'string' }, reference: { type: 'string' }, date: { type: 'string' },
+      name: { type: 'string' }, internal_number: { type: 'string' }, reference: { type: 'string' }, date: { type: 'string' },
       suburb: { type: 'string' }, state: { type: 'string' },
     }),
   },
 
   quotes_list: {
-    jsonataRules: listJsonata(`{ "number": quote_number, "name": name, "date": date, "total": total_amount }`),
+    jsonataRules: listJsonata(`{ "number": quote_number, "internal_number": internal_number, "name": name, "date": date, "total": total_amount }`),
     targetSchema: listTargetSchema({
-      number: { type: 'string' }, name: { type: 'string' }, date: { type: 'string' }, total: { type: 'string' },
+      number: { type: 'string' }, internal_number: { type: 'string' }, name: { type: 'string' }, date: { type: 'string' }, total: { type: 'string' },
     }),
   },
 
   invoices_list: {
-    jsonataRules: listJsonata(`{ "number": invoice_number, "name": name, "date": date, "total": total_amount }`),
+    jsonataRules: listJsonata(`{ "number": invoice_number, "internal_number": internal_number, "name": name, "date": date, "total": total_amount }`),
     targetSchema: listTargetSchema({
-      number: { type: 'string' }, name: { type: 'string' }, date: { type: 'string' }, total: { type: 'string' },
+      number: { type: 'string' }, internal_number: { type: 'string' }, name: { type: 'string' }, date: { type: 'string' }, total: { type: 'string' },
     }),
   },
 
@@ -636,16 +800,16 @@ export const TRANSFORM_DEFAULTS: Record<DocumentType, TransformDefault> = {
   },
 
   work_orders_list: {
-    jsonataRules: listJsonata(`{ "number": wo_number, "name": name, "date": start_date, "total": total_amount }`),
+    jsonataRules: listJsonata(`{ "number": wo_number, "internal_number": internal_number, "name": name, "date": start_date, "total": total_amount }`),
     targetSchema: listTargetSchema({
-      number: { type: 'string' }, name: { type: 'string' }, date: { type: 'string' }, total: { type: 'string' },
+      number: { type: 'string' }, internal_number: { type: 'string' }, name: { type: 'string' }, date: { type: 'string' }, total: { type: 'string' },
     }),
   },
 
   purchase_orders_list: {
-    jsonataRules: listJsonata(`{ "number": po_number, "name": name, "date": date, "total": total_amount }`),
+    jsonataRules: listJsonata(`{ "number": po_number, "internal_number": internal_number, "name": name, "date": date, "total": total_amount }`),
     targetSchema: listTargetSchema({
-      number: { type: 'string' }, name: { type: 'string' }, date: { type: 'string' }, total: { type: 'string' },
+      number: { type: 'string' }, internal_number: { type: 'string' }, name: { type: 'string' }, date: { type: 'string' }, total: { type: 'string' },
     }),
   },
 
@@ -657,9 +821,9 @@ export const TRANSFORM_DEFAULTS: Record<DocumentType, TransformDefault> = {
   },
 
   rfqs_list: {
-    jsonataRules: listJsonata(`{ "number": rfq_number, "name": name, "date": date }`),
+    jsonataRules: listJsonata(`{ "number": rfq_number, "internal_number": internal_number, "name": name, "date": date }`),
     targetSchema: listTargetSchema({
-      number: { type: 'string' }, name: { type: 'string' }, date: { type: 'string' },
+      number: { type: 'string' }, internal_number: { type: 'string' }, name: { type: 'string' }, date: { type: 'string' },
     }),
   },
 

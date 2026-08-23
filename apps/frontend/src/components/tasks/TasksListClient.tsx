@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { CheckSquare, Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -13,8 +13,7 @@ import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { PrintButton } from '@/components/shared/PrintButton';
 import { EntityPageHeader } from '@/components/shared/EntityPageHeader';
 import { computeStatusBreakdown } from '@/components/layout/ListPageHeader';
-import {
-  formatDate,
+import { formatDate,
   ValueFilterMenu,
   SortableColumnHeader,
   commitColumnFilterSelection,
@@ -24,15 +23,23 @@ import {
   TableEmptyRow,
   statusValuesForTaskListTab,
   mergeStatusParamWithTab,
-  type TaskListTab,
-} from '@/components/shared/list-filters';
+  type TaskListTab, withUniqueNamedFilterOptions } from '@/components/shared/list-filters';
 import { TaskFormDrawer } from '@/components/forms/TaskFormDrawer';
 import { TablePagination } from '@/components/shared/table-pagination';
 import {
   ColumnSettingsHeaderCell,
   useColumnVisibility,
 } from '@/components/shared/column-visibility';
-import { resolveJobName, type JobOption } from '@/components/shared/job-label';
+import {
+  jobDisplayName,
+  type JobOption,
+} from '@/components/shared/job-label';
+import { JobCellLink } from '@/components/shared/JobCellLink';
+import {
+  createListFetchSession,
+  replaceListQueryIfNeeded,
+  useListFetchGate,
+} from '@/components/shared/use-list-page-data';
 import {
   buildServerJobFilterOptions,
   resolveServerJobFilterSelection,
@@ -40,7 +47,9 @@ import {
   parseSelectedJobIds,
   toServerJobFetchParams,
   writeServerJobFilterParams,
+  syncServerJobFilterParams,
   jobFilterOptionsFromNameById,
+  buildListJobFilterOptions,
 } from '@/components/shared/server-job-filter';
 import {
   fetchTasksAction,
@@ -138,7 +147,11 @@ export function TasksListClient({
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [tab, setTab] = useState<TaskListTab>('open');
+  const [tab, setTab] = useState<TaskListTab>(() => {
+    const raw = searchParams.get('tab');
+    if (raw === 'completed' || raw === 'all' || raw === 'open') return raw;
+    return 'open';
+  });
   const [page, setPage] = useState(() => {
     const p = parseInt(searchParams.get('page') ?? '1', 10);
     return Number.isFinite(p) && p > 0 ? p : 1;
@@ -169,17 +182,23 @@ export function TasksListClient({
     'tasks',
     TABLE_COLUMNS,
   );
-  const lastFetchKeyRef = useRef<string | null>(null);
+  const { beginFetch, abortFetch } = useListFetchGate();
   const selectedJobIds = useMemo(
     () => parseSelectedJobIds(jobId, jobIdsParam),
     [jobId, jobIdsParam],
   );
-  const filterJobs = useMemo(() => {
-    if (jobs && jobs.length > 0) {
-      return jobs.map((j) => ({ id: j.id, label: j.label }));
-    }
-    return jobFilterOptionsFromNameById(jobNameById);
-  }, [jobs, jobNameById]);
+  const filterJobs = useMemo(
+    () =>
+      buildListJobFilterOptions({
+        jobs: jobs?.map((j) => ({ id: j.id, label: j.label })),
+        jobNameById,
+        currentJob: job
+          ? { id: job.id, label: jobDisplayName(job) }
+          : null,
+        jobId,
+      }),
+    [jobs, jobNameById, job, jobId],
+  );
   const uniqueJobs = useMemo(
     () => buildServerJobFilterOptions(filterJobs),
     [filterJobs],
@@ -203,13 +222,13 @@ export function TasksListClient({
     () => statusValuesForTaskListTab(tab),
     [tab],
   );
+  const columnStatusParam = useMemo(
+    () => columnFilterToValuesParam(statusFilterActive, statusFilter),
+    [statusFilterActive, statusFilter],
+  );
   const statusParam = useMemo(
-    () =>
-      mergeStatusParamWithTab(
-        columnFilterToValuesParam(statusFilterActive, statusFilter),
-        tabStatusValues,
-      ),
-    [statusFilterActive, statusFilter, tabStatusValues],
+    () => mergeStatusParamWithTab(columnStatusParam, tabStatusValues),
+    [columnStatusParam, tabStatusValues],
   );
   const priorityParam = useMemo(
     () => columnFilterToValuesParam(priorityFilterActive, priorityFilter),
@@ -223,14 +242,18 @@ export function TasksListClient({
     () => columnFilterToValuesParam(typeFilterActive, typeFilter),
     [typeFilterActive, typeFilter],
   );
+  const assigneeFilterOptions = useMemo(
+    () => withUniqueNamedFilterOptions(filterOptions.assignees),
+    [filterOptions.assignees],
+  );
   const assignedToUserIdsParam = useMemo(
     () =>
       columnFilterToAssigneeIdsParam(
         assigneeFilterActive,
         assigneeFilter,
-        filterOptions.assignees,
+        assigneeFilterOptions,
       ),
-    [assigneeFilterActive, assigneeFilter, filterOptions.assignees],
+    [assigneeFilterActive, assigneeFilter, assigneeFilterOptions],
   );
 
   const sortParam = `${columnSort.field}_${columnSort.order}`;
@@ -301,37 +324,108 @@ export function TasksListClient({
   ]);
 
   useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (debouncedSearch) params.set('search', debouncedSearch);
+    else params.delete('search');
+    if (tab !== 'open') params.set('tab', tab);
+    else params.delete('tab');
+    if (page > 1) params.set('page', String(page));
+    else params.delete('page');
+    if (sortParam !== 'updated_at_desc') params.set('sort', sortParam);
+    else params.delete('sort');
+    if (columnStatusParam) params.set('status', columnStatusParam);
+    else params.delete('status');
+    if (priorityParam) params.set('priority', priorityParam);
+    else params.delete('priority');
+    if (namesParam) params.set('names', namesParam);
+    else params.delete('names');
+    if (taskTypesParam) params.set('taskTypes', taskTypesParam);
+    else params.delete('taskTypes');
+    if (assignedToUserIdsParam) params.set('assignedToUserIds', assignedToUserIdsParam);
+    else params.delete('assignedToUserIds');
+    syncServerJobFilterParams(params, jobId, jobIdsParam);
+    if (overdue) params.set('overdue', 'true');
+    else params.delete('overdue');
+    if (assignedToUserId) params.set('assignedToUserId', assignedToUserId);
+    else params.delete('assignedToUserId');
+    const next = params.toString();
+    replaceListQueryIfNeeded({
+      router,
+      pathname: '/tasks',
+      currentQuery: searchParams.toString(),
+      nextQuery: next,
+    });
+  }, [
+    debouncedSearch,
+    sortParam,
+    tab,
+    page,
+    columnStatusParam,
+    priorityParam,
+    namesParam,
+    taskTypesParam,
+    assignedToUserIdsParam,
+    jobId,
+    jobIdsParam,
+    overdue,
+    assignedToUserId,
+    searchParams,
+    router,
+  ]);
+
+  useEffect(() => {
     const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
     const priorityKey = priorityParam === null ? '__none__' : (priorityParam ?? '');
     const namesKey = namesParam === null ? '__none__' : (namesParam ?? '');
     const typesKey = taskTypesParam === null ? '__none__' : (taskTypesParam ?? '');
     const assigneesKey =
       assignedToUserIdsParam === null ? '__none__' : (assignedToUserIdsParam ?? '');
-    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${priorityKey}|${namesKey}|${typesKey}|${assigneesKey}|${jobId ?? ''}|${jobIdsParam ?? ''}|${overdue}|${assignedToUserId ?? ''}`;
-    const params = new URLSearchParams(searchParams.toString());
-    params.set('search', debouncedSearch);
-    params.set('tab', tab);
-    params.set('page', String(page));
-    params.set('sort', sortParam);
-    if (statusParam) params.set('status', statusParam); else params.delete('status');
-    if (priorityParam) params.set('priority', priorityParam); else params.delete('priority');
-    if (namesParam) params.set('names', namesParam); else params.delete('names');
-    if (taskTypesParam) params.set('taskTypes', taskTypesParam); else params.delete('taskTypes');
-    if (assignedToUserIdsParam) params.set('assignedToUserIds', assignedToUserIdsParam);
-    else params.delete('assignedToUserIds');
-    if (jobId) params.set('jobId', jobId);
-    else params.delete('jobId');
-    if (jobIdsParam) params.set('jobIds', jobIdsParam);
-    else params.delete('jobIds');
-    if (overdue) params.set('overdue', 'true');
-    else params.delete('overdue');
-    if (assignedToUserId) params.set('assignedToUserId', assignedToUserId);
-    else params.delete('assignedToUserId');
-    router.replace(`/tasks?${params}`, { scroll: false });
-    if (lastFetchKeyRef.current === fetchKey) return;
-    lastFetchKeyRef.current = fetchKey;
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop: router.replace updates URL -> searchParams changes -> effect re-runs
+    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${priorityKey}|${namesKey}|${typesKey}|${assigneesKey}|${fetchJobId ?? ''}|${(fetchJobIds ?? []).join(',')}|${overdue}|${assignedToUserId ?? ''}`;
+
+    const session = createListFetchSession({ fetchKey, beginFetch, abortFetch });
+    if (!session) return;
+
+    if (
+      statusParam === null ||
+      priorityParam === null ||
+      namesParam === null ||
+      taskTypesParam === null ||
+      assignedToUserIdsParam === null
+    ) {
+      setTasks([]);
+      setTotal(0);
+      setLoading(false);
+      return session.cleanup;
+    }
+
+    setLoading(true);
+    fetchTasksAction({
+      page,
+      limit: PAGE_SIZE,
+      search: debouncedSearch || undefined,
+      status: statusParam || (overdue ? 'Open' : undefined),
+      priority: priorityParam,
+      names: namesParam,
+      taskTypes: taskTypesParam,
+      assignedToUserIds: assignedToUserIdsParam,
+      sort: sortParam,
+      jobId: fetchJobId,
+      jobIds: fetchJobIds,
+      assignedToUserId: assignedToUserId ?? undefined,
+      overdue: overdue || undefined,
+    }).then((res) => {
+      if (session.cancelled) return;
+      setTasks(res.data);
+      setTotal(res.total);
+      setLoading(false);
+    }).catch((err) => {
+      console.error('[tasks:TasksListClient] fetchTasksAction failed', err);
+      if (session.cancelled) return;
+      setTasks([]);
+      setTotal(0);
+      setLoading(false);
+    });
+    return session.cleanup;
   }, [
     debouncedSearch,
     sortParam,
@@ -342,12 +436,13 @@ export function TasksListClient({
     namesParam,
     taskTypesParam,
     assignedToUserIdsParam,
-    jobId,
-    jobIdsParam,
     fetchJobId,
     fetchJobIds,
     overdue,
     assignedToUserId,
+    searchParams,
+    beginFetch,
+    abortFetch,
   ]);
 
   useEffect(() => {
@@ -398,10 +493,10 @@ export function TasksListClient({
   const uniqueAssignees = useMemo(
     () =>
       buildColumnFilterOptions(
-        filterOptions.assignees.map((a) => a.name),
+        assigneeFilterOptions.map((a) => a.name),
         { alwaysIncludeBlank: true },
       ),
-    [filterOptions.assignees],
+    [assigneeFilterOptions],
   );
 
   const togglePriority = (name: string) => {
@@ -608,7 +703,9 @@ export function TasksListClient({
                         col.key === 'name'
                           ? {
                               options: uniqueNames,
-                              selected: nameFilter,
+                              selected: nameFilterActive
+                                ? nameFilter
+                                : new Set(uniqueNames),
                               active: nameFilterActive,
                               onApply: applyNameFilter,
                               menuTitle: 'Filter by task',
@@ -626,7 +723,9 @@ export function TasksListClient({
                             : col.key === 'status'
                               ? {
                                   options: uniqueStatuses,
-                                  selected: statusFilter,
+                                  selected: statusFilterActive
+                                    ? statusFilter
+                                    : new Set(uniqueStatuses),
                                   active: statusFilterActive,
                                   onApply: applyStatusFilter,
                                   menuTitle: 'Filter by status',
@@ -635,7 +734,9 @@ export function TasksListClient({
                               : col.key === 'priority'
                                 ? {
                                     options: uniquePriorities,
-                                    selected: priorityFilter,
+                                    selected: priorityFilterActive
+                                      ? priorityFilter
+                                      : new Set(uniquePriorities),
                                     active: priorityFilterActive,
                                     onApply: applyPriorityFilter,
                                     menuTitle: 'Filter by priority',
@@ -644,7 +745,9 @@ export function TasksListClient({
                                 : col.key === 'task_type'
                                   ? {
                                       options: uniqueTypes,
-                                      selected: typeFilter,
+                                      selected: typeFilterActive
+                                        ? typeFilter
+                                        : new Set(uniqueTypes),
                                       active: typeFilterActive,
                                       onApply: applyTypeFilter,
                                       menuTitle: 'Filter by type',
@@ -653,7 +756,9 @@ export function TasksListClient({
                                   : col.key === 'assignee'
                                     ? {
                                         options: uniqueAssignees,
-                                        selected: assigneeFilter,
+                                        selected: assigneeFilterActive
+                                          ? assigneeFilter
+                                          : new Set(uniqueAssignees),
                                         active: assigneeFilterActive,
                                         onApply: applyAssigneeFilter,
                                         menuTitle: 'Filter by assignee',
@@ -695,7 +800,7 @@ export function TasksListClient({
                       )}
                       {isVisible('job') && (
                         <td className="px-4 py-3 text-slate-600">
-                          {resolveJobName(task.jobId, jobNameById)}
+                          <JobCellLink jobId={task.jobId} jobNameById={jobNameById} />
                         </td>
                       )}
                       {isVisible('status') && (

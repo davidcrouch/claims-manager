@@ -1,12 +1,13 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { PurchaseOrdersPageClient } from '@/components/purchase-orders/PurchaseOrdersPageClient';
-import { buildJobNameById, toJobOptions } from '@/components/shared/job-label';
+import {buildJobNameById, toJobOptions,
+  mergeCurrentJobIntoNameById,
+  mergeCurrentJobIntoOptions } from '@/components/shared/job-label';
 import type { Job, PaginatedResponse, PurchaseOrder, Claim } from '@/types/api';
 
 export default async function PurchaseOrdersPage({
-  searchParams,
-}: {
+  searchParams }: {
   searchParams: Promise<{ page?: string; jobId?: string; status?: string; vendorId?: string; sort?: string; search?: string }>;
 }) {
   const api = await getServerApiClient();
@@ -24,8 +25,7 @@ export default async function PurchaseOrdersPage({
         status: params.status,
         vendorId: params.vendorId,
         sort: params.sort,
-        search: params.search,
-      })
+        search: params.search })
       .catch((err: unknown) => {
         console.error(
           'frontend:PurchaseOrdersPage - getPurchaseOrders failed:',
@@ -62,15 +62,13 @@ export default async function PurchaseOrdersPage({
   const statusOptions = (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map(
     (row) => ({
       id: row.id,
-      name: row.name?.trim() ? row.name : 'Unknown',
-    }),
+      name: row.name?.trim() ? row.name : 'Unknown' }),
   );
   const vendorOptions = (vendorsRes.data ?? []).map((vendor) => ({
     id: vendor.id,
-    name: vendor.name?.trim() ? vendor.name : 'Unknown',
-  }));
+    name: vendor.name?.trim() ? vendor.name : 'Unknown' }));
   const jobs = jobsRes?.data ?? [];
-  const jobNameById = buildJobNameById(jobs);
+  const jobNameById = mergeCurrentJobIntoNameById(buildJobNameById(jobs), job);
 
   return (
     <PurchaseOrdersPageClient
@@ -78,7 +76,7 @@ export default async function PurchaseOrdersPage({
       statusOptions={statusOptions}
       vendorOptions={vendorOptions}
       jobNameById={jobNameById}
-      jobs={toJobOptions(jobs)}
+      jobs={mergeCurrentJobIntoOptions(toJobOptions(jobs), job)}
       job={job}
       parentClaim={parentClaim}
     />

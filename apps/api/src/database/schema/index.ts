@@ -14,6 +14,7 @@ import {
   unique,
   index,
   check,
+  primaryKey,
   customType,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
@@ -244,6 +245,7 @@ export const jobs = pgTable(
     connectionId: uuid('connection_id').references(() => integrationConnections.id),
     parentJobId: uuid('parent_job_id').references((): AnyPgColumn => jobs.id),
     name: text('name'),
+    internalNumber: text('internal_number'),
     externalReference: text('external_reference'),
     externalJobId: text('external_job_id'),
     jobTypeLookupId: uuid('job_type_lookup_id').notNull().references(() => lookupValues.id),
@@ -277,6 +279,9 @@ export const jobs = pgTable(
   },
   (t) => [
     uniqueIndex('UQ_jobs_tenant_extref').on(t.tenantId, t.externalReference),
+    uniqueIndex('UQ_jobs_tenant_internal_number')
+      .on(t.tenantId, t.internalNumber)
+      .where(sql`internal_number IS NOT NULL AND deleted_at IS NULL`),
     index('idx_jobs_claim').on(t.tenantId, t.claimId),
     index('idx_jobs_assigned').on(t.tenantId, t.assignedToUserId),
     index('idx_jobs_source_tenant').on(t.sourceTenantId),
@@ -300,6 +305,7 @@ export const quotes = pgTable(
     ownershipStatus: text('ownership_status').notNull().default('owned'),
     externalReference: text('external_reference'),
     quoteNumber: text('quote_number'),
+    internalNumber: text('internal_number'),
     name: text('name'),
     reference: text('reference'),
     note: text('note'),
@@ -345,6 +351,9 @@ export const quotes = pgTable(
       .where(
         sql`issuer_organisation_id IS NOT NULL AND quote_number IS NOT NULL AND deleted_at IS NULL`,
       ),
+    uniqueIndex('UQ_quotes_tenant_internal_number')
+      .on(t.tenantId, t.internalNumber)
+      .where(sql`internal_number IS NOT NULL AND deleted_at IS NULL`),
   ],
 );
 
@@ -483,6 +492,7 @@ export const purchaseOrders = pgTable(
     scopeOfWork: text('scope_of_work'),
     externalId: text('external_id'),
     purchaseOrderNumber: text('purchase_order_number'),
+    internalNumber: text('internal_number'),
     name: text('name'),
     statusLookupId: uuid('status_lookup_id'),
     purchaseOrderTypeLookupId: uuid('purchase_order_type_lookup_id'),
@@ -530,6 +540,9 @@ export const purchaseOrders = pgTable(
     uniqueIndex('UQ_po_issuer_org_number')
       .on(t.issuerOrganisationId, t.purchaseOrderNumber)
       .where(sql`issuer_organisation_id IS NOT NULL AND purchase_order_number IS NOT NULL AND deleted_at IS NULL`),
+    uniqueIndex('UQ_purchase_orders_tenant_internal_number')
+      .on(t.tenantId, t.internalNumber)
+      .where(sql`internal_number IS NOT NULL AND deleted_at IS NULL`),
   ],
 );
 
@@ -653,6 +666,7 @@ export const invoices = pgTable(
     claimId: uuid('claim_id').references(() => claims.id, { onDelete: 'set null' }),
     jobId: uuid('job_id').references(() => jobs.id, { onDelete: 'set null' }),
     invoiceNumber: text('invoice_number'),
+    internalNumber: text('internal_number'),
     issueDate: timestamp('issue_date', { withTimezone: true }),
     receivedDate: timestamp('received_date', { withTimezone: true }),
     comments: text('comments'),
@@ -692,6 +706,9 @@ export const invoices = pgTable(
     uniqueIndex('UQ_invoices_tenant_wo_number')
       .on(t.tenantId, t.workOrderId, t.invoiceNumber)
       .where(sql`work_order_id IS NOT NULL AND invoice_number IS NOT NULL`),
+    uniqueIndex('UQ_invoices_tenant_internal_number')
+      .on(t.tenantId, t.internalNumber)
+      .where(sql`internal_number IS NOT NULL`),
     index('idx_invoices_source_tenant').on(t.sourceTenantId),
     index('idx_invoices_work_order').on(t.tenantId, t.workOrderId),
   ],
@@ -1282,6 +1299,7 @@ export const workOrders = pgTable(
     sourceExternalReference: text('source_external_reference'),
     externalId: text('external_id'),
     workOrderNumber: text('work_order_number'),
+    internalNumber: text('internal_number'),
     name: text('name'),
     statusLookupId: uuid('status_lookup_id').references(() => lookupValues.id),
     workOrderTypeLookupId: uuid('work_order_type_lookup_id').references(() => lookupValues.id),
@@ -1321,6 +1339,12 @@ export const workOrders = pgTable(
     index('idx_wo_job').on(t.tenantId, t.jobId),
     index('idx_wo_claim').on(t.tenantId, t.claimId),
     index('idx_wo_number').on(t.tenantId, t.workOrderNumber),
+    uniqueIndex('UQ_work_orders_tenant_number')
+      .on(t.tenantId, t.workOrderNumber)
+      .where(sql`work_order_number ~* '^wo-[0-9]+$' AND deleted_at IS NULL`),
+    uniqueIndex('UQ_work_orders_tenant_internal_number')
+      .on(t.tenantId, t.internalNumber)
+      .where(sql`internal_number IS NOT NULL AND deleted_at IS NULL`),
   ],
 );
 
@@ -1444,6 +1468,7 @@ export const rfqs = pgTable(
     quoteId: uuid('quote_id').references(() => quotes.id, { onDelete: 'set null' }),
     vendorId: uuid('vendor_id').references(() => vendors.id),
     rfqNumber: text('rfq_number'),
+    internalNumber: text('internal_number'),
     name: text('name'),
     note: text('note'),
     statusLookupId: uuid('status_lookup_id').references(() => lookupValues.id),
@@ -1483,6 +1508,12 @@ export const rfqs = pgTable(
     index('idx_rfq_quote').on(t.tenantId, t.quoteId),
     index('idx_rfq_vendor').on(t.tenantId, t.vendorId),
     index('idx_rfq_number').on(t.tenantId, t.rfqNumber),
+    uniqueIndex('UQ_rfqs_tenant_number')
+      .on(t.tenantId, t.rfqNumber)
+      .where(sql`rfq_number IS NOT NULL AND deleted_at IS NULL`),
+    uniqueIndex('UQ_rfqs_tenant_internal_number')
+      .on(t.tenantId, t.internalNumber)
+      .where(sql`internal_number IS NOT NULL AND deleted_at IS NULL`),
     index('idx_rfq_source_tenant').on(t.sourceTenantId),
   ],
 );
@@ -3545,4 +3576,20 @@ export const entityActivities = pgTable(
     index('idx_entity_activities_entity_action').on(t.entityId, t.action),
     index('idx_entity_activities_actor').on(t.tenantId, t.actorType, t.actorId),
   ],
+);
+
+// ---------------------------------------------------------------------------
+// Tenant record number sequences (auto-incrementing entity numbers per tenant)
+// ---------------------------------------------------------------------------
+export const tenantRecordSequences = pgTable(
+  'tenant_record_sequences',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade', onUpdate: 'cascade' }),
+    sequenceKey: text('sequence_key').notNull(),
+    nextValue: integer('next_value').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.tenantId, t.sequenceKey] })],
 );

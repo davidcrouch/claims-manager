@@ -24,6 +24,7 @@ import {
   lookupToCwObject,
   type CwContactOutbound,
 } from './job-outbound.utils';
+import { RecordNumberService } from '../../common/record-number/record-number.service';
 
 type ContactInput = {
   contactId?: string;
@@ -57,6 +58,7 @@ export class JobsService {
     private readonly lookupResolver: LookupResolver,
     private readonly filesystemService: FilesystemService,
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
+    private readonly recordNumberService: RecordNumberService,
     @Optional() private readonly connectionResolver?: ConnectionResolverService,
     @Optional() private readonly outboundEvents?: OutboundEventsService,
   ) {}
@@ -254,15 +256,26 @@ export class JobsService {
         tx,
       });
 
+      const insertBase = this.buildInsertFromBody(
+        body,
+        resolvedContacts.map((c) => c.snapshot),
+      );
+      if (!this.recordNumberService.isBlank(body.externalReference)) {
+        insertBase.externalReference = String(body.externalReference).trim();
+      }
+      insertBase.internalNumber = await this.recordNumberService.resolve({
+        tenantId,
+        entity: 'job',
+        explicit: body.internalNumber,
+        tx,
+      });
+
       const inserted = await this.jobsRepo.create({
         data: {
           tenantId,
           connectionId: connectionId !== tenantId ? connectionId : undefined,
           syncStatus: needsSync ? 'pending' : null,
-          ...this.buildInsertFromBody(
-            body,
-            resolvedContacts.map((c) => c.snapshot),
-          ),
+          ...insertBase,
         },
         tx,
       });

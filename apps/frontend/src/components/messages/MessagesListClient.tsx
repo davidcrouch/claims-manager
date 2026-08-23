@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Mail, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -18,30 +18,26 @@ import {
   commitColumnFilterSelection,
   buildColumnFilterOptions,
   columnFilterToValuesParam,
-  type SortOption,
-} from '@/components/shared/list-filters';
+  type SortOption } from '@/components/shared/list-filters';
 import {
   ColumnSettingsHeaderCell,
   useColumnVisibility,
-  type ColumnVisibilityDef,
-} from '@/components/shared/column-visibility';
+  type ColumnVisibilityDef } from '@/components/shared/column-visibility';
 import { TablePagination } from '@/components/shared/table-pagination';
 import { formatDateTime } from '@/components/shared/detail';
-import { resolveJobName } from '@/components/shared/job-label';
-import {
-  buildServerJobFilterOptions,
+import { jobDisplayName } from '@/components/shared/job-label';
+import { JobCellLink } from '@/components/shared/JobCellLink';
+import { buildServerJobFilterOptions,
   resolveServerJobFilterSelection,
   selectedJobFilterLabels,
   parseSelectedJobIds,
   toServerJobFetchParams,
   writeServerJobFilterParams,
-  jobFilterOptionsFromNameById,
-} from '@/components/shared/server-job-filter';
+  buildListJobFilterOptions } from '@/components/shared/server-job-filter';
 import { MessageDetailDrawer } from '@/components/messages/MessageDetailDrawer';
 import {
   fetchMessagesAction,
-  fetchMessageFilterOptionsAction,
-} from '@/app/(app)/messages/actions';
+  fetchMessageFilterOptionsAction } from '@/app/(app)/messages/actions';
 import type { Job, Claim, Message } from '@/types/api';
 
 const SORT_OPTIONS: SortOption[] = [
@@ -100,8 +96,7 @@ function stripHtml(html: string): string {
 export function MessagesListClient({
   job,
   parentClaim,
-  jobNameById,
-}: {
+  jobNameById }: {
   job?: Job | null;
   parentClaim?: Claim | null;
   jobNameById?: Record<string, string>;
@@ -130,6 +125,7 @@ export function MessagesListClient({
     toNames: string[];
     statuses: ('Read' | 'Unread')[];
   }>({ fromNames: [], toNames: [], statuses: ['Read', 'Unread'] });
+  const loadGenRef = useRef(0);
   const [page, setPage] = useState(1);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -145,8 +141,14 @@ export function MessagesListClient({
     [jobId, jobIdsParam],
   );
   const filterJobs = useMemo(
-    () => jobFilterOptionsFromNameById(jobNameById),
-    [jobNameById],
+    () =>
+      buildListJobFilterOptions({
+        jobNameById,
+        currentJob: job
+          ? { id: job.id, label: jobDisplayName(job) }
+          : null,
+        jobId }),
+    [jobNameById, job, jobId],
   );
   const uniqueJobs = useMemo(
     () => buildServerJobFilterOptions(filterJobs),
@@ -159,8 +161,7 @@ export function MessagesListClient({
         jobIds: jobIdsParam
           ? jobIdsParam.split(',').map((id) => id.trim()).filter(Boolean)
           : undefined,
-        jobs: filterJobs,
-      }),
+        jobs: filterJobs }),
     [jobId, jobIdsParam, filterJobs],
   );
   const { jobId: fetchJobId, jobIds: fetchJobIds } = useMemo(
@@ -207,6 +208,7 @@ export function MessagesListClient({
   };
 
   const load = useCallback(async () => {
+    const gen = ++loadGenRef.current;
     setLoading(true);
     try {
       if (
@@ -214,6 +216,7 @@ export function MessagesListClient({
         toNamesParam === null ||
         readStatusParam === null
       ) {
+        if (gen !== loadGenRef.current) return;
         setMessages([]);
         setTotal(0);
         return;
@@ -227,12 +230,12 @@ export function MessagesListClient({
         toNames: toNamesParam,
         readStatus: readStatusParam,
         search: debouncedSearch || undefined,
-        sort: sortParam,
-      });
+        sort: sortParam });
+      if (gen !== loadGenRef.current) return;
       setMessages(res.data);
       setTotal(res.total);
     } finally {
-      setLoading(false);
+      if (gen === loadGenRef.current) setLoading(false);
     }
   }, [
     page,
@@ -254,8 +257,7 @@ export function MessagesListClient({
       setFilterOptions({
         fromNames: opts.fromNames ?? [],
         toNames: opts.toNames ?? [],
-        statuses: opts.statuses ?? ['Read', 'Unread'],
-      });
+        statuses: opts.statuses ?? ['Read', 'Unread'] });
     });
   }, []);
 
@@ -303,8 +305,7 @@ export function MessagesListClient({
     const resolved = resolveServerJobFilterSelection({
       next,
       options: uniqueJobs,
-      jobs: filterJobs,
-    });
+      jobs: filterJobs });
     setPage(1);
     const params = new URLSearchParams(searchParams.toString());
     writeServerJobFilterParams(params, resolved);
@@ -315,8 +316,7 @@ export function MessagesListClient({
   const applyFromFilter = (next: Set<string>) => {
     const committed = commitColumnFilterSelection({
       next,
-      optionCount: uniqueFrom.length,
-    });
+      optionCount: uniqueFrom.length });
     setFromFilter(committed.selected);
     setFromFilterActive(committed.active);
   };
@@ -324,8 +324,7 @@ export function MessagesListClient({
   const applyToFilter = (next: Set<string>) => {
     const committed = commitColumnFilterSelection({
       next,
-      optionCount: uniqueTo.length,
-    });
+      optionCount: uniqueTo.length });
     setToFilter(committed.selected);
     setToFilterActive(committed.active);
   };
@@ -333,8 +332,7 @@ export function MessagesListClient({
   const applyStatusColumnFilter = (next: Set<string>) => {
     const committed = commitColumnFilterSelection({
       next,
-      optionCount: statusColumnOptions.length,
-    });
+      optionCount: statusColumnOptions.length });
     setStatusFilter(committed.selected);
     setStatusFilterActive(committed.active);
   };
@@ -419,8 +417,7 @@ export function MessagesListClient({
                       active: jobFilterActive,
                       onApply: applyJobFilter,
                       menuTitle: 'Filter by job',
-                      itemNoun: { singular: 'job', plural: 'jobs' },
-                    }}
+                      itemNoun: { singular: 'job', plural: 'jobs' } }}
                   />
                 )}
                 {isVisible('subject') && (
@@ -439,8 +436,7 @@ export function MessagesListClient({
                       active: fromFilterActive,
                       onApply: applyFromFilter,
                       menuTitle: 'Filter by from',
-                      itemNoun: { singular: 'sender', plural: 'senders' },
-                    }}
+                      itemNoun: { singular: 'sender', plural: 'senders' } }}
                   />
                 )}
                 {isVisible('to') && (
@@ -456,8 +452,7 @@ export function MessagesListClient({
                       active: toFilterActive,
                       onApply: applyToFilter,
                       menuTitle: 'Filter by to',
-                      itemNoun: { singular: 'recipient', plural: 'recipients' },
-                    }}
+                      itemNoun: { singular: 'recipient', plural: 'recipients' } }}
                   />
                 )}
                 {isVisible('date') && (
@@ -476,8 +471,7 @@ export function MessagesListClient({
                       active: statusFilterActive,
                       onApply: applyStatusColumnFilter,
                       menuTitle: 'Filter by status',
-                      itemNoun: { singular: 'status', plural: 'statuses' },
-                    }}
+                      itemNoun: { singular: 'status', plural: 'statuses' } }}
                   />
                 )}
                 {isVisible('attachments') && (
@@ -504,10 +498,6 @@ export function MessagesListClient({
                 />
               ) : (
                 visibleMessages.map((message) => {
-                  const jobLabel = resolveJobName(
-                    messageJobId(message),
-                    jobNameById ?? {},
-                  );
                   const status = messageStatusLabel(message);
                   const preview = stripHtml(message.body ?? '').slice(0, 80);
                   return (
@@ -526,7 +516,12 @@ export function MessagesListClient({
                       aria-label={`Open message: ${message.subject || 'No subject'}`}
                     >
                       {isVisible('job') && (
-                        <td className="px-4 py-3 text-slate-700">{jobLabel || '—'}</td>
+                        <td className="px-4 py-3 text-slate-700">
+                          <JobCellLink
+                            jobId={messageJobId(message)}
+                            jobNameById={jobNameById ?? {}}
+                          />
+                        </td>
                       )}
                       {isVisible('subject') && (
                         <td className="px-4 py-3">

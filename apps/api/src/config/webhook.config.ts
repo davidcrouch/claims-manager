@@ -77,4 +77,22 @@ export default registerAs('webhook', () => ({
   sweepIntervalMs: parseInt32(process.env.WEBHOOK_SWEEP_INTERVAL_MS, 30_000),
   sweepBatchSize: parseInt32(process.env.WEBHOOK_SWEEP_BATCH_SIZE, 10),
   sweepMaxRetries: parseInt32(process.env.WEBHOOK_SWEEP_MAX_RETRIES, 10),
+  /**
+   * When true, the sweep also re-drives `completed_unmapped` events (parent
+   * was missing at first attempt). Capped by `sweepMaxRetries` so permanently
+   * unmappable events are parked rather than spinning forever.
+   */
+  sweepUnmappedEnabled: parseBool(
+    process.env.WEBHOOK_SWEEP_UNMAPPED_ENABLED,
+    true,
+  ),
+  /**
+   * Minimum age (ms) before a completed_unmapped event is eligible for
+   * re-drive. Longer than the pending threshold to give the primary retry
+   * mechanism time to handle it first.
+   */
+  sweepUnmappedThresholdMs: parseInt32(
+    process.env.WEBHOOK_SWEEP_UNMAPPED_THRESHOLD_MS,
+    60_000,
+  ),
 }));

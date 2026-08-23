@@ -1,7 +1,9 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { RfqsPageClient } from '@/components/rfqs/RfqsPageClient';
-import { buildJobNameById, toJobOptions } from '@/components/shared/job-label';
+import {buildJobNameById, toJobOptions,
+  mergeCurrentJobIntoNameById,
+  mergeCurrentJobIntoOptions } from '@/components/shared/job-label';
 import type { Job, Claim, PaginatedResponse, Rfq } from '@/types/api';
 
 export const metadata = { title: 'RFQs — EnsureOS' };
@@ -28,8 +30,7 @@ function resolveStatusForTab(
 }
 
 export default async function RfqsPage({
-  searchParams,
-}: {
+  searchParams }: {
   searchParams: Promise<{
     page?: string;
     sort?: string;
@@ -66,8 +67,7 @@ export default async function RfqsPage({
   const statusOptions = (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map(
     (row) => ({
       id: row.id,
-      name: row.name?.trim() ? row.name : 'Unknown',
-    }),
+      name: row.name?.trim() ? row.name : 'Unknown' }),
   );
   const resolvedStatus = resolveStatusForTab(tab, params.status, statusOptions);
 
@@ -79,8 +79,7 @@ export default async function RfqsPage({
       status: resolvedStatus,
       vendorId: params.vendorId,
       jobId: params.jobId,
-      search: params.search,
-    })
+      search: params.search })
     .catch((err: unknown) => {
       console.error(
         'frontend:RfqsPage - getRfqs failed:',
@@ -106,10 +105,9 @@ export default async function RfqsPage({
 
   const vendorOptions = (vendorsRes.data ?? []).map((vendor) => ({
     id: vendor.id,
-    name: vendor.name?.trim() ? vendor.name : 'Unknown',
-  }));
+    name: vendor.name?.trim() ? vendor.name : 'Unknown' }));
   const jobs = jobsRes?.data ?? [];
-  const jobNameById = buildJobNameById(jobs);
+  const jobNameById = mergeCurrentJobIntoNameById(buildJobNameById(jobs), job);
 
   return (
     <RfqsPageClient
@@ -117,7 +115,7 @@ export default async function RfqsPage({
       statusOptions={statusOptions}
       vendorOptions={vendorOptions}
       jobNameById={jobNameById}
-      jobs={toJobOptions(jobs)}
+      jobs={mergeCurrentJobIntoOptions(toJobOptions(jobs), job)}
       job={job}
       parentClaim={parentClaim}
     />

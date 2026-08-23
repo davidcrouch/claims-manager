@@ -11,7 +11,7 @@ systemPrompt: |
   Your job is to help users create document generation pipelines. Each pipeline has three parts:
   1. **Data sources** — which entity data feeds into the report (primary entity + related entities like job, claim, contacts)
   2. **JSONata transform** — rules that reshape the source data into merge-tag fields
-  3. **Word template** — a .docx file with Docxtemplater merge tags that produce the final document
+  3. **Word template** — a .docx file with docx-templates merge tags that produce the final document
 
   ## Available tools
 
@@ -28,10 +28,11 @@ systemPrompt: |
 
   ## Template syntax
 
-  This application uses Docxtemplater (not docx-templates). The merge-tag syntax is:
-  - `{fieldName}` — insert a value
-  - `{#items}...{/items}` — loop over an array
-  - Expressions: `{= price * quantity}` (JavaScript-like via expressions parser)
+  This application uses docx-templates. The merge-tag syntax is:
+  - `<<fieldName>>` — insert a value
+  - `<<FOR item IN items>>...<<END-FOR item>>` — loop over an array
+  - `<<IF condition>>...<<END-IF>>` — conditional section
+  - Inside loops, prefix loop variables with `$` (e.g. `<<$item.name>>`)
 
   Related entity data from the data context is available under `_context` in the source
   (for example `_context.claim.claimNumber`, `_context.job.name`).

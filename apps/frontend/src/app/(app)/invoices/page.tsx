@@ -2,12 +2,11 @@ import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { loadClaim, loadJob } from '@/lib/cached-entity-loaders';
 import { InvoicesPageClient } from '@/components/invoices/InvoicesPageClient';
-import { buildJobNameById, jobDisplayName } from '@/components/shared/job-label';
+import {buildJobNameById, jobDisplayName } from '@/components/shared/job-label';
 import type { Claim, Invoice, Job, PaginatedResponse, WorkOrder } from '@/types/api';
 
 export default async function InvoicesPage({
-  searchParams,
-}: {
+  searchParams }: {
   searchParams: Promise<{ page?: string; purchaseOrderId?: string; status?: string; sort?: string; jobId?: string; search?: string }>;
 }) {
   const api = await getServerApiClient();
@@ -29,8 +28,7 @@ export default async function InvoicesPage({
           status: params.status,
           sort: params.sort,
           search: params.search,
-          jobId: params.jobId,
-        })
+          jobId: params.jobId })
         .catch((err: unknown) => {
           console.error(
             'frontend:InvoicesPage - getInvoices failed:',
@@ -41,8 +39,7 @@ export default async function InvoicesPage({
       api
         .getWorkOrders({
           limit: jobScoped ? 50 : 100,
-          ...(params.jobId ? { jobId: params.jobId } : {}),
-        })
+          ...(params.jobId ? { jobId: params.jobId } : {}) })
         .catch((err: unknown) => {
           console.error(
             'frontend:InvoicesPage - getWorkOrders failed:',
@@ -76,8 +73,7 @@ export default async function InvoicesPage({
   const statusOptions = (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map(
     (row) => ({
       id: row.id,
-      name: row.name?.trim() ? row.name : 'Unknown',
-    }),
+      name: row.name?.trim() ? row.name : 'Unknown' }),
   );
 
   return (

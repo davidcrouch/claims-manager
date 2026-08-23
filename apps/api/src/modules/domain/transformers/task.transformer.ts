@@ -68,12 +68,20 @@ export class TaskTransformer implements EntityTransformer {
       lookups.push({ field: 'taskTypeLookupId', domain: 'task_type', externalReference: taskTypeField.trim(), name: taskTypeField.trim(), autoCreate: true });
     }
 
-    // Parents: claim and/or job — handle both flat and nested
+    // Parents: claim and/or job — handle both flat and nested.
+    // required: true so resolveParents throws ParentNotProjectedError with the
+    // provider ID, enabling inline recovery via ParentRecoveryService.
     const cwClaimId = this.extractProviderId(payload.claimId, payload.claim);
-    if (cwClaimId) parentRefs.push({ entityType: 'claim', externalId: cwClaimId, required: false });
+    if (cwClaimId) {
+      const nested = isPlainObject(payload.claim) ? (payload.claim as Record<string, unknown>) : undefined;
+      parentRefs.push({ entityType: 'claim', externalId: cwClaimId, required: true, nestedPayload: nested });
+    }
 
     const cwJobId = this.extractProviderId(payload.jobId, payload.job);
-    if (cwJobId) parentRefs.push({ entityType: 'job', externalId: cwJobId, required: false });
+    if (cwJobId) {
+      const nested = isPlainObject(payload.job) ? (payload.job as Record<string, unknown>) : undefined;
+      parentRefs.push({ entityType: 'job', externalId: cwJobId, required: true, nestedPayload: nested });
+    }
 
     return { entity, lookups, parentRefs };
   }

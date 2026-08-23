@@ -429,7 +429,13 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params?.page != null) sp.set('page', String(params.page));
       if (params?.limit != null) sp.set('limit', String(params.limit));
       if (params?.search) sp.set('search', params.search);
-      if (params?.status) sp.set('status', params.status);
+      // Repeat status values so spaces in labels (e.g. "In Progress") never
+      // depend on CSV parsing of a single query param.
+      if (params?.status) {
+        for (const value of params.status.split(',').map((s) => s.trim()).filter(Boolean)) {
+          sp.append('status', value);
+        }
+      }
       if (params?.priority) sp.set('priority', params.priority);
       if (params?.sort) sp.set('sort', params.sort);
       if (params?.order) sp.set('order', params.order);
@@ -1021,7 +1027,7 @@ export function createApiClient(options?: ApiClientOptions) {
       jobIds?: string[];
       unlinkedOnly?: boolean;
       typeLookupIds?: string[];
-      archived?: boolean;
+      status?: string;
     }): Promise<PaginatedResponse<Contact>> {
       const sp = new URLSearchParams();
       if (params?.page != null) sp.set('page', String(params.page));
@@ -1034,13 +1040,17 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params?.typeLookupIds?.length) {
         sp.set('typeLookupIds', params.typeLookupIds.join(','));
       }
-      if (params?.archived === true) sp.set('archived', 'true');
-      else if (params?.archived === false) sp.set('archived', 'false');
+      if (params?.status) sp.set('status', params.status);
       return fetchApi<PaginatedResponse<Contact>>(`/contacts?${sp}`);
     },
 
     getContactFilterJobs(): Promise<{
-      jobs: Array<{ id: string; name?: string | null; externalReference?: string | null }>;
+      jobs: Array<{
+        id: string;
+        name?: string | null;
+        externalReference?: string | null;
+        externalJobId?: string | null;
+      }>;
       hasUnlinked: boolean;
     }> {
       return fetchApi(`/contacts/filter-jobs`);
@@ -1060,6 +1070,10 @@ export function createApiClient(options?: ApiClientOptions) {
 
     createContact(body: Record<string, unknown>): Promise<Contact> {
       return fetchApi<Contact>('/contacts', { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    updateContact(id: string, body: Record<string, unknown>): Promise<Contact> {
+      return fetchApi<Contact>(`/contacts/${id}`, { method: 'POST', body: JSON.stringify(body) });
     },
 
     ensureMeContact(): Promise<{
@@ -1693,6 +1707,42 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi(`/quotes/${quoteId}/groups/reorder`, {
         method: 'PATCH',
         body: JSON.stringify({ groupIds }),
+      });
+    },
+
+    reorderQuoteLineItems(quoteId: string, payload: {
+      items?: Array<{ id: string; sortIndex: number }>;
+      combos?: Array<{ id: string; sortIndex: number }>;
+    }): Promise<{ success: boolean }> {
+      return fetchApi(`/quotes/${quoteId}/line-items/reorder`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+    },
+
+    moveQuoteLineItem(quoteId: string, payload: {
+      itemId?: string;
+      comboId?: string;
+      targetGroupId: string;
+      targetComboId?: string;
+      insertAtIndex?: number;
+    }): Promise<{ success: boolean }> {
+      return fetchApi(`/quotes/${quoteId}/line-items/move`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+    },
+
+    duplicateQuoteLineItem(quoteId: string, payload: {
+      itemId?: string;
+      comboId?: string;
+      targetGroupId: string;
+      targetComboId?: string;
+      insertAtIndex?: number;
+    }): Promise<{ success: boolean; newId?: string }> {
+      return fetchApi(`/quotes/${quoteId}/line-items/duplicate`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
       });
     },
 

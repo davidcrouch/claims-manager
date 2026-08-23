@@ -121,7 +121,7 @@ export class DocumentGenerationService {
       bill: billMapper,
       rfq: rfqMapper,
       job_details: jobMapper,
-      scope_of_work: jobMapper,
+      scope_of_work: quoteMapper,
       claim: claimMapper,
       contact: contactMapper,
       task: taskMapper,
@@ -305,7 +305,7 @@ export class DocumentGenerationService {
         filesystemDocumentId: params.filesystemDocumentId,
       });
 
-      const populatedDocx = this.templateEngine.populate({
+      const populatedDocx = await this.templateEngine.populate({
         templateBuffer,
         data: mergeData,
       });
@@ -486,6 +486,11 @@ export class DocumentGenerationService {
     // Line-item groups remain presentation-shaped (from mapper helpers) under `_context.groups`.
     if (Array.isArray(params.mapperData.groups)) {
       envelope.groups = params.mapperData.groups;
+    }
+
+    // Computed totals for types that lack entity-level sum columns (e.g. RFQ).
+    if (params.mapperData._totals) {
+      envelope._totals = params.mapperData._totals;
     }
 
     return { _context: envelope };

@@ -20,10 +20,10 @@ export class TasksController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('jobId') jobId?: string,
-    @Query('jobIds') jobIds?: string,
+    @Query('jobIds') jobIds?: string | string[],
     @Query('claimId') claimId?: string,
-    @Query('status') status?: string,
-    @Query('priority') priority?: string,
+    @Query('status') status?: string | string[],
+    @Query('priority') priority?: string | string[],
     @Query('entityType') entityType?: string,
     @Query('entityId') entityId?: string,
     @Query('assignedToUserId') assignedToUserId?: string,
@@ -35,16 +35,21 @@ export class TasksController {
     @Query('sort') sort?: string,
   ) {
     const jobIdList = jobIds
-      ? jobIds.split(',').map((id) => id.trim()).filter((id) => id.length > 0)
+      ? (Array.isArray(jobIds) ? jobIds.join(',') : jobIds)
+          .split(',')
+          .map((id) => id.trim())
+          .filter((id) => id.length > 0)
       : undefined;
+    const statusParam = Array.isArray(status) ? status.join(',') : status;
+    const priorityParam = Array.isArray(priority) ? priority.join(',') : priority;
     return this.tasksService.findAll({
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
       jobId,
       jobIds: jobIdList && jobIdList.length > 0 ? jobIdList : undefined,
       claimId,
-      status,
-      priority,
+      status: statusParam,
+      priority: priorityParam,
       entityType,
       entityId,
       assignedToUserId,

@@ -14,7 +14,7 @@ import {
   Globe,
   Loader2,
 } from 'lucide-react';
-import { AddressAutocompleteInput } from '@/components/shared/AddressAutocompleteInput';
+import { AddressAutocompleteInput, type AddressParts } from '@/components/shared/AddressAutocompleteInput';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -131,6 +131,7 @@ export type AppointmentCreateDefaults = Partial<{
   endDate: string;
   endTime: string;
   address: string;
+  addressParts?: AddressParts;
   description: string;
 }>;
 
@@ -145,6 +146,7 @@ export interface AppointmentFormDrawerProps {
   /** Prefill Contacts when opening create from job detail. */
   defaultSelectedParties?: JobParty[];
   defaultAddress?: string;
+  defaultAddressParts?: AddressParts;
   /** Prefill create-mode fields (ignored when editing). */
   createDefaults?: AppointmentCreateDefaults;
   appointment?: Appointment;
@@ -333,6 +335,7 @@ export function AppointmentFormDrawer({
   jobParties = [],
   defaultSelectedParties,
   defaultAddress,
+  defaultAddressParts,
   createDefaults,
   appointment: appointmentProp,
   appointmentId,
@@ -349,6 +352,7 @@ export function AppointmentFormDrawer({
   const locked = submitting || busy || loadingAppointment;
   const [assignees, setAssignees] = useState<PersonRef[]>([]);
   const [selectedParties, setSelectedParties] = useState<JobParty[]>([]);
+  const [addressParts, setAddressParts] = useState<AddressParts | undefined>(defaultAddressParts);
   const needsJobPicker = !isEdit && (jobs?.length ?? 0) > 0;
 
   useEffect(() => {
@@ -425,6 +429,7 @@ export function AppointmentFormDrawer({
       });
       setAssignees([]);
       setSelectedParties([]);
+      setAddressParts(undefined);
       setError(null);
       return;
     }
@@ -449,6 +454,7 @@ export function AppointmentFormDrawer({
     });
     setSelectedParties(defaultSelectedParties ?? []);
     setAssignees([]);
+    setAddressParts(createDefaults?.addressParts ?? defaultAddressParts);
     setError(null);
 
     let cancelled = false;
@@ -471,6 +477,7 @@ export function AppointmentFormDrawer({
     open,
     jobId,
     defaultAddress,
+    defaultAddressParts,
     createDefaults,
     defaultSelectedParties,
     form,
@@ -521,7 +528,7 @@ export function AppointmentFormDrawer({
         timezone: values.timezone,
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
-        address: values.address || undefined,
+        ...(addressParts ? { address: addressParts } : {}),
         description: values.description || undefined,
         attendees,
       };
@@ -847,7 +854,13 @@ export function AppointmentFormDrawer({
                   <AddressAutocompleteInput
                     id="appt-address"
                     value={field.value ?? ''}
-                    onChange={field.onChange}
+                    onChange={(value) => {
+                      field.onChange(value);
+                      if (!value.trim()) setAddressParts(undefined);
+                    }}
+                    onSelect={(suggestion) => {
+                      if (suggestion.parts) setAddressParts(suggestion.parts);
+                    }}
                     placeholder="e.g. 123 Nicholson Parade, Cronulla, NSW 2230"
                     name="appt-address"
                   />

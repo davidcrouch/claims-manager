@@ -3,7 +3,7 @@ import { eq, and, isNull, desc } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
 import { workOrders, organizations } from '../../../database/schema';
 import type { DataMapper } from './base.mapper';
-import { formatDate, formatCurrency } from './base.mapper';
+import { formatDate, formatCurrency, displayRecordNumber, internalNumberField } from './base.mapper';
 import type { TemplateData } from '../types/document-types';
 
 @Injectable()
@@ -24,7 +24,8 @@ export class WorkOrdersListMapper implements DataMapper {
       .limit(500);
 
     const items = rows.map((w) => ({
-      wo_number: w.workOrderNumber ?? '',
+      wo_number: displayRecordNumber(w.internalNumber, w.workOrderNumber),
+      internal_number: internalNumberField(w.internalNumber),
       name: w.name ?? '',
       start_date: formatDate(w.startDate),
       total_amount: formatCurrency(w.totalAmount),

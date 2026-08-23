@@ -9,7 +9,6 @@ export interface GenerateDocumentParams {
   templateId?: string;
   filesystemDocumentId?: string;
   destinationCategoryId?: string;
-  enabledSlugs?: string[];
 }
 
 export interface GenerateDocumentResult {

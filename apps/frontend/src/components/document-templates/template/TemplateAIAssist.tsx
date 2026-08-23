@@ -31,20 +31,19 @@ export function TemplateAIAssistButton() {
         summary: [
           `You are helping the user edit a Word document template for the "${documentType}" document type.`,
           '',
-          'This template uses the Docxtemplater engine syntax:',
-          '- `{fieldName}` — insert a merge field value',
-          '- `{#items}...{/items}` — loop over an array',
-          '- Expressions via `{= price * quantity}` (JavaScript-like parser)',
-          '',
-          'The expression parser supports JavaScript-like expressions inside `{...}` tags.',
+          'This template uses the docx-templates engine syntax:',
+          '- `<<fieldName>>` — insert a merge field value',
+          '- `<<FOR item IN items>>...<<END-FOR item>>` — loop over an array',
+          '- `<<IF condition>>...<<END-IF>>` — conditional section',
+          '- JavaScript expressions are evaluated in template commands',
           '',
           templateTags.length > 0
-            ? `Current template merge tags found in the document:\n${templateTags.map((t) => `  - {${t}}`).join('\n')}`
+            ? `Current template merge tags found in the document:\n${templateTags.map((t) => `  - <<${t}>>`).join('\n')}`
             : 'No merge tags have been found yet — the template may not be assigned or may be empty.',
           '',
           'When the user asks you to create or modify template content:',
           '- Output complete HTML content in a code block',
-          '- Include docx-templates merge tags using `{fieldName}` syntax',
+          '- Include docx-templates merge tags using `<<fieldName>>` syntax',
           '- Use semantic HTML (headings, paragraphs, tables, lists)',
           '- The user can copy your output into the editor',
           '',

@@ -36,6 +36,7 @@ import type { Rfq, Proposal, Job, Quote } from '@/types/api';
 import { PrintButton } from '@/components/shared/PrintButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { jobDisplayName } from '@/components/shared/job-label';
+import { EntityDetailTitle, entityArchiveLabel } from '@/components/shared/EntityDetailTitle';
 import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
 import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
 import {
@@ -76,7 +77,6 @@ function vendorName(rfq: Rfq): string | undefined {
 // ---------- header ----------------------------------------------------------
 
 export function RfqPageHeader({ rfq, job }: { rfq: Rfq; job?: Job | null }) {
-  const title = rfq.rfqNumber ?? rfq.name ?? rfq.id;
   const status = rfq.status?.name ?? 'Unknown';
   const vendor = vendorName(rfq);
 
@@ -87,7 +87,12 @@ export function RfqPageHeader({ rfq, job }: { rfq: Rfq; job?: Job | null }) {
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-100">
           <FileQuestion className="h-4 w-4 text-violet-600" />
         </span>
-        <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
+        <EntityDetailTitle
+          internalNumber={rfq.internalNumber}
+          name={rfq.name}
+          secondaryLabel={rfq.rfqNumber}
+          fallbackId={rfq.id}
+        />
         <StatusBadge status={status} />
         {vendor && (
           <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
@@ -1007,7 +1012,7 @@ export function RfqDetail({
           entityType="rfq"
           entityId={rfq.id}
           statusName={rfq.status?.name}
-          entityLabel={rfq.rfqNumber ?? rfq.name ?? undefined}
+          entityLabel={entityArchiveLabel(rfq.internalNumber, rfq.name, rfq.rfqNumber, rfq.id)}
           redirectTo="/rfqs"
         />
       </SetHeaderActions>

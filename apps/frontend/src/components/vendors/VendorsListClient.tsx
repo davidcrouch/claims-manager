@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Building2 } from 'lucide-react';
 import {
@@ -24,6 +24,11 @@ import {
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { ListPageHeader } from '@/components/layout/ListPageHeader';
 import { fetchVendorsAction } from '@/app/(app)/vendors/actions';
+import {
+  createListFetchSession,
+  replaceListQueryIfNeeded,
+  useListPageData,
+} from '@/components/shared/use-list-page-data';
 import type { Vendor, PaginatedResponse } from '@/types/api';
 
 const PAGE_SIZE = 20;
@@ -57,7 +62,7 @@ export interface VendorsListClientProps {
 export function VendorsListClient({ initialData }: VendorsListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [data, setData] = useState(initialData);
+  const { data, setData, beginFetch, abortFetch } = useListPageData(initialData);
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [sort, setSort] = useState(() => {
@@ -72,7 +77,6 @@ export function VendorsListClient({ initialData }: VendorsListClientProps) {
   const [linkFilter, setLinkFilter] = useState<Set<string>>(() =>
     parseStatusIdsFromSearchParam(searchParams.get('link')),
   );
-  const lastFetchKeyRef = useRef<string | null>(null);
   const { isVisible, toggle, visibleCount } = useColumnVisibility(
     'vendors',
     TABLE_COLUMNS,
@@ -84,22 +88,28 @@ export function VendorsListClient({ initialData }: VendorsListClientProps) {
   }, [search]);
 
   useEffect(() => {
-    setData(initialData);
-    lastFetchKeyRef.current = null;
-  }, [initialData]);
-
-  useEffect(() => {
     const linkKey = statusIdsKey(linkFilter);
     const fetchKey = `${debouncedSearch}|${sort}|${linkKey}`;
     const params = new URLSearchParams(searchParams.toString());
-    params.set('search', debouncedSearch);
-    params.set('sort', sort);
-    params.set('page', '1');
+    if (debouncedSearch) params.set('search', debouncedSearch);
+    else params.delete('search');
+    if (sort !== 'name_asc') params.set('sort', sort);
+    else params.delete('sort');
+    params.delete('page');
     if (linkKey) params.set('link', linkKey);
     else params.delete('link');
-    router.replace(`/vendors?${params}`, { scroll: false });
-    if (lastFetchKeyRef.current === fetchKey) return;
-    lastFetchKeyRef.current = fetchKey;
+    if (
+      !replaceListQueryIfNeeded({
+        router,
+        pathname: '/vendors',
+        currentQuery: searchParams.toString(),
+        nextQuery: params.toString(),
+      })
+    ) {
+      return;
+    }
+    const session = createListFetchSession({ fetchKey, beginFetch, abortFetch });
+    if (!session) return;
 
     const linked =
       linkFilter.size === 1
@@ -116,9 +126,11 @@ export function VendorsListClient({ initialData }: VendorsListClientProps) {
       search: debouncedSearch || undefined,
       sort,
       linked,
-    }).then((res) => res && setData(res));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop: router.replace updates URL -> searchParams changes -> effect re-runs
-  }, [debouncedSearch, sort, linkFilter]);
+    }).then((res) => {
+      if (!session.cancelled && res) setData(res);
+    });
+    return session.cleanup;
+  }, [debouncedSearch, sort, linkFilter, searchParams, router, beginFetch, abortFetch]);
 
   const { field: activeSortField, order: sortOrder } = parseSort({
     sortParam: sort,

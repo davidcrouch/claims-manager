@@ -1,14 +1,14 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { AppointmentsListClient } from '@/components/appointments/AppointmentsListClient';
-import { toJobOptions } from '@/components/shared/job-label';
+import {toJobOptions,
+  mergeCurrentJobIntoOptions } from '@/components/shared/job-label';
 import type { Job, Claim, PaginatedResponse } from '@/types/api';
 
 export const metadata = { title: 'Appointments — EnsureOS' };
 
 export default async function AppointmentsPage({
-  searchParams,
-}: {
+  searchParams }: {
   searchParams: Promise<{ jobId?: string }>;
 }) {
   const api = await getServerApiClient();
@@ -42,7 +42,7 @@ export default async function AppointmentsPage({
 
   return (
     <AppointmentsListClient
-      jobs={toJobOptions(jobsRes?.data ?? [])}
+      jobs={mergeCurrentJobIntoOptions(toJobOptions(jobsRes?.data ?? []), job)}
       job={job}
       parentClaim={parentClaim}
     />

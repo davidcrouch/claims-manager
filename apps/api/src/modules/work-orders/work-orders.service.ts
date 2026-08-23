@@ -1,11 +1,13 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
 import {
   WorkOrdersRepository,
   type WorkOrderViewRow,
 } from '../../database/repositories';
+import { DRIZZLE, type DrizzleDB } from '../../database/drizzle.module';
 import { TenantContext } from '../../tenant/tenant-context';
 import { LookupResolutionService } from '../domain/services/lookup-resolution.service';
 import { LOOKUP_DOMAINS } from '../domain/constants/lookup-domains';
+import { RecordNumberService } from '../../common/record-number/record-number.service';
 
 @Injectable()
 export class WorkOrdersService {
@@ -15,6 +17,8 @@ export class WorkOrdersService {
     private readonly workOrdersRepo: WorkOrdersRepository,
     private readonly tenantContext: TenantContext,
     private readonly lookupResolution: LookupResolutionService,
+    private readonly recordNumberService: RecordNumberService,
+    @Inject(DRIZZLE) private readonly db: DrizzleDB,
   ) {}
 
   async findAll(params: {
@@ -98,8 +102,14 @@ export class WorkOrdersService {
 
   async create(params: { body: Record<string, unknown>; userId?: string }) {
     const tenantId = this.tenantContext.getTenantId();
-    const { createdByUserId: _c, updatedByUserId: _u, statusLookupId, ...rest } =
-      params.body;
+    const {
+      createdByUserId: _c,
+      updatedByUserId: _u,
+      statusLookupId,
+      internalNumber: bodyInternalNumber,
+      workOrderNumber: bodyWorkOrderNumber,
+      ...rest
+    } = params.body;
 
     let resolvedStatusId =
       typeof statusLookupId === 'string' && statusLookupId.trim()
@@ -115,14 +125,29 @@ export class WorkOrdersService {
       });
     }
 
-    return this.workOrdersRepo.create({
-      data: {
-        ...rest,
+    return this.db.transaction(async (tx) => {
+      const internalNumber = await this.recordNumberService.resolve({
         tenantId,
-        statusLookupId: resolvedStatusId,
-        createdByUserId: params.userId ?? null,
-        updatedByUserId: params.userId ?? null,
-      } as any,
+        entity: 'work_order',
+        explicit: bodyInternalNumber,
+        tx,
+      });
+      const workOrderNumber = this.recordNumberService.isBlank(bodyWorkOrderNumber)
+        ? null
+        : String(bodyWorkOrderNumber).trim();
+
+      return this.workOrdersRepo.create({
+        data: {
+          ...rest,
+          tenantId,
+          internalNumber,
+          workOrderNumber,
+          statusLookupId: resolvedStatusId,
+          createdByUserId: params.userId ?? null,
+          updatedByUserId: params.userId ?? null,
+        } as any,
+        tx,
+      });
     });
   }
 

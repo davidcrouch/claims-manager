@@ -30,6 +30,19 @@ export function formatQuantity(value: string | number | null | undefined): strin
   return num % 1 === 0 ? num.toString() : num.toFixed(2);
 }
 
+/** Tenant-issued internal record number (e.g. RFQ-200015), blank when unset. */
+export function internalNumberField(value: string | null | undefined): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+/** Prefer internal number for display fields; fall back to external/provider number. */
+export function displayRecordNumber(
+  internalNumber: string | null | undefined,
+  externalNumber: string | null | undefined,
+): string {
+  return internalNumberField(internalNumber) || internalNumberField(externalNumber);
+}
+
 type AddressLike = {
   unitNumber?: unknown;
   unit_number?: unknown;

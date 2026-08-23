@@ -10,7 +10,6 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import jsonata from 'jsonata';
 
 export interface JsonSchemaObject {
   type: 'object';
@@ -155,22 +154,46 @@ export function TransformEditorProvider({
         return;
       }
 
-      const expression = jsonata(jsonataRules);
-      registerPreviewFunctions(expression);
-      const result = await Promise.race([
-        expression.evaluate(sourceData),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Evaluation timed out (10s)')), 10_000),
-        ),
-      ]);
-      setPreviewResult(result ?? {});
+      const res = await fetch(
+        `/api/document-templates/transforms/${encodeURIComponent(documentType)}/preview`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sourceData, jsonataRules }),
+        },
+      );
+      const data = (await res.json().catch(() => ({}))) as {
+        result?: unknown;
+        error?: string;
+        message?: string;
+      };
+      if (!res.ok) {
+        setPreviewError(data.message ?? `Preview failed (${res.status})`);
+        setPreviewResult(null);
+        return;
+      }
+      if (data.error) {
+        setPreviewError(data.error);
+        setPreviewResult(null);
+        return;
+      }
+      setPreviewResult(data.result ?? {});
     } catch (err) {
       setPreviewError(err instanceof Error ? err.message : String(err));
       setPreviewResult(null);
     } finally {
       setEvaluating(false);
     }
-  }, [jsonataRules, testData]);
+  }, [documentType, jsonataRules, testData]);
+
+  const initialEvaluateRef = useRef(false);
+  useEffect(() => {
+    if (loading || initialEvaluateRef.current || !jsonataRules.trim() || !testData.trim()) {
+      return;
+    }
+    initialEvaluateRef.current = true;
+    void evaluate();
+  }, [loading, jsonataRules, testData, evaluate]);
 
   const save = useCallback(async () => {
     setSaving(true);
@@ -189,6 +212,7 @@ export function TransformEditorProvider({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             jsonataRules,
+            targetSchema,
             testData: parsedTestData,
           }),
         },
@@ -201,7 +225,7 @@ export function TransformEditorProvider({
     } finally {
       setSaving(false);
     }
-  }, [documentType, jsonataRules, testData]);
+  }, [documentType, jsonataRules, targetSchema, testData]);
 
   const reset = useCallback(async () => {
     setSaving(true);
@@ -253,52 +277,70 @@ export function TransformEditorProvider({
   );
 }
 
-function registerPreviewFunctions(expression: ReturnType<typeof jsonata>): void {
-  const formatDate = (value: unknown): string => {
-    if (value == null || value === '') return '';
-    const d = value instanceof Date ? value : new Date(String(value));
-    if (Number.isNaN(d.getTime())) return '';
-    return d.toLocaleDateString('en-AU', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  };
-  const formatCurrency = (value: unknown): string => {
-    const num = typeof value === 'string' ? parseFloat(value) : Number(value ?? 0);
-    if (Number.isNaN(num)) return '$0.00';
-    return `$${num.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-  expression.registerFunction('formatDate', formatDate);
-  expression.registerFunction('formatCurrency', formatCurrency);
-  expression.registerFunction('yn', (value: unknown) =>
-    value === true || value === 'true' || value === 'Yes' ? 'Yes' : 'No',
-  );
-  expression.registerFunction('str', (value: unknown) =>
-    value == null ? '' : String(value),
-  );
-}
-
 function generateSampleFromSchema(
   schema: JsonSchemaObject | null,
+  parentKey = '',
 ): Record<string, unknown> {
   if (!schema?.properties) return {};
   const result: Record<string, unknown> = {};
   for (const [key, prop] of Object.entries(schema.properties)) {
+    if (key === 'contacts' || key === 'claim_contacts') {
+      result[key] = [
+        {
+          firstName: 'Jane',
+          lastName: 'Insured',
+          email: 'jane@example.com',
+          homePhone: '07 2222 2222',
+          mobilePhone: '0411 111 111',
+          isInsured: true,
+          isTenant: false,
+        },
+        {
+          firstName: 'Alex',
+          lastName: 'Tenant',
+          homePhone: '07 4444 4444',
+          isInsured: false,
+          isTenant: true,
+        },
+      ];
+      continue;
+    }
+
     if (prop.type === 'string') {
-      result[key] = `sample_${key}`;
+      if (parentKey === 'organization' && key === 'name') {
+        result[key] = 'Acme Co';
+      } else if (key.toLowerCase().includes('date')) {
+        result[key] = '2026-01-15';
+      } else {
+        result[key] = `sample_${key}`;
+      }
     } else if (prop.type === 'number' || prop.type === 'integer') {
       result[key] = 0;
     } else if (prop.type === 'boolean') {
-      result[key] = false;
+      result[key] = key === 'includePricing' || key === 'includeQuantities';
     } else if (prop.type === 'array' && prop.items) {
       const item =
         prop.items.type === 'object' && prop.items.properties
-          ? generateSampleFromSchema(prop.items as JsonSchemaObject)
+          ? generateSampleFromSchema(prop.items as JsonSchemaObject, key)
           : `sample_item`;
       result[key] = [item];
     } else if (prop.type === 'object' && prop.properties) {
-      result[key] = generateSampleFromSchema(prop as JsonSchemaObject);
+      result[key] = generateSampleFromSchema(prop as JsonSchemaObject, key);
+    } else if (prop.type === 'object') {
+      if (key === 'rfqTo') {
+        result[key] = {
+          name: 'Supplier Co',
+          email: 'supplier@example.com',
+          company: 'Supplier Co',
+          address: '1 Vendor Rd',
+        };
+      } else if (key === 'rfqFrom') {
+        result[key] = { name: 'Acme Co' };
+      } else if (key === 'address' && parentKey === 'job') {
+        result[key] = { streetNumber: '42', streetName: 'Main St' };
+      } else {
+        result[key] = {};
+      }
     } else {
       result[key] = null;
     }

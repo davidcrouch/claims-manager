@@ -3,7 +3,7 @@ import { eq, and, desc } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
 import { quotes, organizations } from '../../../database/schema';
 import type { DataMapper } from './base.mapper';
-import { formatDate, formatCurrency } from './base.mapper';
+import { formatDate, formatCurrency, displayRecordNumber, internalNumberField } from './base.mapper';
 import type { TemplateData } from '../types/document-types';
 
 @Injectable()
@@ -24,7 +24,8 @@ export class QuotesListMapper implements DataMapper {
       .limit(500);
 
     const items = rows.map((q) => ({
-      quote_number: q.quoteNumber ?? '',
+      quote_number: displayRecordNumber(q.internalNumber, q.quoteNumber),
+      internal_number: internalNumberField(q.internalNumber),
       name: q.name ?? '',
       date: formatDate(q.quoteDate),
       total_amount: formatCurrency(q.totalAmount),

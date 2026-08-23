@@ -1,13 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ShoppingCart, Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  type StatusOption,
+import { type StatusOption,
   formatDate,
   commitColumnFilterSelection,
   columnFilterToIdsParam,
@@ -17,31 +16,33 @@ import {
   SortableColumnHeader,
   TableEmptyRow,
   statusIdsForArchiveListTab,
-  mergeStatusParamWithTab,
-} from '@/components/shared/list-filters';
-import { resolveJobName } from '@/components/shared/job-label';
-import {
-  buildServerJobFilterOptions,
+  mergeStatusParamWithTab, withUniqueNamedFilterOptions } from '@/components/shared/list-filters';
+import { jobDisplayName } from '@/components/shared/job-label';
+import { JobCellLink } from '@/components/shared/JobCellLink';
+import { buildServerJobFilterOptions,
   resolveServerJobFilterSelection,
   selectedJobFilterLabels,
   parseSelectedJobIds,
   toServerJobFetchParams,
   writeServerJobFilterParams,
-  jobFilterOptionsFromNameById,
-} from '@/components/shared/server-job-filter';
-import { TablePagination } from '@/components/shared/table-pagination';
+  syncServerJobFilterParams,
+  buildListJobFilterOptions } from '@/components/shared/server-job-filter';
+import {
+  createListFetchSession,
+  replaceListQueryIfNeeded,
+  useListPageData } from '@/components/shared/use-list-page-data';
+import { entityDisplayLabel } from '@/components/shared/entity-label';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import {
   EntityPageHeader,
-  type EntityBreakdownItem,
-} from '@/components/shared/EntityPageHeader';
+  type EntityBreakdownItem } from '@/components/shared/EntityPageHeader';
 import { computeStatusBreakdown } from '@/components/layout/ListPageHeader';
 import { fetchPurchaseOrdersAction } from '@/app/(app)/purchase-orders/actions';
 import {
   ColumnSettingsHeaderCell,
-  useColumnVisibility,
-} from '@/components/shared/column-visibility';
+  useColumnVisibility } from '@/components/shared/column-visibility';
 import { ListArchiveButton, LIST_ARCHIVE_TH_CLASS, LIST_ARCHIVE_TD_CLASS, LIST_ARCHIVE_SPACER_TD_CLASS } from '@/components/shared/ListArchiveButton';
+import { TablePagination } from '@/components/shared/table-pagination';
 import type { PurchaseOrder, PaginatedResponse, Job, Claim } from '@/types/api';
 
 type ListTab = 'active' | 'archived' | 'all';
@@ -60,8 +61,7 @@ function formatAmount(value?: string | null): string {
   return n.toLocaleString('en-AU', {
     style: 'currency',
     currency: 'AUD',
-    maximumFractionDigits: 2,
-  });
+    maximumFractionDigits: 2 });
 }
 
 type POSortField =
@@ -98,13 +98,12 @@ export function PurchaseOrdersListClient({
   vendorOptions,
   jobNameById,
   job,
-  parentClaim,
-}: PurchaseOrdersListClientProps) {
+  parentClaim }: PurchaseOrdersListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const jobId = searchParams.get('jobId') ?? undefined;
   const jobIdsParam = searchParams.get('jobIds') ?? undefined;
-  const [data, setData] = useState(initialData);
+  const { data, setData, beginFetch, abortFetch } = useListPageData(initialData);
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [tab, setTab] = useState<ListTab>(() => parseTab(searchParams.get('tab')));
@@ -114,8 +113,7 @@ export function PurchaseOrdersListClient({
   });
   const [columnSort, setColumnSort] = useState<{ field: POSortField; order: 'asc' | 'desc' }>({
     field: 'updated_at',
-    order: 'desc',
-  });
+    order: 'desc' });
   const [vendorFilter, setVendorFilter] = useState<Set<string>>(new Set());
   const [vendorFilterActive, setVendorFilterActive] = useState(false);
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
@@ -124,14 +122,19 @@ export function PurchaseOrdersListClient({
     'purchase-orders',
     TABLE_COLUMNS,
   );
-  const lastFetchKeyRef = useRef<string | null>(null);
   const selectedJobIds = useMemo(
     () => parseSelectedJobIds(jobId, jobIdsParam),
     [jobId, jobIdsParam],
   );
   const filterJobs = useMemo(
-    () => jobFilterOptionsFromNameById(jobNameById),
-    [jobNameById],
+    () =>
+      buildListJobFilterOptions({
+        jobNameById,
+        currentJob: job
+          ? { id: job.id, label: jobDisplayName(job) }
+          : null,
+        jobId }),
+    [jobNameById, job, jobId],
   );
   const uniqueJobs = useMemo(
     () => buildServerJobFilterOptions(filterJobs),
@@ -144,8 +147,7 @@ export function PurchaseOrdersListClient({
         jobIds: jobIdsParam
           ? jobIdsParam.split(',').map((id) => id.trim()).filter(Boolean)
           : undefined,
-        jobs: filterJobs,
-      }),
+        jobs: filterJobs }),
     [jobId, jobIdsParam, filterJobs],
   );
   const { jobId: fetchJobId, jobIds: fetchJobIds } = useMemo(
@@ -164,9 +166,18 @@ export function PurchaseOrdersListClient({
       ),
     [statusFilterActive, statusFilter, statusOptions, tabStatusIds],
   );
+  const vendorFilterOptions = useMemo(
+    () =>
+      withUniqueNamedFilterOptions(
+        vendorOptions.map((vendor) => ({
+          id: vendor.id,
+          name: vendor.name?.trim() ? vendor.name.trim() : vendor.id })),
+      ),
+    [vendorOptions],
+  );
   const vendorParam = useMemo(
-    () => columnFilterToIdsParam(vendorFilterActive, vendorFilter, vendorOptions),
-    [vendorFilterActive, vendorFilter, vendorOptions],
+    () => columnFilterToIdsParam(vendorFilterActive, vendorFilter, vendorFilterOptions),
+    [vendorFilterActive, vendorFilter, vendorFilterOptions],
   );
 
   const sortParam = `${columnSort.field}_${columnSort.order}`;
@@ -181,26 +192,39 @@ export function PurchaseOrdersListClient({
     const vendorKey = vendorParam === null ? '__none__' : (vendorParam ?? '');
     const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${vendorKey}|${jobId ?? ''}|${jobIdsParam ?? ''}`;
     const params = new URLSearchParams(searchParams.toString());
-    params.set('search', debouncedSearch);
-    params.set('tab', tab);
-    params.set('page', String(page));
-    params.set('sort', sortParam);
+    if (debouncedSearch) params.set('search', debouncedSearch);
+    else params.delete('search');
+    if (tab !== 'active') params.set('tab', tab);
+    else params.delete('tab');
+    if (page > 1) params.set('page', String(page));
+    else params.delete('page');
+    if (sortParam !== 'updated_at_desc') params.set('sort', sortParam);
+    else params.delete('sort');
     if (statusParam) params.set('status', statusParam); else params.delete('status');
     if (vendorParam) params.set('vendorId', vendorParam); else params.delete('vendorId');
-    if (jobId) params.set('jobId', jobId);
-    else params.delete('jobId');
-    if (jobIdsParam) params.set('jobIds', jobIdsParam);
-    else params.delete('jobIds');
-    router.replace(`/purchase-orders?${params}`, { scroll: false });
-    if (lastFetchKeyRef.current === fetchKey) return;
-    lastFetchKeyRef.current = fetchKey;
-    if (statusParam === null || vendorParam === null) {
-      setData({ data: [], total: 0 });
+    syncServerJobFilterParams(params, jobId, jobIdsParam);
+    const next = params.toString();
+    if (
+      !replaceListQueryIfNeeded({
+        router,
+        pathname: '/purchase-orders',
+        currentQuery: searchParams.toString(),
+        nextQuery: next,
+      })
+    ) {
       return;
     }
-    fetchPurchaseOrdersAction({ page, limit: PAGE_SIZE, sort: sortParam, status: statusParam, vendorId: vendorParam, jobId: fetchJobId, jobIds: fetchJobIds, search: debouncedSearch || undefined }).then((res) => res && setData(res));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop: router.replace updates URL -> searchParams changes -> effect re-runs
-  }, [debouncedSearch, sortParam, tab, page, statusParam, vendorParam, jobId, jobIdsParam, fetchJobId, fetchJobIds]);
+    const session = createListFetchSession({ fetchKey, beginFetch, abortFetch });
+    if (!session) return;
+    if (statusParam === null || vendorParam === null) {
+      setData({ data: [], total: 0 });
+      return session.cleanup;
+    }
+    fetchPurchaseOrdersAction({ page, limit: PAGE_SIZE, sort: sortParam, status: statusParam, vendorId: vendorParam, jobId: fetchJobId, jobIds: fetchJobIds, search: debouncedSearch || undefined }).then((res) => {
+      if (!session.cancelled && res) setData(res);
+    });
+    return session.cleanup;
+  }, [debouncedSearch, sortParam, tab, page, statusParam, vendorParam, jobId, jobIdsParam, fetchJobId, fetchJobIds, searchParams, router, beginFetch, abortFetch]);
 
   const handleColumnSort = (field: POSortField) => {
     setColumnSort((prev) => {
@@ -216,7 +240,10 @@ export function PurchaseOrdersListClient({
   const handleSearchChange = (value: string) => { setSearch(value); setPage(1); };
   const handleTabChange = (val: string) => { setTab(val as ListTab); setPage(1); };
 
-  const uniqueVendors = useMemo(() => [...new Set(vendorOptions.map((vendor) => vendor.name.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [vendorOptions]);
+  const uniqueVendors = useMemo(
+    () => vendorFilterOptions.map((vendor) => vendor.name).sort((a, b) => a.localeCompare(b)),
+    [vendorFilterOptions],
+  );
 
 
   const uniqueStatuses = useMemo(() => {
@@ -240,8 +267,7 @@ export function PurchaseOrdersListClient({
     else working.add(name);
     const committed = commitColumnFilterSelection({
       next: working,
-      optionCount: uniqueVendors.length,
-    });
+      optionCount: uniqueVendors.length });
     setVendorFilter(committed.selected);
     setVendorFilterActive(committed.active);
     setPage(1);
@@ -250,8 +276,7 @@ export function PurchaseOrdersListClient({
   const applyStatusFilter = (next: Set<string>) => {
     const committed = commitColumnFilterSelection({
       next,
-      optionCount: uniqueStatuses.length,
-    });
+      optionCount: uniqueStatuses.length });
     setStatusFilter(committed.selected);
     setStatusFilterActive(committed.active);
     setPage(1);
@@ -260,8 +285,7 @@ export function PurchaseOrdersListClient({
   const applyVendorFilter = (next: Set<string>) => {
     const committed = commitColumnFilterSelection({
       next,
-      optionCount: uniqueVendors.length,
-    });
+      optionCount: uniqueVendors.length });
     setVendorFilter(committed.selected);
     setVendorFilterActive(committed.active);
     setPage(1);
@@ -271,8 +295,7 @@ export function PurchaseOrdersListClient({
     const resolved = resolveServerJobFilterSelection({
       next,
       options: uniqueJobs,
-      jobs: filterJobs,
-    });
+      jobs: filterJobs });
     setPage(1);
     const params = new URLSearchParams(searchParams.toString());
     writeServerJobFilterParams(params, resolved);
@@ -286,8 +309,7 @@ export function PurchaseOrdersListClient({
     active: statusFilterActive,
     onApply: applyStatusFilter,
     menuTitle: 'Filter by status',
-    itemNoun: { singular: 'status', plural: 'statuses' },
-  };
+    itemNoun: { singular: 'status', plural: 'statuses' } };
 
   const vendorFilterProps = {
     options: uniqueVendors,
@@ -295,8 +317,7 @@ export function PurchaseOrdersListClient({
     active: vendorFilterActive,
     onApply: applyVendorFilter,
     menuTitle: 'Filter by vendor',
-    itemNoun: { singular: 'vendor', plural: 'vendors' },
-  };
+    itemNoun: { singular: 'vendor', plural: 'vendors' } };
 
   const jobFilterProps = {
     options: uniqueJobs,
@@ -304,8 +325,7 @@ export function PurchaseOrdersListClient({
     active: jobFilterActive,
     onApply: applyJobFilter,
     menuTitle: 'Filter by job',
-    itemNoun: { singular: 'job', plural: 'jobs' },
-  };
+    itemNoun: { singular: 'job', plural: 'jobs' } };
 
   const visibleRows = data.data;
 
@@ -322,8 +342,7 @@ export function PurchaseOrdersListClient({
     return sum.toLocaleString(undefined, {
       style: 'currency',
       currency: 'AUD',
-      maximumFractionDigits: 0,
-    });
+      maximumFractionDigits: 0 });
   }, [visibleRows]);
 
   return (
@@ -438,7 +457,12 @@ export function PurchaseOrdersListClient({
                 ) : (
                   visibleRows.map((po) => {
                   const num =
-                    po.purchaseOrderNumber ?? po.externalId ?? po.id;
+                    entityDisplayLabel(
+                      po.internalNumber,
+                      po.purchaseOrderNumber,
+                      po.externalId,
+                      po.id,
+                    );
                   const statusName = po.status?.name ?? 'Unknown';
                   const vendorName = po.vendor?.name ?? '';
                   return (
@@ -458,7 +482,7 @@ export function PurchaseOrdersListClient({
                       )}
                       {isVisible('job') && (
                         <td className="px-4 py-3 text-slate-600">
-                          {resolveJobName(po.jobId, jobNameById)}
+                          <JobCellLink jobId={po.jobId} jobNameById={jobNameById} />
                         </td>
                       )}
                       {isVisible('status') && (
@@ -492,8 +516,7 @@ export function PurchaseOrdersListClient({
                             setData((prev) => ({
                               ...prev,
                               data: prev.data.filter((row) => row.id !== id),
-                              total: Math.max(0, prev.total - 1),
-                            }));
+                              total: Math.max(0, prev.total - 1) }));
                           }}
                         />
                       </td>

@@ -33,6 +33,7 @@ import { CatalogSelectionService } from '../catalog/services/catalog-selection.s
 import { DocumentIssuanceService } from '../domain/services/document-issuance.service';
 import { OutboundEventsService } from '../outbound-events/outbound-events.service';
 import { ActivitiesService } from '../activities/activities.service';
+import { RecordNumberService } from '../../common/record-number/record-number.service';
 
 export interface PublishResult {
   quote: Record<string, unknown> | null;
@@ -65,6 +66,7 @@ export class QuotesService {
     private readonly lookupsRepo: LookupsRepository,
     private readonly documentIssuance: DocumentIssuanceService,
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
+    private readonly recordNumberService: RecordNumberService,
     @Optional() private readonly connectionResolver?: ConnectionResolverService,
     @Optional() private readonly catalogOutbound?: CatalogOutboundService,
     @Optional() private readonly outboundEvents?: OutboundEventsService,
@@ -361,6 +363,8 @@ export class QuotesService {
 
   async create(params: { body: Record<string, unknown>; userId?: string }) {
     const tenantId = this.tenantContext.getTenantId();
+    const bodyInternalNumber = params.body.internalNumber;
+    const bodyQuoteNumber = params.body.quoteNumber;
     const draftStatusId =
       (await this.lookupResolver.resolveByName({
         tenantId,
@@ -393,58 +397,72 @@ export class QuotesService {
       scheduleInfo.reasonForVariation = params.body.reasonForVariation;
     }
 
-    const insertData: QuoteInsert = {
-      tenantId,
-      jobId: params.body.jobId as string,
-      claimId: (params.body.claimId as string) || null,
-      issuerOrganisationId: tenantId,
-      recipientOrganisationId,
-      ownershipStatus: 'owned',
-      name: (params.body.name as string) || null,
-      reference: (params.body.reference as string) || null,
-      note: (params.body.note as string) || null,
-      quoteDate: params.body.estimateDate
-        ? new Date(params.body.estimateDate as string)
-        : params.body.date
-          ? new Date(params.body.date as string)
+    return this.db.transaction(async (tx) => {
+      const internalNumber = await this.recordNumberService.resolve({
+        tenantId,
+        entity: 'estimate',
+        explicit: bodyInternalNumber,
+        tx,
+      });
+      const quoteNumber = this.recordNumberService.isBlank(bodyQuoteNumber)
+        ? null
+        : String(bodyQuoteNumber).trim();
+
+      const insertData: QuoteInsert = {
+        tenantId,
+        jobId: params.body.jobId as string,
+        claimId: (params.body.claimId as string) || null,
+        issuerOrganisationId: tenantId,
+        recipientOrganisationId,
+        ownershipStatus: 'owned',
+        name: (params.body.name as string) || null,
+        reference: (params.body.reference as string) || null,
+        note: (params.body.note as string) || null,
+        internalNumber,
+        quoteNumber,
+        quoteDate: params.body.estimateDate
+          ? new Date(params.body.estimateDate as string)
+          : params.body.date
+            ? new Date(params.body.date as string)
+            : null,
+        expiresInDays: params.body.expiresInDays
+          ? Number(params.body.expiresInDays)
           : null,
-      expiresInDays: params.body.expiresInDays
-        ? Number(params.body.expiresInDays)
-        : null,
-      estimatedStartDate:
-        ((params.body.estimatedStart ?? params.body.estimatedStartDate) as string) ||
-        null,
-      estimatedCompletionDate:
-        ((params.body.estimatedCompletion ??
-          params.body.estimatedCompletionDate) as string) || null,
-      scheduleInfo,
-      quoteTo:
-        params.body.quoteTo && typeof params.body.quoteTo === 'object'
-          ? (params.body.quoteTo as Record<string, unknown>)
-          : {},
-      quoteFor:
-        params.body.quoteFor && typeof params.body.quoteFor === 'object'
-          ? (params.body.quoteFor as Record<string, unknown>)
-          : {},
-      quoteFrom:
-        params.body.quoteFrom && typeof params.body.quoteFrom === 'object'
-          ? (params.body.quoteFrom as Record<string, unknown>)
-          : {},
-      customData: { quoteType: params.body.quoteType || null },
-      statusLookupId: draftStatusId ?? null,
-      createdByUserId: params.userId ?? null,
-      updatedByUserId: params.userId ?? null,
-    };
-    const to = insertData.quoteTo as Record<string, unknown> | undefined;
-    if (to) {
-      if (typeof to.name === 'string') insertData.quoteToName = to.name;
-      if (typeof to.email === 'string') insertData.quoteToEmail = to.email;
-    }
-    const forParty = insertData.quoteFor as Record<string, unknown> | undefined;
-    if (forParty && typeof forParty.name === 'string') {
-      insertData.quoteForName = forParty.name;
-    }
-    return this.quotesRepo.create({ data: insertData });
+        estimatedStartDate:
+          ((params.body.estimatedStart ?? params.body.estimatedStartDate) as string) ||
+          null,
+        estimatedCompletionDate:
+          ((params.body.estimatedCompletion ??
+            params.body.estimatedCompletionDate) as string) || null,
+        scheduleInfo,
+        quoteTo:
+          params.body.quoteTo && typeof params.body.quoteTo === 'object'
+            ? (params.body.quoteTo as Record<string, unknown>)
+            : {},
+        quoteFor:
+          params.body.quoteFor && typeof params.body.quoteFor === 'object'
+            ? (params.body.quoteFor as Record<string, unknown>)
+            : {},
+        quoteFrom:
+          params.body.quoteFrom && typeof params.body.quoteFrom === 'object'
+            ? (params.body.quoteFrom as Record<string, unknown>)
+            : {},
+        customData: { quoteType: params.body.quoteType || null },
+        statusLookupId: draftStatusId ?? null,
+        createdByUserId: params.userId ?? null,
+        updatedByUserId: params.userId ?? null,
+      };
+      const to = insertData.quoteTo as Record<string, unknown> | undefined;
+      if (to) {
+        if (typeof to.name === 'string') insertData.quoteToName = to.name;
+        if (typeof to.email === 'string') insertData.quoteToEmail = to.email;
+      }
+      const forParty = insertData.quoteFor as Record<string, unknown> | undefined;
+      if (forParty && typeof forParty.name === 'string') {
+        insertData.quoteForName = forParty.name;
+      }
+      return this.quotesRepo.create({ data: insertData, tx });
+    });
   }
 
   async publish(params: { id: string; userId?: string }): Promise<PublishResult> {
@@ -1428,11 +1446,18 @@ export class QuotesService {
         tx,
       });
 
+      const woInternalNumber = await this.recordNumberService.next({
+        tenantId,
+        entity: 'work_order',
+        tx,
+      });
+
       const wo = await this.workOrdersRepo.create({
         data: {
           tenantId,
           jobId: existing.jobId,
           claimId: existing.claimId ?? undefined,
+          internalNumber: woInternalNumber,
           name: woName,
           totalAmount: existing.totalAmount ?? undefined,
           statusLookupId: woStatusId ?? undefined,

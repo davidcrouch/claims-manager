@@ -3,7 +3,7 @@ import { CatalogSelectionService } from '../catalog/services/catalog-selection.s
 import { parseLineItemsPageQuery } from '../catalog/line-items-page';
 import { CatalogMismatchService } from '../catalog/services/catalog-mismatch.service';
 import { AddCatalogAssemblyDto, AddCatalogPrimitiveDto } from '../catalog/dto/catalog.dto';
-import { CreateQuoteGroupDto, UpdateQuoteGroupDto, ReorderQuoteGroupsDto, UpdateQuoteLineItemsDto } from './dto/quote-group.dto';
+import { CreateQuoteGroupDto, UpdateQuoteGroupDto, ReorderQuoteGroupsDto, UpdateQuoteLineItemsDto, ReorderLineItemsDto, MoveLineItemDto, DuplicateLineItemDto } from './dto/quote-group.dto';
 import { QuotesService } from './quotes.service';
 import { ManualCaptureService, type CaptureEstimateDto } from '../domain/services/manual-capture.service';
 import { TenantContext } from '../../tenant/tenant-context';
@@ -255,6 +255,54 @@ export class QuotesController {
   ) {
     await this.quotesService.assertQuoteEditable({ id: quoteId });
     return this.catalogSelectionService.deleteQuoteCombo({ quoteId, comboId });
+  }
+
+  @Patch(':quoteId/line-items/reorder')
+  @RequirePermission(P.procurement.manage)
+  async reorderLineItems(
+    @Param('quoteId') quoteId: string,
+    @Body() body: ReorderLineItemsDto,
+  ) {
+    await this.quotesService.assertQuoteEditable({ id: quoteId });
+    return this.catalogSelectionService.reorderQuoteLineItems({
+      quoteId,
+      items: body.items,
+      combos: body.combos,
+    });
+  }
+
+  @Patch(':quoteId/line-items/move')
+  @RequirePermission(P.procurement.manage)
+  async moveLineItem(
+    @Param('quoteId') quoteId: string,
+    @Body() body: MoveLineItemDto,
+  ) {
+    await this.quotesService.assertQuoteEditable({ id: quoteId });
+    return this.catalogSelectionService.moveQuoteLineItem({
+      quoteId,
+      itemId: body.itemId,
+      comboId: body.comboId,
+      targetGroupId: body.targetGroupId,
+      targetComboId: body.targetComboId,
+      insertAtIndex: body.insertAtIndex,
+    });
+  }
+
+  @Post(':quoteId/line-items/duplicate')
+  @RequirePermission(P.procurement.manage)
+  async duplicateLineItem(
+    @Param('quoteId') quoteId: string,
+    @Body() body: DuplicateLineItemDto,
+  ) {
+    await this.quotesService.assertQuoteEditable({ id: quoteId });
+    return this.catalogSelectionService.duplicateQuoteLineItem({
+      quoteId,
+      itemId: body.itemId,
+      comboId: body.comboId,
+      targetGroupId: body.targetGroupId,
+      targetComboId: body.targetComboId,
+      insertAtIndex: body.insertAtIndex,
+    });
   }
 
   @Post(':quoteId/groups/:groupId/catalog-items')

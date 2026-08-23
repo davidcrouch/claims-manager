@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import type { ProjectionUseCase, ProjectionResult } from './use-case.interface';
 import type { DrizzleDbOrTx } from '../../../database/drizzle.module';
 import { PurchaseOrderTransformer } from '../transformers/purchase-order.transformer';
-import { EntityRelationshipService } from '../services/entity-relationship.service';
+import { EntityRelationshipService, ParentNotProjectedError } from '../services/entity-relationship.service';
 import { LookupResolutionService } from '../services/lookup-resolution.service';
 import { LineItemSyncService } from '../services/line-item-sync.service';
 import {
@@ -88,11 +88,19 @@ export class ProjectPurchaseOrderUseCase implements ProjectionUseCase {
       const claimId = (result.entity as Record<string, unknown>).claimId as string | undefined;
 
       if (!jobId && !claimId) {
-        const payloadId = (payload.id as string) ?? 'unknown';
-        this.logger.warn(
-          `ProjectPurchaseOrderUseCase.execute — WO ${payloadId} has no resolvable job or claim parent; skipping`,
+        const unresolvedParents = result.parentRefs
+          .filter((r) => r.entityType === 'job' || r.entityType === 'claim')
+          .map((r) => ({
+            internalEntityType: r.entityType,
+            providerEntityType: r.entityType,
+            providerEntityId: r.externalId,
+          }));
+        throw new ParentNotProjectedError(
+          'purchase_order',
+          externalObjectId,
+          unresolvedParents,
+          `Work order ${externalObjectId} cannot be created: no resolvable job or claim parent`,
         );
-        return { status: 'skipped', internalEntityId: '', internalEntityType: 'work_order', reason: 'skipped_no_parent' };
       }
 
       const created = await this.workOrdersRepo.create({

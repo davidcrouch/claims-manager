@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -52,20 +51,56 @@ export interface PrintReportTypeOption {
   documentType: string;
   label: string;
   description: string;
+  /** When set, overrides the drawer-level entity id for this report type. */
+  entityId?: string;
 }
 
-export const JOB_REPORT_TYPES: readonly PrintReportTypeOption[] = [
-  {
-    documentType: 'job_details',
-    label: 'Job Details',
-    description: 'Summary of job status, address, claim, and key dates.',
-  },
-  {
-    documentType: 'scope_of_work',
-    label: 'Scope of Work',
-    description: 'Job instructions and scope details for the works.',
-  },
-];
+export function buildEstimateReportTypes(quoteId: string): PrintReportTypeOption[] {
+  return [
+    {
+      documentType: 'quote',
+      label: 'Estimate',
+      description: 'Line items, totals, and estimate summary.',
+      entityId: quoteId,
+    },
+    {
+      documentType: 'scope_of_work',
+      label: 'Scope of Work',
+      description: 'Scope names and descriptions from this estimate (no pricing).',
+      entityId: quoteId,
+    },
+  ];
+}
+
+export function buildJobReportTypes(
+  jobId: string,
+  assessments: Array<{ id: string; name?: string | null; updatedAt?: string }> = [],
+): PrintReportTypeOption[] {
+  const options: PrintReportTypeOption[] = [
+    {
+      documentType: 'job_details',
+      label: 'Job Details',
+      description: 'Summary of job status, address, claim, and key dates.',
+      entityId: jobId,
+    },
+  ];
+
+  const latestAssessment = [...assessments].sort(
+    (a, b) =>
+      new Date(b.updatedAt ?? 0).getTime() - new Date(a.updatedAt ?? 0).getTime(),
+  )[0];
+
+  if (latestAssessment) {
+    options.push({
+      documentType: 'assessment',
+      label: 'Assessment Report',
+      description: 'Site assessment findings, recommendations, and attendance details.',
+      entityId: latestAssessment.id,
+    });
+  }
+
+  return options;
+}
 
 export interface PrintDocumentDrawerProps {
   open: boolean;
@@ -186,11 +221,6 @@ export function PrintDocumentDrawer({
     null,
   );
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
-  const [dataContextAvailable, setDataContextAvailable] = useState(false);
-  const [relatedOptions, setRelatedOptions] = useState<
-    Array<{ slug: string; label: string; description: string }>
-  >([]);
-  const [enabledSlugs, setEnabledSlugs] = useState<string[]>([]);
 
   const reset = useCallback(() => {
     setSelectedType(documentType);
@@ -200,9 +230,6 @@ export function PrintDocumentDrawer({
     setSelectedTemplateId('');
     setDestinationCategoryId(null);
     setFolderPickerOpen(false);
-    setDataContextAvailable(false);
-    setRelatedOptions([]);
-    setEnabledSlugs([]);
   }, [documentType]);
 
   useEffect(() => {
@@ -272,57 +299,6 @@ export function PrintDocumentDrawer({
       cancelled = true;
     };
   }, [open, jobId]);
-
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-
-    async function loadDataContext() {
-      try {
-        const res = await fetch(
-          `/api/document-templates/data-context/${encodeURIComponent(selectedType)}`,
-        );
-        if (!res.ok) {
-          if (!cancelled) {
-            setDataContextAvailable(false);
-            setRelatedOptions([]);
-            setEnabledSlugs([]);
-          }
-          return;
-        }
-        const data = await res.json();
-        if (cancelled) return;
-        if (!data.available || !data.definition) {
-          setDataContextAvailable(false);
-          setRelatedOptions([]);
-          setEnabledSlugs([]);
-          return;
-        }
-        setDataContextAvailable(true);
-        setRelatedOptions(
-          (data.definition.relatedEntities ?? []).map(
-            (r: { slug: string; label: string; description: string }) => ({
-              slug: r.slug,
-              label: r.label,
-              description: r.description,
-            }),
-          ),
-        );
-        setEnabledSlugs(Array.isArray(data.enabledSlugs) ? data.enabledSlugs : []);
-      } catch {
-        if (!cancelled) {
-          setDataContextAvailable(false);
-          setRelatedOptions([]);
-          setEnabledSlugs([]);
-        }
-      }
-    }
-
-    void loadDataContext();
-    return () => {
-      cancelled = true;
-    };
-  }, [open, selectedType]);
 
   const assigned = useMemo(
     () => assignedFilesystemDocId(settings, selectedType),
@@ -420,15 +396,22 @@ export function PrintDocumentDrawer({
       setError('Select a document template before generating.');
       return;
     }
+    const selectedOption = typeOptions?.find(
+      (option) => option.documentType === selectedType,
+    );
+    const resolvedEntityId = selectedOption?.entityId ?? entityId;
+    if (!isUuid(resolvedEntityId)) {
+      setError('This report type requires a linked record before it can be generated.');
+      return;
+    }
     setGenerating(true);
     setError(null);
     try {
       const result = await generateAndDownloadDocument({
         documentType: selectedType,
-        entityId: isUuid(entityId) ? entityId : undefined,
+        entityId: resolvedEntityId,
         filesystemDocumentId: selectedTemplateId,
         destinationCategoryId: destinationCategoryId ?? undefined,
-        enabledSlugs: dataContextAvailable ? enabledSlugs : undefined,
       });
       if (result.format === 'docx') {
         toast.success(
@@ -590,49 +573,6 @@ export function PrintDocumentDrawer({
                   </>
                 )}
               </div>
-
-              {dataContextAvailable && relatedOptions.length > 0 && (
-                <div className="space-y-2">
-                  <Label>Data scope</Label>
-                  <p className="text-xs text-slate-500">
-                    Choose which related records to include in this print.
-                  </p>
-                  <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-3">
-                    {relatedOptions.map((option) => {
-                      const checked = enabledSlugs.includes(option.slug);
-                      return (
-                        <label
-                          key={option.slug}
-                          className="flex cursor-pointer items-start gap-3"
-                        >
-                          <Checkbox
-                            checked={checked}
-                            disabled={generating}
-                            onCheckedChange={(v) => {
-                              setEnabledSlugs((prev) =>
-                                v === true
-                                  ? prev.includes(option.slug)
-                                    ? prev
-                                    : [...prev, option.slug]
-                                  : prev.filter((s) => s !== option.slug),
-                              );
-                            }}
-                            className="mt-0.5"
-                          />
-                          <span className="min-w-0">
-                            <span className="block text-sm font-medium text-slate-800">
-                              {option.label}
-                            </span>
-                            <span className="block text-xs text-slate-500">
-                              {option.description}
-                            </span>
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
 
               <div className="space-y-2">
                 <Label htmlFor="print-destination">Save to folder</Label>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ClipboardList, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -14,17 +14,21 @@ import {
   columnFilterToValuesParam,
   statusValuesForArchiveListTab,
   mergeStatusParamWithTab,
-  TableEmptyRow,
-} from '@/components/shared/list-filters';
-import {
-  buildServerJobFilterOptions,
+  parseArchiveListTab,
+  type ArchiveListTab,
+  TableEmptyRow } from '@/components/shared/list-filters';
+import { buildServerJobFilterOptions,
   resolveServerJobFilterSelection,
   selectedJobFilterLabels,
   parseSelectedJobIds,
   toServerJobFetchParams,
   writeServerJobFilterParams,
-  jobFilterOptionsFromNameById,
-} from '@/components/shared/server-job-filter';
+  syncServerJobFilterParams,
+  buildListJobFilterOptions } from '@/components/shared/server-job-filter';
+import {
+  createListFetchSession,
+  replaceListQueryIfNeeded,
+  useListPageData } from '@/components/shared/use-list-page-data';
 import { TablePagination } from '@/components/shared/table-pagination';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
@@ -34,14 +38,14 @@ import { AssessmentFormDrawer } from './AssessmentFormDrawer';
 import { fetchAssessmentsAction, createAssessmentAction } from '@/app/(app)/assessments/actions';
 import {
   ColumnSettingsHeaderCell,
-  useColumnVisibility,
-} from '@/components/shared/column-visibility';
+  useColumnVisibility } from '@/components/shared/column-visibility';
 import { ListArchiveButton, LIST_ARCHIVE_TH_CLASS, LIST_ARCHIVE_TD_CLASS, LIST_ARCHIVE_SPACER_TD_CLASS } from '@/components/shared/ListArchiveButton';
 import type { Assessment, PaginatedResponse, Job, Claim } from '@/types/api';
 import type { JobOption } from '@/components/shared/job-label';
-import { resolveJobName } from '@/components/shared/job-label';
+import { jobDisplayName } from '@/components/shared/job-label';
+import { JobCellLink } from '@/components/shared/JobCellLink';
 
-type ListTab = 'active' | 'archived' | 'all';
+type ListTab = ArchiveListTab;
 
 type AssessmentSortField =
   | 'name'
@@ -75,23 +79,23 @@ export function AssessmentsPageClient({
   job,
   parentClaim,
   jobNameById,
-  jobs = [],
-}: AssessmentsPageClientProps) {
+  jobs = [] }: AssessmentsPageClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const jobId = searchParams.get('jobId') ?? undefined;
   const jobIdsParam = searchParams.get('jobIds') ?? undefined;
-  const [data, setData] = useState<PaginatedResponse<Assessment>>(
+  const { data, setData, beginFetch, abortFetch } = useListPageData<PaginatedResponse<Assessment>>(
     'data' in initialData ? initialData as PaginatedResponse<Assessment> : { data: [], total: 0 },
   );
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [tab, setTab] = useState<ListTab>('active');
+  const [tab, setTab] = useState<ListTab>(() =>
+    parseArchiveListTab(searchParams.get('tab')),
+  );
   const [page, setPage] = useState(1);
   const [columnSort, setColumnSort] = useState<{ field: AssessmentSortField; order: 'asc' | 'desc' }>({
     field: 'updated_at',
-    order: 'desc',
-  });
+    order: 'desc' });
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [statusFilterActive, setStatusFilterActive] = useState(false);
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
@@ -99,7 +103,6 @@ export function AssessmentsPageClient({
     'assessments',
     TABLE_COLUMNS,
   );
-  const lastFetchKeyRef = useRef<string | null>(null);
   const uniqueStatuses = useMemo(
     () => ['draft', 'in_progress', 'submitted', 'reviewed', 'published', 'archived'],
     [],
@@ -122,8 +125,14 @@ export function AssessmentsPageClient({
     [jobId, jobIdsParam],
   );
   const filterJobs = useMemo(
-    () => jobFilterOptionsFromNameById(jobNameById),
-    [jobNameById],
+    () =>
+      buildListJobFilterOptions({
+        jobNameById,
+        currentJob: job
+          ? { id: job.id, label: jobDisplayName(job) }
+          : null,
+        jobId }),
+    [jobNameById, job, jobId],
   );
   const uniqueJobs = useMemo(
     () => buildServerJobFilterOptions(filterJobs),
@@ -136,8 +145,7 @@ export function AssessmentsPageClient({
         jobIds: jobIdsParam
           ? jobIdsParam.split(',').map((id) => id.trim()).filter(Boolean)
           : undefined,
-        jobs: filterJobs,
-      }),
+        jobs: filterJobs }),
     [jobId, jobIdsParam, filterJobs],
   );
   const { jobId: fetchJobId, jobIds: fetchJobIds } = useMemo(
@@ -155,25 +163,32 @@ export function AssessmentsPageClient({
     const fetchKey = `${debouncedSearch}|${tab}|${page}|${statusKey}|${jobId ?? ''}|${jobIdsParam ?? ''}`;
 
     const params = new URLSearchParams(searchParams.toString());
-    params.set('page', String(page));
+    if (page > 1) params.set('page', String(page));
+    else params.delete('page');
+    if (tab !== 'active') params.set('tab', tab);
+    else params.delete('tab');
     if (debouncedSearch) params.set('search', debouncedSearch);
     else params.delete('search');
     if (statusParam) params.set('status', statusParam); else params.delete('status');
-    if (jobId) params.set('jobId', jobId);
-    else params.delete('jobId');
-    if (jobIdsParam) params.set('jobIds', jobIdsParam);
-    else params.delete('jobIds');
+    syncServerJobFilterParams(params, jobId, jobIdsParam);
     const next = params.toString();
-    if (next !== searchParams.toString()) {
-      router.replace(`/assessments?${next}`, { scroll: false });
+    if (
+      !replaceListQueryIfNeeded({
+        router,
+        pathname: '/assessments',
+        currentQuery: searchParams.toString(),
+        nextQuery: next,
+      })
+    ) {
+      return;
     }
 
-    if (lastFetchKeyRef.current === fetchKey) return;
-    lastFetchKeyRef.current = fetchKey;
+    const session = createListFetchSession({ fetchKey, beginFetch, abortFetch });
+    if (!session) return;
 
     if (statusParam === null) {
       setData({ data: [], total: 0 });
-      return;
+      return session.cleanup;
     }
 
     fetchAssessmentsAction({
@@ -182,10 +197,11 @@ export function AssessmentsPageClient({
       status: statusParam,
       jobId: fetchJobId,
       jobIds: fetchJobIds,
-      search: debouncedSearch || undefined,
-    }).then((res) => setData(res));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, tab, page, statusParam, jobId, jobIdsParam, fetchJobId, fetchJobIds]);
+      search: debouncedSearch || undefined }).then((res) => {
+      if (!session.cancelled) setData(res);
+    });
+    return session.cleanup;
+  }, [debouncedSearch, tab, page, statusParam, jobId, jobIdsParam, fetchJobId, fetchJobIds, searchParams, router, beginFetch, abortFetch]);
 
   const handleCreated = (assessment: Assessment) => {
     setData((prev) => ({ data: [assessment, ...prev.data], total: prev.total + 1 }));
@@ -213,8 +229,7 @@ export function AssessmentsPageClient({
     else working.add(name);
     const committed = commitColumnFilterSelection({
       next: working,
-      optionCount: uniqueStatuses.length,
-    });
+      optionCount: uniqueStatuses.length });
     setStatusFilter(committed.selected);
     setStatusFilterActive(committed.active);
     setPage(1);
@@ -223,8 +238,7 @@ export function AssessmentsPageClient({
   const applyStatusFilter = (next: Set<string>) => {
     const committed = commitColumnFilterSelection({
       next,
-      optionCount: uniqueStatuses.length,
-    });
+      optionCount: uniqueStatuses.length });
     setStatusFilter(committed.selected);
     setStatusFilterActive(committed.active);
     setPage(1);
@@ -234,8 +248,7 @@ export function AssessmentsPageClient({
     const resolved = resolveServerJobFilterSelection({
       next,
       options: uniqueJobs,
-      jobs: filterJobs,
-    });
+      jobs: filterJobs });
     setPage(1);
     const params = new URLSearchParams(searchParams.toString());
     writeServerJobFilterParams(params, resolved);
@@ -253,8 +266,7 @@ export function AssessmentsPageClient({
     submitted: 'bg-blue-100 text-blue-700',
     reviewed: 'bg-green-100 text-green-700',
     published: 'bg-emerald-100 text-emerald-700',
-    archived: 'bg-slate-100 text-slate-600',
-  };
+    archived: 'bg-slate-100 text-slate-600' };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
@@ -357,8 +369,7 @@ export function AssessmentsPageClient({
                             active: jobFilterActive,
                             onApply: applyJobFilter,
                             menuTitle: 'Filter by job',
-                            itemNoun: { singular: 'job', plural: 'jobs' },
-                          }
+                            itemNoun: { singular: 'job', plural: 'jobs' } }
                         : col.key === 'status'
                           ? {
                               options: uniqueStatuses,
@@ -366,8 +377,7 @@ export function AssessmentsPageClient({
                               active: statusFilterActive,
                               onApply: applyStatusFilter,
                               menuTitle: 'Filter by status',
-                              itemNoun: { singular: 'status', plural: 'statuses' },
-                            }
+                              itemNoun: { singular: 'status', plural: 'statuses' } }
                           : undefined
                     }
                   />
@@ -405,7 +415,7 @@ export function AssessmentsPageClient({
                     )}
                     {isVisible('job') && (
                       <td className="px-4 py-3 text-slate-600">
-                        {resolveJobName(assessment.jobId, jobNameById)}
+                        <JobCellLink jobId={assessment.jobId} jobNameById={jobNameById} />
                       </td>
                     )}
                     {isVisible('status') && (
@@ -440,8 +450,7 @@ export function AssessmentsPageClient({
                           setData((prev) => ({
                             ...prev,
                             data: prev.data.filter((row) => row.id !== id),
-                            total: Math.max(0, prev.total - 1),
-                          }));
+                            total: Math.max(0, prev.total - 1) }));
                         }}
                       />
                     </td>

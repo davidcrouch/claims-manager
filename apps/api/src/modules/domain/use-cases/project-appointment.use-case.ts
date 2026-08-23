@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import type { ProjectionUseCase, ProjectionResult } from './use-case.interface';
 import type { DrizzleDbOrTx } from '../../../database/drizzle.module';
 import { AppointmentTransformer } from '../transformers/appointment.transformer';
-import { EntityRelationshipService } from '../services/entity-relationship.service';
+import { EntityRelationshipService, ParentNotProjectedError } from '../services/entity-relationship.service';
 import {
   AppointmentsRepository,
   ExternalLinksRepository,
@@ -81,11 +81,19 @@ export class ProjectAppointmentUseCase implements ProjectionUseCase {
     } else {
       const jobId = (result.entity as Record<string, unknown>).jobId as string | undefined;
       if (!jobId) {
-        const payloadId = (payload.id as string) ?? 'unknown';
-        this.logger.warn(
-          `ProjectAppointmentUseCase.execute — appointment ${payloadId} has no resolvable job parent; skipping insert`,
+        const unresolvedParents = result.parentRefs
+          .filter((r) => r.entityType === 'job')
+          .map((r) => ({
+            internalEntityType: r.entityType,
+            providerEntityType: r.entityType,
+            providerEntityId: r.externalId,
+          }));
+        throw new ParentNotProjectedError(
+          'appointment',
+          externalObjectId,
+          unresolvedParents,
+          `Appointment ${externalObjectId} cannot be created: no resolvable job parent`,
         );
-        return { status: 'skipped', internalEntityId: '', internalEntityType: 'appointment', reason: 'skipped_no_parent' };
       }
 
       const created = await this.appointmentsRepo.create({

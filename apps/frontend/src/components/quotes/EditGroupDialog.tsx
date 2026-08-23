@@ -56,6 +56,7 @@ export function EditGroupDialog({
   const [length, setLength] = useState('');
   const [width, setWidth] = useState('');
   const [height, setHeight] = useState('');
+  const [perimeter, setPerimeter] = useState('');
   const [loading, startTransition] = useTransition();
 
   useEffect(() => {
@@ -65,6 +66,7 @@ export function EditGroupDialog({
     setLength(dimToInput(group.length));
     setWidth(dimToInput(group.width));
     setHeight(dimToInput(group.height));
+    setPerimeter(dimToInput(group.perimeter));
     startTransition(async () => {
       const result = await fetchGroupLabelLookupsAction();
       if (result.success && result.options) {
@@ -79,9 +81,11 @@ export function EditGroupDialog({
     const parsedLength = parseDimInput(length);
     const parsedWidth = parseDimInput(width);
     const parsedHeight = parseDimInput(height);
+    const parsedPerimeter = parseDimInput(perimeter);
     if (parsedLength !== undefined) dimensions.length = parsedLength;
     if (parsedWidth !== undefined) dimensions.width = parsedWidth;
     if (parsedHeight !== undefined) dimensions.height = parsedHeight;
+    if (parsedPerimeter !== undefined) dimensions.perimeter = parsedPerimeter;
 
     onSave({
       groupLabelLookupId: selectedLookupId || undefined,
@@ -123,7 +127,7 @@ export function EditGroupDialog({
               placeholder="e.g. Bedroom 1, Kitchen…"
             />
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="space-y-2">
               <Label htmlFor="edit-group-length">Length</Label>
               <Input
@@ -160,6 +164,19 @@ export function EditGroupDialog({
                 min={0}
                 value={height}
                 onChange={(e) => setHeight(e.target.value)}
+                placeholder="—"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-group-perimeter">Perimeter</Label>
+              <Input
+                id="edit-group-perimeter"
+                type="number"
+                inputMode="decimal"
+                step="any"
+                min={0}
+                value={perimeter}
+                onChange={(e) => setPerimeter(e.target.value)}
                 placeholder="—"
               />
             </div>

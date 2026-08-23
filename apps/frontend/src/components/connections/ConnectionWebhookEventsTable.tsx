@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -14,6 +14,10 @@ import {
   parseSort,
 } from '@/components/shared/list-filters';
 import { fetchConnectionWebhookEventsAction } from '@/app/(app)/connections/actions';
+import {
+  createListFetchSession,
+  useListFetchGate,
+} from '@/components/shared/use-list-page-data';
 import type { WebhookEvent, PaginatedResponse } from '@/types/api';
 
 const SORT_OPTIONS: SortOption[] = [
@@ -86,7 +90,7 @@ export function ConnectionWebhookEventsTable({
   );
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const lastFetchKeyRef = useRef<string | null>(null);
+  const { beginFetch, abortFetch } = useListFetchGate();
   const limit = 20;
 
   useEffect(() => {
@@ -100,26 +104,25 @@ export function ConnectionWebhookEventsTable({
     return [...statusFilter].sort().join(',');
   }, [statusFilter]);
 
-  const fetchEvents = useCallback(async () => {
+  useEffect(() => {
     const fetchKey = `${connectionId}|${page}|${debouncedSearch}|${sort}|${statusParam ?? ''}`;
-    if (lastFetchKeyRef.current === fetchKey) return;
-    lastFetchKeyRef.current = fetchKey;
+    const session = createListFetchSession({ fetchKey, beginFetch, abortFetch });
+    if (!session) return;
 
     setLoading(true);
-    const result = await fetchConnectionWebhookEventsAction(connectionId, {
+    void fetchConnectionWebhookEventsAction(connectionId, {
       page,
       limit,
       status: statusParam,
       search: debouncedSearch || undefined,
       sort,
+    }).then((result) => {
+      if (session.cancelled) return;
+      setData(result);
+      setLoading(false);
     });
-    setData(result);
-    setLoading(false);
-  }, [connectionId, page, debouncedSearch, sort, statusParam]);
-
-  useEffect(() => {
-    void fetchEvents();
-  }, [fetchEvents]);
+    return session.cleanup;
+  }, [connectionId, page, debouncedSearch, sort, statusParam, beginFetch, abortFetch, limit]);
 
   const { field: activeSortField, order: sortOrder } = parseSort({
     sortParam: sort,

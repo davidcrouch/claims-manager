@@ -9,8 +9,8 @@ import {
   organizations,
 } from '../../../database/schema';
 import type { DataMapper } from './base.mapper';
-import { formatCurrency, formatDate } from './base.mapper';
-import { buildTemplateGroups } from './line-items.helper';
+import { formatCurrency, formatDate, displayRecordNumber, internalNumberField } from './base.mapper';
+import { buildTemplateGroups, fetchGroupLabelNameMap } from './line-items.helper';
 import type { TemplateData } from '../types/document-types';
 
 @Injectable()
@@ -66,6 +66,7 @@ export class PurchaseOrderMapper implements DataMapper {
     const poFrom = po.poFrom as Record<string, unknown>;
     const poFor = po.poFor as Record<string, unknown>;
 
+    const groupLabelNames = await fetchGroupLabelNameMap(this.db, groups);
     const groupData = buildTemplateGroups({
       groups,
       combos: combos.map((c) => ({ ...c, groupId: c.purchaseOrderGroupId })),
@@ -74,11 +75,13 @@ export class PurchaseOrderMapper implements DataMapper {
         groupId: i.purchaseOrderGroupId,
         comboId: i.purchaseOrderComboId,
       })),
+      groupLabelNames,
     });
 
     return {
       company_name: org?.name ?? '',
-      po_number: po.purchaseOrderNumber ?? '',
+      po_number: displayRecordNumber(po.internalNumber, po.purchaseOrderNumber),
+      internal_number: internalNumberField(po.internalNumber),
       po_name: po.name ?? '',
       start_date: formatDate(po.startDate),
       end_date: formatDate(po.endDate),

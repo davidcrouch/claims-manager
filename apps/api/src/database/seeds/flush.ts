@@ -26,6 +26,7 @@ import filesystemDefaultSeed from './entries/filesystem-default.seed';
 import ensureConstructionSeed from './entries/ensure-construction.seed';
 import catalogDevSeed from './entries/catalog-dev.seed';
 import lookupsSeed from './entries/lookups.seed';
+import documentTemplateTransformsSeed from './entries/document-template-transforms.seed';
 
 function buildSeeds(): Seed[] {
   return [
@@ -33,6 +34,7 @@ function buildSeeds(): Seed[] {
     ensureConstructionSeed,
     catalogDevSeed,
     lookupsSeed,
+    documentTemplateTransformsSeed,
   ];
 }
 

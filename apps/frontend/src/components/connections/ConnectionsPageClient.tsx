@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Unplug, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,10 @@ import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { ListPageHeader } from '@/components/layout/ListPageHeader';
 import { fetchConnectionsAction } from '@/app/(app)/connections/actions';
+import {
+  createListFetchSession,
+  useListPageData,
+} from '@/components/shared/use-list-page-data';
 import type { ConnectionSummary } from '@/types/api';
 
 const SORT_OPTIONS: SortOption[] = [
@@ -44,13 +48,17 @@ export interface ConnectionsPageClientProps {
 
 export function ConnectionsPageClient({ connections: initialConnections }: ConnectionsPageClientProps) {
   const router = useRouter();
-  const [connections, setConnections] = useState(initialConnections);
+  const {
+    data: connections,
+    setData: setConnections,
+    beginFetch,
+    abortFetch,
+  } = useListPageData(initialConnections);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sort, setSort] = useState<string>(buildSortString('name', 'asc'));
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [createOpen, setCreateOpen] = useState(false);
-  const lastFetchKeyRef = useRef<string | null>(null);
 
   const { field: activeSortField, order: sortOrder } = parseSort({
     sortParam: sort,
@@ -65,15 +73,10 @@ export function ConnectionsPageClient({ connections: initialConnections }: Conne
   }, [search]);
 
   useEffect(() => {
-    setConnections(initialConnections);
-    lastFetchKeyRef.current = null;
-  }, [initialConnections]);
-
-  useEffect(() => {
     const statusKey = statusIdsKey(statusFilter);
     const fetchKey = `${debouncedSearch}|${sort}|${statusKey}`;
-    if (lastFetchKeyRef.current === fetchKey) return;
-    lastFetchKeyRef.current = fetchKey;
+    const session = createListFetchSession({ fetchKey, beginFetch, abortFetch });
+    if (!session) return;
 
     const isActive =
       statusFilter.size === 1
@@ -89,9 +92,10 @@ export function ConnectionsPageClient({ connections: initialConnections }: Conne
       sort,
       isActive,
     }).then((res) => {
-      if (res) setConnections(res);
+      if (!session.cancelled && res) setConnections(res);
     });
-  }, [debouncedSearch, sort, statusFilter]);
+    return session.cleanup;
+  }, [debouncedSearch, sort, statusFilter, beginFetch, abortFetch]);
 
   const handleSort = (field: string) => {
     if (activeSortField === field) {

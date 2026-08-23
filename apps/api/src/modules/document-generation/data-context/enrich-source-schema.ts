@@ -10,6 +10,7 @@ const GROUPED_CONTEXT_TYPES = new Set<DocumentType>([
   'work_order',
   'proposal',
   'rfq',
+  'scope_of_work',
 ]);
 
 function fieldTypeToJsonSchema(type: EntityFieldType): JsonSchemaProperty {
@@ -83,6 +84,10 @@ const GROUPS_SCHEMA: JsonSchemaProperty = {
       group_name: { type: 'string' },
       group_note: { type: 'string' },
       group_subtotal: { type: 'string' },
+      group_length: { type: 'string', description: 'Group length' },
+      group_width: { type: 'string', description: 'Group width' },
+      group_height: { type: 'string', description: 'Group height' },
+      group_perimeter: { type: 'string', description: 'Group perimeter' },
       items: { type: 'array', items: { type: 'object', additionalProperties: true } },
       combos: { type: 'array', items: { type: 'object', additionalProperties: true } },
       scopes: { type: 'array', items: { type: 'object', additionalProperties: true } },
@@ -90,6 +95,21 @@ const GROUPS_SCHEMA: JsonSchemaProperty = {
     additionalProperties: true,
   },
 };
+
+/** RFQ totals are summed from group totals in the mapper (no entity-level columns). */
+const TOTALS_SCHEMA: JsonSchemaProperty = {
+  type: 'object',
+  description: 'Computed document totals (subtotal, tax, total)',
+  properties: {
+    subtotal: { type: 'number', description: 'Subtotal' },
+    tax: { type: 'number', description: 'Tax' },
+    total: { type: 'number', description: 'Grand total' },
+  },
+  additionalProperties: true,
+};
+
+/** Document types that expose mapper-computed `_context._totals`. */
+const COMPUTED_TOTALS_CONTEXT_TYPES = new Set<DocumentType>(['rfq']);
 
 /**
  * Build the `_context` object schema from the data-context definition
@@ -99,6 +119,7 @@ export function buildContextSourceSchemaProperty(params: {
   definition: DataContextDefinition;
   enabledSlugs: string[];
   includeGroups?: boolean;
+  includeComputedTotals?: boolean;
 }): JsonSchemaProperty {
   const { definition, enabledSlugs } = params;
   const properties: Record<string, JsonSchemaProperty> = {
@@ -132,6 +153,10 @@ export function buildContextSourceSchemaProperty(params: {
     properties.groups = GROUPS_SCHEMA;
   }
 
+  if (params.includeComputedTotals) {
+    properties._totals = TOTALS_SCHEMA;
+  }
+
   return {
     type: 'object',
     description:
@@ -161,6 +186,7 @@ export function enrichSourceSchemaWithDataContext(params: {
     definition,
     enabledSlugs,
     includeGroups: GROUPED_CONTEXT_TYPES.has(params.documentType),
+    includeComputedTotals: COMPUTED_TOTALS_CONTEXT_TYPES.has(params.documentType),
   });
 
   return {

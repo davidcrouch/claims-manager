@@ -3,7 +3,7 @@ import { eq, and, desc } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
 import { rfqs, organizations } from '../../../database/schema';
 import type { DataMapper } from './base.mapper';
-import { formatDate } from './base.mapper';
+import { formatDate, displayRecordNumber, internalNumberField } from './base.mapper';
 import type { TemplateData } from '../types/document-types';
 
 @Injectable()
@@ -24,7 +24,8 @@ export class RfqsListMapper implements DataMapper {
       .limit(500);
 
     const items = rows.map((r) => ({
-      rfq_number: r.rfqNumber ?? '',
+      rfq_number: displayRecordNumber(r.internalNumber, r.rfqNumber),
+      internal_number: internalNumberField(r.internalNumber),
       name: r.name ?? '',
       date: formatDate(r.sentDate),
     }));

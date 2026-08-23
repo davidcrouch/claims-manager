@@ -39,6 +39,7 @@ import { InvoiceFormDrawer } from '@/components/forms/InvoiceFormDrawer';
 import type { WorkOrder, Job } from '@/types/api';
 import { PrintButton } from '@/components/shared/PrintButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
+import { EntityDetailTitle, entityArchiveLabel, entityDetailName } from '@/components/shared/EntityDetailTitle';
 import { jobDisplayName } from '@/components/shared/job-label';
 import { PagedLineItemsTable } from '@/components/quotes/PagedLineItemsTable';
 import { groupsFromDocumentPayload } from '@/components/quotes/quote-line-items.utils';
@@ -90,7 +91,11 @@ export function WorkOrderPageHeader({ wo, job }: { wo: WorkOrder; job?: Job | nu
   const [loading, setLoading] = useState(false);
   const [showInvoiceForm, setShowInvoiceForm] = useState(false);
   const payload = getPayload(wo);
-  const title = wo.workOrderNumber ?? wo.externalId ?? wo.id;
+  const displayName = entityDetailName(
+    wo.name,
+    wo.workOrderNumber ?? wo.externalId,
+    wo.id,
+  );
   const status = lookupName(wo.status, payload, 'status') ?? 'Unknown';
   const woType = lookupName(wo.workOrderType, payload, 'workOrderType');
   const source = sourceOrgName(wo);
@@ -166,7 +171,12 @@ export function WorkOrderPageHeader({ wo, job }: { wo: WorkOrder; job?: Job | nu
           entityType="work_order"
           entityId={wo.id}
           statusName={status}
-          entityLabel={title}
+          entityLabel={entityArchiveLabel(
+            wo.internalNumber,
+            wo.name,
+            wo.workOrderNumber ?? wo.externalId,
+            wo.id,
+          )}
           redirectTo={job ? `/work-orders?jobId=${job.id}` : '/work-orders'}
         />
       </SetHeaderActions>
@@ -183,8 +193,13 @@ export function WorkOrderPageHeader({ wo, job }: { wo: WorkOrder; job?: Job | nu
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-100">
             <ClipboardCheck className="h-4 w-4 text-indigo-600" />
           </span>
-          <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
-          {wo.externalId && wo.externalId !== title && (
+          <EntityDetailTitle
+            internalNumber={wo.internalNumber}
+            name={wo.name}
+            secondaryLabel={wo.workOrderNumber ?? wo.externalId}
+            fallbackId={wo.id}
+          />
+          {wo.externalId && wo.externalId !== displayName && (
             <span className="font-mono text-xs text-muted-foreground">· {wo.externalId}</span>
           )}
           <StatusBadge status={status} />

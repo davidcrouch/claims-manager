@@ -14,6 +14,14 @@ import { DataContextService } from '../data-context';
 import { enrichSourceSchemaWithDataContext } from '../data-context/enrich-source-schema';
 
 import { formatCurrency, formatDate } from '../data-mappers/base.mapper';
+import {
+  contactEmail,
+  contactMobile,
+  contactName,
+  contactPhone,
+  jobAddressLine1,
+  jobAddressLine2,
+} from './transform-contact.helpers';
 
 const JSONATA_TIMEOUT_MS = 10_000;
 
@@ -32,6 +40,12 @@ function registerTransformFunctions(expression: ReturnType<typeof jsonata>): voi
   expression.registerFunction('str', (value: unknown) =>
     value == null ? '' : String(value),
   );
+  expression.registerFunction('contactName', contactName);
+  expression.registerFunction('contactPhone', contactPhone);
+  expression.registerFunction('contactMobile', contactMobile);
+  expression.registerFunction('contactEmail', contactEmail);
+  expression.registerFunction('jobAddressLine1', jobAddressLine1);
+  expression.registerFunction('jobAddressLine2', jobAddressLine2);
 }
 
 @Injectable()
@@ -145,6 +159,17 @@ export class TransformService {
       this.logger.warn(`${logPrefix} — JSONata evaluation failed: ${message}`);
       return { result: null, error: message };
     }
+  }
+
+  async previewTransform(params: {
+    documentType: DocumentType;
+    sourceData: TemplateData;
+    jsonataRules: string;
+  }): Promise<{ result: unknown; error?: string }> {
+    return this.evaluateJsonata({
+      jsonataRules: params.jsonataRules,
+      sourceData: params.sourceData,
+    });
   }
 
   async applyTransform(params: {

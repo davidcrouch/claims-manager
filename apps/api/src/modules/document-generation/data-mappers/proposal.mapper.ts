@@ -10,7 +10,7 @@ import {
 } from '../../../database/schema';
 import type { DataMapper } from './base.mapper';
 import { formatCurrency, formatDate } from './base.mapper';
-import { buildTemplateGroups } from './line-items.helper';
+import { buildTemplateGroups, fetchGroupLabelNameMap } from './line-items.helper';
 import type { TemplateData } from '../types/document-types';
 
 @Injectable()
@@ -58,6 +58,7 @@ export class ProposalMapper implements DataMapper {
     const proposalFrom = proposal.proposalFrom as Record<string, unknown>;
     const proposalFor = proposal.proposalFor as Record<string, unknown>;
 
+    const groupLabelNames = await fetchGroupLabelNameMap(this.db, groups);
     const groupData = buildTemplateGroups({
       groups,
       combos: combos.map((c) => ({ ...c, groupId: c.proposalGroupId })),
@@ -66,6 +67,7 @@ export class ProposalMapper implements DataMapper {
         groupId: i.proposalGroupId,
         comboId: i.proposalComboId,
       })),
+      groupLabelNames,
     });
 
     return {

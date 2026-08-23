@@ -239,12 +239,16 @@ function TemplateEditorTabInner({
             }}
             disabled={assigning || visibleDocx.length === 0}
           >
-            <SelectTrigger size="sm" className="w-52 max-w-full">
+            <SelectTrigger size="sm" className="w-80 max-w-full">
               <SelectValue placeholder="Select .docx…" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent
+              align="start"
+              alignItemWithTrigger={false}
+              className="max-h-[min(24rem,var(--available-height))] min-w-(--anchor-width) w-max max-w-[min(28rem,var(--available-width))]"
+            >
               {visibleDocx.map((doc) => (
-                <SelectItem key={doc.id} value={doc.id}>
+                <SelectItem key={doc.id} value={doc.id} title={doc.fileName}>
                   {doc.fileName}
                 </SelectItem>
               ))}

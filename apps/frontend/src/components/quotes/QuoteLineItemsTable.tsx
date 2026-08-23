@@ -331,6 +331,57 @@ function initScopeInputs(scope: ApiScope): Record<EditableFieldKey, string> {
   };
 }
 
+/** Original field values for dirty row keys, using the same row-key scheme as inline edits. */
+export function buildLineItemOriginals(
+  groups: ApiGroup[],
+  edits: Record<string, Record<string, string>>,
+): Record<string, Record<EditableFieldKey, string>> {
+  const result: Record<string, Record<EditableFieldKey, string>> = {};
+  const keys = Object.keys(edits);
+  if (keys.length === 0) return result;
+
+  const take = (key: string, orig: Record<EditableFieldKey, string>) => {
+    if (edits[key]) result[key] = orig;
+  };
+
+  for (let gi = 0; gi < groups.length; gi++) {
+    const g = groups[gi];
+    const gId = g.id ?? `group-${gi}`;
+    for (let ii = 0; ii < (g.items ?? []).length; ii++) {
+      const item = g.items![ii];
+      take(`${gId}-item-${item.id ?? ii}`, initItemInputs(item));
+    }
+    for (let ci = 0; ci < (g.combos ?? []).length; ci++) {
+      const combo = g.combos![ci];
+      const comboKey = `${gId}-combo-${combo.id ?? ci}`;
+      take(comboKey, initComboInputs(combo));
+      for (let ii = 0; ii < (combo.items ?? []).length; ii++) {
+        const item = combo.items![ii];
+        take(`${comboKey}-item-${item.id ?? ii}`, initItemInputs(item));
+      }
+    }
+    for (let si = 0; si < (g.scopes ?? []).length; si++) {
+      const scope = g.scopes![si];
+      const scopeKey = `${gId}-scope-${scope.id ?? si}`;
+      take(scopeKey, initScopeInputs(scope));
+      for (let ii = 0; ii < (scope.items ?? []).length; ii++) {
+        const item = scope.items![ii];
+        take(`${scopeKey}-item-${item.id ?? ii}`, initItemInputs(item));
+      }
+      for (let ci = 0; ci < (scope.combos ?? []).length; ci++) {
+        const combo = scope.combos![ci];
+        const comboKey = `${scopeKey}-combo-${combo.id ?? ci}`;
+        take(comboKey, initComboInputs(combo));
+        for (let ii = 0; ii < (combo.items ?? []).length; ii++) {
+          const item = combo.items![ii];
+          take(`${comboKey}-item-${item.id ?? ii}`, initItemInputs(item));
+        }
+      }
+    }
+  }
+  return result;
+}
+
 /** Line total from stored decimal rates (or UI %-point edits). */
 function computeItemMoney(
   item: ApiItem,
@@ -524,7 +575,7 @@ function ItemRow({
       )}
       draggable={!!showDragHandle}
       onDragStart={showDragHandle ? (e) => onDragStart?.(e, rowKey) : undefined}
-      onDragOver={showDragHandle ? (e) => { e.preventDefault(); onDragOver?.(e, rowKey); } : undefined}
+      onDragOver={showDragHandle ? (e) => { onDragOver?.(e, rowKey); } : undefined}
       onDragLeave={showDragHandle ? (e) => { (e.currentTarget as HTMLElement).style.borderTop = ''; } : undefined}
       onDragEnd={showDragHandle ? onDragEnd : undefined}
       onDrop={showDragHandle ? (e) => { e.preventDefault(); onDrop?.(e, rowKey); } : undefined}
@@ -633,6 +684,17 @@ function ItemRow({
               <p className={cn('mt-0.5 line-clamp-1 text-xs text-slate-500', indented && 'pl-7')}>
                 {editInputs?.description ?? item.description}
               </p>
+            )}
+            {item.catalogMissing && (
+              <span className={cn(
+                'mt-1 inline-flex items-center gap-1 rounded bg-orange-100 px-1.5 py-0.5 text-[10px] text-orange-700',
+                indented && 'ml-7',
+              )}
+              title="This item references a catalogue entry that does not exist locally. The item is included but not linked to the catalogue."
+              >
+                <AlertTriangle className="h-3 w-3" />
+                Not in catalogue
+              </span>
             )}
             {mismatches.length > 0 && (
               <span className={cn(
@@ -880,6 +942,7 @@ function AssemblyBlock({
   onCatalogDragOver,
   onCatalogDragLeave,
   onCatalogDrop,
+  hideUnselectedItems,
 }: {
   combo: ApiCombo;
   comboKey: string;
@@ -927,6 +990,7 @@ function AssemblyBlock({
   onCatalogDragOver?: (e: React.DragEvent) => void;
   onCatalogDragLeave?: (e: React.DragEvent) => void;
   onCatalogDrop?: (e: React.DragEvent) => void;
+  hideUnselectedItems?: boolean;
 }) {
   const effectiveContentQty = contentShowQuantities ?? (showQuantities ?? true);
   const effectiveContentPrice = contentShowPricing ?? (showPricing ?? true);
@@ -961,11 +1025,15 @@ function AssemblyBlock({
     let sum = 0;
     for (let idx = 0; idx < comboItems.length; idx++) {
       const item = comboItems[idx];
+      if (hideUnselectedItems && !isSelectablePicked(item.id, selectedIds)) continue;
       const itemKey = `${comboKey}-item-${item.id ?? idx}`;
       sum += computeItemMoney(item, editInputs[itemKey], showMarkup, showGst).total;
     }
     return sum;
-  }, [comboItems, comboKey, showMarkup, showGst, editInputs]);
+  }, [comboItems, comboKey, showMarkup, showGst, editInputs, hideUnselectedItems, selectedIds]);
+  const visibleComboItemCount = hideUnselectedItems
+    ? comboItems.filter((item) => isSelectablePicked(item.id, selectedIds)).length
+    : comboItemCount;
   const nameInputRef = useRef<HTMLInputElement | null>(null);
   const componentInputRef = useRef<HTMLInputElement | null>(null);
   const descriptionInputRef = useRef<HTMLInputElement | null>(null);
@@ -1021,11 +1089,8 @@ function AssemblyBlock({
             onCatalogDragOver(e);
             if (e.defaultPrevented) return;
           }
-          // Don't claim the drop for row reorder while a catalogue drag is active —
-          // invalid kinds must bubble to group/scope.
           if (hasCatalogDrag(e.dataTransfer) || hasGroupLabelDrag(e.dataTransfer)) return;
           if (showDragHandle) {
-            e.preventDefault();
             onDragOver?.(e, comboKey);
           }
         }}
@@ -1195,7 +1260,7 @@ function AssemblyBlock({
                     )}
                   </span>
                   <span className="shrink-0 rounded-full bg-slate-300 px-2 py-0.5 text-[10px] font-medium text-slate-700">
-                    {comboItemCount} item{comboItemCount !== 1 ? 's' : ''}
+                    {visibleComboItemCount} item{visibleComboItemCount !== 1 ? 's' : ''}
                   </span>
                   <LineScopeStatusBadge status={combo.lineScopeStatus} />
                   <PublishStatusBadge status={combo.publishStatus} />
@@ -1326,6 +1391,7 @@ function AssemblyBlock({
       {/* Assembly child items */}
       {!isCollapsed &&
         comboItems.map((item, idx) => {
+          if (hideUnselectedItems && !isSelectablePicked(item.id, selectedIds)) return null;
           const itemKey = `${comboKey}-item-${item.id ?? idx}`;
           const itemEditing = editState?.rowKey === itemKey || (selectedRows.has(itemKey) && editState !== null);
           const itemPrimary = editState?.rowKey === itemKey;
@@ -1424,6 +1490,7 @@ function ScopeBlock({
   activeDropKey,
   setActiveDropKey,
   onCatalogAssemblyDrop,
+  hideUnselectedItems,
 }: {
   scope: ApiScope;
   scopeKey: string;
@@ -1476,6 +1543,7 @@ function ScopeBlock({
   activeDropKey?: string | null;
   setActiveDropKey?: (key: string | null) => void;
   onCatalogAssemblyDrop?: (payload: CatalogDragPayload, assemblyId: string) => void;
+  hideUnselectedItems?: boolean;
 }) {
   const scopeName = scope.name ?? 'Scope';
   const scopeNote = scope.note;
@@ -1512,6 +1580,7 @@ function ScopeBlock({
   const scopeTotal = useMemo(() => {
     let sum = 0;
     function addItem(item: ApiItem, itemKey: string) {
+      if (hideUnselectedItems && !isSelectablePicked(item.id, selectedIds)) return;
       sum += computeItemMoney(item, editInputs[itemKey], showMarkup, showGst).total;
     }
     for (let idx = 0; idx < scopeItems.length; idx++) {
@@ -1527,7 +1596,7 @@ function ScopeBlock({
       }
     }
     return sum;
-  }, [scopeItems, scopeCombos, scopeKey, showMarkup, showGst, editInputs]);
+  }, [scopeItems, scopeCombos, scopeKey, showMarkup, showGst, editInputs, hideUnselectedItems, selectedIds]);
 
   const nameInputRef = useRef<HTMLInputElement | null>(null);
   const componentInputRef = useRef<HTMLInputElement | null>(null);
@@ -1559,9 +1628,22 @@ function ScopeBlock({
     }
   }, [isEditing, isPrimary, editState?.field]);
 
+  const visibleScopeItems = hideUnselectedItems
+    ? scopeItems.filter((item) => isSelectablePicked(item.id, selectedIds))
+    : scopeItems;
+  const visibleScopeCombos = hideUnselectedItems
+    ? scopeCombos.filter((combo) => comboHasPickedItems(combo, selectedIds))
+    : scopeCombos;
   const totalChildLineCount =
-    scopeItems.length +
-    scopeCombos.reduce((cs, c) => cs + (c.items?.length ?? 0), 0);
+    visibleScopeItems.length +
+    visibleScopeCombos.reduce(
+      (cs, c) =>
+        cs +
+        (hideUnselectedItems
+          ? (c.items ?? []).filter((item) => isSelectablePicked(item.id, selectedIds)).length
+          : (c.items?.length ?? 0)),
+      0,
+    );
 
   return (
     <>
@@ -1581,7 +1663,7 @@ function ScopeBlock({
         )}
         draggable={!!showDragHandle}
         onDragStart={showDragHandle ? (e) => onDragStart?.(e, scopeKey) : undefined}
-        onDragOver={showDragHandle ? (e) => { e.preventDefault(); onDragOver?.(e, scopeKey); } : undefined}
+        onDragOver={showDragHandle ? (e) => { onDragOver?.(e, scopeKey); } : undefined}
         onDragLeave={showDragHandle ? (e) => { (e.currentTarget as HTMLElement).style.borderTop = ''; } : undefined}
         onDragEnd={showDragHandle ? onDragEnd : undefined}
         onDrop={showDragHandle ? (e) => { e.preventDefault(); onDrop?.(e, scopeKey); } : undefined}
@@ -1805,7 +1887,7 @@ function ScopeBlock({
             <div className="flex items-center justify-end gap-3">
               <span className="text-xs tabular-nums text-violet-700">
                 {totalChildLineCount} item{totalChildLineCount !== 1 ? 's' : ''}
-                {scopeCombos.length > 0 && ` · ${scopeCombos.length} assembl${scopeCombos.length !== 1 ? 'ies' : 'y'}`}
+                {visibleScopeCombos.length > 0 && ` · ${visibleScopeCombos.length} assembl${visibleScopeCombos.length !== 1 ? 'ies' : 'y'}`}
               </span>
               <span className="font-semibold text-violet-900">{formatCurrency(scopeTotal)}</span>
             </div>
@@ -1820,7 +1902,7 @@ function ScopeBlock({
             {!showPricing && (
               <span className="mr-2 text-xs tabular-nums text-violet-700">
                 {totalChildLineCount} item{totalChildLineCount !== 1 ? 's' : ''}
-                {scopeCombos.length > 0 && ` · ${scopeCombos.length} assembl${scopeCombos.length !== 1 ? 'ies' : 'y'}`}
+                {visibleScopeCombos.length > 0 && ` · ${visibleScopeCombos.length} assembl${visibleScopeCombos.length !== 1 ? 'ies' : 'y'}`}
               </span>
             )}
             {enableLineNotes && scope.id && onEditLineNote && (
@@ -1885,7 +1967,7 @@ function ScopeBlock({
       {/* Scope children: standalone items + assemblies */}
       {!isCollapsed && (
         <>
-          {scopeItems.map((item, idx) => {
+          {visibleScopeItems.map((item, idx) => {
             const itemKey = `${scopeKey}-item-${item.id ?? idx}`;
             const itemEditing = editState?.rowKey === itemKey || (selectedRows.has(itemKey) && editState !== null);
             const itemPrimary = editState?.rowKey === itemKey;
@@ -1927,7 +2009,7 @@ function ScopeBlock({
               />
             );
           })}
-          {scopeCombos.map((combo, comboIdx) => {
+          {visibleScopeCombos.map((combo, comboIdx) => {
             const comboKey = `${scopeKey}-combo-${combo.id ?? comboIdx}`;
             const isComboCollapsed = collapsedCombos.has(comboKey);
             const comboItems = combo.items ?? [];
@@ -1982,6 +2064,7 @@ function ScopeBlock({
                 showBulkSelect={showBulkSelect}
                 bulkSelectedIds={bulkSelectedIds}
                 onBulkToggle={onBulkToggle}
+                hideUnselectedItems={hideUnselectedItems}
                 isCatalogDropActive={isAssemblyDropActive}
                 onCatalogDragOver={
                   !onCatalogAssemblyDrop || !combo.id
@@ -2077,6 +2160,8 @@ export interface QuoteLineItemsTableProps {
   onDirtyChange?: (dirty: boolean, edits: Record<string, Record<EditableFieldKey, string>>) => void;
   /** When true, omit Catalogue/Save from the sticky toolbar (actions live in the layout header). */
   hideToolbarActions?: boolean;
+  /** Increment to discard unsaved inline edits (autosave undo / cancel). */
+  resetEditsKey?: number;
   structurallyDirty?: boolean;
   readOnly?: boolean;
   mode?: LineItemsMode;
@@ -2084,7 +2169,7 @@ export interface QuoteLineItemsTableProps {
   selection?: LineItemSelection;
   /** Compact layout for drawers / embedded panels (no full-page min-height / sticky offset). */
   compact?: boolean;
-  /** When true, show Quantities/Pricing toggles on toolbar and per-header. RFQ detail only. */
+  /** When true, show Quantities/Pricing/Unselected toggles on toolbar and per-header. RFQ detail only. */
   showColumnToggles?: boolean;
   /**
    * Controlled Quantities/Pricing column visibility (maps to RFQ includeQuantities / includePricing).
@@ -2099,6 +2184,27 @@ export interface QuoteLineItemsTableProps {
   onEditLineNote?: (request: LineNoteEditRequest) => void;
   /** Reorder callback: moves an item within a group from one index to another. */
   onReorderItems?: (groupId: string, fromIndex: number, toIndex: number) => void;
+  /** Move an item/combo across parents (type-aware). */
+  onMoveLineItem?: (params: {
+    itemId?: string;
+    comboId?: string;
+    targetGroupId: string;
+    targetComboId?: string;
+    insertAtIndex?: number;
+  }) => void;
+  /** Duplicate an item/combo (deep copy with children). Triggered by Ctrl+drag. */
+  onDuplicateLineItem?: (params: {
+    itemId?: string;
+    comboId?: string;
+    targetGroupId: string;
+    targetComboId?: string;
+    insertAtIndex?: number;
+  }) => void;
+  /** Reorder items/combos via sortIndex (persisted). */
+  onReorderLineItems?: (params: {
+    items?: Array<{ id: string; sortIndex: number }>;
+    combos?: Array<{ id: string; sortIndex: number }>;
+  }) => void;
   /** Bulk selection state for multi-select + bulk actions. */
   bulkSelection?: {
     selectedIds: Set<string>;
@@ -2122,6 +2228,7 @@ function GroupDimensionFields({
   length,
   width,
   height,
+  perimeter,
   disabled,
   onSave,
 }: {
@@ -2129,6 +2236,7 @@ function GroupDimensionFields({
   length?: number;
   width?: number;
   height?: number;
+  perimeter?: number;
   disabled?: boolean;
   onSave?: (groupId: string, dimensions: GroupDimensions) => void;
 }) {
@@ -2136,6 +2244,7 @@ function GroupDimensionFields({
     length: dimToInput(length),
     width: dimToInput(width),
     height: dimToInput(height),
+    perimeter: dimToInput(perimeter),
   });
 
   useEffect(() => {
@@ -2143,8 +2252,9 @@ function GroupDimensionFields({
       length: dimToInput(length),
       width: dimToInput(width),
       height: dimToInput(height),
+      perimeter: dimToInput(perimeter),
     });
-  }, [groupId, length, width, height]);
+  }, [groupId, length, width, height, perimeter]);
 
   function commit() {
     if (!onSave || disabled) return;
@@ -2152,22 +2262,26 @@ function GroupDimensionFields({
     const parsedLength = parseDimInput(draft.length);
     const parsedWidth = parseDimInput(draft.width);
     const parsedHeight = parseDimInput(draft.height);
+    const parsedPerimeter = parseDimInput(draft.perimeter);
     if (parsedLength !== undefined) next.length = parsedLength;
     if (parsedWidth !== undefined) next.width = parsedWidth;
     if (parsedHeight !== undefined) next.height = parsedHeight;
+    if (parsedPerimeter !== undefined) next.perimeter = parsedPerimeter;
 
     const same =
       dimToInput(length) === dimToInput(next.length) &&
       dimToInput(width) === dimToInput(next.width) &&
-      dimToInput(height) === dimToInput(next.height);
+      dimToInput(height) === dimToInput(next.height) &&
+      dimToInput(perimeter) === dimToInput(next.perimeter);
     if (same) return;
     onSave(groupId, next);
   }
 
-  const fields: Array<{ key: 'length' | 'width' | 'height'; label: string; short: string }> = [
+  const fields: Array<{ key: 'length' | 'width' | 'height' | 'perimeter'; label: string; short: string }> = [
     { key: 'length', label: 'Length', short: 'L' },
     { key: 'width', label: 'Width', short: 'W' },
     { key: 'height', label: 'Height', short: 'H' },
+    { key: 'perimeter', label: 'Perimeter', short: 'P' },
   ];
 
   return (
@@ -2369,6 +2483,7 @@ export function QuoteLineItemsTable({
   onSave,
   onDirtyChange,
   hideToolbarActions = false,
+  resetEditsKey = 0,
   structurallyDirty,
   readOnly,
   mode = 'estimate',
@@ -2382,6 +2497,9 @@ export function QuoteLineItemsTable({
   enableLineNotes = false,
   onEditLineNote,
   onReorderItems,
+  onMoveLineItem,
+  onDuplicateLineItem,
+  onReorderLineItems,
   bulkSelection,
 }: QuoteLineItemsTableProps) {
   const groups = useMemo(() => normalizeLineItemGroups(rawGroups), [rawGroups]);
@@ -2398,12 +2516,14 @@ export function QuoteLineItemsTable({
   const [showGst, setShowGst] = useState(true);
   const [uncontrolledQuantities, setUncontrolledQuantities] = useState(true);
   const [uncontrolledPricing, setUncontrolledPricing] = useState(true);
+  const [showUnselected, setShowUnselected] = useState(true);
   const quantitiesControlled = typeof quantitiesVisible === 'boolean' && !!onQuantitiesVisibleChange;
   const pricingControlled = typeof pricingVisible === 'boolean' && !!onPricingVisibleChange;
   const showQuantities = quantitiesControlled ? quantitiesVisible : uncontrolledQuantities;
   const showPricing = pricingControlled ? pricingVisible : uncontrolledPricing;
   const setShowQuantities = quantitiesControlled ? onQuantitiesVisibleChange : setUncontrolledQuantities;
   const setShowPricing = pricingControlled ? onPricingVisibleChange : setUncontrolledPricing;
+  const hideUnselected = showSelect && !showUnselected;
   const [suppressMarkupIcon, setSuppressMarkupIcon] = useState(false);
   const [suppressGstIcon, setSuppressGstIcon] = useState(false);
   const [headerVisibility, setHeaderVisibility] = useState<
@@ -2453,28 +2573,129 @@ export function QuoteLineItemsTable({
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
 
   // Drag-and-drop reorder state
-  const showDragHandles = !isReadOnly && !!onReorderItems;
+  const showDragHandles = !isReadOnly && (!!onReorderItems || !!onReorderLineItems || !!onMoveLineItem);
   const dragRowKey = useRef<string | null>(null);
+  const dragType = useRef<'item' | 'assembly' | 'scope' | null>(null);
+  const dragId = useRef<string | null>(null);
+  const dragParentGroupId = useRef<string | null>(null);
+  const dragParentComboId = useRef<string | null>(null);
+
+  function parseRowKeyType(rowKey: string): { type: 'item' | 'assembly' | 'scope'; id: string; groupId: string; parentComboId?: string } | null {
+    // Scope-assembly item: {gId}-scope-{sId}-combo-{cId}-item-{iId}
+    const scopeComboItem = rowKey.match(/^([0-9a-f-]{36})-scope-([0-9a-f-]{36})-combo-([0-9a-f-]{36})-item-([0-9a-f-]{36})$/);
+    if (scopeComboItem) return { type: 'item', id: scopeComboItem[4], groupId: scopeComboItem[1], parentComboId: scopeComboItem[3] };
+
+    // Scope-assembly: {gId}-scope-{sId}-combo-{cId}
+    const scopeCombo = rowKey.match(/^([0-9a-f-]{36})-scope-([0-9a-f-]{36})-combo-([0-9a-f-]{36})$/);
+    if (scopeCombo) return { type: 'assembly', id: scopeCombo[3], groupId: scopeCombo[1], parentComboId: scopeCombo[2] };
+
+    // Scope item: {gId}-scope-{sId}-item-{iId}
+    const scopeItem = rowKey.match(/^([0-9a-f-]{36})-scope-([0-9a-f-]{36})-item-([0-9a-f-]{36})$/);
+    if (scopeItem) return { type: 'item', id: scopeItem[3], groupId: scopeItem[1], parentComboId: scopeItem[2] };
+
+    // Assembly item: {gId}-combo-{cId}-item-{iId}
+    const comboItem = rowKey.match(/^([0-9a-f-]{36})-combo-([0-9a-f-]{36})-item-([0-9a-f-]{36})$/);
+    if (comboItem) return { type: 'item', id: comboItem[3], groupId: comboItem[1], parentComboId: comboItem[2] };
+
+    // Scope: {gId}-scope-{sId}
+    const scope = rowKey.match(/^([0-9a-f-]{36})-scope-([0-9a-f-]{36})$/);
+    if (scope) return { type: 'scope', id: scope[2], groupId: scope[1] };
+
+    // Assembly: {gId}-combo-{cId}
+    const combo = rowKey.match(/^([0-9a-f-]{36})-combo-([0-9a-f-]{36})$/);
+    if (combo) return { type: 'assembly', id: combo[2], groupId: combo[1] };
+
+    // Group-level item: {gId}-item-{iId}
+    const item = rowKey.match(/^([0-9a-f-]{36})-item-([0-9a-f-]{36})$/);
+    if (item) return { type: 'item', id: item[2], groupId: item[1] };
+
+    return null;
+  }
+
+  function canDropInTarget(sourceType: 'item' | 'assembly' | 'scope', targetContext: 'group' | 'scope' | 'assembly'): boolean {
+    if (sourceType === 'scope') return targetContext === 'group';
+    if (sourceType === 'assembly') return targetContext === 'group' || targetContext === 'scope';
+    return true; // items can go anywhere
+  }
+
+  function getTargetContext(targetRowKey: string): 'group' | 'scope' | 'assembly' | 'item' {
+    if (targetRowKey.includes('-scope-') && !targetRowKey.includes('-combo-') && !targetRowKey.includes('-item-')) return 'scope';
+    if (targetRowKey.includes('-combo-') && !targetRowKey.includes('-item-')) return 'assembly';
+    if (targetRowKey.includes('-item-')) return 'item';
+    return 'group';
+  }
 
   function handleRowDragStart(e: React.DragEvent, rowKey: string) {
+    const parsed = parseRowKeyType(rowKey);
     dragRowKey.current = rowKey;
-    e.dataTransfer.effectAllowed = 'move';
+    dragType.current = parsed?.type ?? 'item';
+    dragId.current = parsed?.id ?? null;
+    dragParentGroupId.current = parsed?.groupId ?? null;
+    dragParentComboId.current = parsed?.parentComboId ?? null;
+
+    e.dataTransfer.effectAllowed = 'copyMove';
+    e.dataTransfer.setData('application/x-line-item-drag', JSON.stringify({
+      rowKey,
+      type: parsed?.type ?? 'item',
+      id: parsed?.id,
+      parentGroupId: parsed?.groupId,
+      parentComboId: parsed?.parentComboId,
+    }));
     e.dataTransfer.setData('text/plain', rowKey);
     const row = (e.target as HTMLElement).closest('tr');
     if (row) row.style.opacity = '0.4';
   }
 
-  function handleRowDragOver(e: React.DragEvent, _rowKey: string) {
-    const row = (e.target as HTMLElement).closest('tr');
-    if (row) {
-      row.style.borderTop = '2px solid #2563eb';
+  function handleRowDragOver(e: React.DragEvent, targetRowKey: string) {
+    if (!dragRowKey.current) return;
+    const sourceType = dragType.current;
+    if (!sourceType) return;
+
+    const targetContext = getTargetContext(targetRowKey);
+    let dropContext: 'group' | 'scope' | 'assembly';
+
+    if (targetContext === 'item') {
+      dropContext = getParentContext(targetRowKey);
+    } else if (targetContext === 'scope' || targetContext === 'assembly') {
+      // When dragging the same type onto a sibling, treat as reorder within the parent (group)
+      if (sourceType === targetContext) {
+        dropContext = 'group';
+      } else {
+        dropContext = targetContext;
+      }
+    } else {
+      dropContext = 'group';
     }
+
+    const valid = canDropInTarget(sourceType, dropContext);
+
+    if (valid) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = e.ctrlKey ? 'copy' : 'move';
+      const row = (e.target as HTMLElement).closest('tr');
+      if (row) {
+        row.style.borderTop = e.ctrlKey ? '2px solid #16a34a' : '2px solid #2563eb';
+      }
+    } else {
+      e.dataTransfer.dropEffect = 'none';
+    }
+  }
+
+  function getParentContext(rowKey: string): 'group' | 'scope' | 'assembly' {
+    if (rowKey.match(/-scope-[0-9a-f-]{36}-combo-[0-9a-f-]{36}-item-/)) return 'assembly';
+    if (rowKey.match(/-combo-[0-9a-f-]{36}-item-/)) return 'assembly';
+    if (rowKey.match(/-scope-[0-9a-f-]{36}-item-[0-9a-f-]{36}$/)) return 'scope';
+    return 'group';
   }
 
   function handleRowDragEnd(e: React.DragEvent) {
     const row = (e.target as HTMLElement).closest('tr');
     if (row) row.style.opacity = '';
     dragRowKey.current = null;
+    dragType.current = null;
+    dragId.current = null;
+    dragParentGroupId.current = null;
+    dragParentComboId.current = null;
     document.querySelectorAll('tr[data-row-key]').forEach((el) => {
       (el as HTMLElement).style.borderTop = '';
     });
@@ -2485,20 +2706,195 @@ export function QuoteLineItemsTable({
       (el as HTMLElement).style.borderTop = '';
     });
     const sourceKey = dragRowKey.current;
+    const sourceType = dragType.current;
+    const sourceId = dragId.current;
+    const sourceGroupId = dragParentGroupId.current;
+    const sourceComboId = dragParentComboId.current;
     dragRowKey.current = null;
-    if (!sourceKey || sourceKey === targetRowKey || !onReorderItems) return;
+    dragType.current = null;
+    dragId.current = null;
+    dragParentGroupId.current = null;
+    dragParentComboId.current = null;
 
-    for (let gi = 0; gi < groups.length; gi++) {
-      const g = groups[gi];
-      const gId = g.id ?? `group-${gi}`;
-      const items = g.items ?? [];
-      const sourceIdx = items.findIndex((item, idx) => `${gId}-item-${item.id ?? idx}` === sourceKey);
-      const targetIdx = items.findIndex((item, idx) => `${gId}-item-${item.id ?? idx}` === targetRowKey);
-      if (sourceIdx !== -1 && targetIdx !== -1) {
-        onReorderItems(gId, sourceIdx, targetIdx);
-        return;
+    if (!sourceKey || sourceKey === targetRowKey || !sourceType || !sourceId) return;
+
+    const targetParsed = parseRowKeyType(targetRowKey);
+    if (!targetParsed) return;
+
+    const targetContext = getTargetContext(targetRowKey);
+    let dropContext: 'group' | 'scope' | 'assembly';
+    if (targetContext === 'item') {
+      dropContext = getParentContext(targetRowKey);
+    } else if (targetContext === 'scope' || targetContext === 'assembly') {
+      dropContext = sourceType === targetContext ? 'group' : targetContext;
+    } else {
+      dropContext = 'group';
+    }
+    if (!canDropInTarget(sourceType, dropContext)) return;
+
+    const isCopy = e.ctrlKey;
+    const targetGroupId = targetParsed.groupId;
+    // When dropping on a sibling scope/assembly (reorder), don't treat target as a container
+    const targetComboId = (targetContext === 'scope' || targetContext === 'assembly') && sourceType === targetContext
+      ? targetParsed.parentComboId
+      : targetParsed.parentComboId ?? (targetContext === 'scope' || targetContext === 'assembly' ? targetParsed.id : undefined);
+
+    const sameParent = sourceGroupId === targetGroupId &&
+      (sourceComboId ?? undefined) === (targetComboId ?? undefined) &&
+      sourceType === targetParsed.type;
+
+    if (isCopy && onDuplicateLineItem) {
+      const insertIdx = computeInsertIndex(groups, targetGroupId, targetComboId, targetParsed, sourceType);
+      onDuplicateLineItem({
+        itemId: sourceType === 'item' ? sourceId : undefined,
+        comboId: sourceType !== 'item' ? sourceId : undefined,
+        targetGroupId,
+        targetComboId,
+        insertAtIndex: insertIdx,
+      });
+      return;
+    }
+
+    if (sameParent) {
+      if (onReorderItems) {
+        for (let gi = 0; gi < groups.length; gi++) {
+          const g = groups[gi];
+          const gId = g.id ?? `group-${gi}`;
+          if (gId !== targetGroupId) continue;
+
+          if (sourceType === 'item' && !sourceComboId) {
+            const items = g.items ?? [];
+            const sourceIdx = items.findIndex((item) => item.id === sourceId);
+            const targetIdx = items.findIndex((item) => item.id === targetParsed.id);
+            if (sourceIdx !== -1 && targetIdx !== -1) {
+              onReorderItems(gId, sourceIdx, targetIdx);
+              return;
+            }
+          }
+        }
+      }
+
+      if (onReorderLineItems && sourceType === 'item') {
+        const parentCombo = sourceComboId;
+        const items = parentCombo
+          ? findComboItems(groups, parentCombo)
+          : findGroupItems(groups, targetGroupId);
+        if (items) {
+          const sourceIdx = items.findIndex((i) => i.id === sourceId);
+          const targetIdx = items.findIndex((i) => i.id === targetParsed.id);
+          if (sourceIdx !== -1 && targetIdx !== -1) {
+            const reordered = [...items];
+            const [moved] = reordered.splice(sourceIdx, 1);
+            reordered.splice(targetIdx, 0, moved);
+            onReorderLineItems({
+              items: reordered.map((item, idx) => ({ id: item.id!, sortIndex: idx })),
+            });
+            return;
+          }
+        }
+      }
+
+      if (onReorderLineItems && (sourceType === 'assembly' || sourceType === 'scope')) {
+        const groupCombos = findGroupCombos(groups, targetGroupId, sourceType);
+        if (groupCombos) {
+          const sourceIdx = groupCombos.findIndex((c) => c.id === sourceId);
+          const targetIdx = groupCombos.findIndex((c) => c.id === targetParsed.id);
+          if (sourceIdx !== -1 && targetIdx !== -1) {
+            const reordered = [...groupCombos];
+            const [moved] = reordered.splice(sourceIdx, 1);
+            reordered.splice(targetIdx, 0, moved);
+            onReorderLineItems({
+              combos: reordered.map((c, idx) => ({ id: c.id!, sortIndex: idx })),
+            });
+            return;
+          }
+        }
+      }
+      return;
+    }
+
+    // Calculate insert index based on target position in its parent
+    const insertAtIndex = computeInsertIndex(groups, targetGroupId, targetComboId, targetParsed, sourceType);
+
+    if (onMoveLineItem) {
+      onMoveLineItem({
+        itemId: sourceType === 'item' ? sourceId : undefined,
+        comboId: sourceType !== 'item' ? sourceId : undefined,
+        targetGroupId,
+        targetComboId,
+        insertAtIndex,
+      });
+    }
+  }
+
+  function computeInsertIndex(
+    grps: ApiGroup[],
+    targetGroupId: string,
+    targetComboId: string | undefined,
+    targetParsed: { type: 'item' | 'assembly' | 'scope'; id: string; groupId: string; parentComboId?: string },
+    sourceType: 'item' | 'assembly' | 'scope',
+  ): number | undefined {
+    const group = grps.find((g) => g.id === targetGroupId);
+    if (!group) return undefined;
+
+    if (sourceType === 'scope') {
+      const scopes = group.scopes ?? [];
+      const idx = scopes.findIndex((s) => s.id === targetParsed.id);
+      return idx >= 0 ? idx : scopes.length;
+    }
+
+    if (sourceType === 'assembly') {
+      if (targetComboId) {
+        // Moving into a scope — find among scope's combos
+        const scope = (group.scopes ?? []).find((s) => s.id === targetComboId);
+        if (scope) {
+          const combos = scope.combos ?? [];
+          const idx = combos.findIndex((c) => c.id === targetParsed.id);
+          return idx >= 0 ? idx : combos.length;
+        }
+      }
+      const combos = group.combos ?? [];
+      const idx = combos.findIndex((c) => c.id === targetParsed.id);
+      return idx >= 0 ? idx : combos.length;
+    }
+
+    // Items
+    if (targetComboId) {
+      const items = findComboItems(grps, targetComboId);
+      if (items) {
+        const idx = items.findIndex((i) => i.id === targetParsed.id);
+        return idx >= 0 ? idx : items.length;
       }
     }
+    const items = group.items ?? [];
+    const idx = items.findIndex((i) => i.id === targetParsed.id);
+    return idx >= 0 ? idx : items.length;
+  }
+
+  function findGroupItems(grps: ApiGroup[], groupId: string): ApiItem[] | null {
+    const g = grps.find((gr) => gr.id === groupId);
+    return g?.items ?? null;
+  }
+
+  function findComboItems(grps: ApiGroup[], comboId: string): ApiItem[] | null {
+    for (const g of grps) {
+      for (const combo of g.combos ?? []) {
+        if (combo.id === comboId) return combo.items ?? null;
+      }
+      for (const scope of g.scopes ?? []) {
+        if (scope.id === comboId) return scope.items ?? null;
+        for (const combo of scope.combos ?? []) {
+          if (combo.id === comboId) return combo.items ?? null;
+        }
+      }
+    }
+    return null;
+  }
+
+  function findGroupCombos(grps: ApiGroup[], groupId: string, kind: 'assembly' | 'scope'): ApiCombo[] | ApiScope[] | null {
+    const g = grps.find((gr) => gr.id === groupId);
+    if (!g) return null;
+    return kind === 'scope' ? (g.scopes ?? null) : (g.combos ?? null);
   }
 
   // Bulk selection state (internal fallback when no external state provided)
@@ -2523,6 +2919,12 @@ export function QuoteLineItemsTable({
     setEditState(null);
     setSelectedRows(new Set());
   }, [groups]);
+
+  useEffect(() => {
+    if (resetEditsKey === 0) return;
+    setEditInputs({});
+    setEditState(null);
+  }, [resetEditsKey]);
 
   function toggleSelectionIds(ids: string[]) {
     if (!selection || ids.length === 0) return;
@@ -2686,6 +3088,7 @@ export function QuoteLineItemsTable({
     let totalTax = 0;
 
     function addItem(item: ApiItem, rowKey: string) {
+      if (hideUnselected && !isSelectablePicked(item.id, selection?.selectedIds)) return;
       const money = computeItemMoney(item, editInputs[rowKey], true, true);
       extended += money.extended;
       markup += money.markupAmt;
@@ -2728,7 +3131,7 @@ export function QuoteLineItemsTable({
     const subTotal = extended + (showMarkup ? markup : 0) + (showGst ? totalTax : 0);
     const total = extended + markup + totalTax;
     return { subTotal, markup, totalTax, total };
-  }, [groups, showMarkup, showGst, editInputs]);
+  }, [groups, showMarkup, showGst, editInputs, hideUnselected, selection?.selectedIds]);
 
   /* ---- Inline-edit handlers ---- */
 
@@ -3409,6 +3812,19 @@ export function QuoteLineItemsTable({
                   Pricing
                 </Label>
               </div>
+              {showSelect && (
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="line-items-show-unselected"
+                    checked={showUnselected}
+                    onCheckedChange={setShowUnselected}
+                    aria-label="Show unselected items"
+                  />
+                  <Label htmlFor="line-items-show-unselected" className="cursor-pointer text-xs font-medium text-slate-700">
+                    Unselected
+                  </Label>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -3495,20 +3911,34 @@ export function QuoteLineItemsTable({
       {pagedGroups.length === 0 && (
         <p className="py-8 text-center text-sm text-slate-500">No matching line items</p>
       )}
+      {hideUnselected &&
+        pagedGroups.length > 0 &&
+        pagedGroups.every((g) => !groupHasPickedItems(g, selection?.selectedIds)) && (
+          <p className="py-8 text-center text-sm text-slate-500">No selected line items</p>
+        )}
       {pagedGroups.map((group, groupIndex) => {
+        if (hideUnselected && !groupHasPickedItems(group, selection?.selectedIds)) return null;
         const gId = group.id ?? `group-${groupIndex}`;
         const label = groupLabel(group, groupIndex, labels.groupSingularCap);
         const isCollapsed = searchValue ? false : collapsed.has(gId);
         const dropKey = `group-drop-${gId}`;
         const isDropActive = activeDropKey === dropKey;
+        const selectedIdsForFilter = selection?.selectedIds;
 
-        const standaloneItems = group.items ?? [];
-        const combos = group.combos ?? [];
-        const scopes = group.scopes ?? [];
+        const standaloneItems = hideUnselected
+          ? (group.items ?? []).filter((item) => isSelectablePicked(item.id, selectedIdsForFilter))
+          : (group.items ?? []);
+        const combos = hideUnselected
+          ? (group.combos ?? []).filter((combo) => comboHasPickedItems(combo, selectedIdsForFilter))
+          : (group.combos ?? []);
+        const scopes = hideUnselected
+          ? (group.scopes ?? []).filter((scope) => scopeHasPickedItems(scope, selectedIdsForFilter))
+          : (group.scopes ?? []);
 
         const resolvedGroup = resolveVisibility(gId, showQuantities, showPricing);
 
         function computeItemTotal(item: ApiItem, rowKey: string): number {
+          if (hideUnselected && !isSelectablePicked(item.id, selectedIdsForFilter)) return 0;
           return computeItemMoney(item, editInputs[rowKey], showMarkup, showGst).total;
         }
 
@@ -3527,16 +3957,25 @@ export function QuoteLineItemsTable({
           return sum + scopeItemSum + scopeComboSum;
         }, 0);
         const groupTotal = standaloneTotal + comboTotalSum + scopeTotalSum;
+        const pickedItemCount = (items: ApiItem[] | undefined) =>
+          hideUnselected
+            ? (items ?? []).filter((item) => isSelectablePicked(item.id, selectedIdsForFilter)).length
+            : (items?.length ?? 0);
         const totalLineCount =
           standaloneItems.length +
-          combos.reduce((cs, c) => cs + (c.items?.length ?? 0), 0) +
-          scopes.reduce((ss, s) => ss + (s.items?.length ?? 0) + (s.combos ?? []).reduce((cs, c) => cs + (c.items?.length ?? 0), 0), 0);
+          combos.reduce((cs, c) => cs + pickedItemCount(c.items), 0) +
+          scopes.reduce(
+            (ss, s) =>
+              ss +
+              pickedItemCount(s.items) +
+              (s.combos ?? []).reduce((cs, c) => cs + pickedItemCount(c.items), 0),
+            0,
+          );
         const hasTopLevelRows = standaloneItems.length > 0 || combos.length > 0;
         const hasRows = hasTopLevelRows || scopes.length > 0;
 
         const dropProps = isReadOnly ? {} : {
           onDragOver: (e: React.DragEvent) => {
-            // Group labels always land at table root (not inside a group)
             if (hasGroupLabelDrag(e.dataTransfer)) {
               if (!onGroupLabelDrop) return;
               e.preventDefault();
@@ -3545,7 +3984,12 @@ export function QuoteLineItemsTable({
               setActiveDropKey?.('table-root');
               return;
             }
-            // Scopes / assemblies / primitives → group
+            if (dragRowKey.current && dragType.current) {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = e.ctrlKey ? 'copy' : 'move';
+              setActiveDropKey?.(dropKey);
+              return;
+            }
             if (!shouldAcceptCatalogDragOver(e.dataTransfer, 'group')) return;
             e.preventDefault();
             if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
@@ -3567,6 +4011,34 @@ export function QuoteLineItemsTable({
                 onGroupLabelDrop(labelPayload);
                 clearCatalogDrag();
               }
+              return;
+            }
+            if (dragRowKey.current && dragType.current && group.id) {
+              e.preventDefault();
+              e.stopPropagation();
+              setActiveDropKey?.(null);
+              const sourceType = dragType.current;
+              const sourceId = dragId.current;
+              const isCopy = e.ctrlKey;
+              if (!sourceId) return;
+              if (isCopy && onDuplicateLineItem) {
+                onDuplicateLineItem({
+                  itemId: sourceType === 'item' ? sourceId : undefined,
+                  comboId: sourceType !== 'item' ? sourceId : undefined,
+                  targetGroupId: group.id,
+                });
+              } else if (onMoveLineItem) {
+                onMoveLineItem({
+                  itemId: sourceType === 'item' ? sourceId : undefined,
+                  comboId: sourceType !== 'item' ? sourceId : undefined,
+                  targetGroupId: group.id,
+                });
+              }
+              dragRowKey.current = null;
+              dragType.current = null;
+              dragId.current = null;
+              dragParentGroupId.current = null;
+              dragParentComboId.current = null;
               return;
             }
             if (!shouldAcceptCatalogDragOver(e.dataTransfer, 'group')) return;
@@ -3635,6 +4107,7 @@ export function QuoteLineItemsTable({
                     length={group.length}
                     width={group.width}
                     height={group.height}
+                    perimeter={group.perimeter}
                     disabled={isReadOnly}
                     onSave={onUpdateGroupDimensions}
                   />
@@ -3869,6 +4342,7 @@ export function QuoteLineItemsTable({
                               selectedIds={selection?.selectedIds}
                               onToggleIds={toggleSelectionIds}
                               showColumnToggles={showColumnToggles}
+                              hideUnselectedItems={hideUnselected}
                               contentShowQuantities={resolvedAssembly.showQuantities}
                               contentShowPricing={resolvedAssembly.showPricing}
                               isOverridden={isHeaderOverridden(comboKey)}
@@ -3937,12 +4411,14 @@ export function QuoteLineItemsTable({
                           const scopeDropKey = `scope-drop-${scope.id ?? scopeKey}`;
                           const isScopeDropActive = activeDropKey === scopeDropKey;
                           const scopeDropProps =
-                            isReadOnly || !onCatalogDrop || !scope.id
+                            isReadOnly || (!onCatalogDrop && !onMoveLineItem && !onDuplicateLineItem) || !scope.id
                               ? {}
                               : {
                                   onDragOver: (e: React.DragEvent) => {
-                                    // Only assemblies + primitives. Invalid kinds
-                                    // (e.g. scope) bubble to the parent group.
+                                    if (dragRowKey.current && dragType.current) {
+                                      // Line-item drag: let the inner <tr> handle it via bubbling
+                                      return;
+                                    }
                                     if (!shouldAcceptCatalogDragOver(e.dataTransfer, 'scope')) {
                                       return;
                                     }
@@ -3956,6 +4432,10 @@ export function QuoteLineItemsTable({
                                     if (activeDropKey === scopeDropKey) setActiveDropKey?.(null);
                                   },
                                   onDrop: (e: React.DragEvent) => {
+                                    if (dragRowKey.current && dragType.current) {
+                                      // Line-item drag: let the inner <tr> handle it
+                                      return;
+                                    }
                                     if (!shouldAcceptCatalogDragOver(e.dataTransfer, 'scope')) {
                                       return;
                                     }
@@ -3965,7 +4445,7 @@ export function QuoteLineItemsTable({
                                     const payload = getCatalogDragData(e.dataTransfer);
                                     if (!payload) return;
                                     if (isScopeCollapsed) toggleScope(scopeKey);
-                                    onCatalogDrop(payload, group.id, scope.id);
+                                    onCatalogDrop?.(payload, group.id, scope.id);
                                     clearCatalogDrag();
                                   },
                                 };
@@ -4025,6 +4505,7 @@ export function QuoteLineItemsTable({
                                     isDropActive={isScopeDropActive}
                                     dropHint={labels.addToDrop(scope.name ?? 'Scope')}
                                     showColumnToggles={showColumnToggles}
+                                    hideUnselectedItems={hideUnselected}
                                     isOverridden={isHeaderOverridden(scopeKey)}
                                     onToggleOverride={() => toggleHeaderOverride(scopeKey, resolvedGroup.showQuantities, resolvedGroup.showPricing)}
                                     onToggleQuantities={() => toggleHeaderField(scopeKey, 'showQuantities', resolvedScope.showQuantities)}
@@ -4108,4 +4589,25 @@ function collectGroupSelectableIds(group: ApiGroup): string[] {
     }
   }
   return ids;
+}
+
+function isSelectablePicked(id: string | undefined, selectedIds?: Set<string>): boolean {
+  return !!id && !!selectedIds?.has(id);
+}
+
+function comboHasPickedItems(combo: ApiCombo, selectedIds?: Set<string>): boolean {
+  if (isSelectablePicked(combo.id, selectedIds)) return true;
+  return (combo.items ?? []).some((item) => isSelectablePicked(item.id, selectedIds));
+}
+
+function scopeHasPickedItems(scope: ApiScope, selectedIds?: Set<string>): boolean {
+  if (isSelectablePicked(scope.id, selectedIds)) return true;
+  if ((scope.items ?? []).some((item) => isSelectablePicked(item.id, selectedIds))) return true;
+  return (scope.combos ?? []).some((combo) => comboHasPickedItems(combo, selectedIds));
+}
+
+function groupHasPickedItems(group: ApiGroup, selectedIds?: Set<string>): boolean {
+  if ((group.items ?? []).some((item) => isSelectablePicked(item.id, selectedIds))) return true;
+  if ((group.combos ?? []).some((combo) => comboHasPickedItems(combo, selectedIds))) return true;
+  return (group.scopes ?? []).some((scope) => scopeHasPickedItems(scope, selectedIds));
 }

@@ -98,6 +98,7 @@ wired to Admin → Document Templates:
 | `TAX INVOICE.docx` | Invoice |
 | `INVOICE.docx` | Bill |
 | `REQUEST FOR QUOTATION.docx` | RFQ, Quote, Purchase Order |
+| `ASSESSMENT.docx` | Assessment |
 | `SCOPE OF WORK.docx` | Work Order, Proposal, Report |
 
 **How it works:**

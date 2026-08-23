@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, desc, isNull, sql, inArray, or, ilike } from 'drizzle-orm';
+import { eq, and, desc, isNull, sql, inArray, or, ilike, ne } from 'drizzle-orm';
 import { normalizeListJobIds } from '../../common/list-job-filter';
 import { DRIZZLE, type DrizzleDB } from '../drizzle.module';
 import { journals, journalPages, journalEntityLinks } from '../schema';
@@ -29,6 +29,7 @@ export class JournalsRepository {
     let whereClause = and(
       eq(journals.tenantId, params.tenantId),
       isNull(journals.deletedAt),
+      ne(journals.status, 'deleted'),
     );
     const statuses = params.status?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
     if (statuses.length > 0) {
@@ -169,6 +170,7 @@ export class JournalsRepository {
       eq(journals.tenantId, params.tenantId),
       inArray(journals.id, journalIds),
       isNull(journals.deletedAt),
+      ne(journals.status, 'deleted'),
     );
     const statuses = params.status?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
     if (statuses.length > 0) {

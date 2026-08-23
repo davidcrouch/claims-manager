@@ -120,7 +120,7 @@ const SCENARIO_META: Record<AssignableTemplateType, { label: string; description
   },
   scope_of_work: {
     label: 'Scope of Work',
-    description: 'Generated from the job print wizard (scope of work PDF)',
+    description: 'Generated from an estimate (scope names and descriptions, no pricing)',
   },
   claim: {
     label: 'Claim',
@@ -574,7 +574,7 @@ export class TemplateRegistryService {
     tenantId: string;
     documentType: AssignableTemplateType;
     templateEngineService: {
-      getTemplateTags: (p: { templateBuffer: Buffer }) => string[];
+      getTemplateTags: (p: { templateBuffer: Buffer }) => Promise<string[]>;
     };
   }): Promise<{ tags: string[] }> {
     const logPrefix = 'TemplateRegistryService.getTemplateTags';
@@ -582,7 +582,7 @@ export class TemplateRegistryService {
       tenantId: params.tenantId,
       documentType: params.documentType,
     });
-    const tags = params.templateEngineService.getTemplateTags({
+    const tags = await params.templateEngineService.getTemplateTags({
       templateBuffer: fileBuffer,
     });
     this.logger.debug(`${logPrefix} — found ${tags.length} tags`);

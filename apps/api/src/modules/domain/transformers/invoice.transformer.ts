@@ -33,28 +33,26 @@ export class InvoiceTransformer implements EntityTransformer {
       invoicePayload: payload,
     };
 
-    // Parent: purchase order (may project as WO) — nested object or flat string
-    const cwPoId = isPlainObject(payload.purchaseOrder)
-      ? asString((payload.purchaseOrder as Record<string, unknown>).id)
-      : asString(payload.purchaseOrderId);
+    // Parent: purchase order (may project as WO) — nested object or flat string.
+    // Pass nestedPayload when available so EntityRelationshipService can inline-project.
+    const poNested = isPlainObject(payload.purchaseOrder) ? (payload.purchaseOrder as Record<string, unknown>) : undefined;
+    const cwPoId = poNested ? asString(poNested.id) : asString(payload.purchaseOrderId);
     if (cwPoId) {
-      parentRefs.push({ entityType: 'purchase_order', externalId: cwPoId, required: false });
+      parentRefs.push({ entityType: 'purchase_order', externalId: cwPoId, required: false, nestedPayload: poNested });
     }
 
     // Parent: job — nested object or flat string
-    const cwJobId = isPlainObject(payload.job)
-      ? asString((payload.job as Record<string, unknown>).id)
-      : asString(payload.jobId);
+    const jobNested = isPlainObject(payload.job) ? (payload.job as Record<string, unknown>) : undefined;
+    const cwJobId = jobNested ? asString(jobNested.id) : asString(payload.jobId);
     if (cwJobId) {
-      parentRefs.push({ entityType: 'job', externalId: cwJobId, required: false });
+      parentRefs.push({ entityType: 'job', externalId: cwJobId, required: false, nestedPayload: jobNested });
     }
 
     // Parent: claim — nested object or flat string
-    const cwClaimId = isPlainObject(payload.claim)
-      ? asString((payload.claim as Record<string, unknown>).id)
-      : asString(payload.claimId);
+    const claimNested = isPlainObject(payload.claim) ? (payload.claim as Record<string, unknown>) : undefined;
+    const cwClaimId = claimNested ? asString(claimNested.id) : asString(payload.claimId);
     if (cwClaimId) {
-      parentRefs.push({ entityType: 'claim', externalId: cwClaimId, required: false });
+      parentRefs.push({ entityType: 'claim', externalId: cwClaimId, required: false, nestedPayload: claimNested });
     }
 
     // Lookups — status (handle object or bare-string)

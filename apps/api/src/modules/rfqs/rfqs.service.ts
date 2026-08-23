@@ -17,6 +17,7 @@ import {
 } from '../../database/schema';
 import { TenantContext } from '../../tenant/tenant-context';
 import { isScopeComboPayload } from '../catalog/catalog.utils';
+import { RecordNumberService } from '../../common/record-number/record-number.service';
 
 function parseDecimal(value: string | null | undefined): number | undefined {
   if (value == null) return undefined;
@@ -39,6 +40,7 @@ export class RfqsService {
     private readonly rfqsRepo: RfqsRepository,
     private readonly lookupsRepo: LookupsRepository,
     private readonly tenantContext: TenantContext,
+    private readonly recordNumberService: RecordNumberService,
   ) {}
 
   async findAll(params: {
@@ -95,6 +97,8 @@ export class RfqsService {
       createdByUserId: _c,
       updatedByUserId: _u,
       statusLookupId: bodyStatusLookupId,
+      internalNumber: bodyInternalNumber,
+      rfqNumber: bodyRfqNumber,
       ...rfqData
     } = params.body;
 
@@ -107,17 +111,34 @@ export class RfqsService {
             name: 'Draft',
           });
 
-    const rfq = await this.rfqsRepo.create({
-      data: {
-        ...rfqData,
+    const statusLookupId =
+      (typeof bodyStatusLookupId === 'string' && bodyStatusLookupId
+        ? bodyStatusLookupId
+        : draftStatus?.id) ?? null;
+
+    const rfq = await this.db.transaction(async (tx) => {
+      const internalNumber = await this.recordNumberService.resolve({
         tenantId,
-        statusLookupId:
-          (typeof bodyStatusLookupId === 'string' && bodyStatusLookupId
-            ? bodyStatusLookupId
-            : draftStatus?.id) ?? null,
-        createdByUserId: params.userId ?? null,
-        updatedByUserId: params.userId ?? null,
-      } as any,
+        entity: 'rfq',
+        explicit: bodyInternalNumber,
+        tx,
+      });
+      const rfqNumber = this.recordNumberService.isBlank(bodyRfqNumber)
+        ? null
+        : String(bodyRfqNumber).trim();
+
+      return this.rfqsRepo.create({
+        data: {
+          ...rfqData,
+          tenantId,
+          internalNumber,
+          rfqNumber,
+          statusLookupId,
+          createdByUserId: params.userId ?? null,
+          updatedByUserId: params.userId ?? null,
+        } as any,
+        tx,
+      });
     });
 
     if (
@@ -434,6 +455,7 @@ export class RfqsService {
       length: asNumber(dimensions.length),
       width: asNumber(dimensions.width),
       height: asNumber(dimensions.height),
+      perimeter: asNumber(dimensions.perimeter),
       index: group.sortIndex,
       subTotal: asNumber(groupTotals.subTotal),
       totalTax: asNumber(groupTotals.totalTax),

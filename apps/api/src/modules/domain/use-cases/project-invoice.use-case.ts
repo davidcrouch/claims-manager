@@ -4,6 +4,7 @@ import type { DrizzleDbOrTx } from '../../../database/drizzle.module';
 import { InvoiceTransformer } from '../transformers/invoice.transformer';
 import { LookupResolutionService } from '../services/lookup-resolution.service';
 import { ExternalObjectService } from '../../external/external-object.service';
+import { ParentNotProjectedError } from '../../external/errors/parent-not-projected.error';
 import { OutboundEventsService } from '../../outbound-events/outbound-events.service';
 import {
   InvoicesRepository,
@@ -95,16 +96,20 @@ export class ProjectInvoiceUseCase implements ProjectionUseCase {
       (result.entity as Record<string, unknown>).workOrderId = workOrderId;
     }
 
-    if (!purchaseOrderId && !workOrderId) {
-      this.logger.warn(
-        `ProjectInvoiceUseCase.execute — invoice has no resolvable PO or WO parent; skipping`,
+    if (!purchaseOrderId && !workOrderId && !existingLink) {
+      const missingParents = cwPoId
+        ? [{
+            internalEntityType: 'purchase_order',
+            providerEntityType: 'purchase_order',
+            providerEntityId: cwPoId,
+          }]
+        : [];
+      throw new ParentNotProjectedError(
+        'invoice',
+        externalObjectId,
+        missingParents,
+        `Invoice ${externalObjectId} cannot be created: no resolvable PO or WO parent`,
       );
-      return {
-        status: 'skipped',
-        internalEntityId: '',
-        internalEntityType: 'invoice',
-        reason: 'skipped_no_parent',
-      };
     }
 
     const resolvedLookups = await this.lookupResolution.resolveAll({

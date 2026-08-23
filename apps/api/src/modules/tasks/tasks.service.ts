@@ -117,8 +117,8 @@ export class TasksService {
     jobId?: string;
     jobIds?: string[];
     claimId?: string;
-    status?: string;
-    priority?: string;
+    status?: string | string[];
+    priority?: string | string[];
     entityType?: string;
     entityId?: string;
     assignedToUserId?: string;

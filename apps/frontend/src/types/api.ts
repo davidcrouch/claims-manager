@@ -108,6 +108,7 @@ export interface Job {
   vendorId?: string | null;
   connectionId?: string | null;
   name?: string | null;
+  internalNumber?: string | null;
   externalReference?: string | null;
   externalJobId?: string | null;
   jobTypeLookupId: string;
@@ -216,6 +217,7 @@ export interface Quote {
   /** CW quote UUID (column `external_reference`; CW field `id`). */
   externalReference?: string | null;
   quoteNumber?: string | null;
+  internalNumber?: string | null;
   name?: string | null;
   reference?: string | null;
   note?: string | null;
@@ -276,6 +278,7 @@ export interface PurchaseOrder {
   // §2 — identity
   externalId?: string | null;
   purchaseOrderNumber?: string | null;
+  internalNumber?: string | null;
   name?: string | null;
 
   // §4 — lookup FKs
@@ -339,6 +342,7 @@ export interface Invoice {
   workOrderId?: string | null;
   jobId?: string | null;
   invoiceNumber?: string | null;
+  internalNumber?: string | null;
   statusLookupId?: string | null;
   issueDate?: string | null;
   subTotal?: string | null;
@@ -366,6 +370,7 @@ export interface WorkOrder {
   externalId?: string | null;
   originType?: string | null;
   workOrderNumber?: string | null;
+  internalNumber?: string | null;
   name?: string | null;
   statusLookupId?: string | null;
   workOrderTypeLookupId?: string | null;
@@ -401,6 +406,7 @@ export interface Rfq {
   quoteId?: string | null;
   vendorId?: string | null;
   rfqNumber?: string | null;
+  internalNumber?: string | null;
   name?: string | null;
   note?: string | null;
   statusLookupId?: string | null;
@@ -583,6 +589,14 @@ export interface Contact {
   homePhone?: string | null;
   workPhone?: string | null;
   typeLookupId?: string | null;
+  /** All contact type lookup IDs assigned to this contact. */
+  typeLookupIds?: string[];
+  /** Resolved contact type labels (parallel to typeLookupIds when present). */
+  contactTypes?: Array<{
+    id: string;
+    name?: string;
+    externalReference?: string;
+  }>;
   preferredContactMethodLookupId?: string | null;
   notes?: string | null;
   /** Present when API/payload marks the contact archived or removed. */
@@ -595,6 +609,7 @@ export interface Contact {
     id: string;
     name?: string | null;
     externalReference?: string | null;
+    externalJobId?: string | null;
     label?: string;
   }>;
 }
@@ -603,6 +618,9 @@ export interface ContactRelatedJob {
   id: string;
   name?: string | null;
   externalReference?: string | null;
+  externalJobId?: string | null;
+  /** Human-readable job label when provided by the API. */
+  label?: string;
   addressSuburb?: string | null;
   addressState?: string | null;
   statusName?: string | null;

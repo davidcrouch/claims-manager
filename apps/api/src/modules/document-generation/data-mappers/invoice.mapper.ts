@@ -3,7 +3,7 @@ import { eq, and } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
 import { invoices, purchaseOrders, organizations } from '../../../database/schema';
 import type { DataMapper } from './base.mapper';
-import { formatCurrency, formatDate } from './base.mapper';
+import { formatCurrency, formatDate, displayRecordNumber, internalNumberField } from './base.mapper';
 import type { TemplateData } from '../types/document-types';
 
 @Injectable()
@@ -33,7 +33,8 @@ export class InvoiceMapper implements DataMapper {
 
     return {
       company_name: org?.name ?? '',
-      invoice_number: invoice.invoiceNumber ?? '',
+      invoice_number: displayRecordNumber(invoice.internalNumber, invoice.invoiceNumber),
+      internal_number: internalNumberField(invoice.internalNumber),
       issue_date: formatDate(invoice.issueDate),
       received_date: formatDate(invoice.receivedDate),
       comments: invoice.comments ?? '',
@@ -41,7 +42,11 @@ export class InvoiceMapper implements DataMapper {
       total_tax: formatCurrency(invoice.totalTax),
       total_amount: formatCurrency(invoice.totalAmount),
       excess_amount: formatCurrency(invoice.excessAmount),
-      po_number: (po?.purchaseOrderNumber as string) ?? '',
+      po_number: displayRecordNumber(
+        po?.internalNumber as string | null | undefined,
+        po?.purchaseOrderNumber as string | null | undefined,
+      ),
+      po_internal_number: internalNumberField(po?.internalNumber as string | null | undefined),
       po_name: (po?.name as string) ?? '',
     };
   }

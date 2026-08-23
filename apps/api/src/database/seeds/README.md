@@ -16,6 +16,7 @@ staging connection) that make the app usable in dev and staging.
 | `ensure-construction` | **Tenant** | Upserts organisation **Ensure Construction Pty Ltd** and its Crunchwork **staging** integration connection (encrypted credentials). |
 | `catalog-dev` | **Tenant** | Catalogue item types, trade categories, and unit_type lookups for Ensure Construction (CLI) or a given tenant (signup). Does **not** seed catalogues/items — import those manually. |
 | `lookups` | **Tenant** | Status/type lookup values and Crunchwork group labels for Ensure Construction (CLI) or a given tenant (signup). |
+| `document-template-transforms` | **Tenant** | Sync saved RFQ / PO / WO JSONata transforms to current code defaults (idempotent). |
 
 > **Document templates** — uploading `.docx` files from `data/templates/` and assigning
 > Admin → Document Templates is handled by the **first-login provisioning flow**
@@ -137,6 +138,7 @@ seeds/
 | `filesystem_template` (platform) | Yes — `filesystem-default` | Template for tenant FS setup |
 | Catalogue types/categories | Yes — `catalog-dev` | Per-tenant basics only (no catalogues/items) |
 | Lookup values + CW group labels | Yes — `lookups` | Job/claim statuses and Create Job types |
+| `document_template_transforms` (RFQ/PO/WO) | Yes — `document-template-transforms` | Syncs saved JSONata to code defaults when deploy seed runs |
 | `organizations` | Yes — `ensure-construction` only | Bootstrap tenant for staging/dev |
 | `integration_connections` | Yes — Crunchwork staging for Ensure Construction | Encrypted; not applied to other tenants |
 | Word templates + `document_templates` | No — handled by `ProvisioningService` on first login | Uses real API pipeline for thumbnails |

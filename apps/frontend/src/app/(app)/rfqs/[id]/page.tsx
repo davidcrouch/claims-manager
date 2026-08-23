@@ -15,7 +15,7 @@ export async function generateMetadata({
   if (!api) return { title: 'RFQ | EnsureOS' };
 
   const rfq = await api.getRfq(id).catch(() => null);
-  const title = rfq?.rfqNumber ?? rfq?.name ?? id;
+  const title = rfq?.internalNumber ?? rfq?.rfqNumber ?? rfq?.name ?? id;
   return { title: `${title} | EnsureOS` };
 }
 

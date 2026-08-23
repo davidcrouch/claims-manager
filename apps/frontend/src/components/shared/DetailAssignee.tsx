@@ -176,7 +176,7 @@ export function DetailAssignee({
   return (
     <div
       className={cn(
-        'relative z-10 ml-auto flex shrink-0 flex-wrap items-center justify-end gap-x-8 gap-y-2 bg-background pr-6 pl-3 text-sm',
+        'relative z-10 ml-auto flex shrink-0 flex-nowrap items-center justify-end gap-x-8 bg-background py-1 pr-6 pl-3 text-sm',
         className,
       )}
     >
@@ -184,7 +184,7 @@ export function DetailAssignee({
         <User className="h-4 w-4 shrink-0 text-muted-foreground" />
         <MetaLabel>Assigned</MetaLabel>
         {canEdit ? (
-          <div className="min-w-56 w-64 max-w-80">
+          <div className="w-[95%] min-w-0">
             <OrgUserSelect
               id={id}
               showLabel={false}
@@ -210,7 +210,7 @@ export function DetailAssignee({
         )}
       </div>
 
-      <div className="flex flex-col gap-1 self-center pb-1.5">
+      <div className="flex flex-col justify-center gap-0.5">
         <div className="flex items-center gap-2">
           <MetaLabel>Created</MetaLabel>
           <span className="truncate font-medium text-foreground">

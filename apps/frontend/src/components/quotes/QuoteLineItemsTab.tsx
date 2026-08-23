@@ -1,11 +1,25 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type Ref,
+} from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import type { Quote, CatalogType } from '@/types/api';
 import { CatalogPickerDrawer } from '@/components/catalog/CatalogPickerDrawer';
-import { QuoteLineItemsTable, type DeleteItemRequest } from '@/components/quotes/QuoteLineItemsTable';
+import {
+  QuoteLineItemsTable,
+  buildLineItemOriginals,
+  type DeleteItemRequest,
+} from '@/components/quotes/QuoteLineItemsTable';
 import { EditGroupDialog } from '@/components/quotes/EditGroupDialog';
 import { DeleteGroupDialog } from '@/components/quotes/DeleteGroupDialog';
 import { DeleteItemDialog } from '@/components/quotes/DeleteItemDialog';
@@ -24,9 +38,19 @@ import {
   reorderQuoteGroupsAction,
   getQuoteLineItemsAction,
   saveQuoteLineItemsAction,
+  reorderQuoteLineItemsAction,
+  moveQuoteLineItemAction,
+  duplicateQuoteLineItemAction,
 } from '@/app/(app)/quotes/actions';
 
 const PREFIX = 'frontend:QuoteLineItemsTab';
+
+export type LineItemEdits = Record<string, Record<string, string>>;
+
+export interface QuoteLineItemsTabHandle {
+  save: (edits?: LineItemEdits) => void;
+  resetEdits: () => void;
+}
 
 function findItemMarkupType(groups: ApiGroup[], itemId: string): string | undefined {
   for (const g of groups) {
@@ -52,23 +76,30 @@ function findItemMarkupType(groups: ApiGroup[], itemId: string): string | undefi
   return undefined;
 }
 
-export function QuoteLineItemsTab({
-  quote,
-  drawerOpen,
-  onDrawerOpenChange,
-  catalogType,
-  readOnly = false,
-  onDirtyChange,
-  hideToolbarActions = false,
-}: {
-  quote: Quote;
-  drawerOpen: boolean;
-  onDrawerOpenChange: (open: boolean) => void;
-  catalogType?: CatalogType;
-  readOnly?: boolean;
-  onDirtyChange?: (dirty: boolean, save: () => void) => void;
-  hideToolbarActions?: boolean;
-}) {
+export const QuoteLineItemsTab = forwardRef(function QuoteLineItemsTab(
+  {
+    quote,
+    drawerOpen,
+    onDrawerOpenChange,
+    catalogType,
+    readOnly = false,
+    onDirtyChange,
+    hideToolbarActions = false,
+    onUndoCapture,
+    onSaveStateChange,
+  }: {
+    quote: Quote;
+    drawerOpen: boolean;
+    onDrawerOpenChange: (open: boolean) => void;
+    catalogType?: CatalogType;
+    readOnly?: boolean;
+    onDirtyChange?: (dirty: boolean, save: () => void) => void;
+    hideToolbarActions?: boolean;
+    onUndoCapture?: (restoreEdits: LineItemEdits) => void;
+    onSaveStateChange?: (state: 'saving' | 'saved' | 'error', error?: string) => void;
+  },
+  ref: Ref<QuoteLineItemsTabHandle>,
+) {
   const router = useRouter();
   const [dbGroups, setDbGroups] = useState<ApiGroup[]>([]);
   const [page, setPage] = useState(1);
@@ -87,6 +118,12 @@ export function QuoteLineItemsTab({
   const [deletingGroupId, setDeletingGroupId] = useState<string | null>(null);
   const [deletingItem, setDeletingItem] = useState<DeleteItemRequest | null>(null);
   const [structurallyDirty, setStructurallyDirty] = useState(false);
+  const [resetEditsKey, setResetEditsKey] = useState(0);
+  const skipUndoRef = useRef(false);
+  const onUndoCaptureRef = useRef(onUndoCapture);
+  const onSaveStateChangeRef = useRef(onSaveStateChange);
+  onUndoCaptureRef.current = onUndoCapture;
+  onSaveStateChangeRef.current = onSaveStateChange;
 
   const visibleGroupIds = useMemo(() => {
     if (hiddenGroupIds.size === 0 || groupSummaries.length === 0) return undefined;
@@ -229,7 +266,13 @@ export function QuoteLineItemsTab({
         prev
           ? prev.map((g) =>
               g.id === groupId
-                ? { ...g, length: dimensions.length, width: dimensions.width, height: dimensions.height }
+                ? {
+                    ...g,
+                    length: dimensions.length,
+                    width: dimensions.width,
+                    height: dimensions.height,
+                    perimeter: dimensions.perimeter,
+                  }
                 : g,
             )
           : prev,
@@ -317,7 +360,10 @@ export function QuoteLineItemsTab({
     });
   }
 
-  function handleSaveLineItems(edits: Record<string, Record<string, string>>) {
+  function handleSaveLineItems(
+    edits: Record<string, Record<string, string>>,
+    opts?: { skipUndo?: boolean },
+  ) {
     startTransition(async () => {
       const items: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string; unitCost?: string; markupValue?: string; tax?: string; unitType?: string }> = [];
       const combos: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string }> = [];
@@ -362,19 +408,28 @@ export function QuoteLineItemsTab({
 
       if (items.length === 0 && combos.length === 0) {
         setStructurallyDirty(false);
-        toast.success('Changes saved');
+        onSaveStateChangeRef.current?.('saved');
         return;
       }
+
+      const originals = buildLineItemOriginals(groups, edits);
+      const skipUndo = opts?.skipUndo || skipUndoRef.current;
+      skipUndoRef.current = false;
+      onSaveStateChangeRef.current?.('saving');
 
       const result = await saveQuoteLineItemsAction({ quoteId: quote.id, items, combos });
       if (!result.success) {
         console.error(`${PREFIX}.handleSaveLineItems — ${result.error}`);
         toast.error(result.error ?? 'Failed to save line items');
+        onSaveStateChangeRef.current?.('error', result.error ?? 'Failed to save line items');
         return;
       }
 
-      toast.success(`Saved ${result.updated} line item${result.updated !== 1 ? 's' : ''}`);
+      if (!skipUndo && Object.keys(originals).length > 0) {
+        onUndoCaptureRef.current?.(originals);
+      }
       setStructurallyDirty(false);
+      onSaveStateChangeRef.current?.('saved');
       await loadLineItems();
       router.refresh();
     });
@@ -388,6 +443,22 @@ export function QuoteLineItemsTab({
       onDirtyChange?.(dirty, () => saveRef.current?.(edits));
     },
     [onDirtyChange],
+  );
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      save: (edits) => {
+        const next = edits ?? latestEditsRef.current;
+        if (edits) skipUndoRef.current = true;
+        saveRef.current?.(next);
+      },
+      resetEdits: () => {
+        setResetEditsKey((key) => key + 1);
+        setStructurallyDirty(false);
+      },
+    }),
+    [],
   );
 
   function handleMoveGroup(groupId: string, direction: 'up' | 'down') {
@@ -431,6 +502,74 @@ export function QuoteLineItemsTab({
     setStructurallyDirty(true);
   }
 
+  function handleReorderLineItems(params: {
+    items?: Array<{ id: string; sortIndex: number }>;
+    combos?: Array<{ id: string; sortIndex: number }>;
+  }) {
+    startTransition(async () => {
+      const result = await reorderQuoteLineItemsAction({
+        quoteId: quote.id,
+        items: params.items,
+        combos: params.combos,
+      });
+      if (!result.success) {
+        console.error(`${PREFIX}.handleReorderLineItems — ${result.error}`);
+        toast.error(result.error ?? 'Failed to reorder');
+        return;
+      }
+      await loadLineItems();
+      router.refresh();
+    });
+  }
+
+  function handleMoveLineItem(params: {
+    itemId?: string;
+    comboId?: string;
+    targetGroupId: string;
+    targetComboId?: string;
+    insertAtIndex?: number;
+  }) {
+    startTransition(async () => {
+      const result = await moveQuoteLineItemAction({
+        quoteId: quote.id,
+        ...params,
+      });
+      if (!result.success) {
+        console.error(`${PREFIX}.handleMoveLineItem — ${result.error}`);
+        toast.error(result.error ?? 'Failed to move item');
+        return;
+      }
+      toast.success('Item moved');
+      setStructurallyDirty(true);
+      await loadLineItems();
+      router.refresh();
+    });
+  }
+
+  function handleDuplicateLineItem(params: {
+    itemId?: string;
+    comboId?: string;
+    targetGroupId: string;
+    targetComboId?: string;
+    insertAtIndex?: number;
+  }) {
+    startTransition(async () => {
+      const result = await duplicateQuoteLineItemAction({
+        quoteId: quote.id,
+        ...params,
+      });
+      if (!result.success) {
+        console.error(`${PREFIX}.handleDuplicateLineItem — ${result.error}`);
+        toast.error(result.error ?? 'Failed to duplicate item');
+        return;
+      }
+      toast.success('Item duplicated');
+      setStructurallyDirty(true);
+      await loadLineItems();
+      router.refresh();
+    });
+  }
+
   const editingGroup = editingGroupId ? groups.find((g) => g.id === editingGroupId) : null;
   const deletingGroup = deletingGroupId ? groups.find((g) => g.id === deletingGroupId) : null;
 
@@ -470,9 +609,13 @@ export function QuoteLineItemsTab({
         onSave={readOnly ? undefined : handleSaveLineItems}
         onDirtyChange={readOnly ? undefined : handleTableDirtyChange}
         hideToolbarActions={hideToolbarActions}
+        resetEditsKey={resetEditsKey}
         structurallyDirty={structurallyDirty}
         readOnly={readOnly}
         onReorderItems={readOnly ? undefined : handleReorderItems}
+        onMoveLineItem={readOnly ? undefined : handleMoveLineItem}
+        onDuplicateLineItem={readOnly ? undefined : handleDuplicateLineItem}
+        onReorderLineItems={readOnly ? undefined : handleReorderLineItems}
       />
 
       {editingGroup && (
@@ -507,4 +650,4 @@ export function QuoteLineItemsTab({
       )}
     </div>
   );
-}
+});

@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -12,7 +13,6 @@ import {
   MessageSquare,
   Paperclip,
   Package,
-  Save,
   Send,
   BookOpen,
   Lock,
@@ -51,6 +51,7 @@ import type {
   CatalogType,
 } from '@/types/api';
 import { PrintButton } from '@/components/shared/PrintButton';
+import { buildEstimateReportTypes } from '@/components/shared/PrintDocumentDrawer';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import {
   DetailAssignee,
@@ -58,7 +59,8 @@ import {
   resolveDetailAssignee,
 } from '@/components/shared/DetailAssignee';
 import { jobDisplayName } from '@/components/shared/job-label';
-import { QuoteLineItemsTab } from '@/components/quotes/QuoteLineItemsTab';
+import { EntityDetailTitle, entityArchiveLabel } from '@/components/shared/EntityDetailTitle';
+import { QuoteLineItemsTab, type LineItemEdits, type QuoteLineItemsTabHandle } from '@/components/quotes/QuoteLineItemsTab';
 import {
   QuoteOverviewTab,
   type QuoteOverviewTabHandle,
@@ -83,6 +85,43 @@ import {
 import { EstimateApprovalWizard } from '@/components/quotes/EstimateApprovalWizard';
 import { WorkOrderFormDrawer } from '@/components/forms/WorkOrderFormDrawer';
 import { updateQuoteFieldsAction } from '@/app/(app)/quotes/actions';
+import {
+  EMPTY_PARTY,
+  type QuoteFieldsSnapshot,
+  type QuoteOverviewDraft,
+  type QuotePartiesSnapshot,
+} from '@/components/quotes/quote-edit.types';
+import {
+  AUTOSAVE_DEBOUNCE_MS,
+  MAX_UNDO,
+  SAVE_STATUS_CLEAR_MS,
+  cloneJson,
+  detailSaveStatus,
+  pushUndoEntry,
+} from '@/components/shared/detail-autosave';
+import { DetailAutosaveActions } from '@/components/shared/DetailAutosaveActions';
+
+type UndoEntry =
+  | { kind: 'fields'; snapshot: QuoteFieldsSnapshot }
+  | { kind: 'line-items'; edits: LineItemEdits };
+
+const EMPTY_OVERVIEW: QuoteOverviewDraft = {
+  name: '',
+  reference: '',
+  note: '',
+  quoteType: '',
+  estimateDate: '',
+  expiresInDays: '',
+  estimatedStartDate: '',
+  estimatedCompletionDate: '',
+  reasonForVariation: '',
+};
+
+const EMPTY_PARTIES: QuotePartiesSnapshot = {
+  quoteTo: { ...EMPTY_PARTY },
+  quoteFor: { ...EMPTY_PARTY },
+  quoteFrom: { ...EMPTY_PARTY },
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -150,11 +189,6 @@ export function QuotePageHeader({
   claim?: Claim | null;
 }) {
   const approval = getApprovalInfo(quote);
-  const title =
-    quote.name ??
-    quote.quoteNumber ??
-    quote.externalReference ??
-    quote.id;
   const statusName = getEstimateStatusName(quote);
   const quoteTypeName = quote.quoteType?.name ?? approval.quoteTypeName;
   const locked = isEstimateLocked(quote);
@@ -166,7 +200,12 @@ export function QuotePageHeader({
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100">
           <FileSpreadsheet className="h-4 w-4 text-amber-600" />
         </span>
-        <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
+        <EntityDetailTitle
+          internalNumber={quote.internalNumber}
+          name={quote.name}
+          secondaryLabel={quote.quoteNumber ?? quote.externalReference}
+          fallbackId={quote.id}
+        />
         <StatusBadge status={statusName} />
         {locked && (
           <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
@@ -306,6 +345,7 @@ export function QuoteDetail({
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<QuoteTab>('overview');
+  const [lineItemsMounted, setLineItemsMounted] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [workOrderDrawerOpen, setWorkOrderDrawerOpen] = useState(false);
   const [publishWizardOpen, setPublishWizardOpen] = useState(false);
@@ -314,15 +354,28 @@ export function QuoteDetail({
   const [overviewDirty, setOverviewDirty] = useState(false);
   const [partiesDirty, setPartiesDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [lineItemsSaving, setLineItemsSaving] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [fieldEditTick, setFieldEditTick] = useState(0);
+  const [lineItemsEditTick, setLineItemsEditTick] = useState(0);
+  const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
   const saveLineItemsRef = useRef<(() => void) | null>(null);
   const overviewRef = useRef<QuoteOverviewTabHandle>(null);
   const partiesRef = useRef<QuotePartiesTabHandle>(null);
+  const lineItemsRef = useRef<QuoteLineItemsTabHandle>(null);
+  const saveInFlightRef = useRef(false);
+  const skipFieldUndoRef = useRef(false);
   const locked = isEstimateLocked(quote);
   const quoteAssigneeId = quote.assignedToUserId ?? '';
   const [assignedToUserId, setAssignedToUserId] = useState(quoteAssigneeId);
-  const assigneeDirty = assignedToUserId !== quoteAssigneeId;
+  const [committedAssignee, setCommittedAssignee] = useState(quoteAssigneeId);
+  const assignedToUserIdRef = useRef(assignedToUserId);
+  assignedToUserIdRef.current = assignedToUserId;
+  const assigneeDirty = assignedToUserId !== committedAssignee;
   const pageDirty = overviewDirty || partiesDirty || assigneeDirty;
+  const anyDirty = pageDirty || lineItemsDirty;
+  const anySaving = saving || lineItemsSaving;
   const resolvedAssignee = resolveDetailAssignee({
     entityAssigneeName:
       assignedToUserId && assignedToUserId === quoteAssigneeId
@@ -331,16 +384,49 @@ export function QuoteDetail({
     entityAssignedToUserId: assignedToUserId || null,
     job,
   });
+  const estimateReportTypes = useMemo(
+    () => buildEstimateReportTypes(quote.id),
+    [quote.id],
+  );
+
+  const pushUndo = useCallback((entry: UndoEntry) => {
+    setUndoStack((prev) => pushUndoEntry(prev, entry, MAX_UNDO));
+  }, []);
+
+  const captureFieldSnapshot = useCallback((): QuoteFieldsSnapshot => {
+    return cloneJson({
+      assignedToUserId: committedAssignee,
+      overview: overviewRef.current?.getBaseline() ?? EMPTY_OVERVIEW,
+      parties: partiesRef.current?.getBaseline() ?? EMPTY_PARTIES,
+    });
+  }, [committedAssignee]);
 
   useEffect(() => {
     setAssignedToUserId(quote.assignedToUserId ?? '');
+    setCommittedAssignee(quote.assignedToUserId ?? '');
   }, [quote.id, quote.assignedToUserId]);
 
-  const title =
-    quote.name ??
-    quote.quoteNumber ??
-    quote.externalReference ??
-    quote.id;
+  useEffect(() => {
+    setOverviewDirty(false);
+    setPartiesDirty(false);
+    setLineItemsDirty(false);
+    setSaveError(null);
+    setJustSaved(false);
+    setUndoStack([]);
+    setLineItemsMounted(tab === 'line-items');
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- remount take-off for the new estimate
+  }, [quote.id]);
+
+  useEffect(() => {
+    if (tab === 'line-items') setLineItemsMounted(true);
+  }, [tab]);
+
+  const title = entityArchiveLabel(
+    quote.internalNumber,
+    quote.name,
+    quote.quoteNumber ?? quote.externalReference,
+    quote.id,
+  );
   const statusName = getEstimateStatusName(quote);
   const canPublish = !locked;
   const publishMode: EstimatePublishMode =
@@ -348,54 +434,180 @@ export function QuoteDetail({
   const isInternal = publishMode === 'internal';
   const canApprove = statusName === 'Pending' && isInternal;
   const showTakeOffActions = tab === 'line-items' && !locked;
-  const showFieldEditActions =
-    !locked && (tab === 'overview' || tab === 'parties');
   /** Assignment is always editable, including published / locked estimates. */
   const canEditAssignee = true;
-  const showAssigneeSaveActions = assigneeDirty;
+  const canUndo = anyDirty || undoStack.length > 0;
+
+  const handleOverviewDirty = useCallback((dirty: boolean) => {
+    setOverviewDirty(dirty);
+    setFieldEditTick((n) => n + 1);
+  }, []);
+
+  const handlePartiesDirty = useCallback((dirty: boolean) => {
+    setPartiesDirty(dirty);
+    setFieldEditTick((n) => n + 1);
+  }, []);
 
   const handleLineItemsDirtyChange = useCallback((dirty: boolean, save: () => void) => {
     setLineItemsDirty(dirty);
     saveLineItemsRef.current = save;
+    setLineItemsEditTick((n) => n + 1);
   }, []);
 
-  const handleCancel = useCallback(() => {
-    overviewRef.current?.reset();
-    partiesRef.current?.reset();
-    setAssignedToUserId(quote.assignedToUserId ?? '');
-    setSaveError(null);
-  }, [quote.assignedToUserId]);
+  const handleLineItemsUndoCapture = useCallback(
+    (restoreEdits: LineItemEdits) => {
+      pushUndo({ kind: 'line-items', edits: cloneJson(restoreEdits) });
+    },
+    [pushUndo],
+  );
 
-  const handleSave = useCallback(async () => {
+  const handleLineItemsSaveState = useCallback(
+    (state: 'saving' | 'saved' | 'error', error?: string) => {
+      if (state === 'saving') {
+        setLineItemsSaving(true);
+        setJustSaved(false);
+        setSaveError(null);
+        return;
+      }
+      setLineItemsSaving(false);
+      if (state === 'error') {
+        setSaveError(error ?? 'Failed to save line items');
+        return;
+      }
+      setJustSaved(true);
+    },
+    [],
+  );
+
+  const persistPending = useCallback(async (): Promise<{
+    success: boolean;
+    error?: string;
+  }> => {
+    if (saveInFlightRef.current) {
+      return { success: false, error: 'A save is already in progress' };
+    }
+
     const overviewPending = overviewRef.current?.getPendingUpdate() ?? null;
     const partiesPending = partiesRef.current?.getPendingUpdate() ?? null;
-    const assigneeChanged = assignedToUserId !== (quote.assignedToUserId ?? '');
+    const assigneeSnapshot = assignedToUserIdRef.current;
+    const assigneeChanged = assigneeSnapshot !== committedAssignee;
 
     if (!overviewPending && !partiesPending && !assigneeChanged) {
       setSaveError(null);
-      return;
+      return { success: true };
     }
+
+    const undoSnapshot = skipFieldUndoRef.current ? null : captureFieldSnapshot();
+    skipFieldUndoRef.current = false;
+
+    saveInFlightRef.current = true;
     setSaving(true);
+    setJustSaved(false);
     setSaveError(null);
     try {
       const result = await updateQuoteFieldsAction(quote.id, {
         ...(overviewPending ?? {}),
         ...(partiesPending ?? {}),
         ...(assigneeChanged
-          ? { assignedToUserId: assignedToUserId || null }
+          ? { assignedToUserId: assigneeSnapshot || null }
           : {}),
       });
       if (!result.success) {
-        setSaveError(result.error ?? 'Failed to save estimate');
-        return;
+        const message = result.error ?? 'Failed to save estimate';
+        setSaveError(message);
+        return { success: false, error: message };
       }
-      overviewRef.current?.markClean();
-      partiesRef.current?.markClean();
+      if (overviewPending) {
+        overviewRef.current?.markClean(overviewPending);
+      }
+      if (partiesPending) {
+        partiesRef.current?.markClean(partiesPending);
+      }
+      if (assigneeChanged) {
+        setCommittedAssignee(assigneeSnapshot);
+      }
+      if (undoSnapshot) {
+        pushUndo({ kind: 'fields', snapshot: undoSnapshot });
+      }
+      setJustSaved(true);
       router.refresh();
+      return { success: true };
     } finally {
+      saveInFlightRef.current = false;
       setSaving(false);
     }
-  }, [quote.id, quote.assignedToUserId, assignedToUserId, router]);
+  }, [
+    quote.id,
+    router,
+    committedAssignee,
+    captureFieldSnapshot,
+    pushUndo,
+  ]);
+
+  useEffect(() => {
+    if (!pageDirty || anySaving) return;
+    const timer = setTimeout(() => {
+      void persistPending();
+    }, AUTOSAVE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [pageDirty, anySaving, persistPending, fieldEditTick, assignedToUserId]);
+
+  useEffect(() => {
+    if (locked || !lineItemsDirty || anySaving) return;
+    const timer = setTimeout(() => {
+      saveLineItemsRef.current?.();
+    }, AUTOSAVE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [locked, lineItemsDirty, anySaving, lineItemsEditTick]);
+
+  useEffect(() => {
+    if (!justSaved || anyDirty || anySaving || saveError) return;
+    const timer = setTimeout(() => setJustSaved(false), SAVE_STATUS_CLEAR_MS);
+    return () => clearTimeout(timer);
+  }, [justSaved, anyDirty, anySaving, saveError]);
+
+  const handleUndo = useCallback(() => {
+    if (anySaving) return;
+
+    if (anyDirty) {
+      overviewRef.current?.reset();
+      partiesRef.current?.reset();
+      lineItemsRef.current?.resetEdits();
+      setAssignedToUserId(committedAssignee);
+      setSaveError(null);
+      return;
+    }
+
+    const entry = undoStack[undoStack.length - 1];
+    if (!entry) return;
+    setUndoStack((prev) => prev.slice(0, -1));
+
+    if (entry.kind === 'fields') {
+      skipFieldUndoRef.current = true;
+      flushSync(() => {
+        overviewRef.current?.applyDraft(entry.snapshot.overview);
+        partiesRef.current?.applyDraft(entry.snapshot.parties);
+        setAssignedToUserId(entry.snapshot.assignedToUserId);
+      });
+      void persistPending();
+      return;
+    }
+
+    lineItemsRef.current?.save(entry.edits);
+  }, [
+    anySaving,
+    anyDirty,
+    undoStack,
+    committedAssignee,
+    persistPending,
+  ]);
+
+  const { label: saveStatusLabel, tone: saveStatusTone } = detailSaveStatus({
+    saving: anySaving,
+    saveError,
+    justSaved,
+    dirty: anyDirty,
+  });
 
   const tabs: Array<{ id: QuoteTab; label: string; icon: typeof Calendar }> = [
     { id: 'overview', label: 'Overview', icon: FileSignature },
@@ -411,50 +623,23 @@ export function QuoteDetail({
   return (
     <div className="flex flex-col">
       <SetHeaderActions>
-        {(showFieldEditActions || showAssigneeSaveActions) && (
-          <>
-            <Button
-              size="default"
-              variant="outline"
-              onClick={handleCancel}
-              disabled={saving || !pageDirty}
-              className="h-9 gap-1.5 px-4"
-            >
-              Cancel
-            </Button>
-            <Button
-              size="default"
-              onClick={handleSave}
-              disabled={saving || !pageDirty}
-              className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
-            >
-              <Save className="h-3.5 w-3.5" />
-              {saving ? 'Saving...' : 'Save'}
-            </Button>
-          </>
-        )}
+        <DetailAutosaveActions
+          statusLabel={saveStatusLabel}
+          tone={saveStatusTone}
+          canUndo={canUndo}
+          undoDisabled={anySaving}
+          onUndo={handleUndo}
+        />
         {showTakeOffActions && (
-          <>
-            <Button
-              size="default"
-              variant="outline"
-              className="h-9 gap-1.5 px-4"
-              onClick={() => setDrawerOpen(true)}
-            >
-              <Package className="h-3.5 w-3.5" />
-              Catalogue
-            </Button>
-            <Button
-              size="default"
-              variant="outline"
-              disabled={!lineItemsDirty}
-              className="h-9 gap-1.5 px-4"
-              onClick={() => saveLineItemsRef.current?.()}
-            >
-              <Save className="h-3.5 w-3.5" />
-              Save
-            </Button>
-          </>
+          <Button
+            size="default"
+            variant="outline"
+            className="h-9 gap-1.5 px-4"
+            onClick={() => setDrawerOpen(true)}
+          >
+            <Package className="h-3.5 w-3.5" />
+            Catalogue
+          </Button>
         )}
         {canPublish && (
           <Button
@@ -485,7 +670,12 @@ export function QuoteDetail({
             Create Work Order
           </Button>
         )}
-        <PrintButton documentType="quote" entityId={quote.id} jobId={job?.id} />
+        <PrintButton
+          documentType="quote"
+          entityId={quote.id}
+          jobId={job?.id ?? quote.jobId ?? undefined}
+          reportTypes={estimateReportTypes}
+        />
         <ArchiveEntityButton
           entityType="quote"
           entityId={quote.id}
@@ -512,8 +702,8 @@ export function QuoteDetail({
         onOpenChange={setApprovalWizardOpen}
         quoteId={quote.id}
       />
-      <div className="flex w-full flex-wrap items-center gap-x-4 border-b border-slate-200" data-slot="quote-detail-tabs">
-        <div className="flex min-w-0 flex-1 flex-wrap gap-0">
+      <div className="flex w-full flex-nowrap items-center border-b border-slate-200" data-slot="quote-detail-tabs">
+        <div className="flex min-w-0 flex-1 flex-nowrap gap-0">
           {tabs.map((t) => {
             const Icon = t.icon;
             const active = tab === t.id;
@@ -523,8 +713,6 @@ export function QuoteDetail({
                 type="button"
                 onClick={() => {
                   if (t.id !== 'line-items') {
-                    setLineItemsDirty(false);
-                    saveLineItemsRef.current = null;
                     setDrawerOpen(false);
                   }
                   setTab(t.id);
@@ -546,7 +734,7 @@ export function QuoteDetail({
           assignedToUserId={assignedToUserId || null}
           fromJob={resolvedAssignee.fromJob}
           editing={canEditAssignee}
-          saving={saving}
+          saving={false}
           onChange={(userId) => setAssignedToUserId(userId ?? '')}
           unassignedLabel="Not assigned"
           fallbackAssigneeName={job?.assigneeName}
@@ -574,28 +762,33 @@ export function QuoteDetail({
             ref={overviewRef}
             quote={quote}
             editing={!locked}
-            saving={saving}
-            onDirtyChange={setOverviewDirty}
+            saving={false}
+            onDirtyChange={handleOverviewDirty}
           />
         </div>
-        {tab === 'line-items' && (
-          <QuoteLineItemsTab
-            quote={quote}
-            drawerOpen={drawerOpen}
-            onDrawerOpenChange={setDrawerOpen}
-            catalogType={jobProvider}
-            readOnly={locked}
-            onDirtyChange={handleLineItemsDirtyChange}
-            hideToolbarActions
-          />
+        {lineItemsMounted && (
+          <div className={tab === 'line-items' ? '' : 'hidden'}>
+            <QuoteLineItemsTab
+              ref={lineItemsRef}
+              quote={quote}
+              drawerOpen={drawerOpen}
+              onDrawerOpenChange={setDrawerOpen}
+              catalogType={jobProvider}
+              readOnly={locked}
+              onDirtyChange={handleLineItemsDirtyChange}
+              onUndoCapture={handleLineItemsUndoCapture}
+              onSaveStateChange={handleLineItemsSaveState}
+              hideToolbarActions
+            />
+          </div>
         )}
         <div className={tab === 'parties' ? '' : 'hidden'}>
           <QuotePartiesTab
             ref={partiesRef}
             quote={quote}
             editing={!locked}
-            saving={saving}
-            onDirtyChange={setPartiesDirty}
+            saving={false}
+            onDirtyChange={handlePartiesDirty}
           />
         </div>
         {tab === 'activities' && <ActivitiesTab quoteId={quote.id} />}

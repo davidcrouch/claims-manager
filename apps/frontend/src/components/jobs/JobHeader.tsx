@@ -15,6 +15,7 @@ import { TypeBadge } from '@/components/ui/type-badge';
 import { BackButton } from '@/components/layout/BackButton';
 import { JobsPickerDrawer } from '@/components/jobs/JobsPickerDrawer';
 import { formatDate, formatDateTime, formatCurrency, formatAddress, BoolPill } from '@/components/shared/detail';
+import { jobHeaderSubtitle, jobHeaderTitle } from '@/components/shared/job-label';
 import type { Job, Claim } from '@/types/api';
 
 type Dict = Record<string, unknown>;
@@ -47,7 +48,6 @@ export function JobPageHeader({
 }) {
   const router = useRouter();
   const [pickerOpen, setPickerOpen] = useState(false);
-  const title = job.name ?? job.externalJobId ?? job.externalReference ?? job.id;
   const api = getApi(job);
 
   const clearJobSelection = () => {
@@ -68,6 +68,9 @@ export function JobPageHeader({
     ((api.claim as Dict | undefined)?.claimNumber as string | undefined) ??
     ((api.claim as Dict | undefined)?.externalReference as string | undefined);
 
+  const topLabel = jobHeaderSubtitle(job);
+  const linkTitle = jobHeaderTitle(job);
+
   return (
     <>
       <div className="flex w-full min-w-0 flex-col gap-y-1">
@@ -82,9 +85,18 @@ export function JobPageHeader({
               className="group min-w-0 max-w-full rounded-md outline-none transition-colors hover:text-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-500/40"
               title="View job"
             >
-              <h1 className="truncate text-lg font-semibold leading-tight uppercase underline-offset-4 group-hover:underline">
-                {title}
-              </h1>
+              <div className="min-w-0">
+                {topLabel ? (
+                  <p className="truncate text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    {topLabel}
+                  </p>
+                ) : null}
+                <h1
+                  className={`truncate font-mono text-lg font-semibold leading-tight uppercase underline-offset-4 group-hover:underline${topLabel ? ' mt-0.5' : ''}`}
+                >
+                  {linkTitle}
+                </h1>
+              </div>
             </Link>
             <button
               type="button"

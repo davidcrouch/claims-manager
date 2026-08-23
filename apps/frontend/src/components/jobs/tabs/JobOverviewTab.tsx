@@ -22,7 +22,7 @@ import {
   EditText,
   EditTextarea,
 } from '@/components/jobs/JobEditControls';
-import type { JobEditPending, LookupOption } from '@/components/jobs/job-edit.types';
+import type { JobEditPending, JobOverviewDraft, LookupOption } from '@/components/jobs/job-edit.types';
 import type { Job, Claim } from '@/types/api';
 
 type Dict = Record<string, unknown>;
@@ -31,6 +31,8 @@ export interface JobOverviewTabHandle {
   getPendingUpdate: () => JobEditPending | null;
   /** @deprecated use getPendingUpdate */
   getPendingDates: () => JobEditPending | null;
+  getBaseline: () => JobOverviewDraft;
+  applyDraft: (draft: JobOverviewDraft) => void;
   reset: () => void;
   resetDates: () => void;
   /** Align baselines to a saved payload (or current draft) so dirty clears before props refresh. */
@@ -202,7 +204,14 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
 
   useEffect(() => {
     onDirtyChange?.(isDirty);
-  }, [isDirty, onDirtyChange]);
+  }, [
+    isDirty,
+    onDirtyChange,
+    attendanceDate,
+    statusLookupId,
+    jobInstructions,
+    vendorExtRef,
+  ]);
 
   const buildPending = (): JobEditPending | null => {
     if (!isDirty) return null;
@@ -224,6 +233,14 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     setStatusExternalReference(savedStatusExternalReference);
     setJobInstructions(savedJobInstructions);
     setVendorExtRef(savedVendorExtRef);
+  };
+
+  const applyDraft = (next: JobOverviewDraft) => {
+    setAttendanceDate(next.attendanceDate);
+    setStatusLookupId(next.statusLookupId);
+    setStatusExternalReference(next.statusExternalReference);
+    setJobInstructions(next.jobInstructions);
+    setVendorExtRef(next.vendorExtRef);
   };
 
   const markClean = (saved?: JobEditPending | null) => {
@@ -249,6 +266,14 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
   useImperativeHandle(ref, () => ({
     getPendingUpdate: buildPending,
     getPendingDates: buildPending,
+    getBaseline: () => ({
+      attendanceDate: savedAttendanceDate,
+      statusLookupId: savedStatusLookupId,
+      statusExternalReference: savedStatusExternalReference,
+      jobInstructions: savedJobInstructions,
+      vendorExtRef: savedVendorExtRef,
+    }),
+    applyDraft,
     reset,
     resetDates: reset,
     markClean,
@@ -324,6 +349,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
             </button>
           }
         >
+          <DefRow label="Job number" value={job.internalNumber ?? '—'} />
           <DefRow label="Name" value={job.name ?? '—'} />
           <DefRow label="Job type" value={<TypeBadge type={jobTypeName} />} />
           <DefRow
@@ -401,7 +427,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
             value={
               <div className="flex flex-wrap items-center gap-2">
                 <span>{formatDate(bookedDateRaw)}</span>
-                {onAddAppointment && (
+                {onAddAppointment && !bookedDateRaw && (
                   <Button
                     type="button"
                     size="sm"

@@ -1,4 +1,4 @@
-import { Injectable, Optional, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, Optional, BadRequestException, Logger, Inject } from '@nestjs/common';
 import {
   InvoicesRepository,
   WorkOrdersRepository,
@@ -6,11 +6,13 @@ import {
   LookupsRepository,
   type InvoiceInsert,
 } from '../../database/repositories';
+import { DRIZZLE, type DrizzleDB } from '../../database/drizzle.module';
 import { TenantContext } from '../../tenant/tenant-context';
 import { CrunchworkService } from '../../crunchwork/crunchwork.service';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
 import { LookupResolver } from '../external/lookup-resolver.service';
 import { OutboundEventsService } from '../outbound-events/outbound-events.service';
+import { RecordNumberService } from '../../common/record-number/record-number.service';
 
 @Injectable()
 export class InvoicesService {
@@ -24,6 +26,8 @@ export class InvoicesService {
     private readonly tenantContext: TenantContext,
     private readonly crunchworkService: CrunchworkService,
     private readonly lookupResolver: LookupResolver,
+    private readonly recordNumberService: RecordNumberService,
+    @Inject(DRIZZLE) private readonly db: DrizzleDB,
     @Optional() private readonly connectionResolver?: ConnectionResolverService,
     @Optional() private readonly outboundEvents?: OutboundEventsService,
   ) {}
@@ -184,37 +188,50 @@ export class InvoicesService {
     const totalAmount =
       body.totalAmount != null ? String(body.totalAmount) : undefined;
 
-    const insertData: InvoiceInsert = {
-      tenantId,
-      workOrderId: workOrderId ?? null,
-      purchaseOrderId: purchaseOrderId ?? null,
-      claimId: claimId ?? null,
-      jobId: jobId ?? null,
-      invoiceNumber:
-        typeof body.invoiceNumber === 'string' && body.invoiceNumber
-          ? body.invoiceNumber
-          : null,
-      issueDate: issueDate ?? null,
-      comments: typeof body.note === 'string' ? body.note : null,
-      totalAmount: totalAmount ?? null,
-      statusLookupId: draftStatusId ?? null,
-      invoicePayload: {
-        workOrderId,
-        purchaseOrderId,
-        dueDate: body.dueDate ?? null,
-      },
-      originType: 'user',
-      issuerOrganisationId: tenantId,
-      ownershipStatus: 'owned',
-      createdByUserId: params.userId ?? null,
-      updatedByUserId: params.userId ?? null,
-    };
+    const bodyInternalNumber = body.internalNumber;
+    const bodyInvoiceNumber = body.invoiceNumber;
 
-    this.logger.log(
-      `${logPrefix} — local draft workOrderId=${workOrderId ?? 'none'} purchaseOrderId=${purchaseOrderId ?? 'none'}`,
-    );
+    return this.db.transaction(async (tx) => {
+      const internalNumber = await this.recordNumberService.resolve({
+        tenantId,
+        entity: 'invoice',
+        explicit: bodyInternalNumber,
+        tx,
+      });
+      const invoiceNumber = this.recordNumberService.isBlank(bodyInvoiceNumber)
+        ? null
+        : String(bodyInvoiceNumber).trim();
 
-    return this.invoicesRepo.create({ data: insertData });
+      const insertData: InvoiceInsert = {
+        tenantId,
+        workOrderId: workOrderId ?? null,
+        purchaseOrderId: purchaseOrderId ?? null,
+        claimId: claimId ?? null,
+        jobId: jobId ?? null,
+        internalNumber,
+        invoiceNumber,
+        issueDate: issueDate ?? null,
+        comments: typeof body.note === 'string' ? body.note : null,
+        totalAmount: totalAmount ?? null,
+        statusLookupId: draftStatusId ?? null,
+        invoicePayload: {
+          workOrderId,
+          purchaseOrderId,
+          dueDate: body.dueDate ?? null,
+        },
+        originType: 'user',
+        issuerOrganisationId: tenantId,
+        ownershipStatus: 'owned',
+        createdByUserId: params.userId ?? null,
+        updatedByUserId: params.userId ?? null,
+      };
+
+      this.logger.log(
+        `${logPrefix} — local draft workOrderId=${workOrderId ?? 'none'} purchaseOrderId=${purchaseOrderId ?? 'none'} internalNumber=${internalNumber}`,
+      );
+
+      return this.invoicesRepo.create({ data: insertData, tx });
+    });
   }
 
   /**

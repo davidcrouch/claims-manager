@@ -1,4 +1,4 @@
-import { Injectable, ConflictException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, ConflictException, BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import {
   ContactsRepository,
   UsersRepository,
@@ -6,6 +6,12 @@ import {
 } from '../../database/repositories';
 import { JobContactsRepository } from '../../database/repositories/job-contacts.repository';
 import { TenantContext } from '../../tenant/tenant-context';
+import {
+  buildContactTypeFields,
+  readContactTypeLookupIds,
+  resolveContactTypeLookupIds,
+} from '../../common/contact-types';
+import type { ContactRow } from '../../database/repositories/contacts.repository';
 
 function normalizePersonName(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -48,7 +54,7 @@ export class ContactsService {
     jobIds?: string[];
     unlinkedOnly?: boolean;
     typeLookupIds?: string[];
-    archived?: boolean;
+    status?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
     const result = await this.contactsRepo.findAll({
@@ -61,7 +67,7 @@ export class ContactsService {
       jobIds: params.jobIds,
       unlinkedOnly: params.unlinkedOnly,
       typeLookupIds: params.typeLookupIds,
-      archived: params.archived,
+      status: params.status,
     });
 
     const jobsByContact = await this.jobContactsRepo.findJobsForContactIds({
@@ -69,15 +75,19 @@ export class ContactsService {
       contactIds: result.data.map((c) => c.id),
     });
 
+    const enriched = await this.enrichContacts(result.data);
+
     return {
-      data: result.data.map((contact) => ({
+      data: enriched.map((contact) => ({
         ...contact,
         relatedJobs: (jobsByContact[contact.id] ?? []).map((j) => ({
           id: j.id,
           name: j.name,
           externalReference: j.externalReference,
+          externalJobId: j.externalJobId,
           label:
             j.name?.trim() ||
+            j.externalJobId?.trim() ||
             j.externalReference?.trim() ||
             j.id,
         })),
@@ -97,7 +107,10 @@ export class ContactsService {
 
   async findOne(params: { id: string }) {
     const tenantId = this.tenantContext.getTenantId();
-    return this.contactsRepo.findOne({ id: params.id, tenantId });
+    const contact = await this.contactsRepo.findOne({ id: params.id, tenantId });
+    if (!contact) return null;
+    const [enriched] = await this.enrichContacts([contact]);
+    return enriched ?? null;
   }
 
   async findRelatedJobs(params: { id: string }) {
@@ -108,12 +121,19 @@ export class ContactsService {
     });
 
     let fallbackRole: string | null = null;
-    if (contact?.typeLookupId) {
-      const lookup = await this.lookupsRepo.findOne({
-        id: contact.typeLookupId,
+    const typeIds = contact ? readContactTypeLookupIds(contact) : [];
+    if (typeIds.length > 0) {
+      const lookupMap = await this.lookupsRepo.findByIds({
+        ids: typeIds,
         tenantId,
       });
-      fallbackRole = lookup?.name ?? lookup?.externalReference ?? null;
+      const labels = typeIds
+        .map((id) => {
+          const lookup = lookupMap.get(id);
+          return lookup?.name ?? lookup?.externalReference ?? null;
+        })
+        .filter((value): value is string => Boolean(value));
+      fallbackRole = labels.length > 0 ? labels.join(', ') : null;
     }
 
     const rows = await this.jobContactsRepo.findJobsByContact({
@@ -131,17 +151,26 @@ export class ContactsService {
         const t = type as { name?: string; externalReference?: string };
         role = t.name ?? t.externalReference ?? null;
       }
+      if (!role && typeof payload.typeName === 'string') {
+        role = payload.typeName;
+      }
 
       return {
         id: row.jobId,
         name: row.name,
         externalReference: row.externalReference,
+        externalJobId: row.externalJobId,
         addressSuburb: row.addressSuburb,
         addressState: row.addressState,
         statusName: row.statusName,
         jobTypeName: row.jobTypeName,
         role: role ?? fallbackRole,
         updatedAt: row.updatedAt,
+        label:
+          row.name?.trim() ||
+          row.externalJobId?.trim() ||
+          row.externalReference?.trim() ||
+          row.jobId,
       };
     });
   }
@@ -155,8 +184,15 @@ export class ContactsService {
     workPhone?: string;
     notes?: string;
     typeLookupId?: string;
+    typeLookupIds?: string[];
   }) {
     const tenantId = this.tenantContext.getTenantId();
+    const typeLookupIds = resolveContactTypeLookupIds(params);
+    if (typeLookupIds.length === 0) {
+      throw new BadRequestException(
+        'ContactsService.create — at least one contact type is required',
+      );
+    }
 
     if (params.email) {
       const existing = await this.contactsRepo.findByEmail({
@@ -170,7 +206,9 @@ export class ContactsService {
       }
     }
 
-    return this.contactsRepo.create({
+    const typeFields = buildContactTypeFields({ typeLookupIds });
+
+    const created = await this.contactsRepo.create({
       data: {
         tenantId,
         firstName: params.firstName ?? null,
@@ -180,9 +218,76 @@ export class ContactsService {
         homePhone: params.homePhone ?? null,
         workPhone: params.workPhone ?? null,
         notes: params.notes ?? null,
-        typeLookupId: params.typeLookupId?.trim() || null,
+        typeLookupId: typeFields.typeLookupId,
+        contactPayload: typeFields.contactPayload,
       },
     });
+    const [enriched] = await this.enrichContacts([created]);
+    return enriched ?? created;
+  }
+
+  async update(params: {
+    id: string;
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    mobilePhone?: string;
+    homePhone?: string;
+    workPhone?: string;
+    notes?: string;
+    typeLookupId?: string;
+    typeLookupIds?: string[];
+  }) {
+    const tenantId = this.tenantContext.getTenantId();
+    const existing = await this.contactsRepo.findOne({
+      id: params.id,
+      tenantId,
+    });
+    if (!existing) {
+      throw new NotFoundException(`Contact ${params.id} not found`);
+    }
+
+    const typeLookupIds = resolveContactTypeLookupIds(params);
+    if (typeLookupIds.length === 0) {
+      throw new BadRequestException(
+        'ContactsService.update — at least one contact type is required',
+      );
+    }
+
+    if (params.email) {
+      const duplicate = await this.contactsRepo.findByEmail({
+        tenantId,
+        email: params.email,
+      });
+      if (duplicate && duplicate.id !== params.id) {
+        throw new ConflictException(
+          `A contact with email "${params.email}" already exists`,
+        );
+      }
+    }
+
+    const typeFields = buildContactTypeFields({
+      existingPayload: existing.contactPayload,
+      typeLookupIds,
+    });
+
+    const updated = await this.contactsRepo.update({
+      id: params.id,
+      tenantId,
+      data: {
+        firstName: params.firstName ?? null,
+        lastName: params.lastName ?? null,
+        email: params.email ?? null,
+        mobilePhone: params.mobilePhone ?? null,
+        homePhone: params.homePhone ?? null,
+        workPhone: params.workPhone ?? null,
+        notes: params.notes ?? null,
+        typeLookupId: typeFields.typeLookupId,
+        contactPayload: typeFields.contactPayload,
+      },
+    });
+    const [enriched] = await this.enrichContacts([updated]);
+    return enriched ?? updated;
   }
 
   /**
@@ -329,5 +434,36 @@ export class ContactsService {
       name: u.name ?? u.email ?? 'Unknown',
       email: u.email ?? undefined,
     }));
+  }
+
+  private async enrichContacts(contacts: ContactRow[]) {
+    if (contacts.length === 0) return [];
+
+    const tenantId = this.tenantContext.getTenantId();
+    const allTypeIds = [
+      ...new Set(contacts.flatMap((contact) => readContactTypeLookupIds(contact))),
+    ];
+    const lookupMap =
+      allTypeIds.length > 0
+        ? await this.lookupsRepo.findByIds({ ids: allTypeIds, tenantId })
+        : new Map<string, { id: string; name?: string | null; externalReference?: string | null }>();
+
+    return contacts.map((contact) => {
+      const typeLookupIds = readContactTypeLookupIds(contact);
+      const contactTypes = typeLookupIds.map((id) => {
+        const lookup = lookupMap.get(id);
+        return {
+          id,
+          name: lookup?.name ?? undefined,
+          externalReference: lookup?.externalReference ?? undefined,
+        };
+      });
+      return {
+        ...contact,
+        typeLookupIds,
+        contactTypes,
+        typeLookupId: typeLookupIds[0] ?? contact.typeLookupId ?? null,
+      };
+    });
   }
 }

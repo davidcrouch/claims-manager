@@ -401,6 +401,90 @@ export async function saveQuoteLineItemsAction(params: {
   }
 }
 
+export async function reorderQuoteLineItemsAction(params: {
+  quoteId: string;
+  items?: Array<{ id: string; sortIndex: number }>;
+  combos?: Array<{ id: string; sortIndex: number }>;
+}): Promise<{ success: boolean; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+
+  try {
+    await api.reorderQuoteLineItems(params.quoteId, {
+      items: params.items,
+      combos: params.combos,
+    });
+    revalidatePath(`/quotes/${params.quoteId}`);
+    return { success: true };
+  } catch (err) {
+    console.error('[quotes/actions.reorderQuoteLineItemsAction]', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to reorder line items',
+    };
+  }
+}
+
+export async function moveQuoteLineItemAction(params: {
+  quoteId: string;
+  itemId?: string;
+  comboId?: string;
+  targetGroupId: string;
+  targetComboId?: string;
+  insertAtIndex?: number;
+}): Promise<{ success: boolean; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+
+  try {
+    await api.moveQuoteLineItem(params.quoteId, {
+      itemId: params.itemId,
+      comboId: params.comboId,
+      targetGroupId: params.targetGroupId,
+      targetComboId: params.targetComboId,
+      insertAtIndex: params.insertAtIndex,
+    });
+    revalidatePath(`/quotes/${params.quoteId}`);
+    return { success: true };
+  } catch (err) {
+    console.error('[quotes/actions.moveQuoteLineItemAction]', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to move line item',
+    };
+  }
+}
+
+export async function duplicateQuoteLineItemAction(params: {
+  quoteId: string;
+  itemId?: string;
+  comboId?: string;
+  targetGroupId: string;
+  targetComboId?: string;
+  insertAtIndex?: number;
+}): Promise<{ success: boolean; newId?: string; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+
+  try {
+    const result = await api.duplicateQuoteLineItem(params.quoteId, {
+      itemId: params.itemId,
+      comboId: params.comboId,
+      targetGroupId: params.targetGroupId,
+      targetComboId: params.targetComboId,
+      insertAtIndex: params.insertAtIndex,
+    });
+    revalidatePath(`/quotes/${params.quoteId}`);
+    return { success: true, newId: result.newId };
+  } catch (err) {
+    console.error('[quotes/actions.duplicateQuoteLineItemAction]', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to duplicate line item',
+    };
+  }
+}
+
 export async function fetchGroupLabelLookupsAction(): Promise<{
   success: boolean;
   options?: Array<{ id: string; name?: string; externalReference?: string }>;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ClipboardCheck, PackagePlus, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -19,32 +19,34 @@ import {
   SortableColumnHeader,
   TableEmptyRow,
   statusIdsForArchiveListTab,
-  mergeStatusParamWithTab,
-} from '@/components/shared/list-filters';
-import { resolveJobName } from '@/components/shared/job-label';
-import {
-  buildServerJobFilterOptions,
+  mergeStatusParamWithTab } from '@/components/shared/list-filters';
+import { jobDisplayName } from '@/components/shared/job-label';
+import { JobCellLink } from '@/components/shared/JobCellLink';
+import { buildServerJobFilterOptions,
   resolveServerJobFilterSelection,
   selectedJobFilterLabels,
   parseSelectedJobIds,
   toServerJobFetchParams,
   writeServerJobFilterParams,
-  jobFilterOptionsFromNameById,
-} from '@/components/shared/server-job-filter';
+  syncServerJobFilterParams,
+  buildListJobFilterOptions } from '@/components/shared/server-job-filter';
+import {
+  createListFetchSession,
+  replaceListQueryIfNeeded,
+  useListPageData } from '@/components/shared/use-list-page-data';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import {
   EntityPageHeader,
-  type EntityBreakdownItem,
-} from '@/components/shared/EntityPageHeader';
+  type EntityBreakdownItem } from '@/components/shared/EntityPageHeader';
 import { computeStatusBreakdown } from '@/components/layout/ListPageHeader';
 import { CapturePoDrawer } from '@/components/forms/CapturePoDrawer';
 import { fetchWorkOrdersAction } from '@/app/(app)/work-orders/actions';
-import { TablePagination } from '@/components/shared/table-pagination';
+import { entityDisplayLabel } from '@/components/shared/entity-label';
 import {
   ColumnSettingsHeaderCell,
-  useColumnVisibility,
-} from '@/components/shared/column-visibility';
+  useColumnVisibility } from '@/components/shared/column-visibility';
 import { ListArchiveButton, LIST_ARCHIVE_TH_CLASS, LIST_ARCHIVE_TD_CLASS, LIST_ARCHIVE_SPACER_TD_CLASS } from '@/components/shared/ListArchiveButton';
+import { TablePagination } from '@/components/shared/table-pagination';
 import type { WorkOrder, PaginatedResponse, Job, Claim } from '@/types/api';
 
 const PAGE_SIZE = 20;
@@ -63,8 +65,7 @@ function formatAmount(value?: string | null): string {
   return n.toLocaleString('en-AU', {
     style: 'currency',
     currency: 'AUD',
-    maximumFractionDigits: 2,
-  });
+    maximumFractionDigits: 2 });
 }
 
 type WOSortField =
@@ -106,13 +107,12 @@ export function WorkOrdersListClient({
   workOrderTypes,
   jobNameById,
   job,
-  parentClaim,
-}: WorkOrdersListClientProps) {
+  parentClaim }: WorkOrdersListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const jobId = searchParams.get('jobId') ?? undefined;
   const jobIdsParam = searchParams.get('jobIds') ?? undefined;
-  const [data, setData] = useState(initialData);
+  const { data, setData, beginFetch, abortFetch } = useListPageData(initialData);
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [tab, setTab] = useState<ListTab>(() => parseTab(searchParams.get('tab')));
@@ -122,8 +122,7 @@ export function WorkOrdersListClient({
   });
   const [columnSort, setColumnSort] = useState<{ field: WOSortField; order: 'asc' | 'desc' }>({
     field: 'updated_at',
-    order: 'desc',
-  });
+    order: 'desc' });
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
   const [typeFilterActive, setTypeFilterActive] = useState(false);
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
@@ -134,14 +133,19 @@ export function WorkOrdersListClient({
     TABLE_COLUMNS,
   );
 
-  const lastFetchKeyRef = useRef<string | null>(null);
   const selectedJobIds = useMemo(
     () => parseSelectedJobIds(jobId, jobIdsParam),
     [jobId, jobIdsParam],
   );
   const filterJobs = useMemo(
-    () => jobFilterOptionsFromNameById(jobNameById),
-    [jobNameById],
+    () =>
+      buildListJobFilterOptions({
+        jobNameById,
+        currentJob: job
+          ? { id: job.id, label: jobDisplayName(job) }
+          : null,
+        jobId }),
+    [jobNameById, job, jobId],
   );
   const uniqueJobs = useMemo(
     () => buildServerJobFilterOptions(filterJobs),
@@ -154,8 +158,7 @@ export function WorkOrdersListClient({
         jobIds: jobIdsParam
           ? jobIdsParam.split(',').map((id) => id.trim()).filter(Boolean)
           : undefined,
-        jobs: filterJobs,
-      }),
+        jobs: filterJobs }),
     [jobId, jobIdsParam, filterJobs],
   );
   const { jobId: fetchJobId, jobIds: fetchJobIds } = useMemo(
@@ -184,11 +187,6 @@ export function WorkOrdersListClient({
     return () => clearTimeout(t);
   }, [search]);
 
-  useEffect(() => {
-    setData(initialData);
-    lastFetchKeyRef.current = null;
-  }, [initialData]);
-
   const sortParam = `${columnSort.field}_${columnSort.order}`;
 
   useEffect(() => {
@@ -197,24 +195,35 @@ export function WorkOrdersListClient({
     const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${typeKey}|${jobId ?? ''}|${jobIdsParam ?? ''}`;
 
     const params = new URLSearchParams(searchParams.toString());
-    params.set('search', debouncedSearch);
-    params.set('tab', tab);
-    params.set('page', String(page));
-    params.set('sort', sortParam);
+    if (debouncedSearch) params.set('search', debouncedSearch);
+    else params.delete('search');
+    if (tab !== 'active') params.set('tab', tab);
+    else params.delete('tab');
+    if (page > 1) params.set('page', String(page));
+    else params.delete('page');
+    if (sortParam !== 'updated_at_desc') params.set('sort', sortParam);
+    else params.delete('sort');
     if (statusParam) params.set('status', statusParam); else params.delete('status');
     if (workOrderTypeParam) params.set('workOrderType', workOrderTypeParam); else params.delete('workOrderType');
-    if (jobId) params.set('jobId', jobId);
-    else params.delete('jobId');
-    if (jobIdsParam) params.set('jobIds', jobIdsParam);
-    else params.delete('jobIds');
-    router.replace(`/work-orders?${params}`, { scroll: false });
+    syncServerJobFilterParams(params, jobId, jobIdsParam);
+    const next = params.toString();
+    if (
+      !replaceListQueryIfNeeded({
+        router,
+        pathname: '/work-orders',
+        currentQuery: searchParams.toString(),
+        nextQuery: next,
+      })
+    ) {
+      return;
+    }
 
-    if (lastFetchKeyRef.current === fetchKey) return;
-    lastFetchKeyRef.current = fetchKey;
+    const session = createListFetchSession({ fetchKey, beginFetch, abortFetch });
+    if (!session) return;
 
     if (statusParam === null || workOrderTypeParam === null) {
       setData({ data: [], total: 0 });
-      return;
+      return session.cleanup;
     }
 
     fetchWorkOrdersAction({
@@ -224,10 +233,11 @@ export function WorkOrdersListClient({
       status: statusParam,
       workOrderType: workOrderTypeParam,
       jobId: fetchJobId, jobIds: fetchJobIds,
-      search: debouncedSearch || undefined,
-    }).then((res) => res && setData(res));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop: router.replace updates URL -> searchParams changes -> effect re-runs
-  }, [debouncedSearch, sortParam, tab, page, statusParam, workOrderTypeParam, jobId, jobIdsParam, fetchJobId, fetchJobIds]);
+      search: debouncedSearch || undefined }).then((res) => {
+      if (!session.cancelled && res) setData(res);
+    });
+    return session.cleanup;
+  }, [debouncedSearch, sortParam, tab, page, statusParam, workOrderTypeParam, jobId, jobIdsParam, fetchJobId, fetchJobIds, searchParams, router, beginFetch, abortFetch]);
 
   const handleColumnSort = (field: WOSortField) => {
     setColumnSort((prev) => {
@@ -280,8 +290,7 @@ export function WorkOrdersListClient({
     else working.add(name);
     const committed = commitColumnFilterSelection({
       next: working,
-      optionCount: uniqueTypes.length,
-    });
+      optionCount: uniqueTypes.length });
     setTypeFilter(committed.selected);
     setTypeFilterActive(committed.active);
     setPage(1);
@@ -290,8 +299,7 @@ export function WorkOrdersListClient({
   const applyStatusFilter = (next: Set<string>) => {
     const committed = commitColumnFilterSelection({
       next,
-      optionCount: uniqueStatuses.length,
-    });
+      optionCount: uniqueStatuses.length });
     setStatusFilter(committed.selected);
     setStatusFilterActive(committed.active);
     setPage(1);
@@ -300,8 +308,7 @@ export function WorkOrdersListClient({
   const applyTypeFilter = (next: Set<string>) => {
     const committed = commitColumnFilterSelection({
       next,
-      optionCount: uniqueTypes.length,
-    });
+      optionCount: uniqueTypes.length });
     setTypeFilter(committed.selected);
     setTypeFilterActive(committed.active);
     setPage(1);
@@ -311,8 +318,7 @@ export function WorkOrdersListClient({
     const resolved = resolveServerJobFilterSelection({
       next,
       options: uniqueJobs,
-      jobs: filterJobs,
-    });
+      jobs: filterJobs });
     setPage(1);
     const params = new URLSearchParams(searchParams.toString());
     writeServerJobFilterParams(params, resolved);
@@ -326,8 +332,7 @@ export function WorkOrdersListClient({
     active: statusFilterActive,
     onApply: applyStatusFilter,
     menuTitle: 'Filter by status',
-    itemNoun: { singular: 'status', plural: 'statuses' },
-  };
+    itemNoun: { singular: 'status', plural: 'statuses' } };
 
   const typeFilterProps = {
     options: uniqueTypes,
@@ -335,8 +340,7 @@ export function WorkOrdersListClient({
     active: typeFilterActive,
     onApply: applyTypeFilter,
     menuTitle: 'Filter by type',
-    itemNoun: { singular: 'type', plural: 'types' },
-  };
+    itemNoun: { singular: 'type', plural: 'types' } };
 
   const jobFilterProps = {
     options: uniqueJobs,
@@ -344,8 +348,7 @@ export function WorkOrdersListClient({
     active: jobFilterActive,
     onApply: applyJobFilter,
     menuTitle: 'Filter by job',
-    itemNoun: { singular: 'job', plural: 'jobs' },
-  };
+    itemNoun: { singular: 'job', plural: 'jobs' } };
 
   const visibleRows = data.data;
 
@@ -360,8 +363,7 @@ export function WorkOrdersListClient({
     return sum.toLocaleString(undefined, {
       style: 'currency',
       currency: 'AUD',
-      maximumFractionDigits: 0,
-    });
+      maximumFractionDigits: 0 });
   }, [visibleRows]);
 
   return (
@@ -485,7 +487,13 @@ export function WorkOrdersListClient({
                   <TableEmptyRow colSpan={visibleCount + 2} label="No work orders found." />
                 ) : (
                   visibleRows.map((wo) => {
-                  const displayName = wo.name?.trim() || wo.workOrderNumber || wo.externalId || wo.id;
+                  const displayName = entityDisplayLabel(
+                    wo.internalNumber,
+                    wo.name,
+                    wo.workOrderNumber,
+                    wo.externalId,
+                    wo.id,
+                  );
                   const statusName = wo.status?.name ?? 'Unknown';
                   const woType = wo.workOrderType?.name ?? '';
                   const source = wo.sourceExternalReference ?? '';
@@ -506,7 +514,7 @@ export function WorkOrdersListClient({
                       )}
                       {isVisible('job') && (
                         <td className="px-4 py-3 text-slate-600">
-                          {resolveJobName(wo.jobId, jobNameById)}
+                          <JobCellLink jobId={wo.jobId} jobNameById={jobNameById} />
                         </td>
                       )}
                       {isVisible('status') && (
@@ -559,8 +567,7 @@ export function WorkOrdersListClient({
                             setData((prev) => ({
                               ...prev,
                               data: prev.data.filter((row) => row.id !== id),
-                              total: Math.max(0, prev.total - 1),
-                            }));
+                              total: Math.max(0, prev.total - 1) }));
                           }}
                         />
                       </td>

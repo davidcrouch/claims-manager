@@ -480,7 +480,7 @@ resource "google_cloud_run_v2_job" "migrate_api" {
   depends_on = [google_project_service.run]
 }
 
-# Idempotent lookups + catalogue group labels for every tenant. Run after migrate-api.
+# Idempotent lookups + document-template JSONata sync for every tenant. Run after migrate-api.
 resource "google_cloud_run_v2_job" "seed_api_lookups" {
   count    = var.enable_cloud_run ? 1 : 0
   project  = var.project_id

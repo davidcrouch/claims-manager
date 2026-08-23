@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Search, X } from 'lucide-react';
 import { FileText } from 'lucide-react';
@@ -13,11 +13,13 @@ import {
   computeStatusBreakdown,
 } from '@/components/layout/ListPageHeader';
 import { fetchClaimsAction } from '@/app/(app)/claims/actions';
-import type { Claim, PaginatedResponse } from '@/types/api';
 import {
-  normalizeSortParam,
-  ARCHIVED_STATUS_NAMES,
-} from './claims-list-helpers';
+  createListFetchSession,
+  replaceListQueryIfNeeded,
+  useListPageData,
+} from '@/components/shared/use-list-page-data';
+import type { Claim, PaginatedResponse } from '@/types/api';
+import { normalizeSortParam } from './claims-list-helpers';
 import {
   compareValues,
   compareDates,
@@ -25,6 +27,10 @@ import {
   SortableColumnHeader,
   commitColumnFilterSelection,
   columnFilterToIdsParam,
+  statusIdsForArchiveListTab,
+  mergeStatusParamWithTab,
+  parseArchiveListTab,
+  type ArchiveListTab,
   TableEmptyRow,
 } from '@/components/shared/list-filters';
 import {
@@ -34,6 +40,8 @@ import {
 import { ListArchiveButton, LIST_ARCHIVE_TH_CLASS, LIST_ARCHIVE_TD_CLASS, LIST_ARCHIVE_SPACER_TD_CLASS } from '@/components/shared/ListArchiveButton';
 import { TablePagination } from '@/components/shared/table-pagination';
 import { formatAddress } from '@/components/shared/detail';
+
+type ClaimTab = ArchiveListTab;
 
 const PAGE_SIZE = 20;
 
@@ -48,58 +56,6 @@ function formatDate(value?: string | null): string {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return '';
   return d.toLocaleDateString();
-}
-
-type ClaimTab = 'active' | 'archived' | 'all';
-
-const VALID_TABS = new Set<ClaimTab>(['active', 'archived', 'all']);
-
-function parseTab(param: string | null): ClaimTab {
-  if (param && VALID_TABS.has(param as ClaimTab)) return param as ClaimTab;
-  return 'active';
-}
-
-function statusIdsForTab(
-  tab: ClaimTab,
-  statusOptions: { id: string; name: string }[],
-): string {
-  if (tab === 'all') return '';
-  const archivedIds: string[] = [];
-  const activeIds: string[] = [];
-  for (const opt of statusOptions) {
-    if (ARCHIVED_STATUS_NAMES.has(opt.name.trim().toLowerCase())) {
-      archivedIds.push(opt.id);
-    } else {
-      activeIds.push(opt.id);
-    }
-  }
-  const ids = tab === 'archived' ? archivedIds : activeIds;
-  return ids.sort().join(',');
-}
-
-/** Intersect column status selections with tab status IDs. */
-function resolveStatusParam(
-  tab: ClaimTab,
-  statusFilterActive: boolean,
-  statusFilter: Set<string>,
-  statusOptions: { id: string; name: string }[],
-): string | undefined | null {
-  const tabIds = statusIdsForTab(tab, statusOptions);
-  const columnParam = columnFilterToIdsParam(
-    statusFilterActive,
-    statusFilter,
-    statusOptions,
-  );
-  if (columnParam === null) return null;
-  if (!columnParam) return tabIds || undefined;
-  if (!tabIds) return columnParam;
-  const tabSet = new Set(tabIds.split(',').filter(Boolean));
-  const intersected = columnParam
-    .split(',')
-    .filter((id) => tabSet.has(id))
-    .sort();
-  // empty intersection after active filter → match nothing
-  return intersected.length > 0 ? intersected.join(',') : null;
 }
 
 type ColumnSortField =
@@ -167,14 +123,16 @@ export function ClaimsListClient({
 }: ClaimsListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [data, setData] = useState(initialData);
+  const { data, setData, beginFetch, abortFetch } = useListPageData(initialData, {
+    initialFetchKey,
+  });
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [sort, setSort] = useState(() =>
     normalizeSortParam(searchParams.get('sort'))
   );
   const [tab, setTab] = useState<ClaimTab>(() =>
-    parseTab(searchParams.get('tab'))
+    parseArchiveListTab(searchParams.get('tab')),
   );
   const [page, setPage] = useState(() => {
     const p = parseInt(searchParams.get('page') ?? '1', 10);
@@ -193,15 +151,17 @@ export function ClaimsListClient({
     TABLE_COLUMNS,
   );
 
-  const lastFetchKeyRef = useRef<string | null>(initialFetchKey);
-
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
   }, [search]);
 
   const statusParam = useMemo(
-    () => resolveStatusParam(tab, statusFilterActive, statusFilter, statusOptions),
+    () =>
+      mergeStatusParamWithTab(
+        columnFilterToIdsParam(statusFilterActive, statusFilter, statusOptions),
+        statusIdsForArchiveListTab(tab, statusOptions),
+      ),
     [tab, statusFilterActive, statusFilter, statusOptions],
   );
 
@@ -216,10 +176,14 @@ export function ClaimsListClient({
     const fetchKey = `${debouncedSearch}|${sort}|${tab}|${statusKey}|${accountKey}|${page}`;
 
     const params = new URLSearchParams(searchParams.toString());
-    params.set('search', debouncedSearch);
-    params.set('sort', sort);
-    params.set('page', String(page));
-    params.set('tab', tab);
+    if (debouncedSearch) params.set('search', debouncedSearch);
+    else params.delete('search');
+    if (sort !== 'updated_at_desc') params.set('sort', sort);
+    else params.delete('sort');
+    if (page > 1) params.set('page', String(page));
+    else params.delete('page');
+    if (tab !== 'active') params.set('tab', tab);
+    else params.delete('tab');
     if (statusParam) {
       params.set('status', statusParam);
     } else {
@@ -230,18 +194,26 @@ export function ClaimsListClient({
     } else {
       params.delete('account');
     }
-    router.replace(`/claims?${params}`, { scroll: false });
-
-    if (lastFetchKeyRef.current === fetchKey) {
+    const next = params.toString();
+    if (
+      !replaceListQueryIfNeeded({
+        router,
+        pathname: '/claims',
+        currentQuery: searchParams.toString(),
+        nextQuery: next,
+      })
+    ) {
       return;
     }
-    lastFetchKeyRef.current = fetchKey;
+
+    const session = createListFetchSession({ fetchKey, beginFetch, abortFetch });
+    if (!session) return;
 
     setColumnSort(null);
 
     if (statusParam === null || accountParam === null) {
       setData({ data: [], total: 0 });
-      return;
+      return session.cleanup;
     }
 
     fetchClaimsAction({
@@ -251,9 +223,12 @@ export function ClaimsListClient({
       account: accountParam,
       page,
       limit: PAGE_SIZE,
-    }).then((res) => res && setData(res));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, sort, tab, statusParam, accountParam, page]);
+    }).then((res) => {
+      if (!session.cancelled && res) setData(res);
+    });
+
+    return session.cleanup;
+  }, [debouncedSearch, sort, tab, statusParam, accountParam, page, searchParams, router, beginFetch, abortFetch]);
 
   const SERVER_SORT_FIELDS = new Set(['claim_number', 'updated_at', 'created_at']);
 

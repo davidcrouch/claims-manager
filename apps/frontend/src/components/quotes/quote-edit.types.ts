@@ -44,6 +44,44 @@ export type QuoteEditPending = {
   quoteFrom?: QuotePartyPayload;
 };
 
+export type QuotePartiesSnapshot = {
+  quoteTo: PartyDraft;
+  quoteFor: PartyDraft;
+  quoteFrom: PartyDraft;
+};
+
+export type QuoteFieldsSnapshot = {
+  assignedToUserId: string;
+  overview: QuoteOverviewDraft;
+  parties: QuotePartiesSnapshot;
+};
+
+export function applyPendingToOverviewDraft(
+  draft: QuoteOverviewDraft,
+  saved: QuoteEditPending,
+): QuoteOverviewDraft {
+  const next = { ...draft };
+  if (saved.name !== undefined) next.name = saved.name ?? '';
+  if (saved.reference !== undefined) next.reference = saved.reference ?? '';
+  if (saved.note !== undefined) next.note = saved.note ?? '';
+  if (saved.quoteType !== undefined) next.quoteType = saved.quoteType ?? '';
+  if (saved.estimateDate !== undefined) next.estimateDate = saved.estimateDate ?? '';
+  if (saved.expiresInDays !== undefined) {
+    next.expiresInDays =
+      saved.expiresInDays === null ? '' : String(saved.expiresInDays);
+  }
+  if (saved.estimatedStartDate !== undefined) {
+    next.estimatedStartDate = saved.estimatedStartDate ?? '';
+  }
+  if (saved.estimatedCompletionDate !== undefined) {
+    next.estimatedCompletionDate = saved.estimatedCompletionDate ?? '';
+  }
+  if (saved.reasonForVariation !== undefined) {
+    next.reasonForVariation = saved.reasonForVariation ?? '';
+  }
+  return next;
+}
+
 export const EMPTY_PARTY: PartyDraft = {
   name: '',
   companyRegistrationNumber: '',

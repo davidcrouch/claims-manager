@@ -49,7 +49,7 @@ export const SOURCE_SCHEMAS: Record<DocumentType, ZodType> = {
   bill: BillSourceSchema,
   rfq: RfqSourceSchema,
   job_details: JobSourceSchema,
-  scope_of_work: JobSourceSchema,
+  scope_of_work: QuoteSourceSchema,
   claim: ClaimSourceSchema,
   contact: ContactSourceSchema,
   task: TaskSourceSchema,

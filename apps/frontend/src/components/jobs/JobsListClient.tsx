@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Briefcase, Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -12,8 +12,7 @@ import {
   ListPageHeader,
   computeStatusBreakdown,
 } from '@/components/layout/ListPageHeader';
-import {
-  type StatusOption,
+import { type StatusOption,
   formatDate,
   commitColumnFilterSelection,
   columnFilterToIdsParam,
@@ -24,8 +23,7 @@ import {
   buildColumnFilterOptions,
   ValueFilterMenu,
   SortableColumnHeader,
-  TableEmptyRow,
-} from '@/components/shared/list-filters';
+  TableEmptyRow, withUniqueNamedFilterOptions } from '@/components/shared/list-filters';
 import { TablePagination } from '@/components/shared/table-pagination';
 import {
   ColumnSettingsHeaderCell,
@@ -33,7 +31,13 @@ import {
 } from '@/components/shared/column-visibility';
 import { ListArchiveButton, LIST_ARCHIVE_TH_CLASS, LIST_ARCHIVE_TD_CLASS, LIST_ARCHIVE_SPACER_TD_CLASS } from '@/components/shared/ListArchiveButton';
 import { formatAddress } from '@/components/shared/detail';
+import { jobDisplayName } from '@/components/shared/job-label';
 import { fetchJobsAction, fetchJobFilterOptionsAction } from '@/app/(app)/jobs/actions';
+import {
+  createListFetchSession,
+  replaceListQueryIfNeeded,
+  useListPageData,
+} from '@/components/shared/use-list-page-data';
 import type { Job, PaginatedResponse } from '@/types/api';
 
 const PAGE_SIZE = 20;
@@ -52,7 +56,7 @@ function jobListAddress(job: Job): string {
 }
 
 function jobListRef(job: Job): string {
-  return job.name ?? job.externalJobId ?? job.externalReference ?? job.id;
+  return jobDisplayName(job);
 }
 
 type JobSortField =
@@ -118,7 +122,7 @@ export function JobsListClient({
   const isPicker = variant === 'picker';
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [data, setData] = useState(initialData);
+  const { data, setData, beginFetch, abortFetch } = useListPageData(initialData);
   const unreadSet = useMemo(() => new Set(unreadJobIds ?? []), [unreadJobIds]);
   const [search, setSearch] = useState(() =>
     isPicker ? '' : (searchParams.get('search') ?? ''),
@@ -152,8 +156,6 @@ export function JobsListClient({
     'jobs',
     TABLE_COLUMNS,
   );
-
-  const lastFetchKeyRef = useRef<string | null>(null);
 
   const typeOptions = useMemo(
     () =>
@@ -201,14 +203,18 @@ export function JobsListClient({
     () => columnFilterToValuesParam(refFilterActive, refFilter),
     [refFilterActive, refFilter],
   );
+  const assigneeFilterOptions = useMemo(
+    () => withUniqueNamedFilterOptions(filterOptions.assignees),
+    [filterOptions.assignees],
+  );
   const assignedToUserIdsParam = useMemo(
     () =>
       columnFilterToAssigneeIdsParam(
         assigneeFilterActive,
         assigneeFilter,
-        filterOptions.assignees,
+        assigneeFilterOptions,
       ),
-    [assigneeFilterActive, assigneeFilter, filterOptions.assignees],
+    [assigneeFilterActive, assigneeFilter, assigneeFilterOptions],
   );
 
   useEffect(() => {
@@ -238,10 +244,14 @@ export function JobsListClient({
   useEffect(() => {
     if (isPicker) return;
     const params = new URLSearchParams(searchParams.toString());
-    params.set('search', debouncedSearch);
-    params.set('tab', tab);
-    params.set('page', String(page));
-    params.set('sort', sortParam);
+    if (debouncedSearch) params.set('search', debouncedSearch);
+    else params.delete('search');
+    if (tab !== 'active') params.set('tab', tab);
+    else params.delete('tab');
+    if (page > 1) params.set('page', String(page));
+    else params.delete('page');
+    if (sortParam !== 'updated_at_desc') params.set('sort', sortParam);
+    else params.delete('sort');
     if (statusParam) params.set('status', statusParam);
     else params.delete('status');
     if (jobTypeParam) params.set('jobType', jobTypeParam);
@@ -251,9 +261,12 @@ export function JobsListClient({
     if (assignedToUserIdsParam) params.set('assignedToUserIds', assignedToUserIdsParam);
     else params.delete('assignedToUserIds');
     const next = params.toString();
-    if (next === searchParams.toString()) return;
-    router.replace(`/jobs?${next}`, { scroll: false });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    replaceListQueryIfNeeded({
+      router,
+      pathname: '/jobs',
+      currentQuery: searchParams.toString(),
+      nextQuery: next,
+    });
   }, [
     debouncedSearch,
     sortParam,
@@ -264,6 +277,8 @@ export function JobsListClient({
     refsParam,
     assignedToUserIdsParam,
     isPicker,
+    searchParams,
+    router,
   ]);
 
   useEffect(() => {
@@ -274,8 +289,8 @@ export function JobsListClient({
       assignedToUserIdsParam === null ? '__none__' : (assignedToUserIdsParam ?? '');
     const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${typeKey}|${refsKey}|${assigneesKey}|${refreshNonce}`;
 
-    if (lastFetchKeyRef.current === fetchKey) return;
-    lastFetchKeyRef.current = fetchKey;
+    const session = createListFetchSession({ fetchKey, beginFetch, abortFetch });
+    if (!session) return;
 
     if (
       statusParam === null ||
@@ -284,10 +299,9 @@ export function JobsListClient({
       assignedToUserIdsParam === null
     ) {
       setData({ data: [], total: 0 });
-      return;
+      return session.cleanup;
     }
 
-    let cancelled = false;
     fetchJobsAction({
       search: debouncedSearch || undefined,
       page,
@@ -298,17 +312,10 @@ export function JobsListClient({
       refs: refsParam,
       assignedToUserIds: assignedToUserIdsParam,
     }).then((res) => {
-      if (!cancelled && res) setData(res);
+      if (!session.cancelled && res) setData(res);
     });
 
-    return () => {
-      cancelled = true;
-      // If this effect is cleaned up before the request lands (navigate away /
-      // hide), allow the same key to refetch when the list is shown again.
-      if (lastFetchKeyRef.current === fetchKey) {
-        lastFetchKeyRef.current = null;
-      }
-    };
+    return session.cleanup;
   }, [
     debouncedSearch,
     sortParam,
@@ -319,6 +326,9 @@ export function JobsListClient({
     refsParam,
     assignedToUserIdsParam,
     refreshNonce,
+    searchParams,
+    beginFetch,
+    abortFetch,
   ]);
 
   const handleColumnSort = (field: JobSortField) => {
@@ -386,10 +396,10 @@ export function JobsListClient({
   const uniqueAssignees = useMemo(
     () =>
       buildColumnFilterOptions(
-        filterOptions.assignees.map((a) => a.name),
+        assigneeFilterOptions.map((a) => a.name),
         { alwaysIncludeBlank: true },
       ),
-    [filterOptions.assignees],
+    [assigneeFilterOptions],
   );
 
   const applyRefFilter = (next: Set<string>) => {

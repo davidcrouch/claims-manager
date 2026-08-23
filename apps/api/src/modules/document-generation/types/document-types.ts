@@ -69,7 +69,7 @@ export const DOCUMENT_TYPE_TO_ENTITY_TYPE: Record<DocumentType, string> = {
   bill: 'Bill',
   rfq: 'RFQ',
   job_details: 'Job',
-  scope_of_work: 'Job',
+  scope_of_work: 'Quote',
   claim: 'Claim',
   contact: 'Contact',
   task: 'Task',
@@ -100,9 +100,13 @@ export const DOCUMENT_TYPE_TO_ENTITY_TYPE: Record<DocumentType, string> = {
   schedule_list: 'Organization',
 };
 
-export const ENTITY_TYPE_TO_DOCUMENT_TYPE: Record<string, DocumentType> = Object.fromEntries(
-  Object.entries(DOCUMENT_TYPE_TO_ENTITY_TYPE).map(([k, v]) => [v, k as DocumentType]),
-) as Record<string, DocumentType>;
+/** First document type wins when several types share an entity (Job, Quote). */
+export const ENTITY_TYPE_TO_DOCUMENT_TYPE: Record<string, DocumentType> = {};
+for (const [documentType, entityType] of Object.entries(DOCUMENT_TYPE_TO_ENTITY_TYPE)) {
+  if (!(entityType in ENTITY_TYPE_TO_DOCUMENT_TYPE)) {
+    ENTITY_TYPE_TO_DOCUMENT_TYPE[entityType] = documentType as DocumentType;
+  }
+}
 
 export type GenerationTrigger = 'manual' | 'workflow';
 export type GenerationStatus = 'pending' | 'processing' | 'completed' | 'failed';

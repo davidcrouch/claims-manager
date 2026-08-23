@@ -35,7 +35,7 @@ export default async function JobDetailPage({
   // Fire-and-forget: mark any unread notifications for this job as read
   api.markEntityNotificationsRead('job', id).catch(() => {});
 
-  const [parentClaim, statusOptions, jobTypeOptions, contactTypeOptions, reportStatusOptions, reportTypeOptions] =
+  const [parentClaim, statusOptions, jobTypeOptions, contactTypeOptions, reportStatusOptions, reportTypeOptions, assessmentsResult] =
     await Promise.all([
     job.claimId ? loadClaim(job.claimId) : Promise.resolve(null as Claim | null),
     api
@@ -59,6 +59,13 @@ export default async function JobDetailPage({
     api.getLookupsByDomain('contact_type').catch(() => []),
     api.getLookupsByDomain('report_status').catch(() => []),
     api.getLookupsByDomain('report_type').catch(() => []),
+    api.getAssessments({ jobId: id, limit: 10 }).catch((err: unknown) => {
+      console.warn(
+        'frontend:JobDetailPage - getAssessments failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return { data: [], total: 0 };
+    }),
   ]);
 
   const toOptions = (
@@ -82,6 +89,7 @@ export default async function JobDetailPage({
         contactTypeOptions={toOptions(contactTypeOptions)}
         reportStatusOptions={toOptions(reportStatusOptions)}
         reportTypeOptions={toOptions(reportTypeOptions)}
+        assessments={assessmentsResult.data}
       />
     </>
   );

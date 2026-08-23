@@ -46,6 +46,7 @@ import { OrgUserLabel } from '@/components/shared/DetailAssignee';
 import type { Quote } from '@/types/api';
 import {
   QUOTE_TYPES,
+  applyPendingToOverviewDraft,
   toInputDate,
   type QuoteEditPending,
   type QuoteOverviewDraft,
@@ -53,8 +54,10 @@ import {
 
 export interface QuoteOverviewTabHandle {
   getPendingUpdate: () => QuoteEditPending | null;
+  getBaseline: () => QuoteOverviewDraft;
+  applyDraft: (draft: QuoteOverviewDraft) => void;
   reset: () => void;
-  markClean: () => void;
+  markClean: (saved?: QuoteEditPending | null) => void;
   isDirty: () => boolean;
 }
 
@@ -196,7 +199,7 @@ export const QuoteOverviewTab = forwardRef(function QuoteOverviewTab(
 
   useEffect(() => {
     onDirtyChange?.(isDirty);
-  }, [isDirty, onDirtyChange]);
+  }, [isDirty, onDirtyChange, draft]);
 
   const patch = <K extends keyof QuoteOverviewDraft>(
     key: K,
@@ -239,7 +242,15 @@ export const QuoteOverviewTab = forwardRef(function QuoteOverviewTab(
     setDraft(baseline);
   };
 
-  const markClean = () => {
+  const applyDraft = (next: QuoteOverviewDraft) => {
+    setDraft(next);
+  };
+
+  const markClean = (saved?: QuoteEditPending | null) => {
+    if (saved) {
+      setBaseline((prev) => applyPendingToOverviewDraft(prev, saved));
+      return;
+    }
     setBaseline(draft);
   };
 
@@ -247,6 +258,8 @@ export const QuoteOverviewTab = forwardRef(function QuoteOverviewTab(
     ref,
     () => ({
       getPendingUpdate: buildPending,
+      getBaseline: () => baseline,
+      applyDraft,
       reset,
       markClean,
       isDirty: () => isDirty,
@@ -331,6 +344,10 @@ export const QuoteOverviewTab = forwardRef(function QuoteOverviewTab(
           icon={<FileSignature className="h-4 w-4 text-muted-foreground" />}
         >
           <DefRow
+            label="Estimate number"
+            value={quote.internalNumber ?? quote.quoteNumber ?? '—'}
+          />
+          <DefRow
             label="Name"
             value={
               editing ? (
@@ -344,7 +361,6 @@ export const QuoteOverviewTab = forwardRef(function QuoteOverviewTab(
               )
             }
           />
-          <DefRow label="Estimate number" value={quote.quoteNumber ?? '—'} />
           <DefRow
             label="Reference"
             value={

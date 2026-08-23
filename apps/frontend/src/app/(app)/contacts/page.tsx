@@ -9,7 +9,7 @@ export const metadata = { title: 'Contacts — EnsureOS' };
 export default async function ContactsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ jobId?: string; jobIds?: string; unlinkedOnly?: string }>;
+  searchParams: Promise<{ jobId?: string; jobIds?: string; unlinkedOnly?: string; status?: string }>;
 }) {
   const api = await getServerApiClient();
   if (!api) redirect('/api/auth/login');
@@ -28,8 +28,7 @@ export default async function ContactsPage({
         jobId: params.jobId,
         jobIds: jobIds && jobIds.length > 0 ? jobIds : undefined,
         unlinkedOnly: unlinkedOnly || undefined,
-        // ContactsListClient defaults to Active tab
-        archived: false,
+        status: params.status,
       })
       .catch((err: unknown) => {
         console.error(
@@ -62,12 +61,23 @@ export default async function ContactsPage({
     }
   }
 
-  const filterJobs = filterJobsRes.jobs ?? [];
+  const filterJobsRaw = filterJobsRes.jobs ?? [];
+  const filterJobs = filterJobsRaw.map((j) => ({
+    id: j.id,
+    label: jobDisplayName({
+      id: j.id,
+      name: j.name ?? undefined,
+      externalJobId: j.externalJobId ?? undefined,
+      externalReference: j.externalReference ?? undefined,
+    }),
+  }));
+  if (job && !filterJobs.some((j) => j.id === job.id)) {
+    filterJobs.unshift({ id: job.id, label: jobDisplayName(job) });
+  }
   const jobNameById = buildJobNameById(
     filterJobs.map((j) => ({
       id: j.id,
-      name: j.name ?? undefined,
-      externalReference: j.externalReference ?? undefined,
+      name: j.label,
     })),
   );
   if (job) {
@@ -80,14 +90,7 @@ export default async function ContactsPage({
       job={job}
       parentClaim={parentClaim}
       jobNameById={jobNameById}
-      filterJobs={filterJobs.map((j) => ({
-        id: j.id,
-        label: jobDisplayName({
-          id: j.id,
-          name: j.name ?? undefined,
-          externalReference: j.externalReference ?? undefined,
-        }),
-      }))}
+      filterJobs={filterJobs}
       hasUnlinkedContacts={Boolean(filterJobsRes.hasUnlinked)}
     />
   );

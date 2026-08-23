@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { BookOpen, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -14,17 +14,21 @@ import {
   columnFilterToValuesParam,
   statusValuesForArchiveListTab,
   mergeStatusParamWithTab,
-  TableEmptyRow,
-} from '@/components/shared/list-filters';
-import {
-  buildServerJobFilterOptions,
+  parseArchiveListTab,
+  type ArchiveListTab,
+  TableEmptyRow } from '@/components/shared/list-filters';
+import { buildServerJobFilterOptions,
   resolveServerJobFilterSelection,
   selectedJobFilterLabels,
   parseSelectedJobIds,
   toServerJobFetchParams,
   writeServerJobFilterParams,
-  jobFilterOptionsFromNameById,
-} from '@/components/shared/server-job-filter';
+  syncServerJobFilterParams,
+  buildListJobFilterOptions } from '@/components/shared/server-job-filter';
+import {
+  createListFetchSession,
+  replaceListQueryIfNeeded,
+  useListPageData } from '@/components/shared/use-list-page-data';
 import { TablePagination } from '@/components/shared/table-pagination';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
@@ -35,18 +39,17 @@ import { JournalFormDrawer } from './JournalFormDrawer';
 import {
   createJournalAction,
   fetchJournalsAction,
-  linkJournalAction,
-} from '@/app/(app)/journals/actions';
+  linkJournalAction } from '@/app/(app)/journals/actions';
 import {
   ColumnSettingsHeaderCell,
-  useColumnVisibility,
-} from '@/components/shared/column-visibility';
+  useColumnVisibility } from '@/components/shared/column-visibility';
 import { ListArchiveButton, LIST_ARCHIVE_TH_CLASS, LIST_ARCHIVE_TD_CLASS, LIST_ARCHIVE_SPACER_TD_CLASS } from '@/components/shared/ListArchiveButton';
 import type { Journal, PaginatedResponse, Job, Claim } from '@/types/api';
 import type { JobOption } from '@/components/shared/job-label';
-import { resolveJobName } from '@/components/shared/job-label';
+import { jobDisplayName } from '@/components/shared/job-label';
+import { JobCellLink } from '@/components/shared/JobCellLink';
 
-type ListTab = 'active' | 'archived' | 'all';
+type ListTab = ArchiveListTab;
 
 type JournalSortField =
   | 'name'
@@ -86,23 +89,23 @@ export function JournalsPageClient({
   job,
   parentClaim,
   jobNameById,
-  jobs = [],
-}: JournalsPageClientProps) {
+  jobs = [] }: JournalsPageClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const jobId = searchParams.get('jobId') ?? undefined;
   const jobIdsParam = searchParams.get('jobIds') ?? undefined;
-  const [data, setData] = useState<PaginatedResponse<Journal>>(
+  const { data, setData, beginFetch, abortFetch } = useListPageData<PaginatedResponse<Journal>>(
     'data' in initialData ? initialData as PaginatedResponse<Journal> : { data: [], total: 0 },
   );
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [tab, setTab] = useState<ListTab>('active');
+  const [tab, setTab] = useState<ListTab>(() =>
+    parseArchiveListTab(searchParams.get('tab')),
+  );
   const [page, setPage] = useState(1);
   const [columnSort, setColumnSort] = useState<{ field: JournalSortField; order: 'asc' | 'desc' }>({
     field: 'updated_at',
-    order: 'desc',
-  });
+    order: 'desc' });
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [statusFilterActive, setStatusFilterActive] = useState(false);
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
@@ -110,9 +113,8 @@ export function JournalsPageClient({
     'journals',
     TABLE_COLUMNS,
   );
-  const lastFetchKeyRef = useRef<string | null>(null);
   const uniqueStatuses = useMemo(
-    () => ['active', 'archived', 'deleted'],
+    () => ['active', 'archived'],
     [],
   );
   const tabStatusValues = useMemo(
@@ -133,8 +135,14 @@ export function JournalsPageClient({
     [jobId, jobIdsParam],
   );
   const filterJobs = useMemo(
-    () => jobFilterOptionsFromNameById(jobNameById),
-    [jobNameById],
+    () =>
+      buildListJobFilterOptions({
+        jobNameById,
+        currentJob: job
+          ? { id: job.id, label: jobDisplayName(job) }
+          : null,
+        jobId }),
+    [jobNameById, job, jobId],
   );
   const uniqueJobs = useMemo(
     () => buildServerJobFilterOptions(filterJobs),
@@ -147,8 +155,7 @@ export function JournalsPageClient({
         jobIds: jobIdsParam
           ? jobIdsParam.split(',').map((id) => id.trim()).filter(Boolean)
           : undefined,
-        jobs: filterJobs,
-      }),
+        jobs: filterJobs }),
     [jobId, jobIdsParam, filterJobs],
   );
   const { jobId: fetchJobId, jobIds: fetchJobIds } = useMemo(
@@ -166,26 +173,32 @@ export function JournalsPageClient({
     const fetchKey = `${debouncedSearch}|${tab}|${page}|${statusKey}|${jobId ?? ''}|${jobIdsParam ?? ''}`;
 
     const params = new URLSearchParams(searchParams.toString());
-    params.set('page', String(page));
+    if (page > 1) params.set('page', String(page));
+    else params.delete('page');
+    if (tab !== 'active') params.set('tab', tab);
+    else params.delete('tab');
     if (debouncedSearch) params.set('search', debouncedSearch);
     else params.delete('search');
     if (statusParam) params.set('status', statusParam); else params.delete('status');
-    if (jobId) params.set('jobId', jobId);
-    else params.delete('jobId');
-    if (jobIdsParam) params.set('jobIds', jobIdsParam);
-    else params.delete('jobIds');
+    syncServerJobFilterParams(params, jobId, jobIdsParam);
     const next = params.toString();
-    // Skip no-op replace so create→detail navigation is not cancelled on remount.
-    if (next !== searchParams.toString()) {
-      router.replace(`/journals?${next}`, { scroll: false });
+    if (
+      !replaceListQueryIfNeeded({
+        router,
+        pathname: '/journals',
+        currentQuery: searchParams.toString(),
+        nextQuery: next,
+      })
+    ) {
+      return;
     }
 
-    if (lastFetchKeyRef.current === fetchKey) return;
-    lastFetchKeyRef.current = fetchKey;
+    const session = createListFetchSession({ fetchKey, beginFetch, abortFetch });
+    if (!session) return;
 
     if (statusParam === null) {
       setData({ data: [], total: 0 });
-      return;
+      return session.cleanup;
     }
 
     fetchJournalsAction({
@@ -194,10 +207,11 @@ export function JournalsPageClient({
       status: statusParam,
       search: debouncedSearch || undefined,
       jobId: fetchJobId,
-      jobIds: fetchJobIds,
-    }).then((res) => setData(res));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop: router.replace updates URL -> searchParams changes -> effect re-runs
-  }, [debouncedSearch, tab, page, statusParam, jobId, jobIdsParam, fetchJobId, fetchJobIds]);
+      jobIds: fetchJobIds }).then((res) => {
+      if (!session.cancelled) setData(res);
+    });
+    return session.cleanup;
+  }, [debouncedSearch, tab, page, statusParam, jobId, jobIdsParam, fetchJobId, fetchJobIds, searchParams, router, beginFetch, abortFetch]);
 
   const handleCreated = (journal: Journal) => {
     setData((prev) => ({ data: [journal, ...prev.data], total: prev.total + 1 }));
@@ -226,8 +240,7 @@ export function JournalsPageClient({
     else working.add(name);
     const committed = commitColumnFilterSelection({
       next: working,
-      optionCount: uniqueStatuses.length,
-    });
+      optionCount: uniqueStatuses.length });
     setStatusFilter(committed.selected);
     setStatusFilterActive(committed.active);
     setPage(1);
@@ -236,8 +249,7 @@ export function JournalsPageClient({
   const applyStatusFilter = (next: Set<string>) => {
     const committed = commitColumnFilterSelection({
       next,
-      optionCount: uniqueStatuses.length,
-    });
+      optionCount: uniqueStatuses.length });
     setStatusFilter(committed.selected);
     setStatusFilterActive(committed.active);
     setPage(1);
@@ -247,8 +259,7 @@ export function JournalsPageClient({
     const resolved = resolveServerJobFilterSelection({
       next,
       options: uniqueJobs,
-      jobs: filterJobs,
-    });
+      jobs: filterJobs });
     setPage(1);
     const params = new URLSearchParams(searchParams.toString());
     writeServerJobFilterParams(params, resolved);
@@ -362,8 +373,7 @@ export function JournalsPageClient({
                               active: jobFilterActive,
                               onApply: applyJobFilter,
                               menuTitle: 'Filter by job',
-                              itemNoun: { singular: 'job', plural: 'jobs' },
-                            }
+                              itemNoun: { singular: 'job', plural: 'jobs' } }
                           : col.key === 'status'
                             ? {
                                 options: uniqueStatuses,
@@ -371,8 +381,7 @@ export function JournalsPageClient({
                                 active: statusFilterActive,
                                 onApply: applyStatusFilter,
                                 menuTitle: 'Filter by status',
-                                itemNoun: { singular: 'status', plural: 'statuses' },
-                              }
+                                itemNoun: { singular: 'status', plural: 'statuses' } }
                             : undefined
                       }
                     />
@@ -408,7 +417,7 @@ export function JournalsPageClient({
                     )}
                     {isVisible('job') && (
                       <td className="px-4 py-3 text-slate-600">
-                        {resolveJobName(journal.jobId, jobNameById)}
+                        <JobCellLink jobId={journal.jobId} jobNameById={jobNameById} />
                       </td>
                     )}
                     {isVisible('status') && (
@@ -456,8 +465,7 @@ export function JournalsPageClient({
                           setData((prev) => ({
                             ...prev,
                             data: prev.data.filter((row) => row.id !== id),
-                            total: Math.max(0, prev.total - 1),
-                          }));
+                            total: Math.max(0, prev.total - 1) }));
                         }}
                       />
                     </td>

@@ -1,4 +1,4 @@
-import { IsArray, IsObject, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator';
+import { IsArray, IsInt, IsObject, IsOptional, IsString, IsUUID, Min, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateQuoteGroupDto {
@@ -99,4 +99,71 @@ export class UpdateQuoteLineItemsDto {
   @ValidateNested({ each: true })
   @Type(() => ComboUpdateDto)
   combos!: ComboUpdateDto[];
+}
+
+export class SortIndexEntryDto {
+  @IsUUID()
+  id!: string;
+
+  @IsInt()
+  @Min(0)
+  sortIndex!: number;
+}
+
+export class ReorderLineItemsDto {
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SortIndexEntryDto)
+  items?: SortIndexEntryDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SortIndexEntryDto)
+  combos?: SortIndexEntryDto[];
+}
+
+export class MoveLineItemDto {
+  @IsOptional()
+  @IsUUID()
+  itemId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  comboId?: string;
+
+  @IsUUID()
+  targetGroupId!: string;
+
+  @IsOptional()
+  @IsUUID()
+  targetComboId?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  insertAtIndex?: number;
+}
+
+export class DuplicateLineItemDto {
+  @IsOptional()
+  @IsUUID()
+  itemId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  comboId?: string;
+
+  @IsUUID()
+  targetGroupId!: string;
+
+  @IsOptional()
+  @IsUUID()
+  targetComboId?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  insertAtIndex?: number;
 }

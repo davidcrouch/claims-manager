@@ -9,7 +9,7 @@ import { WebhooksService } from './webhooks.service';
 /**
  * Polls for stuck webhook events and re-attempts processing.
  *
- * Two passes per sweep cycle (run in priority order):
+ * Three passes per sweep cycle (run in priority order):
  * 1. Reprocess pass — events with connection_id set but still at 'pending'
  *    status (crashed between persist and processEventAsync). These are
  *    guaranteed processable so they run first.
@@ -18,6 +18,10 @@ import { WebhooksService } from './webhooks.service';
  *    the connection and proceeds to processing. Ordered newest-first so
  *    recently arrived events aren't starved by old unresolvable ones.
  *    Events that exceed `sweepMaxRetries` resolution attempts are excluded.
+ * 3. Unmapped re-drive — events that reached 'completed_unmapped' (parent
+ *    was missing at projection time) are re-driven through the full pipeline.
+ *    When the parent has since landed, the projection succeeds on retry.
+ *    Capped by `sweepMaxRetries` to park permanently unmappable events.
  *
  * Uses FOR UPDATE SKIP LOCKED to prevent double-processing across instances.
  */
@@ -53,12 +57,13 @@ export class WebhookSweepService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async sweep(): Promise<{ resolved: number; reprocessed: number; failed: number }> {
-    if (this.sweeping) return { resolved: 0, reprocessed: 0, failed: 0 };
+  async sweep(): Promise<{ resolved: number; reprocessed: number; redriven: number; failed: number }> {
+    if (this.sweeping) return { resolved: 0, reprocessed: 0, redriven: 0, failed: 0 };
     this.sweeping = true;
 
     let resolved = 0;
     let reprocessed = 0;
+    let redriven = 0;
     let failed = 0;
 
     try {
@@ -173,15 +178,70 @@ export class WebhookSweepService implements OnModuleInit, OnModuleDestroy {
         }
       }
 
-      if (resolved > 0 || reprocessed > 0 || failed > 0) {
+      // Pass 3: Re-drive completed_unmapped events whose parents may have
+      // landed since the original attempt. Reset status to 'pending' and
+      // reprocess so the full pipeline (fetch + projection) runs again.
+      const unmappedEnabled = this.configService.get<boolean>('webhook.sweepUnmappedEnabled', true);
+      if (unmappedEnabled) {
+        const unmappedThresholdMs = this.configService.get<number>(
+          'webhook.sweepUnmappedThresholdMs',
+          60_000,
+        );
+        const unmappedThreshold = new Date(Date.now() - unmappedThresholdMs);
+
+        const unmappedEvents = await this.db
+          .select()
+          .from(inboundWebhookEvents)
+          .where(
+            and(
+              eq(inboundWebhookEvents.processingStatus, 'completed_unmapped'),
+              isNotNull(inboundWebhookEvents.connectionId),
+              lt(inboundWebhookEvents.createdAt, unmappedThreshold),
+              lt(inboundWebhookEvents.retryCount, maxRetries),
+            ),
+          )
+          .orderBy(desc(inboundWebhookEvents.createdAt))
+          .limit(batchSize)
+          .for('update', { skipLocked: true });
+
+        for (const event of unmappedEvents) {
+          try {
+            await this.db
+              .update(inboundWebhookEvents)
+              .set({
+                processingStatus: 'pending',
+                retryCount: sql`retry_count + 1`,
+              })
+              .where(eq(inboundWebhookEvents.id, event.id));
+
+            await this.webhooksService.processEventAsync({
+              eventId: event.id,
+              tenantId: event.tenantId!,
+              connectionId: event.connectionId!,
+              providerCode: event.providerCode ?? 'crunchwork',
+              eventType: event.eventType,
+              providerEntityId: event.payloadEntityId ?? '',
+              eventTimestamp: event.eventTimestamp ?? undefined,
+            });
+            redriven++;
+          } catch (err) {
+            failed++;
+            this.logger.error(
+              `WebhookSweepService.sweep — failed re-driving unmapped eventId=${event.id}: ${(err as Error).message}`,
+            );
+          }
+        }
+      }
+
+      if (resolved > 0 || reprocessed > 0 || redriven > 0 || failed > 0) {
         this.logger.log(
-          `WebhookSweepService.sweep — resolved=${resolved} reprocessed=${reprocessed} failed=${failed}`,
+          `WebhookSweepService.sweep — resolved=${resolved} reprocessed=${reprocessed} redriven=${redriven} failed=${failed}`,
         );
       }
     } finally {
       this.sweeping = false;
     }
 
-    return { resolved, reprocessed, failed };
+    return { resolved, reprocessed, redriven, failed };
   }
 }

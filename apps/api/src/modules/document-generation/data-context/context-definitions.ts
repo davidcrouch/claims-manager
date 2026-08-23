@@ -11,6 +11,7 @@ const f = (
 /** Report-facing fields for each entity — aligned to Drizzle schema columns. */
 const JOB_FIELDS: EntityFieldDef[] = [
   f('id', 'Job ID'),
+  f('internalNumber', 'Internal number'),
   f('name', 'Job name'),
   f('externalReference', 'Job reference'),
   f('externalJobId', 'External job id'),
@@ -89,6 +90,7 @@ const CLAIM_FIELDS: EntityFieldDef[] = [
 
 const QUOTE_FIELDS: EntityFieldDef[] = [
   f('id', 'Quote ID'),
+  f('internalNumber', 'Internal number'),
   f('quoteNumber', 'Quote number'),
   f('name', 'Name'),
   f('reference', 'Reference'),
@@ -124,6 +126,7 @@ const QUOTE_FIELDS: EntityFieldDef[] = [
 
 const INVOICE_FIELDS: EntityFieldDef[] = [
   f('id', 'Invoice ID'),
+  f('internalNumber', 'Internal number'),
   f('invoiceNumber', 'Invoice number'),
   f('purchaseOrderId', 'Purchase order ID'),
   f('workOrderId', 'Work order ID'),
@@ -147,6 +150,7 @@ const INVOICE_FIELDS: EntityFieldDef[] = [
 
 const PO_FIELDS: EntityFieldDef[] = [
   f('id', 'PO ID'),
+  f('internalNumber', 'Internal number'),
   f('purchaseOrderNumber', 'PO number'),
   f('name', 'Name'),
   f('externalId', 'External ID'),
@@ -190,6 +194,10 @@ const CONTACT_FIELDS: EntityFieldDef[] = [
   f('homePhone', 'Home phone'),
   f('workPhone', 'Work phone'),
   f('typeLookupId', 'Type lookup ID'),
+  f('typeName', 'Primary contact type name'),
+  f('typeNames', 'All contact type names', 'array'),
+  f('isInsured', 'Contact is typed as Insured', 'boolean'),
+  f('isTenant', 'Contact is typed as Tenant/Occupant', 'boolean'),
   f('preferredContactMethodLookupId', 'Preferred contact method'),
   f('notes', 'Notes'),
   f('contactPayload', 'Contact payload', 'object'),
@@ -294,6 +302,7 @@ const REPORT_FIELDS: EntityFieldDef[] = [
 
 const WORK_ORDER_FIELDS: EntityFieldDef[] = [
   f('id', 'Work order ID'),
+  f('internalNumber', 'Internal number'),
   f('workOrderNumber', 'Work order number'),
   f('name', 'Name'),
   f('purchaseOrderId', 'Purchase order ID'),
@@ -379,6 +388,7 @@ const PROPOSAL_FIELDS: EntityFieldDef[] = [
 
 const RFQ_FIELDS: EntityFieldDef[] = [
   f('id', 'RFQ ID'),
+  f('internalNumber', 'Internal number'),
   f('rfqNumber', 'RFQ number'),
   f('name', 'Name'),
   f('note', 'Note'),
@@ -468,6 +478,21 @@ function relatedContactsViaJob(overrides: Partial<RelatedEntityDef> = {}): Relat
     traversalPath: ['jobId'],
     parentFk: 'jobId',
     viaJoin: 'job_contacts',
+    fields: CONTACT_FIELDS,
+    defaultEnabled: false,
+    ...overrides,
+  };
+}
+
+function relatedClaimContactsViaJob(overrides: Partial<RelatedEntityDef> = {}): RelatedEntityDef {
+  return {
+    entityType: 'Contact',
+    slug: 'claim_contacts',
+    label: 'Claim contacts',
+    description: 'People associated with the linked claim',
+    cardinality: 'many',
+    traversalPath: ['jobId', 'claimId'],
+    viaJoin: 'claim_contacts',
     fields: CONTACT_FIELDS,
     defaultEnabled: false,
     ...overrides,
@@ -603,8 +628,24 @@ const JOB_DETAILS_CONTEXT: DataContextDefinition = {
 };
 
 const SCOPE_OF_WORK_CONTEXT: DataContextDefinition = {
-  ...JOB_DETAILS_CONTEXT,
   documentType: 'scope_of_work',
+  primaryEntity: {
+    entityType: 'Quote',
+    label: 'Estimate / quote',
+    fields: QUOTE_FIELDS,
+  },
+  relatedEntities: [
+    relatedJob({ defaultEnabled: true }),
+    relatedClaimViaJob({ defaultEnabled: true }),
+    relatedClaimDirect({
+      slug: 'claim_direct',
+      label: 'Claim (direct)',
+      description: 'Claim linked directly on the estimate when present',
+      defaultEnabled: false,
+    }),
+    relatedContactsViaJob({ defaultEnabled: true }),
+    relatedClaimContactsViaJob({ defaultEnabled: true }),
+  ],
 };
 
 const PURCHASE_ORDER_CONTEXT: DataContextDefinition = {
@@ -616,7 +657,7 @@ const PURCHASE_ORDER_CONTEXT: DataContextDefinition = {
   },
   relatedEntities: [
     relatedJob({ defaultEnabled: true }),
-    relatedClaimViaJob({ defaultEnabled: false }),
+    relatedClaimViaJob({ defaultEnabled: true }),
     {
       entityType: 'Quote',
       slug: 'quote',
@@ -637,6 +678,8 @@ const PURCHASE_ORDER_CONTEXT: DataContextDefinition = {
       fields: VENDOR_FIELDS,
       defaultEnabled: true,
     },
+    relatedContactsViaJob({ defaultEnabled: true }),
+    relatedClaimContactsViaJob({ defaultEnabled: true }),
   ],
 };
 
@@ -659,7 +702,9 @@ const WORK_ORDER_CONTEXT: DataContextDefinition = {
       defaultEnabled: true,
     },
     relatedJob({ defaultEnabled: true }),
-    relatedClaimViaJob({ defaultEnabled: false }),
+    relatedClaimViaJob({ defaultEnabled: true }),
+    relatedContactsViaJob({ defaultEnabled: true }),
+    relatedClaimContactsViaJob({ defaultEnabled: true }),
   ],
 };
 
@@ -775,7 +820,7 @@ const RFQ_CONTEXT: DataContextDefinition = {
   },
   relatedEntities: [
     relatedJob({ defaultEnabled: true }),
-    relatedClaimViaJob({ defaultEnabled: false }),
+    relatedClaimViaJob({ defaultEnabled: true }),
     {
       entityType: 'Quote',
       slug: 'quote',
@@ -786,6 +831,8 @@ const RFQ_CONTEXT: DataContextDefinition = {
       fields: QUOTE_FIELDS,
       defaultEnabled: false,
     },
+    relatedContactsViaJob({ defaultEnabled: true }),
+    relatedClaimContactsViaJob({ defaultEnabled: true }),
   ],
 };
 

@@ -26,9 +26,13 @@ const CONTEXT_TYPES = [
 
 // Mirror apps/api/.../schemas/target/defaults.ts group helpers
 const itemJsonata = `{ "name": item_name, "description": item_description, "category": item_category, "quantity": item_quantity, "unit_cost": item_unit_cost, "tax": item_tax, "total": item_total, "note": item_note }`;
-const comboJsonata = `{ "name": combo_name, "description": combo_description, "quantity": combo_quantity, "subtotal": combo_subtotal, "note": combo_note, "items": items.(${itemJsonata}) }`;
-const scopeJsonata = `{ "name": scope_name, "description": scope_description, "quantity": scope_quantity, "subtotal": scope_subtotal, "note": scope_note, "items": items.(${itemJsonata}), "combos": combos.(${comboJsonata}) }`;
-const groupedItemsJsonataCtx = `_context.groups.{ "name": group_name, "note": group_note, "subtotal": group_subtotal, "items": items.(${itemJsonata}), "combos": combos.(${comboJsonata}), "scopes": scopes.(${scopeJsonata}) }`;
+const asArray = (field) => `($exists(${field}) ? ${field} : [])`;
+const mapArray = (field, mapExpr) => `$append([], ${asArray(field)}.(${mapExpr}))`;
+const comboJsonata = `{ "name": combo_name, "description": combo_description, "quantity": combo_quantity, "subtotal": combo_subtotal, "note": combo_note, "items": ${mapArray('items', itemJsonata)} }`;
+const scopeJsonata = `{ "name": scope_name, "description": scope_description, "quantity": scope_quantity, "subtotal": scope_subtotal, "note": scope_note, "items": ${mapArray('items', itemJsonata)}, "combos": ${mapArray('combos', comboJsonata)} }`;
+const groupJsonataFields =
+  `"name": group_name, "note": group_note, "subtotal": group_subtotal, "dimensions": { "length": group_length, "width": group_width, "height": group_height }`;
+const groupedItemsJsonataCtx = `$append([], ($exists(_context.groups) ? _context.groups : []).{ ${groupJsonataFields}, "items": ${mapArray('items', itemJsonata)}, "combos": ${mapArray('combos', comboJsonata)}, "scopes": ${mapArray('scopes', scopeJsonata)} })`;
 
 function looksLegacy(rules) {
   if (!rules || typeof rules !== 'string') return true; // force rewrite if empty/broken

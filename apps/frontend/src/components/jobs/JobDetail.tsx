@@ -1,6 +1,7 @@
 ﻿'use client';
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import {
   Calendar,
@@ -18,15 +19,16 @@ import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { DetailAssignee } from '@/components/shared/DetailAssignee';
 import { AddJobContactsDrawer } from '@/components/forms/AddJobContactsDrawer';
 import { PrintButton } from '@/components/shared/PrintButton';
-import { JOB_REPORT_TYPES } from '@/components/shared/PrintDocumentDrawer';
+import { buildJobReportTypes } from '@/components/shared/PrintDocumentDrawer';
 import { QuoteFormDrawer } from '@/components/forms/QuoteFormDrawer';
 import {
   AppointmentFormDrawer,
   type AppointmentCreateDefaults,
   type JobParty,
 } from '@/components/forms/AppointmentFormDrawer';
+import type { AddressParts } from '@/components/shared/AddressAutocompleteInput';
 import { JobOverviewTab, type JobOverviewTabHandle } from './tabs/JobOverviewTab';
-import { JobTypeDetailsTab, type JobTypeDetailsTabHandle } from './tabs/JobTypeDetailsTab';
+import { JobTypeDetailsTab, type JobTypeDetailsSnapshot, type JobTypeDetailsTabHandle } from './tabs/JobTypeDetailsTab';
 import { JobPartiesTab } from './tabs/JobPartiesTab';
 import { JobReportsTab } from './tabs/JobReportsTab';
 import { JobTimelineTab } from './tabs/JobTimelineTab';
@@ -35,8 +37,17 @@ import { EntityAttachmentsTab } from '@/components/shared/EntityAttachmentsTab';
 import { hasTypeDetails } from './util/jobType';
 import { updateJobFieldsAction } from '@/app/(app)/jobs/[id]/actions';
 import { formatAddress, asString, pick } from '@/components/shared/detail';
-import type { LookupOption } from './job-edit.types';
-import type { Job, Claim } from '@/types/api';
+import {
+  AUTOSAVE_DEBOUNCE_MS,
+  MAX_UNDO,
+  SAVE_STATUS_CLEAR_MS,
+  cloneJson,
+  detailSaveStatus,
+  pushUndoEntry,
+} from '@/components/shared/detail-autosave';
+import { DetailAutosaveActions } from '@/components/shared/DetailAutosaveActions';
+import type { JobOverviewDraft, LookupOption } from './job-edit.types';
+import type { Job, Claim, Assessment } from '@/types/api';
 
 const VALID_TABS = [
   'overview',
@@ -49,7 +60,19 @@ const VALID_TABS = [
 
 type TabValue = (typeof VALID_TABS)[number];
 
-const AUTOSAVE_DEBOUNCE_MS = 600;
+type JobFieldsSnapshot = {
+  assignedToUserId: string;
+  overview: JobOverviewDraft;
+  typeDetails: JobTypeDetailsSnapshot | null;
+};
+
+const EMPTY_OVERVIEW: JobOverviewDraft = {
+  attendanceDate: '',
+  statusLookupId: '',
+  statusExternalReference: '',
+  jobInstructions: '',
+  vendorExtRef: '',
+};
 
 type Dict = Record<string, unknown>;
 
@@ -125,6 +148,20 @@ function todayDateString() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+function jobAddressParts(job: Job): AddressParts | undefined {
+  const src = jobAddressSource(job);
+  const parts: AddressParts = {
+    unitNumber: asString(src.unitNumber) ?? undefined,
+    streetNumber: asString(src.streetNumber) ?? undefined,
+    streetName: asString(src.streetName) ?? undefined,
+    suburb: job.addressSuburb ?? asString(src.suburb) ?? undefined,
+    state: job.addressState ?? asString(src.state) ?? undefined,
+    postcode: job.addressPostcode ?? asString(src.postcode) ?? undefined,
+    country: job.addressCountry ?? asString(src.country) ?? undefined,
+  };
+  return Object.values(parts).some((value) => value?.trim()) ? parts : undefined;
+}
+
 function appointmentCreateDefaultsFromJob(job: Job): AppointmentCreateDefaults {
   const custom = (job.customData as Dict | undefined) ?? {};
   const api = (job.apiPayload as Dict | undefined) ?? {};
@@ -135,6 +172,7 @@ function appointmentCreateDefaultsFromJob(job: Job): AppointmentCreateDefaults {
   };
   const endTime = oneHourLater(start.time);
   const address = formatJobAddress(job);
+  const addressParts = jobAddressParts(job);
   const jobTypeName = job.jobType?.name;
   const name =
     job.name?.trim() ||
@@ -157,6 +195,7 @@ function appointmentCreateDefaultsFromJob(job: Job): AppointmentCreateDefaults {
     endDate: start.date,
     endTime: start.time === '00:00' ? '10:00' : endTime,
     address,
+    addressParts,
     description: description || undefined,
   };
 }
@@ -183,6 +222,7 @@ export function JobDetail({
   contactTypeOptions = [],
   reportStatusOptions = [],
   reportTypeOptions = [],
+  assessments = [],
 }: {
   job: Job;
   parentClaim?: Claim | null;
@@ -191,6 +231,7 @@ export function JobDetail({
   contactTypeOptions?: LookupOption[];
   reportStatusOptions?: LookupOption[];
   reportTypeOptions?: LookupOption[];
+  assessments?: Assessment[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -201,11 +242,14 @@ export function JobDetail({
   const overviewRef = useRef<JobOverviewTabHandle>(null);
   const typeDetailsRef = useRef<JobTypeDetailsTabHandle>(null);
   const saveInFlightRef = useRef(false);
+  const skipFieldUndoRef = useRef(false);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [justSaved, setJustSaved] = useState(false);
   const [justPublished, setJustPublished] = useState(false);
+  const [fieldEditTick, setFieldEditTick] = useState(0);
+  const [undoStack, setUndoStack] = useState<JobFieldsSnapshot[]>([]);
   const [contactDrawerOpen, setContactDrawerOpen] = useState(false);
   const [reportDrawerOpen, setReportDrawerOpen] = useState(false);
   const [estimateDrawerOpen, setEstimateDrawerOpen] = useState(false);
@@ -217,6 +261,8 @@ export function JobDetail({
   const [publishWizardOpen, setPublishWizardOpen] = useState(false);
   const [assignedToUserId, setAssignedToUserId] = useState(job.assignedToUserId ?? '');
   const [committedAssignee, setCommittedAssignee] = useState(job.assignedToUserId ?? '');
+  const assignedToUserIdRef = useRef(assignedToUserId);
+  assignedToUserIdRef.current = assignedToUserId;
   const [overviewDirty, setOverviewDirty] = useState(false);
   const [typeDetailsDirty, setTypeDetailsDirty] = useState(false);
   /** Sticky: CW field edits enable Publish until the user clicks Publish (survives autosave). */
@@ -224,8 +270,35 @@ export function JobDetail({
 
   const assigneeDirty = assignedToUserId !== committedAssignee;
   const pageDirty = overviewDirty || typeDetailsDirty || assigneeDirty;
+  const anySaving = saving || publishing;
+  const canUndo = pageDirty || undoStack.length > 0;
   /** Overview + type-details drafts are the CW-bound fields (not assignee). */
   const cwFieldsDirty = overviewDirty || typeDetailsDirty;
+
+  const pushUndo = useCallback((entry: JobFieldsSnapshot) => {
+    setUndoStack((prev) => pushUndoEntry(prev, entry, MAX_UNDO));
+  }, []);
+
+  const captureFieldSnapshot = useCallback((): JobFieldsSnapshot => {
+    return cloneJson({
+      assignedToUserId: committedAssignee,
+      overview: overviewRef.current?.getBaseline() ?? EMPTY_OVERVIEW,
+      typeDetails:
+        isCrunchwork && showTypeDetails
+          ? typeDetailsRef.current?.getBaseline() ?? null
+          : null,
+    });
+  }, [committedAssignee, isCrunchwork, showTypeDetails]);
+
+  const handleOverviewDirty = useCallback((dirty: boolean) => {
+    setOverviewDirty(dirty);
+    setFieldEditTick((n) => n + 1);
+  }, []);
+
+  const handleTypeDetailsDirty = useCallback((dirty: boolean) => {
+    setTypeDetailsDirty(dirty);
+    setFieldEditTick((n) => n + 1);
+  }, []);
 
   useEffect(() => {
     setAssignedToUserId(job.assignedToUserId ?? '');
@@ -239,6 +312,7 @@ export function JobDetail({
     setJustSaved(false);
     setJustPublished(false);
     setCwPublishPending(false);
+    setUndoStack([]);
   }, [job.id]);
 
   useEffect(() => {
@@ -281,13 +355,16 @@ export function JobDetail({
       isCrunchwork && showTypeDetails
         ? typeDetailsRef.current?.getPendingUpdate() ?? null
         : null;
-    const assigneeSnapshot = assignedToUserId;
+    const assigneeSnapshot = assignedToUserIdRef.current;
     const assigneeChanged = assigneeSnapshot !== committedAssignee;
 
     if (!overviewPending && !typePending && !assigneeChanged) {
       setSaveError(null);
       return { success: true };
     }
+
+    const undoSnapshot = skipFieldUndoRef.current ? null : captureFieldSnapshot();
+    skipFieldUndoRef.current = false;
 
     const typeSnapshot = JSON.stringify(typePending);
 
@@ -329,6 +406,9 @@ export function JobDetail({
       if (assigneeChanged) {
         setCommittedAssignee(assigneeSnapshot);
       }
+      if (undoSnapshot) {
+        pushUndo(undoSnapshot);
+      }
       setJustSaved(true);
       router.refresh();
       return { success: true };
@@ -341,38 +421,63 @@ export function JobDetail({
     router,
     isCrunchwork,
     showTypeDetails,
-    assignedToUserId,
     committedAssignee,
+    captureFieldSnapshot,
+    pushUndo,
   ]);
 
   // Debounced autosave for local draft changes.
   useEffect(() => {
-    if (!pageDirty || saving || publishing) return;
+    if (!pageDirty || anySaving) return;
     const timer = setTimeout(() => {
       void persistPending();
     }, AUTOSAVE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [
     pageDirty,
-    saving,
-    publishing,
+    anySaving,
     persistPending,
-    overviewDirty,
-    typeDetailsDirty,
+    fieldEditTick,
     assignedToUserId,
   ]);
 
   useEffect(() => {
-    if (!justSaved || pageDirty || saving || saveError) return;
-    const timer = setTimeout(() => setJustSaved(false), 2000);
+    if (!justSaved || pageDirty || anySaving || saveError) return;
+    const timer = setTimeout(() => setJustSaved(false), SAVE_STATUS_CLEAR_MS);
     return () => clearTimeout(timer);
-  }, [justSaved, pageDirty, saving, saveError]);
+  }, [justSaved, pageDirty, anySaving, saveError]);
 
   useEffect(() => {
     if (!justPublished || cwPublishPending) return;
-    const timer = setTimeout(() => setJustPublished(false), 2000);
+    const timer = setTimeout(() => setJustPublished(false), SAVE_STATUS_CLEAR_MS);
     return () => clearTimeout(timer);
   }, [justPublished, cwPublishPending]);
+
+  const handleUndo = useCallback(() => {
+    if (anySaving) return;
+
+    if (pageDirty) {
+      overviewRef.current?.reset();
+      typeDetailsRef.current?.reset();
+      setAssignedToUserId(committedAssignee);
+      setSaveError(null);
+      return;
+    }
+
+    const entry = undoStack[undoStack.length - 1];
+    if (!entry) return;
+    setUndoStack((prev) => prev.slice(0, -1));
+
+    skipFieldUndoRef.current = true;
+    flushSync(() => {
+      overviewRef.current?.applyDraft(entry.overview);
+      if (entry.typeDetails) {
+        typeDetailsRef.current?.applyDraft(entry.typeDetails);
+      }
+      setAssignedToUserId(entry.assignedToUserId);
+    });
+    void persistPending();
+  }, [anySaving, pageDirty, undoStack, committedAssignee, persistPending]);
 
   const handlePublishConfirm = useCallback(async (): Promise<{
     success: boolean;
@@ -434,12 +539,17 @@ export function JobDetail({
     { id: 'timeline', label: 'Timeline', icon: Clock },
   ];
 
+  const jobReportTypes = useMemo(
+    () => buildJobReportTypes(job.id, assessments),
+    [job.id, assessments],
+  );
+
   const printButton = (
     <PrintButton
       documentType="job_details"
       entityId={job.id}
       jobId={job.id}
-      reportTypes={JOB_REPORT_TYPES}
+      reportTypes={jobReportTypes}
     />
   );
 
@@ -460,38 +570,19 @@ export function JobDetail({
   const canPublish =
     isCrunchwork && cwPublishPending && !saving && !publishing && !saveError;
 
-  const saveStatusLabel = publishing
-    ? 'Publishing…'
-    : saving
-      ? 'Saving…'
-      : saveError
-        ? 'Save failed'
-        : justPublished
-          ? 'Published'
-          : justSaved
-            ? 'Saved'
-            : pageDirty
-              ? 'Unsaved changes'
-              : null;
+  const { label: saveStatusLabel, tone: saveStatusTone } = detailSaveStatus({
+    saving,
+    publishing,
+    saveError,
+    justSaved,
+    justPublished,
+    dirty: pageDirty,
+  });
 
   let tabActions: ReactNode = null;
   if (showEditActions) {
     tabActions = (
       <>
-        {saveStatusLabel && (
-          <span
-            className={`mr-2 text-sm ${
-              saveError
-                ? 'text-red-600'
-                : saving || publishing || pageDirty
-                  ? 'text-slate-500'
-                  : 'text-emerald-600'
-            }`}
-            aria-live="polite"
-          >
-            {saveStatusLabel}
-          </span>
-        )}
         {isCrunchwork && (
           <Button
             size="default"
@@ -544,6 +635,13 @@ export function JobDetail({
       >
         Create Estimate
       </Button>
+      <DetailAutosaveActions
+        statusLabel={saveStatusLabel}
+        tone={saveStatusTone}
+        canUndo={canUndo}
+        undoDisabled={anySaving}
+        onUndo={handleUndo}
+      />
       {tabActions}
       {archiveButton}
     </>
@@ -602,7 +700,7 @@ export function JobDetail({
               saving={false}
               editing
               statusOptions={statusOptions}
-              onDirtyChange={setOverviewDirty}
+              onDirtyChange={handleOverviewDirty}
               onAddAppointment={openAppointmentDrawer}
             />
           </div>
@@ -615,7 +713,7 @@ export function JobDetail({
               editing={isCrunchwork}
               saving={false}
               jobTypeOptions={jobTypeOptions}
-              onDirtyChange={setTypeDetailsDirty}
+              onDirtyChange={handleTypeDetailsDirty}
             />
           </div>
         )}

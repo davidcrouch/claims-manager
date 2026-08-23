@@ -899,3 +899,14 @@
   Builder assessment, make-safe, and repair-works jobs move through dates, documents, and partner updates with less re-keying.
   Publishing estimates and jobs gives clearer on-screen feedback, and people on a job stay aligned across contacts and messages.
   Task types, work-order details, and stronger sign-in complete the day-to-day operating set.
+
+- `2026-08-23` `eb768f2` **12 h**
+  `168 files | +6662 −3232 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  Lay summary: Every entity now has its own reference number, contacts have a dedicated detail screen, quote lines can be grouped and edited in place, and document output includes richer project and financial data.
+  **Record numbers, contact management, document transforms, and quote line-items.**
+  Every job, quote, task, and purchase order now receives a sequential reference number automatically.
+  Contacts have their own detail screen showing related jobs and a redesigned edit form.
+  Quote line items can be grouped, edited inline, and totals flow through to generated documents.
+  Document templates pull richer party, assessment, and financial data into printed output.
+  List screens across the application use consistent server-side filtering and loading states.
+  Outbound webhooks and projection events carry entity numbers and updated party information.

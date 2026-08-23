@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, X, Link2, Unlink } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -25,6 +25,10 @@ import {
   ColumnSettingsHeaderCell,
   useColumnVisibility,
 } from '@/components/shared/column-visibility';
+import {
+  createListFetchSession,
+  useListFetchGate,
+} from '@/components/shared/use-list-page-data';
 import type { AddressPayload, Journal } from '@/types/api';
 
 export interface JournalListProps {
@@ -66,7 +70,7 @@ const TABLE_COLUMNS: ColDef[] = [
   { key: 'updated_at', label: 'Updated' },
 ];
 
-const STATUS_OPTIONS = ['active', 'archived', 'deleted'];
+const STATUS_OPTIONS = ['active', 'archived'];
 
 function getSortValue(j: Journal, field: JournalSortField): string | number | null | undefined {
   switch (field) {
@@ -107,7 +111,7 @@ export function JournalList({
     'journal-list',
     TABLE_COLUMNS,
   );
-  const lastFetchKeyRef = useRef<string | null>(null);
+  const { beginFetch, abortFetch, invalidateFetch } = useListFetchGate();
 
   const tabStatusValues = useMemo(
     () => statusValuesForArchiveListTab(tab, STATUS_OPTIONS),
@@ -129,13 +133,13 @@ export function JournalList({
 
   useEffect(() => {
     const fetchKey = `${entityType}|${entityId}|${debouncedSearch}|${statusParam ?? ''}|${statusParam === null ? 'none' : ''}`;
-    if (lastFetchKeyRef.current === fetchKey) return;
-    lastFetchKeyRef.current = fetchKey;
+    const session = createListFetchSession({ fetchKey, beginFetch, abortFetch });
+    if (!session) return;
 
     if (statusParam === null) {
       setJournals([]);
       setLoading(false);
-      return;
+      return session.cleanup;
     }
 
     setLoading(true);
@@ -143,18 +147,23 @@ export function JournalList({
       search: debouncedSearch || undefined,
       status: statusParam,
     })
-      .then((data) => setJournals(data))
+      .then((data) => {
+        if (!session.cancelled) setJournals(data);
+      })
       .catch((err) => console.error('JournalList.loadJournals:', err))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!session.cancelled) setLoading(false);
+      });
+    return session.cleanup;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchJournals identity changes each render from callers
-  }, [entityType, entityId, debouncedSearch, statusParam]);
+  }, [entityType, entityId, debouncedSearch, statusParam, beginFetch, abortFetch]);
 
   const handleCreatedAndLinked = (journal: Journal) => {
     setJournals((prev) => [journal, ...prev]);
   };
 
   const handleLinked = () => {
-    lastFetchKeyRef.current = null;
+    invalidateFetch();
     setLoading(true);
     fetchJournals({
       search: debouncedSearch || undefined,

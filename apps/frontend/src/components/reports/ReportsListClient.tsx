@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ClipboardList, Plus, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -20,12 +20,18 @@ import {
   mergeStatusParamWithTab,
 } from '@/components/shared/list-filters';
 import { TablePagination } from '@/components/shared/table-pagination';
+import { JobCellLink } from '@/components/shared/JobCellLink';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import {
   ListPageHeader,
   computeStatusBreakdown,
 } from '@/components/layout/ListPageHeader';
 import { fetchReportsAction } from '@/app/(app)/reports/actions';
+import {
+  createListFetchSession,
+  replaceListQueryIfNeeded,
+  useListPageData,
+} from '@/components/shared/use-list-page-data';
 import {
   ColumnSettingsHeaderCell,
   useColumnVisibility,
@@ -89,7 +95,7 @@ export function ReportsListClient({
 }: ReportsListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [data, setData] = useState(initialData);
+  const { data, setData, beginFetch, abortFetch } = useListPageData(initialData);
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [tab, setTab] = useState<ListTab>(() => parseTab(searchParams.get('tab')));
@@ -109,7 +115,6 @@ export function ReportsListClient({
     'reports',
     TABLE_COLUMNS,
   );
-  const lastFetchKeyRef = useRef<string | null>(null);
   const tabStatusIds = useMemo(
     () => statusIdsForArchiveListTab(tab, statusOptions),
     [tab, statusOptions],
@@ -139,20 +144,34 @@ export function ReportsListClient({
     const typeKey = reportTypeParam === null ? '__none__' : (reportTypeParam ?? '');
     const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${typeKey}`;
     const params = new URLSearchParams(searchParams.toString());
-    params.set('search', debouncedSearch);
-    params.set('tab', tab);
-    params.set('page', String(page));
-    params.set('sort', sortParam);
+    if (debouncedSearch) params.set('search', debouncedSearch);
+    else params.delete('search');
+    if (tab !== 'active') params.set('tab', tab);
+    else params.delete('tab');
+    if (page > 1) params.set('page', String(page));
+    else params.delete('page');
+    if (sortParam !== 'updated_at_desc') params.set('sort', sortParam);
+    else params.delete('sort');
     if (statusParam) params.set('status', statusParam); else params.delete('status');
     if (reportTypeParam) params.set('reportTypeId', reportTypeParam); else params.delete('reportTypeId');
-    router.replace(`/reports?${params}`, { scroll: false });
+    const next = params.toString();
+    if (
+      !replaceListQueryIfNeeded({
+        router,
+        pathname: '/reports',
+        currentQuery: searchParams.toString(),
+        nextQuery: next,
+      })
+    ) {
+      return;
+    }
 
-    if (lastFetchKeyRef.current === fetchKey) return;
-    lastFetchKeyRef.current = fetchKey;
+    const session = createListFetchSession({ fetchKey, beginFetch, abortFetch });
+    if (!session) return;
 
     if (statusParam === null || reportTypeParam === null) {
       setData({ data: [], total: 0 });
-      return;
+      return session.cleanup;
     }
 
     fetchReportsAction({
@@ -162,11 +181,11 @@ export function ReportsListClient({
       status: statusParam,
       reportTypeId: reportTypeParam,
       search: debouncedSearch || undefined,
-    }).then(
-      (res) => res && setData(res),
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, sortParam, tab, page, statusParam, reportTypeParam]);
+    }).then((res) => {
+      if (!session.cancelled && res) setData(res);
+    });
+    return session.cleanup;
+  }, [debouncedSearch, sortParam, tab, page, statusParam, reportTypeParam, searchParams, router, beginFetch, abortFetch]);
 
   const handleColumnSort = (field: ReportSortField) => {
     setColumnSort((prev) => {
@@ -393,20 +412,7 @@ export function ReportsListClient({
                       )}
                       {isVisible('job_ref') && (
                         <td className="px-4 py-3 text-slate-600">
-                          {jobRef ? (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                router.push(`/jobs/${report.jobId}`);
-                              }}
-                              className="text-primary hover:underline"
-                            >
-                              {jobRef}
-                            </button>
-                          ) : (
-                            '—'
-                          )}
+                          <JobCellLink jobId={report.jobId} label={jobRef} />
                         </td>
                       )}
                       {isVisible('created_at') && (

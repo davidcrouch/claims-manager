@@ -9,8 +9,8 @@ import {
   organizations,
 } from '../../../database/schema';
 import type { DataMapper } from './base.mapper';
-import { formatCurrency, formatDate } from './base.mapper';
-import { buildTemplateGroups } from './line-items.helper';
+import { formatCurrency, formatDate, displayRecordNumber, internalNumberField } from './base.mapper';
+import { buildTemplateGroups, fetchGroupLabelNameMap } from './line-items.helper';
 import type { TemplateData } from '../types/document-types';
 
 @Injectable()
@@ -63,6 +63,7 @@ export class WorkOrderMapper implements DataMapper {
     const woFrom = wo.woFrom as Record<string, unknown>;
     const woFor = wo.woFor as Record<string, unknown>;
 
+    const groupLabelNames = await fetchGroupLabelNameMap(this.db, groups);
     const groupData = buildTemplateGroups({
       groups,
       combos: combos.map((c) => ({ ...c, groupId: c.workOrderGroupId })),
@@ -71,11 +72,13 @@ export class WorkOrderMapper implements DataMapper {
         groupId: i.workOrderGroupId,
         comboId: i.workOrderComboId,
       })),
+      groupLabelNames,
     });
 
     return {
       company_name: org?.name ?? '',
-      wo_number: wo.workOrderNumber ?? '',
+      wo_number: displayRecordNumber(wo.internalNumber, wo.workOrderNumber),
+      internal_number: internalNumberField(wo.internalNumber),
       wo_name: wo.name ?? '',
       start_date: formatDate(wo.startDate),
       end_date: formatDate(wo.endDate),

@@ -1,17 +1,17 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { AssessmentsPageClient } from '@/components/assessments/AssessmentsPageClient';
-import { buildJobNameById, toJobOptions } from '@/components/shared/job-label';
+import {buildJobNameById, toJobOptions,
+  mergeCurrentJobIntoNameById,
+  mergeCurrentJobIntoOptions } from '@/components/shared/job-label';
 import type { Metadata } from 'next';
 import type { Job, Claim, PaginatedResponse } from '@/types/api';
 
 export const metadata: Metadata = {
-  title: 'Assessments | EnsureOS',
-};
+  title: 'Assessments | EnsureOS' };
 
 export default async function AssessmentsPage({
-  searchParams,
-}: {
+  searchParams }: {
   searchParams: Promise<{ page?: string; status?: string; jobId?: string; jobIds?: string; search?: string }>;
 }) {
   const api = await getServerApiClient();
@@ -30,8 +30,7 @@ export default async function AssessmentsPage({
       status: params.status,
       jobId: params.jobId,
       jobIds,
-      search: params.search,
-    }).catch((err: unknown) => {
+      search: params.search }).catch((err: unknown) => {
       console.error(
         'frontend:AssessmentsPage - getAssessments failed:',
         err instanceof Error ? err.message : err,
@@ -69,8 +68,8 @@ export default async function AssessmentsPage({
       initialData={result}
       job={job}
       parentClaim={parentClaim}
-      jobNameById={buildJobNameById(jobs)}
-      jobs={toJobOptions(jobs)}
+      jobNameById={mergeCurrentJobIntoNameById(buildJobNameById(jobs), job)}
+      jobs={mergeCurrentJobIntoOptions(toJobOptions(jobs), job)}
     />
   );
 }

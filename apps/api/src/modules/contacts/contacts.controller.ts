@@ -22,6 +22,7 @@ export class ContactsController {
       workPhone?: string;
       notes?: string;
       typeLookupId?: string;
+      typeLookupIds?: string[];
     },
   ) {
     return this.contactsService.create(body);
@@ -106,7 +107,7 @@ export class ContactsController {
     @Query('jobIds') jobIds?: string,
     @Query('unlinkedOnly') unlinkedOnly?: string,
     @Query('typeLookupIds') typeLookupIds?: string,
-    @Query('archived') archived?: string,
+    @Query('status') status?: string,
   ) {
     const ids = typeLookupIds
       ? typeLookupIds
@@ -120,8 +121,6 @@ export class ContactsController {
           .map((id) => id.trim())
           .filter((id) => id.length > 0)
       : undefined;
-    const archivedFilter =
-      archived === 'true' ? true : archived === 'false' ? false : undefined;
     return this.contactsService.findAll({
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
@@ -131,7 +130,7 @@ export class ContactsController {
       jobIds: jobIdList && jobIdList.length > 0 ? jobIdList : undefined,
       unlinkedOnly: unlinkedOnly === '1' || unlinkedOnly === 'true',
       typeLookupIds: ids && ids.length > 0 ? ids : undefined,
-      archived: archivedFilter,
+      status: status || undefined,
     });
   }
 
@@ -145,5 +144,25 @@ export class ContactsController {
   @RequirePermission(P.contacts.read)
   async findOne(@Param('id') id: string) {
     return this.contactsService.findOne({ id });
+  }
+
+  @Post(':id')
+  @RequirePermission(P.contacts.manage)
+  async update(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      firstName?: string;
+      lastName?: string;
+      email?: string;
+      mobilePhone?: string;
+      homePhone?: string;
+      workPhone?: string;
+      notes?: string;
+      typeLookupId?: string;
+      typeLookupIds?: string[];
+    },
+  ) {
+    return this.contactsService.update({ id, ...body });
   }
 }

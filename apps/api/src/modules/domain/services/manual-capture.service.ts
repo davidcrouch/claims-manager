@@ -18,6 +18,7 @@ import {
 import { purchaseOrders, quotes, rfqs, invoices, organizations } from '../../../database/schema';
 import { GhostOrganisationService } from './ghost-organisation.service';
 import { LookupResolutionService } from './lookup-resolution.service';
+import { RecordNumberService } from '../../../common/record-number/record-number.service';
 
 export interface CapturePurchaseOrderDto {
   issuer: {
@@ -143,6 +144,7 @@ export class ManualCaptureService {
     private readonly billsRepo: BillsRepository,
     private readonly jobsRepo: JobsRepository,
     private readonly lookupResolution: LookupResolutionService,
+    private readonly recordNumberService: RecordNumberService,
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
   ) {}
 
@@ -221,6 +223,17 @@ export class ManualCaptureService {
         tx,
       });
 
+      const poInternalNumber = await this.recordNumberService.next({
+        tenantId,
+        entity: 'purchase_order',
+        tx,
+      });
+      const woInternalNumber = await this.recordNumberService.next({
+        tenantId,
+        entity: 'work_order',
+        tx,
+      });
+
       const poData: PurchaseOrderInsert = {
         tenantId,
         claimId: dto.claimId ?? null,
@@ -231,6 +244,7 @@ export class ManualCaptureService {
         captureMethod: 'manual',
         ownershipStatus: 'externally_captured',
         originType: 'capture',
+        internalNumber: poInternalNumber,
         purchaseOrderNumber: dto.purchaseOrderNumber,
         name: dto.name ?? null,
         startDate: dto.startDate ?? null,
@@ -254,6 +268,7 @@ export class ManualCaptureService {
         sourceOrganisationId: issuerOrgId,
         sourceTenantId: null,
         originType: 'capture',
+        internalNumber: woInternalNumber,
         workOrderNumber: dto.purchaseOrderNumber,
         name: dto.name ?? null,
         statusLookupId: statusLookupId ?? null,
@@ -365,6 +380,14 @@ export class ManualCaptureService {
 
       const quoteFrom = this.buildIssuerPartySnapshot(dto.issuer);
 
+      const internalNumber = await this.recordNumberService.resolve({
+        tenantId,
+        entity: 'estimate',
+        explicit: undefined,
+        tx,
+      });
+      const quoteNumber = dto.quoteNumber?.trim() || null;
+
       const quoteData: QuoteInsert = {
         tenantId,
         claimId: dto.claimId ?? null,
@@ -375,7 +398,8 @@ export class ManualCaptureService {
         captureMethod: 'manual',
         ownershipStatus: 'externally_captured',
         originType: 'capture',
-        quoteNumber: dto.quoteNumber ?? null,
+        internalNumber,
+        quoteNumber,
         name: dto.name,
         reference: dto.reference ?? null,
         note: dto.note ?? null,
@@ -402,7 +426,7 @@ export class ManualCaptureService {
         sourceTenantId: null,
         sourceOrganisationId: issuerOrgId,
         originType: 'capture',
-        proposalNumber: dto.quoteNumber ?? null,
+        proposalNumber: quoteNumber,
         name: dto.name,
         reference: dto.reference ?? null,
         note: dto.note ?? null,
@@ -479,6 +503,13 @@ export class ManualCaptureService {
         tx,
       });
 
+      const internalNumber = await this.recordNumberService.resolve({
+        tenantId,
+        entity: 'rfq',
+        explicit: undefined,
+        tx,
+      });
+
       const rfqData = {
         tenantId,
         claimId: dto.claimId ?? null,
@@ -489,7 +520,8 @@ export class ManualCaptureService {
         captureMethod: 'manual' as const,
         ownershipStatus: 'externally_captured' as const,
         originType: 'capture' as const,
-        rfqNumber: dto.rfqNumber ?? null,
+        internalNumber,
+        rfqNumber: dto.rfqNumber?.trim() || null,
         name: dto.name,
         note: dto.note ?? null,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
@@ -553,6 +585,14 @@ export class ManualCaptureService {
         tx,
       });
 
+      const internalNumber = await this.recordNumberService.resolve({
+        tenantId,
+        entity: 'invoice',
+        explicit: undefined,
+        tx,
+      });
+      const invoiceNumber = dto.invoiceNumber?.trim() || null;
+
       const invoiceData = {
         tenantId,
         purchaseOrderId: dto.purchaseOrderId,
@@ -564,7 +604,8 @@ export class ManualCaptureService {
         captureMethod: 'manual',
         ownershipStatus: 'externally_captured',
         originType: 'capture',
-        invoiceNumber: dto.invoiceNumber ?? null,
+        internalNumber,
+        invoiceNumber,
         issueDate: dto.issueDate ? new Date(dto.issueDate) : null,
         receivedDate: new Date(),
         comments: dto.comments ?? null,
@@ -586,7 +627,7 @@ export class ManualCaptureService {
         sourceTenantId: null as string | null,
         sourceOrganisationId: issuerOrgId,
         originType: 'capture' as const,
-        billNumber: dto.invoiceNumber ?? null,
+        billNumber: invoiceNumber,
         issueDate: dto.issueDate ? new Date(dto.issueDate) : null,
         receivedDate: new Date(),
         comments: dto.comments ?? null,

@@ -164,16 +164,15 @@ export class QuoteTransformer implements EntityTransformer<QuoteInsert> {
       apiPayload: payload,
     };
 
-    // Parents — Crunchwork sends either nested object { id } or flat string field
-    const cwJobId = isPlainObject(payload.job)
-      ? asString((payload.job as Record<string, unknown>).id)
-      : asString(payload.jobId);
-    if (cwJobId) parentRefs.push({ entityType: 'job', externalId: cwJobId, required: false });
+    // Parents — Crunchwork sends either nested object { id } or flat string field.
+    // Pass nestedPayload when available so EntityRelationshipService can inline-project.
+    const jobNested = isPlainObject(payload.job) ? (payload.job as Record<string, unknown>) : undefined;
+    const cwJobId = jobNested ? asString(jobNested.id) : asString(payload.jobId);
+    if (cwJobId) parentRefs.push({ entityType: 'job', externalId: cwJobId, required: false, nestedPayload: jobNested });
 
-    const cwClaimId = isPlainObject(payload.claim)
-      ? asString((payload.claim as Record<string, unknown>).id)
-      : asString(payload.claimId);
-    if (cwClaimId) parentRefs.push({ entityType: 'claim', externalId: cwClaimId, required: false });
+    const claimNested = isPlainObject(payload.claim) ? (payload.claim as Record<string, unknown>) : undefined;
+    const cwClaimId = claimNested ? asString(claimNested.id) : asString(payload.claimId);
+    if (cwClaimId) parentRefs.push({ entityType: 'claim', externalId: cwClaimId, required: false, nestedPayload: claimNested });
 
     // Lookups
     if (isPlainObject(payload.status)) {

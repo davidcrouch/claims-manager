@@ -1,5 +1,5 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
-import { eq, and, asc } from 'drizzle-orm';
+import { eq, and, asc, inArray } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
 import {
   rfqs,
@@ -9,8 +9,8 @@ import {
   organizations,
 } from '../../../database/schema';
 import type { DataMapper } from './base.mapper';
-import { formatDate } from './base.mapper';
-import { buildTemplateGroups } from './line-items.helper';
+import { formatDate, displayRecordNumber, internalNumberField } from './base.mapper';
+import { buildTemplateGroups, fetchGroupLabelNameMap, rollupDocumentTotals } from './line-items.helper';
 import type { TemplateData } from '../types/document-types';
 
 @Injectable()
@@ -37,34 +37,81 @@ export class RfqMapper implements DataMapper {
       )
       .orderBy(asc(rfqGroups.sortIndex));
 
-    const combos = await this.db
-      .select()
-      .from(rfqCombos)
-      .where(eq(rfqCombos.tenantId, params.tenantId))
-      .orderBy(asc(rfqCombos.sortIndex));
+    const groupIds = groups.map((group) => group.id);
 
-    const items = await this.db
-      .select()
-      .from(rfqItems)
-      .where(eq(rfqItems.tenantId, params.tenantId))
-      .orderBy(asc(rfqItems.sortIndex));
+    const combos =
+      groupIds.length === 0
+        ? []
+        : await this.db
+            .select()
+            .from(rfqCombos)
+            .where(
+              and(
+                eq(rfqCombos.tenantId, params.tenantId),
+                inArray(rfqCombos.rfqGroupId, groupIds),
+              ),
+            )
+            .orderBy(asc(rfqCombos.sortIndex));
+
+    const comboIds = combos.map((combo) => combo.id);
+
+    const directItems =
+      groupIds.length === 0
+        ? []
+        : await this.db
+            .select()
+            .from(rfqItems)
+            .where(
+              and(
+                eq(rfqItems.tenantId, params.tenantId),
+                inArray(rfqItems.rfqGroupId, groupIds),
+              ),
+            )
+            .orderBy(asc(rfqItems.sortIndex));
+
+    const comboChildItems =
+      comboIds.length === 0
+        ? []
+        : await this.db
+            .select()
+            .from(rfqItems)
+            .where(
+              and(
+                eq(rfqItems.tenantId, params.tenantId),
+                inArray(rfqItems.rfqComboId, comboIds),
+              ),
+            )
+            .orderBy(asc(rfqItems.sortIndex));
+
+    const itemsById = new Map<string, (typeof directItems)[number]>();
+    for (const item of [...directItems, ...comboChildItems]) {
+      itemsById.set(item.id, item);
+    }
+    const items = [...itemsById.values()];
+
+    const comboGroupById = new Map(combos.map((combo) => [combo.id, combo.rfqGroupId]));
 
     const rfqTo = rfq.rfqTo as Record<string, unknown>;
     const rfqFrom = rfq.rfqFrom as Record<string, unknown>;
 
+    const groupLabelNames = await fetchGroupLabelNameMap(this.db, groups);
     const groupData = buildTemplateGroups({
       groups,
       combos: combos.map((c) => ({ ...c, groupId: c.rfqGroupId })),
       items: items.map((i) => ({
         ...i,
-        groupId: i.rfqGroupId,
+        groupId: i.rfqGroupId ?? (i.rfqComboId ? comboGroupById.get(i.rfqComboId) ?? null : null),
         comboId: i.rfqComboId,
       })),
+      groupLabelNames,
     });
+
+    const rolledUp = rollupDocumentTotals({ groups, combos, items });
 
     return {
       company_name: org?.name ?? '',
-      rfq_number: rfq.rfqNumber ?? '',
+      rfq_number: displayRecordNumber(rfq.internalNumber, rfq.rfqNumber),
+      internal_number: internalNumberField(rfq.internalNumber),
       rfq_name: rfq.name ?? '',
       note: rfq.note ?? '',
       sent_date: formatDate(rfq.sentDate),
@@ -76,6 +123,11 @@ export class RfqMapper implements DataMapper {
       rfq_to_email: rfq.rfqToEmail ?? (rfqTo?.email as string) ?? '',
       rfq_from_name: (rfqFrom?.name as string) ?? '',
       groups: groupData,
+      _totals: {
+        subtotal: rolledUp.subtotal,
+        tax: rolledUp.tax,
+        total: rolledUp.total,
+      },
     };
   }
 }

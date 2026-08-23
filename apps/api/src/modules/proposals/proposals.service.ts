@@ -230,6 +230,7 @@ export class ProposalsService {
         length: asNumber(dimensions.length),
         width: asNumber(dimensions.width),
         height: asNumber(dimensions.height),
+        perimeter: asNumber(dimensions.perimeter),
         index: group.sortIndex,
         subTotal: asNumber(groupTotals.subTotal),
         totalTax: asNumber(groupTotals.totalTax),

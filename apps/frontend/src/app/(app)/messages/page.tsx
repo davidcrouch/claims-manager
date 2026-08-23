@@ -1,14 +1,14 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { MessagesListClient } from '@/components/messages/MessagesListClient';
-import { buildJobNameById } from '@/components/shared/job-label';
+import {buildJobNameById,
+  mergeCurrentJobIntoNameById } from '@/components/shared/job-label';
 import type { Job, Claim, PaginatedResponse } from '@/types/api';
 
 export const metadata = { title: 'Communications — EnsureOS' };
 
 export default async function MessagesPage({
-  searchParams,
-}: {
+  searchParams }: {
   searchParams: Promise<{ jobId?: string }>;
 }) {
   const api = await getServerApiClient();
@@ -44,7 +44,7 @@ export default async function MessagesPage({
     <MessagesListClient
       job={job}
       parentClaim={parentClaim}
-      jobNameById={buildJobNameById(jobsRes?.data ?? [])}
+      jobNameById={mergeCurrentJobIntoNameById(buildJobNameById(jobsRes?.data ?? []), job)}
     />
   );
 }

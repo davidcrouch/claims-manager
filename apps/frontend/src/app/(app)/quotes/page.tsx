@@ -1,16 +1,15 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { QuotesPageClient } from '@/components/quotes/QuotesPageClient';
-import {
-  buildJobAssigneeNameById,
+import {buildJobAssigneeNameById,
   buildJobNameById,
   toJobOptions,
-} from '@/components/shared/job-label';
+  mergeCurrentJobIntoNameById,
+  mergeCurrentJobIntoOptions } from '@/components/shared/job-label';
 import type { Job, PaginatedResponse, Quote, Claim } from '@/types/api';
 
 export default async function QuotesPage({
-  searchParams,
-}: {
+  searchParams }: {
   searchParams: Promise<{ page?: string; search?: string; jobId?: string; status?: string; quoteType?: string; sort?: string }>;
 }) {
   const api = await getServerApiClient();
@@ -27,8 +26,7 @@ export default async function QuotesPage({
         jobId: params.jobId,
         status: params.status,
         quoteType: params.quoteType,
-        sort: params.sort,
-      })
+        sort: params.sort })
       .catch((err: unknown) => {
         console.error(
           'frontend:QuotesPage - getQuotes failed:',
@@ -65,15 +63,13 @@ export default async function QuotesPage({
   const statusOptions = (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map(
     (row) => ({
       id: row.id,
-      name: row.name?.trim() ? row.name : 'Unknown',
-    }),
+      name: row.name?.trim() ? row.name : 'Unknown' }),
   );
   const quoteTypes = (Array.isArray(typeLookupsRes) ? typeLookupsRes : []).map((row) => ({
     id: row.id,
-    name: row.name?.trim() ? row.name : 'Unknown',
-  }));
+    name: row.name?.trim() ? row.name : 'Unknown' }));
   const jobs = jobsRes?.data ?? [];
-  const jobNameById = buildJobNameById(jobs);
+  const jobNameById = mergeCurrentJobIntoNameById(buildJobNameById(jobs), job);
   const jobAssigneeNameById = buildJobAssigneeNameById(jobs);
   if (job?.id) {
     const scopedName = job.assigneeName?.trim();
@@ -87,7 +83,7 @@ export default async function QuotesPage({
       quoteTypes={quoteTypes}
       jobNameById={jobNameById}
       jobAssigneeNameById={jobAssigneeNameById}
-      jobs={toJobOptions(jobs)}
+      jobs={mergeCurrentJobIntoOptions(toJobOptions(jobs), job)}
       job={job}
       parentClaim={parentClaim}
     />

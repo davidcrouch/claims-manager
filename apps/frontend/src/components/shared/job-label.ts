@@ -2,7 +2,7 @@ import type { AddressPayload, Job } from '@/types/api';
 
 type JobLabelSource = Pick<
   Job,
-  'id' | 'name' | 'externalJobId' | 'externalReference'
+  'id' | 'name' | 'internalNumber' | 'externalJobId' | 'externalReference'
 >;
 
 export type JobOption = {
@@ -19,11 +19,24 @@ export type JobOption = {
 
 export function jobDisplayName(job: JobLabelSource): string {
   return (
+    job.internalNumber?.trim() ||
     job.name?.trim() ||
     job.externalJobId?.trim() ||
     job.externalReference?.trim() ||
     job.id
   );
+}
+
+/** CW / insurer reference (or job name) shown above the internal number on job headers. */
+export function jobHeaderSubtitle(job: JobLabelSource): string | undefined {
+  const cwLabel =
+    job.externalJobId?.trim() || job.externalReference?.trim() || undefined;
+  return cwLabel || job.name?.trim() || undefined;
+}
+
+/** Primary job title on detail/list headers (internal number). */
+export function jobHeaderTitle(job: JobLabelSource): string {
+  return job.internalNumber?.trim() || job.id;
 }
 
 export function buildJobNameById(jobs: JobLabelSource[]): Record<string, string> {
@@ -32,6 +45,32 @@ export function buildJobNameById(jobs: JobLabelSource[]): Record<string, string>
     map[job.id] = jobDisplayName(job);
   }
   return map;
+}
+
+/** Ensure the current job appears in the name map used by list Job filters. */
+export function mergeCurrentJobIntoNameById(
+  jobNameById: Record<string, string>,
+  job?: JobLabelSource | null,
+): Record<string, string> {
+  if (!job?.id) return jobNameById;
+  return { ...jobNameById, [job.id]: jobDisplayName(job) };
+}
+
+/** Ensure the current job appears in JobOption[] used by list filters / drawers. */
+export function mergeCurrentJobIntoOptions(
+  jobs: JobOption[],
+  job?: (JobLabelSource & { claimId?: string | null }) | null,
+): JobOption[] {
+  if (!job?.id) return jobs;
+  if (jobs.some((j) => j.id === job.id)) return jobs;
+  return [
+    {
+      id: job.id,
+      label: jobDisplayName(job),
+      claimId: job.claimId,
+    },
+    ...jobs,
+  ];
 }
 
 /** Map job id → assignee display name (omit jobs with no assignee name). */

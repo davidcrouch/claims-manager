@@ -3,7 +3,7 @@ import { eq, and, isNull, desc } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
 import { jobs, organizations } from '../../../database/schema';
 import type { DataMapper } from './base.mapper';
-import { formatDate } from './base.mapper';
+import { formatDate, internalNumberField } from './base.mapper';
 import type { TemplateData } from '../types/document-types';
 
 @Injectable()
@@ -25,6 +25,7 @@ export class JobsListMapper implements DataMapper {
 
     const items = rows.map((j) => ({
       name: j.name ?? '',
+      internal_number: internalNumberField(j.internalNumber),
       reference: j.externalReference ?? j.externalJobId ?? '',
       request_date: formatDate(j.requestDate),
       suburb: j.addressSuburb ?? '',

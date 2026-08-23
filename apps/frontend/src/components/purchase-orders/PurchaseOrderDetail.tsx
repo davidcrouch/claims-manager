@@ -50,6 +50,7 @@ import type { PurchaseOrder, Job } from '@/types/api';
 import { PrintButton } from '@/components/shared/PrintButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { jobDisplayName } from '@/components/shared/job-label';
+import { EntityDetailTitle, entityArchiveLabel, entityDetailName } from '@/components/shared/EntityDetailTitle';
 import { getPurchaseOrderLineItemsAction } from '@/app/(app)/purchase-orders/actions';
 import { PagedLineItemsTable } from '@/components/quotes/PagedLineItemsTable';
 
@@ -98,7 +99,11 @@ function partyAddress(party: Dict): string {
 // ---------- header ----------------------------------------------------------
 
 export function PurchaseOrderPageHeader({ po, job }: { po: PurchaseOrder; job?: Job | null }) {
-  const title = po.purchaseOrderNumber ?? po.externalId ?? po.id;
+  const displayName = entityDetailName(
+    po.name,
+    po.purchaseOrderNumber ?? po.externalId,
+    po.id,
+  );
   const status = lookupName(po, po.status, 'status') ?? 'Unknown';
   const poType = lookupName(po, po.purchaseOrderType, 'purchaseOrderType');
   const vendor = lookupName(po, po.vendor, 'vendor');
@@ -112,7 +117,12 @@ export function PurchaseOrderPageHeader({ po, job }: { po: PurchaseOrder; job?: 
           entityType="purchase_order"
           entityId={po.id}
           statusName={status}
-          entityLabel={title}
+          entityLabel={entityArchiveLabel(
+            po.internalNumber,
+            po.name,
+            po.purchaseOrderNumber ?? po.externalId,
+            po.id,
+          )}
           redirectTo={job ? `/purchase-orders?jobId=${job.id}` : '/purchase-orders'}
         />
       </SetHeaderActions>
@@ -122,8 +132,13 @@ export function PurchaseOrderPageHeader({ po, job }: { po: PurchaseOrder; job?: 
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-orange-100">
             <ShoppingCart className="h-4 w-4 text-orange-600" />
           </span>
-          <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
-          {po.externalId && po.externalId !== title && (
+          <EntityDetailTitle
+            internalNumber={po.internalNumber}
+            name={po.name}
+            secondaryLabel={po.purchaseOrderNumber ?? po.externalId}
+            fallbackId={po.id}
+          />
+          {po.externalId && po.externalId !== displayName && (
             <span className="font-mono text-xs text-muted-foreground">· {po.externalId}</span>
           )}
           <StatusBadge status={status} />

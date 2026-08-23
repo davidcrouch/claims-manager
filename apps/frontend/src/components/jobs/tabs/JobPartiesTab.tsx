@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useEffect, useTransition, useRef } from 'react';
+import { useMemo, useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, Loader2, Mail, Phone, Search, Trash2, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -23,7 +23,10 @@ import {
 } from '@/components/shared/list-filters';
 import { removeJobContactAction } from '@/app/(app)/jobs/mutations';
 import { fetchContactsAction } from '@/app/(app)/contacts/actions';
-import { ContactDetailDrawer } from '@/components/contacts/ContactDetailDrawer';
+import {
+  createListFetchSession,
+  useListFetchGate,
+} from '@/components/shared/use-list-page-data';
 import type { Contact, Job } from '@/types/api';
 
 function contactName(c: Contact): string {
@@ -69,13 +72,11 @@ export function JobPartiesTab({
   const [confirmRemove, setConfirmRemove] = useState<Contact | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
-  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
-  const [detailOpen, setDetailOpen] = useState(false);
   const [columnSort, setColumnSort] = useState<{ field: ContactSortField; order: 'asc' | 'desc' }>({
     field: 'name',
     order: 'asc',
   });
-  const lastFetchKeyRef = useRef<string | null>(null);
+  const { beginFetch, abortFetch, invalidateFetch } = useListFetchGate();
 
   const typeParam = useMemo(
     () =>
@@ -95,13 +96,13 @@ export function JobPartiesTab({
   useEffect(() => {
     const typeKey = typeParam === null ? '__none__' : (typeParam ?? '');
     const fetchKey = `${job.id}|${debouncedSearch}|${typeKey}|${columnSort.field}_${columnSort.order}`;
-    if (lastFetchKeyRef.current === fetchKey) return;
-    lastFetchKeyRef.current = fetchKey;
+    const session = createListFetchSession({ fetchKey, beginFetch, abortFetch });
+    if (!session) return;
 
     if (typeParam === null) {
       setContacts([]);
       setLoading(false);
-      return;
+      return session.cleanup;
     }
 
     setLoading(true);
@@ -115,9 +116,14 @@ export function JobPartiesTab({
           ? `${columnSort.field}_${columnSort.order}`
           : undefined,
     })
-      .then((res) => setContacts(res.data))
-      .finally(() => setLoading(false));
-  }, [job.id, debouncedSearch, typeParam, columnSort]);
+      .then((res) => {
+        if (!session.cancelled) setContacts(res.data);
+      })
+      .finally(() => {
+        if (!session.cancelled) setLoading(false);
+      });
+    return session.cleanup;
+  }, [job.id, debouncedSearch, typeParam, columnSort, beginFetch, abortFetch]);
 
   function requestRemove(contact: Contact) {
     if (!contact.id) return;
@@ -126,13 +132,8 @@ export function JobPartiesTab({
   }
 
   function openContactDetail(contact: Contact) {
-    setSelectedContact(contact);
-    setDetailOpen(true);
-  }
-
-  function handleDetailOpenChange(open: boolean) {
-    setDetailOpen(open);
-    if (!open) setSelectedContact(null);
+    if (!contact.id) return;
+    router.push(`/contacts/${contact.id}?fromJob=${job.id}`);
   }
 
   function confirmRemoveContact() {
@@ -149,7 +150,7 @@ export function JobPartiesTab({
           return;
         }
         setConfirmRemove(null);
-        lastFetchKeyRef.current = null;
+        invalidateFetch();
         router.refresh();
         setContacts((prev) => prev.filter((c) => c.id !== contact.id));
       } finally {
@@ -379,13 +380,6 @@ export function JobPartiesTab({
             </tbody>
           </table>
         </div>
-
-      <ContactDetailDrawer
-        open={detailOpen}
-        onOpenChange={handleDetailOpenChange}
-        contact={selectedContact}
-        currentJobId={job.id}
-      />
 
       <Dialog
         open={confirmRemove !== null}

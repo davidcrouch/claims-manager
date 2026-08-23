@@ -25,6 +25,7 @@ export interface ApiItem {
   pcps?: string | null;
   note?: string | null;
   catalogItemId?: string;
+  catalogMissing?: boolean;
   internal?: boolean;
   publishStatus?: PublishStatus;
   mismatches?: Array<{ property?: string; catalogValue?: string }>;
@@ -90,6 +91,7 @@ export interface ApiGroup {
   length?: number;
   width?: number;
   height?: number;
+  perimeter?: number;
   index?: number;
   subTotal?: number;
   totalTax?: number;
@@ -103,6 +105,7 @@ export type GroupDimensions = {
   length?: number;
   width?: number;
   height?: number;
+  perimeter?: number;
 };
 
 export interface FlatLineItemRow {
