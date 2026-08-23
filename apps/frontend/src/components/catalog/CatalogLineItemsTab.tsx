@@ -4,12 +4,18 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { CreateSubmitOverlay } from '@/components/forms/CreateSubmitOverlay';
-import { QuoteLineItemsTable, type DeleteItemRequest } from '@/components/quotes/QuoteLineItemsTable';
 import { EditGroupDialog } from '@/components/quotes/EditGroupDialog';
 import { DeleteGroupDialog } from '@/components/quotes/DeleteGroupDialog';
 import { DeleteItemDialog } from '@/components/quotes/DeleteItemDialog';
-import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
-import { LINE_ITEMS_PAGE_SIZE } from '@/components/quotes/quote-line-items.utils';
+import {
+  LineItemsProvider,
+  LineItemsTable,
+  type ApiGroup,
+  type DeleteItemRequest,
+  type EditableFieldKey,
+  type LineItemsActions,
+  LINE_ITEMS_PAGE_SIZE,
+} from '@/components/line-items';
 import { uiMarkupToStored, uiTaxToStored } from '@/lib/rates';
 import {
   getCatalogGroupedItemsAction,
@@ -440,11 +446,23 @@ export function CatalogLineItemsTab({
   const editingGroup = editingGroupId ? groups.find((g) => g.id === editingGroupId) : null;
   const deletingGroup = deletingGroupId ? groups.find((g) => g.id === deletingGroupId) : null;
 
+  const catalogActions: LineItemsActions = useMemo(() => ({
+    onSave: handleSaveLineItems,
+    onEditGroup: (id: string) => setEditingGroupId(id),
+    onDeleteGroup: (id: string) => setDeletingGroupId(id),
+    onDeleteItem: handleDeleteItem,
+    onDeleteCombo: handleDeleteCombo,
+    onDeleteScope: handleDeleteScope,
+    onMoveGroupUp: (id: string) => handleMoveGroup(id, 'up'),
+    onMoveGroupDown: (id: string) => handleMoveGroup(id, 'down'),
+  }), [handleDeleteCombo, handleDeleteScope, loadGroupedItems]);
+
   return (
     <div className="space-y-4">
       <CreateSubmitOverlay phase={initialLoad ? 'loading' : 'idle'} entityLabel="catalogue" />
-      <QuoteLineItemsTable
+      <LineItemsProvider
         groups={groups}
+        mode="catalog"
         paging={{
           page,
           pageSize: LINE_ITEMS_PAGE_SIZE,
@@ -455,18 +473,11 @@ export function CatalogLineItemsTab({
           onHiddenGroupIdsChange: setHiddenGroupIds,
           serverFiltered: true,
         }}
-        onEditGroup={(id) => setEditingGroupId(id)}
-        onDeleteGroup={(id) => setDeletingGroupId(id)}
-        onDeleteItem={handleDeleteItem}
-        onDeleteCombo={handleDeleteCombo}
-        onDeleteScope={handleDeleteScope}
-        onMoveGroupUp={(id) => handleMoveGroup(id, 'up')}
-        onMoveGroupDown={(id) => handleMoveGroup(id, 'down')}
-        onSave={handleSaveLineItems}
-        onDirtyChange={handleTableDirtyChange}
+        actions={catalogActions}
         structurallyDirty={structurallyDirty}
-        mode="catalog"
-      />
+      >
+        <LineItemsTable />
+      </LineItemsProvider>
 
       {editingGroup && (
         <EditGroupDialog

@@ -8,6 +8,7 @@ describe('TemplateEngineService', () => {
   const templatesDir = path.join(process.cwd(), '../../data/templates');
   const rfqTemplatePath = path.join(templatesDir, 'Request for Quotation Template.docx');
   const poTemplatePath = path.join(templatesDir, 'Purchase Order Template.docx');
+  const invoiceTemplatePath = path.join(templatesDir, 'Invoice Template.docx');
   const sowTemplatePath = path.join(templatesDir, 'Scope of Work Template.docx');
   const assessmentTemplatePath = path.join(templatesDir, 'Assessment Template.docx');
 
@@ -205,6 +206,69 @@ describe('TemplateEngineService', () => {
     expect(documentXml).toContain('PO-TEST-99');
     expect(documentXml).toContain('Vendor Co');
     expect(documentXml).toContain('PO line item');
+  });
+
+  it('extracts docx-templates merge tags from the invoice template', async () => {
+    const templateBuffer = fs.readFileSync(invoiceTemplatePath);
+    const tags = await service.getTemplateTags({ templateBuffer });
+
+    expect(tags).toEqual(expect.arrayContaining(['invoice_number', 'to.name', 'client.name', 'total']));
+    expect(tags.some((tag) => tag.startsWith('FOR '))).toBe(true);
+    expect(tags).toEqual(expect.arrayContaining(['$item.name', '$item.description']));
+  });
+
+  it('merges sample invoice data into the template', async () => {
+    const templateBuffer = fs.readFileSync(invoiceTemplatePath);
+    const output = await service.populate({
+      templateBuffer,
+      data: {
+        invoice_number: 'INV-TEST-01',
+        date: '22-Aug-26',
+        subtotal: '$1,000.00',
+        tax: '$100.00',
+        total: '$1,100.00',
+        to: { name: 'Insurer Ltd', email: 'ap@example.com', address: '1 Insurer St' },
+        client: {
+          name: 'Client Name',
+          address_line1: '1 Client Rd',
+          address_line2: 'Brisbane QLD',
+          home_phone: '07 1111 1111',
+          mobile_phone: '0400 000 000',
+          other_phone: '',
+          email: 'client@example.com',
+        },
+        tenant: { name: '', home_phone: '', mobile_phone: '', other_phone: '' },
+        groups: [
+          {
+            ...sampleGroups[0],
+            name: 'Kitchen',
+            scopes: [
+              {
+                ...sampleGroups[0].scopes[0],
+                name: 'Tiling',
+                description: 'Supply and lay',
+                items: [
+                  {
+                    ...sampleGroups[0].scopes[0].items[0],
+                    name: 'Wall tiles',
+                    description: 'Invoice line item',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const zip = new PizZip(output);
+    const documentXml = zip.file('word/document.xml')?.asText() ?? '';
+    expect(documentXml).toContain('INV-TEST-01');
+    expect(documentXml).toContain('Insurer Ltd');
+    expect(documentXml).toContain('Kitchen');
+    expect(documentXml).toContain('Wall tiles');
+    expect(documentXml).toContain('Invoice line item');
+    expect(documentXml).toContain('$1,100.00');
   });
 
   it('extracts docx-templates merge tags from the scope of works template', async () => {

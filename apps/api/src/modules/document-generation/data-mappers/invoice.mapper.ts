@@ -4,11 +4,18 @@ import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
 import { invoices, purchaseOrders, organizations } from '../../../database/schema';
 import type { DataMapper } from './base.mapper';
 import { formatCurrency, formatDate, displayRecordNumber, internalNumberField } from './base.mapper';
+import { templateGroupsFromPayload } from './line-items.helper';
+import { PurchaseOrderMapper } from './purchase-order.mapper';
+import { WorkOrderMapper } from './work-order.mapper';
 import type { TemplateData } from '../types/document-types';
 
 @Injectable()
 export class InvoiceMapper implements DataMapper {
-  constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: DrizzleDB,
+    private readonly purchaseOrderMapper: PurchaseOrderMapper,
+    private readonly workOrderMapper: WorkOrderMapper,
+  ) {}
 
   async aggregate(params: { tenantId: string; entityId: string }): Promise<TemplateData> {
     const [invoice] = await this.db
@@ -31,6 +38,11 @@ export class InvoiceMapper implements DataMapper {
       po = poRow as unknown as Record<string, unknown>;
     }
 
+    const groups = await this.resolveGroups({
+      tenantId: params.tenantId,
+      invoice,
+    });
+
     return {
       company_name: org?.name ?? '',
       invoice_number: displayRecordNumber(invoice.internalNumber, invoice.invoiceNumber),
@@ -48,6 +60,37 @@ export class InvoiceMapper implements DataMapper {
       ),
       po_internal_number: internalNumberField(po?.internalNumber as string | null | undefined),
       po_name: (po?.name as string) ?? '',
+      groups,
     };
+  }
+
+  private async resolveGroups(params: {
+    tenantId: string;
+    invoice: typeof invoices.$inferSelect;
+  }): Promise<TemplateData['groups']> {
+    const fromPayload = templateGroupsFromPayload(params.invoice.invoicePayload);
+    if (fromPayload) return fromPayload;
+
+    if (params.invoice.purchaseOrderId) {
+      const poData = await this.purchaseOrderMapper.aggregate({
+        tenantId: params.tenantId,
+        entityId: params.invoice.purchaseOrderId,
+      });
+      if (Array.isArray(poData.groups) && poData.groups.length > 0) {
+        return poData.groups;
+      }
+    }
+
+    if (params.invoice.workOrderId) {
+      const woData = await this.workOrderMapper.aggregate({
+        tenantId: params.tenantId,
+        entityId: params.invoice.workOrderId,
+      });
+      if (Array.isArray(woData.groups) && woData.groups.length > 0) {
+        return woData.groups;
+      }
+    }
+
+    return [];
   }
 }

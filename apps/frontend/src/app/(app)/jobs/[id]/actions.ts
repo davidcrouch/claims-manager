@@ -254,6 +254,9 @@ export async function updateJobFieldsAction(
     if (fields.attendanceDate !== undefined) datePatch.attendanceDate = fields.attendanceDate;
     if (Object.keys(datePatch).length > 0) {
       body.customData = { ...existingCustom, ...datePatch };
+      console.info(
+        '[jobs/[id]/actions updateJobFieldsAction] including bookedDate/attendanceDate in customData',
+      );
     }
 
     if (fields.assignedToUserId !== undefined) {

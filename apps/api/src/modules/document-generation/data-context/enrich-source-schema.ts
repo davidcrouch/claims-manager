@@ -6,6 +6,7 @@ import { getContextDefinition, getDefaultEnabledSlugs } from './context-definiti
 /** Document types that include template line-item `groups` under `_context`. */
 const GROUPED_CONTEXT_TYPES = new Set<DocumentType>([
   'quote',
+  'invoice',
   'purchase_order',
   'work_order',
   'proposal',

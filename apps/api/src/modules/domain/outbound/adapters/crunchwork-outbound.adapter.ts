@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CrunchworkService } from '../../../../crunchwork/crunchwork.service';
+import { applyCrunchworkJobDates } from '../../../jobs/job-outbound.utils';
 import type { OutboundAdapter, OutboundAdapterPushParams, OutboundPushResult } from '../outbound-adapter.interface';
 
 const UUID_RE =
@@ -249,6 +250,7 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
       'jobTypeLookupId',
       'assignedToUserId',
       'customData',
+      'cwCustomData',
       'temporaryAccommodationDetails',
       'specialistDetails',
       'rectificationDetails',
@@ -260,8 +262,6 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
       'name',
       'parentJobId',
       'address',
-      'bookedDate',
-      'attendanceDate',
     ]);
 
     const out: Record<string, unknown> = {};
@@ -282,6 +282,12 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
       out[key] = value;
     }
 
-    return out;
+    const withDates = applyCrunchworkJobDates(out, payload);
+    if (withDates.customData !== out.customData) {
+      this.logger.debug(
+        'CrunchworkOutboundAdapter.transformJobPayload — including bookedDate/attendanceDate in CW customData',
+      );
+    }
+    return withDates;
   }
 }

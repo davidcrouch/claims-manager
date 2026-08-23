@@ -12,7 +12,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { fetchGroupLabelLookupsAction } from '@/app/(app)/quotes/actions';
-import type { ApiGroup, GroupDimensions } from '@/components/quotes/quote-line-items.types';
+import type { ApiGroup, GroupDimensions } from '@/components/line-items';
 
 interface LookupOption {
   id: string;

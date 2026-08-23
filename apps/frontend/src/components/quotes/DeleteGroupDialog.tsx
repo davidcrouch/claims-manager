@@ -10,8 +10,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
-import { groupLabel } from '@/components/quotes/quote-line-items.utils';
+import { groupLabel, type ApiGroup } from '@/components/line-items';
 
 export interface DeleteGroupDialogProps {
   open: boolean;

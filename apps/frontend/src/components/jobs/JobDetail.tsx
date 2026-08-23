@@ -67,6 +67,7 @@ type JobFieldsSnapshot = {
 };
 
 const EMPTY_OVERVIEW: JobOverviewDraft = {
+  bookedDate: '',
   attendanceDate: '',
   statusLookupId: '',
   statusExternalReference: '',
@@ -342,7 +343,9 @@ export function JobDetail({
     [pathname, router, searchParams],
   );
 
-  const persistPending = useCallback(async (): Promise<{
+  const persistPending = useCallback(async (opts?: {
+    forceDates?: boolean;
+  }): Promise<{
     success: boolean;
     error?: string;
   }> => {
@@ -351,6 +354,12 @@ export function JobDetail({
     }
 
     const overviewPending = overviewRef.current?.getPendingUpdate() ?? null;
+    const publishDates = opts?.forceDates
+      ? overviewRef.current?.getCurrentDates() ?? null
+      : null;
+    const hasPublishDates = Boolean(
+      publishDates?.bookedDate || publishDates?.attendanceDate,
+    );
     const typePending =
       isCrunchwork && showTypeDetails
         ? typeDetailsRef.current?.getPendingUpdate() ?? null
@@ -358,7 +367,7 @@ export function JobDetail({
     const assigneeSnapshot = assignedToUserIdRef.current;
     const assigneeChanged = assigneeSnapshot !== committedAssignee;
 
-    if (!overviewPending && !typePending && !assigneeChanged) {
+    if (!overviewPending && !typePending && !assigneeChanged && !hasPublishDates) {
       setSaveError(null);
       return { success: true };
     }
@@ -367,6 +376,15 @@ export function JobDetail({
     skipFieldUndoRef.current = false;
 
     const typeSnapshot = JSON.stringify(typePending);
+    const overviewPayload = {
+      ...(overviewPending ?? {}),
+      ...(hasPublishDates
+        ? {
+            bookedDate: publishDates?.bookedDate ?? null,
+            attendanceDate: publishDates?.attendanceDate ?? null,
+          }
+        : {}),
+    };
 
     saveInFlightRef.current = true;
     setSaving(true);
@@ -374,11 +392,11 @@ export function JobDetail({
     setSaveError(null);
     try {
       const mergedTypeDetails = {
-        ...(overviewPending?.typeDetails ?? {}),
+        ...(overviewPayload.typeDetails ?? {}),
         ...(typePending?.typeDetails ?? {}),
       };
       const result = await updateJobFieldsAction(job.id, {
-        ...(overviewPending ?? {}),
+        ...overviewPayload,
         ...(typePending ?? {}),
         ...(assigneeChanged
           ? { assignedToUserId: assigneeSnapshot || null }
@@ -392,8 +410,8 @@ export function JobDetail({
         setSaveError(message);
         return { success: false, error: message };
       }
-      if (overviewPending) {
-        overviewRef.current?.markClean(overviewPending);
+      if (overviewPending || hasPublishDates) {
+        overviewRef.current?.markClean(overviewPayload);
       }
       const typeNow = JSON.stringify(
         isCrunchwork && showTypeDetails
@@ -489,7 +507,7 @@ export function JobDetail({
     setPublishing(true);
     setSaveError(null);
     try {
-      const result = await persistPending();
+      const result = await persistPending({ forceDates: true });
       if (!result.success) {
         return {
           success: false,

@@ -37,8 +37,13 @@ import { PrintButton } from '@/components/shared/PrintButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { jobDisplayName } from '@/components/shared/job-label';
 import { EntityDetailTitle, entityArchiveLabel } from '@/components/shared/EntityDetailTitle';
-import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
-import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
+import {
+  LineItemsProvider,
+  LineItemsTable,
+  type ApiGroup,
+  type LineNoteEditRequest,
+  type LineItemsActions,
+} from '@/components/line-items';
 import {
   fetchRfqLineItemsAction,
   replaceRfqLineItemsAction,
@@ -51,7 +56,6 @@ import {
   type LineNoteTarget,
 } from '@/components/rfqs/LineItemNoteDrawer';
 import { RequestsTab } from '@/components/rfqs/RequestsTab';
-import type { LineNoteEditRequest } from '@/components/quotes/QuoteLineItemsTable';
 
 // ---------- helpers ---------------------------------------------------------
 
@@ -560,26 +564,28 @@ function ScopeItemsTab({
           Loading estimate line items...
         </div>
       )}
-      <QuoteLineItemsTable
+      <LineItemsProvider
         groups={displayGroups ?? []}
-        readOnly
+        mode={estimateGroups ? 'selection' : 'readonly'}
+        enableLineNotes
         showColumnToggles
         quantitiesVisible={includeQuantities}
         pricingVisible={includePricing}
-        onQuantitiesVisibleChange={setIncludeQuantities}
-        onPricingVisibleChange={setIncludePricing}
-        enableLineNotes
-        onEditLineNote={(request: LineNoteEditRequest) => {
-          const mapped = resolveRfqNoteTarget(request, rfqNoteTargets);
-          setNoteTarget(mapped);
-          setNoteDrawerOpen(true);
-        }}
         selection={
           estimateGroups
             ? { selectedIds, onChange: setSelectedIds }
             : undefined
         }
-      />
+        actions={{
+          onEditLineNote: (request: LineNoteEditRequest) => {
+            const mapped = resolveRfqNoteTarget(request, rfqNoteTargets);
+            setNoteTarget(mapped);
+            setNoteDrawerOpen(true);
+          },
+        }}
+      >
+        <LineItemsTable />
+      </LineItemsProvider>
       <LineItemNoteDrawer
         open={noteDrawerOpen}
         onOpenChange={(open) => {

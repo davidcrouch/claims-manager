@@ -35,6 +35,7 @@ import { LineItemSyncService } from './line-item-sync.service';
 import { VisibilityService } from './visibility.service';
 import { LookupResolutionService } from './lookup-resolution.service';
 import { LOOKUP_DOMAINS } from '../constants/lookup-domains';
+import { RecordNumberService } from '../../../common/record-number/record-number.service';
 
 export interface IssuanceResult {
   versionNumber: number;
@@ -65,6 +66,7 @@ export class DocumentIssuanceService {
     private readonly proposalsRepo: ProposalsRepository,
     private readonly billsRepo: BillsRepository,
     private readonly jobsRepo: JobsRepository,
+    private readonly recordNumberService: RecordNumberService,
   ) {}
 
   /**
@@ -375,6 +377,16 @@ export class DocumentIssuanceService {
       latestAvailableVersion: params.versionNumber,
       versionAcknowledged: false,
     };
+
+    const internalNumber = await this.recordNumberService.next({
+      tenantId: params.recipientTenantId,
+      entity: 'work_order',
+      tx,
+    });
+    woData.internalNumber = internalNumber;
+    this.logger.log(
+      `DocumentIssuanceService.createWorkOrderFromPo — assigned internalNumber=${internalNumber} for recipientTenant=${params.recipientTenantId}`,
+    );
 
     const created = await this.workOrdersRepo.create({
       data: woData as WorkOrderInsert,
@@ -772,6 +784,16 @@ export class DocumentIssuanceService {
       statusLookupId: statusLookupId ?? undefined,
       apiPayload: { rfqPayload: src.rfqPayload, sourceRfqId: params.sourceDocumentId },
     };
+
+    const internalNumber = await this.recordNumberService.next({
+      tenantId: params.recipientTenantId,
+      entity: 'job',
+      tx,
+    });
+    jobData.internalNumber = internalNumber;
+    this.logger.log(
+      `DocumentIssuanceService.createJobFromRfq — assigned internalNumber=${internalNumber} for recipientTenant=${params.recipientTenantId}`,
+    );
 
     const created = await this.jobsRepo.create({
       data: jobData as JobInsert,

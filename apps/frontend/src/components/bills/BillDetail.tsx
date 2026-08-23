@@ -36,9 +36,9 @@ import type { Bill, Job } from '@/types/api';
 import { PrintButton } from '@/components/shared/PrintButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { jobDisplayName } from '@/components/shared/job-label';
-import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
+import { LineItemsProvider, LineItemsTable } from '@/components/line-items';
 import { PagedLineItemsTable } from '@/components/quotes/PagedLineItemsTable';
-import { groupsFromDocumentPayload } from '@/components/quotes/quote-line-items.utils';
+import { groupsFromDocumentPayload } from '@/components/line-items';
 import { getPurchaseOrderLineItemsAction } from '@/app/(app)/purchase-orders/actions';
 // ---------- helpers ---------------------------------------------------------
 
@@ -329,7 +329,11 @@ function LineItemsTab({ bill }: { bill: Bill }) {
   const lineItems = (payload.lineItems ?? payload.items ?? []) as Array<Record<string, unknown>>;
 
   if (payloadGroups.length > 0) {
-    return <QuoteLineItemsTable groups={payloadGroups} readOnly />;
+    return (
+      <LineItemsProvider groups={payloadGroups} mode="readonly">
+        <LineItemsTable />
+      </LineItemsProvider>
+    );
   }
 
   if (bill.purchaseOrderId) {

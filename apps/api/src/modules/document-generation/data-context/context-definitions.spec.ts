@@ -46,6 +46,15 @@ describe('data-context definitions', () => {
     expect(slugs).not.toContain('quotes');
   });
 
+  it('defaults job, purchase order, work order, and contacts on for invoice', () => {
+    const slugs = getDefaultEnabledSlugs('invoice');
+    expect(slugs).toContain('job');
+    expect(slugs).toContain('purchase_order');
+    expect(slugs).toContain('work_order');
+    expect(slugs).toContain('contacts');
+    expect(slugs).toContain('claim_contacts');
+  });
+
   it('uses unique related slugs within each definition', () => {
     for (const def of Object.values(CONTEXT_DEFINITIONS)) {
       if (!def) continue;

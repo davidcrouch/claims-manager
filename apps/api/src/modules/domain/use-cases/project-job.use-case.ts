@@ -13,6 +13,7 @@ import {
   ExternalLinksRepository,
   type JobInsert,
 } from '../../../database/repositories';
+import { RecordNumberService } from '../../../common/record-number/record-number.service';
 
 @Injectable()
 export class ProjectJobUseCase implements ProjectionUseCase {
@@ -27,6 +28,7 @@ export class ProjectJobUseCase implements ProjectionUseCase {
     private readonly projectAppointment: ProjectAppointmentUseCase,
     private readonly jobsRepo: JobsRepository,
     private readonly externalLinksRepo: ExternalLinksRepository,
+    private readonly recordNumberService: RecordNumberService,
   ) {}
 
   async execute(params: {
@@ -122,8 +124,16 @@ export class ProjectJobUseCase implements ProjectionUseCase {
       await this.jobsRepo.update({ id: existingEntity.id, data: result.entity, tx });
       jobId = existingEntity.id;
     } else {
+      const internalNumber = await this.recordNumberService.next({
+        tenantId,
+        entity: 'job',
+        tx,
+      });
+      this.logger.log(
+        `ProjectJobUseCase.execute — assigned internalNumber=${internalNumber} for ${externalObjectId}`,
+      );
       const created = await this.jobsRepo.createIfNotExists({
-        data: result.entity as JobInsert,
+        data: { ...result.entity, internalNumber } as JobInsert,
         tx,
       });
       if (created) {

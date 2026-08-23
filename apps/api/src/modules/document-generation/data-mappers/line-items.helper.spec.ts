@@ -1,4 +1,4 @@
-import { buildTemplateGroups, resolveGroupDisplayName, rollupDocumentTotals } from './line-items.helper';
+import { buildTemplateGroups, resolveGroupDisplayName, rollupDocumentTotals, templateGroupsFromPayload } from './line-items.helper';
 
 describe('rollupDocumentTotals', () => {
   it('uses group totals when present', () => {
@@ -80,5 +80,72 @@ describe('resolveGroupDisplayName', () => {
         new Map([['label-1', 'Bedroom']]),
       ),
     ).toBe('Bedroom');
+  });
+});
+
+describe('templateGroupsFromPayload', () => {
+  it('maps API-shaped invoice payload groups', () => {
+    const groups = templateGroupsFromPayload({
+      groups: [
+        {
+          groupLabel: { name: 'Kitchen' },
+          note: 'Wet area',
+          subTotal: 100,
+          length: 4,
+          items: [
+            {
+              name: 'Tile',
+              description: 'Supply and lay tiles',
+              quantity: 10,
+              unitCost: 25,
+              total: 250,
+            },
+          ],
+          scopes: [
+            {
+              name: 'Waterproofing',
+              description: 'Membrane to wet areas',
+              items: [{ name: 'Membrane', description: 'Apply membrane', quantity: 1, unitCost: 80, total: 80 }],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(groups).toEqual([
+      expect.objectContaining({
+        group_name: 'Kitchen',
+        group_note: 'Wet area',
+        group_length: '4',
+        items: [
+          expect.objectContaining({
+            item_name: 'Tile',
+            item_description: 'Supply and lay tiles',
+            item_quantity: '10',
+          }),
+        ],
+        scopes: [
+          expect.objectContaining({
+            scope_name: 'Waterproofing',
+            scope_description: 'Membrane to wet areas',
+          }),
+        ],
+      }),
+    ]);
+  });
+
+  it('wraps flat lineItems into a single group', () => {
+    const groups = templateGroupsFromPayload({
+      lineItems: [{ name: 'Call out', description: 'After hours', quantity: 1, unitCost: 150, total: 150 }],
+    });
+    expect(groups).toHaveLength(1);
+    expect(groups?.[0].items).toEqual([
+      expect.objectContaining({ item_name: 'Call out', item_description: 'After hours' }),
+    ]);
+  });
+
+  it('returns null when payload has no line items', () => {
+    expect(templateGroupsFromPayload({})).toBeNull();
+    expect(templateGroupsFromPayload(null)).toBeNull();
   });
 });

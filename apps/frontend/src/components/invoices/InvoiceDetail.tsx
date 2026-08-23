@@ -40,9 +40,9 @@ import {
   linkJournalAction,
   unlinkJournalAction,
 } from '@/app/(app)/journals/actions';
-import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
+import { LineItemsProvider, LineItemsTable } from '@/components/line-items';
 import { PagedLineItemsTable } from '@/components/quotes/PagedLineItemsTable';
-import { groupsFromDocumentPayload } from '@/components/quotes/quote-line-items.utils';
+import { groupsFromDocumentPayload } from '@/components/line-items';
 import { getPurchaseOrderLineItemsAction } from '@/app/(app)/purchase-orders/actions';
 import { getWorkOrderLineItemsAction } from '@/app/(app)/work-orders/actions';
 import { EntityAttachmentsTab } from '@/components/shared/EntityAttachmentsTab';
@@ -282,7 +282,11 @@ function LineItemsTab({ invoice }: { invoice: Invoice }) {
   const lineItems = (payload.lineItems ?? payload.items ?? []) as Array<Record<string, unknown>>;
 
   if (payloadGroups.length > 0) {
-    return <QuoteLineItemsTable groups={payloadGroups} readOnly />;
+    return (
+      <LineItemsProvider groups={payloadGroups} mode="readonly">
+        <LineItemsTable />
+      </LineItemsProvider>
+    );
   }
 
   if (invoice.purchaseOrderId) {

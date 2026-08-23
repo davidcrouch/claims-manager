@@ -1,0 +1,220 @@
+import { useCallback } from 'react';
+import type { EditableFieldKey, RowEntry } from '../lib/types';
+import {
+  getEditableFields,
+  NAME_COL_FIELDS,
+  ASSEMBLY_EDITABLE_FIELDS,
+  SCOPE_EDITABLE_FIELDS,
+} from '../lib/money';
+
+/** Walk visible rows until the next entry of `kind` (or any row when omitted). */
+function findAdjacentRowIndex(
+  rows: RowEntry[],
+  startIdx: number,
+  direction: -1 | 1,
+  kind?: RowEntry['kind'],
+): number {
+  let idx = startIdx + direction;
+  while (idx >= 0 && idx < rows.length) {
+    if (!kind || rows[idx].kind === kind) return idx;
+    idx += direction;
+  }
+  return -1;
+}
+
+export interface UseKeyboardNavOptions {
+  editState: { rowKey: string; field: EditableFieldKey } | null;
+  setEditState: (state: { rowKey: string; field: EditableFieldKey } | null) => void;
+  visibleRowIndex: RowEntry[];
+  showMarkup: boolean;
+  showGst: boolean;
+  showQuantities: boolean;
+  showPricing: boolean;
+  selectedRows: Set<string>;
+  setSelectedRows: React.Dispatch<React.SetStateAction<Set<string>>>;
+  initRow: (rowKey: string, entry: RowEntry) => void;
+}
+
+/**
+ * Hook that handles keyboard navigation within the line items table.
+ * Arrow keys move between cells; Tab cycles through fields; Escape/Enter commit.
+ */
+export function useKeyboardNav({
+  editState,
+  setEditState,
+  visibleRowIndex,
+  showMarkup,
+  showGst,
+  showQuantities,
+  showPricing,
+  selectedRows,
+  setSelectedRows,
+  initRow,
+}: UseKeyboardNavOptions) {
+  const navigateToRow = useCallback(
+    (rowIdx: number, field: EditableFieldKey) => {
+      if (rowIdx < 0 || rowIdx >= visibleRowIndex.length) return;
+      const target = visibleRowIndex[rowIdx];
+      const assemblyFields = showQuantities
+        ? ASSEMBLY_EDITABLE_FIELDS
+        : ASSEMBLY_EDITABLE_FIELDS.filter((f) => f !== 'quantity');
+      const scopeFields = showQuantities
+        ? SCOPE_EDITABLE_FIELDS
+        : SCOPE_EDITABLE_FIELDS.filter((f) => f !== 'quantity');
+
+      let effectiveField = field;
+      if (target.kind === 'assembly') {
+        effectiveField = assemblyFields.includes(field) ? field : 'name';
+      } else if (target.kind === 'scope') {
+        effectiveField = scopeFields.includes(field) ? field : 'name';
+      }
+
+      initRow(target.key, target);
+      setEditState({ rowKey: target.key, field: effectiveField });
+    },
+    [visibleRowIndex, showQuantities, initRow, setEditState],
+  );
+
+  const handleCellKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (!editState) return;
+
+      const currentRow = visibleRowIndex.find((r) => r.key === editState.rowKey);
+      const assemblyFields = showQuantities
+        ? ASSEMBLY_EDITABLE_FIELDS
+        : ASSEMBLY_EDITABLE_FIELDS.filter((f) => f !== 'quantity');
+      const scopeFields = showQuantities
+        ? SCOPE_EDITABLE_FIELDS
+        : SCOPE_EDITABLE_FIELDS.filter((f) => f !== 'quantity');
+      const fields =
+        currentRow?.kind === 'assembly'
+          ? assemblyFields
+          : currentRow?.kind === 'scope'
+            ? scopeFields
+            : getEditableFields(showMarkup, showGst, showQuantities, showPricing);
+
+      const colIdx = fields.indexOf(editState.field);
+      const inNameCol = NAME_COL_FIELDS.includes(editState.field);
+
+      switch (e.key) {
+        case 'ArrowLeft':
+          e.preventDefault();
+          if (editState.field === 'component') {
+            setEditState({ ...editState, field: 'name' });
+          } else if (editState.field === 'description') {
+            setEditState({ ...editState, field: 'component' });
+          } else if (!inNameCol && colIdx > 0) {
+            const prev = fields[colIdx - 1];
+            setEditState({ ...editState, field: prev === 'description' ? 'component' : prev });
+          }
+          break;
+
+        case 'ArrowRight':
+          e.preventDefault();
+          if (editState.field === 'name') {
+            setEditState({ ...editState, field: 'component' });
+          } else if (editState.field === 'component' || editState.field === 'description') {
+            const nextField = fields.find((f) => !NAME_COL_FIELDS.includes(f));
+            if (nextField) setEditState({ ...editState, field: nextField });
+          } else if (colIdx < fields.length - 1) {
+            setEditState({ ...editState, field: fields[colIdx + 1] });
+          }
+          break;
+
+        case 'ArrowUp': {
+          e.preventDefault();
+          if (selectedRows.size > 1) break;
+          const rowIdx = visibleRowIndex.findIndex((r) => r.key === editState.rowKey);
+          if (rowIdx < 0) break;
+
+          if (currentRow?.kind === 'item' && NAME_COL_FIELDS.includes(editState.field)) {
+            const prevIdx = findAdjacentRowIndex(visibleRowIndex, rowIdx, -1, 'item');
+            if (prevIdx >= 0) navigateToRow(prevIdx, editState.field);
+            break;
+          }
+
+          if (editState.field === 'description') {
+            setEditState({ ...editState, field: 'name' });
+          } else if (editState.field === 'name' || editState.field === 'component') {
+            if (rowIdx > 0) navigateToRow(rowIdx - 1, 'description');
+          } else if (rowIdx > 0) {
+            navigateToRow(rowIdx - 1, editState.field);
+          }
+          break;
+        }
+
+        case 'ArrowDown': {
+          e.preventDefault();
+          if (selectedRows.size > 1) break;
+          const rowIdx = visibleRowIndex.findIndex((r) => r.key === editState.rowKey);
+          if (rowIdx < 0) break;
+
+          if (currentRow?.kind === 'item' && NAME_COL_FIELDS.includes(editState.field)) {
+            const nextIdx = findAdjacentRowIndex(visibleRowIndex, rowIdx, 1, 'item');
+            if (nextIdx >= 0) navigateToRow(nextIdx, editState.field);
+            break;
+          }
+
+          if (editState.field === 'name' || editState.field === 'component') {
+            setEditState({ ...editState, field: 'description' });
+          } else if (editState.field === 'description') {
+            if (rowIdx < visibleRowIndex.length - 1) navigateToRow(rowIdx + 1, 'name');
+          } else if (rowIdx < visibleRowIndex.length - 1) {
+            navigateToRow(rowIdx + 1, editState.field);
+          }
+          break;
+        }
+
+        case 'Tab': {
+          e.preventDefault();
+          if (e.shiftKey) {
+            if (editState.field === 'description') {
+              setEditState({ ...editState, field: 'component' });
+            } else if (editState.field === 'component') {
+              setEditState({ ...editState, field: 'name' });
+            } else if (!inNameCol && colIdx > 0) {
+              const prev = fields[colIdx - 1];
+              setEditState({ ...editState, field: prev === 'description' ? 'description' : prev });
+            } else if (inNameCol && editState.field === 'name') {
+              const rowIdx = visibleRowIndex.findIndex((r) => r.key === editState.rowKey);
+              if (rowIdx > 0) {
+                const prevRow = visibleRowIndex[rowIdx - 1];
+                const prevFields =
+                  prevRow.kind === 'assembly'
+                    ? assemblyFields
+                    : prevRow.kind === 'scope'
+                      ? scopeFields
+                      : fields;
+                navigateToRow(rowIdx - 1, prevFields[prevFields.length - 1]);
+              }
+            }
+          } else {
+            if (editState.field === 'name') {
+              setEditState({ ...editState, field: 'component' });
+            } else if (editState.field === 'component') {
+              setEditState({ ...editState, field: 'description' });
+            } else if (colIdx < fields.length - 1) {
+              setEditState({ ...editState, field: fields[colIdx + 1] });
+            } else {
+              const rowIdx = visibleRowIndex.findIndex((r) => r.key === editState.rowKey);
+              if (rowIdx >= 0 && rowIdx < visibleRowIndex.length - 1) {
+                navigateToRow(rowIdx + 1, 'name');
+              }
+            }
+          }
+          break;
+        }
+
+        case 'Escape':
+        case 'Enter':
+          e.preventDefault();
+          setEditState(null);
+          setSelectedRows(new Set());
+          break;
+      }
+    },
+    [editState, setEditState, visibleRowIndex, showMarkup, showGst, showQuantities, showPricing, selectedRows, setSelectedRows, navigateToRow],
+  );
+
+  return { handleCellKeyDown, navigateToRow };
+}

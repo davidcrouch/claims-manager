@@ -42,7 +42,7 @@ const DOCX_MIME =
 /** Canonical filenames under data/templates/ (spaces, as stored in document.file_name). */
 const DOCUMENT_TYPE_TO_FILE: Record<AssignableTemplateType, string> = {
   default: 'SCOPE OF WORK.docx',
-  invoice: 'TAX INVOICE.docx',
+  invoice: 'Invoice Template.docx',
   bill: 'INVOICE.docx',
   rfq: 'REQUEST FOR QUOTATION.docx',
   quote: 'REQUEST FOR QUOTATION.docx',

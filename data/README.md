@@ -95,7 +95,7 @@ wired to Admin → Document Templates:
 
 | File | Assigned scenarios |
 |------|--------------------|
-| `TAX INVOICE.docx` | Invoice |
+| `Invoice Template.docx` | Invoice |
 | `INVOICE.docx` | Bill |
 | `REQUEST FOR QUOTATION.docx` | RFQ, Quote, Purchase Order |
 | `ASSESSMENT.docx` | Assessment |

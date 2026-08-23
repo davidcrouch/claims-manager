@@ -2,7 +2,11 @@ import { BadRequestException, Injectable, Inject, Logger, NotFoundException } fr
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { DRIZZLE } from '../../database/drizzle.module';
 import type { DrizzleDB } from '../../database/drizzle.module';
-import { RfqsRepository, LookupsRepository } from '../../database/repositories';
+import {
+  RfqsRepository,
+  LookupsRepository,
+  ContactsRepository,
+} from '../../database/repositories';
 import {
   rfqGroups,
   rfqCombos,
@@ -39,6 +43,7 @@ export class RfqsService {
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
     private readonly rfqsRepo: RfqsRepository,
     private readonly lookupsRepo: LookupsRepository,
+    private readonly contactsRepo: ContactsRepository,
     private readonly tenantContext: TenantContext,
     private readonly recordNumberService: RecordNumberService,
   ) {}
@@ -86,6 +91,35 @@ export class RfqsService {
     const tenantId = this.tenantContext.getTenantId();
     this.logger.debug(`api:RfqsService.findByQuote quoteId=${params.quoteId} tenantId=${tenantId}`);
     return this.rfqsRepo.findByQuote({ quoteId: params.quoteId, tenantId });
+  }
+
+  async findSentToContact(params: { contactId: string; jobId?: string }) {
+    const tenantId = this.tenantContext.getTenantId();
+    this.logger.debug(
+      `api:RfqsService.findSentToContact contactId=${params.contactId} jobId=${params.jobId ?? ''} tenantId=${tenantId}`,
+    );
+    const contact = await this.contactsRepo.findOne({
+      id: params.contactId,
+      tenantId,
+    });
+    if (!contact) {
+      this.logger.debug(
+        `api:RfqsService.findSentToContact — contact not found contactId=${params.contactId}`,
+      );
+      return [];
+    }
+    const email = contact.email?.trim() || '';
+    if (!email) {
+      this.logger.debug(
+        `api:RfqsService.findSentToContact — contact has no email contactId=${params.contactId}`,
+      );
+      return [];
+    }
+    return this.rfqsRepo.findSentToEmail({
+      tenantId,
+      email,
+      jobId: params.jobId,
+    });
   }
 
   async create(params: { body: Record<string, unknown>; userId?: string }) {

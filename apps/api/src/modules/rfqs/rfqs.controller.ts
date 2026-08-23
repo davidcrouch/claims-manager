@@ -49,6 +49,15 @@ export class RfqsController {
     return this.rfqsService.findByQuote({ quoteId });
   }
 
+  @Get('contact/:contactId')
+  @RequirePermission(P.procurement.read)
+  async findSentToContact(
+    @Param('contactId') contactId: string,
+    @Query('jobId') jobId?: string,
+  ) {
+    return this.rfqsService.findSentToContact({ contactId, jobId });
+  }
+
   @Get(':id/line-items')
   @RequirePermission(P.procurement.read)
   async getLineItems(@Param('id') id: string) {

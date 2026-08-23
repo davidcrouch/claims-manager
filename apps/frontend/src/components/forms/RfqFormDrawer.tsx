@@ -13,7 +13,7 @@ import {
   BottomFormDrawerError,
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
-import { QuoteLineItemsTable } from '@/components/quotes/QuoteLineItemsTable';
+import { LineItemsProvider, LineItemsTable } from '@/components/line-items';
 import { createRfqAction } from '@/app/(app)/mutations';
 import {
   CreateSubmitOverlay,
@@ -25,8 +25,7 @@ import { getQuoteLineItemsAction } from '@/app/(app)/quotes/actions';
 import { JobSelectField } from '@/components/forms/JobSelectField';
 import type { JobOption } from '@/components/shared/job-label';
 import type { Quote } from '@/types/api';
-import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
-import { collectSelectableLineItemIds } from '@/components/quotes/quote-line-items.utils';
+import { collectSelectableLineItemIds, type ApiGroup } from '@/components/line-items';
 
 type WizardStep = 'details' | 'scope';
 
@@ -350,14 +349,17 @@ export function RfqFormDrawer({
                 This estimate has no line items. Add items to the estimate first.
               </p>
             ) : (
-              <QuoteLineItemsTable
+              <LineItemsProvider
                 groups={groups}
+                mode="selection"
                 compact
                 selection={{
                   selectedIds: selectedItemIds,
                   onChange: setSelectedItemIds,
                 }}
-              />
+              >
+                <LineItemsTable />
+              </LineItemsProvider>
             )}
           </div>
         )}

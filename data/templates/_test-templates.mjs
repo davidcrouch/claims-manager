@@ -94,6 +94,28 @@ await testTemplate('Purchase Order Template.docx', {
   groups: sampleGroups,
 }, ['PO-TEST-99', 'Vendor Co', 'PO line item', '$1,234.56']);
 
+const invoiceSample = {
+  invoice_number: 'INV-TEST-99',
+  date: '22-Aug-26',
+  subtotal: '$1,000.00',
+  tax: '$100.00',
+  total: '$1,100.00',
+  to: { name: 'Insurer Ltd', email: 'ap@example.com', address: '1 Insurer St' },
+  client: {
+    name: 'Client Name',
+    address_line1: '1 Client Rd',
+    address_line2: 'Brisbane QLD',
+    home_phone: '07 1111 1111',
+    mobile_phone: '0400 000 000',
+    other_phone: '',
+    email: 'client@example.com',
+  },
+  tenant: { name: '', home_phone: '', mobile_phone: '', other_phone: '' },
+  groups: sampleGroups,
+};
+const invoiceAssertions = ['INV-TEST-99', 'Insurer Ltd', 'Group 1', 'Item 1', 'PO line item', '$1,100.00'];
+await testTemplate('Invoice Template.docx', invoiceSample, invoiceAssertions);
+
 await testTemplate('Request for Quotation Template.docx', {
   rfq_number: 'RFQ-TEST-99',
   sent_date: '22-Aug-26',

@@ -11,6 +11,39 @@ export type ContactInsert = typeof contacts.$inferInsert;
 
 export { normalizePhoneDigits } from '../../common/contact-identity';
 
+/** Strip LIKE wildcards so user input is treated as a literal substring. */
+function escapeIlikeToken(value: string): string {
+  return value.replace(/[%_\\]/g, '');
+}
+
+/**
+ * Case-insensitive partial match on name, email, and phone.
+ * Multi-word queries require every token to match (e.g. "jo sm" → "John Smith").
+ */
+function contactSearchClause(search: string | undefined) {
+  const tokens = (search ?? '')
+    .trim()
+    .split(/\s+/)
+    .map((t) => escapeIlikeToken(t))
+    .filter((t) => t.length > 0);
+  if (tokens.length === 0) return undefined;
+
+  return and(
+    ...tokens.map((token) => {
+      const pattern = `%${token.toLowerCase()}%`;
+      return or(
+        sql`lower(coalesce(${contacts.firstName}, '')) like ${pattern}`,
+        sql`lower(coalesce(${contacts.lastName}, '')) like ${pattern}`,
+        sql`lower(coalesce(${contacts.email}, '')) like ${pattern}`,
+        sql`lower(coalesce(${contacts.mobilePhone}, '')) like ${pattern}`,
+        sql`lower(coalesce(${contacts.homePhone}, '')) like ${pattern}`,
+        sql`lower(coalesce(${contacts.workPhone}, '')) like ${pattern}`,
+        sql`lower(concat_ws(' ', ${contacts.firstName}, ${contacts.lastName})) like ${pattern}`,
+      );
+    }),
+  );
+}
+
 function buildContactsOrderBy(sort?: string) {
   switch (sort) {
     case 'name_desc':
@@ -56,17 +89,9 @@ export class ContactsRepository {
     const limit = Math.min(params.limit ?? 20, 100);
     const skip = (page - 1) * limit;
 
-    const searchPattern = params.search ? `%${params.search}%` : null;
-    let whereClause = searchPattern
-      ? and(
-          eq(contacts.tenantId, params.tenantId),
-          or(
-            ilike(contacts.firstName, searchPattern),
-            ilike(contacts.lastName, searchPattern),
-            ilike(contacts.email, searchPattern),
-            ilike(contacts.mobilePhone, searchPattern),
-          ),
-        )
+    const searchClause = contactSearchClause(params.search);
+    let whereClause = searchClause
+      ? and(eq(contacts.tenantId, params.tenantId), searchClause)
       : eq(contacts.tenantId, params.tenantId);
 
     if (params.typeLookupIds && params.typeLookupIds.length > 0) {

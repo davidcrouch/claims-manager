@@ -565,8 +565,20 @@ const INVOICE_CONTEXT: DataContextDefinition = {
       fields: PO_FIELDS,
       defaultEnabled: true,
     },
+    {
+      entityType: 'WorkOrder',
+      slug: 'work_order',
+      label: 'Work order',
+      description: 'The work order this invoice is billed against',
+      cardinality: 'one',
+      traversalPath: ['workOrderId'],
+      fields: WORK_ORDER_FIELDS,
+      defaultEnabled: true,
+    },
     relatedJob({ defaultEnabled: true }),
-    relatedClaimViaJob({ defaultEnabled: false }),
+    relatedClaimViaJob({ defaultEnabled: true }),
+    relatedContactsViaJob({ defaultEnabled: true }),
+    relatedClaimContactsViaJob({ defaultEnabled: true }),
   ],
 };
 

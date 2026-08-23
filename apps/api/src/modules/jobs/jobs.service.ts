@@ -525,6 +525,13 @@ export class JobsService {
       });
 
       if (needsSync) {
+        const existingApi = (existing.apiPayload as Record<string, unknown> | null) ?? {};
+        const existingCwCustom =
+          existingApi.customData &&
+          typeof existingApi.customData === 'object' &&
+          !Array.isArray(existingApi.customData)
+            ? (existingApi.customData as Record<string, unknown>)
+            : undefined;
         await this.outboundSync.enqueue({
           tenantId,
           connectionId,
@@ -534,6 +541,7 @@ export class JobsService {
           payload: {
             ...params.body,
             externalId: existing.externalReference,
+            ...(existingCwCustom ? { cwCustomData: existingCwCustom } : {}),
           },
           idempotencyKey: `update:job:${params.id}:${Date.now()}`,
           tx,

@@ -19,6 +19,7 @@ export const SYNCED_TRANSFORM_DOCUMENT_TYPES = [
   'purchase_order',
   'work_order',
   'scope_of_work',
+  'invoice',
 ] as const satisfies readonly DocumentType[];
 
 export type SyncedTransformDocumentType =

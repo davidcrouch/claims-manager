@@ -39,7 +39,7 @@ function isGcsAuthError(err: unknown): boolean {
 /** Files expected under `data/templates/`. */
 const TEMPLATE_FILES = [
   'INVOICE.docx',
-  'TAX INVOICE.docx',
+  'Invoice Template.docx',
   'SCOPE OF WORK.docx',
   'REQUEST FOR QUOTATION.docx',
   'ASSESSMENT.docx',
@@ -51,7 +51,7 @@ const TEMPLATE_FILES = [
  */
 const DOCUMENT_TYPE_TO_FILE: Record<AssignableTemplateType, (typeof TEMPLATE_FILES)[number]> = {
   default: 'SCOPE OF WORK.docx',
-  invoice: 'TAX INVOICE.docx',
+  invoice: 'Invoice Template.docx',
   bill: 'INVOICE.docx',
   rfq: 'REQUEST FOR QUOTATION.docx',
   quote: 'REQUEST FOR QUOTATION.docx',

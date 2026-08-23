@@ -74,6 +74,17 @@ describe('enrichSourceSchemaWithDataContext', () => {
     expect(context?.properties?.contacts).toBeDefined();
   });
 
+  it('includes groups for invoice documents', () => {
+    const result = enrichSourceSchemaWithDataContext({
+      documentType: 'invoice',
+      baseSchema: emptyBase,
+      enabledSlugs: null,
+    });
+    expect(result.properties?._context?.properties?.groups?.type).toBe('array');
+    expect(result.properties?._context?.properties?.invoice).toBeDefined();
+    expect(result.properties?._context?.properties?.contacts).toBeDefined();
+  });
+
   it('includes computed totals for RFQ documents', () => {
     const result = enrichSourceSchemaWithDataContext({
       documentType: 'rfq',

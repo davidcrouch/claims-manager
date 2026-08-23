@@ -14,6 +14,7 @@ import {
   PurchaseOrdersRepository,
   type InvoiceInsert,
 } from '../../../database/repositories';
+import { RecordNumberService } from '../../../common/record-number/record-number.service';
 
 function cwPurchaseOrderExternalId(
   payload: Record<string, unknown>,
@@ -41,6 +42,7 @@ export class ProjectInvoiceUseCase implements ProjectionUseCase {
     private readonly lookupsRepo: LookupsRepository,
     private readonly workOrdersRepo: WorkOrdersRepository,
     private readonly purchaseOrdersRepo: PurchaseOrdersRepository,
+    private readonly recordNumberService: RecordNumberService,
     @Optional() private readonly outboundEvents?: OutboundEventsService,
   ) {}
 
@@ -139,8 +141,16 @@ export class ProjectInvoiceUseCase implements ProjectionUseCase {
       });
       invoiceId = existingLink.internalEntityId;
     } else {
+      const internalNumber = await this.recordNumberService.next({
+        tenantId,
+        entity: 'invoice',
+        tx,
+      });
+      this.logger.log(
+        `ProjectInvoiceUseCase.execute — assigned internalNumber=${internalNumber} for ${externalObjectId}`,
+      );
       const created = await this.invoicesRepo.create({
-        data: { tenantId, ...result.entity, originType: 'provider' } as InvoiceInsert,
+        data: { tenantId, ...result.entity, originType: 'provider', internalNumber } as InvoiceInsert,
         tx,
       });
       invoiceId = created.id;

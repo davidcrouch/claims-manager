@@ -4,6 +4,25 @@ import { getSession, getAccessToken } from '@/lib/auth';
 import { createApiClient } from '@/lib/api-client';
 import type { PaginatedResponse, Rfq } from '@/types/api';
 
+export async function fetchRfqsSentToContactAction(
+  contactId: string,
+  jobId?: string,
+): Promise<Rfq[]> {
+  const session = await getSession();
+  if (!session.authenticated) return [];
+
+  const token = await getAccessToken();
+  if (!token) return [];
+
+  const api = createApiClient({ token });
+  try {
+    return await api.getRfqsSentToContact(contactId, jobId);
+  } catch (err) {
+    console.error('[rfqs/actions.fetchRfqsSentToContactAction]', err);
+    return [];
+  }
+}
+
 export async function fetchRfqsAction(params?: {
   page?: number;
   limit?: number;

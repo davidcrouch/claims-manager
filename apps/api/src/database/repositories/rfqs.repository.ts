@@ -3,7 +3,7 @@ import { eq, and, isNull, desc, asc, sql, inArray, or, ilike } from 'drizzle-orm
 import { normalizeListJobIds } from '../../common/list-job-filter';
 import { DRIZZLE } from '../drizzle.module';
 import type { DrizzleDB, DrizzleDbOrTx } from '../drizzle.module';
-import { rfqs } from '../schema';
+import { rfqs, rfqSendRequests, rfqSendRecipients } from '../schema';
 
 export type RfqRow = typeof rfqs.$inferSelect;
 export type RfqInsert = typeof rfqs.$inferInsert;
@@ -141,6 +141,72 @@ export class RfqsRepository {
       .from(rfqs)
       .where(and(eq(rfqs.quoteId, params.quoteId), eq(rfqs.tenantId, params.tenantId)))
       .orderBy(desc(rfqs.updatedAt));
+  }
+
+  /**
+   * RFQs sent to a recipient email (send-request recipients and RFQ "to" email).
+   * Matching is by email only — contact UUID is not used.
+   */
+  async findSentToEmail(params: {
+    tenantId: string;
+    email: string;
+    jobId?: string;
+  }): Promise<RfqRow[]> {
+    const email = params.email.trim().toLowerCase();
+    if (!email) return [];
+
+    let sentWhere = and(
+      eq(rfqs.tenantId, params.tenantId),
+      isNull(rfqs.deletedAt),
+      eq(rfqSendRequests.tenantId, params.tenantId),
+      sql`lower(${rfqSendRecipients.recipientEmail}) = ${email}`,
+    );
+    if (params.jobId) {
+      sentWhere = and(sentWhere, eq(rfqs.jobId, params.jobId));
+    }
+
+    const sentRows = await this.db
+      .select({ rfq: rfqs })
+      .from(rfqs)
+      .innerJoin(rfqSendRequests, eq(rfqSendRequests.rfqId, rfqs.id))
+      .innerJoin(
+        rfqSendRecipients,
+        eq(rfqSendRecipients.sendRequestId, rfqSendRequests.id),
+      )
+      .where(sentWhere)
+      .orderBy(desc(rfqs.updatedAt));
+
+    const byId = new Map<string, RfqRow>();
+    for (const row of sentRows) {
+      byId.set(row.rfq.id, row.rfq);
+    }
+
+    let toWhere = and(
+      eq(rfqs.tenantId, params.tenantId),
+      isNull(rfqs.deletedAt),
+      or(
+        sql`lower(${rfqs.rfqToEmail}) = ${email}`,
+        sql`lower(${rfqs.rfqTo}->>'email') = ${email}`,
+      ),
+    );
+    if (params.jobId) {
+      toWhere = and(toWhere, eq(rfqs.jobId, params.jobId));
+    }
+
+    const toRows = await this.db
+      .select()
+      .from(rfqs)
+      .where(toWhere)
+      .orderBy(desc(rfqs.updatedAt));
+    for (const row of toRows) {
+      byId.set(row.id, row);
+    }
+
+    return [...byId.values()].sort((a, b) => {
+      const aTime = a.updatedAt instanceof Date ? a.updatedAt.getTime() : 0;
+      const bTime = b.updatedAt instanceof Date ? b.updatedAt.getTime() : 0;
+      return bTime - aTime;
+    });
   }
 
   async create(params: { data: RfqInsert; tx?: DrizzleDbOrTx }): Promise<RfqRow> {

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { GroupSchema } from './_shared';
 
 export const InvoiceSourceSchema = z.object({
   company_name: z.string(),
@@ -12,4 +13,5 @@ export const InvoiceSourceSchema = z.object({
   excess_amount: z.string(),
   po_number: z.string(),
   po_name: z.string(),
+  groups: z.array(GroupSchema),
 });

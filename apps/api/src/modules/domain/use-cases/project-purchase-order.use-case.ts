@@ -10,6 +10,7 @@ import {
   ExternalLinksRepository,
   type WorkOrderInsert,
 } from '../../../database/repositories';
+import { RecordNumberService } from '../../../common/record-number/record-number.service';
 
 @Injectable()
 export class ProjectPurchaseOrderUseCase implements ProjectionUseCase {
@@ -22,6 +23,7 @@ export class ProjectPurchaseOrderUseCase implements ProjectionUseCase {
     private readonly lineItemSync: LineItemSyncService,
     private readonly workOrdersRepo: WorkOrdersRepository,
     private readonly externalLinksRepo: ExternalLinksRepository,
+    private readonly recordNumberService: RecordNumberService,
   ) {}
 
   async execute(params: {
@@ -103,8 +105,16 @@ export class ProjectPurchaseOrderUseCase implements ProjectionUseCase {
         );
       }
 
+      const internalNumber = await this.recordNumberService.next({
+        tenantId,
+        entity: 'work_order',
+        tx,
+      });
+      this.logger.log(
+        `ProjectPurchaseOrderUseCase.execute — assigned internalNumber=${internalNumber} for ${externalObjectId}`,
+      );
       const created = await this.workOrdersRepo.create({
-        data: { tenantId, ...result.entity, originType: 'provider' } as WorkOrderInsert,
+        data: { tenantId, ...result.entity, originType: 'provider', internalNumber } as WorkOrderInsert,
         tx,
       });
       woId = created.id;

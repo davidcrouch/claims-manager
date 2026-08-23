@@ -314,4 +314,108 @@ describe('TransformService party contacts', () => {
       ],
     });
   });
+
+  it('maps invoice groups, parties, and totals', async () => {
+    const { result, error } = await service.evaluateJsonata({
+      jsonataRules: TRANSFORM_DEFAULTS.invoice.jsonataRules,
+      sourceData: {
+        _context: {
+          organization: { name: 'Acme Co' },
+          invoice: {
+            invoiceNumber: 'INV-100',
+            internalNumber: 'INV-200010',
+            issueDate: '2026-08-01',
+            receivedDate: null,
+            comments: 'Progress claim 1',
+            subTotal: '1000',
+            totalTax: '100',
+            totalAmount: '1100',
+            excessAmount: '0',
+          },
+          purchase_order: {
+            purchaseOrderNumber: 'PO-50',
+            internalNumber: 'PO-200050',
+            name: 'Roof works',
+            poFrom: { name: 'Insurer Ltd', address: '1 Insurer St' },
+            poToEmail: 'ap@insurer.example',
+            poForName: 'Jane Insured',
+          },
+          work_order: {},
+          job: baseJob,
+          contacts: [
+            {
+              firstName: 'Jane',
+              lastName: 'Insured',
+              email: 'jane@example.com',
+              homePhone: '07 2222 2222',
+              mobilePhone: '0411 111 111',
+              isInsured: true,
+            },
+          ],
+          claim_contacts: [],
+          groups: [
+            {
+              group_name: 'Kitchen',
+              group_note: '',
+              group_subtotal: '$250.00',
+              group_length: '',
+              group_width: '',
+              group_height: '',
+              group_perimeter: '',
+              items: [],
+              combos: [],
+              scopes: [
+                {
+                  scope_name: 'Tiling',
+                  scope_description: 'Supply and lay',
+                  scope_quantity: '1',
+                  scope_subtotal: '$250.00',
+                  scope_note: '',
+                  items: [
+                    {
+                      item_name: 'Wall tiles',
+                      item_description: 'Supply and lay wall tiles',
+                      item_category: 'm2',
+                      item_quantity: '10',
+                      item_unit_cost: '$25.00',
+                      item_tax: '$0.00',
+                      item_total: '$250.00',
+                      item_note: '',
+                    },
+                  ],
+                  combos: [],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    expect(error).toBeUndefined();
+    expect(result).toMatchObject({
+      invoice_number: 'INV-200010',
+      number: 'INV-200010',
+      date: expect.any(String),
+      subtotal: '$1,000.00',
+      tax: '$100.00',
+      total: '$1,100.00',
+      to: { name: 'Insurer Ltd', address: '1 Insurer St' },
+      from: { name: 'Acme Co' },
+      client: { name: 'Jane Insured', email: 'jane@example.com' },
+      po: { number: 'PO-200050', name: 'Roof works' },
+      groups: [
+        {
+          name: 'Kitchen',
+          scopes: [
+            {
+              name: 'Tiling',
+              description: 'Supply and lay',
+              items: [{ name: 'Wall tiles', description: 'Supply and lay wall tiles' }],
+            },
+          ],
+        },
+      ],
+    });
+  });
 });

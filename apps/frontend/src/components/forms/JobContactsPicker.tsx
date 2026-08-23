@@ -173,7 +173,7 @@ export function JobContactsPicker({
   );
 }
 
-function ContactSearchField({
+export function ContactSearchField({
   selectedIds,
   onSelect,
   defaultTypeRefs,
@@ -263,7 +263,7 @@ function ContactSearchField({
 
   function runSearch(value: string, typeIds: string[] | undefined) {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (value.trim().length < 2) {
+    if (value.trim().length < 1) {
       setResults([]);
       setShowDropdown(false);
       return;
@@ -281,7 +281,19 @@ function ContactSearchField({
           typeLookupIds: typeIds,
         });
         const selected = new Set(selectedIds);
-        setResults((res ?? []).filter((r) => !selected.has(r.id)));
+        const tokens = value
+          .trim()
+          .toLowerCase()
+          .split(/\s+/)
+          .filter(Boolean);
+        setResults(
+          (res ?? []).filter((r) => {
+            if (selected.has(r.id)) return false;
+            const hay =
+              `${r.name} ${r.email ?? ''} ${r.mobilePhone ?? ''}`.toLowerCase();
+            return tokens.every((t) => hay.includes(t));
+          }),
+        );
         setShowDropdown(true);
       } finally {
         setSearching(false);
@@ -307,7 +319,7 @@ function ContactSearchField({
               [...allTypeIds].every((tid) => next.has(tid))
             ? undefined
             : [...next];
-      if (query.trim().length >= 2) {
+      if (query.trim().length >= 1) {
         runSearch(query, nextFilter);
       }
       return next;
@@ -317,12 +329,12 @@ function ContactSearchField({
   function selectAllTypes() {
     const next = new Set(contactTypes.map((t) => t.id));
     setSelectedTypeIds(next);
-    if (query.trim().length >= 2) runSearch(query, undefined);
+    if (query.trim().length >= 1) runSearch(query, undefined);
   }
 
   function clearAllTypes() {
     setSelectedTypeIds(new Set());
-    if (query.trim().length >= 2) {
+    if (query.trim().length >= 1) {
       setResults([]);
       setShowDropdown(true);
     }
@@ -366,7 +378,7 @@ function ContactSearchField({
               ))}
             </ul>
           )}
-          {showDropdown && !searching && results.length === 0 && query.trim().length >= 2 && (
+          {showDropdown && !searching && results.length === 0 && query.trim().length >= 1 && (
             <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover px-3 py-2 text-sm text-muted-foreground shadow-md">
               No contacts found. Try a different name or email, or add a new contact below.
             </div>

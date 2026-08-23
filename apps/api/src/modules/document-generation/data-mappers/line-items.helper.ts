@@ -288,3 +288,151 @@ export function buildTemplateGroups(params: {
     };
   });
 }
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+}
+
+function str(value: unknown): string {
+  return value == null ? '' : String(value);
+}
+
+function money(value: unknown): string {
+  if (value == null || value === '') return '';
+  if (typeof value === 'string' && value.trim().startsWith('$')) return value;
+  return formatCurrency(value as string | number);
+}
+
+function asTemplateItem(raw: unknown): TemplateGroupItem {
+  const item = asRecord(raw);
+  if ('item_name' in item || 'item_description' in item) {
+    return {
+      item_name: str(item.item_name),
+      item_description: str(item.item_description),
+      item_category: str(item.item_category),
+      item_quantity: str(item.item_quantity),
+      item_unit_cost: str(item.item_unit_cost),
+      item_tax: str(item.item_tax),
+      item_total: str(item.item_total),
+      item_note: str(item.item_note),
+    };
+  }
+  const unitType = asRecord(item.unitType);
+  return {
+    item_name: str(item.name ?? item.itemName),
+    item_description: str(item.description),
+    item_category: str(item.category ?? unitType.name),
+    item_quantity: formatQuantity(item.quantity as string | number | null | undefined),
+    item_unit_cost: money(item.unitCost ?? item.unitPrice ?? item.rate),
+    item_tax: money(item.tax ?? item.totalTax),
+    item_total: money(item.total ?? item.amount ?? item.lineTotal),
+    item_note: str(item.note),
+  };
+}
+
+function asTemplateCombo(raw: unknown): TemplateCombo {
+  const combo = asRecord(raw);
+  if ('combo_name' in combo || 'combo_description' in combo) {
+    return {
+      combo_name: str(combo.combo_name),
+      combo_description: str(combo.combo_description),
+      combo_quantity: str(combo.combo_quantity),
+      combo_subtotal: str(combo.combo_subtotal),
+      combo_note: str(combo.combo_note),
+      items: Array.isArray(combo.items) ? combo.items.map(asTemplateItem) : [],
+    };
+  }
+  return {
+    combo_name: str(combo.name),
+    combo_description: str(combo.description),
+    combo_quantity: formatQuantity(combo.quantity as string | number | null | undefined),
+    combo_subtotal: money(combo.subTotal ?? combo.total),
+    combo_note: str(combo.note),
+    items: Array.isArray(combo.items) ? combo.items.map(asTemplateItem) : [],
+  };
+}
+
+function asTemplateScope(raw: unknown): TemplateScope {
+  const scope = asRecord(raw);
+  if ('scope_name' in scope || 'scope_description' in scope) {
+    return {
+      scope_name: str(scope.scope_name),
+      scope_description: str(scope.scope_description),
+      scope_quantity: str(scope.scope_quantity),
+      scope_subtotal: str(scope.scope_subtotal),
+      scope_note: str(scope.scope_note),
+      items: Array.isArray(scope.items) ? scope.items.map(asTemplateItem) : [],
+      combos: Array.isArray(scope.combos) ? scope.combos.map(asTemplateCombo) : [],
+    };
+  }
+  return {
+    scope_name: str(scope.name),
+    scope_description: str(scope.description),
+    scope_quantity: formatQuantity(scope.quantity as string | number | null | undefined),
+    scope_subtotal: money(scope.subTotal ?? scope.total),
+    scope_note: str(scope.note),
+    items: Array.isArray(scope.items) ? scope.items.map(asTemplateItem) : [],
+    combos: Array.isArray(scope.combos) ? scope.combos.map(asTemplateCombo) : [],
+  };
+}
+
+function asTemplateGroup(raw: unknown): TemplateGroup {
+  const group = asRecord(raw);
+  if ('group_name' in group) {
+    return {
+      group_name: str(group.group_name),
+      group_note: str(group.group_note),
+      group_subtotal: str(group.group_subtotal),
+      group_length: str(group.group_length),
+      group_width: str(group.group_width),
+      group_height: str(group.group_height),
+      group_perimeter: str(group.group_perimeter),
+      items: Array.isArray(group.items) ? group.items.map(asTemplateItem) : [],
+      combos: Array.isArray(group.combos) ? group.combos.map(asTemplateCombo) : [],
+      scopes: Array.isArray(group.scopes) ? group.scopes.map(asTemplateScope) : [],
+    };
+  }
+  const groupLabel = asRecord(group.groupLabel);
+  return {
+    group_name: str(groupLabel.name ?? group.description),
+    group_note: str(group.note),
+    group_subtotal: money(group.subTotal ?? group.total),
+    group_length: formatDimension(group.length),
+    group_width: formatDimension(group.width),
+    group_height: formatDimension(group.height),
+    group_perimeter: formatDimension(group.perimeter),
+    items: Array.isArray(group.items) ? group.items.map(asTemplateItem) : [],
+    combos: Array.isArray(group.combos) ? group.combos.map(asTemplateCombo) : [],
+    scopes: Array.isArray(group.scopes) ? group.scopes.map(asTemplateScope) : [],
+  };
+}
+
+/**
+ * Convert invoice (or other document) payload groups / flat line items into the
+ * presentation shape expected under `_context.groups`.
+ */
+export function templateGroupsFromPayload(payload: unknown): TemplateGroup[] | null {
+  const record = asRecord(payload);
+  const groups = record.groups;
+  if (Array.isArray(groups) && groups.length > 0) {
+    return groups.map(asTemplateGroup);
+  }
+  const lineItems = record.lineItems ?? record.items;
+  if (Array.isArray(lineItems) && lineItems.length > 0) {
+    return [
+      {
+        group_name: '',
+        group_note: '',
+        group_subtotal: '',
+        group_length: '',
+        group_width: '',
+        group_height: '',
+        group_perimeter: '',
+        items: lineItems.map(asTemplateItem),
+        combos: [],
+        scopes: [],
+      },
+    ];
+  }
+  return null;
+}

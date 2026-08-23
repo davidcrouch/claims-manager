@@ -10,6 +10,7 @@ export type MobilityOption = {
 };
 
 export type JobOverviewDraft = {
+  bookedDate: string;
   attendanceDate: string;
   statusLookupId: string;
   statusExternalReference: string;

@@ -31,6 +31,7 @@ export interface JobOverviewTabHandle {
   getPendingUpdate: () => JobEditPending | null;
   /** @deprecated use getPendingUpdate */
   getPendingDates: () => JobEditPending | null;
+  getCurrentDates: () => { bookedDate: string | null; attendanceDate: string | null };
   getBaseline: () => JobOverviewDraft;
   applyDraft: (draft: JobOverviewDraft) => void;
   reset: () => void;
@@ -152,6 +153,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
   const attendanceDateRaw = asString(pick(custom, 'attendanceDate') ?? pick(api, 'attendanceDate'));
   const completedDate = asString(pick(custom, 'completedDate') ?? pick(api, 'completedDate'));
 
+  const [bookedDate, setBookedDate] = useState(bookedDateRaw ?? '');
   const [attendanceDate, setAttendanceDate] = useState(attendanceDateRaw ?? '');
 
   const [statusLookupId, setStatusLookupId] = useState(job.statusLookupId ?? job.status?.id ?? '');
@@ -164,6 +166,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
 
   // Baselines for dirty detection — updated on markClean so autosave clears dirty
   // before router.refresh() brings matching props.
+  const [savedBookedDate, setSavedBookedDate] = useState(bookedDateRaw ?? '');
   const [savedAttendanceDate, setSavedAttendanceDate] = useState(attendanceDateRaw ?? '');
   const [savedStatusLookupId, setSavedStatusLookupId] = useState(
     job.statusLookupId ?? job.status?.id ?? '',
@@ -176,16 +179,19 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
 
   // Re-seed only when navigating to a different job so in-progress edits survive refresh/tab switches.
   useEffect(() => {
+    const nextBooked = bookedDateRaw ?? '';
     const nextAttendance = attendanceDateRaw ?? '';
     const nextStatusId = job.statusLookupId ?? job.status?.id ?? '';
     const nextStatusExt = job.status?.externalReference ?? '';
     const nextInstructions = job.jobInstructions ?? '';
     const nextVendorExt = vendorExtRefInitial ?? '';
+    setBookedDate(nextBooked);
     setAttendanceDate(nextAttendance);
     setStatusLookupId(nextStatusId);
     setStatusExternalReference(nextStatusExt);
     setJobInstructions(nextInstructions);
     setVendorExtRef(nextVendorExt);
+    setSavedBookedDate(nextBooked);
     setSavedAttendanceDate(nextAttendance);
     setSavedStatusLookupId(nextStatusId);
     setSavedStatusExternalReference(nextStatusExt);
@@ -195,6 +201,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
   }, [job.id]);
 
   const isDirty =
+    bookedDate !== savedBookedDate ||
     attendanceDate !== savedAttendanceDate ||
     (isCrunchwork && (
       statusLookupId !== savedStatusLookupId ||
@@ -207,6 +214,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
   }, [
     isDirty,
     onDirtyChange,
+    bookedDate,
     attendanceDate,
     statusLookupId,
     jobInstructions,
@@ -216,6 +224,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
   const buildPending = (): JobEditPending | null => {
     if (!isDirty) return null;
     const pending: JobEditPending = {
+      bookedDate: bookedDate || null,
       attendanceDate: attendanceDate || null,
     };
     if (isCrunchwork) {
@@ -228,6 +237,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
   };
 
   const reset = () => {
+    setBookedDate(savedBookedDate);
     setAttendanceDate(savedAttendanceDate);
     setStatusLookupId(savedStatusLookupId);
     setStatusExternalReference(savedStatusExternalReference);
@@ -236,6 +246,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
   };
 
   const applyDraft = (next: JobOverviewDraft) => {
+    setBookedDate(next.bookedDate);
     setAttendanceDate(next.attendanceDate);
     setStatusLookupId(next.statusLookupId);
     setStatusExternalReference(next.statusExternalReference);
@@ -245,6 +256,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
 
   const markClean = (saved?: JobEditPending | null) => {
     if (saved) {
+      if (saved.bookedDate !== undefined) setSavedBookedDate(saved.bookedDate ?? '');
       if (saved.attendanceDate !== undefined) setSavedAttendanceDate(saved.attendanceDate ?? '');
       if (saved.statusLookupId !== undefined) setSavedStatusLookupId(saved.statusLookupId ?? '');
       if (saved.statusExternalReference !== undefined) {
@@ -256,6 +268,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
       }
       return;
     }
+    setSavedBookedDate(bookedDate);
     setSavedAttendanceDate(attendanceDate);
     setSavedStatusLookupId(statusLookupId);
     setSavedStatusExternalReference(statusExternalReference);
@@ -266,7 +279,12 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
   useImperativeHandle(ref, () => ({
     getPendingUpdate: buildPending,
     getPendingDates: buildPending,
+    getCurrentDates: () => ({
+      bookedDate: bookedDate || null,
+      attendanceDate: attendanceDate || null,
+    }),
     getBaseline: () => ({
+      bookedDate: savedBookedDate,
       attendanceDate: savedAttendanceDate,
       statusLookupId: savedStatusLookupId,
       statusExternalReference: savedStatusExternalReference,
@@ -280,11 +298,13 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     isDirty: () => isDirty,
   }), [
     isDirty,
+    bookedDate,
     attendanceDate,
     statusLookupId,
     statusExternalReference,
     jobInstructions,
     vendorExtRef,
+    savedBookedDate,
     savedAttendanceDate,
     savedStatusLookupId,
     savedStatusExternalReference,
@@ -426,8 +446,18 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
             label="Booked date"
             value={
               <div className="flex flex-wrap items-center gap-2">
-                <span>{formatDate(bookedDateRaw)}</span>
-                {onAddAppointment && !bookedDateRaw && (
+                {editing ? (
+                  <Input
+                    type="date"
+                    value={toInputDate(bookedDate)}
+                    onChange={(e) => setBookedDate(e.target.value)}
+                    disabled={saving}
+                    className="h-7 w-40 text-sm"
+                  />
+                ) : (
+                  <span>{formatDate(bookedDate || bookedDateRaw)}</span>
+                )}
+                {onAddAppointment && !(bookedDate || bookedDateRaw) && (
                   <Button
                     type="button"
                     size="sm"

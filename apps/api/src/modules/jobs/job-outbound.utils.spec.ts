@@ -1,8 +1,11 @@
 import {
+  applyCrunchworkJobDates,
   buildCrunchworkJobCreateBody,
   claimApiContactsToOutbound,
   isCwUsableLookupRef,
   lookupToCwObject,
+  pickCrunchworkJobDates,
+  toCrunchworkDate,
 } from './job-outbound.utils';
 
 describe('job-outbound.utils', () => {
@@ -99,6 +102,57 @@ describe('job-outbound.utils', () => {
       });
       expect(body).not.toHaveProperty('jobTypeLookupId');
       expect(body).not.toHaveProperty('claimIdLookup');
+    });
+  });
+
+  describe('pickCrunchworkJobDates / applyCrunchworkJobDates', () => {
+    it('converts date-only values to ISO datetimes', () => {
+      expect(toCrunchworkDate('2026-08-23')).toBe('2026-08-23T00:00:00.000Z');
+    });
+
+    it('reads booked and attendance dates from customData', () => {
+      expect(
+        pickCrunchworkJobDates({
+          customData: {
+            bookedDate: '2026-08-23',
+            attendanceDate: '2026-08-24',
+            workflowPhase: 'scheduled',
+          },
+        }),
+      ).toEqual({
+        bookedDate: '2026-08-23T00:00:00.000Z',
+        attendanceDate: '2026-08-24T00:00:00.000Z',
+      });
+    });
+
+    it('overlays dates onto existing CW customData without forwarding internal keys', () => {
+      const body = applyCrunchworkJobDates(
+        { jobInstructions: 'Attend site' },
+        {
+          customData: {
+            bookedDate: '2026-08-23',
+            attendanceDate: '2026-08-24',
+            workflowPhase: 'scheduled',
+          },
+          cwCustomData: { insurerNote: 'keep-me' },
+        },
+      );
+
+      expect(body).toEqual({
+        jobInstructions: 'Attend site',
+        customData: {
+          insurerNote: 'keep-me',
+          bookedDate: '2026-08-23T00:00:00.000Z',
+          attendanceDate: '2026-08-24T00:00:00.000Z',
+        },
+      });
+      expect(body.customData).not.toHaveProperty('workflowPhase');
+    });
+
+    it('leaves the body unchanged when dates are absent', () => {
+      expect(applyCrunchworkJobDates({ status: { externalReference: 'Pending' } }, {})).toEqual({
+        status: { externalReference: 'Pending' },
+      });
     });
   });
 });

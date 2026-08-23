@@ -39,7 +39,7 @@ export function ProposalsPageClient({
           onClick={() => setDrawerOpen(true)}
           className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
         >
-          Create Proposal
+          Receive Proposal
         </Button>
         <PrintButton documentType="proposals_list" entityId="list" />
       </SetHeaderActions>

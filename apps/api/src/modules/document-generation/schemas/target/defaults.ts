@@ -334,16 +334,26 @@ export const TRANSFORM_DEFAULTS: Record<DocumentType, TransformDefault> = {
     }),
   },
 
-  // ── Detail: Flat financial documents ─────────────────────────────────
-
   invoice: {
-    jsonataRules: `{
+    jsonataRules: withPartyContacts(`{
   "company": _context.organization.name,
+  "invoice_number": ${preferInternalNumber('_context.invoice', 'invoiceNumber')},
   "number": ${preferInternalNumber('_context.invoice', 'invoiceNumber')},
   "internal_number": _context.invoice.internalNumber,
+  "name": _context.invoice.invoiceNumber,
   "date": $formatDate(_context.invoice.issueDate),
   "received": $formatDate(_context.invoice.receivedDate),
+  "note": _context.invoice.comments,
   "notes": _context.invoice.comments,
+  "to": {
+    "name": _context.purchase_order.poFrom.name ? _context.purchase_order.poFrom.name : _context.work_order.woFrom.name,
+    "email": _context.purchase_order.poToEmail ? _context.purchase_order.poToEmail : _context.work_order.woToEmail,
+    "address": _context.purchase_order.poFrom.address ? _context.purchase_order.poFrom.address : _context.work_order.woFrom.address,
+    "address_line1": _context.purchase_order.poFrom.address ? _context.purchase_order.poFrom.address : (_context.work_order.woFrom.address ? _context.work_order.woFrom.address : ""),
+    "address_line2": ""
+  },
+  "from": { "name": _context.organization.name },
+  "for_name": _context.purchase_order.poForName ? _context.purchase_order.poForName : _context.work_order.woForName,
   "subtotal": $formatCurrency(_context.invoice.subTotal),
   "tax": $formatCurrency(_context.invoice.totalTax),
   "total": $formatCurrency(_context.invoice.totalAmount),
@@ -352,19 +362,25 @@ export const TRANSFORM_DEFAULTS: Record<DocumentType, TransformDefault> = {
     "number": ${preferInternalNumber('_context.purchase_order', 'purchaseOrderNumber')},
     "internal_number": _context.purchase_order.internalNumber,
     "name": _context.purchase_order.name
-  }
-}`,
-    targetSchema: {
-      type: 'object',
-      properties: {
-        company: { type: 'string' }, number: { type: 'string' }, internal_number: { type: 'string' },
-        date: { type: 'string' }, received: { type: 'string' }, notes: { type: 'string' },
-        subtotal: { type: 'string' }, tax: { type: 'string' }, total: { type: 'string' },
-        excess: { type: 'string' },
-        po: { type: 'object', properties: { number: { type: 'string' }, internal_number: { type: 'string' }, name: { type: 'string' } } },
-      },
-    },
   },
+  "client": $client,
+  "tenant": $tenant,
+  "groups": ${groupedItemsJsonataCtx}
+}`),
+    targetSchema: groupedDocSchema('invoice', {
+      number: { type: 'string' },
+      received: { type: 'string' },
+      notes: { type: 'string' },
+      excess: { type: 'string' },
+      po: {
+        type: 'object',
+        properties: { number: { type: 'string' }, internal_number: { type: 'string' }, name: { type: 'string' } },
+      },
+      ...partyContactTargetProps,
+    }),
+  },
+
+  // ── Detail: Flat financial documents ─────────────────────────────────
 
   bill: {
     jsonataRules: `{

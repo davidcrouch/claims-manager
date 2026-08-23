@@ -910,3 +910,21 @@
   Document templates pull richer party, assessment, and financial data into printed output.
   List screens across the application use consistent server-side filtering and loading states.
   Outbound webhooks and projection events carry entity numbers and updated party information.
+
+- `2026-08-24` `c3f12a2` **0.5 h**
+  **fix(api): resolve CI typecheck failures.** Remove unsupported tx argument from quotesRepo.findOne and use filesystem category displayName instead of the removed name field.
+
+- `2026-08-24` `53d51e0` **0.5 h**
+  **test(api): expect three providers in registry summary.** Update providers findAll spec for the more0-ensure registry entry introduced alongside the direct provider.
+
+- `2026-08-24` `3345435` **12 h**
+  `93 files | +8465 −5927 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
+  Lay summary: Quote and related line lists are easier to group and edit, invoices print from a proper template, and the people on a job go through to the partner system.
+  **Rebuilt line-item editing and invoice documents, and sent job contacts to the partner system.**
+  Staff can group, search, reorder, and edit quote and catalogue lines in place, with totals, notes, and drag-and-drop from the catalogue.
+  The same line editor is used on quotes, bills, invoices, work orders, and related screens so editing feels consistent.
+  Invoices now generate from a dedicated printed template with grouped line items, quantities, rates, and amounts.
+  Requests for quotation carry the right contacts and selected lines through create, edit, and issue.
+  Job people are chosen more clearly on the job screen and those contacts are included when the job is sent to the partner workflow.
+  Document output and partner updates stay in step with the latest line groups, parties, and job dates.
+

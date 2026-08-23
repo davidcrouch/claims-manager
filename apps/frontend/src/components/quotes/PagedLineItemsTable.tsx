@@ -3,9 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { QuoteLineItemsTable, type QuoteLineItemsTableProps } from '@/components/quotes/QuoteLineItemsTable';
-import { LINE_ITEMS_PAGE_SIZE } from '@/components/quotes/quote-line-items.utils';
-import type { ApiGroup } from '@/components/quotes/quote-line-items.types';
+import {
+  LineItemsProvider,
+  LineItemsTable,
+  type ApiGroup,
+  type LineItemsMode,
+  type LineItemsActions,
+  LINE_ITEMS_PAGE_SIZE,
+} from '@/components/line-items';
 import type { LineItemsPageQuery } from '@/types/api';
 
 const PREFIX = 'frontend:PagedLineItemsTable';
@@ -18,20 +23,27 @@ type LineItemsFetchResult = {
   error?: string;
 };
 
+export interface PagedLineItemsTableProps {
+  documentId: string;
+  loadAction: (id: string, query?: LineItemsPageQuery) => Promise<LineItemsFetchResult>;
+  fallbackGroups?: ApiGroup[];
+  emptyLabel?: string;
+  reloadToken?: number;
+  readOnly?: boolean;
+  mode?: LineItemsMode;
+  actions?: LineItemsActions;
+}
+
 export function PagedLineItemsTable({
   documentId,
   loadAction,
   fallbackGroups,
   emptyLabel,
   reloadToken = 0,
-  ...tableProps
-}: {
-  documentId: string;
-  loadAction: (id: string, query?: LineItemsPageQuery) => Promise<LineItemsFetchResult>;
-  fallbackGroups?: ApiGroup[];
-  emptyLabel?: string;
-  reloadToken?: number;
-} & Omit<QuoteLineItemsTableProps, 'groups' | 'paging'>) {
+  readOnly = true,
+  mode,
+  actions,
+}: PagedLineItemsTableProps) {
   const [groups, setGroups] = useState<ApiGroup[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -155,10 +167,12 @@ export function PagedLineItemsTable({
     );
   }
 
+  const effectiveMode: LineItemsMode = mode ?? (readOnly ? 'readonly' : 'edit');
+
   return (
-    <QuoteLineItemsTable
-      {...tableProps}
+    <LineItemsProvider
       groups={groups}
+      mode={effectiveMode}
       paging={
         useFallback
           ? undefined
@@ -175,6 +189,9 @@ export function PagedLineItemsTable({
               serverFiltered: true,
             }
       }
-    />
+      actions={actions}
+    >
+      <LineItemsTable />
+    </LineItemsProvider>
   );
 }

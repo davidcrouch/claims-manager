@@ -36,7 +36,7 @@ import { PrintButton } from '@/components/shared/PrintButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { jobDisplayName } from '@/components/shared/job-label';
 import { PagedLineItemsTable } from '@/components/quotes/PagedLineItemsTable';
-import { groupsFromDocumentPayload } from '@/components/quotes/quote-line-items.utils';
+import { groupsFromDocumentPayload } from '@/components/line-items';
 import { getProposalLineItemsAction } from '@/app/(app)/proposals/actions';
 
 // ---------- helpers ---------------------------------------------------------

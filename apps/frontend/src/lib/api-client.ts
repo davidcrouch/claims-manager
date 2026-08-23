@@ -1196,6 +1196,13 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<Rfq[]>(`/rfqs/quote/${quoteId}`);
     },
 
+    getRfqsSentToContact(contactId: string, jobId?: string): Promise<Rfq[]> {
+      const sp = new URLSearchParams();
+      if (jobId) sp.set('jobId', jobId);
+      const qs = sp.toString();
+      return fetchApi<Rfq[]>(`/rfqs/contact/${contactId}${qs ? `?${qs}` : ''}`);
+    },
+
     createRfq(body: Record<string, unknown>): Promise<Rfq> {
       return fetchApi<Rfq>('/rfqs', { method: 'POST', body: JSON.stringify(body) });
     },

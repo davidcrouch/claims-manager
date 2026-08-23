@@ -42,7 +42,7 @@ import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { EntityDetailTitle, entityArchiveLabel, entityDetailName } from '@/components/shared/EntityDetailTitle';
 import { jobDisplayName } from '@/components/shared/job-label';
 import { PagedLineItemsTable } from '@/components/quotes/PagedLineItemsTable';
-import { groupsFromDocumentPayload } from '@/components/quotes/quote-line-items.utils';
+import { groupsFromDocumentPayload } from '@/components/line-items';
 import { getWorkOrderLineItemsAction } from '@/app/(app)/work-orders/actions';
 import { EntityAttachmentsTab } from '@/components/shared/EntityAttachmentsTab';
 

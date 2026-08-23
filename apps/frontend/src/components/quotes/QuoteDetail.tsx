@@ -60,7 +60,7 @@ import {
 } from '@/components/shared/DetailAssignee';
 import { jobDisplayName } from '@/components/shared/job-label';
 import { EntityDetailTitle, entityArchiveLabel } from '@/components/shared/EntityDetailTitle';
-import { QuoteLineItemsTab, type LineItemEdits, type QuoteLineItemsTabHandle } from '@/components/quotes/QuoteLineItemsTab';
+import { QuoteLineItemsTabV2 as QuoteLineItemsTab, type LineItemEdits, type QuoteLineItemsTabHandle } from '@/components/line-items/QuoteLineItemsTabV2';
 import {
   QuoteOverviewTab,
   type QuoteOverviewTabHandle,

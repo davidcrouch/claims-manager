@@ -134,3 +134,60 @@ export function buildCrunchworkJobCreateBody(params: {
 
   return body;
 }
+
+export const CRUNCHWORK_JOB_DATE_FIELDS = ['bookedDate', 'attendanceDate'] as const;
+
+export type CrunchworkJobDateField = (typeof CRUNCHWORK_JOB_DATE_FIELDS)[number];
+
+/** Convert a date-only or ISO string to the ISO-8601 datetime CW expects. */
+export function toCrunchworkDate(value: unknown): string | null {
+  if (value == null || value === '') return null;
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return `${trimmed}T00:00:00.000Z`;
+  }
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return trimmed;
+  return parsed.toISOString();
+}
+
+/**
+ * Read booked/attendance dates from an outbound job payload.
+ * Local edits live on customData; some inbound CW payloads also set them top-level.
+ */
+export function pickCrunchworkJobDates(
+  payload: Record<string, unknown>,
+): Partial<Record<CrunchworkJobDateField, string>> {
+  const custom = isPlainObject(payload.customData) ? payload.customData : {};
+  const out: Partial<Record<CrunchworkJobDateField, string>> = {};
+  for (const key of CRUNCHWORK_JOB_DATE_FIELDS) {
+    const iso = toCrunchworkDate(payload[key] ?? custom[key]);
+    if (iso) out[key] = iso;
+  }
+  return out;
+}
+
+/**
+ * Overlay booked/attendance onto CW customData (preserving existing CW keys).
+ * Local-only customData keys are not forwarded.
+ */
+export function applyCrunchworkJobDates(
+  body: Record<string, unknown>,
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  const dates = pickCrunchworkJobDates(payload);
+  if (Object.keys(dates).length === 0) return body;
+
+  const existingCwCustom = isPlainObject(payload.cwCustomData)
+    ? payload.cwCustomData
+    : {};
+  return {
+    ...body,
+    customData: {
+      ...existingCwCustom,
+      ...dates,
+    },
+  };
+}
