@@ -769,7 +769,7 @@ export class DocumentsService {
     if (!categoryId) return null;
     try {
       const cat = await this.filesystemsRepo.findCategoryById(categoryId);
-      return cat?.name ?? null;
+      return cat?.displayName ?? null;
     } catch {
       return null;
     }

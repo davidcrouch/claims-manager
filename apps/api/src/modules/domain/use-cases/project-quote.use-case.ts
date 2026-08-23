@@ -77,7 +77,7 @@ export class ProjectQuoteUseCase implements ProjectionUseCase {
     let quoteId: string;
     let previousStatusLookupId: string | null = null;
     if (existingLink) {
-      const existing = await this.quotesRepo.findOne({ id: existingLink.internalEntityId, tenantId, tx });
+      const existing = await this.quotesRepo.findOne({ id: existingLink.internalEntityId, tenantId });
       previousStatusLookupId = existing?.statusLookupId ?? null;
       await this.quotesRepo.update({ id: existingLink.internalEntityId, data: result.entity, tx });
       quoteId = existingLink.internalEntityId;
