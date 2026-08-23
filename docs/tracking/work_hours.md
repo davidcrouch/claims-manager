@@ -928,7 +928,7 @@
   Job people are chosen more clearly on the job screen and those contacts are included when the job is sent to the partner workflow.
   Document output and partner updates stay in step with the latest line groups, parties, and job dates.
 
-- `2026-08-24` `pending` **1 h**
+- `2026-08-24` `ae090b1` **1 h**
   `9 files | +116 −49 | Tier 2 standard | Moderate orchestration`
   Lay summary: Quote and catalogue line edits now stay on screen and save correctly, including when several lines are changed together.
   **Fixed quote and catalogue line editing so typed changes stay visible and actually save.**
