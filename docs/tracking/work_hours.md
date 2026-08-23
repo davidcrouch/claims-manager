@@ -917,7 +917,7 @@
 - `2026-08-24` `53d51e0` **0.5 h**
   **test(api): expect three providers in registry summary.** Update providers findAll spec for the more0-ensure registry entry introduced alongside the direct provider.
 
-- `2026-08-24` `3345435` **12 h**
+- `2026-08-24` `d63704b` **12 h**
   `93 files | +8465 −5927 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
   Lay summary: Quote and related line lists are easier to group and edit, invoices print from a proper template, and the people on a job go through to the partner system.
   **Rebuilt line-item editing and invoice documents, and sent job contacts to the partner system.**
