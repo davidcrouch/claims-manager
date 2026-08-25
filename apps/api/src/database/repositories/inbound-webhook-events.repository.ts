@@ -103,6 +103,16 @@ export class InboundWebhookEventsRepository {
       .limit(params.limit ?? 20);
   }
 
+  private connectionTenantCondition(connectionId: string, tenantId: string) {
+    return and(
+      eq(inboundWebhookEvents.connectionId, connectionId),
+      or(
+        eq(inboundWebhookEvents.tenantId, tenantId),
+        eq(inboundWebhookEvents.payloadTenantId, tenantId),
+      )!,
+    )!;
+  }
+
   /**
    * Build a WHERE condition matching events belonging to a provider+tenant.
    * Matches events where:
@@ -162,6 +172,7 @@ export class InboundWebhookEventsRepository {
     connectionId: string;
     tenantId: string;
     status?: string;
+    eventType?: string;
     search?: string;
     sort?: string;
     page?: number;
@@ -170,14 +181,10 @@ export class InboundWebhookEventsRepository {
     const limit = params.limit ?? 20;
     const offset = ((params.page ?? 1) - 1) * limit;
 
-    const ownership = and(
-      eq(inboundWebhookEvents.connectionId, params.connectionId),
-      or(
-        eq(inboundWebhookEvents.tenantId, params.tenantId),
-        eq(inboundWebhookEvents.payloadTenantId, params.tenantId),
-      )!,
-    )!;
-    let whereClause = ownership;
+    let whereClause = this.connectionTenantCondition(
+      params.connectionId,
+      params.tenantId,
+    );
     const statuses =
       params.status?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
     if (statuses.length === 1) {
@@ -186,6 +193,16 @@ export class InboundWebhookEventsRepository {
       whereClause = and(
         whereClause,
         inArray(inboundWebhookEvents.processingStatus, statuses),
+      )!;
+    }
+    const eventTypes =
+      params.eventType?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
+    if (eventTypes.length === 1) {
+      whereClause = and(whereClause, eq(inboundWebhookEvents.eventType, eventTypes[0]))!;
+    } else if (eventTypes.length > 1) {
+      whereClause = and(
+        whereClause,
+        inArray(inboundWebhookEvents.eventType, eventTypes),
       )!;
     }
     if (params.search?.trim()) {
@@ -216,19 +233,25 @@ export class InboundWebhookEventsRepository {
     return { data, total: countResult[0]?.count ?? 0 };
   }
 
+  async distinctEventTypesByConnectionId(params: {
+    connectionId: string;
+    tenantId: string;
+  }): Promise<string[]> {
+    const rows = await this.db
+      .selectDistinct({ eventType: inboundWebhookEvents.eventType })
+      .from(inboundWebhookEvents)
+      .where(this.connectionTenantCondition(params.connectionId, params.tenantId))
+      .orderBy(asc(inboundWebhookEvents.eventType));
+    return rows
+      .map((row) => (row.eventType ?? '').trim())
+      .filter(Boolean);
+  }
+
   async countByConnectionId(params: { connectionId: string; tenantId: string }): Promise<number> {
     const [result] = await this.db
       .select({ count: drizzleCount() })
       .from(inboundWebhookEvents)
-      .where(
-        and(
-          eq(inboundWebhookEvents.connectionId, params.connectionId),
-          or(
-            eq(inboundWebhookEvents.tenantId, params.tenantId),
-            eq(inboundWebhookEvents.payloadTenantId, params.tenantId),
-          )!,
-        ),
-      );
+      .where(this.connectionTenantCondition(params.connectionId, params.tenantId));
     return result?.count ?? 0;
   }
 
@@ -238,11 +261,7 @@ export class InboundWebhookEventsRepository {
       .from(inboundWebhookEvents)
       .where(
         and(
-          eq(inboundWebhookEvents.connectionId, params.connectionId),
-          or(
-            eq(inboundWebhookEvents.tenantId, params.tenantId),
-            eq(inboundWebhookEvents.payloadTenantId, params.tenantId),
-          )!,
+          this.connectionTenantCondition(params.connectionId, params.tenantId),
           eq(inboundWebhookEvents.processingStatus, 'failed'),
         ),
       );
@@ -253,15 +272,7 @@ export class InboundWebhookEventsRepository {
     const [result] = await this.db
       .select({ lastAt: max(inboundWebhookEvents.createdAt) })
       .from(inboundWebhookEvents)
-      .where(
-        and(
-          eq(inboundWebhookEvents.connectionId, params.connectionId),
-          or(
-            eq(inboundWebhookEvents.tenantId, params.tenantId),
-            eq(inboundWebhookEvents.payloadTenantId, params.tenantId),
-          )!,
-        ),
-      );
+      .where(this.connectionTenantCondition(params.connectionId, params.tenantId));
     return result?.lastAt ?? null;
   }
 

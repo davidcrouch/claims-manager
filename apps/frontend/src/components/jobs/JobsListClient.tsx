@@ -34,20 +34,22 @@ import { formatAddress } from '@/components/shared/detail';
 import { jobDisplayName, jobInsurerReference } from '@/components/shared/job-label';
 import { fetchJobsAction, fetchJobFilterOptionsAction } from '@/app/(app)/jobs/actions';
 import {
+  buildJobsListFetchKey,
+  columnFilterFromIdsParam,
+  columnFilterFromValuesParam,
+  DEFAULT_JOBS_SORT,
+  JOBS_PAGE_SIZE,
+  parseJobsColumnSort,
+  parseJobsListTab,
+  type JobSortField,
+  type JobsListTab,
+} from '@/components/jobs/jobs-list-helpers';
+import {
   createListFetchSession,
   replaceListQueryIfNeeded,
   useListPageData,
 } from '@/components/shared/use-list-page-data';
 import type { Job, PaginatedResponse } from '@/types/api';
-
-const PAGE_SIZE = 20;
-
-type ListTab = 'active' | 'archived' | 'all';
-const VALID_TABS = new Set<ListTab>(['active', 'archived', 'all']);
-function parseTab(param: string | null): ListTab {
-  if (param && VALID_TABS.has(param as ListTab)) return param as ListTab;
-  return 'active';
-}
 
 function jobListAddress(job: Job): string {
   return formatAddress(job.address as Record<string, unknown> | undefined, {
@@ -58,16 +60,6 @@ function jobListAddress(job: Job): string {
 function jobListRef(job: Job): string {
   return jobDisplayName(job);
 }
-
-type JobSortField =
-  | 'external_reference'
-  | 'external_job_id'
-  | 'status'
-  | 'job_type'
-  | 'assignee'
-  | 'address'
-  | 'request_date'
-  | 'updated_at';
 
 interface ColDef {
   key: JobSortField;
@@ -90,6 +82,8 @@ const TABLE_COLUMNS: ColDef[] = [
 
 export interface JobsListClientProps {
   initialData: PaginatedResponse<Job>;
+  /** Skip the first client fetch when it matches SSR / picker bootstrap. */
+  initialFetchKey?: string;
   statusOptions: StatusOption[];
   jobTypes?: { id: string; name?: string }[];
   unreadJobIds?: string[];
@@ -111,6 +105,7 @@ export interface JobsListClientProps {
 
 export function JobsListClient({
   initialData,
+  initialFetchKey,
   statusOptions,
   jobTypes = [],
   unreadJobIds,
@@ -124,32 +119,43 @@ export function JobsListClient({
   const isPicker = variant === 'picker';
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { data, setData, beginFetch, abortFetch } = useListPageData(initialData);
+  const { data, setData, beginFetch, abortFetch } = useListPageData(initialData, {
+    initialFetchKey,
+  });
   const unreadSet = useMemo(() => new Set(unreadJobIds ?? []), [unreadJobIds]);
+  const initialRefFilter = useMemo(
+    () =>
+      isPicker
+        ? { selected: new Set<string>(), active: false }
+        : columnFilterFromValuesParam(searchParams.get('refs')),
+    [isPicker, searchParams],
+  );
   const [search, setSearch] = useState(() =>
     isPicker ? '' : (searchParams.get('search') ?? ''),
   );
   const [debouncedSearch, setDebouncedSearch] = useState(search);
-  const [tab, setTab] = useState<ListTab>(() =>
-    isPicker ? 'active' : parseTab(searchParams.get('tab')),
+  const [tab, setTab] = useState<JobsListTab>(() =>
+    isPicker ? 'active' : parseJobsListTab(searchParams.get('tab')),
   );
   const [page, setPage] = useState(() => {
     if (isPicker) return 1;
     const p = parseInt(searchParams.get('page') ?? '1', 10);
     return Number.isFinite(p) && p > 0 ? p : 1;
   });
-  const [columnSort, setColumnSort] = useState<{ field: JobSortField; order: 'asc' | 'desc' }>({
-    field: 'updated_at',
-    order: 'desc',
-  });
+  const [columnSort, setColumnSort] = useState<{ field: JobSortField; order: 'asc' | 'desc' }>(() =>
+    isPicker
+      ? { field: 'updated_at', order: 'desc' }
+      : parseJobsColumnSort(searchParams.get('sort')),
+  );
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
   const [typeFilterActive, setTypeFilterActive] = useState(false);
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [statusFilterActive, setStatusFilterActive] = useState(false);
-  const [refFilter, setRefFilter] = useState<Set<string>>(new Set());
-  const [refFilterActive, setRefFilterActive] = useState(false);
+  const [refFilter, setRefFilter] = useState(initialRefFilter.selected);
+  const [refFilterActive, setRefFilterActive] = useState(initialRefFilter.active);
   const [assigneeFilter, setAssigneeFilter] = useState<Set<string>>(new Set());
   const [assigneeFilterActive, setAssigneeFilterActive] = useState(false);
+  const [filtersHydrated, setFiltersHydrated] = useState(isPicker);
   const [filterOptions, setFilterOptions] = useState<{
     refs: string[];
     assignees: { id: string; name: string }[];
@@ -233,6 +239,39 @@ export function JobsListClient({
     });
   }, []);
 
+  useEffect(() => {
+    if (isPicker || filtersHydrated) return;
+
+    const jobTypeParam = searchParams.get('jobType');
+    const assigneeParam = searchParams.get('assignedToUserIds');
+
+    if (jobTypeParam && typeOptions.length === 0) return;
+    if (assigneeParam && filterOptions.assignees.length === 0) return;
+
+    if (jobTypeParam) {
+      const hydrated = columnFilterFromIdsParam(jobTypeParam, typeOptions);
+      setTypeFilter(hydrated.selected);
+      setTypeFilterActive(hydrated.active);
+    }
+
+    if (assigneeParam) {
+      const hydrated = columnFilterFromIdsParam(assigneeParam, assigneeFilterOptions, {
+        blankId: '__blank__',
+      });
+      setAssigneeFilter(hydrated.selected);
+      setAssigneeFilterActive(hydrated.active);
+    }
+
+    setFiltersHydrated(true);
+  }, [
+    isPicker,
+    filtersHydrated,
+    typeOptions,
+    filterOptions.assignees.length,
+    assigneeFilterOptions,
+    searchParams,
+  ]);
+
   // After create (or other external refresh), jump to page 1 so the new row is visible.
   useEffect(() => {
     if (refreshNonce === 0) return;
@@ -241,58 +280,9 @@ export function JobsListClient({
 
   const sortParam = `${columnSort.field}_${columnSort.order}`;
 
-  // URL sync only — do not tie this to refreshNonce or a create→detail
-  // navigation can race with replace('/jobs?...').
-  useEffect(() => {
-    if (isPicker) return;
-    const params = new URLSearchParams(searchParams.toString());
-    if (debouncedSearch) params.set('search', debouncedSearch);
-    else params.delete('search');
-    if (tab !== 'active') params.set('tab', tab);
-    else params.delete('tab');
-    if (page > 1) params.set('page', String(page));
-    else params.delete('page');
-    if (sortParam !== 'updated_at_desc') params.set('sort', sortParam);
-    else params.delete('sort');
-    if (statusParam) params.set('status', statusParam);
-    else params.delete('status');
-    if (jobTypeParam) params.set('jobType', jobTypeParam);
-    else params.delete('jobType');
-    if (refsParam) params.set('refs', refsParam);
-    else params.delete('refs');
-    if (assignedToUserIdsParam) params.set('assignedToUserIds', assignedToUserIdsParam);
-    else params.delete('assignedToUserIds');
-    const next = params.toString();
-    replaceListQueryIfNeeded({
-      router,
-      pathname: '/jobs',
-      currentQuery: searchParams.toString(),
-      nextQuery: next,
-    });
-  }, [
-    debouncedSearch,
-    sortParam,
-    tab,
-    page,
-    statusParam,
-    jobTypeParam,
-    refsParam,
-    assignedToUserIdsParam,
-    isPicker,
-    searchParams,
-    router,
-  ]);
-
-  useEffect(() => {
-    const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
-    const typeKey = jobTypeParam === null ? '__none__' : (jobTypeParam ?? '');
-    const refsKey = refsParam === null ? '__none__' : (refsParam ?? '');
-    const assigneesKey =
-      assignedToUserIdsParam === null ? '__none__' : (assignedToUserIdsParam ?? '');
-    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${typeKey}|${refsKey}|${assigneesKey}|${refreshNonce}`;
-
+  const runJobsFetch = (fetchKey: string) => {
     const session = createListFetchSession({ fetchKey, beginFetch, abortFetch });
-    if (!session) return;
+    if (!session) return undefined;
 
     if (
       statusParam === null ||
@@ -307,7 +297,7 @@ export function JobsListClient({
     fetchJobsAction({
       search: debouncedSearch || undefined,
       page,
-      limit: PAGE_SIZE,
+      limit: JOBS_PAGE_SIZE,
       sort: sortParam,
       status: statusParam,
       jobType: jobTypeParam,
@@ -318,7 +308,9 @@ export function JobsListClient({
     });
 
     return session.cleanup;
-  }, [
+  };
+
+  const fetchDeps = [
     debouncedSearch,
     sortParam,
     tab,
@@ -328,10 +320,65 @@ export function JobsListClient({
     refsParam,
     assignedToUserIdsParam,
     refreshNonce,
-    searchParams,
+    filtersHydrated,
     beginFetch,
     abortFetch,
-  ]);
+    setData,
+  ] as const;
+
+  const fetchKey = buildJobsListFetchKey({
+    search: debouncedSearch,
+    sort: sortParam,
+    tab,
+    page,
+    status: statusParam,
+    jobType: jobTypeParam,
+    refs: refsParam,
+    assignedToUserIds: assignedToUserIdsParam,
+    refreshNonce,
+  });
+
+  // Page list: sync URL first, then fetch once the query string has settled.
+  useEffect(() => {
+    if (isPicker || !filtersHydrated) return;
+
+    const params = new URLSearchParams(searchParams.toString());
+    if (debouncedSearch) params.set('search', debouncedSearch);
+    else params.delete('search');
+    if (tab !== 'active') params.set('tab', tab);
+    else params.delete('tab');
+    if (page > 1) params.set('page', String(page));
+    else params.delete('page');
+    if (sortParam !== DEFAULT_JOBS_SORT) params.set('sort', sortParam);
+    else params.delete('sort');
+    if (statusParam) params.set('status', statusParam);
+    else params.delete('status');
+    if (jobTypeParam) params.set('jobType', jobTypeParam);
+    else params.delete('jobType');
+    if (refsParam) params.set('refs', refsParam);
+    else params.delete('refs');
+    if (assignedToUserIdsParam) params.set('assignedToUserIds', assignedToUserIdsParam);
+    else params.delete('assignedToUserIds');
+    const next = params.toString();
+    if (
+      !replaceListQueryIfNeeded({
+        router,
+        pathname: '/jobs',
+        currentQuery: searchParams.toString(),
+        nextQuery: next,
+      })
+    ) {
+      return;
+    }
+
+    return runJobsFetch(fetchKey);
+  }, [...fetchDeps, isPicker, searchParams, router, fetchKey]);
+
+  // Picker: isolated from parent-page URL churn (e.g. quotes ?status=…).
+  useEffect(() => {
+    if (!isPicker || !filtersHydrated) return;
+    return runJobsFetch(fetchKey);
+  }, [...fetchDeps, isPicker, fetchKey]);
 
   const handleColumnSort = (field: JobSortField) => {
     setColumnSort((prev) => {
@@ -359,7 +406,7 @@ export function JobsListClient({
   };
 
   const handleTabChange = (val: string) => {
-    setTab(val as ListTab);
+    setTab(val as JobsListTab);
     setPage(1);
   };
 
@@ -496,7 +543,24 @@ export function JobsListClient({
           />
         </SetPageHeader>
       )}
-      <div className={`flex flex-col gap-4 pb-4 pt-1 ${isPicker ? 'px-4' : 'px-6'}`}>
+      <div
+        className={`flex flex-col gap-4 pb-4 pt-1 ${
+          isPicker
+            ? 'sticky top-0 z-10 border-b border-slate-200 bg-background px-4'
+            : 'px-6'
+        }`}
+      >
+        {isPicker && (
+          <p className="text-sm text-slate-500">
+            Showing {visibleRows.length.toLocaleString()} of {data.total.toLocaleString()} jobs
+            {debouncedSearch ? (
+              <>
+                {' '}
+                matching &ldquo;{debouncedSearch}&rdquo;
+              </>
+            ) : null}
+          </p>
+        )}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
           <Tabs value={tab} onValueChange={handleTabChange}>
             <TabsList>
@@ -686,7 +750,7 @@ export function JobsListClient({
             </table>
             <TablePagination
               page={page}
-              pageSize={PAGE_SIZE}
+              pageSize={JOBS_PAGE_SIZE}
               total={data.total}
               onPageChange={handlePageChange}
             />

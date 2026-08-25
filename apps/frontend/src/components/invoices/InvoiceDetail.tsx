@@ -13,12 +13,16 @@ import {
   MessageSquare,
   Paperclip,
   BookOpen,
-  Send,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { BackButton } from '@/components/layout/BackButton';
+import {
+  PageHeaderField,
+  PageHeaderIcon,
+  PageHeaderLayout,
+} from '@/components/layout/PageHeaderLayout';
+import { HeaderActionToolbar } from '@/components/layout/HeaderActionToolbar';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import {
   DefRow,
@@ -29,9 +33,10 @@ import {
 } from '@/components/shared/detail';
 import type { Claim, Invoice, Job } from '@/types/api';
 import { PrintButton } from '@/components/shared/PrintButton';
+import { PublishButton } from '@/components/shared/PublishButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { jobDisplayName } from '@/components/shared/job-label';
-import { EntityDetailTitle, entityArchiveLabel } from '@/components/shared/EntityDetailTitle';
+import { entityArchiveLabel, entityDetailHeaderTitles } from '@/components/shared/EntityDetailTitle';
 import { JournalList } from '@/components/journals/JournalList';
 import {
   fetchJournalsByEntityAction,
@@ -67,33 +72,33 @@ export function InvoicePageHeader({
   const canPublish = !invoice.sourceExternalReference;
   const publishMode: InvoicePublishMode =
     job?.provider === 'crunchwork' ? 'external' : 'internal';
+  const titles = entityDetailHeaderTitles({
+    internalNumber: invoice.internalNumber,
+    secondaryLabel: invoice.invoiceNumber,
+    fallbackId: invoice.id,
+  });
 
   return (
     <>
       <SetHeaderActions>
-        {canPublish && (
-          <Button
-            size="default"
-            onClick={() => setPublishWizardOpen(true)}
-            className="h-9 gap-1.5 px-4 bg-amber-600 text-white hover:bg-amber-500"
-          >
-            <Send className="h-3.5 w-3.5" />
-            Publish
-          </Button>
-        )}
-        <PrintButton documentType="invoice" entityId={invoice.id} jobId={job?.id} />
-        <ArchiveEntityButton
-          entityType="invoice"
-          entityId={invoice.id}
-          statusName={statusName}
-          entityLabel={entityArchiveLabel(
-            invoice.internalNumber,
-            null,
-            invoice.invoiceNumber,
-            invoice.id,
+        <HeaderActionToolbar>
+          {canPublish && (
+            <PublishButton onClick={() => setPublishWizardOpen(true)} />
           )}
-          redirectTo={job ? `/invoices?jobId=${job.id}` : '/invoices'}
-        />
+          <PrintButton documentType="invoice" entityId={invoice.id} jobId={job?.id} />
+          <ArchiveEntityButton
+            entityType="invoice"
+            entityId={invoice.id}
+            statusName={statusName}
+            entityLabel={entityArchiveLabel(
+              invoice.internalNumber,
+              null,
+              invoice.invoiceNumber,
+              invoice.id,
+            )}
+            redirectTo={job ? `/invoices?jobId=${job.id}` : '/invoices'}
+          />
+        </HeaderActionToolbar>
       </SetHeaderActions>
       <InvoicePublishWizard
         open={publishWizardOpen}
@@ -103,61 +108,58 @@ export function InvoicePageHeader({
         claim={claim}
         mode={publishMode}
       />
-      <div className="flex w-full min-w-0 flex-col gap-y-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-          <BackButton href={job ? `/invoices?jobId=${job.id}` : '/invoices'} label="Back to invoices" />
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-teal-100">
-            <Receipt className="h-4 w-4 text-teal-600" />
-          </span>
-          <EntityDetailTitle
-            internalNumber={invoice.internalNumber}
-            secondaryLabel={invoice.invoiceNumber}
-            fallbackId={invoice.id}
+      <PageHeaderLayout
+        leading={<BackButton href={job ? `/invoices?jobId=${job.id}` : '/invoices'} label="Back to invoices" />}
+        icon={
+          <PageHeaderIcon
+            icon={Receipt}
+            className="bg-teal-100"
+            iconClassName="text-teal-600"
           />
-          <StatusBadge status={statusName} />
-          {invoice.purchaseOrderId && (
-            <Link
-              href={`/purchase-orders/${invoice.purchaseOrderId}`}
-              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-            >
-              View PO
-              <ExternalLink className="h-3 w-3" />
-            </Link>
-          )}
-          {!invoice.purchaseOrderId && invoice.workOrderId && (
-            <Link
-              href={`/work-orders/${invoice.workOrderId}`}
-              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-            >
-              View work order
-              <ExternalLink className="h-3 w-3" />
-            </Link>
-          )}
-          {job && (
-            <Link
-              href={`/jobs/${job.id}`}
-              className="inline-flex items-center gap-1 text-xs uppercase text-primary hover:underline"
-            >
-              {jobDisplayName(job)}
-              <ExternalLink className="h-3 w-3" />
-            </Link>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pl-20 text-xs">
-          <div className="flex items-baseline gap-1">
-            <span className="text-muted-foreground">Amount:</span>
-            <span className="font-medium">{formatCurrency(invoice.totalAmount)}</span>
-          </div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-muted-foreground">Issue date:</span>
-            <span className="font-medium">{formatDate(invoice.issueDate)}</span>
-          </div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-muted-foreground">Updated:</span>
-            <span className="font-medium">{formatDateTime(invoice.updatedAt)}</span>
-          </div>
-        </div>
-      </div>
+        }
+        topTitle={titles.topTitle}
+        title={titles.title}
+        titleMono={titles.titleMono}
+        topRow={
+          <>
+            <StatusBadge status={statusName} />
+            {invoice.purchaseOrderId && (
+              <Link
+                href={`/purchase-orders/${invoice.purchaseOrderId}`}
+                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+              >
+                View PO
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            )}
+            {!invoice.purchaseOrderId && invoice.workOrderId && (
+              <Link
+                href={`/work-orders/${invoice.workOrderId}`}
+                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+              >
+                View work order
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            )}
+            {job && (
+              <Link
+                href={`/jobs/${job.id}`}
+                className="inline-flex items-center gap-1 text-xs uppercase text-primary hover:underline"
+              >
+                {jobDisplayName(job)}
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            )}
+          </>
+        }
+        bottomRow={
+          <>
+            <PageHeaderField label="Amount">{formatCurrency(invoice.totalAmount)}</PageHeaderField>
+            <PageHeaderField label="Issue date">{formatDate(invoice.issueDate)}</PageHeaderField>
+            <PageHeaderField label="Updated">{formatDateTime(invoice.updatedAt)}</PageHeaderField>
+          </>
+        }
+      />
     </>
   );
 }
@@ -281,19 +283,14 @@ function LineItemsTab({ invoice }: { invoice: Invoice }) {
   const payloadGroups = groupsFromDocumentPayload(payload);
   const lineItems = (payload.lineItems ?? payload.items ?? []) as Array<Record<string, unknown>>;
 
-  if (payloadGroups.length > 0) {
-    return (
-      <LineItemsProvider groups={payloadGroups} mode="readonly">
-        <LineItemsTable />
-      </LineItemsProvider>
-    );
-  }
-
+  // CW create-invoice responses include groups, but they zero unit costs and send
+  // tax/markup as percentage points. Prefer the linked WO/PO line items.
   if (invoice.purchaseOrderId) {
     return (
       <PagedLineItemsTable
         documentId={invoice.purchaseOrderId}
         loadAction={getPurchaseOrderLineItemsAction}
+        fallbackGroups={payloadGroups}
         emptyLabel="No line items found in this invoice payload."
         readOnly
       />
@@ -305,9 +302,18 @@ function LineItemsTab({ invoice }: { invoice: Invoice }) {
       <PagedLineItemsTable
         documentId={invoice.workOrderId}
         loadAction={getWorkOrderLineItemsAction}
+        fallbackGroups={payloadGroups}
         emptyLabel="No line items found in this invoice payload."
         readOnly
       />
+    );
+  }
+
+  if (payloadGroups.length > 0) {
+    return (
+      <LineItemsProvider groups={payloadGroups} mode="readonly">
+        <LineItemsTable />
+      </LineItemsProvider>
     );
   }
 

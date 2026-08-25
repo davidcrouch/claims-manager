@@ -38,6 +38,14 @@ async function main() {
 
     console.log(`[${LOG}] found ${wrong.length} work orders with purchase_order_status`);
 
+    const { rows: wrongTypes } = await client.query(`
+      SELECT wo.id AS wo_id, wo.tenant_id, src.id AS src_id, src.name AS src_name
+      FROM work_orders wo
+      JOIN lookup_values src ON src.id = wo.work_order_type_lookup_id
+      WHERE src.domain = 'purchase_order_type'
+    `);
+    console.log(`[${LOG}] found ${wrongTypes.length} work orders with purchase_order_type`);
+
     let updated = 0;
     let skipped = 0;
     const missing = new Map();
@@ -80,8 +88,46 @@ async function main() {
       updated += 1;
     }
 
+    let typesUpdated = 0;
+    let typesSkipped = 0;
+    for (const row of wrongTypes) {
+      const targetName = String(row.src_name ?? '').trim();
+      if (!targetName) {
+        typesSkipped += 1;
+        continue;
+      }
+      const { rows: targets } = await client.query(
+        `
+        SELECT id
+        FROM lookup_values
+        WHERE tenant_id = $1
+          AND domain = 'work_order_type'
+          AND lower(name) = lower($2)
+          AND is_active = true
+        ORDER BY created_at ASC NULLS LAST, id ASC
+        LIMIT 1
+        `,
+        [row.tenant_id, targetName],
+      );
+      const targetId = targets[0]?.id;
+      if (!targetId || targetId === row.src_id) {
+        typesSkipped += 1;
+        continue;
+      }
+      if (!dryRun) {
+        await client.query(
+          `UPDATE work_orders SET work_order_type_lookup_id = $1, updated_at = now() WHERE id = $2`,
+          [targetId, row.wo_id],
+        );
+      }
+      typesUpdated += 1;
+    }
+
     console.log(
       `[${LOG}] ${dryRun ? 'dry-run would update' : 'updated'} ${updated}, skipped ${skipped}`,
+    );
+    console.log(
+      `[${LOG}] types ${dryRun ? 'dry-run would update' : 'updated'} ${typesUpdated}, skipped ${typesSkipped}`,
     );
     if (missing.size > 0) {
       console.warn(`[${LOG}] missing work_order_status targets:`);

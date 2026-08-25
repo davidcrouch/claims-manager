@@ -36,6 +36,7 @@ describe('ProvidersService', () => {
       countErrorsByConnectionId: jest.fn().mockResolvedValue(0),
       lastEventAtByConnectionId: jest.fn().mockResolvedValue(null),
       findByConnectionId: jest.fn().mockResolvedValue({ data: [], total: 0 }),
+      distinctEventTypesByConnectionId: jest.fn().mockResolvedValue([]),
       ...overrides.events,
     };
     const cipher = {

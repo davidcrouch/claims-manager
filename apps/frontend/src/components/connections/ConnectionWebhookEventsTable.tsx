@@ -6,14 +6,20 @@ import { Button } from '@/components/ui/button';
 import {
   SortTabs,
   SearchInput,
-  StatusFilterMenu,
+  SortableColumnHeader,
   TableEmptyRow,
+  commitColumnFilterSelection,
+  columnFilterToValuesParam,
+  buildColumnFilterOptions,
   type SortOption,
   type StatusOption,
   buildSortString,
   parseSort,
 } from '@/components/shared/list-filters';
-import { fetchConnectionWebhookEventsAction } from '@/app/(app)/connections/actions';
+import {
+  fetchConnectionWebhookEventsAction,
+  fetchConnectionWebhookEventFilterOptionsAction,
+} from '@/app/(app)/connections/actions';
 import {
   createListFetchSession,
   useListFetchGate,
@@ -39,6 +45,9 @@ const STATUS_OPTIONS: StatusOption[] = [
   { id: 'mapper_failed', name: 'Mapper Failed' },
   { id: 'failed', name: 'Failed' },
 ];
+const STATUS_FILTER_OPTIONS = STATUS_OPTIONS.map((option) => option.name);
+const STATUS_NAME_BY_ID = new Map(STATUS_OPTIONS.map((option) => [option.id, option.name]));
+const STATUS_ID_BY_NAME = new Map(STATUS_OPTIONS.map((option) => [option.name, option.id]));
 
 function formatTimestamp(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
@@ -89,6 +98,10 @@ export function ConnectionWebhookEventsTable({
     buildSortString('created_at', 'desc'),
   );
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [statusFilterActive, setStatusFilterActive] = useState(false);
+  const [eventTypeFilter, setEventTypeFilter] = useState<Set<string>>(new Set());
+  const [eventTypeFilterActive, setEventTypeFilterActive] = useState(false);
+  const [eventTypeOptions, setEventTypeOptions] = useState<string[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const { beginFetch, abortFetch } = useListFetchGate();
   const limit = 20;
@@ -99,21 +112,50 @@ export function ConnectionWebhookEventsTable({
   }, [search]);
 
   const statusParam = useMemo(() => {
-    if (statusFilter.size === 0) return undefined;
-    if (statusFilter.size === STATUS_OPTIONS.length) return undefined;
-    return [...statusFilter].sort().join(',');
-  }, [statusFilter]);
+    const names = columnFilterToValuesParam(statusFilterActive, statusFilter);
+    if (names === undefined || names === null) return names;
+    return names
+      .split(',')
+      .map((name) => STATUS_ID_BY_NAME.get(name) ?? name)
+      .filter(Boolean)
+      .sort()
+      .join(',');
+  }, [statusFilterActive, statusFilter]);
+
+  const eventTypeParam = useMemo(
+    () => columnFilterToValuesParam(eventTypeFilterActive, eventTypeFilter),
+    [eventTypeFilterActive, eventTypeFilter],
+  );
 
   useEffect(() => {
-    const fetchKey = `${connectionId}|${page}|${debouncedSearch}|${sort}|${statusParam ?? ''}`;
+    setStatusFilter(new Set());
+    setStatusFilterActive(false);
+    setEventTypeFilter(new Set());
+    setEventTypeFilterActive(false);
+    void fetchConnectionWebhookEventFilterOptionsAction(connectionId).then(
+      (result) => {
+        setEventTypeOptions(result?.eventTypes ?? []);
+      },
+    );
+  }, [connectionId]);
+
+  useEffect(() => {
+    const fetchKey = `${connectionId}|${page}|${debouncedSearch}|${sort}|${statusParam ?? ''}|${eventTypeParam ?? ''}`;
     const session = createListFetchSession({ fetchKey, beginFetch, abortFetch });
     if (!session) return;
+
+    if (eventTypeParam === null || statusParam === null) {
+      setData({ data: [], total: 0 });
+      setLoading(false);
+      return session.cleanup;
+    }
 
     setLoading(true);
     void fetchConnectionWebhookEventsAction(connectionId, {
       page,
       limit,
-      status: statusParam,
+      status: statusParam || undefined,
+      eventType: eventTypeParam,
       search: debouncedSearch || undefined,
       sort,
     }).then((result) => {
@@ -122,7 +164,7 @@ export function ConnectionWebhookEventsTable({
       setLoading(false);
     });
     return session.cleanup;
-  }, [connectionId, page, debouncedSearch, sort, statusParam, beginFetch, abortFetch, limit]);
+  }, [connectionId, page, debouncedSearch, sort, statusParam, eventTypeParam, beginFetch, abortFetch, limit]);
 
   const { field: activeSortField, order: sortOrder } = parseSort({
     sortParam: sort,
@@ -140,27 +182,47 @@ export function ConnectionWebhookEventsTable({
     setPage(1);
   };
 
-  const setStatusChecked = (id: string, checked: boolean) => {
-    setStatusFilter((prev) => {
-      const working =
-        prev.size === 0
-          ? new Set(STATUS_OPTIONS.map((o) => o.id))
-          : new Set(prev);
-      if (checked) working.add(id);
-      else working.delete(id);
-      if (working.size === STATUS_OPTIONS.length) return new Set();
-      return working;
+  const uniqueEventTypes = useMemo(
+    () =>
+      buildColumnFilterOptions(
+        [...eventTypeOptions, ...(data?.data ?? []).map((event) => event.eventType)],
+        { alwaysIncludeBlank: false },
+      ),
+    [eventTypeOptions, data],
+  );
+
+  const applyEventTypeFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueEventTypes.length,
     });
+    setEventTypeFilter(committed.selected);
+    setEventTypeFilterActive(committed.active);
     setPage(1);
   };
 
-  const clearStatuses = () => {
-    setStatusFilter(new Set());
-    setPage(1);
-  };
+  const uniqueStatuses = useMemo(
+    () =>
+      buildColumnFilterOptions(
+        [
+          ...STATUS_FILTER_OPTIONS,
+          ...(data?.data ?? []).map(
+            (event) =>
+              STATUS_NAME_BY_ID.get(event.processingStatus) ?? event.processingStatus,
+          ),
+        ],
+        { alwaysIncludeBlank: false },
+      ),
+    [data],
+  );
 
-  const selectAllStatuses = () => {
-    setStatusFilter(new Set());
+  const applyStatusFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueStatuses.length,
+    });
+    setStatusFilter(committed.selected);
+    setStatusFilterActive(committed.active);
     setPage(1);
   };
 
@@ -185,18 +247,6 @@ export function ConnectionWebhookEventsTable({
             setPage(1);
           }}
         />
-
-        <StatusFilterMenu
-          options={STATUS_OPTIONS}
-          selected={
-            statusFilter.size === 0
-              ? new Set(STATUS_OPTIONS.map((o) => o.id))
-              : statusFilter
-          }
-          onSelectionChange={setStatusChecked}
-          onClearAll={clearStatuses}
-          onSelectAll={selectAllStatuses}
-        />
       </div>
 
       {loading ? (
@@ -209,9 +259,37 @@ export function ConnectionWebhookEventsTable({
             <thead className="bg-slate-50">
               <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
                 <th scope="col" className="w-8 px-2 py-3" aria-label="Expand" />
-                <th scope="col" className="px-4 py-3">Event Type</th>
+                <SortableColumnHeader
+                  columnKey="event_type"
+                  label="Event Type"
+                  activeField={activeSortField}
+                  sortOrder={sortOrder}
+                  onSort={handleSort}
+                  filter={{
+                    options: uniqueEventTypes,
+                    selected: eventTypeFilter,
+                    active: eventTypeFilterActive,
+                    onApply: applyEventTypeFilter,
+                    menuTitle: 'Filter by event type',
+                    itemNoun: { singular: 'event type', plural: 'event types' },
+                  }}
+                />
                 <th scope="col" className="px-4 py-3">Entity ID</th>
-                <th scope="col" className="px-4 py-3">Status</th>
+                <SortableColumnHeader
+                  columnKey="processing_status"
+                  label="Status"
+                  activeField={activeSortField}
+                  sortOrder={sortOrder}
+                  onSort={handleSort}
+                  filter={{
+                    options: uniqueStatuses,
+                    selected: statusFilter,
+                    active: statusFilterActive,
+                    onApply: applyStatusFilter,
+                    menuTitle: 'Filter by status',
+                    itemNoun: { singular: 'status', plural: 'statuses' },
+                  }}
+                />
                 <th scope="col" className="px-4 py-3">HMAC</th>
                 <th scope="col" className="px-4 py-3">Created</th>
               </tr>
@@ -297,7 +375,7 @@ function EventRow({
               event.processingStatus,
             )}`}
           >
-            {event.processingStatus}
+            {STATUS_NAME_BY_ID.get(event.processingStatus) ?? event.processingStatus}
           </span>
         </td>
         <td className="whitespace-nowrap px-4 py-3 text-slate-600">

@@ -34,6 +34,12 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { BackButton } from '@/components/layout/BackButton';
+import {
+  PageHeaderField,
+  PageHeaderIcon,
+  PageHeaderLayout,
+} from '@/components/layout/PageHeaderLayout';
+import { HeaderActionToolbar } from '@/components/layout/HeaderActionToolbar';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import {
   DefRow,
@@ -50,7 +56,7 @@ import type { PurchaseOrder, Job } from '@/types/api';
 import { PrintButton } from '@/components/shared/PrintButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { jobDisplayName } from '@/components/shared/job-label';
-import { EntityDetailTitle, entityArchiveLabel, entityDetailName } from '@/components/shared/EntityDetailTitle';
+import { entityArchiveLabel, entityDetailName, entityDetailHeaderTitles } from '@/components/shared/EntityDetailTitle';
 import { getPurchaseOrderLineItemsAction } from '@/app/(app)/purchase-orders/actions';
 import { PagedLineItemsTable } from '@/components/quotes/PagedLineItemsTable';
 
@@ -108,86 +114,90 @@ export function PurchaseOrderPageHeader({ po, job }: { po: PurchaseOrder; job?: 
   const poType = lookupName(po, po.purchaseOrderType, 'purchaseOrderType');
   const vendor = lookupName(po, po.vendor, 'vendor');
   const total = formatCurrency(po.totalAmount);
+  const titles = entityDetailHeaderTitles({
+    internalNumber: po.internalNumber,
+    name: po.name,
+    secondaryLabel: po.purchaseOrderNumber ?? po.externalId,
+    fallbackId: po.id,
+  });
 
   return (
     <>
       <SetHeaderActions>
-        <PrintButton documentType="purchase_order" entityId={po.id} jobId={job?.id} />
-        <ArchiveEntityButton
-          entityType="purchase_order"
-          entityId={po.id}
-          statusName={status}
-          entityLabel={entityArchiveLabel(
-            po.internalNumber,
-            po.name,
-            po.purchaseOrderNumber ?? po.externalId,
-            po.id,
-          )}
-          redirectTo={job ? `/purchase-orders?jobId=${job.id}` : '/purchase-orders'}
-        />
-      </SetHeaderActions>
-      <div className="flex w-full min-w-0 flex-col gap-y-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-          <BackButton href={job ? `/purchase-orders?jobId=${job.id}` : '/purchase-orders'} label="Back to purchase orders" />
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-orange-100">
-            <ShoppingCart className="h-4 w-4 text-orange-600" />
-          </span>
-          <EntityDetailTitle
-            internalNumber={po.internalNumber}
-            name={po.name}
-            secondaryLabel={po.purchaseOrderNumber ?? po.externalId}
-            fallbackId={po.id}
+        <HeaderActionToolbar>
+          <PrintButton documentType="purchase_order" entityId={po.id} jobId={job?.id} />
+          <ArchiveEntityButton
+            entityType="purchase_order"
+            entityId={po.id}
+            statusName={status}
+            entityLabel={entityArchiveLabel(
+              po.internalNumber,
+              po.name,
+              po.purchaseOrderNumber ?? po.externalId,
+              po.id,
+            )}
+            redirectTo={job ? `/purchase-orders?jobId=${job.id}` : '/purchase-orders'}
           />
-          {po.externalId && po.externalId !== displayName && (
-            <span className="font-mono text-xs text-muted-foreground">· {po.externalId}</span>
-          )}
-          <StatusBadge status={status} />
-          {poType && (
-            <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-              <Package className="h-3 w-3" />
-              {poType}
-            </span>
-          )}
-          {vendor && (
-            <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-              <Building2 className="h-3 w-3" />
-              {vendor}
-            </span>
-          )}
-          {job && (
-            <Link
-              href={`/jobs/${job.id}`}
-              className="inline-flex items-center gap-1 text-xs uppercase text-primary hover:underline"
-            >
-              {jobDisplayName(job)}
-              <ExternalLink className="h-3 w-3" />
-            </Link>
-          )}
-          {po.claimId && (
-            <Link
-              href={`/claims/${po.claimId}`}
-              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-            >
-              View claim
-              <ExternalLink className="h-3 w-3" />
-            </Link>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pl-20 text-xs">
-          <div className="flex items-baseline gap-1">
-            <span className="text-muted-foreground">Total:</span>
-            <span className="font-medium">{total}</span>
-          </div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-muted-foreground">Start:</span>
-            <span className="font-medium">{formatDate(po.startDate)}</span>
-          </div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-muted-foreground">End:</span>
-            <span className="font-medium">{formatDate(po.endDate)}</span>
-          </div>
-        </div>
-      </div>
+        </HeaderActionToolbar>
+      </SetHeaderActions>
+      <PageHeaderLayout
+        leading={<BackButton href={job ? `/purchase-orders?jobId=${job.id}` : '/purchase-orders'} label="Back to purchase orders" />}
+        icon={
+          <PageHeaderIcon
+            icon={ShoppingCart}
+            className="bg-orange-100"
+            iconClassName="text-orange-600"
+          />
+        }
+        topTitle={titles.topTitle}
+        title={titles.title}
+        titleMono={titles.titleMono}
+        topRow={
+          <>
+            {po.externalId && po.externalId !== displayName && (
+              <span className="font-mono text-xs text-muted-foreground">· {po.externalId}</span>
+            )}
+            <StatusBadge status={status} />
+            {poType && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                <Package className="h-3 w-3" />
+                {poType}
+              </span>
+            )}
+            {vendor && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                <Building2 className="h-3 w-3" />
+                {vendor}
+              </span>
+            )}
+            {job && (
+              <Link
+                href={`/jobs/${job.id}`}
+                className="inline-flex items-center gap-1 text-xs uppercase text-primary hover:underline"
+              >
+                {jobDisplayName(job)}
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            )}
+            {po.claimId && (
+              <Link
+                href={`/claims/${po.claimId}`}
+                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+              >
+                View claim
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            )}
+          </>
+        }
+        bottomRow={
+          <>
+            <PageHeaderField label="Total">{total}</PageHeaderField>
+            <PageHeaderField label="Start">{formatDate(po.startDate)}</PageHeaderField>
+            <PageHeaderField label="End">{formatDate(po.endDate)}</PageHeaderField>
+          </>
+        }
+      />
     </>
   );
 }

@@ -144,10 +144,11 @@ export function nearestEditableField(
 }
 
 /** Group label display — falls back to description or indexed label. */
-export function groupLabel(group: { groupLabel?: { name?: string; externalReference?: string }; description?: string }, index: number, fallbackPrefix = 'Group'): string {
+export function groupLabel(group: { name?: string; groupLabel?: { name?: string; externalReference?: string }; description?: string }, index: number, fallbackPrefix = 'Group'): string {
   return (
     group.groupLabel?.name ??
     group.groupLabel?.externalReference ??
+    group.name ??
     group.description ??
     `${fallbackPrefix} ${index + 1}`
   );

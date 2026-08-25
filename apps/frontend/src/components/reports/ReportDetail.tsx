@@ -13,6 +13,12 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { BackButton } from '@/components/layout/BackButton';
+import {
+  PageHeaderField,
+  PageHeaderIcon,
+  PageHeaderLayout,
+} from '@/components/layout/PageHeaderLayout';
+import { HeaderActionToolbar } from '@/components/layout/HeaderActionToolbar';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import {
   DefRow,
@@ -39,52 +45,56 @@ export function ReportPageHeader({ report }: { report: Report }) {
   return (
     <>
       <SetHeaderActions>
-        <PrintButton
-          documentType="report"
-          entityId={report.id}
-          jobId={report.jobId ?? undefined}
-        />
-        <ArchiveEntityButton
-          entityType="report"
-          entityId={report.id}
-          statusName={statusName}
-          entityLabel={title}
-          redirectTo="/reports"
-        />
+        <HeaderActionToolbar>
+          <PrintButton
+            documentType="report"
+            entityId={report.id}
+            jobId={report.jobId ?? undefined}
+          />
+          <ArchiveEntityButton
+            entityType="report"
+            entityId={report.id}
+            statusName={statusName}
+            entityLabel={title}
+            redirectTo="/reports"
+          />
+        </HeaderActionToolbar>
       </SetHeaderActions>
-      <div className="flex w-full min-w-0 flex-col gap-y-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-          <BackButton href="/reports" label="Back to reports" />
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted">
-            <ClipboardList className="h-4 w-4 text-muted-foreground" />
-          </span>
-          <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
-          <StatusBadge status={statusName} />
-          {typeName && (
-            <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-              {typeName}
-            </span>
-          )}
-          {report.jobId && (
-            <Link
-              href={`/jobs/${report.jobId}`}
-              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-            >
-              View Job <ExternalLink className="h-3 w-3" />
-            </Link>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pl-20 text-xs">
-          <div className="flex items-baseline gap-1">
-            <span className="text-muted-foreground">Created:</span>
-            <span className="font-medium">{formatDate(report.createdAt)}</span>
-          </div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-muted-foreground">Updated:</span>
-            <span className="font-medium">{formatDate(report.updatedAt)}</span>
-          </div>
-        </div>
-      </div>
+      <PageHeaderLayout
+        leading={<BackButton href="/reports" label="Back to reports" />}
+        icon={
+          <PageHeaderIcon
+            icon={ClipboardList}
+            className="bg-muted"
+            iconClassName="text-muted-foreground"
+          />
+        }
+        title={title}
+        topRow={
+          <>
+            <StatusBadge status={statusName} />
+            {typeName && (
+              <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                {typeName}
+              </span>
+            )}
+            {report.jobId && (
+              <Link
+                href={`/jobs/${report.jobId}`}
+                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+              >
+                View Job <ExternalLink className="h-3 w-3" />
+              </Link>
+            )}
+          </>
+        }
+        bottomRow={
+          <>
+            <PageHeaderField label="Created">{formatDate(report.createdAt)}</PageHeaderField>
+            <PageHeaderField label="Updated">{formatDate(report.updatedAt)}</PageHeaderField>
+          </>
+        }
+      />
     </>
   );
 }

@@ -8,13 +8,13 @@ import {
   ClipboardCheck,
   Home,
   Save,
-  Send,
   ShieldAlert,
   Stethoscope,
   Users,
   Wrench,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { HeaderActionToolbar } from '@/components/layout/HeaderActionToolbar';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import {
@@ -22,6 +22,7 @@ import {
   resolveDetailAssignee,
 } from '@/components/shared/DetailAssignee';
 import { PrintButton } from '@/components/shared/PrintButton';
+import { PublishButton } from '@/components/shared/PublishButton';
 import { updateAssessmentAction } from '@/app/(app)/assessments/actions';
 import { AssessmentPublishDrawer } from './drawers/AssessmentPublishDrawer';
 import {
@@ -163,30 +164,31 @@ export function AssessmentDetailClient({ assessment, job, claim }: AssessmentDet
             {saving ? 'Saving...' : saved ? 'Saved' : 'Save'}
           </Button>
         )}
-        {!locked && (
-          <Button
-            size="default"
-            onClick={() => void handleOpenPublish()}
-            disabled={saving || !assessment.jobId}
-            className="h-9 gap-1.5 bg-amber-600 text-white hover:bg-amber-500"
-          >
-            <Send className="size-4" />
-            Publish
-          </Button>
-        )}
-        <PrintButton
-          documentType="assessment"
-          entityId={assessment.id}
-          jobId={assessment.jobId ?? undefined}
-        />
-        <ArchiveEntityButton
-          entityType="assessment"
-          entityId={assessment.id}
-          statusName={assessment.status}
-          entityLabel={assessment.name}
-          redirectTo="/assessments"
-          className="mr-3"
-        />
+        <HeaderActionToolbar>
+          {!locked && (
+            <PublishButton
+              onClick={() => void handleOpenPublish()}
+              disabled={saving || !assessment.jobId}
+              title={
+                assessment.jobId
+                  ? 'Publish'
+                  : 'Link this assessment to a job to publish'
+              }
+            />
+          )}
+          <PrintButton
+            documentType="assessment"
+            entityId={assessment.id}
+            jobId={assessment.jobId ?? undefined}
+          />
+          <ArchiveEntityButton
+            entityType="assessment"
+            entityId={assessment.id}
+            statusName={assessment.status}
+            entityLabel={assessment.name}
+            redirectTo="/assessments"
+          />
+        </HeaderActionToolbar>
       </SetHeaderActions>
 
       <div className="flex w-full flex-wrap items-center gap-x-4 border-b border-slate-200">

@@ -14,6 +14,7 @@ import { TenantContext } from '../../tenant/tenant-context';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
 import { LookupResolver } from '../external/lookup-resolver.service';
 import { OutboundSyncService } from '../domain/outbound/outbound-sync.service';
+import { CrunchworkOutboundAdapter } from '../domain/outbound/adapters/crunchwork-outbound.adapter';
 import { FilesystemService } from '../filesystem/filesystem.service';
 import { OutboundEventsService } from '../outbound-events/outbound-events.service';
 import {
@@ -55,6 +56,7 @@ export class JobsService {
     private readonly claimsRepo: ClaimsRepository,
     private readonly tenantContext: TenantContext,
     private readonly outboundSync: OutboundSyncService,
+    private readonly crunchworkOutbound: CrunchworkOutboundAdapter,
     private readonly lookupResolver: LookupResolver,
     private readonly filesystemService: FilesystemService,
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
@@ -249,7 +251,21 @@ export class JobsService {
     // Builder Make Safe jobs must publish with makeSafeRequired=true.
     await this.applyMakeSafeRequiredDefault({ tenantId, body });
 
-    const job = await this.db.transaction(async (tx) => {
+    const parentJobId =
+      typeof body.parentJobId === 'string' && body.parentJobId.trim()
+        ? body.parentJobId.trim()
+        : undefined;
+    const parentJob = parentJobId
+      ? await this.jobsRepo.findByIdAndTenant({ id: parentJobId, tenantId })
+      : null;
+    if (parentJobId && !parentJob) {
+      throw new BadRequestException(`Parent job not found: ${parentJobId}`);
+    }
+    if (parentJob && claimId && parentJob.claimId && parentJob.claimId !== claimId) {
+      throw new BadRequestException('Parent job must belong to the same claim');
+    }
+
+    const { job, outboundPayload } = await this.db.transaction(async (tx) => {
       const resolvedContacts = await this.resolveContacts({
         tenantId,
         contacts: contactsInput,
@@ -263,12 +279,16 @@ export class JobsService {
       if (!this.recordNumberService.isBlank(body.externalReference)) {
         insertBase.externalReference = String(body.externalReference).trim();
       }
-      insertBase.internalNumber = await this.recordNumberService.resolve({
+      const { internalNumber, externalJobId } = await this.resolveJobInternalNumber({
         tenantId,
-        entity: 'job',
-        explicit: body.internalNumber,
+        explicitInternal: body.internalNumber,
+        parentJob,
         tx,
       });
+      insertBase.internalNumber = internalNumber;
+      if (externalJobId) {
+        insertBase.externalJobId = externalJobId;
+      }
 
       const inserted = await this.jobsRepo.create({
         data: {
@@ -307,33 +327,73 @@ export class JobsService {
         }
       }
 
+      let createOutboundPayload: Record<string, unknown> | null = null;
       if (needsSync) {
-        const outboundPayload = await this.buildOutboundCreatePayload({
+        createOutboundPayload = await this.buildOutboundCreatePayload({
           tenantId,
           body,
           claim,
           claimApiPayload,
-          claimCwContacts,
-          contactSnapshots: resolvedContacts.map((c) => c.snapshot),
-        });
-        await this.outboundSync.enqueue({
-          tenantId,
-          connectionId,
-          entityType: 'job',
-          entityId: inserted.id,
-          action: 'create',
-          payload: outboundPayload,
-          idempotencyKey: `create:job:${inserted.id}`,
-          tx,
         });
       }
 
-      return inserted;
+      return { job: inserted, outboundPayload: createOutboundPayload };
     });
 
     this.logger.debug(
       `JobsService.create — id=${job.id} assignedToUserId=${job.assignedToUserId ?? 'none'}`,
     );
+
+    // Push create to Crunchwork in-request so callers get a real success/failure
+    // (and the CW payload) instead of a fire-and-forget queue result.
+    if (needsSync && outboundPayload) {
+      try {
+        const result = await this.crunchworkOutbound.push({
+          connectionId,
+          entityType: 'job',
+          entityId: job.id,
+          action: 'create',
+          payload: outboundPayload,
+        });
+        const syncPatch: Partial<JobInsert> = { syncStatus: 'synced' };
+        if (result.externalReference) {
+          syncPatch.externalReference = result.externalReference;
+        }
+        if (result.responsePayload) {
+          syncPatch.apiPayload = result.responsePayload;
+          const insurerRef = asNonEmptyString(result.responsePayload.externalReference);
+          if (insurerRef) {
+            syncPatch.externalJobId = insurerRef;
+          }
+        }
+        await this.jobsRepo.update({
+          id: job.id,
+          data: syncPatch,
+        });
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'Failed to create job in Crunchwork';
+        this.logger.error(
+          `JobsService.create — Crunchwork create failed jobId=${job.id}: ${message}`,
+        );
+        this.logger.error(
+          `JobsService.create — Crunchwork request payload jobId=${job.id}: ${JSON.stringify(outboundPayload)}`,
+        );
+        await this.jobsRepo.update({
+          id: job.id,
+          data: { syncStatus: 'failed' },
+        });
+        await this.outboundSync.cancelPending({
+          tenantId,
+          entityType: 'job',
+          entityId: job.id,
+        });
+        throw new BadRequestException({
+          message,
+          outboundPayload,
+        });
+      }
+    }
 
     const filesystemTemplateId =
       typeof params.body.filesystemTemplateId === 'string'
@@ -859,8 +919,6 @@ export class JobsService {
     body: Record<string, unknown>;
     claim: Awaited<ReturnType<ClaimsRepository['findOne']>>;
     claimApiPayload: Record<string, unknown> | null;
-    claimCwContacts: CwContactOutbound[];
-    contactSnapshots: Record<string, unknown>[];
   }): Promise<Record<string, unknown>> {
     const nestedJobType = params.body.jobType as { id?: string } | undefined;
     const jobTypeLookupId =
@@ -906,20 +964,8 @@ export class JobsService {
       status = lookupToCwObject(statusLookup);
     }
 
-    const contactsFromSnapshots = this.snapshotsToOutboundContacts(
-      params.contactSnapshots,
-    );
-    const contacts =
-      params.claimCwContacts.length > 0
-        ? params.claimCwContacts
-        : contactsFromSnapshots;
-
-    if (contacts.length === 0) {
-      throw new BadRequestException(
-        'At least one Crunchwork contact (with externalReference and type) is required to publish a job to NRMA',
-      );
-    }
-
+    // Do not send contacts on CW create: re-posting claim contacts returns
+    // 400 (missing fields) or 500 Not Authorised. CW copies them from the claim.
     const address =
       params.body.address &&
       typeof params.body.address === 'object' &&
@@ -931,7 +977,6 @@ export class JobsService {
       cwClaimId,
       jobType,
       status,
-      contacts,
       address,
       makeSafeRequired,
       collectExcess:
@@ -1106,6 +1151,64 @@ export class JobsService {
     }
 
     return resolved;
+  }
+
+  /**
+   * Same allocation rules as inbound webhook ingest (`ProjectJobUseCase`):
+   * reuse an existing internal number when jobs share an insurer ref
+   * (`external_job_id`), otherwise assign the next sequence value.
+   */
+  private async resolveJobInternalNumber(params: {
+    tenantId: string;
+    explicitInternal?: unknown;
+    parentJob?: { id?: string; internalNumber?: string | null; externalJobId?: string | null } | null;
+    tx: DrizzleDbOrTx;
+  }): Promise<{ internalNumber: string; externalJobId: string | null }> {
+    if (!this.recordNumberService.isBlank(params.explicitInternal)) {
+      const insurerRef = params.parentJob?.externalJobId?.trim() || null;
+      return {
+        internalNumber: String(params.explicitInternal).trim(),
+        externalJobId: insurerRef,
+      };
+    }
+
+    const insurerRef = params.parentJob?.externalJobId?.trim() || null;
+    if (insurerRef) {
+      const reusedInternalNumber = await this.jobsRepo.findInternalNumberByExternalJobId({
+        tenantId: params.tenantId,
+        externalJobId: insurerRef,
+        tx: params.tx,
+      });
+      if (reusedInternalNumber) {
+        this.logger.log(
+          `JobsService.resolveJobInternalNumber — reused internalNumber=${reusedInternalNumber} for insurer ref ${insurerRef}`,
+        );
+        return { internalNumber: reusedInternalNumber, externalJobId: insurerRef };
+      }
+    }
+
+    const parentInternalNumber = params.parentJob?.internalNumber?.trim() || null;
+    if (parentInternalNumber) {
+      if (!insurerRef) {
+        throw new BadRequestException(
+          'Parent job has no insurer reference yet; sync the parent job to Crunchwork before creating a related job.',
+        );
+      }
+      this.logger.log(
+        `JobsService.resolveJobInternalNumber — reused parent internalNumber=${parentInternalNumber} insurerRef=${insurerRef}`,
+      );
+      return { internalNumber: parentInternalNumber, externalJobId: insurerRef };
+    }
+
+    const internalNumber = await this.recordNumberService.next({
+      tenantId: params.tenantId,
+      entity: 'job',
+      tx: params.tx,
+    });
+    this.logger.log(
+      `JobsService.resolveJobInternalNumber — assigned internalNumber=${internalNumber}`,
+    );
+    return { internalNumber, externalJobId: insurerRef };
   }
 
   private buildInsertFromBody(

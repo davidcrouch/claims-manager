@@ -7,6 +7,7 @@ import {
   BottomFormDrawer,
   BottomFormDrawerBody,
 } from '@/components/forms/BottomFormDrawer';
+import { JOBS_PICKER_DRAWER_WIDTH_CLASS } from '@/components/forms/form-drawer-layout';
 import { JobsListClient } from '@/components/jobs/JobsListClient';
 import { fetchJobsPickerBootstrapAction } from '@/app/(app)/jobs/actions';
 import type { Job, PaginatedResponse } from '@/types/api';
@@ -26,6 +27,8 @@ type Bootstrap = {
   jobs: PaginatedResponse<Job>;
   statusOptions: StatusOption[];
   jobTypes: { id: string; name: string }[];
+  unreadJobIds: string[];
+  initialFetchKey?: string;
 };
 
 export function JobsPickerDrawer({
@@ -38,9 +41,11 @@ export function JobsPickerDrawer({
   const searchParams = useSearchParams();
   const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null);
   const [loading, setLoading] = useState(false);
+  const [listSession, setListSession] = useState(0);
 
   useEffect(() => {
     if (!open) return;
+    setListSession((session) => session + 1);
     let cancelled = false;
     setLoading(true);
     fetchJobsPickerBootstrapAction()
@@ -88,6 +93,7 @@ export function JobsPickerDrawer({
       title="Switch job"
       description="Select a job to open it in this view."
       icon={<Briefcase className="h-5 w-5" />}
+      widthClassName={JOBS_PICKER_DRAWER_WIDTH_CLASS}
     >
       <BottomFormDrawerBody className="flex h-full flex-col !px-0 !py-0">
         {loading && !bootstrap ? (
@@ -96,11 +102,13 @@ export function JobsPickerDrawer({
           </div>
         ) : bootstrap ? (
           <JobsListClient
-            key={`jobs-picker-${selectedJobId}`}
+            key={`jobs-picker-${selectedJobId}-${listSession}`}
             variant="picker"
             initialData={bootstrap.jobs}
+            initialFetchKey={bootstrap.initialFetchKey}
             statusOptions={bootstrap.statusOptions}
             jobTypes={bootstrap.jobTypes}
+            unreadJobIds={bootstrap.unreadJobIds}
             selectedJobId={selectedJobId}
             onJobSelect={handleSelect}
           />

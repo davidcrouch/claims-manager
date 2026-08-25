@@ -1,5 +1,5 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../../../database/drizzle.module';
 import {
   purchaseOrderGroups,
@@ -15,6 +15,7 @@ import {
 } from '../../../database/schema';
 import {
   coerceToRateString,
+  isPercentMarkupType,
 } from '../../../common/rates';
 import { LookupResolutionService } from './lookup-resolution.service';
 
@@ -32,6 +33,15 @@ function cwTaxToStored(value: unknown): string | undefined {
   return coerceToRateString(value as string | number);
 }
 
+function cwMarkupToStored(markupType: unknown, markupValue: unknown): string | undefined {
+  if (markupValue == null || markupValue === '') return undefined;
+  const type = typeof markupType === 'string' ? markupType : undefined;
+  if (isPercentMarkupType(type)) {
+    return coerceToRateString(markupValue as string | number);
+  }
+  return asNumStr(markupValue);
+}
+
 function cwGroupLabelName(group: Record<string, unknown>): string | null {
   const label = group.groupLabel;
   if (label && typeof label === 'object') {
@@ -41,6 +51,8 @@ function cwGroupLabelName(group: Record<string, unknown>): string | null {
     const ext = typeof rec.externalReference === 'string' ? rec.externalReference.trim() : '';
     if (ext) return ext;
   }
+  const nameField = typeof group.name === 'string' ? group.name.trim() : '';
+  if (nameField) return nameField;
   const description = typeof group.description === 'string' ? group.description.trim() : '';
   return description || null;
 }
@@ -135,7 +147,7 @@ export class LineItemSyncService {
     private readonly lookupResolution: LookupResolutionService,
   ) {}
 
-  private collectCatalogItemIds(groups: Record<string, unknown>[]): string[] {
+  private collectCatalogIds(groups: Record<string, unknown>[]): string[] {
     const ids = new Set<string>();
     for (const group of groups) {
       for (const item of (group.items as Record<string, unknown>[]) ?? []) {
@@ -143,6 +155,8 @@ export class LineItemSyncService {
         if (id) ids.add(id);
       }
       for (const combo of combosFromGroup(group)) {
+        const comboId = asStr(combo.catalogComboId);
+        if (comboId) ids.add(comboId);
         for (const item of (combo.items as Record<string, unknown>[]) ?? []) {
           const id = asStr(item.catalogItemId);
           if (id) ids.add(id);
@@ -152,31 +166,73 @@ export class LineItemSyncService {
     return [...ids];
   }
 
-  private async resolveValidCatalogIds(params: {
+  /**
+   * Map inbound catalogItemId / catalogComboId values to local catalog_items.id.
+   * Matches local UUID first, then tenant external_reference (CW catalog UUID).
+   * Unknown IDs are omitted from the map so callers leave the FK null.
+   */
+  private async resolveCatalogIdMap(params: {
     tenantId: string;
     groups: Record<string, unknown>[];
     tx: DrizzleDbOrTx;
-  }): Promise<Set<string>> {
-    const candidateIds = this.collectCatalogItemIds(params.groups);
-    if (candidateIds.length === 0) return new Set();
+  }): Promise<Map<string, string>> {
+    const mapping = new Map<string, string>();
+    const candidateIds = this.collectCatalogIds(params.groups);
+    if (candidateIds.length === 0) return mapping;
 
-    const rows = await params.tx
-      .select({ id: catalogItems.id })
+    const byId = await params.tx
+      .select({
+        id: catalogItems.id,
+        externalReference: catalogItems.externalReference,
+      })
       .from(catalogItems)
-      .where(inArray(catalogItems.id, candidateIds));
+      .where(
+        and(
+          eq(catalogItems.tenantId, params.tenantId),
+          inArray(catalogItems.id, candidateIds),
+          isNull(catalogItems.deletedAt),
+        ),
+      );
 
-    return new Set(rows.map((r) => r.id));
+    for (const row of byId) {
+      mapping.set(row.id, row.id);
+    }
+
+    const unresolved = candidateIds.filter((id) => !mapping.has(id));
+    if (unresolved.length === 0) return mapping;
+
+    const byExtRef = await params.tx
+      .select({
+        id: catalogItems.id,
+        externalReference: catalogItems.externalReference,
+      })
+      .from(catalogItems)
+      .where(
+        and(
+          eq(catalogItems.tenantId, params.tenantId),
+          inArray(catalogItems.externalReference, unresolved),
+          isNull(catalogItems.deletedAt),
+        ),
+      );
+
+    for (const row of byExtRef) {
+      if (row.externalReference) mapping.set(row.externalReference, row.id);
+    }
+
+    return mapping;
   }
 
-  private resolveCatalogItemId(
-    item: Record<string, unknown>,
-    validIds: Set<string>,
+  private resolveCatalogFk(
+    rawId: unknown,
+    mapping: Map<string, string>,
     warnings: CatalogWarning[],
+    name: string | undefined,
   ): string | undefined {
-    const id = asStr(item.catalogItemId);
+    const id = asStr(rawId);
     if (!id) return undefined;
-    if (validIds.has(id)) return id;
-    warnings.push({ itemName: asStr(item.name), catalogItemId: id });
+    const localId = mapping.get(id);
+    if (localId) return localId;
+    warnings.push({ itemName: name, catalogItemId: id });
     return undefined;
   }
 
@@ -220,7 +276,7 @@ export class LineItemSyncService {
       .where(eq(purchaseOrderGroups.purchaseOrderId, params.purchaseOrderId));
 
     const groups = (params.payload.groups as Record<string, unknown>[]) ?? [];
-    const validCatalogIds = await this.resolveValidCatalogIds({ tenantId: params.tenantId, groups, tx: db });
+    const catalogIdMap = await this.resolveCatalogIdMap({ tenantId: params.tenantId, groups, tx: db });
     this.logger.debug(
       `${logPrefix} — PO=${params.purchaseOrderId} groups=${groups.length}`,
     );
@@ -258,7 +314,7 @@ export class LineItemSyncService {
           tenantId: params.tenantId,
           purchaseOrderGroupId: createdGroup.id,
           purchaseOrderComboId: null,
-          catalogItemId: this.resolveCatalogItemId(item, validCatalogIds, warnings),
+          catalogItemId: this.resolveCatalogFk(item.catalogItemId, catalogIdMap, warnings, asStr(item.name)),
           quoteLineItemId: asStr(item.quoteLineItemId) ?? undefined,
           name: asStr(item.name),
           description: asStr(item.description),
@@ -270,7 +326,7 @@ export class LineItemSyncService {
           unitCost: asNumStr(item.unitCost),
           buyCost: asNumStr(item.buyCost),
           markupType: asStr(item.markupType),
-          markupValue: asNumStr(item.markupValue),
+          markupValue: cwMarkupToStored(item.markupType, item.markupValue),
           reconciliation: asNumStr(item.reconciliation),
           manualAllocation: asBoolVal(item.manualAllocation),
           note: asStr(item.note),
@@ -289,7 +345,7 @@ export class LineItemSyncService {
           .values({
             tenantId: params.tenantId,
             purchaseOrderGroupId: createdGroup.id,
-            catalogComboId: asStr(combo.catalogComboId) ?? undefined,
+            catalogComboId: this.resolveCatalogFk(combo.catalogComboId, catalogIdMap, warnings, asStr(combo.name)),
             quoteComboId: asStr(combo.quoteComboId) ?? undefined,
             name: asStr(combo.name),
             description: asStr(combo.description),
@@ -308,7 +364,7 @@ export class LineItemSyncService {
           await db.insert(purchaseOrderItems).values({
             tenantId: params.tenantId,
             purchaseOrderComboId: createdCombo.id,
-            catalogItemId: this.resolveCatalogItemId(item, validCatalogIds, warnings),
+            catalogItemId: this.resolveCatalogFk(item.catalogItemId, catalogIdMap, warnings, asStr(item.name)),
             quoteLineItemId: asStr(item.quoteLineItemId) ?? undefined,
             name: asStr(item.name),
             description: asStr(item.description),
@@ -320,7 +376,7 @@ export class LineItemSyncService {
             unitCost: asNumStr(item.unitCost),
             buyCost: asNumStr(item.buyCost),
             markupType: asStr(item.markupType),
-            markupValue: asNumStr(item.markupValue),
+            markupValue: cwMarkupToStored(item.markupType, item.markupValue),
             reconciliation: asNumStr(item.reconciliation),
             manualAllocation: asBoolVal(item.manualAllocation),
             note: asStr(item.note),
@@ -334,7 +390,7 @@ export class LineItemSyncService {
 
     if (warnings.length > 0) {
       this.logger.warn(
-        `${logPrefix} — ${warnings.length} item(s) with unresolved catalog references for PO=${params.purchaseOrderId}: ${warnings.map((w) => `${w.itemName ?? '?'} (${w.catalogItemId})`).join(', ')}`,
+        `${logPrefix} — ${warnings.length} catalog reference(s) unresolved for PO=${params.purchaseOrderId}: ${warnings.map((w) => `${w.itemName ?? '?'} (${w.catalogItemId})`).join(', ')}`,
       );
     }
     this.logger.log(
@@ -358,7 +414,7 @@ export class LineItemSyncService {
       .where(eq(workOrderGroups.workOrderId, params.workOrderId));
 
     const groups = (params.payload.groups as Record<string, unknown>[]) ?? [];
-    const validCatalogIds = await this.resolveValidCatalogIds({ tenantId: params.tenantId, groups, tx: db });
+    const catalogIdMap = await this.resolveCatalogIdMap({ tenantId: params.tenantId, groups, tx: db });
     this.logger.debug(
       `${logPrefix} — WO=${params.workOrderId} groups=${groups.length}`,
     );
@@ -397,7 +453,7 @@ export class LineItemSyncService {
           tenantId: params.tenantId,
           workOrderGroupId: createdGroup.id,
           workOrderComboId: null,
-          catalogItemId: this.resolveCatalogItemId(item, validCatalogIds, warnings),
+          catalogItemId: this.resolveCatalogFk(item.catalogItemId, catalogIdMap, warnings, asStr(item.name)),
           quoteLineItemId: asStr(item.quoteLineItemId) ?? undefined,
           name: asStr(item.name),
           description: asStr(item.description),
@@ -409,7 +465,7 @@ export class LineItemSyncService {
           unitCost: asNumStr(item.unitCost),
           buyCost: asNumStr(item.buyCost),
           markupType: asStr(item.markupType),
-          markupValue: asNumStr(item.markupValue),
+          markupValue: cwMarkupToStored(item.markupType, item.markupValue),
           reconciliation: asNumStr(item.reconciliation),
           manualAllocation: asBoolVal(item.manualAllocation),
           note: asStr(item.note),
@@ -428,7 +484,7 @@ export class LineItemSyncService {
           .values({
             tenantId: params.tenantId,
             workOrderGroupId: createdGroup.id,
-            catalogComboId: asStr(combo.catalogComboId) ?? undefined,
+            catalogComboId: this.resolveCatalogFk(combo.catalogComboId, catalogIdMap, warnings, asStr(combo.name)),
             quoteComboId: asStr(combo.quoteComboId) ?? undefined,
             name: asStr(combo.name),
             description: asStr(combo.description),
@@ -447,7 +503,7 @@ export class LineItemSyncService {
           await db.insert(workOrderItems).values({
             tenantId: params.tenantId,
             workOrderComboId: createdCombo.id,
-            catalogItemId: this.resolveCatalogItemId(item, validCatalogIds, warnings),
+            catalogItemId: this.resolveCatalogFk(item.catalogItemId, catalogIdMap, warnings, asStr(item.name)),
             quoteLineItemId: asStr(item.quoteLineItemId) ?? undefined,
             name: asStr(item.name),
             description: asStr(item.description),
@@ -459,7 +515,7 @@ export class LineItemSyncService {
             unitCost: asNumStr(item.unitCost),
             buyCost: asNumStr(item.buyCost),
             markupType: asStr(item.markupType),
-            markupValue: asNumStr(item.markupValue),
+            markupValue: cwMarkupToStored(item.markupType, item.markupValue),
             reconciliation: asNumStr(item.reconciliation),
             manualAllocation: asBoolVal(item.manualAllocation),
             note: asStr(item.note),
@@ -473,7 +529,7 @@ export class LineItemSyncService {
 
     if (warnings.length > 0) {
       this.logger.warn(
-        `${logPrefix} — ${warnings.length} item(s) with unresolved catalog references for WO=${params.workOrderId}: ${warnings.map((w) => `${w.itemName ?? '?'} (${w.catalogItemId})`).join(', ')}`,
+        `${logPrefix} — ${warnings.length} catalog reference(s) unresolved for WO=${params.workOrderId}: ${warnings.map((w) => `${w.itemName ?? '?'} (${w.catalogItemId})`).join(', ')}`,
       );
     }
     this.logger.log(
@@ -498,7 +554,7 @@ export class LineItemSyncService {
       .where(eq(quoteGroups.quoteId, params.quoteId));
 
     const groups = (params.payload.groups as Record<string, unknown>[]) ?? [];
-    const validCatalogIds = await this.resolveValidCatalogIds({ tenantId: params.tenantId, groups, tx: db });
+    const catalogIdMap = await this.resolveCatalogIdMap({ tenantId: params.tenantId, groups, tx: db });
     this.logger.debug(
       `${logPrefix} — Q=${params.quoteId} groups=${groups.length}`,
     );
@@ -544,7 +600,7 @@ export class LineItemSyncService {
           quoteGroupId: createdGroup.id,
           quoteComboId: null,
           externalReference: asStr(item.id),
-          catalogItemId: this.resolveCatalogItemId(item, validCatalogIds, warnings),
+          catalogItemId: this.resolveCatalogFk(item.catalogItemId, catalogIdMap, warnings, asStr(item.name)),
           lineScopeStatusLookupId: lineScopeId ?? undefined,
           unitTypeLookupId: unitTypeId ?? undefined,
           name: asStr(item.name),
@@ -558,7 +614,7 @@ export class LineItemSyncService {
           unitCost: asNumStr(item.unitCost),
           buyCost: asNumStr(item.buyCost),
           markupType: asStr(item.markupType),
-          markupValue: asNumStr(item.markupValue),
+          markupValue: cwMarkupToStored(item.markupType, item.markupValue),
           allocatedCost: asNumStr(item.allocatedCost),
           committedCost: asNumStr(item.committedCost),
           internal: asBoolVal(item.internal),
@@ -586,7 +642,7 @@ export class LineItemSyncService {
             tenantId: params.tenantId,
             quoteGroupId: createdGroup.id,
             externalReference: asStr(combo.id),
-            catalogComboId: asStr(combo.catalogComboId) ?? undefined,
+            catalogComboId: this.resolveCatalogFk(combo.catalogComboId, catalogIdMap, warnings, asStr(combo.name)),
             lineScopeStatusLookupId: comboScopeId ?? undefined,
             name: asStr(combo.name),
             component: asStr(combo.component),
@@ -614,7 +670,7 @@ export class LineItemSyncService {
             quoteComboId: createdCombo.id,
             quoteGroupId: null,
             externalReference: asStr(item.id),
-            catalogItemId: this.resolveCatalogItemId(item, validCatalogIds, warnings),
+            catalogItemId: this.resolveCatalogFk(item.catalogItemId, catalogIdMap, warnings, asStr(item.name)),
             lineScopeStatusLookupId: lineScopeId ?? undefined,
             unitTypeLookupId: unitTypeId ?? undefined,
             name: asStr(item.name),
@@ -628,7 +684,7 @@ export class LineItemSyncService {
             unitCost: asNumStr(item.unitCost),
             buyCost: asNumStr(item.buyCost),
             markupType: asStr(item.markupType),
-            markupValue: asNumStr(item.markupValue),
+            markupValue: cwMarkupToStored(item.markupType, item.markupValue),
             allocatedCost: asNumStr(item.allocatedCost),
             committedCost: asNumStr(item.committedCost),
             internal: asBoolVal(item.internal),
@@ -645,7 +701,7 @@ export class LineItemSyncService {
 
     if (warnings.length > 0) {
       this.logger.warn(
-        `${logPrefix} — ${warnings.length} item(s) with unresolved catalog references for Q=${params.quoteId}: ${warnings.map((w) => `${w.itemName ?? '?'} (${w.catalogItemId})`).join(', ')}`,
+        `${logPrefix} — ${warnings.length} catalog reference(s) unresolved for Q=${params.quoteId}: ${warnings.map((w) => `${w.itemName ?? '?'} (${w.catalogItemId})`).join(', ')}`,
       );
     }
     this.logger.log(

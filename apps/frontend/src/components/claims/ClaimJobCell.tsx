@@ -21,46 +21,58 @@ export function ClaimJobCell({ jobs }: { jobs?: ClaimJobRef[] | null }) {
   const primary = items[0];
   const extraCount = items.length - 1;
   const primaryLabel = jobDisplayName(primary);
+  const primaryType = primary.jobType?.name?.trim();
 
   return (
     <div
       className="group/jobs relative isolate z-10 hover:z-40 focus-within:z-40"
       onClick={(e) => e.stopPropagation()}
     >
-      <Link
-        href={`/jobs/${primary.id}`}
-        className="inline-flex items-baseline gap-1 text-primary hover:underline"
-        aria-label={
-          extraCount > 0
-            ? `${primaryLabel} and ${extraCount} more job${extraCount === 1 ? '' : 's'}`
-            : `Open ${primaryLabel}`
-        }
-      >
-        <span>{primaryLabel}</span>
+      <div className="inline-flex items-center gap-1.5">
+        <Link
+          href={`/jobs/${primary.id}`}
+          className="text-primary hover:underline"
+          aria-label={
+            extraCount > 0
+              ? `${primaryLabel} and ${extraCount} more job${extraCount === 1 ? '' : 's'}`
+              : `Open ${primaryLabel}`
+          }
+        >
+          {primaryLabel}
+        </Link>
+        {primaryType ? <TypeBadge type={primaryType} /> : null}
         {extraCount > 0 ? (
           <span className="text-xs font-medium text-slate-500">+{extraCount}</span>
         ) : null}
-      </Link>
-
-      <div className="pointer-events-none invisible absolute left-0 top-full z-40 pt-1 group-hover/jobs:pointer-events-auto group-hover/jobs:visible group-focus-within/jobs:pointer-events-auto group-focus-within/jobs:visible">
-        <ul className="min-w-[16rem] rounded-md bg-white py-1 shadow-lg ring-1 ring-slate-200">
-          {items.map((job) => {
-            const label = jobDisplayName(job);
-            const typeName = job.jobType?.name?.trim();
-            return (
-              <li key={job.id}>
-                <Link
-                  href={`/jobs/${job.id}`}
-                  className="flex items-center gap-2 whitespace-nowrap px-2.5 py-1.5 text-sm hover:bg-slate-50"
-                >
-                  <span className="font-medium text-slate-900">{label}</span>
-                  {typeName ? <TypeBadge type={typeName} /> : null}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
       </div>
+
+      {extraCount > 0 ? (
+        <>
+          <span
+            aria-hidden
+            className="absolute inset-y-0 left-0 z-30 w-[calc(100%+10px)]"
+          />
+          <div className="pointer-events-none invisible absolute top-1/2 left-full z-40 -ml-2 -translate-y-1/2 pl-2 group-hover/jobs:pointer-events-auto group-hover/jobs:visible group-focus-within/jobs:pointer-events-auto group-focus-within/jobs:visible">
+            <ul className="min-w-[16rem] rounded-md bg-white py-1 shadow-lg ring-1 ring-slate-200">
+              {items.map((job) => {
+                const label = jobDisplayName(job);
+                const typeName = job.jobType?.name?.trim();
+                return (
+                  <li key={job.id}>
+                    <Link
+                      href={`/jobs/${job.id}`}
+                      className="flex items-center gap-2 whitespace-nowrap px-2.5 py-1.5 text-sm hover:bg-slate-50"
+                    >
+                      <span className="font-medium text-slate-900">{label}</span>
+                      {typeName ? <TypeBadge type={typeName} /> : null}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }

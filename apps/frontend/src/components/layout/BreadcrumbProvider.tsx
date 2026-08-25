@@ -72,7 +72,7 @@ export function useBreadcrumbsOptional() {
 export function BreadcrumbConsumer() {
   const { items, headerNode } = useBreadcrumbs();
   if (headerNode) {
-    return <div className="min-w-0 flex-1">{headerNode}</div>;
+    return <div className="flex min-w-0 flex-1 items-center">{headerNode}</div>;
   }
   return <Breadcrumbs items={items} />;
 }
@@ -84,5 +84,5 @@ export function BreadcrumbConsumer() {
 export function HeaderActionsConsumer() {
   const { headerActions } = useBreadcrumbs();
   if (!headerActions) return null;
-  return <div className="flex shrink-0 items-center gap-2">{headerActions}</div>;
+  return <div className="flex shrink-0 items-center gap-2 self-stretch">{headerActions}</div>;
 }

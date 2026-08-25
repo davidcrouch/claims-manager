@@ -19,6 +19,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { BackButton } from '@/components/layout/BackButton';
+import {
+  PageHeaderField,
+  PageHeaderIcon,
+  PageHeaderLayout,
+} from '@/components/layout/PageHeaderLayout';
+import { HeaderActionToolbar } from '@/components/layout/HeaderActionToolbar';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import {
   DefRow,
@@ -113,68 +119,71 @@ export function ProposalPageHeader({ proposal, job }: { proposal: Proposal; job?
             </Button>
           </>
         )}
-        <PrintButton documentType="proposal" entityId={proposal.id} jobId={job?.id} />
-        <ArchiveEntityButton
-          entityType="proposal"
-          entityId={proposal.id}
-          statusName={status}
-          entityLabel={typeof title === 'string' ? title : undefined}
-          redirectTo={job ? `/proposals?jobId=${job.id}` : '/proposals'}
-        />
+        <HeaderActionToolbar>
+          <PrintButton documentType="proposal" entityId={proposal.id} jobId={job?.id} />
+          <ArchiveEntityButton
+            entityType="proposal"
+            entityId={proposal.id}
+            statusName={status}
+            entityLabel={typeof title === 'string' ? title : undefined}
+            redirectTo={job ? `/proposals?jobId=${job.id}` : '/proposals'}
+          />
+        </HeaderActionToolbar>
       </SetHeaderActions>
-      <div className="flex w-full min-w-0 flex-col gap-y-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-          <BackButton href={job ? `/proposals?jobId=${job.id}` : '/proposals'} label="Back to proposals" />
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-100">
-            <FileInput className="h-4 w-4 text-violet-600" />
-          </span>
-          <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
-          <StatusBadge status={status} />
-          {proposal.sourceOrganisationId && !proposal.sourceTenantId && (
-            <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-200">
-              External vendor
-            </span>
-          )}
-          {vendor && (
-            <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-              <Building2 className="h-3 w-3" />
-              {vendor}
-            </span>
-          )}
-          {proposal.rfqId && (
-            <Link
-              href={`/rfqs/${proposal.rfqId}`}
-              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-            >
-              View RFQ
-              <ExternalLink className="h-3 w-3" />
-            </Link>
-          )}
-          {job && (
-            <Link
-              href={`/jobs/${job.id}`}
-              className="inline-flex items-center gap-1 text-xs uppercase text-primary hover:underline"
-            >
-              {jobDisplayName(job)}
-              <ExternalLink className="h-3 w-3" />
-            </Link>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pl-20 text-xs">
-          <div className="flex items-baseline gap-1">
-            <span className="text-muted-foreground">Total:</span>
-            <span className="font-medium">{formatCurrency(proposal.totalAmount)}</span>
-          </div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-muted-foreground">Received:</span>
-            <span className="font-medium">{formatDate(proposal.receivedDate ?? proposal.proposalDate)}</span>
-          </div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-muted-foreground">Updated:</span>
-            <span className="font-medium">{formatDateTime(proposal.updatedAt)}</span>
-          </div>
-        </div>
-      </div>
+      <PageHeaderLayout
+        leading={<BackButton href={job ? `/proposals?jobId=${job.id}` : '/proposals'} label="Back to proposals" />}
+        icon={
+          <PageHeaderIcon
+            icon={FileInput}
+            className="bg-violet-100"
+            iconClassName="text-violet-600"
+          />
+        }
+        title={title}
+        topRow={
+          <>
+            <StatusBadge status={status} />
+            {proposal.sourceOrganisationId && !proposal.sourceTenantId && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-200">
+                External vendor
+              </span>
+            )}
+            {vendor && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                <Building2 className="h-3 w-3" />
+                {vendor}
+              </span>
+            )}
+            {proposal.rfqId && (
+              <Link
+                href={`/rfqs/${proposal.rfqId}`}
+                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+              >
+                View RFQ
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            )}
+            {job && (
+              <Link
+                href={`/jobs/${job.id}`}
+                className="inline-flex items-center gap-1 text-xs uppercase text-primary hover:underline"
+              >
+                {jobDisplayName(job)}
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            )}
+          </>
+        }
+        bottomRow={
+          <>
+            <PageHeaderField label="Total">{formatCurrency(proposal.totalAmount)}</PageHeaderField>
+            <PageHeaderField label="Received">
+              {formatDate(proposal.receivedDate ?? proposal.proposalDate)}
+            </PageHeaderField>
+            <PageHeaderField label="Updated">{formatDateTime(proposal.updatedAt)}</PageHeaderField>
+          </>
+        }
+      />
     </>
   );
 }

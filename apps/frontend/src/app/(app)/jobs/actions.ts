@@ -2,6 +2,11 @@
 
 import { getSession, getAccessToken } from '@/lib/auth';
 import { createApiClient } from '@/lib/api-client';
+import {
+  buildJobsListFetchKey,
+  DEFAULT_JOBS_SORT,
+  statusIdsForJobsListTab,
+} from '@/components/jobs/jobs-list-helpers';
 import type { PaginatedResponse } from '@/types/api';
 import type { Job } from '@/types/api';
 
@@ -39,18 +44,30 @@ export async function fetchJobsAction(params: {
   const token = await getAccessToken();
   if (!token) return null;
 
-  const api = createApiClient({ token });
-  return api.getJobs({
-    page: params.page ?? 1,
-    limit: params.limit ?? 20,
-    search: params.search,
-    claimId: params.claimId,
-    sort: params.sort,
-    status: params.status,
-    jobType: params.jobType,
-    assignedToUserIds: params.assignedToUserIds,
-    refs: params.refs,
-  });
+  const tenantId =
+    session.identity?.organization_id ??
+    process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID ??
+    undefined;
+  const api = createApiClient({ token, tenantId });
+  try {
+    return await api.getJobs({
+      page: params.page ?? 1,
+      limit: params.limit ?? 20,
+      search: params.search,
+      claimId: params.claimId,
+      sort: params.sort,
+      status: params.status,
+      jobType: params.jobType,
+      assignedToUserIds: params.assignedToUserIds,
+      refs: params.refs,
+    });
+  } catch (err) {
+    console.error(
+      'frontend:fetchJobsAction - getJobs failed:',
+      err instanceof Error ? err.message : err,
+    );
+    return null;
+  }
 }
 
 export async function fetchJobFilterOptionsAction(): Promise<{
@@ -80,6 +97,8 @@ export async function fetchJobsPickerBootstrapAction(): Promise<{
   jobs: PaginatedResponse<Job>;
   statusOptions: { id: string; name: string }[];
   jobTypes: { id: string; name: string }[];
+  unreadJobIds: string[];
+  initialFetchKey?: string;
 } | null> {
   const session = await getSession();
   if (!session.authenticated) return null;
@@ -87,17 +106,14 @@ export async function fetchJobsPickerBootstrapAction(): Promise<{
   const token = await getAccessToken();
   if (!token) return null;
 
-  const api = createApiClient({ token });
+  const tenantId =
+    session.identity?.organization_id ??
+    process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID ??
+    undefined;
+  const api = createApiClient({ token, tenantId });
   const emptyJobs: PaginatedResponse<Job> = { data: [], total: 0 };
 
-  const [jobs, statusLookupsRes, jobTypesAllRes] = await Promise.all([
-    api.getJobs({ page: 1, limit: 20, sort: 'updated_at_desc' }).catch((err: unknown) => {
-      console.error(
-        'frontend:fetchJobsPickerBootstrapAction - getJobs failed:',
-        err instanceof Error ? err.message : err,
-      );
-      return emptyJobs;
-    }),
+  const [statusLookupsRes, jobTypesAllRes, unreadJobIds] = await Promise.all([
     api.getLookupsByDomain('job_status').catch((err: unknown) => {
       console.error(
         'frontend:fetchJobsPickerBootstrapAction - job_status lookups failed:',
@@ -112,17 +128,55 @@ export async function fetchJobsPickerBootstrapAction(): Promise<{
       );
       return [];
     }),
+    api.getUnreadEntityIds('job').catch((err: unknown) => {
+      console.error(
+        'frontend:fetchJobsPickerBootstrapAction - getUnreadEntityIds failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return [] as string[];
+    }),
   ]);
+
+  const statusOptions = (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map((row) => ({
+    id: row.id,
+    name: row.name?.trim() ? row.name : 'Unknown',
+  }));
+  const activeStatus = statusIdsForJobsListTab('active', statusOptions);
+  const initialFetchKey = buildJobsListFetchKey({
+    sort: DEFAULT_JOBS_SORT,
+    tab: 'active',
+    page: 1,
+    status: activeStatus,
+  });
+
+  let jobsSsrOk = false;
+  const jobs = await api
+    .getJobs({
+      page: 1,
+      limit: 20,
+      sort: DEFAULT_JOBS_SORT,
+      status: activeStatus,
+    })
+    .then((data) => {
+      jobsSsrOk = true;
+      return data;
+    })
+    .catch((err: unknown) => {
+      console.error(
+        'frontend:fetchJobsPickerBootstrapAction - getJobs failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return emptyJobs;
+    });
 
   return {
     jobs,
-    statusOptions: (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map((row) => ({
-      id: row.id,
-      name: row.name?.trim() ? row.name : 'Unknown',
-    })),
+    statusOptions,
     jobTypes: (Array.isArray(jobTypesAllRes) ? jobTypesAllRes : []).map((row) => ({
       id: row.id,
       name: row.name?.trim() ? row.name.trim() : 'Unknown',
     })),
+    unreadJobIds,
+    initialFetchKey: jobsSsrOk ? initialFetchKey : undefined,
   };
 }

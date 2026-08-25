@@ -1,12 +1,50 @@
-import type { ApiGroup, ApiItem, FlatLineItemRow } from './types';
+import type { ApiCombo, ApiGroup, ApiItem, ApiScope, FlatLineItemRow } from './types';
 import { groupLabel } from '../lib/money';
+import { coerceToRate, isFixedMarkupType, isPercentMarkupType } from '@/lib/rates';
+
+function normalizePayloadItem(item: ApiItem): ApiItem {
+  const tax = item.tax != null ? coerceToRate(item.tax) : item.tax;
+  const markupValue =
+    item.markupValue != null && !isFixedMarkupType(item.markupType) && isPercentMarkupType(item.markupType)
+      ? coerceToRate(item.markupValue)
+      : item.markupValue;
+  return { ...item, tax, markupValue };
+}
+
+function normalizePayloadCombo(combo: ApiCombo): ApiCombo {
+  return { ...combo, items: combo.items?.map(normalizePayloadItem) };
+}
+
+function normalizePayloadScope(scope: ApiScope): ApiScope {
+  return {
+    ...scope,
+    items: scope.items?.map(normalizePayloadItem),
+    combos: scope.combos?.map(normalizePayloadCombo),
+  };
+}
+
+function normalizePayloadGroup(group: ApiGroup & { name?: string }): ApiGroup {
+  const hasLabel = Boolean(group.groupLabel?.name || group.groupLabel?.externalReference);
+  const labelName = group.name?.trim() || group.description?.trim();
+  return {
+    ...group,
+    groupLabel: hasLabel
+      ? group.groupLabel
+      : labelName
+        ? { name: labelName }
+        : group.groupLabel,
+    items: group.items?.map(normalizePayloadItem),
+    combos: group.combos?.map(normalizePayloadCombo),
+    scopes: group.scopes?.map(normalizePayloadScope),
+  };
+}
 
 /** Extract ApiGroup[] from a document payload (WO, PO, Invoice, etc). */
 export function groupsFromDocumentPayload(
   payload: Record<string, unknown> | null | undefined,
 ): ApiGroup[] {
   const groups = payload?.groups;
-  return Array.isArray(groups) ? (groups as ApiGroup[]) : [];
+  return Array.isArray(groups) ? (groups as ApiGroup[]).map(normalizePayloadGroup) : [];
 }
 
 /** IDs used by RFQ/PO scope pickers — includes scopes and nested assemblies/items. */

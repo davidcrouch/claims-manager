@@ -22,6 +22,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { BackButton } from '@/components/layout/BackButton';
+import {
+  PageHeaderField,
+  PageHeaderIcon,
+  PageHeaderLayout,
+} from '@/components/layout/PageHeaderLayout';
+import { HeaderActionToolbar } from '@/components/layout/HeaderActionToolbar';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import {
   DefRow,
@@ -39,7 +45,7 @@ import { InvoiceFormDrawer } from '@/components/forms/InvoiceFormDrawer';
 import type { WorkOrder, Job } from '@/types/api';
 import { PrintButton } from '@/components/shared/PrintButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
-import { EntityDetailTitle, entityArchiveLabel, entityDetailName } from '@/components/shared/EntityDetailTitle';
+import { entityArchiveLabel, entityDetailName, entityDetailHeaderTitles } from '@/components/shared/EntityDetailTitle';
 import { jobDisplayName } from '@/components/shared/job-label';
 import { PagedLineItemsTable } from '@/components/quotes/PagedLineItemsTable';
 import { groupsFromDocumentPayload } from '@/components/line-items';
@@ -100,6 +106,12 @@ export function WorkOrderPageHeader({ wo, job }: { wo: WorkOrder; job?: Job | nu
   const woType = lookupName(wo.workOrderType, payload, 'workOrderType');
   const source = sourceOrgName(wo);
   const total = formatCurrency(wo.totalAmount);
+  const titles = entityDetailHeaderTitles({
+    internalNumber: wo.internalNumber,
+    name: wo.name,
+    secondaryLabel: wo.workOrderNumber ?? wo.externalId,
+    fallbackId: wo.id,
+  });
   const jobName = job?.name?.trim() || job?.externalReference?.trim() || undefined;
   const jobNameById =
     wo.jobId && jobName ? { [wo.jobId]: jobName } : undefined;
@@ -166,19 +178,21 @@ export function WorkOrderPageHeader({ wo, job }: { wo: WorkOrder; job?: Job | nu
           <Plus className="h-3.5 w-3.5" />
           Create Invoice
         </Button>
-        <PrintButton documentType="work_order" entityId={wo.id} jobId={job?.id} />
-        <ArchiveEntityButton
-          entityType="work_order"
-          entityId={wo.id}
-          statusName={status}
-          entityLabel={entityArchiveLabel(
-            wo.internalNumber,
-            wo.name,
-            wo.workOrderNumber ?? wo.externalId,
-            wo.id,
-          )}
-          redirectTo={job ? `/work-orders?jobId=${job.id}` : '/work-orders'}
-        />
+        <HeaderActionToolbar>
+          <PrintButton documentType="work_order" entityId={wo.id} jobId={job?.id} />
+          <ArchiveEntityButton
+            entityType="work_order"
+            entityId={wo.id}
+            statusName={status}
+            entityLabel={entityArchiveLabel(
+              wo.internalNumber,
+              wo.name,
+              wo.workOrderNumber ?? wo.externalId,
+              wo.id,
+            )}
+            redirectTo={job ? `/work-orders?jobId=${job.id}` : '/work-orders'}
+          />
+        </HeaderActionToolbar>
       </SetHeaderActions>
       <InvoiceFormDrawer
         open={showInvoiceForm}
@@ -187,68 +201,64 @@ export function WorkOrderPageHeader({ wo, job }: { wo: WorkOrder; job?: Job | nu
         jobNameById={jobNameById}
         defaultWorkOrderId={wo.id}
       />
-      <div className="flex w-full min-w-0 flex-col gap-y-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-          <BackButton href={job ? `/work-orders?jobId=${job.id}` : '/work-orders'} label="Back to work orders" />
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-100">
-            <ClipboardCheck className="h-4 w-4 text-indigo-600" />
-          </span>
-          <EntityDetailTitle
-            internalNumber={wo.internalNumber}
-            name={wo.name}
-            secondaryLabel={wo.workOrderNumber ?? wo.externalId}
-            fallbackId={wo.id}
+      <PageHeaderLayout
+        leading={<BackButton href={job ? `/work-orders?jobId=${job.id}` : '/work-orders'} label="Back to work orders" />}
+        icon={
+          <PageHeaderIcon
+            icon={ClipboardCheck}
+            className="bg-indigo-100"
+            iconClassName="text-indigo-600"
           />
-          {wo.externalId && wo.externalId !== displayName && (
-            <span className="font-mono text-xs text-muted-foreground">· {wo.externalId}</span>
-          )}
-          <StatusBadge status={status} />
-          {woType && (
-            <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-              <Package className="h-3 w-3" />
-              {woType}
-            </span>
-          )}
-          {source && (
-            <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-              <Building2 className="h-3 w-3" />
-              {source}
-            </span>
-          )}
-          {job && (
-            <Link
-              href={`/jobs/${job.id}`}
-              className="inline-flex items-center gap-1 text-xs uppercase text-primary hover:underline"
-            >
-              {jobDisplayName(job)}
-              <ExternalLink className="h-3 w-3" />
-            </Link>
-          )}
-          {wo.claimId && (
-            <Link
-              href={`/claims/${wo.claimId}`}
-              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-            >
-              View Claim
-              <ExternalLink className="h-3 w-3" />
-            </Link>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pl-20 text-xs">
-          <div className="flex items-baseline gap-1">
-            <span className="text-muted-foreground">Total:</span>
-            <span className="font-medium">{total}</span>
-          </div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-muted-foreground">Start:</span>
-            <span className="font-medium">{formatDate(wo.startDate)}</span>
-          </div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-muted-foreground">End:</span>
-            <span className="font-medium">{formatDate(wo.endDate)}</span>
-          </div>
-        </div>
-      </div>
+        }
+        topTitle={titles.topTitle}
+        title={titles.title}
+        titleMono={titles.titleMono}
+        topRow={
+          <>
+            {wo.externalId && wo.externalId !== displayName && (
+              <span className="font-mono text-xs text-muted-foreground">· {wo.externalId}</span>
+            )}
+            <StatusBadge status={status} />
+            {woType && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                <Package className="h-3 w-3" />
+                {woType}
+              </span>
+            )}
+            {source && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                <Building2 className="h-3 w-3" />
+                {source}
+              </span>
+            )}
+            {job && (
+              <Link
+                href={`/jobs/${job.id}`}
+                className="inline-flex items-center gap-1 text-xs uppercase text-primary hover:underline"
+              >
+                {jobDisplayName(job)}
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            )}
+            {wo.claimId && (
+              <Link
+                href={`/claims/${wo.claimId}`}
+                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+              >
+                View Claim
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            )}
+          </>
+        }
+        bottomRow={
+          <>
+            <PageHeaderField label="Total">{total}</PageHeaderField>
+            <PageHeaderField label="Start">{formatDate(wo.startDate)}</PageHeaderField>
+            <PageHeaderField label="End">{formatDate(wo.endDate)}</PageHeaderField>
+          </>
+        }
+      />
     </>
   );
 }

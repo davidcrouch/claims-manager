@@ -10,12 +10,18 @@ import {
   Activity,
   AlertTriangle,
   ExternalLink,
+  Pencil,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { BackButton } from '@/components/layout/BackButton';
+import {
+  PageHeaderIcon,
+  PageHeaderLayout,
+} from '@/components/layout/PageHeaderLayout';
 import {
   DefRow,
   SectionCard,
@@ -35,22 +41,28 @@ function ConnectionPageHeader({
   connection: ConnectionDetail;
 }) {
   return (
-    <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1">
-      <BackButton href="/connections" label="Back to connections" />
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-100">
-        <Unplug className="h-4 w-4 text-violet-600" />
-      </span>
-      <h1 className="truncate text-lg font-semibold leading-tight">
-        {connection.name || connection.providerName}
-      </h1>
-      <span className="text-xs text-muted-foreground">
-        {connection.providerName} · {connection.environment}
-      </span>
-      <StatusBadge
-        status={connection.isActive ? 'Active' : 'Inactive'}
-        variant={connection.isActive ? 'active' : 'inactive'}
-      />
-    </div>
+    <PageHeaderLayout
+      leading={<BackButton href="/connections" label="Back to connections" />}
+      icon={
+        <PageHeaderIcon
+          icon={Unplug}
+          className="bg-violet-100"
+          iconClassName="text-violet-600"
+        />
+      }
+      title={connection.name || connection.providerName}
+      topRow={
+        <>
+          <span className="text-xs text-muted-foreground">
+            {connection.providerName} · {connection.environment}
+          </span>
+          <StatusBadge
+            status={connection.isActive ? 'Active' : 'Inactive'}
+            variant={connection.isActive ? 'active' : 'inactive'}
+          />
+        </>
+      }
+    />
   );
 }
 
@@ -94,6 +106,17 @@ export function ConnectionDetailContent({
         <ConnectionPageHeader connection={connection} />
       </SetPageHeader>
 
+      <SetHeaderActions>
+        <Button
+          size="default"
+          onClick={() => setEditDrawerOpen(true)}
+          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+          Edit Connection
+        </Button>
+      </SetHeaderActions>
+
       <div className="flex gap-0 border-b border-slate-200 bg-white px-8">
         {(['events', 'details'] as const).map((t) => (
           <button
@@ -121,10 +144,7 @@ export function ConnectionDetailContent({
         )}
         {tab === 'details' && (
           <div className="px-8 py-6">
-            <DetailsTab
-              connection={connection}
-              onEdit={() => setEditDrawerOpen(true)}
-            />
+            <DetailsTab connection={connection} />
           </div>
         )}
       </div>
@@ -145,19 +165,11 @@ export function ConnectionDetailContent({
 
 function DetailsTab({
   connection,
-  onEdit,
 }: {
   connection: ConnectionDetail;
-  onEdit: () => void;
 }) {
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-end">
-        <Button size="sm" onClick={onEdit}>
-          Edit Connection
-        </Button>
-      </div>
-
       <div className="grid gap-4 md:grid-cols-4">
         <Card size="sm">
           <CardContent className="px-4">

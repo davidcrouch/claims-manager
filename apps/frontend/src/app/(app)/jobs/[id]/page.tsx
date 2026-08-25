@@ -35,27 +35,39 @@ export default async function JobDetailPage({
   // Fire-and-forget: mark any unread notifications for this job as read
   api.markEntityNotificationsRead('job', id).catch(() => {});
 
-  const [parentClaim, statusOptions, jobTypeOptions, contactTypeOptions, reportStatusOptions, reportTypeOptions, assessmentsResult] =
+  const [parentClaim, statusOptions, jobTypeLookups, contactTypeOptions, reportStatusOptions, reportTypeOptions, assessmentsResult] =
     await Promise.all([
     job.claimId ? loadClaim(job.claimId) : Promise.resolve(null as Claim | null),
-    api
-      .getLookupsByDomain('job_status', { providerCode: 'crunchwork' })
-      .catch((err: unknown) => {
-        console.warn(
-          'frontend:JobDetailPage - getLookupsByDomain(job_status) failed:',
-          err instanceof Error ? err.message : err,
-        );
-        return [] as Awaited<ReturnType<typeof api.getLookupsByDomain>>;
-      }),
-    api
-      .getLookupsByDomain('job_type', { providerCode: 'crunchwork' })
-      .catch((err: unknown) => {
-        console.warn(
-          'frontend:JobDetailPage - getLookupsByDomain(job_type) failed:',
-          err instanceof Error ? err.message : err,
-        );
-        return [] as Awaited<ReturnType<typeof api.getLookupsByDomain>>;
-      }),
+    // All providers: synced CW statuses often have provider_code null, while
+    // seed/crunchwork rows use provider_code='crunchwork'. Filtering to one
+    // provider left the status select showing the lookup UUID.
+    api.getLookupsByDomain('job_status').catch((err: unknown) => {
+      console.warn(
+        'frontend:JobDetailPage - getLookupsByDomain(job_status) failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return [] as Awaited<ReturnType<typeof api.getLookupsByDomain>>;
+    }),
+    Promise.all([
+      api
+        .getLookupsByDomain('job_type', { providerCode: 'crunchwork' })
+        .catch((err: unknown) => {
+          console.warn(
+            'frontend:JobDetailPage - getLookupsByDomain(job_type, crunchwork) failed:',
+            err instanceof Error ? err.message : err,
+          );
+          return [] as Awaited<ReturnType<typeof api.getLookupsByDomain>>;
+        }),
+      api
+        .getLookupsByDomain('job_type', { providerCode: 'direct' })
+        .catch((err: unknown) => {
+          console.warn(
+            'frontend:JobDetailPage - getLookupsByDomain(job_type, direct) failed:',
+            err instanceof Error ? err.message : err,
+          );
+          return [] as Awaited<ReturnType<typeof api.getLookupsByDomain>>;
+        }),
+    ]).then(([crunchwork, direct]) => ({ crunchwork, direct })),
     api.getLookupsByDomain('contact_type').catch(() => []),
     api.getLookupsByDomain('report_status').catch(() => []),
     api.getLookupsByDomain('report_type').catch(() => []),
@@ -74,7 +86,25 @@ export default async function JobDetailPage({
     (Array.isArray(rows) ? rows : []).map((row) => ({
       id: row.id,
       name: row.name?.trim() ? row.name : 'Unknown',
+      externalReference: row.externalReference ?? undefined,
     }));
+
+  const jobTypeOptions = jobTypeLookups.crunchwork;
+  const makeSafeMatches = [
+    ...jobTypeLookups.crunchwork,
+    ...jobTypeLookups.direct,
+  ].filter((row) => (row.name ?? '').trim().toLowerCase() === 'builder make safe');
+  const makeSafeJobTypeRow =
+    makeSafeMatches.find((row) => row.providerCode === 'crunchwork') ??
+    makeSafeMatches[0] ??
+    null;
+  const makeSafeJobType = makeSafeJobTypeRow
+    ? {
+        id: makeSafeJobTypeRow.id,
+        name: makeSafeJobTypeRow.name?.trim() || 'Builder Make Safe',
+        externalReference: makeSafeJobTypeRow.externalReference ?? undefined,
+      }
+    : null;
 
   return (
     <>
@@ -84,12 +114,13 @@ export default async function JobDetailPage({
       <JobDetail
         job={job}
         parentClaim={parentClaim}
-        statusOptions={statusOptions}
-        jobTypeOptions={jobTypeOptions}
+        statusOptions={toOptions(statusOptions)}
+        jobTypeOptions={toOptions(jobTypeOptions)}
         contactTypeOptions={toOptions(contactTypeOptions)}
         reportStatusOptions={toOptions(reportStatusOptions)}
         reportTypeOptions={toOptions(reportTypeOptions)}
         assessments={assessmentsResult.data}
+        makeSafeJobType={makeSafeJobType}
       />
     </>
   );

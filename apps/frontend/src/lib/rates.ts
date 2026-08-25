@@ -31,6 +31,17 @@ export function rateToPercentPoints(rate: number): number {
   return Math.round(rate * 1e6) / 1e4;
 }
 
+/**
+ * Coerce an inbound value that may be percentage points (>1) or already a
+ * decimal rate (<=1) into a stored decimal rate. Use for tax and percent markup.
+ */
+export function coerceToRate(value: string | number | null | undefined): number {
+  const n = typeof value === 'number' ? value : parseFloat(String(value ?? ''));
+  if (!Number.isFinite(n) || n === 0) return 0;
+  if (Math.abs(n) > 1) return n / 100;
+  return n;
+}
+
 export function formatRateAsPercentLabel(rate: number): string {
   const pts = rateToPercentPoints(rate);
   if (!pts) return '—';
@@ -44,11 +55,11 @@ export function storedMarkupToUi(
 ): number {
   const v = stored ?? fallback;
   if (isFixedMarkupType(markupType)) return v;
-  return rateToPercentPoints(v);
+  return rateToPercentPoints(coerceToRate(v));
 }
 
 export function storedTaxToUi(stored: number | null | undefined): number {
-  return rateToPercentPoints(stored ?? 0);
+  return rateToPercentPoints(coerceToRate(stored ?? 0));
 }
 
 export function uiMarkupToStored(
@@ -83,7 +94,7 @@ export function resolveMarkupAmount(params: {
   }
   const stored = params.storedMarkupValue ?? DEFAULT_MARKUP_RATE;
   if (isFixedMarkupType(markupType)) return stored * quantity;
-  return extended * stored;
+  return extended * coerceToRate(stored);
 }
 
 /** Resolve stored decimal tax rate from edit UI or item. */
@@ -94,5 +105,5 @@ export function resolveTaxRate(params: {
   if (params.editUiValue != null) {
     return percentPointsToRate(parseFloat(params.editUiValue) || 0);
   }
-  return params.storedTax ?? 0;
+  return coerceToRate(params.storedTax ?? 0);
 }

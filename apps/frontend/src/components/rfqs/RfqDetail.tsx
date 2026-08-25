@@ -20,6 +20,12 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { BackButton } from '@/components/layout/BackButton';
+import {
+  PageHeaderField,
+  PageHeaderIcon,
+  PageHeaderLayout,
+} from '@/components/layout/PageHeaderLayout';
+import { HeaderActionToolbar } from '@/components/layout/HeaderActionToolbar';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { Button } from '@/components/ui/button';
 import {
@@ -36,7 +42,7 @@ import type { Rfq, Proposal, Job, Quote } from '@/types/api';
 import { PrintButton } from '@/components/shared/PrintButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { jobDisplayName } from '@/components/shared/job-label';
-import { EntityDetailTitle, entityArchiveLabel } from '@/components/shared/EntityDetailTitle';
+import { entityArchiveLabel, entityDetailHeaderTitles } from '@/components/shared/EntityDetailTitle';
 import {
   LineItemsProvider,
   LineItemsTable,
@@ -83,61 +89,63 @@ function vendorName(rfq: Rfq): string | undefined {
 export function RfqPageHeader({ rfq, job }: { rfq: Rfq; job?: Job | null }) {
   const status = rfq.status?.name ?? 'Unknown';
   const vendor = vendorName(rfq);
+  const titles = entityDetailHeaderTitles({
+    internalNumber: rfq.internalNumber,
+    name: rfq.name,
+    secondaryLabel: rfq.rfqNumber,
+    fallbackId: rfq.id,
+  });
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-y-1">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-        <BackButton href={job ? `/rfqs?jobId=${job.id}` : '/rfqs'} label="Back to RFQs" />
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-100">
-          <FileQuestion className="h-4 w-4 text-violet-600" />
-        </span>
-        <EntityDetailTitle
-          internalNumber={rfq.internalNumber}
-          name={rfq.name}
-          secondaryLabel={rfq.rfqNumber}
-          fallbackId={rfq.id}
+    <PageHeaderLayout
+      leading={<BackButton href={job ? `/rfqs?jobId=${job.id}` : '/rfqs'} label="Back to RFQs" />}
+      icon={
+        <PageHeaderIcon
+          icon={FileQuestion}
+          className="bg-violet-100"
+          iconClassName="text-violet-600"
         />
-        <StatusBadge status={status} />
-        {vendor && (
-          <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-            <Building2 className="h-3 w-3" />
-            {vendor}
-          </span>
-        )}
-        {job && (
-          <Link
-            href={`/jobs/${job.id}`}
-            className="inline-flex items-center gap-1 text-xs uppercase text-primary hover:underline"
-          >
-            {jobDisplayName(job)}
-            <ExternalLink className="h-3 w-3" />
-          </Link>
-        )}
-        {rfq.quoteId && (
-          <Link
-            href={`/quotes/${rfq.quoteId}`}
-            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-          >
-            View Source Estimate
-            <ExternalLink className="h-3 w-3" />
-          </Link>
-        )}
-      </div>
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pl-20 text-xs">
-        <div className="flex items-baseline gap-1">
-          <span className="text-muted-foreground">Sent:</span>
-          <span className="font-medium">{formatDate(rfq.sentDate)}</span>
-        </div>
-        <div className="flex items-baseline gap-1">
-          <span className="text-muted-foreground">Due:</span>
-          <span className="font-medium">{formatDate(rfq.dueDate)}</span>
-        </div>
-        <div className="flex items-baseline gap-1">
-          <span className="text-muted-foreground">Updated:</span>
-          <span className="font-medium">{formatDateTime(rfq.updatedAt)}</span>
-        </div>
-      </div>
-    </div>
+      }
+      topTitle={titles.topTitle}
+      title={titles.title}
+      titleMono={titles.titleMono}
+      topRow={
+        <>
+          <StatusBadge status={status} />
+          {vendor && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              <Building2 className="h-3 w-3" />
+              {vendor}
+            </span>
+          )}
+          {job && (
+            <Link
+              href={`/jobs/${job.id}`}
+              className="inline-flex items-center gap-1 text-xs uppercase text-primary hover:underline"
+            >
+              {jobDisplayName(job)}
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
+          {rfq.quoteId && (
+            <Link
+              href={`/quotes/${rfq.quoteId}`}
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              View Source Estimate
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
+        </>
+      }
+      bottomRow={
+        <>
+          <PageHeaderField label="Sent">{formatDate(rfq.sentDate)}</PageHeaderField>
+          <PageHeaderField label="Due">{formatDate(rfq.dueDate)}</PageHeaderField>
+          <PageHeaderField label="Updated">{formatDateTime(rfq.updatedAt)}</PageHeaderField>
+        </>
+      }
+    />
   );
 }
 
@@ -1013,14 +1021,16 @@ export function RfqDetail({
             </Button>
           </>
         )}
-        <PrintButton documentType="rfq" entityId={rfq.id} jobId={job?.id} />
-        <ArchiveEntityButton
-          entityType="rfq"
-          entityId={rfq.id}
-          statusName={rfq.status?.name}
-          entityLabel={entityArchiveLabel(rfq.internalNumber, rfq.name, rfq.rfqNumber, rfq.id)}
-          redirectTo="/rfqs"
-        />
+        <HeaderActionToolbar>
+          <PrintButton documentType="rfq" entityId={rfq.id} jobId={job?.id} />
+          <ArchiveEntityButton
+            entityType="rfq"
+            entityId={rfq.id}
+            statusName={rfq.status?.name}
+            entityLabel={entityArchiveLabel(rfq.internalNumber, rfq.name, rfq.rfqNumber, rfq.id)}
+            redirectTo="/rfqs"
+          />
+        </HeaderActionToolbar>
       </SetHeaderActions>
       <div className="flex flex-wrap gap-0 border-b border-slate-200">
         {tabs.map((t) => {

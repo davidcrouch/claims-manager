@@ -13,7 +13,6 @@ import {
   MessageSquare,
   Paperclip,
   Package,
-  Send,
   BookOpen,
   Lock,
   Layers,
@@ -30,6 +29,12 @@ import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { TypeBadge } from '@/components/ui/type-badge';
 import { BackButton } from '@/components/layout/BackButton';
+import {
+  PageHeaderField,
+  PageHeaderIcon,
+  PageHeaderLayout,
+} from '@/components/layout/PageHeaderLayout';
+import { HeaderActionToolbar } from '@/components/layout/HeaderActionToolbar';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import {
   DefRow,
@@ -51,6 +56,7 @@ import type {
   CatalogType,
 } from '@/types/api';
 import { PrintButton } from '@/components/shared/PrintButton';
+import { PublishButton } from '@/components/shared/PublishButton';
 import { buildEstimateReportTypes } from '@/components/shared/PrintDocumentDrawer';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import {
@@ -59,7 +65,7 @@ import {
   resolveDetailAssignee,
 } from '@/components/shared/DetailAssignee';
 import { jobDisplayName } from '@/components/shared/job-label';
-import { EntityDetailTitle, entityArchiveLabel } from '@/components/shared/EntityDetailTitle';
+import { entityArchiveLabel, entityDetailHeaderTitles } from '@/components/shared/EntityDetailTitle';
 import { QuoteLineItemsTabV2 as QuoteLineItemsTab, type LineItemEdits, type QuoteLineItemsTabHandle } from '@/components/line-items/QuoteLineItemsTabV2';
 import {
   QuoteOverviewTab,
@@ -99,7 +105,10 @@ import {
   detailSaveStatus,
   pushUndoEntry,
 } from '@/components/shared/detail-autosave';
-import { DetailAutosaveActions } from '@/components/shared/DetailAutosaveActions';
+import {
+  DetailSaveStatus,
+  DetailUndoButton,
+} from '@/components/shared/DetailAutosaveActions';
 
 type UndoEntry =
   | { kind: 'fields'; snapshot: QuoteFieldsSnapshot }
@@ -193,63 +202,66 @@ export function QuotePageHeader({
   const quoteTypeName = quote.quoteType?.name ?? approval.quoteTypeName;
   const locked = isEstimateLocked(quote);
 
+  const titles = entityDetailHeaderTitles({
+    internalNumber: quote.internalNumber,
+    name: quote.name,
+    secondaryLabel: quote.quoteNumber ?? quote.externalReference,
+    fallbackId: quote.id,
+  });
+
   return (
-    <div className="flex w-full min-w-0 flex-col gap-y-1">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-        <BackButton href={job ? `/quotes?jobId=${job.id}` : '/quotes'} label="Back to estimates" />
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100">
-          <FileSpreadsheet className="h-4 w-4 text-amber-600" />
-        </span>
-        <EntityDetailTitle
-          internalNumber={quote.internalNumber}
-          name={quote.name}
-          secondaryLabel={quote.quoteNumber ?? quote.externalReference}
-          fallbackId={quote.id}
+    <PageHeaderLayout
+      leading={<BackButton href={job ? `/quotes?jobId=${job.id}` : '/quotes'} label="Back to estimates" />}
+      icon={
+        <PageHeaderIcon
+          icon={FileSpreadsheet}
+          className="bg-amber-100"
+          iconClassName="text-amber-600"
         />
-        <StatusBadge status={statusName} />
-        {locked && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-            <Lock className="h-3 w-3" />
-            Locked
-          </span>
-        )}
-        {quoteTypeName && quoteTypeName !== 'Estimate' && quoteTypeName !== 'Quote' && (
-          <TypeBadge type={quoteTypeName} />
-        )}
-        {job && (
-          <Link
-            href={`/jobs/${job.id}`}
-            className="inline-flex items-center gap-1 text-xs uppercase text-primary hover:underline"
-          >
-            {jobDisplayName(job)}
-            <ExternalLink className="h-3 w-3" />
-          </Link>
-        )}
-        {quote.claimId && (
-          <Link
-            href={`/claims/${quote.claimId}`}
-            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-          >
-            View Claim
-            <ExternalLink className="h-3 w-3" />
-          </Link>
-        )}
-      </div>
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pl-20 text-xs">
-        <div className="flex items-baseline gap-1">
-          <span className="text-muted-foreground">Total:</span>
-          <span className="font-medium">{formatCurrency(quote.totalAmount)}</span>
-        </div>
-        <div className="flex items-baseline gap-1">
-          <span className="text-muted-foreground">Estimate date:</span>
-          <span className="font-medium">{formatDate(quote.quoteDate)}</span>
-        </div>
-        <div className="flex items-baseline gap-1">
-          <span className="text-muted-foreground">Updated:</span>
-          <span className="font-medium">{formatDateTime(quote.updatedAt)}</span>
-        </div>
-      </div>
-    </div>
+      }
+      topTitle={titles.topTitle}
+      title={titles.title}
+      titleMono={titles.titleMono}
+      topRow={
+        <>
+          <StatusBadge status={statusName} />
+          {locked && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+              <Lock className="h-3 w-3" />
+              Locked
+            </span>
+          )}
+          {quoteTypeName && quoteTypeName !== 'Estimate' && quoteTypeName !== 'Quote' && (
+            <TypeBadge type={quoteTypeName} />
+          )}
+          {job && (
+            <Link
+              href={`/jobs/${job.id}`}
+              className="inline-flex items-center gap-1 text-xs uppercase text-primary hover:underline"
+            >
+              {jobDisplayName(job)}
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
+          {quote.claimId && (
+            <Link
+              href={`/claims/${quote.claimId}`}
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              View Claim
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
+        </>
+      }
+      bottomRow={
+        <>
+          <PageHeaderField label="Total">{formatCurrency(quote.totalAmount)}</PageHeaderField>
+          <PageHeaderField label="Estimate date">{formatDate(quote.quoteDate)}</PageHeaderField>
+          <PageHeaderField label="Updated">{formatDateTime(quote.updatedAt)}</PageHeaderField>
+        </>
+      }
+    />
   );
 }
 
@@ -623,13 +635,7 @@ export function QuoteDetail({
   return (
     <div className="flex flex-col">
       <SetHeaderActions>
-        <DetailAutosaveActions
-          statusLabel={saveStatusLabel}
-          tone={saveStatusTone}
-          canUndo={canUndo}
-          undoDisabled={anySaving}
-          onUndo={handleUndo}
-        />
+        <DetailSaveStatus statusLabel={saveStatusLabel} tone={saveStatusTone} />
         {showTakeOffActions && (
           <Button
             size="default"
@@ -639,16 +645,6 @@ export function QuoteDetail({
           >
             <Package className="h-3.5 w-3.5" />
             Catalogue
-          </Button>
-        )}
-        {canPublish && (
-          <Button
-            size="default"
-            onClick={() => setPublishWizardOpen(true)}
-            className="h-9 gap-1.5 px-4 bg-amber-600 text-white hover:bg-amber-500"
-          >
-            <Send className="h-3.5 w-3.5" />
-            Publish
           </Button>
         )}
         {canApprove && (
@@ -665,24 +661,34 @@ export function QuoteDetail({
           <Button
             size="default"
             onClick={() => setWorkOrderDrawerOpen(true)}
-            className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+            className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
           >
             Create Work Order
           </Button>
         )}
-        <PrintButton
-          documentType="quote"
-          entityId={quote.id}
-          jobId={job?.id ?? quote.jobId ?? undefined}
-          reportTypes={estimateReportTypes}
-        />
-        <ArchiveEntityButton
-          entityType="quote"
-          entityId={quote.id}
-          statusName={statusName}
-          entityLabel={title}
-          redirectTo={job ? `/quotes?jobId=${job.id}` : '/quotes'}
-        />
+        <HeaderActionToolbar>
+          <DetailUndoButton
+            canUndo={canUndo}
+            undoDisabled={anySaving}
+            onUndo={handleUndo}
+          />
+          {canPublish && (
+            <PublishButton onClick={() => setPublishWizardOpen(true)} />
+          )}
+          <PrintButton
+            documentType="quote"
+            entityId={quote.id}
+            jobId={job?.id ?? quote.jobId ?? undefined}
+            reportTypes={estimateReportTypes}
+          />
+          <ArchiveEntityButton
+            entityType="quote"
+            entityId={quote.id}
+            statusName={statusName}
+            entityLabel={title}
+            redirectTo={job ? `/quotes?jobId=${job.id}` : '/quotes'}
+          />
+        </HeaderActionToolbar>
       </SetHeaderActions>
       <WorkOrderFormDrawer
         open={workOrderDrawerOpen}

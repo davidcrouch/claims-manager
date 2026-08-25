@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { LayoutList, Plus, ScrollText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { HeaderActionToolbar } from '@/components/layout/HeaderActionToolbar';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { PrintButton } from '@/components/shared/PrintButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
@@ -73,20 +74,22 @@ export function JournalDetailClient({ journal, initialPages, job = null }: Journ
           <Button
             size="default"
             onClick={() => setEntryDrawerOpen(true)}
-            className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+            className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
           >
             <Plus className="h-4 w-4" />
             Add Entry
           </Button>
         )}
-        <PrintButton documentType="journal" entityId={journal.id} jobId={job?.id} />
-        <ArchiveEntityButton
-          entityType="journal"
-          entityId={journal.id}
-          statusName={journal.status}
-          entityLabel={journal.name}
-          redirectTo="/journals"
-        />
+        <HeaderActionToolbar>
+          <PrintButton documentType="journal" entityId={journal.id} jobId={job?.id} />
+          <ArchiveEntityButton
+            entityType="journal"
+            entityId={journal.id}
+            statusName={journal.status}
+            entityLabel={journal.name}
+            redirectTo="/journals"
+          />
+        </HeaderActionToolbar>
       </SetHeaderActions>
 
       <div className="flex w-full flex-wrap items-center gap-x-4 border-b border-slate-200">

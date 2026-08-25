@@ -336,6 +336,7 @@ export class ProvidersService {
     connectionId: string;
     tenantId: string;
     status?: string;
+    eventType?: string;
     search?: string;
     sort?: string;
     page?: number;
@@ -352,11 +353,30 @@ export class ProvidersService {
       connectionId: params.connectionId,
       tenantId: params.tenantId,
       status: params.status,
+      eventType: params.eventType,
       search: params.search,
       sort: params.sort,
       page: params.page,
       limit: params.limit,
     });
+  }
+
+  async findWebhookEventFilterOptionsByConnection(params: {
+    connectionId: string;
+    tenantId: string;
+  }): Promise<{ eventTypes: string[] }> {
+    this.logger.debug(
+      `[ProvidersService.findWebhookEventFilterOptionsByConnection] connectionId=${params.connectionId}`,
+    );
+    const conn = await this.connectionsRepo.findById({ id: params.connectionId });
+    if (!conn || conn.tenantId !== params.tenantId) {
+      throw new NotFoundException(`Connection ${params.connectionId} not found`);
+    }
+    const eventTypes = await this.webhookEventsRepo.distinctEventTypesByConnectionId({
+      connectionId: params.connectionId,
+      tenantId: params.tenantId,
+    });
+    return { eventTypes };
   }
 
   private async enrichConnection(params: {

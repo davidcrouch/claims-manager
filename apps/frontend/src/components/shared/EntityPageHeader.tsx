@@ -16,6 +16,11 @@ import {
 import { StatusBadge } from '@/components/ui/status-badge';
 import { TypeBadge } from '@/components/ui/type-badge';
 import { JobsPickerDrawer } from '@/components/jobs/JobsPickerDrawer';
+import {
+  PageHeaderField,
+  PageHeaderIcon,
+  PageHeaderLayout,
+} from '@/components/layout/PageHeaderLayout';
 import { formatDate, formatDateTime, formatCurrency, formatAddress } from '@/components/shared/detail';
 import { jobHeaderSubtitle, jobHeaderTitle } from '@/components/shared/job-label';
 import type { Job, Claim } from '@/types/api';
@@ -152,31 +157,40 @@ export function EntityPageHeader({
 
     return (
       <>
-        <div className="flex w-full min-w-0 flex-col gap-y-1">
-          {/* Primary row: job context */}
-          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100">
-              <Briefcase className="h-4 w-4 text-emerald-600" />
-            </span>
-            <div className="inline-flex max-w-full min-w-0 items-center gap-0.5">
+        <PageHeaderLayout
+          icon={
+            <PageHeaderIcon
+              icon={Briefcase}
+              className="bg-emerald-100"
+              iconClassName="text-emerald-600"
+            />
+          }
+          topTitle={
+            topLabel ? (
               <Link
                 href={`/jobs/${job.id}`}
                 className="group min-w-0 max-w-full rounded-md outline-none transition-colors hover:text-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-500/40"
                 title="View job"
               >
-                <div className="min-w-0">
-                  {topLabel ? (
-                    <p className="truncate text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                      {topLabel}
-                    </p>
-                  ) : null}
-                  <h1
-                    className={`truncate font-mono text-lg font-semibold leading-tight uppercase underline-offset-4 group-hover:underline${topLabel ? ' mt-0.5' : ''}`}
-                  >
-                    {linkTitle}
-                  </h1>
-                </div>
+                <p className="truncate text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {topLabel}
+                </p>
               </Link>
+            ) : undefined
+          }
+          title={
+            <Link
+              href={`/jobs/${job.id}`}
+              className="group min-w-0 max-w-full rounded-md outline-none transition-colors hover:text-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+              title="View job"
+            >
+              <h1 className="truncate font-mono text-lg font-semibold leading-tight uppercase underline-offset-4 group-hover:underline">
+                {linkTitle}
+              </h1>
+            </Link>
+          }
+          titleActions={
+            <div className="flex items-center gap-0.5">
               <button
                 type="button"
                 onClick={() => setPickerOpen(true)}
@@ -198,62 +212,51 @@ export function EntityPageHeader({
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <StatusBadge status={statusName} />
-            {jobTypeName && <TypeBadge type={jobTypeName} />}
-            {address && (
-              <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                <MapPin className="h-3 w-3" />
-                {address}
-              </span>
-            )}
-            {job.claimId && (
-              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                <span>Claim:</span>
-                <Link
-                  href={`/claims/${job.claimId}`}
-                  className="inline-flex items-center gap-1 text-primary hover:underline"
-                >
-                  {parentClaimNumber ?? job.claimId}
-                  <ExternalLink className="h-3 w-3" />
-                </Link>
-              </span>
-            )}
-            {/* Entity metrics inline */}
-            <span className="ml-auto inline-flex items-center gap-2">
-              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${accentCls.badgeBg} ${accentCls.badgeText}`}>
+          }
+          topRow={
+            <>
+              <StatusBadge status={statusName} />
+              {jobTypeName && <TypeBadge type={jobTypeName} />}
+              {address && (
+                <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                  <MapPin className="h-3 w-3" />
+                  {address}
+                </span>
+              )}
+              {job.claimId && (
+                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  <span>Claim:</span>
+                  <Link
+                    href={`/claims/${job.claimId}`}
+                    className="inline-flex items-center gap-1 text-primary hover:underline"
+                  >
+                    {parentClaimNumber ?? job.claimId}
+                    <ExternalLink className="h-3 w-3" />
+                  </Link>
+                </span>
+              )}
+              <span
+                className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${accentCls.badgeBg} ${accentCls.badgeText}`}
+              >
                 {total.toLocaleString()} {title.toLowerCase()}
               </span>
-            </span>
-          </div>
-          {/* Secondary row: job metadata + entity stats */}
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pl-10 text-xs">
-            <div className="flex items-baseline gap-1">
-              <span className="text-muted-foreground">Request:</span>
-              <span className="font-medium">{formatDate(job.requestDate)}</span>
-            </div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-muted-foreground">Updated:</span>
-              <span className="font-medium">{formatDateTime(job.updatedAt)}</span>
-            </div>
-            {job.excess != null && job.excess !== '' && (
-              <div className="flex items-baseline gap-1">
-                <span className="text-muted-foreground">Excess:</span>
-                <span className="font-medium">{formatCurrency(job.excess)}</span>
-              </div>
-            )}
-            {stats && stats.length > 0 && (
-              <>
-                <span className="mx-1 text-muted-foreground/40">|</span>
-                {stats.map((s) => (
-                  <div key={s.label} className="flex items-baseline gap-1">
-                    <span className="text-muted-foreground">{s.label}:</span>
-                    <span className="font-medium">{s.value}</span>
-                  </div>
-                ))}
-              </>
-            )}
-          </div>
-        </div>
+            </>
+          }
+          bottomRow={
+            <>
+              <PageHeaderField label="Request">{formatDate(job.requestDate)}</PageHeaderField>
+              <PageHeaderField label="Updated">{formatDateTime(job.updatedAt)}</PageHeaderField>
+              {job.excess != null && job.excess !== '' && (
+                <PageHeaderField label="Excess">{formatCurrency(job.excess)}</PageHeaderField>
+              )}
+              {stats?.map((s) => (
+                <PageHeaderField key={s.label} label={s.label}>
+                  {s.value}
+                </PageHeaderField>
+              ))}
+            </>
+          }
+        />
         <JobsPickerDrawer
           open={pickerOpen}
           onOpenChange={setPickerOpen}
@@ -264,71 +267,73 @@ export function EntityPageHeader({
     );
   }
 
-  // All-jobs mode: aggregate entity metrics
   return (
     <>
-      <div className="flex w-full min-w-0 flex-col gap-y-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-          <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${accentCls.iconBg}`}>
-            <Icon className={`h-4 w-4 ${accentCls.iconText}`} />
-          </span>
-          <h1 className="truncate text-lg font-semibold leading-tight">
-            {title}
-          </h1>
-          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${accentCls.badgeBg} ${accentCls.badgeText}`}>
-            {total.toLocaleString()} total
-          </span>
-          {showShowing && (
-            <span className="text-xs text-muted-foreground">
-              Showing {showing!.toLocaleString()}
+      <PageHeaderLayout
+        icon={
+          <PageHeaderIcon
+            icon={Icon}
+            className={accentCls.iconBg}
+            iconClassName={accentCls.iconText}
+          />
+        }
+        title={title}
+        topRow={
+          <>
+            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${accentCls.badgeBg} ${accentCls.badgeText}`}>
+              {total.toLocaleString()} total
             </span>
-          )}
-          {trimmedSearch && (
-            <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-              <Search className="h-3 w-3" />
-              &ldquo;{trimmedSearch}&rdquo;
-            </span>
-          )}
-          {hasStatusFilter && (
-            <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-              <Filter className="h-3 w-3" />
-              {statusSelectedCount} {statusSelectedCount === 1 ? 'status' : 'statuses'}
-            </span>
-          )}
-          {breakdown && breakdown.length > 0 && (
-            <span className="flex flex-wrap items-center gap-1">
-              {breakdown.map((item) => (
-                <span
-                  key={item.name}
-                  className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground"
-                >
-                  {item.name}
-                  <span className="font-medium text-foreground">{item.count}</span>
-                </span>
-              ))}
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={() => setPickerOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-emerald-500/40"
-            title="Filter by job"
-          >
-            <Briefcase className="h-3 w-3" />
-            Filter by job
-          </button>
-        </div>
-        {stats && stats.length > 0 && (
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pl-10 text-xs">
-            {stats.map((s) => (
-              <div key={s.label} className="flex items-baseline gap-1">
-                <span className="text-muted-foreground">{s.label}:</span>
-                <span className="font-medium">{s.value}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+            {showShowing && (
+              <span className="text-xs text-muted-foreground">
+                Showing {showing!.toLocaleString()}
+              </span>
+            )}
+            {trimmedSearch && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                <Search className="h-3 w-3" />
+                &ldquo;{trimmedSearch}&rdquo;
+              </span>
+            )}
+            {hasStatusFilter && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                <Filter className="h-3 w-3" />
+                {statusSelectedCount} {statusSelectedCount === 1 ? 'status' : 'statuses'}
+              </span>
+            )}
+            {breakdown && breakdown.length > 0 && (
+              <span className="flex flex-wrap items-center gap-1">
+                {breakdown.map((item) => (
+                  <span
+                    key={item.name}
+                    className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                  >
+                    {item.name}
+                    <span className="font-medium text-foreground">{item.count}</span>
+                  </span>
+                ))}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => setPickerOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+              title="Filter by job"
+            >
+              <Briefcase className="h-3 w-3" />
+              Filter by job
+            </button>
+          </>
+        }
+        bottomRow={
+          stats && stats.length > 0
+            ? stats.map((s) => (
+                <PageHeaderField key={s.label} label={s.label}>
+                  {s.value}
+                </PageHeaderField>
+              ))
+            : undefined
+        }
+      />
       <JobsPickerDrawer
         open={pickerOpen}
         onOpenChange={setPickerOpen}

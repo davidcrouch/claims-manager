@@ -11,7 +11,7 @@ import { CrunchworkOutboundAdapter } from './adapters/crunchwork-outbound.adapte
     OutboundWorkerService,
     CrunchworkOutboundAdapter,
   ],
-  exports: [OutboundSyncService],
+  exports: [OutboundSyncService, CrunchworkOutboundAdapter],
 })
 export class OutboundModule implements OnModuleInit {
   constructor(

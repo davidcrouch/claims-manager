@@ -62,6 +62,16 @@ export class ConnectionsController {
     return this.providersService.updateConnectionById({ id, tenantId, dto });
   }
 
+  @Get(':id/webhook-events/filter-options')
+  @RequirePermission(P.integrations.read)
+  async findWebhookEventFilterOptions(@Param('id') id: string) {
+    const tenantId = this.tenantContext.getTenantId();
+    return this.providersService.findWebhookEventFilterOptionsByConnection({
+      connectionId: id,
+      tenantId,
+    });
+  }
+
   @Get(':id/webhook-events')
   @RequirePermission(P.integrations.read)
   async findWebhookEvents(
@@ -69,6 +79,7 @@ export class ConnectionsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('status') status?: string,
+    @Query('eventType') eventType?: string,
     @Query('search') search?: string,
     @Query('sort') sort?: string,
   ) {
@@ -77,6 +88,7 @@ export class ConnectionsController {
       connectionId: id,
       tenantId,
       status,
+      eventType,
       search,
       sort,
       page: page ? parseInt(page, 10) : undefined,

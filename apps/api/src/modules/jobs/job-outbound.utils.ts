@@ -106,7 +106,8 @@ export function buildCrunchworkJobCreateBody(params: {
   cwClaimId: string;
   jobType: { externalReference: string; name?: string };
   status?: { externalReference: string; name?: string } | null;
-  contacts: CwContactOutbound[];
+  /** Omit on create — CW copies claim contacts; re-sending them returns 400/500. */
+  contacts?: CwContactOutbound[];
   address?: Record<string, unknown> | null;
   makeSafeRequired?: boolean;
   excess?: number | string | null;
@@ -117,9 +118,11 @@ export function buildCrunchworkJobCreateBody(params: {
   const body: Record<string, unknown> = {
     claimId: params.cwClaimId,
     jobType: params.jobType,
-    contacts: params.contacts,
   };
 
+  if (params.contacts && params.contacts.length > 0) {
+    body.contacts = params.contacts;
+  }
   if (params.status) body.status = params.status;
   if (params.address && Object.keys(params.address).length > 0) {
     body.address = params.address;

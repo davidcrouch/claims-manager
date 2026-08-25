@@ -139,10 +139,11 @@ export const QuoteLineItemsTabV2 = forwardRef(function QuoteLineItemsTabV2(
   const handleCatalogDrop = useCallback((payload: CatalogDragPayload, groupId?: string, quoteComboId?: string) => {
     startTransition(async () => {
       const qty = quantity.trim() || '1';
+      const nestUnderComboId = payload.kind === 'scope' ? undefined : quoteComboId;
       const result =
         payload.kind === 'assembly' || payload.kind === 'scope'
-          ? await addCatalogAssemblyToQuoteAction({ quoteId: quote.id, catalogAssemblyId: payload.id, quantity: qty, groupId, quoteComboId })
-          : await addCatalogItemToQuoteAction({ quoteId: quote.id, catalogItemId: payload.id, quantity: qty, groupId, quoteComboId });
+          ? await addCatalogAssemblyToQuoteAction({ quoteId: quote.id, catalogAssemblyId: payload.id, quantity: qty, groupId, quoteComboId: nestUnderComboId })
+          : await addCatalogItemToQuoteAction({ quoteId: quote.id, catalogItemId: payload.id, quantity: qty, groupId, quoteComboId: nestUnderComboId });
       if (!result.success) {
         toast.error(result.error ?? 'Failed to add catalogue item');
         return;

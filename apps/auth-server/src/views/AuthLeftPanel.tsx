@@ -2,6 +2,8 @@ import React from 'react';
 
 const LOGO_TEXT = '/ensure_logo_text_dark.png';
 const LOGO_ICON = '/ensure_logo_text_dark.png';
+/** Exact baked-in background of ensure_logo_text_dark.png (rgb(2, 18, 45)). */
+const LOGO_NAVY = '#02122d';
 
 interface AuthLeftPanelProps {
   variant?: 'full' | 'icon';
@@ -12,17 +14,9 @@ export function AuthLeftPanel({ variant = 'full' }: AuthLeftPanelProps) {
 
   return (
     <div
-      className="relative flex min-h-[200px] w-full flex-1 basis-0 flex-col items-center justify-center overflow-hidden bg-brand-950 px-5 py-8 sm:px-6 md:min-h-0"
+      className="relative flex min-h-[200px] w-full flex-1 basis-0 flex-col items-center justify-center overflow-hidden px-5 py-8 sm:px-6 md:min-h-0"
+      style={{ backgroundColor: LOGO_NAVY }}
     >
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 opacity-40"
-        style={{
-          background:
-            'radial-gradient(ellipse 80% 60% at 20% 20%, rgba(42,88,163,0.25), transparent 55%), radial-gradient(ellipse 70% 50% at 80% 80%, rgba(42,88,163,0.12), transparent 50%)',
-        }}
-      />
-
       <div className="relative z-10 flex w-full max-w-[min(100%,320px)] flex-col items-center justify-center">
         {isFull ? (
           <img
@@ -30,7 +24,7 @@ export function AuthLeftPanel({ variant = 'full' }: AuthLeftPanelProps) {
             alt="EnsureOS"
             width={640}
             height={400}
-            className="h-auto w-full object-contain drop-shadow-[0_8px_32px_rgba(0,0,0,0.35)]"
+            className="h-auto w-full object-contain"
             decoding="async"
           />
         ) : (
@@ -39,7 +33,7 @@ export function AuthLeftPanel({ variant = 'full' }: AuthLeftPanelProps) {
             alt="EnsureOS"
             width={256}
             height={256}
-            className="mx-auto h-auto w-[min(55%,200px)] object-contain drop-shadow-[0_8px_32px_rgba(0,0,0,0.35)]"
+            className="mx-auto h-auto w-[min(55%,200px)] object-contain"
             decoding="async"
           />
         )}

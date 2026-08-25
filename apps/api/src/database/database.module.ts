@@ -57,7 +57,6 @@ import {
   RfqSendRequestsRepository,
   EmailTemplatesRepository,
   EntityActivitiesRepository,
-  TaskTypeMappingsRepository,
 } from './repositories';
 
 const repositories = [
@@ -117,7 +116,6 @@ const repositories = [
   RfqSendRequestsRepository,
   EmailTemplatesRepository,
   EntityActivitiesRepository,
-  TaskTypeMappingsRepository,
 ];
 
 @Global()

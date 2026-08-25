@@ -1,6 +1,22 @@
 import { Injectable } from '@nestjs/common';
 import type { EntityTransformer, TransformResult, LookupRequest, ParentRef } from './transformer.interface';
 import { asString, asNumericString, isPlainObject } from './transform-utils';
+import { LOOKUP_DOMAINS } from '../constants/lookup-domains';
+
+/** Map inbound CW PO status names onto work_order_status (list tabs filter that domain only). */
+export function mapPoStatusToWorkOrderStatus(raw: string | null | undefined): {
+  name: string;
+  externalReference: string;
+} {
+  const trimmed = (raw ?? '').trim();
+  const key = trimmed.toLowerCase();
+  if (key === 'issued') return { name: 'Open', externalReference: 'Open' };
+  if (key === 'cancelled' || key === 'closed') {
+    return { name: 'Archived', externalReference: 'Archived' };
+  }
+  const name = trimmed || 'Open';
+  return { name, externalReference: name };
+}
 
 // ── Party-bucket helpers ────────────────────────────────────────────
 // CW sends party info as flat top-level keys (toName, forEmail, etc.).
@@ -168,19 +184,40 @@ export class PurchaseOrderTransformer implements EntityTransformer {
     const cwQuoteId = asString(payload.quoteRevisionId);
     if (cwQuoteId) parentRefs.push({ entityType: 'quote', externalId: cwQuoteId, required: false });
 
-    // §4 — Lookups (handle both object and bare-string forms)
-    if (isPlainObject(payload.status)) {
-      const extRef = asString(payload.status.externalReference) ?? asString(payload.status.name) ?? asString(payload.status.id);
-      if (extRef) lookups.push({ field: 'statusLookupId', domain: 'purchase_order_status', externalReference: extRef, name: asString(payload.status.name), autoCreate: true });
-    } else if (typeof payload.status === 'string' && payload.status.trim()) {
-      lookups.push({ field: 'statusLookupId', domain: 'purchase_order_status', externalReference: payload.status.trim(), name: payload.status.trim(), autoCreate: true });
-    }
+    // §4 — Lookups. Inbound POs project as work orders, so resolve
+    // work_order_status / work_order_type (Active/Archived tabs filter those IDs).
+    const rawStatus = isPlainObject(payload.status)
+      ? (asString(payload.status.name) ?? asString(payload.status.externalReference) ?? asString(payload.status.id))
+      : (typeof payload.status === 'string' ? payload.status : undefined);
+    const mappedStatus = mapPoStatusToWorkOrderStatus(rawStatus);
+    lookups.push({
+      field: 'statusLookupId',
+      domain: LOOKUP_DOMAINS.WORK_ORDER_STATUS,
+      externalReference: mappedStatus.externalReference,
+      name: mappedStatus.name,
+      autoCreate: true,
+    });
 
     if (isPlainObject(payload.purchaseOrderType)) {
-      const extRef = asString(payload.purchaseOrderType.externalReference) ?? asString(payload.purchaseOrderType.name) ?? asString(payload.purchaseOrderType.id);
-      if (extRef) lookups.push({ field: 'workOrderTypeLookupId', domain: 'purchase_order_type', externalReference: extRef, name: asString(payload.purchaseOrderType.name), autoCreate: true });
+      const typeName = asString(payload.purchaseOrderType.name) ?? asString(payload.purchaseOrderType.externalReference) ?? asString(payload.purchaseOrderType.id);
+      if (typeName) {
+        lookups.push({
+          field: 'workOrderTypeLookupId',
+          domain: LOOKUP_DOMAINS.WORK_ORDER_TYPE,
+          externalReference: typeName,
+          name: typeName,
+          autoCreate: true,
+        });
+      }
     } else if (typeof payload.purchaseOrderType === 'string' && payload.purchaseOrderType.trim()) {
-      lookups.push({ field: 'workOrderTypeLookupId', domain: 'purchase_order_type', externalReference: payload.purchaseOrderType.trim(), name: payload.purchaseOrderType.trim(), autoCreate: true });
+      const typeName = payload.purchaseOrderType.trim();
+      lookups.push({
+        field: 'workOrderTypeLookupId',
+        domain: LOOKUP_DOMAINS.WORK_ORDER_TYPE,
+        externalReference: typeName,
+        name: typeName,
+        autoCreate: true,
+      });
     }
 
     return { entity, lookups, parentRefs };

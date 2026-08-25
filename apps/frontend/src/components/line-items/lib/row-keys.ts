@@ -89,7 +89,8 @@ export function parseGroupDropKey(key: string): string | null {
   return groupId.length > 0 ? groupId : null;
 }
 
-/** Validate whether a dragged element type can be dropped in a target context. */
+/** Validate whether a dragged element type can be dropped in a target context.
+ * Scopes are group-only; remap a drop-on-scope to the parent group before calling. */
 export function canDropInTarget(
   sourceType: 'item' | 'assembly' | 'scope',
   targetContext: 'group' | 'scope' | 'assembly',

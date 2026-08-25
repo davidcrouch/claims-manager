@@ -20,7 +20,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { StatusBadge } from '@/components/ui/status-badge';
 import { TypeBadge } from '@/components/ui/type-badge';
 import {
   DefRow,
@@ -272,72 +271,6 @@ export const QuoteOverviewTab = forwardRef(function QuoteOverviewTab(
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card size="sm">
-          <CardContent className="px-4">
-            <p className="text-xs text-muted-foreground">Status</p>
-            <div className="mt-1">
-              <StatusBadge status={statusName} />
-            </div>
-          </CardContent>
-        </Card>
-        <Card size="sm">
-          <CardContent className="px-4">
-            <p className="text-xs text-muted-foreground">Estimate type</p>
-            <div className="mt-1">
-              {editing ? (
-                <Select
-                  value={draft.quoteType || undefined}
-                  onValueChange={(v) => patch('quoteType', v ?? '')}
-                  disabled={saving}
-                  items={quoteTypeItems}
-                >
-                  <SelectTrigger className="h-8 w-full max-w-xs text-sm">
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {QUOTE_TYPES.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {t}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <TypeBadge type={draft.quoteType || '—'} />
-              )}
-            </div>
-          </CardContent>
-        </Card>
-        <Card size="sm">
-          <CardContent className="px-4">
-            <p className="text-xs text-muted-foreground">Total</p>
-            <p className="mt-1 text-sm font-medium">
-              {formatCurrency(quote.totalAmount)}
-            </p>
-          </CardContent>
-        </Card>
-        <Card size="sm">
-          <CardContent className="px-4">
-            <p className="text-xs text-muted-foreground">Estimate date</p>
-            <div className="mt-1">
-              {editing ? (
-                <EditText
-                  type="date"
-                  value={draft.estimateDate}
-                  onChange={(v) => patch('estimateDate', v)}
-                  disabled={saving}
-                />
-              ) : (
-                <p className="text-sm font-medium">
-                  {formatDate(quote.quoteDate)}
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
       <div className="grid gap-4 md:grid-cols-2">
         <SectionCard
           title="Identifiers"
@@ -375,16 +308,6 @@ export const QuoteOverviewTab = forwardRef(function QuoteOverviewTab(
               )
             }
           />
-          <DefRow
-            label="CW ID"
-            value={
-              quote.externalReference ? (
-                <span className="font-mono text-xs">{quote.externalReference}</span>
-              ) : (
-                '—'
-              )
-            }
-          />
           {insurerRef && <DefRow label="Insurer reference" value={insurerRef} />}
           <DefRow label="Status type" value={approval.statusType ?? '—'} />
           <DefRow label="Created" value={formatDateTime(quote.createdAt)} />
@@ -401,6 +324,21 @@ export const QuoteOverviewTab = forwardRef(function QuoteOverviewTab(
           title="Financials"
           icon={<Calculator className="h-4 w-4 text-muted-foreground" />}
         >
+          <DefRow
+            label="Estimate date"
+            value={
+              editing ? (
+                <EditText
+                  type="date"
+                  value={draft.estimateDate}
+                  onChange={(v) => patch('estimateDate', v)}
+                  disabled={saving}
+                />
+              ) : (
+                formatDate(quote.quoteDate)
+              )
+            }
+          />
           <DefRow
             label="Sub total (ex. tax)"
             value={formatCurrency(quote.subTotal)}
@@ -505,7 +443,29 @@ export const QuoteOverviewTab = forwardRef(function QuoteOverviewTab(
           <DefRow label="Status name" value={approval.statusName ?? '—'} />
           <DefRow
             label="Estimate type"
-            value={<TypeBadge type={approval.quoteTypeName ?? draft.quoteType} />}
+            value={
+              editing ? (
+                <Select
+                  value={draft.quoteType || undefined}
+                  onValueChange={(v) => patch('quoteType', v ?? '')}
+                  disabled={saving}
+                  items={quoteTypeItems}
+                >
+                  <SelectTrigger className="h-8 w-full max-w-xs text-sm">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {QUOTE_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <TypeBadge type={approval.quoteTypeName ?? draft.quoteType} />
+              )
+            }
           />
           <DefRow
             label="Created by"

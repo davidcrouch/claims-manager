@@ -3,6 +3,12 @@ import { getSession } from '@/lib/auth';
 import { getServerApiClient } from '@/lib/server-api';
 import { JobsPageClient } from '@/components/jobs/JobsPageClient';
 import { toJobFormClaimOption } from '@/components/forms/job-form-claim';
+import {
+  buildJobsListFetchKeyFromPageParams,
+  JOBS_PAGE_SIZE,
+  parseJobsListTab,
+  statusIdsForJobsListTab,
+} from '@/components/jobs/jobs-list-helpers';
 import type { Job, PaginatedResponse } from '@/types/api';
 
 export default async function JobsPage({
@@ -14,6 +20,9 @@ export default async function JobsPage({
     sort?: string;
     status?: string;
     jobType?: string;
+    tab?: string;
+    refs?: string;
+    assignedToUserIds?: string;
   }>;
 }) {
   const api = await getServerApiClient();
@@ -21,12 +30,39 @@ export default async function JobsPage({
 
   const params = await searchParams;
   const emptyJobs: PaginatedResponse<Job> = { data: [], total: 0 };
+  const tab = parseJobsListTab(params.tab ?? null);
 
+  const [statusLookupsRes, jobTypesRes, jobTypesAllRes] = await Promise.all([
+    api.getLookupsByDomain('job_status').catch(() => []),
+    Promise.all([
+      api.getLookupsByDomain('job_type', { providerCode: 'direct' }).catch(() => []),
+      api.getLookupsByDomain('job_type', { providerCode: 'crunchwork' }).catch(() => []),
+    ]).then(([direct, crunchwork]) => [...direct, ...crunchwork]),
+    api.getLookupsByDomain('job_type').catch(() => []),
+  ]);
+
+  const statusOptions = (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map(
+    (row) => ({
+      id: row.id,
+      name: row.name?.trim() ? row.name : 'Unknown',
+    }),
+  );
+  const initialStatus =
+    params.status ?? statusIdsForJobsListTab(tab, statusOptions);
+  const initialFetchKey = buildJobsListFetchKeyFromPageParams({
+    search: params.search,
+    sort: params.sort,
+    tab: params.tab,
+    page: params.page,
+    status: initialStatus,
+    jobType: params.jobType,
+    refs: params.refs,
+    assignedToUserIds: params.assignedToUserIds,
+  });
+
+  let jobsSsrOk = false;
   const [
     initialJobs,
-    jobTypesRes,
-    jobTypesAllRes,
-    statusLookupsRes,
     unreadJobIds,
     orgUsers,
     session,
@@ -35,11 +71,17 @@ export default async function JobsPage({
     api
       .getJobs({
         page: parseInt(params.page ?? '1', 10),
-        limit: 20,
+        limit: JOBS_PAGE_SIZE,
         search: params.search,
         sort: params.sort,
-        status: params.status,
+        status: initialStatus,
         jobType: params.jobType,
+        refs: params.refs,
+        assignedToUserIds: params.assignedToUserIds,
+      })
+      .then((data) => {
+        jobsSsrOk = true;
+        return data;
       })
       .catch((err: unknown) => {
         console.error(
@@ -48,14 +90,6 @@ export default async function JobsPage({
         );
         return emptyJobs;
       }),
-    // Form create drawer: job types for Internal (direct) and Crunchwork
-    Promise.all([
-      api.getLookupsByDomain('job_type', { providerCode: 'direct' }).catch(() => []),
-      api.getLookupsByDomain('job_type', { providerCode: 'crunchwork' }).catch(() => []),
-    ]).then(([direct, crunchwork]) => [...direct, ...crunchwork]),
-    // List column filter: all providers so IDs match jobs from any source
-    api.getLookupsByDomain('job_type').catch(() => []),
-    api.getLookupsByDomain('job_status').catch(() => []),
     api.getUnreadEntityIds('job').catch(() => [] as string[]),
     api.listOrgUsersForSelect().catch((err: unknown) => {
       console.error(
@@ -91,17 +125,12 @@ export default async function JobsPage({
       name: row.name?.trim() ? row.name.trim() : 'Unknown',
     }),
   );
-  const statusOptions = (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map(
-    (row) => ({
-      id: row.id,
-      name: row.name?.trim() ? row.name : 'Unknown',
-    }),
-  );
   const claims = (claimsRes?.data ?? []).map(toJobFormClaimOption);
 
   return (
     <JobsPageClient
       initialData={initialJobs}
+      initialFetchKey={jobsSsrOk ? initialFetchKey : undefined}
       jobTypes={jobTypes}
       jobTypeFilterOptions={jobTypeFilterOptions}
       claims={claims}

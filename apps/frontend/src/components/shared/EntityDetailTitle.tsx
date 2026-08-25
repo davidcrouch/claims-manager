@@ -35,7 +35,33 @@ type EntityDetailTitleProps = {
 };
 
 /**
- * Detail page title: internal record number above the entity display name.
+ * CW title (external / document number) and record title (internal number)
+ * for the shared two-row page header.
+ */
+export function entityDetailHeaderTitles({
+  internalNumber,
+  name,
+  secondaryLabel,
+  fallbackId,
+}: Omit<EntityDetailTitleProps, 'nameClassName' | 'numberClassName'>): {
+  topTitle?: string;
+  title: string;
+  titleMono: boolean;
+} {
+  const rec = internalNumber?.trim();
+  const cw = secondaryLabel?.trim() || name?.trim() || undefined;
+  if (rec) {
+    return {
+      topTitle: cw && cw !== rec ? cw : undefined,
+      title: rec,
+      titleMono: true,
+    };
+  }
+  return { title: cw || fallbackId || '—', titleMono: false };
+}
+
+/**
+ * Detail page title: CW / external label above the internal record number.
  */
 export function EntityDetailTitle({
   internalNumber,
@@ -45,29 +71,34 @@ export function EntityDetailTitle({
   nameClassName,
   numberClassName,
 }: EntityDetailTitleProps) {
-  const number = internalNumber?.trim();
-  const displayName = entityDetailName(name, secondaryLabel, fallbackId);
+  const { topTitle, title, titleMono } = entityDetailHeaderTitles({
+    internalNumber,
+    name,
+    secondaryLabel,
+    fallbackId,
+  });
 
   return (
     <div className="min-w-0">
-      {number ? (
+      {topTitle ? (
         <p
           className={cn(
-            'truncate font-mono text-xs font-medium uppercase tracking-wide text-muted-foreground',
-            numberClassName,
+            'truncate text-xs font-medium uppercase tracking-wide text-muted-foreground',
+            nameClassName,
           )}
         >
-          {number}
+          {topTitle}
         </p>
       ) : null}
       <h1
         className={cn(
           'truncate text-lg font-semibold leading-tight',
-          number ? 'mt-0.5' : undefined,
-          nameClassName,
+          titleMono && 'font-mono uppercase',
+          topTitle ? 'mt-0.5' : undefined,
+          numberClassName,
         )}
       >
-        {displayName}
+        {title}
       </h1>
     </div>
   );

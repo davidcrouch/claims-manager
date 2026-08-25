@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { extractCwTaskTypeName } from '../../tasks/cw-task-types';
 import type { EntityTransformer, TransformResult, LookupRequest, ParentRef } from './transformer.interface';
 import { asString, asNumericString, asTimestamp, isPlainObject } from './transform-utils';
 
@@ -54,18 +55,34 @@ export class TaskTransformer implements EntityTransformer {
       taskPayload: payload,
     };
 
-    // Lookups — taskType (object or bare-string); also set text taskType when present
+    // taskType from CW payload (IdNameExternalReference)
+    const taskTypeName = extractCwTaskTypeName(payload);
     const taskTypeField = payload.taskType ?? payload.taskTypeLookupId;
+    if (taskTypeName) {
+      entity.taskType = taskTypeName;
+    }
     if (isPlainObject(taskTypeField)) {
-      const typeName =
+      const extRef =
+        asString((taskTypeField as Record<string, unknown>).externalReference) ??
         asString((taskTypeField as Record<string, unknown>).name) ??
-        asString((taskTypeField as Record<string, unknown>).externalReference);
-      if (typeName) entity.taskType = typeName;
-      const extRef = asString((taskTypeField as Record<string, unknown>).externalReference) ?? asString((taskTypeField as Record<string, unknown>).name) ?? asString((taskTypeField as Record<string, unknown>).id);
-      if (extRef) lookups.push({ field: 'taskTypeLookupId', domain: 'task_type', externalReference: extRef, name: asString((taskTypeField as Record<string, unknown>).name), autoCreate: true });
+        asString((taskTypeField as Record<string, unknown>).id);
+      if (extRef) {
+        lookups.push({
+          field: 'taskTypeLookupId',
+          domain: 'task_type',
+          externalReference: extRef,
+          name: taskTypeName ?? asString((taskTypeField as Record<string, unknown>).name),
+          autoCreate: true,
+        });
+      }
     } else if (typeof taskTypeField === 'string' && taskTypeField.trim()) {
-      entity.taskType = taskTypeField.trim();
-      lookups.push({ field: 'taskTypeLookupId', domain: 'task_type', externalReference: taskTypeField.trim(), name: taskTypeField.trim(), autoCreate: true });
+      lookups.push({
+        field: 'taskTypeLookupId',
+        domain: 'task_type',
+        externalReference: taskTypeField.trim(),
+        name: taskTypeName ?? taskTypeField.trim(),
+        autoCreate: true,
+      });
     }
 
     // Parents: claim and/or job — handle both flat and nested.

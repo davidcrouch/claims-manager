@@ -6,6 +6,7 @@ import { Briefcase, Building2, ListTree, Pencil, Plus, Trash2 } from 'lucide-rea
 import { Button } from '@/components/ui/button';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
+import { AdminPageHeader } from '@/components/layout/PageHeaderLayout';
 import { Card } from '@/components/ui/card';
 import { FilesystemTemplateDrawer } from './FilesystemTemplateDrawer';
 import type { FilesystemTemplate } from '@/lib/api-client';
@@ -174,18 +175,11 @@ export function FilesystemTemplatesPanel({
   return (
     <>
       <SetPageHeader>
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-            <ListTree className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-xl font-semibold text-sidebar-foreground">Filesystem Templates</h1>
-            <p className="text-sm text-sidebar-foreground/65">
-              Company templates set up the organisation document library. Project templates define
-              the folder structure for each job.
-            </p>
-          </div>
-        </div>
+        <AdminPageHeader
+          icon={ListTree}
+          title="Filesystem Templates"
+          description="Company templates set up the organisation document library. Project templates define the folder structure for each job."
+        />
       </SetPageHeader>
       <SetHeaderActions>
         <Button

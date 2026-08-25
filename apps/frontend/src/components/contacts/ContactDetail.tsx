@@ -8,6 +8,11 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { BackButton } from '@/components/layout/BackButton';
+import {
+  PageHeaderField,
+  PageHeaderIcon,
+  PageHeaderLayout,
+} from '@/components/layout/PageHeaderLayout';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { ContactRelatedJobsSection } from '@/components/contacts/ContactRelatedJobsSection';
@@ -196,42 +201,47 @@ function ContactPageHeader({
       <SetHeaderActions>
         <ContactSaveStatus saveState={saveState} saveError={saveError} />
       </SetHeaderActions>
-      <div className="flex w-full min-w-0 flex-col gap-y-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-          <BackButton href={backHref} label={backLabel} />
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted">
-            <User className="h-4 w-4 text-muted-foreground" />
-          </span>
-          <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
-          {typeLabels.map((label) => (
-            <span
-              key={label}
-              className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-800"
-            >
-              {label}
-            </span>
-          ))}
-        </div>
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pl-20 text-xs">
-          {displayContact.email && (
-            <div className="flex items-baseline gap-1">
-              <span className="text-muted-foreground">Email:</span>
-              <a
-                href={`mailto:${displayContact.email}`}
-                className="font-medium text-primary hover:underline"
+      <PageHeaderLayout
+        leading={<BackButton href={backHref} label={backLabel} />}
+        icon={
+          <PageHeaderIcon
+            icon={User}
+            className="bg-muted"
+            iconClassName="text-muted-foreground"
+          />
+        }
+        title={title}
+        topRow={
+          <>
+            {typeLabels.map((label) => (
+              <span
+                key={label}
+                className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-800"
               >
-                {displayContact.email}
-              </a>
-            </div>
-          )}
-          {relatedJobCount > 0 && (
-            <div className="flex items-baseline gap-1">
-              <span className="text-muted-foreground">Related jobs:</span>
-              <span className="font-medium">{relatedJobCount}</span>
-            </div>
-          )}
-        </div>
-      </div>
+                {label}
+              </span>
+            ))}
+          </>
+        }
+        bottomRow={
+          <>
+            {displayContact.email && (
+              <div className="flex items-baseline gap-1">
+                <span className="text-muted-foreground">Email:</span>
+                <a
+                  href={`mailto:${displayContact.email}`}
+                  className="font-medium text-primary hover:underline"
+                >
+                  {displayContact.email}
+                </a>
+              </div>
+            )}
+            {relatedJobCount > 0 && (
+              <PageHeaderField label="Related jobs">{relatedJobCount}</PageHeaderField>
+            )}
+          </>
+        }
+      />
     </>
   );
 }

@@ -13,6 +13,7 @@ import { ConnectionResolverService } from '../external/connection-resolver.servi
 import { LookupResolver } from '../external/lookup-resolver.service';
 import { OutboundEventsService } from '../outbound-events/outbound-events.service';
 import { RecordNumberService } from '../../common/record-number/record-number.service';
+import { preferExistingAmount } from './invoice-publish.utils';
 
 @Injectable()
 export class InvoicesService {
@@ -304,7 +305,6 @@ export class InvoicesService {
       name: 'Submitted',
     });
 
-    const toNum = (v: unknown) => (v != null ? String(v) : undefined);
     // UI titles use invoiceNumber; CW returns a display name plus a numeric invoiceNumber.
     const cwInvoiceNumber =
       (typeof apiObj.name === 'string' && apiObj.name.trim() ? apiObj.name.trim() : null) ??
@@ -316,9 +316,9 @@ export class InvoicesService {
         sourceExternalReference: cwInvoiceId,
         statusLookupId: submittedStatusId ?? existing.statusLookupId,
         invoiceNumber: cwInvoiceNumber ?? existing.invoiceNumber,
-        subTotal: toNum(apiObj.subTotal) ?? existing.subTotal,
-        totalTax: toNum(apiObj.totalTax) ?? existing.totalTax,
-        totalAmount: toNum(apiObj.totalAmount ?? apiObj.total) ?? existing.totalAmount,
+        subTotal: preferExistingAmount(apiObj.subTotal, existing.subTotal),
+        totalTax: preferExistingAmount(apiObj.totalTax, existing.totalTax),
+        totalAmount: preferExistingAmount(apiObj.totalAmount ?? apiObj.total, existing.totalAmount),
         invoicePayload: apiInvoice as Record<string, unknown>,
         ...(params.userId ? { updatedByUserId: params.userId } : {}),
       },

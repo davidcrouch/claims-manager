@@ -11,6 +11,8 @@ import type { Job, PaginatedResponse } from '@/types/api';
 
 export interface JobsPageClientProps {
   initialData: PaginatedResponse<Job>;
+  /** Omitted when SSR list fetch failed so the client retries. */
+  initialFetchKey?: string;
   jobTypes: { id: string; name?: string; providerCode?: string | null }[];
   /** All job_type lookups for list filtering (any provider). Falls back to jobTypes. */
   jobTypeFilterOptions?: { id: string; name: string }[];
@@ -23,6 +25,7 @@ export interface JobsPageClientProps {
 
 export function JobsPageClient({
   initialData,
+  initialFetchKey,
   jobTypes,
   jobTypeFilterOptions,
   claims = [],
@@ -47,6 +50,7 @@ export function JobsPageClient({
       </SetHeaderActions>
       <JobsListClient
         initialData={initialData}
+        initialFetchKey={initialFetchKey}
         statusOptions={statusOptions}
         jobTypes={jobTypeFilterOptions ?? jobTypes}
         unreadJobIds={unreadJobIds}

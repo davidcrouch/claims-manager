@@ -575,6 +575,13 @@
       "when": 1791200000000,
       "tag": "0082_backfill_shared_job_internal_numbers",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1791300000000,
+      "tag": "0083_drop_task_type_mappings_backfill",
+      "breakpoints": true
     }
   ]
 }

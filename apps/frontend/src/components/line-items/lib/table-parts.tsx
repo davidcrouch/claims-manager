@@ -47,25 +47,26 @@ export function LineItemsColGroup({
   showGst,
   showNotesColumn,
 }: TableLayoutProps) {
-  return (
-    <colgroup>
-      {showDragHandle && <col className="w-8" />}
-      {showBulkSelect && <col className="w-6" />}
-      {showSelect && <col className="w-6" />}
-      <col className={nameColClass(showCategory)} />
-      <col className="w-[70px]" /> {/* Type */}
-      {showCategory && <col className="w-[120px]" />}
-      {showQuantities && <col className="w-[80px]" />}
-      {showQuantities && <col className="w-[64px]" />}
-      {showPricing && <col className="w-[110px]" />}
-      {showPricing && <col className="w-[100px]" />}
-      {showPricing && showMarkup && <col className="w-[90px]" />}
-      {showPricing && showGst && <col className="w-[80px]" />}
-      {showPricing && <col className="w-[100px]" />}
-      {showNotesColumn && <col className="w-[100px]" />}
-      <col className="w-10" /> {/* Actions */}
-    </colgroup>
-  );
+  // Array children avoid whitespace text nodes inside <colgroup> (invalid HTML / hydration error).
+  const cols = [
+    showDragHandle ? <col key="drag" className="w-8" /> : null,
+    showBulkSelect ? <col key="bulk" className="w-6" /> : null,
+    showSelect ? <col key="select" className="w-6" /> : null,
+    <col key="name" className={nameColClass(showCategory)} />,
+    <col key="type" className="w-[70px]" />,
+    showCategory ? <col key="category" className="w-[120px]" /> : null,
+    showQuantities ? <col key="qty" className="w-[80px]" /> : null,
+    showQuantities ? <col key="unit" className="w-[64px]" /> : null,
+    showPricing ? <col key="unit-price" className="w-[110px]" /> : null,
+    showPricing ? <col key="extended" className="w-[100px]" /> : null,
+    showPricing && showMarkup ? <col key="markup" className="w-[90px]" /> : null,
+    showPricing && showGst ? <col key="gst" className="w-[80px]" /> : null,
+    showPricing ? <col key="total" className="w-[100px]" /> : null,
+    showNotesColumn ? <col key="notes" className="w-[100px]" /> : null,
+    <col key="actions" className="w-10" />,
+  ].filter(Boolean);
+
+  return <colgroup>{cols}</colgroup>;
 }
 
 export function LineItemsThead({

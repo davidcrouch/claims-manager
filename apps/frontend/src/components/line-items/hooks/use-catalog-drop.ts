@@ -4,6 +4,7 @@ import {
   getCatalogDragData,
   getGroupLabelDragData,
   shouldAcceptCatalogDragOver,
+  resolveCatalogDropDestination,
   clearCatalogDrag,
 } from '@/components/catalog/catalog-drag';
 import type { CatalogDragPayload, GroupLabelDragPayload } from '@/components/catalog/catalog-drag';
@@ -92,10 +93,13 @@ export function useCatalogDrop({
 
       const catalogPayload = getCatalogDragData(e.dataTransfer);
       if (catalogPayload) {
+        const destination = resolveCatalogDropDestination(catalogPayload.kind, target);
+        if (!destination) return;
         e.preventDefault();
         e.stopPropagation();
         clearCatalogDrag();
-        onCatalogDrop?.(catalogPayload, groupId, quoteComboId);
+        const nestUnderComboId = destination === 'group' ? undefined : quoteComboId;
+        onCatalogDrop?.(catalogPayload, groupId, nestUnderComboId);
       }
     },
     [disabled, target, groupId, quoteComboId, onCatalogDrop, onGroupLabelDrop],

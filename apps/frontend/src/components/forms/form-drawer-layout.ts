@@ -1,6 +1,9 @@
 /** Default form drawer width (BottomFormDrawer). */
 export const FORM_DRAWER_WIDTH_CLASS = 'w-[65%]';
 
+/** Switch Job picker — wider to fit list search and column filters. */
+export const JOBS_PICKER_DRAWER_WIDTH_CLASS = 'w-[70%]';
+
 /** Default chat drawer width when opened on its own. */
 export const CHAT_DRAWER_WIDTH_CLASS = 'w-[50%]';
 

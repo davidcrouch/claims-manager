@@ -8,7 +8,13 @@ import {
   Files,
 } from 'lucide-react';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { BackButton } from '@/components/layout/BackButton';
+import {
+  PageHeaderField,
+  PageHeaderIcon,
+  PageHeaderLayout,
+} from '@/components/layout/PageHeaderLayout';
 import type {
   DocumentTemplateSetting,
   DocumentTemplatesFolderSetting,
@@ -48,41 +54,39 @@ export function DocumentTemplateDetailClient({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
+      {isDefault ? null : (
+        <SetHeaderActions>
+          <ReportBuilderButton
+            documentType={setting.documentType}
+            label={setting.label}
+          />
+        </SetHeaderActions>
+      )}
       <SetPageHeader>
-        <div className="flex w-full min-w-0 flex-col gap-y-1">
-          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+        <PageHeaderLayout
+          leading={
             <BackButton
               href="/admin/document-templates"
               label="Back to document templates"
             />
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted">
-              <Files className="h-4 w-4 text-muted-foreground" />
-            </span>
-            <h1 className="truncate text-lg font-semibold leading-tight">
-              {setting.label}
-            </h1>
-            {!isDefault && (
-              <div className="ml-auto">
-                <ReportBuilderButton
-                  documentType={setting.documentType}
-                  label={setting.label}
-                />
-              </div>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pl-20 text-xs">
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-muted-foreground">Type:</span>
-              <span className="font-medium">{setting.documentType}</span>
-            </div>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-muted-foreground">Template:</span>
-              <span className="font-medium">
+          }
+          icon={
+            <PageHeaderIcon
+              icon={Files}
+              className="bg-muted"
+              iconClassName="text-muted-foreground"
+            />
+          }
+          title={setting.label}
+          bottomRow={
+            <>
+              <PageHeaderField label="Type">{setting.documentType}</PageHeaderField>
+              <PageHeaderField label="Template">
                 {setting.filesystemDocument ? 'Assigned' : 'Not set'}
-              </span>
-            </div>
-          </div>
-        </div>
+              </PageHeaderField>
+            </>
+          }
+        />
       </SetPageHeader>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">

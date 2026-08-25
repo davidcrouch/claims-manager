@@ -2,6 +2,11 @@
 
 import { Search, Filter } from 'lucide-react';
 import type { ComponentType, ReactNode, SVGProps } from 'react';
+import {
+  PageHeaderField,
+  PageHeaderIcon,
+  PageHeaderLayout,
+} from '@/components/layout/PageHeaderLayout';
 
 type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
 
@@ -138,68 +143,69 @@ export function ListPageHeader({
   const accentCls = ACCENT_CLASSES[accent];
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-y-1">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-        <span
-          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${accentCls.iconBg}`}
-        >
-          <Icon className={`h-4 w-4 ${accentCls.iconText}`} />
-        </span>
-        <h1 className="truncate text-lg font-semibold leading-tight text-sidebar-foreground">
-          {title}
-        </h1>
-        <span
-          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${accentCls.badgeBg} ${accentCls.badgeText}`}
-        >
-          {total.toLocaleString()} total
-        </span>
-        {showShowing && (
-          <span className="text-xs text-sidebar-foreground/65">
-            Showing {showing!.toLocaleString()}
+    <PageHeaderLayout
+      icon={
+        <PageHeaderIcon
+          icon={Icon}
+          className={accentCls.iconBg}
+          iconClassName={accentCls.iconText}
+        />
+      }
+      title={title}
+      topRow={
+        <>
+          <span
+            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${accentCls.badgeBg} ${accentCls.badgeText}`}
+          >
+            {total.toLocaleString()} total
           </span>
-        )}
-        {trimmedSearch && (
-          <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-            <Search className="h-3 w-3" />
-            &ldquo;{trimmedSearch}&rdquo;
-          </span>
-        )}
-        {hasStatusFilter && (
-          <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-            <Filter className="h-3 w-3" />
-            {statusSelectedCount}{' '}
-            {statusSelectedCount === 1
-              ? statusFilterNoun.singular
-              : statusFilterNoun.plural}
-          </span>
-        )}
-        {breakdown && breakdown.length > 0 && (
-          <span className="flex flex-wrap items-center gap-1">
-            {breakdown.map((item) => (
-              <span
-                key={item.name}
-                className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground"
-              >
-                {item.name}
-                <span className="font-medium text-foreground">
-                  {item.count}
+          {showShowing && (
+            <span className="text-xs text-sidebar-foreground/65">
+              Showing {showing!.toLocaleString()}
+            </span>
+          )}
+          {trimmedSearch && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              <Search className="h-3 w-3" />
+              &ldquo;{trimmedSearch}&rdquo;
+            </span>
+          )}
+          {hasStatusFilter && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              <Filter className="h-3 w-3" />
+              {statusSelectedCount}{' '}
+              {statusSelectedCount === 1
+                ? statusFilterNoun.singular
+                : statusFilterNoun.plural}
+            </span>
+          )}
+          {breakdown && breakdown.length > 0 && (
+            <span className="flex flex-wrap items-center gap-1">
+              {breakdown.map((item) => (
+                <span
+                  key={item.name}
+                  className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                >
+                  {item.name}
+                  <span className="font-medium text-foreground">
+                    {item.count}
+                  </span>
                 </span>
-              </span>
-            ))}
-          </span>
-        )}
-      </div>
-      {stats && stats.length > 0 && (
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pl-10 text-xs">
-          {stats.map((s) => (
-            <div key={s.label} className="flex items-baseline gap-1">
-              <span className="text-sidebar-foreground/65">{s.label}:</span>
-              <span className="font-medium text-sidebar-foreground">{s.value}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+              ))}
+            </span>
+          )}
+        </>
+      }
+      bottomRow={
+        stats && stats.length > 0
+          ? stats.map((s) => (
+              <PageHeaderField key={s.label} label={s.label}>
+                {s.value}
+              </PageHeaderField>
+            ))
+          : undefined
+      }
+    />
   );
 }
 

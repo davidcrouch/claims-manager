@@ -44,6 +44,7 @@ export async function fetchConnectionWebhookEventsAction(
     page?: number;
     limit?: number;
     status?: string;
+    eventType?: string;
     search?: string;
     sort?: string;
   },
@@ -51,6 +52,22 @@ export async function fetchConnectionWebhookEventsAction(
   const api = await getApi();
   if (!api) return null;
   return api.getConnectionWebhookEvents(connectionId, params);
+}
+
+export async function fetchConnectionWebhookEventFilterOptionsAction(
+  connectionId: string,
+): Promise<{ eventTypes: string[] } | null> {
+  const api = await getApi();
+  if (!api) return null;
+  try {
+    return await api.getConnectionWebhookEventFilterOptions(connectionId);
+  } catch (err) {
+    console.error(
+      '[connections/actions.fetchConnectionWebhookEventFilterOptionsAction]',
+      err,
+    );
+    return { eventTypes: [] };
+  }
 }
 
 export async function createConnectionAction(

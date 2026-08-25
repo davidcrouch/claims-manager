@@ -24,7 +24,7 @@ export function PrintButton({
   jobId,
   reportTypes,
   className,
-  size = 'default',
+  size = 'icon-lg',
 }: PrintButtonProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -34,7 +34,7 @@ export function PrintButton({
         size={size}
         onClick={() => setDrawerOpen(true)}
         className={cn(
-          'h-9 w-9 px-0 bg-blue-600 text-white hover:bg-blue-500',
+          'bg-blue-600 text-white hover:bg-blue-500',
           className,
         )}
         title="Print PDF"

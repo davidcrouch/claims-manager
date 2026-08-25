@@ -4,7 +4,7 @@ import { TenantContext } from '../../tenant/tenant-context';
 import { CrunchworkService } from '../../crunchwork/crunchwork.service';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
 import { OutboundEventsService } from '../outbound-events/outbound-events.service';
-import { TaskTypeMappingsService } from './task-type-mappings.service';
+import { CW_TASK_TYPES, extractCwTaskTypeName } from './cw-task-types';
 
 function parseOptionalUserId(value: unknown): string | null | undefined {
   if (value === undefined) return undefined;
@@ -80,7 +80,6 @@ export class TasksService {
     private readonly crunchworkService: CrunchworkService,
     @Optional() private readonly connectionResolver?: ConnectionResolverService,
     @Optional() private readonly outboundEvents?: OutboundEventsService,
-    @Optional() private readonly taskTypeMappings?: TaskTypeMappingsService,
   ) {}
 
   private async resolveConnectionId(tenantId: string): Promise<string> {
@@ -92,23 +91,8 @@ export class TasksService {
     return connection.id;
   }
 
-  private async inferTaskType(params: {
-    tenantId: string;
-    name: string | null | undefined;
-    explicitType: string | null | undefined;
-  }): Promise<string | undefined> {
-    if (params.explicitType) return params.explicitType;
-    if (!this.taskTypeMappings || !params.name) return undefined;
-    const resolved = await this.taskTypeMappings.resolveFromTitle({
-      tenantId: params.tenantId,
-      title: params.name,
-    });
-    if (resolved) {
-      this.logger.debug(
-        `TasksService.inferTaskType — title="${params.name}" → type="${resolved}"`,
-      );
-    }
-    return resolved ?? undefined;
+  listCanonicalTaskTypes(): string[] {
+    return [...CW_TASK_TYPES];
   }
 
   async findAll(params: {
@@ -203,20 +187,14 @@ export class TasksService {
 
     const assignedToUserId = parseOptionalUserId(params.body.assignedToUserId) ?? undefined;
     const status = (parseOptionalText(params.body.status) ?? 'Open') as string;
-    const name = (params.body.name as string) ?? undefined;
     const explicitType = parseOptionalText(params.body.taskType) ?? undefined;
-    const inferredType = await this.inferTaskType({
-      tenantId,
-      name,
-      explicitType,
-    });
 
     this.logger.debug(
       `TasksService.create — tenantId=${tenantId} assignedToUserId=${assignedToUserId ?? 'none'}`,
     );
 
     const localFields: Partial<TaskInsert> = {
-      taskType: inferredType,
+      taskType: explicitType ?? undefined,
       startDate: parseOptionalDate(params.body.startDate) ?? undefined,
       reminderAt: parseOptionalDate(params.body.reminderAt) ?? undefined,
       estimatedHours: parseOptionalNumeric(params.body.estimatedHours) ?? undefined,
@@ -252,14 +230,8 @@ export class TasksService {
         taskPayload: apiTask as Record<string, unknown>,
         ...localFields,
       };
-      // Re-infer if CW returned a different name and type still empty
-      if (!insertData.taskType && insertData.name) {
-        insertData.taskType = await this.inferTaskType({
-          tenantId,
-          name: insertData.name,
-          explicitType: undefined,
-        });
-      }
+      insertData.taskType =
+        explicitType ?? extractCwTaskTypeName(apiObj) ?? insertData.taskType;
       created = await this.tasksRepo.create({ data: insertData });
     } catch {
       const insertData: TaskInsert = {
@@ -356,21 +328,6 @@ export class TasksService {
       localPatch.claimId = parseOptionalText(params.body.claimId);
     }
 
-    // If type still unset after patch, try infer from (new or existing) name
-    const nextName = (localPatch.name ?? existing.name) as string;
-    const nextType =
-      localPatch.taskType !== undefined
-        ? localPatch.taskType
-        : ((existing.taskType as string | null) ?? null);
-    if (!nextType?.trim()) {
-      const inferred = await this.inferTaskType({
-        tenantId,
-        name: nextName,
-        explicitType: undefined,
-      });
-      if (inferred) localPatch.taskType = inferred;
-    }
-
     this.logger.debug(
       `TasksService.update — id=${params.id} assignedToUserId=${assignedToUserId === undefined ? 'unchanged' : assignedToUserId ?? 'none'}`,
     );
@@ -385,12 +342,14 @@ export class TasksService {
       });
 
       const apiObj = apiTask as Record<string, unknown>;
+      const cwType = extractCwTaskTypeName(apiObj);
       const row = await this.tasksRepo.update({
         id: params.id,
         data: {
           ...localPatch,
           taskPayload: apiTask as Record<string, unknown>,
           status: (apiObj.status as string) ?? localPatch.status ?? existing.status,
+          ...(localPatch.taskType === undefined && cwType ? { taskType: cwType } : {}),
         },
       });
       if (row) updated = { ...existing, ...row };

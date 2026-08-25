@@ -20,6 +20,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { BackButton } from '@/components/layout/BackButton';
+import {
+  PageHeaderField,
+  PageHeaderIcon,
+  PageHeaderLayout,
+} from '@/components/layout/PageHeaderLayout';
+import { HeaderActionToolbar } from '@/components/layout/HeaderActionToolbar';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import {
   DefRow,
@@ -107,63 +113,64 @@ export function BillPageHeader({ bill, job }: { bill: Bill; job?: Job | null }) 
             Mark Paid
           </Button>
         )}
-        <PrintButton documentType="bill" entityId={bill.id} jobId={job?.id} />
-        <ArchiveEntityButton
-          entityType="bill"
-          entityId={bill.id}
-          statusName={status}
-          entityLabel={title}
-          redirectTo={job ? `/bills?jobId=${job.id}` : '/bills'}
-        />
+        <HeaderActionToolbar>
+          <PrintButton documentType="bill" entityId={bill.id} jobId={job?.id} />
+          <ArchiveEntityButton
+            entityType="bill"
+            entityId={bill.id}
+            statusName={status}
+            entityLabel={title}
+            redirectTo={job ? `/bills?jobId=${job.id}` : '/bills'}
+          />
+        </HeaderActionToolbar>
       </SetHeaderActions>
-      <div className="flex w-full min-w-0 flex-col gap-y-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-          <BackButton href={job ? `/bills?jobId=${job.id}` : '/bills'} label="Back to bills" />
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-rose-100">
-            <ReceiptText className="h-4 w-4 text-rose-600" />
-          </span>
-          <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
-          <StatusBadge status={status} />
-          {vendor && (
-            <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-              <Building2 className="h-3 w-3" />
-              {vendor}
-            </span>
-          )}
-          {bill.purchaseOrderId && (
-            <Link
-              href={`/purchase-orders/${bill.purchaseOrderId}`}
-              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-            >
-              View PO
-              <ExternalLink className="h-3 w-3" />
-            </Link>
-          )}
-          {job && (
-            <Link
-              href={`/jobs/${job.id}`}
-              className="inline-flex items-center gap-1 text-xs uppercase text-primary hover:underline"
-            >
-              {jobDisplayName(job)}
-              <ExternalLink className="h-3 w-3" />
-            </Link>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pl-20 text-xs">
-          <div className="flex items-baseline gap-1">
-            <span className="text-muted-foreground">Amount:</span>
-            <span className="font-medium">{formatCurrency(bill.totalAmount)}</span>
-          </div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-muted-foreground">Received:</span>
-            <span className="font-medium">{formatDate(bill.receivedDate)}</span>
-          </div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-muted-foreground">Due:</span>
-            <span className="font-medium">{formatDate(bill.dueDate)}</span>
-          </div>
-        </div>
-      </div>
+      <PageHeaderLayout
+        leading={<BackButton href={job ? `/bills?jobId=${job.id}` : '/bills'} label="Back to bills" />}
+        icon={
+          <PageHeaderIcon
+            icon={ReceiptText}
+            className="bg-rose-100"
+            iconClassName="text-rose-600"
+          />
+        }
+        title={title}
+        topRow={
+          <>
+            <StatusBadge status={status} />
+            {vendor && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                <Building2 className="h-3 w-3" />
+                {vendor}
+              </span>
+            )}
+            {bill.purchaseOrderId && (
+              <Link
+                href={`/purchase-orders/${bill.purchaseOrderId}`}
+                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+              >
+                View PO
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            )}
+            {job && (
+              <Link
+                href={`/jobs/${job.id}`}
+                className="inline-flex items-center gap-1 text-xs uppercase text-primary hover:underline"
+              >
+                {jobDisplayName(job)}
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            )}
+          </>
+        }
+        bottomRow={
+          <>
+            <PageHeaderField label="Amount">{formatCurrency(bill.totalAmount)}</PageHeaderField>
+            <PageHeaderField label="Received">{formatDate(bill.receivedDate)}</PageHeaderField>
+            <PageHeaderField label="Due">{formatDate(bill.dueDate)}</PageHeaderField>
+          </>
+        }
+      />
     </>
   );
 }
@@ -328,22 +335,23 @@ function LineItemsTab({ bill }: { bill: Bill }) {
   const payloadGroups = groupsFromDocumentPayload(payload);
   const lineItems = (payload.lineItems ?? payload.items ?? []) as Array<Record<string, unknown>>;
 
-  if (payloadGroups.length > 0) {
-    return (
-      <LineItemsProvider groups={payloadGroups} mode="readonly">
-        <LineItemsTable />
-      </LineItemsProvider>
-    );
-  }
-
   if (bill.purchaseOrderId) {
     return (
       <PagedLineItemsTable
         documentId={bill.purchaseOrderId}
         loadAction={getPurchaseOrderLineItemsAction}
+        fallbackGroups={payloadGroups}
         emptyLabel="No line items found for this bill."
         readOnly
       />
+    );
+  }
+
+  if (payloadGroups.length > 0) {
+    return (
+      <LineItemsProvider groups={payloadGroups} mode="readonly">
+        <LineItemsTable />
+      </LineItemsProvider>
     );
   }
 

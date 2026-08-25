@@ -308,8 +308,3 @@ export {
   type EntityActivityRow,
   type EntityActivityInsert,
 } from './entity-activities.repository';
-export {
-  TaskTypeMappingsRepository,
-  type TaskTypeMappingRow,
-  type TaskTypeMappingInsert,
-} from './task-type-mappings.repository';

@@ -539,18 +539,6 @@ export interface Task {
   updatedAt?: string;
 }
 
-export interface TaskTypeMapping {
-  id: string;
-  tenantId: string;
-  titlePattern: string;
-  matchMode: 'exact' | 'normalized' | 'prefix' | 'contains' | string;
-  taskType: string;
-  priority: number;
-  isActive: boolean;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
 export interface Message {
   id: string;
   tenantId: string;

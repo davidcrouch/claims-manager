@@ -44,7 +44,6 @@ import {
   Bell,
   ToggleLeft,
   PackageOpen,
-  Tags,
 } from 'lucide-react';
 import { Collapsible } from '@base-ui/react/collapsible';
 import {
@@ -160,7 +159,6 @@ const adminNavGroups: NavGroup[] = [
     label: 'CONTENT',
     items: [
       { title: 'Catalogues', href: '/admin/catalog', icon: Package },
-      { title: 'Task Types', href: '/admin/task-types', icon: Tags },
       { title: 'Document Templates', href: '/admin/document-templates', icon: Files },
       { title: 'Filesystem Categories', href: '/admin/documents', icon: FolderOpen },
       { title: 'Filesystem Templates', href: '/admin/filesystem-templates', icon: ListTree },

@@ -76,19 +76,11 @@ describe('job-outbound.utils', () => {
   });
 
   describe('buildCrunchworkJobCreateBody', () => {
-    it('builds CW create body with required fields', () => {
+    it('builds CW create body with required fields and omits contacts by default', () => {
       const body = buildCrunchworkJobCreateBody({
         cwClaimId: '3ce05f84-4b1b-493f-b588-08ff49e86b94',
         jobType: { externalReference: 'MS', name: 'Builder Make Safe' },
         status: { externalReference: 'Pending', name: 'Pending' },
-        contacts: [
-          {
-            externalReference: 'e1a71812-b113-4811-9726-cd722e2ae58f',
-            firstName: 'TEST',
-            lastName: 'DREWERACV',
-            type: { externalReference: 'insured', name: 'insured' },
-          },
-        ],
         address: { suburb: 'Melbourne', state: 'VIC' },
         makeSafeRequired: false,
       });
@@ -100,8 +92,25 @@ describe('job-outbound.utils', () => {
         makeSafeRequired: false,
         address: { suburb: 'Melbourne', state: 'VIC' },
       });
+      expect(body).not.toHaveProperty('contacts');
       expect(body).not.toHaveProperty('jobTypeLookupId');
       expect(body).not.toHaveProperty('claimIdLookup');
+    });
+
+    it('includes contacts only when explicitly provided', () => {
+      const body = buildCrunchworkJobCreateBody({
+        cwClaimId: '3ce05f84-4b1b-493f-b588-08ff49e86b94',
+        jobType: { externalReference: 'MS' },
+        contacts: [
+          {
+            externalReference: 'e1a71812-b113-4811-9726-cd722e2ae58f',
+            firstName: 'TEST',
+            lastName: 'DREWERACV',
+            type: { externalReference: 'insured', name: 'insured' },
+          },
+        ],
+      });
+      expect(body.contacts).toHaveLength(1);
     });
   });
 

@@ -117,7 +117,13 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
   const { latitude: mapLat, longitude: mapLng } = jobCoords(job);
   const hasMapTarget =
     (mapLat != null && mapLng != null) || Boolean(mapAddress);
-  const statusName = job.status?.name ?? ((api.status as Dict | undefined)?.name as string | undefined) ?? 'Unknown';
+  const statusLookupIdForLabel = job.statusLookupId ?? job.status?.id;
+  const statusName =
+    job.status?.name?.trim() ||
+    statusOptions.find((o) => o.id === statusLookupIdForLabel)?.name?.trim() ||
+    ((api.status as Dict | undefined)?.name as string | undefined)?.trim() ||
+    job.status?.externalReference?.trim() ||
+    'Unknown';
   const jobTypeName = job.jobType?.name ?? ((api.jobType as Dict | undefined)?.name as string | undefined);
   const addr = jobAddressSource(job);
   const latitude = asString(pick(addr, 'latitude', 'lat'));

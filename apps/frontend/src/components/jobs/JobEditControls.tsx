@@ -89,6 +89,14 @@ export function EditTextarea({
   );
 }
 
+function lookupOptionLabel(opt: LookupOption): string {
+  const name = opt.name?.trim();
+  if (name) return name;
+  const ext = opt.externalReference?.trim();
+  if (ext) return ext;
+  return 'Unknown';
+}
+
 export function EditLookupSelect({
   valueId,
   options,
@@ -104,7 +112,7 @@ export function EditLookupSelect({
 }) {
   const items: Record<string, string> = { [EMPTY]: '—' };
   for (const opt of options) {
-    items[opt.id] = opt.name ?? opt.externalReference ?? opt.id;
+    items[opt.id] = lookupOptionLabel(opt);
   }
 
   return (
@@ -121,7 +129,12 @@ export function EditLookupSelect({
       disabled={disabled}
     >
       <SelectTrigger className="h-8 w-full max-w-xs" disabled={disabled}>
-        <SelectValue placeholder={placeholder} />
+        <SelectValue placeholder={placeholder}>
+          {(selected: string | null) => {
+            if (!selected || selected === EMPTY) return '—';
+            return items[selected] ?? placeholder;
+          }}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={EMPTY}>—</SelectItem>

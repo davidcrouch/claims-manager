@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
@@ -11,14 +11,15 @@ import {
   Info,
   Paperclip,
   Plus,
-  Send,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { HeaderActionToolbar } from '@/components/layout/HeaderActionToolbar';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { DetailAssignee } from '@/components/shared/DetailAssignee';
 import { AddJobContactsDrawer } from '@/components/forms/AddJobContactsDrawer';
 import { PrintButton } from '@/components/shared/PrintButton';
+import { PublishButton } from '@/components/shared/PublishButton';
 import { buildJobReportTypes } from '@/components/shared/PrintDocumentDrawer';
 import { QuoteFormDrawer } from '@/components/forms/QuoteFormDrawer';
 import {
@@ -33,6 +34,7 @@ import { JobPartiesTab } from './tabs/JobPartiesTab';
 import { JobReportsTab } from './tabs/JobReportsTab';
 import { JobTimelineTab } from './tabs/JobTimelineTab';
 import { JobPublishWizard } from './JobPublishWizard';
+import { JobCreateMakeSafeDrawer } from './JobCreateMakeSafeDrawer';
 import { EntityAttachmentsTab } from '@/components/shared/EntityAttachmentsTab';
 import { hasTypeDetails } from './util/jobType';
 import { updateJobFieldsAction } from '@/app/(app)/jobs/[id]/actions';
@@ -45,9 +47,14 @@ import {
   detailSaveStatus,
   pushUndoEntry,
 } from '@/components/shared/detail-autosave';
-import { DetailAutosaveActions } from '@/components/shared/DetailAutosaveActions';
+import {
+  DetailSaveStatus,
+  DetailUndoButton,
+} from '@/components/shared/DetailAutosaveActions';
 import type { JobOverviewDraft, LookupOption } from './job-edit.types';
 import type { Job, Claim, Assessment } from '@/types/api';
+
+const BUILDER_MAKE_SAFE_TYPE_NAME = 'builder make safe';
 
 const VALID_TABS = [
   'overview',
@@ -224,6 +231,7 @@ export function JobDetail({
   reportStatusOptions = [],
   reportTypeOptions = [],
   assessments = [],
+  makeSafeJobType,
 }: {
   job: Job;
   parentClaim?: Claim | null;
@@ -233,6 +241,8 @@ export function JobDetail({
   reportStatusOptions?: LookupOption[];
   reportTypeOptions?: LookupOption[];
   assessments?: Assessment[];
+  /** Builder Make Safe lookup used by Create Make-Safe. */
+  makeSafeJobType?: LookupOption | null;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -260,6 +270,7 @@ export function JobDetail({
   const [appointmentJobParties, setAppointmentJobParties] = useState<JobParty[]>([]);
   const [appointmentDefaultAddress, setAppointmentDefaultAddress] = useState('');
   const [publishWizardOpen, setPublishWizardOpen] = useState(false);
+  const [makeSafeDrawerOpen, setMakeSafeDrawerOpen] = useState(false);
   const [assignedToUserId, setAssignedToUserId] = useState(job.assignedToUserId ?? '');
   const [committedAssignee, setCommittedAssignee] = useState(job.assignedToUserId ?? '');
   const assignedToUserIdRef = useRef(assignedToUserId);
@@ -524,6 +535,12 @@ export function JobDetail({
   }, [isCrunchwork, cwPublishPending, persistPending, router]);
 
   const claimId = job.claimId ?? undefined;
+  const isAlreadyMakeSafe =
+    (job.jobType?.name ?? '').trim().toLowerCase() === BUILDER_MAKE_SAFE_TYPE_NAME;
+  const canCreateMakeSafe =
+    Boolean(claimId) &&
+    Boolean(makeSafeJobType?.id) &&
+    !isAlreadyMakeSafe;
   const existingContacts = (
     ((job.apiPayload as Record<string, unknown> | undefined)?.contacts as
       | Array<{
@@ -578,15 +595,14 @@ export function JobDetail({
       statusName={job.status?.name}
       entityLabel={job.name ?? job.externalReference ?? undefined}
       redirectTo="/jobs"
-      className="mr-3"
     />
   );
 
-  const showEditActions =
-    activeTab === 'overview' || (isCrunchwork && activeTab === 'type-details');
-
   const canPublish =
     isCrunchwork && cwPublishPending && !saving && !publishing && !saveError;
+
+  const showEditActions =
+    activeTab === 'overview' || (isCrunchwork && activeTab === 'type-details');
 
   const { label: saveStatusLabel, tone: saveStatusTone } = detailSaveStatus({
     saving,
@@ -598,34 +614,12 @@ export function JobDetail({
   });
 
   let tabActions: ReactNode = null;
-  if (showEditActions) {
-    tabActions = (
-      <>
-        {isCrunchwork && (
-          <Button
-            size="default"
-            onClick={() => setPublishWizardOpen(true)}
-            disabled={!canPublish}
-            className="mr-2 h-9 gap-1.5 px-4 bg-amber-600 text-white hover:bg-amber-500 disabled:bg-slate-300 disabled:text-slate-500"
-            title={
-              cwPublishPending
-                ? 'Review and publish Crunchwork field changes to the insurer'
-                : 'Enter Crunchwork fields (e.g. booked or attendance date) to enable Publish'
-            }
-          >
-            <Send className="h-3.5 w-3.5" />
-            Publish
-          </Button>
-        )}
-        {printButton}
-      </>
-    );
-  } else if (activeTab === 'parties') {
+  if (activeTab === 'parties') {
     tabActions = (
       <Button
         size="default"
         onClick={() => setContactDrawerOpen(true)}
-        className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
       >
         <Plus className="h-3.5 w-3.5" />
         Add Contact
@@ -636,7 +630,7 @@ export function JobDetail({
       <Button
         size="default"
         onClick={() => setReportDrawerOpen(true)}
-        className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
       >
         <Plus className="h-3.5 w-3.5" />
         Add Report
@@ -646,22 +640,44 @@ export function JobDetail({
 
   const headerActions = (
     <>
+      {canCreateMakeSafe && (
+        <Button
+          size="default"
+          onClick={() => setMakeSafeDrawerOpen(true)}
+          className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          Create Make-Safe
+        </Button>
+      )}
       <Button
         size="default"
         onClick={() => setEstimateDrawerOpen(true)}
-        className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
       >
         Create Estimate
       </Button>
-      <DetailAutosaveActions
-        statusLabel={saveStatusLabel}
-        tone={saveStatusTone}
-        canUndo={canUndo}
-        undoDisabled={anySaving}
-        onUndo={handleUndo}
-      />
       {tabActions}
-      {archiveButton}
+      <DetailSaveStatus statusLabel={saveStatusLabel} tone={saveStatusTone} />
+      <HeaderActionToolbar>
+        <DetailUndoButton
+          canUndo={canUndo}
+          undoDisabled={anySaving}
+          onUndo={handleUndo}
+        />
+        {isCrunchwork && (
+          <PublishButton
+            onClick={() => setPublishWizardOpen(true)}
+            disabled={!canPublish}
+            title={
+              cwPublishPending
+                ? 'Review and publish Crunchwork field changes to the insurer'
+                : 'Enter Crunchwork fields (e.g. booked or attendance date) to enable Publish'
+            }
+          />
+        )}
+        {printButton}
+        {archiveButton}
+      </HeaderActionToolbar>
     </>
   );
 
@@ -788,6 +804,16 @@ export function JobDetail({
           job={job}
           claim={parentClaim}
           onPublish={handlePublishConfirm}
+        />
+      )}
+      {canCreateMakeSafe && makeSafeJobType?.id && (
+        <JobCreateMakeSafeDrawer
+          open={makeSafeDrawerOpen}
+          onOpenChange={setMakeSafeDrawerOpen}
+          job={job}
+          claim={parentClaim}
+          makeSafeJobTypeId={makeSafeJobType.id}
+          makeSafeJobTypeName={makeSafeJobType.name ?? 'Builder Make Safe'}
         />
       )}
     </div>

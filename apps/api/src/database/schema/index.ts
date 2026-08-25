@@ -3521,38 +3521,6 @@ export const emailTemplates = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Task type mappings (title pattern → canonical task type)
-// ---------------------------------------------------------------------------
-export const taskTypeMappings = pgTable(
-  'task_type_mappings',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    tenantId: uuid('tenant_id')
-      .notNull()
-      .references(() => organizations.id, { onDelete: 'cascade', onUpdate: 'cascade' }),
-    titlePattern: text('title_pattern').notNull(),
-    matchMode: text('match_mode').notNull().default('normalized'),
-    taskType: text('task_type').notNull(),
-    priority: integer('priority').notNull().default(100),
-    isActive: boolean('is_active').notNull().default(true),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    check(
-      'chk_task_type_mapping_match_mode',
-      sql`match_mode IN ('exact','normalized','prefix','contains')`,
-    ),
-    unique('UQ_task_type_mappings_tenant_pattern_mode').on(
-      t.tenantId,
-      t.titlePattern,
-      t.matchMode,
-    ),
-    index('idx_task_type_mappings_tenant_active').on(t.tenantId, t.isActive, t.priority),
-  ],
-);
-
-// ---------------------------------------------------------------------------
 // Entity Activities (unified audit / activity feed)
 // ---------------------------------------------------------------------------
 export const entityActivities = pgTable(

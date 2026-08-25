@@ -136,7 +136,7 @@ export type CatalogDropTarget = 'table' | 'group' | 'scope' | 'assembly';
 /**
  * Hierarchy rules:
  * - group labels → table (top level) only
- * - scopes → groups only
+ * - scopes → groups only (a drop on a nested scope/assembly retargets to that parent group)
  * - assemblies → groups or scopes
  * - primitives → groups, scopes, or assemblies
  */
@@ -156,6 +156,22 @@ export function isValidCatalogDropTarget(
     default:
       return false;
   }
+}
+
+/**
+ * Where a catalogue item actually lands after remapping.
+ * Scopes cannot nest, so any accepted drop of a scope becomes a group drop.
+ */
+export function resolveCatalogDropDestination(
+  kind: CatalogDragPayload['kind'],
+  target: CatalogDropTarget,
+): Exclude<CatalogDropTarget, 'table'> | null {
+  if (kind === 'scope') {
+    if (target === 'table') return null;
+    return 'group';
+  }
+  if (!isValidCatalogDropTarget(kind, target) || target === 'table') return null;
+  return target;
 }
 
 export function isValidGroupLabelDropTarget(target: CatalogDropTarget): boolean {
@@ -189,5 +205,5 @@ export function shouldAcceptCatalogDragOver(
   if (!hasCatalogDrag(dataTransfer)) return false;
   const kind = peekCatalogDragKind(dataTransfer);
   if (!kind) return false;
-  return isValidCatalogDropTarget(kind, target);
+  return resolveCatalogDropDestination(kind, target) !== null;
 }

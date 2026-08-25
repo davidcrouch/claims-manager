@@ -36,35 +36,10 @@ import {
   CreateSubmitOverlay,
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
+import { CW_TASK_TYPES } from '@/lib/cw-task-types';
 import type { LookupRef, Task } from '@/types/api';
 
-const TASK_TYPES = [
-  'Call to Schedule',
-  'Book Site Attendance',
-  'Follow-up with Customer',
-  'Submit Report',
-  'Customer Complaint',
-  'Quote Review Required',
-  'Submission Required',
-  'Repair Update',
-  'Commence Repairs',
-  'Send Scope/Contract',
-  'Upload Completion Certificate',
-  'Schedule Repairs',
-  'Send Excess',
-  'Make Safe Required',
-  'Signed Scope/Contract',
-  'Collect Excess',
-  'Review Claim',
-  'Review Specialist Report',
-  'Update Required',
-  'Tender Update',
-  'Specialist Required',
-  'Check out Date Changes',
-  'Book Accommodation',
-  'Follow-up with Supplier',
-  'Other',
-] as const;
+const TASK_TYPES = CW_TASK_TYPES;
 
 const TASK_STATUSES = [
   'Open',

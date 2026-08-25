@@ -14,6 +14,12 @@ export class TasksController {
     return this.tasksService.findFilterOptions();
   }
 
+  @Get('task-types')
+  @RequirePermission(P.workflows.read)
+  async listTaskTypes() {
+    return this.tasksService.listCanonicalTaskTypes();
+  }
+
   @Get()
   @RequirePermission(P.workflows.read)
   async findAll(

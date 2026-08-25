@@ -29,8 +29,16 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { TypeBadge } from '@/components/ui/type-badge';
+import { jobHeaderTitle, jobInsurerReference } from '@/components/shared/job-label';
 import { Button } from '@/components/ui/button';
 import { BackButton } from '@/components/layout/BackButton';
+import {
+  PageHeaderField,
+  PageHeaderIcon,
+  PageHeaderLayout,
+} from '@/components/layout/PageHeaderLayout';
+import { HeaderActionToolbar } from '@/components/layout/HeaderActionToolbar';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { PrintButton } from '@/components/shared/PrintButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
@@ -139,37 +147,6 @@ function OverviewTab({ claim }: { claim: Claim }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card size="sm">
-          <CardContent className="px-4">
-            <p className="text-xs text-muted-foreground">Status</p>
-            <p className="mt-1 text-sm font-medium">{status}</p>
-          </CardContent>
-        </Card>
-        <Card size="sm">
-          <CardContent className="px-4">
-            <p className="text-xs text-muted-foreground">Account</p>
-            <p className="mt-1 text-sm font-medium">{account ?? '—'}</p>
-          </CardContent>
-        </Card>
-        <Card size="sm">
-          <CardContent className="px-4">
-            <p className="text-xs text-muted-foreground">Lodged</p>
-            <p className="mt-1 text-sm font-medium">
-              {formatDate(claim.lodgementDate)}
-            </p>
-          </CardContent>
-        </Card>
-        <Card size="sm">
-          <CardContent className="px-4">
-            <p className="text-xs text-muted-foreground">Date of loss</p>
-            <p className="mt-1 text-sm font-medium">
-              {formatDate(claim.dateOfLoss)}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
       <div className="grid gap-4 md:grid-cols-2">
         <SectionCard
           title="Claim Identifiers"
@@ -189,6 +166,7 @@ function OverviewTab({ claim }: { claim: Claim }) {
             value={account ?? '—'}
           />
           <DefRow label="Status" value={status} />
+          <DefRow label="Lodged" value={formatDate(claim.lodgementDate)} />
         </SectionCard>
 
         <SectionCard
@@ -760,17 +738,26 @@ function JobsTab({
                     const statusName =
                       (job.status as { name?: string })?.name ?? 'Unknown';
                     const typeName =
-                      (job.jobType as { name?: string })?.name ?? '—';
+                      (job.jobType as { name?: string })?.name ?? '';
+                    const insurerRef = jobInsurerReference(job);
                     const snap = job.vendorSnapshot ?? {};
                     const vendorName = (snap.name ?? snap.companyName ?? snap.vendorName ?? '—') as string;
                     const vendorPhone = (snap.contactNumber ?? snap.phone ?? snap.phoneNumber ?? '—') as string;
                     const vendorEmail = (snap.contactEmail ?? snap.email ?? '—') as string;
                     return (
                       <tr key={job.id} className="hover:bg-muted/30">
-                        <td className="px-4 py-2 text-muted-foreground">{typeName}</td>
+                        <td className="px-4 py-2">
+                          <TypeBadge type={typeName} />
+                        </td>
                         <td className="px-4 py-2 font-medium">
-                          <Link href={`/jobs/${job.id}`} className="text-primary hover:underline">
-                            {job.externalJobId ?? job.externalReference ?? job.id}
+                          <Link
+                            href={`/jobs/${job.id}`}
+                            className="inline-flex items-center gap-2 text-primary hover:underline"
+                          >
+                            <span>{jobHeaderTitle(job)}</span>
+                            {insurerRef ? (
+                              <span className="font-normal text-muted-foreground">{insurerRef}</span>
+                            ) : null}
                           </Link>
                         </td>
                         <td className="px-4 py-2 text-muted-foreground">{vendorName}</td>
@@ -913,47 +900,41 @@ export function ClaimPageHeader({ claim }: { claim: Claim }) {
   const jobs = claim.jobs ?? [];
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-y-1">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-        <BackButton href="/claims" label="Back to claims" />
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-100">
-          <FileText className="h-4 w-4 text-blue-600" />
-        </span>
-        <h1 className="truncate text-lg font-semibold leading-tight">{title}</h1>
-        {claim.externalReference && (
-          <span className="font-mono text-xs text-muted-foreground">
-            · {claim.externalReference}
-          </span>
-        )}
-        <StatusBadge status={statusName} />
-        {account && (
-          <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-            <Building2 className="h-3 w-3" />
-            {account}
-          </span>
-        )}
-        {address && (
-          <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-            <MapPin className="h-3 w-3" />
-            {address}
-          </span>
-        )}
-      </div>
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pl-20 text-xs">
-        <div className="flex items-baseline gap-1">
-          <span className="text-muted-foreground">Lodged:</span>
-          <span className="font-medium">{formatDate(claim.lodgementDate)}</span>
-        </div>
-        <div className="flex items-baseline gap-1">
-          <span className="text-muted-foreground">DOL:</span>
-          <span className="font-medium">{formatDate(claim.dateOfLoss)}</span>
-        </div>
-        <div className="flex items-baseline gap-1">
-          <span className="text-muted-foreground">Jobs:</span>
-          <span className="font-medium">{jobs.length}</span>
-        </div>
-      </div>
-    </div>
+    <PageHeaderLayout
+      leading={<BackButton href="/claims" label="Back to claims" />}
+      icon={
+        <PageHeaderIcon
+          icon={FileText}
+          className="bg-blue-100"
+          iconClassName="text-blue-600"
+        />
+      }
+      title={title}
+      topRow={
+        <>
+          <StatusBadge status={statusName} />
+          {account && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              <Building2 className="h-3 w-3" />
+              {account}
+            </span>
+          )}
+          {address && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              <MapPin className="h-3 w-3" />
+              {address}
+            </span>
+          )}
+        </>
+      }
+      bottomRow={
+        <>
+          <PageHeaderField label="Lodged">{formatDate(claim.lodgementDate)}</PageHeaderField>
+          <PageHeaderField label="DOL">{formatDate(claim.dateOfLoss)}</PageHeaderField>
+          <PageHeaderField label="Jobs">{jobs.length}</PageHeaderField>
+        </>
+      }
+    />
   );
 }
 
@@ -1014,7 +995,7 @@ export function ClaimDetail({
         <Button
           size="default"
           onClick={() => setJobDrawerOpen(true)}
-          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+          className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
         >
           <Briefcase className="h-3.5 w-3.5" />
           Create Job
@@ -1023,20 +1004,22 @@ export function ClaimDetail({
           <Button
             size="default"
             onClick={() => setMessageDrawerOpen(true)}
-            className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+            className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
           >
             <Mail className="h-3.5 w-3.5" />
             Send Message
           </Button>
         ) : null}
-        <PrintButton documentType="claim" entityId={claim.id} />
-        <ArchiveEntityButton
-          entityType="claim"
-          entityId={claim.id}
-          statusName={claim.status?.name}
-          entityLabel={claim.claimNumber ?? claim.externalReference ?? undefined}
-          redirectTo="/claims"
-        />
+        <HeaderActionToolbar>
+          <PrintButton documentType="claim" entityId={claim.id} />
+          <ArchiveEntityButton
+            entityType="claim"
+            entityId={claim.id}
+            statusName={claim.status?.name}
+            entityLabel={claim.claimNumber ?? claim.externalReference ?? undefined}
+            redirectTo="/claims"
+          />
+        </HeaderActionToolbar>
       </SetHeaderActions>
       <div className="flex gap-0 border-b border-slate-200">
         {tabs.map((t) => {

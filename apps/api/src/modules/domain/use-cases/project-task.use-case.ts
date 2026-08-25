@@ -1,5 +1,4 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
-import { ModuleRef } from '@nestjs/core';
 import type { ProjectionUseCase, ProjectionResult } from './use-case.interface';
 import type { DrizzleDbOrTx } from '../../../database/drizzle.module';
 import { TaskTransformer } from '../transformers/task.transformer';
@@ -10,21 +9,16 @@ import {
   ExternalLinksRepository,
   type TaskInsert,
 } from '../../../database/repositories';
-import { TaskTypeMappingsService } from '../../tasks/task-type-mappings.service';
 
 @Injectable()
 export class ProjectTaskUseCase implements ProjectionUseCase {
   private readonly logger = new Logger('ProjectTaskUseCase');
 
-  // Explicit @Inject on every param: SWC collapses constructor types to Object.
-  // TaskTypeMappingsService is request-scoped (via TenantContext) so we resolve
-  // it lazily through ModuleRef to keep this use case singleton-scoped.
   constructor(
     @Inject(TaskTransformer) private readonly transformer: TaskTransformer,
     @Inject(EntityRelationshipService) private readonly entityRelationship: EntityRelationshipService,
     @Inject(TasksRepository) private readonly tasksRepo: TasksRepository,
     @Inject(ExternalLinksRepository) private readonly externalLinksRepo: ExternalLinksRepository,
-    @Inject(ModuleRef) private readonly moduleRef: ModuleRef,
   ) {}
 
   async execute(params: {
@@ -39,17 +33,11 @@ export class ProjectTaskUseCase implements ProjectionUseCase {
 
     this.logger.log(`ProjectTaskUseCase.execute — externalObjectId=${externalObjectId}`);
 
-    // 1. Check for existing entity
     const existingLinks = await this.externalLinksRepo.findByExternalObjectId({ externalObjectId, tx });
     const existingLink = existingLinks.find((l) => l.internalEntityType === 'task');
 
-    // 2. Transform
     const result = this.transformer.transform({ payload, tenantId });
 
-    // 3. Resolve parents.
-    // For updates, relax required→false so we don't block on missing parents;
-    // for new tasks the transformer's required:true lets resolveParents throw
-    // ParentNotProjectedError directly, engaging inline recovery.
     const parentRefs = existingLink
       ? result.parentRefs.map((r) => ({ ...r, required: false }))
       : result.parentRefs;
@@ -66,9 +54,6 @@ export class ProjectTaskUseCase implements ProjectionUseCase {
     if (claimId) (result.entity as Record<string, unknown>).claimId = claimId;
     if (jobId) (result.entity as Record<string, unknown>).jobId = jobId;
 
-    // Defensive fallback: if resolveParents didn't throw (e.g. no parentRefs
-    // in the payload at all) but this is a new task with no parent, throw so
-    // the retry machinery can attempt recovery.
     if (!existingLink && !claimId && !jobId) {
       throw new ParentNotProjectedError(
         'task',
@@ -82,8 +67,6 @@ export class ProjectTaskUseCase implements ProjectionUseCase {
       );
     }
 
-    // Derive relatedEntityType / relatedEntityId only when at least one
-    // parent resolved — avoids overwriting good values on the update path.
     if (jobId || claimId) {
       const resolvedEntityType = jobId ? 'Job' : 'Claim';
       const resolvedEntityId = (jobId ?? claimId)!;
@@ -91,14 +74,6 @@ export class ProjectTaskUseCase implements ProjectionUseCase {
       (result.entity as Record<string, unknown>).relatedEntityId = resolvedEntityId;
     }
 
-    // Infer taskType from title when not explicitly set on the payload entity
-    await this.applyInferredTaskType({
-      tenantId,
-      entity: result.entity as Record<string, unknown>,
-      existingTaskId: existingLink?.internalEntityId,
-    });
-
-    // 4. Upsert
     let taskId: string;
     if (existingLink) {
       await this.tasksRepo.update({
@@ -129,47 +104,5 @@ export class ProjectTaskUseCase implements ProjectionUseCase {
     }
 
     return { status: 'completed', internalEntityId: taskId, internalEntityType: 'task' };
-  }
-
-  private async applyInferredTaskType(params: {
-    tenantId: string;
-    entity: Record<string, unknown>;
-    existingTaskId?: string;
-  }): Promise<void> {
-    let taskTypeMappings: TaskTypeMappingsService | undefined;
-    try {
-      taskTypeMappings = await this.moduleRef.resolve(TaskTypeMappingsService);
-    } catch {
-      return;
-    }
-    if (!taskTypeMappings) return;
-
-    const explicit =
-      typeof params.entity.taskType === 'string' ? params.entity.taskType.trim() : '';
-    if (explicit) return;
-
-    // On update, preserve an existing type if already set
-    if (params.existingTaskId) {
-      const existing = await this.tasksRepo.findOne({
-        id: params.existingTaskId,
-        tenantId: params.tenantId,
-      });
-      const existingType =
-        typeof existing?.taskType === 'string' ? existing.taskType.trim() : '';
-      if (existingType) return;
-    }
-
-    const title =
-      typeof params.entity.name === 'string' ? params.entity.name : undefined;
-    const resolved = await taskTypeMappings.resolveFromTitle({
-      tenantId: params.tenantId,
-      title,
-    });
-    if (!resolved) return;
-
-    params.entity.taskType = resolved;
-    this.logger.log(
-      `ProjectTaskUseCase.applyInferredTaskType — title="${title}" → type="${resolved}"`,
-    );
   }
 }

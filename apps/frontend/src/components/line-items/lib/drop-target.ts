@@ -55,6 +55,10 @@ export function resolveDrop(
   const targetParsed = parseRowKey(overId);
   if (!targetParsed) return null;
 
+  if (source.type === 'scope') {
+    return resolveScopeDrop(source, overId, targetParsed, groups, position);
+  }
+
   const targetContext = getTargetContext(overId);
   let dropContext: 'group' | 'scope' | 'assembly';
   if (targetContext === 'item') {
@@ -137,6 +141,101 @@ export function resolveDrop(
       position,
     ),
   };
+}
+
+/**
+ * Scopes can only live in a group. Dropping on a scope (or anything nested
+ * under one) retargets to that parent group so the dragged scope is inserted
+ * as a sibling, never nested.
+ */
+function resolveScopeDrop(
+  source: DragState,
+  overId: string,
+  targetParsed: NonNullable<ReturnType<typeof parseRowKey>>,
+  groups: ApiGroup[],
+  position: InsertPosition,
+): DropResolution {
+  const targetGroupId = targetParsed.groupId;
+  const targetScopeId =
+    targetParsed.type === 'scope' ? targetParsed.id : enclosingScopeIdFromKey(overId);
+
+  if (targetScopeId === source.id) {
+    return {
+      valid: false,
+      dropContext: 'group',
+      targetGroupId,
+      targetRowKey: overId,
+      sameParent: true,
+      isContainerDrop: false,
+    };
+  }
+
+  const sameParent = source.parentGroupId === targetGroupId && !!targetScopeId;
+
+  if (sameParent && targetScopeId) {
+    const container = findContainer(groups, source.parentGroupId, undefined, 'scope');
+    if (!container) {
+      return {
+        valid: true,
+        dropContext: 'group',
+        targetGroupId,
+        targetRowKey: overId,
+        sameParent: true,
+        isContainerDrop: false,
+      };
+    }
+    const fromIndex = container.findIndex((entry) => entry.id === source.id);
+    const targetIndex = container.findIndex((entry) => entry.id === targetScopeId);
+    if (fromIndex === -1 || targetIndex === -1) {
+      return {
+        valid: true,
+        dropContext: 'group',
+        targetGroupId,
+        targetRowKey: overId,
+        sameParent: true,
+        isContainerDrop: false,
+      };
+    }
+    let toIndex = targetIndex;
+    if (position === 'after') toIndex += 1;
+    if (fromIndex < toIndex) toIndex -= 1;
+    return {
+      valid: true,
+      dropContext: 'group',
+      targetGroupId,
+      targetRowKey: overId,
+      sameParent: true,
+      isContainerDrop: false,
+      reorderFromIndex: fromIndex,
+      reorderToIndex: toIndex,
+    };
+  }
+
+  const insertTarget = targetScopeId
+    ? { type: 'scope' as const, id: targetScopeId }
+    : targetParsed;
+
+  return {
+    valid: true,
+    dropContext: 'group',
+    targetGroupId,
+    targetRowKey: overId,
+    sameParent: false,
+    isContainerDrop: false,
+    insertAtIndex: computeInsertIndex(
+      groups,
+      targetGroupId,
+      undefined,
+      insertTarget,
+      'scope',
+      position,
+    ),
+  };
+}
+
+function enclosingScopeIdFromKey(rowKey: string): string | undefined {
+  const match = rowKey.match(/^[0-9a-f-]{36}-scope-([0-9a-f-]{36})/i);
+  return match?.[1];
 }
 
 function appendIndex(

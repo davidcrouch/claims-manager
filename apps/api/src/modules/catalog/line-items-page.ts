@@ -84,6 +84,7 @@ function groupSummaryLabel(group: Record<string, unknown>, index: number): strin
       return rec.externalReference;
     }
   }
+  if (typeof group.name === 'string' && group.name) return group.name;
   if (typeof group.description === 'string' && group.description) return group.description;
   return `Group ${index + 1}`;
 }

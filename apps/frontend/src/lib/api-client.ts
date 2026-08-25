@@ -38,7 +38,6 @@ import type {
   PaginatedResponse,
   LineItemsPageQuery,
   LineItemsPageResponse,
-  TaskTypeMapping,
   FinanceSummary,
   AgingBucket,
   Catalog,
@@ -465,63 +464,8 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<Task | null>(`/tasks/${id}`);
     },
 
-    // -- Task type mappings (title → type) --
-
-    getTaskTypeMappings(params?: {
-      includeInactive?: boolean;
-    }): Promise<TaskTypeMapping[]> {
-      const sp = new URLSearchParams();
-      if (params?.includeInactive === false) sp.set('includeInactive', 'false');
-      const qs = sp.toString();
-      return fetchApi<TaskTypeMapping[]>(
-        `/task-type-mappings${qs ? `?${qs}` : ''}`,
-      );
-    },
-
-    getCanonicalTaskTypes(): Promise<string[]> {
-      return fetchApi<string[]>('/task-type-mappings/task-types');
-    },
-
-    createTaskTypeMapping(body: {
-      titlePattern: string;
-      taskType: string;
-      matchMode?: string;
-      priority?: number;
-      isActive?: boolean;
-    }): Promise<TaskTypeMapping> {
-      return fetchApi<TaskTypeMapping>('/task-type-mappings', {
-        method: 'POST',
-        body: JSON.stringify(body),
-      });
-    },
-
-    updateTaskTypeMapping(
-      id: string,
-      body: {
-        titlePattern?: string;
-        taskType?: string;
-        matchMode?: string;
-        priority?: number;
-        isActive?: boolean;
-      },
-    ): Promise<TaskTypeMapping> {
-      return fetchApi<TaskTypeMapping>(`/task-type-mappings/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify(body),
-      });
-    },
-
-    deleteTaskTypeMapping(id: string): Promise<{ success: boolean }> {
-      return fetchApi<{ success: boolean }>(`/task-type-mappings/${id}`, {
-        method: 'DELETE',
-      });
-    },
-
-    backfillTaskTypes(): Promise<{ updated: number; scanned: number }> {
-      return fetchApi<{ updated: number; scanned: number }>(
-        '/task-type-mappings/backfill',
-        { method: 'POST' },
-      );
+    getTaskTypes(): Promise<string[]> {
+      return fetchApi<string[]>('/tasks/task-types');
     },
 
     getMessages(params?: {
@@ -1433,6 +1377,7 @@ export function createApiClient(options?: ApiClientOptions) {
       page?: number;
       limit?: number;
       status?: string;
+      eventType?: string;
       search?: string;
       sort?: string;
     }): Promise<PaginatedResponse<WebhookEvent>> {
@@ -1440,9 +1385,16 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params?.page != null) sp.set('page', String(params.page));
       if (params?.limit != null) sp.set('limit', String(params.limit));
       if (params?.status) sp.set('status', params.status);
+      if (params?.eventType) sp.set('eventType', params.eventType);
       if (params?.search) sp.set('search', params.search);
       if (params?.sort) sp.set('sort', params.sort);
       return fetchApi<PaginatedResponse<WebhookEvent>>(`/connections/${id}/webhook-events?${sp}`);
+    },
+
+    getConnectionWebhookEventFilterOptions(id: string): Promise<{ eventTypes: string[] }> {
+      return fetchApi<{ eventTypes: string[] }>(
+        `/connections/${id}/webhook-events/filter-options`,
+      );
     },
 
     getCatalogs(params?: { type?: string }): Promise<Catalog[]> {
