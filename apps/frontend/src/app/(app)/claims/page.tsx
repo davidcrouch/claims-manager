@@ -5,36 +5,16 @@ import {
   buildClaimsListFetchKeyFromPageParams,
   normalizeSortParam,
 } from '@/components/claims/claims-list-helpers';
-import { isArchivedStatus } from '@/components/shared/list-filters';
+import {
+  parseArchiveListTab,
+  resolveArchiveListStatusParam,
+} from '@/components/shared/archive-list';
 import type { Claim, PaginatedResponse } from '@/types/api';
 
 /** Lookup domain for claim lifecycle status values (tenant-specific). */
 const CLAIM_STATUS_LOOKUP_DOMAIN = 'claim_status';
 /** Lookup domain for insurer/account values. */
 const CLAIM_ACCOUNT_LOOKUP_DOMAIN = 'account';
-
-type ClaimTab = 'active' | 'archived' | 'all';
-const VALID_TABS = new Set<ClaimTab>(['active', 'archived', 'all']);
-
-function resolveStatusForTab(
-  tab: ClaimTab,
-  explicitStatus: string | undefined,
-  statusOptions: { id: string; name: string }[],
-): string | undefined {
-  if (explicitStatus) return explicitStatus;
-  if (tab === 'all') return undefined;
-  const archivedIds: string[] = [];
-  const activeIds: string[] = [];
-  for (const opt of statusOptions) {
-    if (isArchivedStatus(opt.name)) {
-      archivedIds.push(opt.id);
-    } else {
-      activeIds.push(opt.id);
-    }
-  }
-  const ids = tab === 'archived' ? archivedIds : activeIds;
-  return ids.length ? ids.sort().join(',') : undefined;
-}
 
 export default async function ClaimsPage({
   searchParams,
@@ -55,9 +35,7 @@ export default async function ClaimsPage({
 
   const params = await searchParams;
   const sort = normalizeSortParam(params.sort ?? null);
-  const tab: ClaimTab = params.tab && VALID_TABS.has(params.tab as ClaimTab)
-    ? (params.tab as ClaimTab)
-    : 'active';
+  const tab = parseArchiveListTab(params.tab);
 
   const emptyClaims: PaginatedResponse<Claim> = { data: [], total: 0 };
 
@@ -80,7 +58,11 @@ export default async function ClaimsPage({
     })
   );
 
-  const resolvedStatus = resolveStatusForTab(tab, params.status, statusOptions);
+  const resolvedStatus = resolveArchiveListStatusParam(
+    tab,
+    params.status,
+    statusOptions,
+  );
 
   const initialClaims = await api
     .getClaims({

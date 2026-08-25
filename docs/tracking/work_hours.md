@@ -986,3 +986,12 @@
   A later catalogue refresh keeps the insurer tag instead of clearing it.
   Staff can publish Ensure-based estimates without a manual retag.
   Grouping lines stay internal-only, as intended.
+
+- `2026-08-26` `c50760b` **0.5 h**
+  `4 files | +141 −116 | Tier 2 standard | Light orchestration`
+  Lay summary: Fixed the hosted claims list so it opens reliably instead of showing an error on first load.
+  **Restored the hosted claims list after a server-side rendering failure.**
+  Diagnosed the staging error blocking the claims list on first load.
+  Moved archive and active-tab helpers to a server-safe module shared with list filters.
+  Updated the claims page to use those helpers instead of client-only code.
+  Staging can load the full claims list on refresh and direct navigation again.
