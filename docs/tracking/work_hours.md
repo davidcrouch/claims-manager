@@ -987,7 +987,7 @@
   Staff can publish Ensure-based estimates without a manual retag.
   Grouping lines stay internal-only, as intended.
 
-- `2026-08-26` `c50760b` **0.5 h**
+- `2026-08-26` `3b01a08` **0.5 h**
   `4 files | +141 −116 | Tier 2 standard | Light orchestration`
   Lay summary: Fixed the hosted claims list so it opens reliably instead of showing an error on first load.
   **Restored the hosted claims list after a server-side rendering failure.**
