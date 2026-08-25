@@ -948,7 +948,7 @@
   Claims list job column shows the primary job with a hover menu listing every related job and its type badge when multiple jobs exist on one claim.
   Job overview and shared label helpers surface the insurer reference consistently, separate from the partner system's own job identifier.
 
-- `2026-08-26` `TBD` **10 h**
+- `2026-08-26` `0e70cad` **10 h**
   `111 files | +4101 −3266 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Record pages now share a consistent header and action bar, task types are built in instead of configured separately, and jobs and line-item editing work more smoothly.
   **Unified detail-page headers and simplified task types across the product.**
