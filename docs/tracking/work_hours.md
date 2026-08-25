@@ -977,3 +977,12 @@
   Existing claims still receive the correct type and status labels.
   The current product catalogue still replaces older catalogues on hosted sites.
   Staff keep seeing the right claim list and matching product codes after the next release.
+
+- `2026-08-26` `pending` **0.5 h**
+  `6 files | +115 −8 | Tier 3 complex | Light orchestration`
+  Lay summary: Ensure catalogue product lines can be sent to the insurer again on the hosted site.
+  **Tagged Ensure catalogue product lines so they can be sent to the insurer.**
+  Hosted releases apply that tagging automatically after each deploy.
+  A later catalogue refresh keeps the insurer tag instead of clearing it.
+  Staff can publish Ensure-based estimates without a manual retag.
+  Grouping lines stay internal-only, as intended.

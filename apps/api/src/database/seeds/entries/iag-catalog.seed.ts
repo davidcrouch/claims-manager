@@ -2,8 +2,10 @@
  * Replace tenant catalogues with the IAG / Crunchwork export used on local
  * (Crunchwork 2026-04-35 + Ensure Catalogue default).
  *
- * Idempotent: skips when the target Crunchwork catalogue already has a full
- * item set, unless REPLACE_IAG_CATALOG=true.
+ * Idempotent: skips the full wipe/re-import when the target Crunchwork
+ * catalogue already has a full item set, unless REPLACE_IAG_CATALOG=true.
+ * Always retags Ensure Catalogue primitives as crunchwork (scopes stay
+ * internal) so insurer publish is not blocked after a replace.
  *
  * Callers:
  *   - Cloud Run job `seed-api-lookups` (`run-seed-lookups.js`)
@@ -20,7 +22,10 @@ import {
   iagEnsureScopesCsvPath,
 } from '../lib/catalog-data-paths';
 import { coerceToRateString, DEFAULT_MARKUP_RATE, DEFAULT_TAX_RATE } from '../../../common/rates';
-import { defaultProviderCodesForImport } from '../../../modules/catalog/catalog.utils';
+import {
+  defaultProviderCodesForImport,
+  providerCodesForEnsureCatalogItem,
+} from '../../../modules/catalog/catalog.utils';
 
 const LOG = '[seeds/iag-catalog]';
 
@@ -295,17 +300,45 @@ async function ensureUnit(
   return created.id;
 }
 
+async function retagEnsurePrimitives(params: {
+  db: SeedDb;
+  tenantId: string;
+  logger: SeedLogger;
+}): Promise<number> {
+  const result = await params.db.execute(sql`
+    UPDATE "catalog_items" AS ci
+    SET "provider_codes" = ARRAY['crunchwork']::text[]
+    FROM "catalogs" AS c
+    WHERE ci."catalog_id" = c."id"
+      AND ci."tenant_id" = ${params.tenantId}
+      AND c."tenant_id" = ${params.tenantId}
+      AND ci."deleted_at" IS NULL
+      AND ci."kind" = 'primitive'
+      AND lower(c."name") IN ('ensure', 'ensure catalogue')
+      AND ci."provider_codes" IS DISTINCT FROM ARRAY['crunchwork']::text[]
+  `);
+  const n = Number(result.rowCount ?? 0);
+  if (n > 0) {
+    params.logger.info(
+      `${LOG} retagged ${n} Ensure primitives to crunchwork (tenant=${params.tenantId})`,
+    );
+  }
+  return n;
+}
+
 async function importRows(params: {
   db: SeedDb;
   tenantId: string;
   catalogId: string;
   importFormat: 'internal' | 'crunchwork';
+  tagging?: 'default' | 'ensure';
   cols: Map<string, number>;
   rows: string[][];
   onlyKind?: string;
   logger: SeedLogger;
 }): Promise<number> {
   const { db, tenantId, catalogId, importFormat, cols, rows, onlyKind, logger } = params;
+  const tagging = params.tagging ?? 'default';
   const typeCache = new Map<string, string>();
   const catCache = new Map<string, string>();
   const unitCache = new Map<string, string>();
@@ -384,7 +417,10 @@ async function importRows(params: {
       markupValue: coerceToRateString(cell(cols, row, 'markup'), DEFAULT_MARKUP_RATE),
       taxRate: coerceToRateString(cell(cols, row, 'tax %'), DEFAULT_TAX_RATE),
       externalReference: id || null,
-      providerCodes: defaultProviderCodesForImport(importFormat, kind),
+      providerCodes:
+        tagging === 'ensure'
+          ? providerCodesForEnsureCatalogItem(kind)
+          : defaultProviderCodesForImport(importFormat, kind),
       parentCode: cell(cols, row, 'parent'),
       isActive: !archived,
     });
@@ -471,14 +507,18 @@ async function replaceForTenant(params: {
   logger: SeedLogger;
   crunchwork: ParsedCsv;
   ensureScopes: ParsedCsv;
-}): Promise<{ inserted: number; skipped: number }> {
+}): Promise<{ inserted: number; skipped: number; updated: number }> {
   const { db, tenantId, logger, crunchwork, ensureScopes } = params;
 
   await seedCatalogDevForTenant({ db, tenantId, logger });
 
   if (!forceReplace() && (await alreadyImported(db, tenantId))) {
-    logger.info(`${LOG} skip tenant=${tenantId} — ${CW_CATALOG_NAME} already present`);
-    return { inserted: 0, skipped: 1 };
+    const updated = await retagEnsurePrimitives({ db, tenantId, logger });
+    logger.info(
+      `${LOG} skip tenant=${tenantId} — ${CW_CATALOG_NAME} already present` +
+        (updated > 0 ? `; retaggedEnsurePrimitives=${updated}` : ''),
+    );
+    return { inserted: 0, skipped: 1, updated };
   }
 
   logger.info(`${LOG} replacing catalogues for tenant=${tenantId}`);
@@ -522,6 +562,7 @@ async function replaceForTenant(params: {
     tenantId,
     catalogId: ensureCat.id,
     importFormat: 'internal',
+    tagging: 'ensure',
     cols: ensureScopes.cols,
     rows: ensureScopes.rows,
     logger,
@@ -536,10 +577,11 @@ async function replaceForTenant(params: {
     logger,
   });
 
+  const updated = await retagEnsurePrimitives({ db, tenantId, logger });
   logger.info(
     `${LOG} tenant=${tenantId} ensureScopes=${ensureCount} crunchworkItems=${cwCount}`,
   );
-  return { inserted: ensureCount + cwCount, skipped: 0 };
+  return { inserted: ensureCount + cwCount, skipped: 0, updated };
 }
 
 export async function replaceIagCatalogForAllTenants(params: {
@@ -589,6 +631,7 @@ export async function replaceIagCatalogForAllTenants(params: {
       ensureScopes,
     });
     totals.inserted += result.inserted;
+    totals.updated += result.updated;
     totals.skipped += result.skipped;
   }
   totals.notes = `tenants=${tenants.length}`;

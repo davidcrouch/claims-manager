@@ -357,6 +357,23 @@ export function defaultProviderCodesForImport(
   return [importFormat === 'crunchwork' ? 'crunchwork' : 'internal'];
 }
 
+const ENSURE_CATALOG_NAMES = new Set(['ensure', 'ensure catalogue']);
+
+/** True for the Ensure default catalogue (`Ensure` or `Ensure Catalogue`). */
+export function isEnsureCatalogName(name: string | null | undefined): boolean {
+  return ENSURE_CATALOG_NAMES.has((name ?? '').trim().toLowerCase());
+}
+
+/**
+ * Ensure Catalogue is type=internal (scopes live there) but its primitives
+ * are Crunchwork-publishable and must carry the crunchwork tag.
+ */
+export function providerCodesForEnsureCatalogItem(kind: string): string[] {
+  if (kind === 'scope') return ['internal'];
+  if (kind === 'primitive') return ['crunchwork'];
+  return ['internal'];
+}
+
 /** Resolve provider tags for create/update: scopes never carry crunchwork. */
 export function resolveCatalogItemProviderCodes(params: {
   kind: string;

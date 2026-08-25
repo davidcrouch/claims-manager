@@ -14,6 +14,8 @@ import {
   normalizeProviderCodes,
   catalogItemAllowsProvider,
   defaultProviderCodesForImport,
+  isEnsureCatalogName,
+  providerCodesForEnsureCatalogItem,
   resolveCatalogItemProviderCodes,
 } from './catalog.utils';
 
@@ -273,6 +275,24 @@ describe('catalog.utils', () => {
 
     it('forces scopes to internal even for crunchwork imports', () => {
       expect(defaultProviderCodesForImport('crunchwork', 'scope')).toEqual(['internal']);
+    });
+  });
+
+  describe('isEnsureCatalogName', () => {
+    it('matches Ensure and Ensure Catalogue', () => {
+      expect(isEnsureCatalogName('Ensure')).toBe(true);
+      expect(isEnsureCatalogName('Ensure Catalogue')).toBe(true);
+      expect(isEnsureCatalogName('ensure catalogue')).toBe(true);
+      expect(isEnsureCatalogName('Crunchwork 2026-04-35')).toBe(false);
+      expect(isEnsureCatalogName('Default')).toBe(false);
+    });
+  });
+
+  describe('providerCodesForEnsureCatalogItem', () => {
+    it('tags Ensure primitives as crunchwork and scopes as internal', () => {
+      expect(providerCodesForEnsureCatalogItem('primitive')).toEqual(['crunchwork']);
+      expect(providerCodesForEnsureCatalogItem('scope')).toEqual(['internal']);
+      expect(providerCodesForEnsureCatalogItem('assembly')).toEqual(['internal']);
     });
   });
 
