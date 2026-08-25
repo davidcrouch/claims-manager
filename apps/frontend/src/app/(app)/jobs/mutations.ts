@@ -10,7 +10,7 @@ function nestErrorMessage(body: unknown, fallback: string): string {
   const message = (body as { message?: unknown }).message;
   if (typeof message === 'string' && message.trim()) return message;
   if (Array.isArray(message)) {
-    const parts = message.filter((m): m is string => typeof m === 'string' && m.trim());
+    const parts = message.filter((m): m is string => typeof m === 'string' && m.trim().length > 0);
     if (parts.length) return parts.join('; ');
   }
   return fallback;
