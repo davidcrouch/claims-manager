@@ -475,7 +475,8 @@ resource "google_cloud_run_v2_job" "migrate_api" {
   depends_on = [google_project_service.run]
 }
 
-# Idempotent lookups + document-template JSONata sync for every tenant. Run after migrate-api.
+# Idempotent lookups, claim-lookup backfill, IAG catalogue replace, and
+# document-template JSONata sync for every tenant. Run after migrate-api.
 resource "google_cloud_run_v2_job" "seed_api_lookups" {
   count    = var.enable_cloud_run ? 1 : 0
   project  = var.project_id
@@ -485,7 +486,7 @@ resource "google_cloud_run_v2_job" "seed_api_lookups" {
   template {
     template {
       service_account = module.iam.service_account_emails["api-server"]
-      timeout         = "300s"
+      timeout         = "900s"
       max_retries     = 1
 
       vpc_access {

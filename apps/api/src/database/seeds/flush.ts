@@ -26,6 +26,8 @@ import filesystemDefaultSeed from './entries/filesystem-default.seed';
 import ensureConstructionSeed from './entries/ensure-construction.seed';
 import catalogDevSeed from './entries/catalog-dev.seed';
 import lookupsSeed from './entries/lookups.seed';
+import backfillClaimLookupsSeed from './entries/backfill-claim-lookups.seed';
+import iagCatalogSeed from './entries/iag-catalog.seed';
 import documentTemplateTransformsSeed from './entries/document-template-transforms.seed';
 
 function buildSeeds(): Seed[] {
@@ -34,6 +36,8 @@ function buildSeeds(): Seed[] {
     ensureConstructionSeed,
     catalogDevSeed,
     lookupsSeed,
+    backfillClaimLookupsSeed,
+    iagCatalogSeed,
     documentTemplateTransformsSeed,
   ];
 }

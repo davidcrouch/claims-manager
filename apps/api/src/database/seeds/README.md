@@ -14,8 +14,10 @@ staging connection) that make the app usable in dev and staging.
 |---|---|---|
 | `filesystem-default` | **Platform** (`tenant_id = NULL`) | Creates Company + Project filesystem templates (`Company` is `is_default=true`). Available to all tenants at FS setup. |
 | `ensure-construction` | **Tenant** | Upserts organisation **Ensure Construction Pty Ltd** and its Crunchwork **staging** integration connection (encrypted credentials). |
-| `catalog-dev` | **Tenant** | Catalogue item types, trade categories, and unit_type lookups for Ensure Construction (CLI) or a given tenant (signup). Does **not** seed catalogues/items — import those manually. |
+| `catalog-dev` | **Tenant** | Catalogue item types, trade categories, and unit_type lookups for Ensure Construction (CLI) or a given tenant (signup). Does **not** seed catalogues/items — `iag-catalog` does that. |
 | `lookups` | **Tenant** | Status/type lookup values and Crunchwork group labels for Ensure Construction (CLI) or a given tenant (signup). |
+| `backfill-claim-lookups` | **Tenant** | Links existing claims to CW status / loss-type lookup codes from `api_payload`. |
+| `iag-catalog` | **Tenant** | Replaces catalogues with the IAG Crunchwork 2026-04-35 export + Ensure scope catalogue. Skips when that Crunchwork catalogue already has a full item set (`REPLACE_IAG_CATALOG=true` to force). |
 | `document-template-transforms` | **Tenant** | Sync saved RFQ / PO / WO JSONata transforms to current code defaults (idempotent). |
 
 > **Document templates** — uploading `.docx` files from `data/templates/` and assigning
@@ -32,7 +34,7 @@ staging connection) that make the app usable in dev and staging.
 
 | Caller | How | When |
 |---|---|---|
-| CLI (`pnpm --filter api run db:seed`) | Platform seed + Ensure Construction org/connection + catalog-dev + lookups | Manual / bootstrap |
+| CLI (`pnpm --filter api run db:seed`) | Platform seed + Ensure Construction org/connection + catalog-dev + lookups + IAG catalogues | Manual / bootstrap |
 | `POST /api/v1/internal/seed-tenant` | Catalog-dev + MCP + lookups; Crunchwork staging connection if the tenant is Ensure Construction | Invoked by `auth-server` after a new tenant signs up |
 | **First-login provisioning** | `ProvisioningService` → filesystem + template uploads + doc template settings + catalog | Triggered on user's first authenticated request |
 
@@ -47,6 +49,7 @@ secret) and gated by `SEED_NEW_TENANTS=true`. See
 |---|---|
 | `SEED_NEW_TENANTS=true` | Enables signup → `/internal/seed-tenant` (catalog-dev, MCP, lookups) |
 | `CREDENTIALS_ENCRYPTION_KEY` | Required by `ensure-construction` to encrypt Crunchwork client secret + HMAC |
+| `REPLACE_IAG_CATALOG=true` | Force `iag-catalog` to wipe and re-import even when Crunchwork 2026-04-35 is already present |
 
 ### Seeding a remote environment (e.g. staging)
 
@@ -137,7 +140,9 @@ seeds/
 |---|---|---|
 | `filesystem_template` (platform) | Yes — `filesystem-default` | Template for tenant FS setup |
 | Catalogue types/categories | Yes — `catalog-dev` | Per-tenant basics only (no catalogues/items) |
+| IAG / Crunchwork catalogues | Yes — `iag-catalog` | Wipes old catalogues then imports the IAG 2026-04-35 CSV (skipped if already present) |
 | Lookup values + CW group labels | Yes — `lookups` | Job/claim statuses and Create Job types |
+| Claim lookup FKs | Yes — `backfill-claim-lookups` | Maps existing CW claims onto status / loss-type lookups |
 | `document_template_transforms` (RFQ/PO/WO) | Yes — `document-template-transforms` | Syncs saved JSONata to code defaults when deploy seed runs |
 | `organizations` | Yes — `ensure-construction` only | Bootstrap tenant for staging/dev |
 | `integration_connections` | Yes — Crunchwork staging for Ensure Construction | Encrypted; not applied to other tenants |

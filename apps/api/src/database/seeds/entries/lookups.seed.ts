@@ -104,6 +104,28 @@ const LOOKUP_SPECS: readonly LookupSpec[] = [
   { domain: 'bill_payment_status', name: 'Partial', ref: 'bill-pay-partial' },
 ];
 
+/**
+ * Crunchwork Insurance REST lookup codes observed on inbound claim payloads.
+ * `externalReference` is the CW code (not the seed- prefixed internal catalogue).
+ * Kept separate so LOOKUP_SPECS can stay prefixed for direct/manual flows.
+ */
+const CW_CLAIM_LOOKUPS: ReadonlyArray<{
+  domain: string;
+  name: string;
+  externalReference: string;
+}> = [
+  { domain: 'claim_status', name: 'Open', externalReference: 'open' },
+  { domain: 'claim_status', name: 'Closed Complete', externalReference: 'closedComplete' },
+  { domain: 'claim_status', name: 'Closed Cancelled', externalReference: 'closedCancelled' },
+  { domain: 'loss_type', name: 'Fire', externalReference: 'Fire' },
+  { domain: 'loss_type', name: 'Storm/ Flood/ Earthquake', externalReference: 'Storm' },
+  { domain: 'loss_type', name: 'Glass', externalReference: 'Glass Breakage' },
+  { domain: 'loss_type', name: 'Accidental Damage/ Loss', externalReference: 'Accidental Damage' },
+  { domain: 'loss_type', name: 'Water Damage - Non Storm', externalReference: 'Water/Liquid Damage' },
+  { domain: 'loss_type', name: 'Fusion', externalReference: 'Lightning' },
+  { domain: 'loss_type', name: 'Impact', externalReference: 'Impact' },
+];
+
 const CW_GROUP_LABELS: readonly string[] = [
   'Alfresco', 'Awning', 'BBQ Area', 'Balcony', 'Bar', 'Bathroom',
   'Bathroom 2', 'Bathroom 3', 'Bedroom 1', 'Bedroom 2', 'Bedroom 3',
@@ -223,6 +245,16 @@ export async function seedLookupsForTenant(params: {
     })),
   );
   logger.info(`lookups ready (${LOOKUP_SPECS.length} specs)`);
+  await insertMissing(
+    { db, tenantId, stats, existing },
+    CW_CLAIM_LOOKUPS.map((spec) => ({
+      domain: spec.domain,
+      name: spec.name,
+      externalReference: spec.externalReference,
+      providerCode: 'crunchwork',
+    })),
+  );
+  logger.info(`crunchwork claim lookups ready (${CW_CLAIM_LOOKUPS.length})`);
   await insertMissing(
     { db, tenantId, stats, existing },
     CW_GROUP_LABELS.map((name) => ({

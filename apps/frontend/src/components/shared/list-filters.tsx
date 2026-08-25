@@ -463,7 +463,11 @@ export function formatDate(value?: string | null): string {
 export const ARCHIVED_STATUS_NAMES = new Set(['archived', 'closed']);
 
 export function isArchivedStatus(name: string | null | undefined): boolean {
-  return !!name && ARCHIVED_STATUS_NAMES.has(name.trim().toLowerCase());
+  if (!name) return false;
+  const normalized = name.trim().toLowerCase();
+  return (
+    ARCHIVED_STATUS_NAMES.has(normalized) || normalized.startsWith('closed ')
+  );
 }
 
 export type ArchiveListTab = 'active' | 'archived' | 'all';

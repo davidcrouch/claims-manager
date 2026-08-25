@@ -36,6 +36,8 @@ COPY --from=builder /app/apps/api/packs ./apps/api/packs
 COPY --from=builder /app/data/building-repairs-catalog.csv ./data/building-repairs-catalog.csv
 COPY --from=builder /app/data/internal-assembly-bom.json ./data/internal-assembly-bom.json
 COPY --from=builder /app/data/templates ./data/templates
+COPY --from=builder ["/app/data/catalogues/IAG Catalog ItemsExport -2026-04-35.csv", "./data/catalogues/iag-2026-04-35.csv"]
+COPY --from=builder ["/app/data/catalogues/IAG Catalog ItemsExport -2026-04-35 with ENSURE SCOPE ITEMS.import.csv", "./data/catalogues/iag-ensure-scopes.import.csv"]
 
 WORKDIR /app/apps/api
 EXPOSE 3001

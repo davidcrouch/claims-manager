@@ -9,7 +9,7 @@
  * Order:
  *   1. Platform seeds (no org required) — filesystem-default
  *   2. Ensure Construction org + Crunchwork staging connection
- *   3. Tenant seeds for that org — catalog-dev, lookups
+ *   3. Tenant seeds for that org — catalog-dev, lookups, claim-lookup backfill, IAG catalogues
  *
  * Note: Document template uploads moved to first-login provisioning flow
  * (ProvisioningService) — they go through the real API pipeline for thumbnails.
@@ -21,6 +21,8 @@ import filesystemDefaultSeed from './entries/filesystem-default.seed';
 import ensureConstructionSeed from './entries/ensure-construction.seed';
 import catalogDevSeed from './entries/catalog-dev.seed';
 import lookupsSeed from './entries/lookups.seed';
+import backfillClaimLookupsSeed from './entries/backfill-claim-lookups.seed';
+import iagCatalogSeed from './entries/iag-catalog.seed';
 import documentTemplateTransformsSeed from './entries/document-template-transforms.seed';
 
 function buildSeeds(): Seed[] {
@@ -29,6 +31,8 @@ function buildSeeds(): Seed[] {
     ensureConstructionSeed,
     catalogDevSeed,
     lookupsSeed,
+    backfillClaimLookupsSeed,
+    iagCatalogSeed,
     documentTemplateTransformsSeed,
   ];
 }

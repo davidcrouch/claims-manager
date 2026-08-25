@@ -66,6 +66,7 @@ export class ProjectClaimUseCase implements ProjectionUseCase {
     const resolvedLookups = await this.lookupResolution.resolveAll({
       lookups: result.lookups,
       tenantId,
+      providerCode: 'crunchwork',
       sourceEntity: 'claim',
       sourceEntityId: existingClaimId ?? undefined,
       tx,

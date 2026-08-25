@@ -119,10 +119,10 @@ export class ClaimTransformer implements EntityTransformer<ClaimInsert> {
 
     // ── Lookup declarations (object form → LookupRequest) ───────────
     this.declareLookup(lookups, payload.account, 'accountLookupId', 'account', true);
-    this.declareLookup(lookups, payload.status, 'statusLookupId', 'claim_status');
+    this.declareLookup(lookups, payload.status, 'statusLookupId', 'claim_status', true);
     this.declareLookup(lookups, payload.catCode, 'catCodeLookupId', 'cat_code', true);
-    this.declareLookup(lookups, payload.lossType, 'lossTypeLookupId', 'loss_type');
-    this.declareLookup(lookups, payload.lossSubType, 'lossSubtypeLookupId', 'loss_subtype');
+    this.declareLookup(lookups, payload.lossType, 'lossTypeLookupId', 'loss_type', true);
+    this.declareLookup(lookups, payload.lossSubType, 'lossSubtypeLookupId', 'loss_subtype', true);
 
     // Object-or-string fields: extract id if object; if bare string, stash in customData
     this.declareOrRaw(lookups, customDataRaw, payload.claimDecision, 'claimDecisionLookupId', 'claim_decision', 'claimDecisionRaw');

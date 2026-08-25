@@ -230,7 +230,8 @@ jobs:
           gcloud run jobs update seed-api-lookups \
             --project "${PROD_PROJECT}" \
             --region "${GCP_REGION}" \
-            --image "${{ env.REGISTRY }}/api-server:${IMAGE_TAG}"
+            --image "${{ env.REGISTRY }}/api-server:${IMAGE_TAG}" \
+            --task-timeout=15m
           gcloud run jobs execute seed-api-lookups \
             --project "${PROD_PROJECT}" \
             --region "${GCP_REGION}" \

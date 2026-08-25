@@ -26,7 +26,7 @@ Claims Manager runs **Cloud Run only** (staging and production). No GKE, no Comp
 - Signup creates org → auth-server `SEED_NEW_TENANTS=true` + `API_INTERNAL_URL` → `POST /internal/seed-tenant` (catalog, MCP, lookups; Crunchwork staging connection when the org is Ensure Construction).
 - CLI `pnpm --filter api run db:seed` upserts Ensure Construction Pty Ltd + its Crunchwork staging connection.
 - First login → frontend provisioning flow (`filesystem` / templates / catalog / lookups) when `organizations.provisioning_status != complete`.
-- CD after migrate runs `seed-api-lookups` (idempotent lookups + document-template JSONata sync for every tenant) in both staging and production.
+- CD after migrate runs `seed-api-lookups` (idempotent lookups, claim-lookup backfill, IAG catalogue replace, and document-template JSONata sync for every tenant) in both staging and production.
 
 **Networking:** Active subnet is `claims-manager-private-<env>`. An orphan `claims-manager-gke-staging` subnet may remain until GCP releases stuck serverless address reservations — it is unused.
 

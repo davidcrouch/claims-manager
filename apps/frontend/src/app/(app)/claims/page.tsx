@@ -4,8 +4,8 @@ import { ClaimsListClient } from '@/components/claims/ClaimsListClient';
 import {
   buildClaimsListFetchKeyFromPageParams,
   normalizeSortParam,
-  ARCHIVED_STATUS_NAMES,
 } from '@/components/claims/claims-list-helpers';
+import { isArchivedStatus } from '@/components/shared/list-filters';
 import type { Claim, PaginatedResponse } from '@/types/api';
 
 /** Lookup domain for claim lifecycle status values (tenant-specific). */
@@ -26,7 +26,7 @@ function resolveStatusForTab(
   const archivedIds: string[] = [];
   const activeIds: string[] = [];
   for (const opt of statusOptions) {
-    if (ARCHIVED_STATUS_NAMES.has(opt.name.trim().toLowerCase())) {
+    if (isArchivedStatus(opt.name)) {
       archivedIds.push(opt.id);
     } else {
       activeIds.push(opt.id);

@@ -958,3 +958,13 @@
   Line-item tables support improved drag-and-drop targets, parsing, and catalogue drops on quote and related screens.
   Invoice publishing uses shared publish logic; partner connections expose webhook event history more clearly.
   Automated tests cover task types, line-item sync, purchase-order transforms, and invoice publish helpers.
+
+- `2026-08-26` `PENDING` **6 h**
+  `19 files | +897 −17 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  Lay summary: Incoming partner claims now show the right type and status, and hosted environments use the same item catalogue so product codes match.
+  **Partner claims show real types and statuses, and hosted sites load the current item catalogue.**
+  Incoming claims recognise partner statuses and loss types instead of appearing as Unknown.
+  Claims already in the system are updated to those same labels so lists and filters work.
+  Hosted environments replace old item catalogues with the current partner catalogue so product codes match the working system.
+  Completed and cancelled claims appear under archive instead of dropping off the active list.
+  Each release applies the catalogue and claim-label updates automatically after deploy.
