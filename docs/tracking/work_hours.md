@@ -959,7 +959,7 @@
   Invoice publishing uses shared publish logic; partner connections expose webhook event history more clearly.
   Automated tests cover task types, line-item sync, purchase-order transforms, and invoice publish helpers.
 
-- `2026-08-26` `PENDING` **6 h**
+- `2026-08-26` `c865a25` **6 h**
   `19 files | +897 −17 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Incoming partner claims now show the right type and status, and hosted environments use the same item catalogue so product codes match.
   **Partner claims show real types and statuses, and hosted sites load the current item catalogue.**
