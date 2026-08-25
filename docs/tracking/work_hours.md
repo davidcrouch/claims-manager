@@ -969,7 +969,7 @@
   Completed and cancelled claims appear under archive instead of dropping off the active list.
   Each release applies the catalogue and claim-label updates automatically after deploy.
 
-- `2026-08-26` `PENDING` **0.5 h**
+- `2026-08-26` `fcff4e5` **0.5 h**
   `3 files | +37 −28 | Tier 3 complex | Light orchestration`
   Lay summary: A failed hosted release is corrected so claim labels and the product catalogue still update automatically after deploy.
   **Fixed the post-deploy update so hosted environments finish loading claim labels and the item catalogue.**
