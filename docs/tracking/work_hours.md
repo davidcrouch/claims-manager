@@ -968,3 +968,12 @@
   Hosted environments replace old item catalogues with the current partner catalogue so product codes match the working system.
   Completed and cancelled claims appear under archive instead of dropping off the active list.
   Each release applies the catalogue and claim-label updates automatically after deploy.
+
+- `2026-08-26` `PENDING` **0.5 h**
+  `3 files | +37 −28 | Tier 3 complex | Light orchestration`
+  Lay summary: A failed hosted release is corrected so claim labels and the product catalogue still update automatically after deploy.
+  **Fixed the post-deploy update so hosted environments finish loading claim labels and the item catalogue.**
+  The automatic update after a release no longer stops with an error before it finishes.
+  Existing claims still receive the correct type and status labels.
+  The current product catalogue still replaces older catalogues on hosted sites.
+  Staff keep seeing the right claim list and matching product codes after the next release.

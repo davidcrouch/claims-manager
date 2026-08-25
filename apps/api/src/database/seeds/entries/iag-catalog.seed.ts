@@ -524,7 +524,6 @@ async function replaceForTenant(params: {
     importFormat: 'internal',
     cols: ensureScopes.cols,
     rows: ensureScopes.rows,
-    onlyKind: 'scope',
     logger,
   });
   const cwCount = await importRows({

@@ -15,14 +15,20 @@ import type { SeedDb } from '../lib/db';
 
 const LOG = '[seeds/backfill-claim-lookups]';
 
+const PAYLOAD_KEYS = ['status', 'lossType', 'lossSubType'] as const;
+type PayloadKey = (typeof PAYLOAD_KEYS)[number];
+
 async function upsertAndLink(params: {
   db: SeedDb;
   logger: SeedLogger;
   domain: string;
   column: 'status_lookup_id' | 'loss_type_lookup_id' | 'loss_subtype_lookup_id';
-  objectKey: 'status' | 'lossType' | 'lossSubType';
+  objectKey: PayloadKey;
 }): Promise<{ inserted: number; updated: number }> {
   const { db, logger, domain, column, objectKey } = params;
+  if (!PAYLOAD_KEYS.includes(objectKey)) {
+    throw new Error(`${LOG} invalid payload key`);
+  }
 
   const created = await db.execute(sql`
     INSERT INTO lookup_values (
@@ -38,33 +44,28 @@ async function upsertAndLink(params: {
       '{}'::jsonb,
       true
     FROM (
-      SELECT DISTINCT ON (
-        c.tenant_id,
-        COALESCE(
-          NULLIF(c.api_payload->${objectKey}->>'externalReference', ''),
-          NULLIF(c.api_payload->${objectKey}->>'id', '')
-        )
-      )
-        c.tenant_id,
-        COALESCE(
-          NULLIF(c.api_payload->${objectKey}->>'externalReference', ''),
-          NULLIF(c.api_payload->${objectKey}->>'id', '')
-        ) AS ext_ref,
-        COALESCE(
-          NULLIF(c.api_payload->${objectKey}->>'name', ''),
-          NULLIF(c.api_payload->${objectKey}->>'externalReference', ''),
-          NULLIF(c.api_payload->${objectKey}->>'id', '')
-        ) AS disp_name
-      FROM claims c
-      WHERE c.deleted_at IS NULL
-      ORDER BY
-        c.tenant_id,
-        COALESCE(
-          NULLIF(c.api_payload->${objectKey}->>'externalReference', ''),
-          NULLIF(c.api_payload->${objectKey}->>'id', '')
-        )
+      SELECT DISTINCT ON (extracted.tenant_id, extracted.ext_ref)
+        extracted.tenant_id,
+        extracted.ext_ref,
+        extracted.disp_name
+      FROM (
+        SELECT
+          c.tenant_id,
+          COALESCE(
+            NULLIF(c.api_payload->${sql.raw(`'${objectKey}'`)}->>'externalReference', ''),
+            NULLIF(c.api_payload->${sql.raw(`'${objectKey}'`)}->>'id', '')
+          ) AS ext_ref,
+          COALESCE(
+            NULLIF(c.api_payload->${sql.raw(`'${objectKey}'`)}->>'name', ''),
+            NULLIF(c.api_payload->${sql.raw(`'${objectKey}'`)}->>'externalReference', ''),
+            NULLIF(c.api_payload->${sql.raw(`'${objectKey}'`)}->>'id', '')
+          ) AS disp_name
+        FROM claims c
+        WHERE c.deleted_at IS NULL
+      ) extracted
+      WHERE extracted.ext_ref IS NOT NULL
+      ORDER BY extracted.tenant_id, extracted.ext_ref
     ) src
-    WHERE src.ext_ref IS NOT NULL
     ON CONFLICT (tenant_id, domain, provider_code, external_reference)
     DO UPDATE SET
       name = EXCLUDED.name,
