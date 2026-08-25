@@ -978,7 +978,7 @@
   The current product catalogue still replaces older catalogues on hosted sites.
   Staff keep seeing the right claim list and matching product codes after the next release.
 
-- `2026-08-26` `pending` **0.5 h**
+- `2026-08-26` `3cec069` **0.5 h**
   `6 files | +115 −8 | Tier 3 complex | Light orchestration`
   Lay summary: Ensure catalogue product lines can be sent to the insurer again on the hosted site.
   **Tagged Ensure catalogue product lines so they can be sent to the insurer.**
