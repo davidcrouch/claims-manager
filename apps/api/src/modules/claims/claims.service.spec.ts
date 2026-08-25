@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ClaimsRepository } from '../../database/repositories';
+import { ClaimsRepository, JobsRepository } from '../../database/repositories';
 import { ClaimsService } from './claims.service';
 import { TenantContext } from '../../tenant/tenant-context';
 import { CrunchworkService } from '../../crunchwork/crunchwork.service';
@@ -24,6 +24,10 @@ describe('ClaimsService', () => {
     ),
   };
 
+  const mockJobsRepo = {
+    findSummariesByClaimIds: jest.fn().mockResolvedValue([]),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -31,6 +35,7 @@ describe('ClaimsService', () => {
       providers: [
         ClaimsService,
         { provide: ClaimsRepository, useValue: mockClaimsRepo },
+        { provide: JobsRepository, useValue: mockJobsRepo },
         { provide: TenantContext, useValue: mockTenantContext },
         {
           provide: CrunchworkService,
@@ -63,6 +68,73 @@ describe('ClaimsService', () => {
         status: undefined,
         account: undefined,
       });
+      expect(mockJobsRepo.findSummariesByClaimIds).not.toHaveBeenCalled();
+    });
+
+    it('should attach job type summaries for listed claims', async () => {
+      mockClaimsRepo.findAll.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'claim-1',
+            tenantId: 'tenant-1',
+            statusLookupId: 'st-1',
+            accountLookupId: null,
+            statusName: 'Open',
+            statusExternalReference: null,
+            accountName: null,
+            accountExternalReference: null,
+          },
+        ],
+        total: 1,
+      });
+      mockJobsRepo.findSummariesByClaimIds.mockResolvedValueOnce([
+        {
+          id: 'job-1',
+          claimId: 'claim-1',
+          internalNumber: 'JOB-200423',
+          name: null,
+          externalJobId: null,
+          externalReference: null,
+          jobTypeLookupId: 'jt-1',
+          jobTypeName: 'Inspection',
+        },
+        {
+          id: 'job-2',
+          claimId: 'claim-1',
+          internalNumber: 'JOB-200422',
+          name: null,
+          externalJobId: null,
+          externalReference: null,
+          jobTypeLookupId: 'jt-2',
+          jobTypeName: 'Repair',
+        },
+      ]);
+
+      const result = await service.findAll({ page: 1, limit: 20 });
+      expect(mockJobsRepo.findSummariesByClaimIds).toHaveBeenCalledWith({
+        tenantId: 'tenant-1',
+        claimIds: ['claim-1'],
+      });
+      expect(result.data[0].jobs).toEqual([
+        {
+          id: 'job-1',
+          internalNumber: 'JOB-200423',
+          name: null,
+          externalJobId: null,
+          externalReference: null,
+          jobTypeLookupId: 'jt-1',
+          jobType: { id: 'jt-1', name: 'Inspection' },
+        },
+        {
+          id: 'job-2',
+          internalNumber: 'JOB-200422',
+          name: null,
+          externalJobId: null,
+          externalReference: null,
+          jobTypeLookupId: 'jt-2',
+          jobType: { id: 'jt-2', name: 'Repair' },
+        },
+      ]);
     });
   });
 

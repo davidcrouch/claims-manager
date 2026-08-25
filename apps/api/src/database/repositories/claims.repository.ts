@@ -14,7 +14,16 @@ import {
   getTableColumns,
 } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
+import { addressSearchText, parseSearchTokens } from '../../common/address-search';
 import { claims, lookupValues } from '../schema';
+
+const claimAddressSearchText = addressSearchText({
+  address: claims.address,
+  suburb: claims.addressSuburb,
+  state: claims.addressState,
+  postcode: claims.addressPostcode,
+  country: claims.addressCountry,
+});
 
 export type ClaimRow = typeof claims.$inferSelect;
 export type ClaimInsert = typeof claims.$inferInsert;
@@ -79,14 +88,22 @@ export class ClaimsRepository {
           .filter(Boolean)
       : [];
 
-    const searchPattern = params.search ? `%${params.search}%` : null;
-    const searchClause = searchPattern
-      ? or(
-          ilike(claims.claimNumber, searchPattern),
-          ilike(claims.externalReference, searchPattern),
-          ilike(claims.policyNumber, searchPattern),
-        )
-      : undefined;
+    const searchTokens = parseSearchTokens(params.search);
+    const searchClause =
+      searchTokens.length > 0
+        ? and(
+            ...searchTokens.map((token) => {
+              const pattern = `%${token}%`;
+              return or(
+                ilike(claims.claimNumber, pattern),
+                ilike(claims.externalReference, pattern),
+                ilike(claims.policyNumber, pattern),
+                ilike(claims.postalAddress, pattern),
+                sql`${claimAddressSearchText} ilike ${pattern}`,
+              )!;
+            }),
+          )
+        : undefined;
 
     const statusClause =
       statusIds.length > 0

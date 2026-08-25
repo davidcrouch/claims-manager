@@ -281,7 +281,12 @@ export const jobs = pgTable(
     uniqueIndex('UQ_jobs_tenant_extref').on(t.tenantId, t.externalReference),
     uniqueIndex('UQ_jobs_tenant_internal_number')
       .on(t.tenantId, t.internalNumber)
-      .where(sql`internal_number IS NOT NULL AND deleted_at IS NULL`),
+      .where(
+        sql`internal_number IS NOT NULL AND deleted_at IS NULL AND external_job_id IS NULL`,
+      ),
+    index('idx_jobs_tenant_external_job_id')
+      .on(t.tenantId, t.externalJobId)
+      .where(sql`external_job_id IS NOT NULL AND deleted_at IS NULL`),
     index('idx_jobs_claim').on(t.tenantId, t.claimId),
     index('idx_jobs_assigned').on(t.tenantId, t.assignedToUserId),
     index('idx_jobs_source_tenant').on(t.sourceTenantId),

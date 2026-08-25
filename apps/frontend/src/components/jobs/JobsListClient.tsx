@@ -31,7 +31,7 @@ import {
 } from '@/components/shared/column-visibility';
 import { ListArchiveButton, LIST_ARCHIVE_TH_CLASS, LIST_ARCHIVE_TD_CLASS, LIST_ARCHIVE_SPACER_TD_CLASS } from '@/components/shared/ListArchiveButton';
 import { formatAddress } from '@/components/shared/detail';
-import { jobDisplayName } from '@/components/shared/job-label';
+import { jobDisplayName, jobInsurerReference } from '@/components/shared/job-label';
 import { fetchJobsAction, fetchJobFilterOptionsAction } from '@/app/(app)/jobs/actions';
 import {
   createListFetchSession,
@@ -61,6 +61,7 @@ function jobListRef(job: Job): string {
 
 type JobSortField =
   | 'external_reference'
+  | 'external_job_id'
   | 'status'
   | 'job_type'
   | 'assignee'
@@ -78,6 +79,7 @@ interface ColDef {
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'external_reference', label: 'Job Ref', locked: true, filterable: true },
+  { key: 'external_job_id', label: 'Insurer Ref' },
   { key: 'status', label: 'Status', filterable: true },
   { key: 'job_type', label: 'Type', filterable: true },
   { key: 'assignee', label: 'Assigned', filterable: true },
@@ -336,7 +338,13 @@ export function JobsListClient({
       if (prev.field === field) {
         return { field, order: prev.order === 'asc' ? 'desc' : 'asc' };
       }
-      return { field, order: field === 'external_reference' ? 'asc' : 'desc' };
+      return {
+        field,
+        order:
+          field === 'external_reference' || field === 'external_job_id'
+            ? 'asc'
+            : 'desc',
+      };
     });
     setPage(1);
   };
@@ -504,7 +512,7 @@ export function JobsListClient({
               size={16}
             />
             <Input
-              placeholder="Search jobs by reference or suburb..."
+              placeholder="Search jobs by job ref, insurer reference, or address..."
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
               className="h-10 w-full pl-9 pr-9"
@@ -612,6 +620,11 @@ export function JobsListClient({
                             <span className="mr-2 inline-block h-2 w-2 rounded-full bg-blue-500" />
                           )}
                           {ref}
+                        </td>
+                      )}
+                      {isVisible('external_job_id') && (
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                          {jobInsurerReference(job) || '—'}
                         </td>
                       )}
                       {isVisible('status') && (

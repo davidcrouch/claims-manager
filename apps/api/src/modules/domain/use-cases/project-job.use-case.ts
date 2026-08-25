@@ -124,13 +124,25 @@ export class ProjectJobUseCase implements ProjectionUseCase {
       await this.jobsRepo.update({ id: existingEntity.id, data: result.entity, tx });
       jobId = existingEntity.id;
     } else {
-      const internalNumber = await this.recordNumberService.next({
-        tenantId,
-        entity: 'job',
-        tx,
-      });
+      const insurerRef = result.entity.externalJobId?.trim();
+      const reusedInternalNumber = insurerRef
+        ? await this.jobsRepo.findInternalNumberByExternalJobId({
+            tenantId,
+            externalJobId: insurerRef,
+            tx,
+          })
+        : null;
+      const internalNumber =
+        reusedInternalNumber ??
+        (await this.recordNumberService.next({
+          tenantId,
+          entity: 'job',
+          tx,
+        }));
       this.logger.log(
-        `ProjectJobUseCase.execute — assigned internalNumber=${internalNumber} for ${externalObjectId}`,
+        reusedInternalNumber
+          ? `ProjectJobUseCase.execute — reused internalNumber=${internalNumber} for insurer ref ${insurerRef} (${externalObjectId})`
+          : `ProjectJobUseCase.execute — assigned internalNumber=${internalNumber} for ${externalObjectId}`,
       );
       const created = await this.jobsRepo.createIfNotExists({
         data: { ...result.entity, internalNumber } as JobInsert,

@@ -40,6 +40,7 @@ import {
 import { ListArchiveButton, LIST_ARCHIVE_TH_CLASS, LIST_ARCHIVE_TD_CLASS, LIST_ARCHIVE_SPACER_TD_CLASS } from '@/components/shared/ListArchiveButton';
 import { TablePagination } from '@/components/shared/table-pagination';
 import { formatAddress } from '@/components/shared/detail';
+import { ClaimJobCell } from './ClaimJobCell';
 
 type ClaimTab = ArchiveListTab;
 
@@ -67,15 +68,19 @@ type ColumnSortField =
   | 'lodgement_date'
   | 'updated_at';
 
+type ColumnKey = ColumnSortField | 'jobs';
+
 interface ColumnDef {
-  key: ColumnSortField;
+  key: ColumnKey;
   label: string;
   filterable?: boolean;
   locked?: boolean;
+  sortable?: boolean;
 }
 
 const TABLE_COLUMNS: ColumnDef[] = [
   { key: 'claim_number', label: 'Claim #', locked: true },
+  { key: 'jobs', label: 'Job', sortable: false },
   { key: 'status', label: 'Status', filterable: true },
   { key: 'policy', label: 'Policy' },
   { key: 'address', label: 'Address' },
@@ -406,7 +411,7 @@ export function ClaimsListClient({
               size={16}
             />
             <Input
-              placeholder="Search claims by claim number, reference, or policy..."
+              placeholder="Search claims by claim number, reference, policy, or address..."
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
               className="h-10 w-full pl-9 pr-9"
@@ -451,23 +456,29 @@ export function ClaimsListClient({
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50">
                 <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                  {TABLE_COLUMNS.filter((col) => isVisible(col.key)).map((col) => (
-                    <SortableColumnHeader
-                      key={col.key}
-                      columnKey={col.key}
-                      label={col.label}
-                      activeField={activeColumnField}
-                      sortOrder={activeColumnOrder}
-                      onSort={handleColumnSort}
-                      filter={
-                        col.key === 'status'
-                          ? statusFilterProps
-                          : col.key === 'account'
-                            ? accountFilterProps
-                            : undefined
-                      }
-                    />
-                  ))}
+                  {TABLE_COLUMNS.filter((col) => isVisible(col.key)).map((col) =>
+                    col.sortable === false ? (
+                      <th key={col.key} scope="col" className="px-4 py-3">
+                        {col.label}
+                      </th>
+                    ) : (
+                      <SortableColumnHeader
+                        key={col.key}
+                        columnKey={col.key as ColumnSortField}
+                        label={col.label}
+                        activeField={activeColumnField}
+                        sortOrder={activeColumnOrder}
+                        onSort={handleColumnSort}
+                        filter={
+                          col.key === 'status'
+                            ? statusFilterProps
+                            : col.key === 'account'
+                              ? accountFilterProps
+                              : undefined
+                        }
+                      />
+                    ),
+                  )}
                   <th scope="col" className={LIST_ARCHIVE_TH_CLASS}>
                     <span className="sr-only">Actions</span>
                   </th>
@@ -501,6 +512,11 @@ export function ClaimsListClient({
                       {isVisible('claim_number') && (
                         <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
                           {claimNo}
+                        </td>
+                      )}
+                      {isVisible('jobs') && (
+                        <td className="relative overflow-visible whitespace-nowrap px-4 py-3">
+                          <ClaimJobCell jobs={claim.jobs} />
                         </td>
                       )}
                       {isVisible('status') && (

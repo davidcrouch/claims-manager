@@ -1,4 +1,5 @@
 import type { AddressPayload, Job } from '@/types/api';
+import { asString, pick } from '@/components/shared/detail';
 
 type JobLabelSource = Pick<
   Job,
@@ -25,6 +26,19 @@ export function jobDisplayName(job: JobLabelSource): string {
     job.externalReference?.trim() ||
     job.id
   );
+}
+
+/** Same value as job overview "Insurer reference". Hidden when it is just the CW job id. */
+export function jobInsurerReference(
+  job: Pick<Job, 'externalReference' | 'customData' | 'apiPayload'>,
+): string | undefined {
+  const custom = (job.customData as Record<string, unknown> | undefined) ?? {};
+  const api = (job.apiPayload as Record<string, unknown> | undefined) ?? {};
+  const insurerRef = asString(
+    pick(custom, 'insurerExternalReference') ?? pick(api, 'externalReference'),
+  );
+  if (!insurerRef || insurerRef === job.externalReference) return undefined;
+  return insurerRef;
 }
 
 /** CW / insurer reference (or job name) shown above the internal number on job headers. */

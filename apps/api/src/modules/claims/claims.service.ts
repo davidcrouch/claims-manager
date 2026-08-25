@@ -1,13 +1,21 @@
-import { Injectable, Optional, BadRequestException } from '@nestjs/common';
-import { ClaimsRepository, type ClaimInsert, type ClaimViewRow } from '../../database/repositories';
+import { Injectable, Optional, BadRequestException, Logger } from '@nestjs/common';
+import {
+  ClaimsRepository,
+  JobsRepository,
+  type ClaimInsert,
+  type ClaimViewRow,
+} from '../../database/repositories';
 import { TenantContext } from '../../tenant/tenant-context';
 import { CrunchworkService } from '../../crunchwork/crunchwork.service';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
 
 @Injectable()
 export class ClaimsService {
+  private readonly logger = new Logger(ClaimsService.name);
+
   constructor(
     private readonly claimsRepo: ClaimsRepository,
+    private readonly jobsRepo: JobsRepository,
     private readonly tenantContext: TenantContext,
     private readonly crunchworkService: CrunchworkService,
     @Optional() private readonly connectionResolver?: ConnectionResolverService,
@@ -40,7 +48,39 @@ export class ClaimsService {
       status: params.status,
       account: params.account,
     });
-    return { data: result.data.map(this.shapeClaimResponse), total: result.total };
+    const claimIds = result.data.map((row) => row.id);
+    const jobRows =
+      claimIds.length > 0
+        ? await this.jobsRepo.findSummariesByClaimIds({ tenantId, claimIds })
+        : [];
+    this.logger.debug(
+      `ClaimsService.findAll — attaching ${jobRows.length} jobs across ${claimIds.length} claims`,
+    );
+    const jobsByClaimId = new Map<string, typeof jobRows>();
+    for (const job of jobRows) {
+      if (!job.claimId) continue;
+      const list = jobsByClaimId.get(job.claimId) ?? [];
+      list.push(job);
+      jobsByClaimId.set(job.claimId, list);
+    }
+    return {
+      data: result.data.map((row) => ({
+        ...this.shapeClaimResponse(row),
+        jobs: (jobsByClaimId.get(row.id) ?? []).map((job) => ({
+          id: job.id,
+          internalNumber: job.internalNumber,
+          name: job.name,
+          externalJobId: job.externalJobId,
+          externalReference: job.externalReference,
+          jobTypeLookupId: job.jobTypeLookupId,
+          jobType: {
+            id: job.jobTypeLookupId,
+            name: job.jobTypeName ?? undefined,
+          },
+        })),
+      })),
+      total: result.total,
+    };
   }
 
   async findOne(params: { id: string }) {

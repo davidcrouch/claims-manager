@@ -5,7 +5,13 @@ export {
   type ClaimViewRow,
 } from './claims.repository';
 export { LookupsRepository } from './lookups.repository';
-export { JobsRepository, type JobRow, type JobInsert, type JobViewRow } from './jobs.repository';
+export {
+  JobsRepository,
+  type JobRow,
+  type JobInsert,
+  type JobViewRow,
+  type ClaimJobSummary,
+} from './jobs.repository';
 export {
   ContactsRepository,
   type ContactRow,

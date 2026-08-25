@@ -23,6 +23,7 @@ import {
   EditTextarea,
 } from '@/components/jobs/JobEditControls';
 import type { JobEditPending, JobOverviewDraft, LookupOption } from '@/components/jobs/job-edit.types';
+import { jobInsurerReference } from '@/components/shared/job-label';
 import type { Job, Claim } from '@/types/api';
 
 type Dict = Record<string, unknown>;
@@ -131,7 +132,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
   const instructionsHtml = job.jobInstructions ?? '';
   const parentClaimNumber = parentClaim?.claimNumber ?? parentClaim?.externalReference ?? ((api.claim as Dict | undefined)?.claimNumber as string | undefined) ?? ((api.claim as Dict | undefined)?.externalReference as string | undefined);
   const custom = (job.customData as Dict | undefined) ?? {};
-  const insurerRef = asString(pick(custom, 'insurerExternalReference') ?? pick(api, 'externalReference'));
+  const insurerRef = jobInsurerReference(job);
   const cwUpdatedAt = asString(pick(custom, 'cwUpdatedAtDate') ?? pick(api, 'updatedAtDate'));
   const parentClaimCw = job.parentClaimId ?? null;
   const parentJobId = job.parentJobId ?? null;
@@ -390,7 +391,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
               )
             }
           />
-          {insurerRef && insurerRef !== job.externalReference && (
+          {insurerRef && (
             <DefRow label="Insurer reference" value={insurerRef} />
           )}
           <DefRow label="Parent claim" value={job.claimId ? (<Link href={`/claims/${job.claimId}`} className="inline-flex items-center gap-1 text-primary hover:underline">{parentClaimNumber ?? job.claimId}<ExternalLink className="h-3 w-3" /></Link>) : '—'} />

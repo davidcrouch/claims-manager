@@ -937,3 +937,13 @@
   Editing several selected lines at once fills in the full set of fields so nothing is left blank.
   The same behaviour applies on the catalogue line list as on quotes.
 
+- `2026-08-25` `4dd73e0` **4.5 h**
+  `16 files | +550 −55 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  Lay summary: Jobs from the partner system that share the same insurer reference now use one internal job number, and the claims list shows linked jobs more clearly.
+  **Aligned internal job numbers and improved claims list job visibility.**
+  Partner jobs that share an insurer reference (e.g. Make Safe and Builder Works under the same cc: number) now receive the same internal job number instead of each getting a new one.
+  New job ingest looks up an existing number by insurer reference before assigning the next sequence value.
+  Database migrations relaxed the internal-number uniqueness rule for insurer-linked jobs and backfilled existing dev data so sibling jobs already in the system match.
+  Claims list search now includes job references, insurer references, and site address text so staff can find claims by job or location details.
+  Claims list job column shows the primary job with a hover menu listing every related job and its type badge when multiple jobs exist on one claim.
+  Job overview and shared label helpers surface the insurer reference consistently, separate from the partner system's own job identifier.

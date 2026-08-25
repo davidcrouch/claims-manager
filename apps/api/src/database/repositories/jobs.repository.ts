@@ -2,13 +2,28 @@ import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
 import { eq, and, isNull, desc, asc, sql, gte, ilike, or, inArray, notInArray, aliasedTable, getTableColumns } from 'drizzle-orm';
 import { normalizeListUserIds, parseCsvFilterValues } from '../../common/list-job-filter';
+import { addressSearchText, parseSearchTokens } from '../../common/address-search';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { jobs, lookupValues, vendors, integrationConnections, users } from '../schema';
 
 const assigneeJoinOn = sql`${jobs.assignedToUserId} = ${users.id}::text`;
 
-/** Matches frontend jobListRef: name ?? externalJobId ?? externalReference ?? id */
-const jobDisplayRef = sql`COALESCE(${jobs.name}, ${jobs.externalJobId}, ${jobs.externalReference}, ${jobs.id}::text)`;
+/** Matches frontend jobListRef: internalNumber ?? name ?? externalJobId ?? externalReference ?? id */
+const jobDisplayRef = sql`COALESCE(${jobs.internalNumber}, ${jobs.name}, ${jobs.externalJobId}, ${jobs.externalReference}, ${jobs.id}::text)`;
+
+/** Matches job overview "Insurer reference". */
+const jobInsurerRef = sql`COALESCE(
+  NULLIF(${jobs.customData}->>'insurerExternalReference', ''),
+  NULLIF(${jobs.apiPayload}->>'externalReference', '')
+)`;
+
+const jobAddressSearchText = addressSearchText({
+  address: jobs.address,
+  suburb: jobs.addressSuburb,
+  state: jobs.addressState,
+  postcode: jobs.addressPostcode,
+  country: jobs.addressCountry,
+});
 
 function buildJobOrderBy(sort?: string) {
   switch (sort) {
@@ -22,6 +37,10 @@ function buildJobOrderBy(sort?: string) {
       return [asc(jobs.externalReference)];
     case 'external_reference_desc':
       return [desc(jobs.externalReference)];
+    case 'external_job_id_asc':
+      return [asc(jobInsurerRef)];
+    case 'external_job_id_desc':
+      return [desc(jobInsurerRef)];
     case 'request_date_asc':
       return [asc(jobs.requestDate)];
     case 'request_date_desc':
@@ -53,6 +72,17 @@ export interface JobViewRow extends JobRow {
   connectionProviderCode: string | null;
   assigneeName: string | null;
 }
+
+export type ClaimJobSummary = {
+  id: string;
+  claimId: string | null;
+  internalNumber: string | null;
+  name: string | null;
+  externalJobId: string | null;
+  externalReference: string | null;
+  jobTypeLookupId: string;
+  jobTypeName: string | null;
+};
 
 @Injectable()
 export class JobsRepository {
@@ -103,15 +133,26 @@ export class JobsRepository {
       whereParts.push(eq(jobs.claimId, params.claimId));
     }
 
-    if (params.search) {
-      const term = `%${params.search}%`;
-      whereParts.push(
-        or(
-          ilike(jobs.name, term),
-          ilike(jobs.externalReference, term),
-          ilike(jobs.addressSuburb, term),
-        )!,
-      );
+    if (params.search?.trim()) {
+      const tokens = parseSearchTokens(params.search);
+      if (tokens.length > 0) {
+        whereParts.push(
+          and(
+            ...tokens.map((token) => {
+              const pattern = `%${token}%`;
+              return or(
+                sql`${jobDisplayRef} ilike ${pattern}`,
+                ilike(jobs.internalNumber, pattern),
+                ilike(jobs.name, pattern),
+                ilike(jobs.externalJobId, pattern),
+                ilike(jobs.externalReference, pattern),
+                sql`${jobInsurerRef} ilike ${pattern}`,
+                sql`${jobAddressSearchText} ilike ${pattern}`,
+              )!;
+            }),
+          )!,
+        );
+      }
     }
 
     if (statusIds.length > 0) {
@@ -398,6 +439,37 @@ export class JobsRepository {
     return inserted ?? null;
   }
 
+  /**
+   * Returns an existing internal number for any job sharing the same insurer
+   * reference (`external_job_id`), e.g. when CW creates Make Safe + Works jobs
+   * under one insurer ref.
+   */
+  async findInternalNumberByExternalJobId(params: {
+    tenantId: string;
+    externalJobId: string;
+    tx?: DrizzleDbOrTx;
+  }): Promise<string | null> {
+    const trimmed = params.externalJobId.trim();
+    if (!trimmed) return null;
+
+    const db = params.tx ?? this.db;
+    const [row] = await db
+      .select({ internalNumber: jobs.internalNumber })
+      .from(jobs)
+      .where(
+        and(
+          eq(jobs.tenantId, params.tenantId),
+          eq(jobs.externalJobId, trimmed),
+          isNull(jobs.deletedAt),
+          sql`${jobs.internalNumber} IS NOT NULL`,
+        ),
+      )
+      .orderBy(asc(jobs.createdAt))
+      .limit(1);
+    const internalNumber = row?.internalNumber?.trim();
+    return internalNumber || null;
+  }
+
   async findByExternalReference(params: {
     tenantId: string;
     externalReference: string;
@@ -463,6 +535,39 @@ export class JobsRepository {
       attendanceDate: ((r.customData as Record<string, unknown>)?.attendanceDate ?? '') as string,
       customData: (r.customData ?? {}) as Record<string, unknown>,
     }));
+  }
+
+  async findSummariesByClaimIds(params: {
+    tenantId: string;
+    claimIds: string[];
+  }): Promise<ClaimJobSummary[]> {
+    const claimIds = params.claimIds.filter(Boolean);
+    if (claimIds.length === 0) return [];
+
+    const jobTypeLookup = aliasedTable(lookupValues, 'job_type_lookup');
+    const rows = await this.db
+      .select({
+        id: jobs.id,
+        claimId: jobs.claimId,
+        internalNumber: jobs.internalNumber,
+        name: jobs.name,
+        externalJobId: jobs.externalJobId,
+        externalReference: jobs.externalReference,
+        jobTypeLookupId: jobs.jobTypeLookupId,
+        jobTypeName: jobTypeLookup.name,
+      })
+      .from(jobs)
+      .leftJoin(jobTypeLookup, eq(jobs.jobTypeLookupId, jobTypeLookup.id))
+      .where(
+        and(
+          eq(jobs.tenantId, params.tenantId),
+          isNull(jobs.deletedAt),
+          inArray(jobs.claimId, claimIds),
+        ),
+      )
+      .orderBy(desc(jobs.createdAt), asc(jobTypeLookup.name));
+
+    return rows;
   }
 
   async countByTenant(params: { tenantId: string }): Promise<number> {
