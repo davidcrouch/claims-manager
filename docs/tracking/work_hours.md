@@ -937,7 +937,7 @@
   Editing several selected lines at once fills in the full set of fields so nothing is left blank.
   The same behaviour applies on the catalogue line list as on quotes.
 
-- `2026-08-25` `4dd73e0` **4.5 h**
+- `2026-08-25` `1021abc` **4.5 h**
   `16 files | +550 −55 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Jobs from the partner system that share the same insurer reference now use one internal job number, and the claims list shows linked jobs more clearly.
   **Aligned internal job numbers and improved claims list job visibility.**
