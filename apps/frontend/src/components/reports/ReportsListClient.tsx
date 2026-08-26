@@ -83,6 +83,8 @@ export interface ReportsListClientProps {
   initialData: PaginatedResponse<Report>;
   statusOptions: StatusOption[];
   reportTypes: StatusOption[];
+  jobNameById?: Record<string, string>;
+  jobTypeById?: Record<string, string>;
 }
 
 const PAGE_SIZE = 20;
@@ -91,6 +93,8 @@ export function ReportsListClient({
   initialData,
   statusOptions,
   reportTypes,
+  jobNameById,
+  jobTypeById,
 }: ReportsListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -387,7 +391,6 @@ export function ReportsListClient({
                   const ref = report.reference ?? report.title ?? report.id;
                   const statusName = report.status?.name ?? 'Unknown';
                   const typeName = report.reportType?.name ?? '';
-                  const jobRef = report.jobId ?? '';
                   return (
                     <tr
                       key={report.id}
@@ -411,7 +414,11 @@ export function ReportsListClient({
                       )}
                       {isVisible('job_ref') && (
                         <td className="px-4 py-3 text-slate-600">
-                          <JobCellLink jobId={report.jobId} label={jobRef} />
+                          <JobCellLink
+                            jobId={report.jobId}
+                            jobNameById={jobNameById}
+                            jobTypeById={jobTypeById}
+                          />
                         </td>
                       )}
                       {isVisible('created_at') && (

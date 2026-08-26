@@ -1,8 +1,9 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { JournalsPageClient } from '@/components/journals/JournalsPageClient';
-import {buildJobNameById, toJobOptions,
+import {buildJobNameById, buildJobTypeById, toJobOptions,
   mergeCurrentJobIntoNameById,
+  mergeCurrentJobIntoTypeById,
   mergeCurrentJobIntoOptions } from '@/components/shared/job-label';
 import type { Metadata } from 'next';
 import type { Job, Claim, PaginatedResponse } from '@/types/api';
@@ -69,6 +70,7 @@ export default async function JournalsPage({
       job={job}
       parentClaim={parentClaim}
       jobNameById={mergeCurrentJobIntoNameById(buildJobNameById(jobs), job)}
+      jobTypeById={mergeCurrentJobIntoTypeById(buildJobTypeById(jobs), job)}
       jobs={mergeCurrentJobIntoOptions(toJobOptions(jobs), job)}
     />
   );

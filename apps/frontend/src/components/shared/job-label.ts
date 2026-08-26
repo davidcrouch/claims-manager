@@ -4,12 +4,16 @@ import { asString, pick } from '@/components/shared/detail';
 type JobLabelSource = Pick<
   Job,
   'id' | 'name' | 'internalNumber' | 'externalJobId' | 'externalReference'
->;
+> & {
+  jobType?: { name?: string | null } | null;
+  jobTypeName?: string | null;
+};
 
 export type JobOption = {
   id: string;
   label: string;
   claimId?: string | null;
+  jobType?: string | null;
   /** Optional site address used to prefill journal create forms. */
   address?: AddressPayload | null;
   addressSuburb?: string | null;
@@ -26,6 +30,11 @@ export function jobDisplayName(job: JobLabelSource): string {
     job.externalReference?.trim() ||
     job.id
   );
+}
+
+export function jobTypeDisplayName(job?: JobLabelSource | null): string | undefined {
+  const name = job?.jobType?.name?.trim() || job?.jobTypeName?.trim();
+  return name || undefined;
 }
 
 /** Same value as job overview "Insurer reference". Hidden when it is just the CW job id. */
@@ -53,10 +62,48 @@ export function jobHeaderTitle(job: JobLabelSource): string {
   return job.internalNumber?.trim() || job.id;
 }
 
+/** Merge job labels from list rows so cells work when the jobs page fetch is capped. */
+export function mergeJobLabelsFromRows(
+  jobNameById: Record<string, string> | undefined,
+  rows: Array<{ jobId?: string | null; job?: JobLabelSource | null }>,
+): Record<string, string> {
+  const map = { ...(jobNameById ?? {}) };
+  for (const row of rows) {
+    if (!row.jobId || !row.job) continue;
+    map[row.jobId] = jobDisplayName(row.job);
+  }
+  return map;
+}
+
+export function mergeJobTypesFromRows(
+  jobTypeById: Record<string, string> | undefined,
+  rows: Array<{
+    jobId?: string | null;
+    job?: (JobLabelSource & { jobType?: { name?: string | null } | null }) | null;
+  }>,
+): Record<string, string> {
+  const map = { ...(jobTypeById ?? {}) };
+  for (const row of rows) {
+    const type = jobTypeDisplayName(row.job);
+    if (!row.jobId || !type) continue;
+    map[row.jobId] = type;
+  }
+  return map;
+}
+
 export function buildJobNameById(jobs: JobLabelSource[]): Record<string, string> {
   const map: Record<string, string> = {};
   for (const job of jobs) {
     map[job.id] = jobDisplayName(job);
+  }
+  return map;
+}
+
+export function buildJobTypeById(jobs: JobLabelSource[]): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const job of jobs) {
+    const type = jobTypeDisplayName(job);
+    if (type) map[job.id] = type;
   }
   return map;
 }
@@ -68,6 +115,16 @@ export function mergeCurrentJobIntoNameById(
 ): Record<string, string> {
   if (!job?.id) return jobNameById;
   return { ...jobNameById, [job.id]: jobDisplayName(job) };
+}
+
+export function mergeCurrentJobIntoTypeById(
+  jobTypeById: Record<string, string>,
+  job?: JobLabelSource | null,
+): Record<string, string> {
+  if (!job?.id) return jobTypeById;
+  const type = jobTypeDisplayName(job);
+  if (!type) return jobTypeById;
+  return { ...jobTypeById, [job.id]: type };
 }
 
 /** Ensure the current job appears in JobOption[] used by list filters / drawers. */
@@ -82,6 +139,7 @@ export function mergeCurrentJobIntoOptions(
       id: job.id,
       label: jobDisplayName(job),
       claimId: job.claimId,
+      jobType: jobTypeDisplayName(job) ?? null,
     },
     ...jobs,
   ];
@@ -105,6 +163,17 @@ export function resolveJobName(
 ): string {
   if (!jobId) return '';
   return jobNameById?.[jobId] ?? '';
+}
+
+export function resolveJobType(
+  jobId: string | null | undefined,
+  jobTypeById?: Record<string, string>,
+  jobType?: string | null,
+): string {
+  const direct = jobType?.trim();
+  if (direct) return direct;
+  if (!jobId) return '';
+  return jobTypeById?.[jobId]?.trim() ?? '';
 }
 
 function normalizeJobAddress(
@@ -156,6 +225,7 @@ export function toJobOptions(
       id: job.id,
       label: jobDisplayName(job),
       claimId: job.claimId,
+      jobType: jobTypeDisplayName(job) ?? null,
       address,
       addressSuburb: address?.suburb ?? job.addressSuburb ?? null,
       addressPostcode: address?.postcode ?? job.addressPostcode ?? null,

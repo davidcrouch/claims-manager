@@ -275,12 +275,27 @@ export class QuotesService {
       search: params.search,
       sort: params.sort,
     });
-    return { data: result.data.map(this.shapeQuoteResponse), total: result.total };
+    return { data: await this.attachJobSummaries(result.data), total: result.total };
   }
 
   async findFilterAssignees() {
     const tenantId = this.tenantContext.getTenantId();
     return this.quotesRepo.findFilterAssignees({ tenantId });
+  }
+
+  async findFilterJobs() {
+    const tenantId = this.tenantContext.getTenantId();
+    const rows = await this.quotesRepo.findFilterJobs({ tenantId });
+    return rows.map((job) => ({
+      id: job.id,
+      label:
+        job.internalNumber?.trim() ||
+        job.name?.trim() ||
+        job.externalJobId?.trim() ||
+        job.externalReference?.trim() ||
+        job.id,
+      jobType: job.jobTypeName?.trim() || null,
+    }));
   }
 
   async findOne(params: { id: string }) {
@@ -337,7 +352,32 @@ export class QuotesService {
   async findByJob(params: { jobId: string }) {
     const tenantId = this.tenantContext.getTenantId();
     const rows = await this.quotesRepo.findByJob({ jobId: params.jobId, tenantId });
-    return rows.map(this.shapeQuoteResponse);
+    return this.attachJobSummaries(rows);
+  }
+
+  private async attachJobSummaries(rows: QuoteViewRow[]) {
+    const tenantId = this.tenantContext.getTenantId();
+    const jobIds = [
+      ...new Set(rows.map((row) => row.jobId).filter((id): id is string => !!id)),
+    ];
+    const jobs = await this.jobsRepo.findByIds({ tenantId, ids: jobIds });
+    const jobById = new Map(jobs.map((job) => [job.id, job]));
+    return rows.map((row) => {
+      const shaped = this.shapeQuoteResponse(row);
+      const job = row.jobId ? jobById.get(row.jobId) : undefined;
+      if (!job) return shaped;
+      return {
+        ...shaped,
+        job: {
+          id: job.id,
+          internalNumber: job.internalNumber,
+          name: job.name,
+          externalJobId: job.externalJobId,
+          externalReference: job.externalReference,
+          jobType: job.jobTypeName ? { name: job.jobTypeName } : null,
+        },
+      };
+    });
   }
 
   private shapeQuoteResponse(row: QuoteViewRow) {

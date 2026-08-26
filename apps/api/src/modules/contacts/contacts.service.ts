@@ -85,6 +85,7 @@ export class ContactsService {
           name: j.name,
           externalReference: j.externalReference,
           externalJobId: j.externalJobId,
+          jobTypeName: j.jobTypeName,
           label:
             j.name?.trim() ||
             j.externalJobId?.trim() ||

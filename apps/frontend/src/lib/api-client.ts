@@ -630,6 +630,10 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi('/quotes/filter-assignees');
     },
 
+    getQuoteFilterJobs(): Promise<{ id: string; label: string; jobType?: string | null }[]> {
+      return fetchApi('/quotes/filter-jobs');
+    },
+
     getQuote(id: string): Promise<Quote | null> {
       return fetchApi<Quote | null>(`/quotes/${id}`);
     },
@@ -994,6 +998,7 @@ export function createApiClient(options?: ApiClientOptions) {
         name?: string | null;
         externalReference?: string | null;
         externalJobId?: string | null;
+        jobTypeName?: string | null;
       }>;
       hasUnlinked: boolean;
     }> {

@@ -255,6 +255,15 @@ export interface Quote {
   updatedAt?: string;
   status?: LookupRef;
   quoteType?: LookupRef;
+  /** Resolved parent job for list cells — not a quotes table column. */
+  job?: {
+    id: string;
+    internalNumber?: string | null;
+    name?: string | null;
+    externalJobId?: string | null;
+    externalReference?: string | null;
+    jobType?: { name?: string | null } | null;
+  } | null;
 }
 
 /**
@@ -598,6 +607,7 @@ export interface Contact {
     name?: string | null;
     externalReference?: string | null;
     externalJobId?: string | null;
+    jobTypeName?: string | null;
     label?: string;
   }>;
 }

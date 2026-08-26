@@ -83,6 +83,7 @@ export interface ProposalsListClientProps {
   statusOptions: StatusOption[];
   vendorOptions: StatusOption[];
   jobNameById?: Record<string, string>;
+  jobTypeById?: Record<string, string>;
   job?: Job | null;
   parentClaim?: Claim | null;
 }
@@ -92,6 +93,7 @@ export function ProposalsListClient({
   statusOptions,
   vendorOptions,
   jobNameById,
+  jobTypeById,
   job,
   parentClaim }: ProposalsListClientProps) {
   const router = useRouter();
@@ -489,7 +491,7 @@ export function ProposalsListClient({
                       )}
                       {isVisible('job') && (
                         <td className="px-4 py-3 text-slate-600">
-                          <JobCellLink jobId={p.jobId} jobNameById={jobNameById} />
+                          <JobCellLink jobId={p.jobId} jobNameById={jobNameById} jobTypeById={jobTypeById} />
                         </td>
                       )}
                       {isVisible('status') && (

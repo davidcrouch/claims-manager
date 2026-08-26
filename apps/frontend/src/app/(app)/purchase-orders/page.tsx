@@ -1,8 +1,9 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { PurchaseOrdersPageClient } from '@/components/purchase-orders/PurchaseOrdersPageClient';
-import {buildJobNameById, toJobOptions,
+import {buildJobNameById, buildJobTypeById, toJobOptions,
   mergeCurrentJobIntoNameById,
+  mergeCurrentJobIntoTypeById,
   mergeCurrentJobIntoOptions } from '@/components/shared/job-label';
 import type { Job, PaginatedResponse, PurchaseOrder, Claim } from '@/types/api';
 
@@ -69,6 +70,7 @@ export default async function PurchaseOrdersPage({
     name: vendor.name?.trim() ? vendor.name : 'Unknown' }));
   const jobs = jobsRes?.data ?? [];
   const jobNameById = mergeCurrentJobIntoNameById(buildJobNameById(jobs), job);
+  const jobTypeById = mergeCurrentJobIntoTypeById(buildJobTypeById(jobs), job);
 
   return (
     <PurchaseOrdersPageClient
@@ -76,6 +78,7 @@ export default async function PurchaseOrdersPage({
       statusOptions={statusOptions}
       vendorOptions={vendorOptions}
       jobNameById={jobNameById}
+      jobTypeById={jobTypeById}
       jobs={mergeCurrentJobIntoOptions(toJobOptions(jobs), job)}
       job={job}
       parentClaim={parentClaim}

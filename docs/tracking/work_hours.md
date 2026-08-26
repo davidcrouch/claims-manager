@@ -995,3 +995,13 @@
   Moved archive and active-tab helpers to a server-safe module shared with list filters.
   Updated the claims page to use those helpers instead of client-only code.
   Staging can load the full claims list on refresh and direct navigation again.
+
+- `2026-08-26` `PENDING` **4 h**
+  `62 files | +749 −111 | Tier 2 standard | Moderate orchestration`
+  Lay summary: Job lists now show the job type next to the job number, screens prefer the internal job number, and save status no longer crowds the header.
+  **Clearer job labels on lists, and a save status that no longer crowds the header.**
+  Record lists now show the job type next to the internal job number in the same link to the job.
+  Quote and contact lists resolve job names and types even when the jobs list is large.
+  The dashboard and related screens prefer the internal job number over insurer or partner references.
+  Save status on job records appears under the header icons so title and action buttons stay in place.
+  Catalogue drag-and-drop onto line items is more reliable.

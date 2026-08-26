@@ -5,7 +5,36 @@ import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { JobDetail } from '@/components/jobs/JobDetail';
 import { JobPageHeader } from '@/components/jobs/JobHeader';
 import type { Metadata } from 'next';
-import type { Claim } from '@/types/api';
+import type { Claim, Job } from '@/types/api';
+
+const BUILDER_MAKE_SAFE_TYPE_NAME = 'builder make safe';
+
+function findExistingMakeSafeJob(params: {
+  currentJobId: string;
+  internalNumber?: string | null;
+  siblings: Job[];
+}): Job | null {
+  const currentInternal = params.internalNumber?.trim();
+  const makeSafeSiblings = params.siblings.filter((sibling) => {
+    if (sibling.id === params.currentJobId) return false;
+    return (
+      (sibling.jobType?.name ?? '').trim().toLowerCase() ===
+      BUILDER_MAKE_SAFE_TYPE_NAME
+    );
+  });
+
+  if (currentInternal) {
+    const byNumber = makeSafeSiblings.find(
+      (sibling) => sibling.internalNumber?.trim() === currentInternal,
+    );
+    if (byNumber) return byNumber;
+  }
+
+  return (
+    makeSafeSiblings.find((sibling) => sibling.parentJobId === params.currentJobId) ??
+    null
+  );
+}
 
 export async function generateMetadata({
   params,
@@ -35,9 +64,15 @@ export default async function JobDetailPage({
   // Fire-and-forget: mark any unread notifications for this job as read
   api.markEntityNotificationsRead('job', id).catch(() => {});
 
-  const [parentClaim, statusOptions, jobTypeLookups, contactTypeOptions, reportStatusOptions, reportTypeOptions, assessmentsResult] =
+  const siblingJobsQuery = job.claimId
+    ? { claimId: job.claimId, limit: 50 }
+    : job.internalNumber?.trim()
+      ? { search: job.internalNumber.trim(), limit: 50 }
+      : null;
+
+  const [parentClaim, statusOptions, jobTypeLookups, contactTypeOptions, reportStatusOptions, reportTypeOptions, assessmentsResult, siblingJobsResult] =
     await Promise.all([
-    job.claimId ? loadClaim(job.claimId) : Promise.resolve(null as Claim | null),
+      job.claimId ? loadClaim(job.claimId) : Promise.resolve(null as Claim | null),
     // All providers: synced CW statuses often have provider_code null, while
     // seed/crunchwork rows use provider_code='crunchwork'. Filtering to one
     // provider left the status select showing the lookup UUID.
@@ -78,6 +113,15 @@ export default async function JobDetailPage({
       );
       return { data: [], total: 0 };
     }),
+    siblingJobsQuery
+      ? api.getJobs(siblingJobsQuery).catch((err: unknown) => {
+          console.warn(
+            'frontend:JobDetailPage - getJobs (make-safe sibling) failed:',
+            err instanceof Error ? err.message : err,
+          );
+          return { data: [] as Job[], total: 0 };
+        })
+      : Promise.resolve({ data: [] as Job[], total: 0 }),
   ]);
 
   const toOptions = (
@@ -105,6 +149,11 @@ export default async function JobDetailPage({
         externalReference: makeSafeJobTypeRow.externalReference ?? undefined,
       }
     : null;
+  const existingMakeSafeJob = findExistingMakeSafeJob({
+    currentJobId: job.id,
+    internalNumber: job.internalNumber,
+    siblings: siblingJobsResult.data,
+  });
 
   return (
     <>
@@ -121,6 +170,7 @@ export default async function JobDetailPage({
         reportTypeOptions={toOptions(reportTypeOptions)}
         assessments={assessmentsResult.data}
         makeSafeJobType={makeSafeJobType}
+        existingMakeSafeJobId={existingMakeSafeJob?.id ?? null}
       />
     </>
   );

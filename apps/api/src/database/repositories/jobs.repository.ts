@@ -386,16 +386,27 @@ export class JobsRepository {
   async findByIds(params: {
     tenantId: string;
     ids: string[];
-  }): Promise<Array<Pick<JobRow, 'id' | 'name' | 'externalReference'>>> {
+  }): Promise<
+    Array<
+      Pick<JobRow, 'id' | 'internalNumber' | 'name' | 'externalJobId' | 'externalReference'> & {
+        jobTypeName: string | null;
+      }
+    >
+  > {
     const ids = [...new Set(params.ids.filter(Boolean))];
     if (ids.length === 0) return [];
+    const jobTypeLookup = aliasedTable(lookupValues, 'job_type_lookup');
     return this.db
       .select({
         id: jobs.id,
+        internalNumber: jobs.internalNumber,
         name: jobs.name,
+        externalJobId: jobs.externalJobId,
         externalReference: jobs.externalReference,
+        jobTypeName: jobTypeLookup.name,
       })
       .from(jobs)
+      .leftJoin(jobTypeLookup, eq(jobs.jobTypeLookupId, jobTypeLookup.id))
       .where(and(eq(jobs.tenantId, params.tenantId), inArray(jobs.id, ids)));
   }
 

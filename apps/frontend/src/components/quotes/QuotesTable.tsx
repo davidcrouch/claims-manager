@@ -6,6 +6,7 @@ import {
   useColumnVisibility,
 } from '@/components/shared/column-visibility';
 import { JobCellLink } from '@/components/shared/JobCellLink';
+import { jobDisplayName } from '@/components/shared/job-label';
 import { resolveDetailAssignee } from '@/components/shared/DetailAssignee';
 import { ListArchiveButton, LIST_ARCHIVE_TH_CLASS, LIST_ARCHIVE_TD_CLASS, LIST_ARCHIVE_SPACER_TD_CLASS } from '@/components/shared/ListArchiveButton';
 import { entityDisplayLabel } from '@/components/shared/entity-label';
@@ -99,6 +100,7 @@ const TABLE_COLUMNS: ColDef[] = [
 export interface QuotesTableProps {
   quotes: Quote[];
   jobNameById?: Record<string, string>;
+  jobTypeById?: Record<string, string>;
   jobAssigneeNameById?: Record<string, string>;
   onRowClick?: (quote: Quote) => void;
   onArchived?: (quoteId: string) => void;
@@ -114,6 +116,7 @@ export interface QuotesTableProps {
 export function QuotesTable({
   quotes,
   jobNameById,
+  jobTypeById,
   jobAssigneeNameById,
   onRowClick,
   onArchived,
@@ -204,7 +207,13 @@ export function QuotesTable({
                 )}
                 {isVisible('job') && (
                   <td className="px-4 py-3 text-slate-600">
-                    <JobCellLink jobId={quote.jobId} jobNameById={jobNameById} />
+                    <JobCellLink
+                      jobId={quote.jobId}
+                      jobNameById={jobNameById}
+                      jobTypeById={jobTypeById}
+                      label={quote.job ? jobDisplayName(quote.job) : undefined}
+                      jobType={quote.job?.jobType?.name}
+                    />
                   </td>
                 )}
                 {isVisible('assignee') && (

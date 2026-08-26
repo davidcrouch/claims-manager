@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { ReportsListClient } from '@/components/reports/ReportsListClient';
-import type { PaginatedResponse, Report } from '@/types/api';
+import { buildJobNameById, buildJobTypeById } from '@/components/shared/job-label';
+import type { Job, PaginatedResponse, Report } from '@/types/api';
 
 export default async function ReportsPage({
   searchParams,
@@ -13,7 +14,8 @@ export default async function ReportsPage({
 
   const params = await searchParams;
   const empty: PaginatedResponse<Report> = { data: [], total: 0 };
-  const [initialReports, statusLookupsRes, reportTypesRes] = await Promise.all([
+  const emptyJobs: PaginatedResponse<Job> = { data: [], total: 0 };
+  const [initialReports, statusLookupsRes, reportTypesRes, jobsRes] = await Promise.all([
     api
       .getReports({
         page: parseInt(params.page ?? '1', 10),
@@ -33,6 +35,13 @@ export default async function ReportsPage({
       }),
     api.getLookupsByDomain('report_status').catch(() => []),
     api.getLookupsByDomain('report_type').catch(() => []),
+    api.getJobs({ limit: 100 }).catch((err: unknown) => {
+      console.error(
+        'frontend:ReportsPage - getJobs failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return emptyJobs;
+    }),
   ]);
 
   const statusOptions = (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map(
@@ -46,7 +55,14 @@ export default async function ReportsPage({
     name: row.name?.trim() ? row.name : 'Unknown',
   }));
 
+  const jobs = jobsRes?.data ?? [];
   return (
-    <ReportsListClient initialData={initialReports} statusOptions={statusOptions} reportTypes={reportTypes} />
+    <ReportsListClient
+      initialData={initialReports}
+      statusOptions={statusOptions}
+      reportTypes={reportTypes}
+      jobNameById={buildJobNameById(jobs)}
+      jobTypeById={buildJobTypeById(jobs)}
+    />
   );
 }

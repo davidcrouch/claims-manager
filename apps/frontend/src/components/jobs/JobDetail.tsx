@@ -15,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { HeaderActionToolbar } from '@/components/layout/HeaderActionToolbar';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
+import { SetHeaderStatus } from '@/components/layout/SetHeaderStatus';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { DetailAssignee } from '@/components/shared/DetailAssignee';
 import { AddJobContactsDrawer } from '@/components/forms/AddJobContactsDrawer';
@@ -232,6 +233,7 @@ export function JobDetail({
   reportTypeOptions = [],
   assessments = [],
   makeSafeJobType,
+  existingMakeSafeJobId = null,
 }: {
   job: Job;
   parentClaim?: Claim | null;
@@ -243,6 +245,8 @@ export function JobDetail({
   assessments?: Assessment[];
   /** Builder Make Safe lookup used by Create Make-Safe. */
   makeSafeJobType?: LookupOption | null;
+  /** Existing Builder Make-Safe job for this internal job number. */
+  existingMakeSafeJobId?: string | null;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -640,14 +644,24 @@ export function JobDetail({
 
   const headerActions = (
     <>
-      {canCreateMakeSafe && (
+      {existingMakeSafeJobId && !isAlreadyMakeSafe ? (
         <Button
           size="default"
-          onClick={() => setMakeSafeDrawerOpen(true)}
-          className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+          onClick={() => router.push(`/jobs/${existingMakeSafeJobId}`)}
+          className="h-9 gap-1.5 px-4 bg-slate-500 text-white hover:bg-slate-400"
         >
-          Create Make-Safe
+          Go to Make-Safe
         </Button>
+      ) : (
+        canCreateMakeSafe && (
+          <Button
+            size="default"
+            onClick={() => setMakeSafeDrawerOpen(true)}
+            className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+          >
+            Create Make-Safe
+          </Button>
+        )
       )}
       <Button
         size="default"
@@ -657,7 +671,6 @@ export function JobDetail({
         Create Estimate
       </Button>
       {tabActions}
-      <DetailSaveStatus statusLabel={saveStatusLabel} tone={saveStatusTone} />
       <HeaderActionToolbar>
         <DetailUndoButton
           canUndo={canUndo}
@@ -688,6 +701,17 @@ export function JobDetail({
   return (
     <div className="flex flex-col">
       <SetHeaderActions>{headerActions}</SetHeaderActions>
+      <SetHeaderStatus>
+        <DetailSaveStatus
+          statusLabel={saveStatusLabel}
+          tone={saveStatusTone}
+          className={
+            saveStatusTone === 'error'
+              ? 'text-xs whitespace-nowrap'
+              : 'text-xs whitespace-nowrap text-yellow-400'
+          }
+        />
+      </SetHeaderStatus>
       <div className="flex w-full flex-wrap items-center gap-x-4 border-b border-slate-200">
         <div className="flex min-w-0 flex-1 flex-wrap gap-0">
           {overviewTabs.map((t) => {
@@ -806,7 +830,7 @@ export function JobDetail({
           onPublish={handlePublishConfirm}
         />
       )}
-      {canCreateMakeSafe && makeSafeJobType?.id && (
+      {!existingMakeSafeJobId && canCreateMakeSafe && makeSafeJobType?.id && (
         <JobCreateMakeSafeDrawer
           open={makeSafeDrawerOpen}
           onOpenChange={setMakeSafeDrawerOpen}

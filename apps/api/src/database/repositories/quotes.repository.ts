@@ -3,7 +3,7 @@ import { Inject } from '@nestjs/common';
 import { eq, and, isNull, desc, asc, sql, inArray, or, aliasedTable, getTableColumns, ilike } from 'drizzle-orm';
 import { normalizeListJobIds, parseCsvFilterValues } from '../../common/list-job-filter';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
-import { quotes, lookupValues, users } from '../schema';
+import { quotes, lookupValues, users, jobs } from '../schema';
 
 export type QuoteRow = typeof quotes.$inferSelect;
 export type QuoteInsert = typeof quotes.$inferInsert;
@@ -194,6 +194,54 @@ export class QuotesRepository {
     return rows
       .filter((r): r is { id: string; name: string | null } => !!r.id)
       .map((r) => ({ id: r.id, name: (r.name ?? '').trim() || r.id }));
+  }
+
+  async findFilterJobs(params: {
+    tenantId: string;
+  }): Promise<
+    Array<{
+      id: string;
+      internalNumber: string | null;
+      name: string | null;
+      externalJobId: string | null;
+      externalReference: string | null;
+      jobTypeName: string | null;
+    }>
+  > {
+    const jobTypeLookup = aliasedTable(lookupValues, 'job_type_lookup');
+    return this.db
+      .select({
+        id: jobs.id,
+        internalNumber: jobs.internalNumber,
+        name: jobs.name,
+        externalJobId: jobs.externalJobId,
+        externalReference: jobs.externalReference,
+        jobTypeName: jobTypeLookup.name,
+      })
+      .from(quotes)
+      .innerJoin(jobs, eq(jobs.id, quotes.jobId))
+      .leftJoin(jobTypeLookup, eq(jobs.jobTypeLookupId, jobTypeLookup.id))
+      .where(
+        and(
+          eq(quotes.tenantId, params.tenantId),
+          isNull(quotes.deletedAt),
+          eq(jobs.tenantId, params.tenantId),
+          isNull(jobs.deletedAt),
+        ),
+      )
+      .groupBy(
+        jobs.id,
+        jobs.internalNumber,
+        jobs.name,
+        jobs.externalJobId,
+        jobs.externalReference,
+        jobTypeLookup.name,
+      )
+      .orderBy(
+        asc(
+          sql`COALESCE(${jobs.internalNumber}, ${jobs.name}, ${jobs.externalJobId}, ${jobs.externalReference}, ${jobs.id}::text)`,
+        ),
+      );
   }
 
   async findOne(params: {

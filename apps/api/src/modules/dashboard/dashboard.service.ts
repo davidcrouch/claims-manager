@@ -27,7 +27,9 @@ import {
   formatJobAddressLine,
   humanizeTitle,
   inactiveJobStatusIds,
+  jobDisplayTitle,
   jobSubtitle,
+  type JobNumberSource,
   matchLookupIdsByNames,
   notificationHref,
   overdueCountFromBuckets,
@@ -506,12 +508,7 @@ export class DashboardService {
       job: (typeof activeJobRows.data)[number],
     ): DashboardActiveJobItem => ({
       id: job.id,
-      title: humanizeTitle(
-        'Job',
-        job.name,
-        job.externalReference,
-        job.externalJobId,
-      ),
+      title: jobDisplayTitle(job, 'Job'),
       status: job.statusName ?? undefined,
       jobType: job.jobTypeName ?? undefined,
       address: formatJobAddressLine(job),
@@ -565,7 +562,7 @@ export class DashboardService {
 
   private taskItem(
     task: TaskRow,
-    jobById: Map<string, { externalReference?: string | null; name?: string | null }>,
+    jobById: Map<string, JobNumberSource>,
   ): DashboardInboxItem {
     return {
       id: task.id,

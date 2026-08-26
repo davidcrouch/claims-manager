@@ -96,6 +96,7 @@ export interface WorkOrdersListClientProps {
   statusOptions: StatusOption[];
   workOrderTypes: StatusOption[];
   jobNameById?: Record<string, string>;
+  jobTypeById?: Record<string, string>;
   /** When provided, the page header shows job details and data is scoped to this job. */
   job?: Job | null;
   parentClaim?: Claim | null;
@@ -106,6 +107,7 @@ export function WorkOrdersListClient({
   statusOptions,
   workOrderTypes,
   jobNameById,
+  jobTypeById,
   job,
   parentClaim }: WorkOrdersListClientProps) {
   const router = useRouter();
@@ -514,7 +516,7 @@ export function WorkOrdersListClient({
                       )}
                       {isVisible('job') && (
                         <td className="px-4 py-3 text-slate-600">
-                          <JobCellLink jobId={wo.jobId} jobNameById={jobNameById} />
+                          <JobCellLink jobId={wo.jobId} jobNameById={jobNameById} jobTypeById={jobTypeById} />
                         </td>
                       )}
                       {isVisible('status') && (

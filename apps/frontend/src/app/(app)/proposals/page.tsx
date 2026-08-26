@@ -1,8 +1,9 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { ProposalsPageClient } from '@/components/proposals/ProposalsPageClient';
-import {buildJobNameById, toJobOptions,
+import {buildJobNameById, buildJobTypeById, toJobOptions,
   mergeCurrentJobIntoNameById,
+  mergeCurrentJobIntoTypeById,
   mergeCurrentJobIntoOptions } from '@/components/shared/job-label';
 import type { Job, PaginatedResponse, Proposal, Claim } from '@/types/api';
 
@@ -71,6 +72,7 @@ export default async function ProposalsPage({
     name: vendor.name?.trim() ? vendor.name : 'Unknown' }));
   const jobs = jobsRes?.data ?? [];
   const jobNameById = mergeCurrentJobIntoNameById(buildJobNameById(jobs), job);
+  const jobTypeById = mergeCurrentJobIntoTypeById(buildJobTypeById(jobs), job);
 
   return (
     <ProposalsPageClient
@@ -78,6 +80,7 @@ export default async function ProposalsPage({
       statusOptions={statusOptions}
       vendorOptions={vendorOptions}
       jobNameById={jobNameById}
+      jobTypeById={jobTypeById}
       jobs={mergeCurrentJobIntoOptions(toJobOptions(jobs), job)}
       job={job}
       parentClaim={parentClaim}

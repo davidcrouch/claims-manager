@@ -71,8 +71,8 @@ interface ColDef {
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'external_reference', label: 'Job Ref', locked: true, filterable: true },
   { key: 'external_job_id', label: 'Insurer Ref' },
-  { key: 'status', label: 'Status', filterable: true },
   { key: 'job_type', label: 'Type', filterable: true },
+  { key: 'status', label: 'Status', filterable: true },
   { key: 'assignee', label: 'Assigned', filterable: true },
   { key: 'address', label: 'Address' },
   { key: 'request_date', label: 'Requested' },
@@ -690,14 +690,14 @@ export function JobsListClient({
                           {jobInsurerReference(job) || '—'}
                         </td>
                       )}
-                      {isVisible('status') && (
-                        <td className="whitespace-nowrap px-4 py-3">
-                          <StatusBadge status={statusName} />
-                        </td>
-                      )}
                       {isVisible('job_type') && (
                         <td className="px-4 py-3">
                           <TypeBadge type={jobTypeName} />
+                        </td>
+                      )}
+                      {isVisible('status') && (
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <StatusBadge status={statusName} />
                         </td>
                       )}
                       {isVisible('assignee') && (

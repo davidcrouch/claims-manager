@@ -96,10 +96,12 @@ function stripHtml(html: string): string {
 export function MessagesListClient({
   job,
   parentClaim,
-  jobNameById }: {
+  jobNameById,
+  jobTypeById }: {
   job?: Job | null;
   parentClaim?: Claim | null;
   jobNameById?: Record<string, string>;
+  jobTypeById?: Record<string, string>;
 } = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -520,6 +522,7 @@ export function MessagesListClient({
                           <JobCellLink
                             jobId={messageJobId(message)}
                             jobNameById={jobNameById ?? {}}
+                            jobTypeById={jobTypeById}
                           />
                         </td>
                       )}

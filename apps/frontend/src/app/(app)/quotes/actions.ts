@@ -63,6 +63,19 @@ export async function fetchQuoteFilterAssigneesAction(): Promise<
   }
 }
 
+export async function fetchQuoteFilterJobsAction(): Promise<
+  { id: string; label: string }[]
+> {
+  const api = await getApi();
+  if (!api) return [];
+  try {
+    return await api.getQuoteFilterJobs();
+  } catch (err) {
+    console.error('[quotes/actions.fetchQuoteFilterJobsAction]', err);
+    return [];
+  }
+}
+
 export async function deleteQuoteAction(quoteId: string): Promise<{
   success: boolean;
   softDeleted?: boolean;

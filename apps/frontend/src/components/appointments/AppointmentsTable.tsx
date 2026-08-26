@@ -105,6 +105,7 @@ export interface AppointmentsTableProps {
   jobColumnFilter?: ColumnValueFilter;
   locationColumnFilter?: ColumnValueFilter;
   jobNameById?: Record<string, string>;
+  jobTypeById?: Record<string, string>;
 }
 
 export function AppointmentsTable({
@@ -120,6 +121,7 @@ export function AppointmentsTable({
   jobColumnFilter,
   locationColumnFilter,
   jobNameById,
+  jobTypeById,
 }: AppointmentsTableProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const { isVisible, toggle, visibleCount } = useColumnVisibility(
@@ -294,7 +296,7 @@ export function AppointmentsTable({
                   )}
                   {isVisible('job') && (
                     <td className="px-4 py-2.5 text-slate-600">
-                      <JobCellLink jobId={a.jobId} jobNameById={jobNameById} />
+                      <JobCellLink jobId={a.jobId} jobNameById={jobNameById} jobTypeById={jobTypeById} />
                     </td>
                   )}
                   {isVisible('type') && (

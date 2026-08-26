@@ -90,10 +90,17 @@ function renderContactJobsCell(
   contact: Contact,
   selectedJobIds: string[],
   labelById: Record<string, string>,
+  jobTypeById?: Record<string, string>,
 ) {
   const ids = selectedJobIds.filter((id) => id !== '__none__');
   if (ids.length === 1) {
-    return <JobCellLink jobId={ids[0]} jobNameById={labelById} />;
+    return (
+      <JobCellLink
+        jobId={ids[0]}
+        jobNameById={labelById}
+        jobTypeById={jobTypeById}
+      />
+    );
   }
 
   const related = contact.relatedJobs ?? [];
@@ -111,12 +118,24 @@ function renderContactJobsCell(
     });
 
   if (related.length === 1) {
-    return <JobCellLink jobId={related[0].id} label={labelFor(related[0])} />;
+    return (
+      <JobCellLink
+        jobId={related[0].id}
+        label={labelFor(related[0])}
+        jobType={related[0].jobTypeName}
+        jobTypeById={jobTypeById}
+      />
+    );
   }
 
   return (
     <>
-      <JobCellLink jobId={related[0].id} label={labelFor(related[0])} />
+      <JobCellLink
+        jobId={related[0].id}
+        label={labelFor(related[0])}
+        jobType={related[0].jobTypeName}
+        jobTypeById={jobTypeById}
+      />
       {` +${related.length - 1}`}
     </>
   );
@@ -127,6 +146,7 @@ export interface ContactsListClientProps {
   job?: Job | null;
   parentClaim?: Claim | null;
   jobNameById?: Record<string, string>;
+  jobTypeById?: Record<string, string>;
   /** Jobs that actually have contacts — drives Job column filter options. */
   filterJobs?: Array<{ id: string; label: string }>;
   hasUnlinkedContacts?: boolean;
@@ -137,6 +157,7 @@ export function ContactsListClient({
   job,
   parentClaim,
   jobNameById,
+  jobTypeById,
   filterJobs = [],
   hasUnlinkedContacts = false,
 }: ContactsListClientProps) {
@@ -415,7 +436,7 @@ export function ContactsListClient({
                   >
                     {isVisible('job') && (
                       <td className="px-4 py-3 text-slate-600">
-                        {renderContactJobsCell(contact, selectedJobIds, labelById)}
+                        {renderContactJobsCell(contact, selectedJobIds, labelById, jobTypeById)}
                       </td>
                     )}
                     {isVisible('name') && (

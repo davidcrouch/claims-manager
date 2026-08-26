@@ -4,6 +4,7 @@ import {
   daysFromNow,
   humanizeTitle,
   isUuid,
+  jobDisplayTitle,
   jobSubtitle,
   matchLookupIdsByNames,
   notificationHref,
@@ -118,9 +119,43 @@ describe('dashboard.utils', () => {
     });
   });
 
+  describe('jobDisplayTitle', () => {
+    it('prefers internal number over name and CW / insurer refs', () => {
+      expect(
+        jobDisplayTitle(
+          {
+            internalNumber: 'JOB-200423',
+            name: 'Roof',
+            externalJobId: 'INS-99',
+            externalReference: 'MIL-1',
+          },
+          'Job',
+        ),
+      ).toBe('JOB-200423');
+    });
+
+    it('falls back through name then insurer then CW refs', () => {
+      expect(jobDisplayTitle({ name: 'Roof', externalJobId: 'INS-99' }, 'Job')).toBe('Roof');
+      expect(jobDisplayTitle({ externalJobId: 'INS-99', externalReference: 'MIL-1' }, 'Job')).toBe(
+        'INS-99',
+      );
+      expect(jobDisplayTitle({ externalReference: 'MIL-1' }, 'Job')).toBe('MIL-1');
+    });
+  });
+
   describe('jobSubtitle', () => {
-    it('prefers external reference over name', () => {
-      expect(jobSubtitle({ externalReference: 'MIL-1', name: 'Roof' })).toBe('MIL-1');
+    it('prefers internal number over insurer/CW refs', () => {
+      expect(
+        jobSubtitle({
+          internalNumber: 'JOB-200423',
+          externalReference: 'MIL-1',
+          name: 'Roof',
+        }),
+      ).toBe('JOB-200423');
+    });
+
+    it('falls back to name when internal number is missing', () => {
+      expect(jobSubtitle({ externalReference: 'MIL-1', name: 'Roof' })).toBe('Roof');
     });
   });
 

@@ -1,8 +1,9 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { RfqsPageClient } from '@/components/rfqs/RfqsPageClient';
-import {buildJobNameById, toJobOptions,
+import {buildJobNameById, buildJobTypeById, toJobOptions,
   mergeCurrentJobIntoNameById,
+  mergeCurrentJobIntoTypeById,
   mergeCurrentJobIntoOptions } from '@/components/shared/job-label';
 import type { Job, Claim, PaginatedResponse, Rfq } from '@/types/api';
 
@@ -108,6 +109,7 @@ export default async function RfqsPage({
     name: vendor.name?.trim() ? vendor.name : 'Unknown' }));
   const jobs = jobsRes?.data ?? [];
   const jobNameById = mergeCurrentJobIntoNameById(buildJobNameById(jobs), job);
+  const jobTypeById = mergeCurrentJobIntoTypeById(buildJobTypeById(jobs), job);
 
   return (
     <RfqsPageClient
@@ -115,6 +117,7 @@ export default async function RfqsPage({
       statusOptions={statusOptions}
       vendorOptions={vendorOptions}
       jobNameById={jobNameById}
+      jobTypeById={jobTypeById}
       jobs={mergeCurrentJobIntoOptions(toJobOptions(jobs), job)}
       job={job}
       parentClaim={parentClaim}

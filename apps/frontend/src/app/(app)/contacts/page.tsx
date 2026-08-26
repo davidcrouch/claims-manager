@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { ContactsListClient } from '@/components/contacts/ContactsListClient';
-import { buildJobNameById, jobDisplayName } from '@/components/shared/job-label';
+import { buildJobNameById, buildJobTypeById, jobDisplayName, mergeCurrentJobIntoTypeById } from '@/components/shared/job-label';
 import type { PaginatedResponse, Contact, Job, Claim } from '@/types/api';
 
 export const metadata = { title: 'Contacts — EnsureOS' };
@@ -83,6 +83,15 @@ export default async function ContactsPage({
   if (job) {
     jobNameById[job.id] = jobDisplayName(job);
   }
+  const jobTypeById = mergeCurrentJobIntoTypeById(
+    buildJobTypeById(
+      filterJobsRaw.map((j) => ({
+        id: j.id,
+        jobTypeName: j.jobTypeName,
+      })),
+    ),
+    job,
+  );
 
   return (
     <ContactsListClient
@@ -90,6 +99,7 @@ export default async function ContactsPage({
       job={job}
       parentClaim={parentClaim}
       jobNameById={jobNameById}
+      jobTypeById={jobTypeById}
       filterJobs={filterJobs}
       hasUnlinkedContacts={Boolean(filterJobsRes.hasUnlinked)}
     />

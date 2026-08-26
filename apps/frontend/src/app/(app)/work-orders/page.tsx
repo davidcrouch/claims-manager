@@ -1,8 +1,9 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { WorkOrdersPageClient } from '@/components/work-orders/WorkOrdersPageClient';
-import {buildJobNameById, toJobOptions,
+import {buildJobNameById, buildJobTypeById, toJobOptions,
   mergeCurrentJobIntoNameById,
+  mergeCurrentJobIntoTypeById,
   mergeCurrentJobIntoOptions } from '@/components/shared/job-label';
 import type { Job, Claim, PaginatedResponse, WorkOrder } from '@/types/api';
 
@@ -109,6 +110,7 @@ export default async function WorkOrdersPage({
 
   const jobs = jobsRes?.data ?? [];
   const jobNameById = mergeCurrentJobIntoNameById(buildJobNameById(jobs), job);
+  const jobTypeById = mergeCurrentJobIntoTypeById(buildJobTypeById(jobs), job);
 
   return (
     <WorkOrdersPageClient
@@ -116,6 +118,7 @@ export default async function WorkOrdersPage({
       statusOptions={statusOptions}
       workOrderTypes={workOrderTypes}
       jobNameById={jobNameById}
+      jobTypeById={jobTypeById}
       jobs={mergeCurrentJobIntoOptions(toJobOptions(jobs), job)}
       job={job}
       parentClaim={parentClaim}

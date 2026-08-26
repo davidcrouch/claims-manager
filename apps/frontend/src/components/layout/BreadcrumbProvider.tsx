@@ -17,6 +17,8 @@ interface BreadcrumbContextValue {
   setHeaderNode: (node: ReactNode | null) => void;
   headerActions: ReactNode | null;
   setHeaderActions: (node: ReactNode | null) => void;
+  headerStatus: ReactNode | null;
+  setHeaderStatus: (node: ReactNode | null) => void;
 }
 
 const BreadcrumbContext = createContext<BreadcrumbContextValue | null>(null);
@@ -25,6 +27,7 @@ export function BreadcrumbProvider({ children }: { children: ReactNode }) {
   const [items, setItemsState] = useState<BreadcrumbItem[]>([]);
   const [headerNode, setHeaderNodeState] = useState<ReactNode | null>(null);
   const [headerActions, setHeaderActionsState] = useState<ReactNode | null>(null);
+  const [headerStatus, setHeaderStatusState] = useState<ReactNode | null>(null);
 
   const setItems = useCallback((newItems: BreadcrumbItem[]) => {
     setItemsState(newItems);
@@ -38,9 +41,22 @@ export function BreadcrumbProvider({ children }: { children: ReactNode }) {
     setHeaderActionsState(node);
   }, []);
 
+  const setHeaderStatus = useCallback((node: ReactNode | null) => {
+    setHeaderStatusState(node);
+  }, []);
+
   return (
     <BreadcrumbContext.Provider
-      value={{ items, setItems, headerNode, setHeaderNode, headerActions, setHeaderActions }}
+      value={{
+        items,
+        setItems,
+        headerNode,
+        setHeaderNode,
+        headerActions,
+        setHeaderActions,
+        headerStatus,
+        setHeaderStatus,
+      }}
     >
       {children}
     </BreadcrumbContext.Provider>
@@ -85,4 +101,19 @@ export function HeaderActionsConsumer() {
   const { headerActions } = useBreadcrumbs();
   if (!headerActions) return null;
   return <div className="flex shrink-0 items-center gap-2 self-stretch">{headerActions}</div>;
+}
+
+/**
+ * Renders page-registered header status (via `SetHeaderStatus`) at the
+ * bottom-right of the header, under the user-icon cluster. Absolutely
+ * positioned so it never shifts title, fields, or action buttons.
+ */
+export function HeaderStatusConsumer() {
+  const { headerStatus } = useBreadcrumbs();
+  if (!headerStatus) return null;
+  return (
+    <div className="pointer-events-none absolute right-4 bottom-1.5 z-10 leading-none">
+      {headerStatus}
+    </div>
+  );
 }

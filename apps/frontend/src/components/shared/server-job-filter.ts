@@ -249,7 +249,7 @@ export function buildListJobFilterOptions(params: {
   jobId?: string | null;
 }): JobFilterOption[] {
   const raw =
-    params.jobs && params.jobs.length > 0
+    params.jobs !== undefined
       ? params.jobs.map((j) => ({ id: j.id, label: j.label }))
       : jobFilterOptionsFromNameById(params.jobNameById);
   const current =

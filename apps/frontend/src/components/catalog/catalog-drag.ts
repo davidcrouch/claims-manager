@@ -190,20 +190,38 @@ export function peekActiveDragType(): 'group-label' | 'catalog' | null {
   return activeDrag?.type ?? null;
 }
 
+export interface CatalogDragOverDecision {
+  /** Call preventDefault on dragover so the browser allows drop. */
+  allowDrop: boolean;
+  /** Highlight this zone and stopPropagation so parents do not also highlight. */
+  highlight: boolean;
+}
+
+/** Drop-zone decision for dragover/dragenter — separates allow-drop from highlight. */
+export function getCatalogDragOverDecision(
+  dataTransfer: DataTransfer,
+  target: CatalogDropTarget,
+): CatalogDragOverDecision {
+  if (hasGroupLabelDrag(dataTransfer)) {
+    const accept = isValidGroupLabelDropTarget(target);
+    return { allowDrop: accept, highlight: accept };
+  }
+  if (!hasCatalogDrag(dataTransfer)) {
+    return { allowDrop: false, highlight: false };
+  }
+  const kind = peekCatalogDragKind(dataTransfer);
+  if (!kind) return { allowDrop: false, highlight: false };
+  const destination = resolveCatalogDropDestination(kind, target);
+  if (!destination) return { allowDrop: false, highlight: false };
+  return { allowDrop: true, highlight: destination === target };
+}
+
 /**
- * Returns true when this target should accept the current drag (and the caller
- * should preventDefault / highlight). False means leave the event alone so a
- * parent zone can accept it instead.
+ * True when this target is the resolved drop destination (highlight + stop bubble).
  */
 export function shouldAcceptCatalogDragOver(
   dataTransfer: DataTransfer,
   target: CatalogDropTarget,
 ): boolean {
-  if (hasGroupLabelDrag(dataTransfer)) {
-    return isValidGroupLabelDropTarget(target);
-  }
-  if (!hasCatalogDrag(dataTransfer)) return false;
-  const kind = peekCatalogDragKind(dataTransfer);
-  if (!kind) return false;
-  return resolveCatalogDropDestination(kind, target) !== null;
+  return getCatalogDragOverDecision(dataTransfer, target).highlight;
 }

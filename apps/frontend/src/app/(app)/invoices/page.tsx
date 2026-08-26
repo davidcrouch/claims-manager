@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { loadClaim, loadJob } from '@/lib/cached-entity-loaders';
 import { InvoicesPageClient } from '@/components/invoices/InvoicesPageClient';
-import {buildJobNameById, jobDisplayName } from '@/components/shared/job-label';
+import {buildJobNameById, buildJobTypeById, jobDisplayName, jobTypeDisplayName } from '@/components/shared/job-label';
 import type { Claim, Invoice, Job, PaginatedResponse, WorkOrder } from '@/types/api';
 
 export default async function InvoicesPage({
@@ -64,6 +64,10 @@ export default async function InvoicesPage({
   const jobNameById = job
     ? { [job.id]: jobDisplayName(job) }
     : buildJobNameById(jobsRes?.data ?? []);
+  const scopedType = job ? jobTypeDisplayName(job) : undefined;
+  const jobTypeById = job
+    ? (scopedType ? { [job.id]: scopedType } : {})
+    : buildJobTypeById(jobsRes?.data ?? []);
 
   let parentClaim: Claim | null = null;
   if (job?.claimId) {
@@ -81,6 +85,7 @@ export default async function InvoicesPage({
       initialData={initialInvoices}
       workOrders={workOrders}
       jobNameById={jobNameById}
+      jobTypeById={jobTypeById}
       statusOptions={statusOptions}
       job={job}
       parentClaim={parentClaim}

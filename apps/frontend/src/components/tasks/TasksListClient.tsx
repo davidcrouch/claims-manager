@@ -128,11 +128,13 @@ export function TasksListClient({
   job,
   parentClaim,
   jobNameById,
+  jobTypeById,
   jobs,
 }: {
   job?: Job | null;
   parentClaim?: Claim | null;
   jobNameById?: Record<string, string>;
+  jobTypeById?: Record<string, string>;
   jobs?: JobOption[];
 } = {}) {
   const router = useRouter();
@@ -800,7 +802,7 @@ export function TasksListClient({
                       )}
                       {isVisible('job') && (
                         <td className="px-4 py-3 text-slate-600">
-                          <JobCellLink jobId={task.jobId} jobNameById={jobNameById} />
+                          <JobCellLink jobId={task.jobId} jobNameById={jobNameById} jobTypeById={jobTypeById} />
                         </td>
                       )}
                       {isVisible('status') && (

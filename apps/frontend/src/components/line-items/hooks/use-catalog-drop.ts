@@ -3,7 +3,7 @@ import type { CatalogDropTarget } from '@/components/catalog/catalog-drag';
 import {
   getCatalogDragData,
   getGroupLabelDragData,
-  shouldAcceptCatalogDragOver,
+  getCatalogDragOverDecision,
   resolveCatalogDropDestination,
   clearCatalogDrag,
 } from '@/components/catalog/catalog-drag';
@@ -42,11 +42,11 @@ export function useCatalogDrop({
   const onDragOver = useCallback(
     (e: React.DragEvent) => {
       if (disabled) return;
-      if (shouldAcceptCatalogDragOver(e.dataTransfer, target)) {
-        e.preventDefault();
-        e.stopPropagation();
-        e.dataTransfer.dropEffect = 'copy';
-      }
+      const decision = getCatalogDragOverDecision(e.dataTransfer, target);
+      if (!decision.allowDrop) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      if (decision.highlight) e.stopPropagation();
     },
     [target, disabled],
   );
@@ -54,12 +54,13 @@ export function useCatalogDrop({
   const onDragEnter = useCallback(
     (e: React.DragEvent) => {
       if (disabled) return;
-      if (shouldAcceptCatalogDragOver(e.dataTransfer, target)) {
-        e.preventDefault();
-        e.stopPropagation();
-        enterCountRef.current += 1;
-        setIsOver(true);
-      }
+      const decision = getCatalogDragOverDecision(e.dataTransfer, target);
+      if (!decision.allowDrop) return;
+      e.preventDefault();
+      if (!decision.highlight) return;
+      e.stopPropagation();
+      enterCountRef.current += 1;
+      setIsOver(true);
     },
     [target, disabled],
   );

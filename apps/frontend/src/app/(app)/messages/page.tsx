@@ -2,7 +2,9 @@ import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { MessagesListClient } from '@/components/messages/MessagesListClient';
 import {buildJobNameById,
-  mergeCurrentJobIntoNameById } from '@/components/shared/job-label';
+  buildJobTypeById,
+  mergeCurrentJobIntoNameById,
+  mergeCurrentJobIntoTypeById } from '@/components/shared/job-label';
 import type { Job, Claim, PaginatedResponse } from '@/types/api';
 
 export const metadata = { title: 'Communications — EnsureOS' };
@@ -45,6 +47,7 @@ export default async function MessagesPage({
       job={job}
       parentClaim={parentClaim}
       jobNameById={mergeCurrentJobIntoNameById(buildJobNameById(jobsRes?.data ?? []), job)}
+      jobTypeById={mergeCurrentJobIntoTypeById(buildJobTypeById(jobsRes?.data ?? []), job)}
     />
   );
 }

@@ -79,6 +79,7 @@ export interface RfqsListClientProps {
   statusOptions: StatusOption[];
   vendorOptions: StatusOption[];
   jobNameById?: Record<string, string>;
+  jobTypeById?: Record<string, string>;
   job?: Job | null;
   parentClaim?: Claim | null;
 }
@@ -88,6 +89,7 @@ export function RfqsListClient({
   statusOptions,
   vendorOptions,
   jobNameById,
+  jobTypeById,
   job,
   parentClaim }: RfqsListClientProps) {
   const router = useRouter();
@@ -453,7 +455,7 @@ export function RfqsListClient({
                       )}
                       {isVisible('job') && (
                         <td className="px-4 py-3 text-slate-600">
-                          <JobCellLink jobId={rfq.jobId} jobNameById={jobNameById} />
+                          <JobCellLink jobId={rfq.jobId} jobNameById={jobNameById} jobTypeById={jobTypeById} />
                         </td>
                       )}
                       {isVisible('status') && (

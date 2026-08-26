@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { FileSpreadsheet, Search, X } from 'lucide-react';
-import { fetchQuotesAction, fetchQuoteFilterAssigneesAction } from '@/app/(app)/quotes/actions';
+import { fetchQuotesAction, fetchQuoteFilterAssigneesAction, fetchQuoteFilterJobsAction } from '@/app/(app)/quotes/actions';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { type StatusOption,
@@ -31,7 +31,7 @@ import {
 import { computeStatusBreakdown } from '@/components/layout/ListPageHeader';
 import { TablePagination } from '@/components/shared/table-pagination';
 import { QuotesTable, type QuoteSortField } from './QuotesTable';
-import { jobDisplayName } from '@/components/shared/job-label';
+import { jobDisplayName, mergeJobLabelsFromRows, mergeJobTypesFromRows } from '@/components/shared/job-label';
 import type { Quote, PaginatedResponse, Job, Claim } from '@/types/api';
 
 type ListTab = 'active' | 'archived' | 'all';
@@ -46,7 +46,9 @@ export interface QuotesListClientProps {
   statusOptions: StatusOption[];
   quoteTypes: StatusOption[];
   jobNameById?: Record<string, string>;
+  jobTypeById?: Record<string, string>;
   jobAssigneeNameById?: Record<string, string>;
+  filterJobs?: { id: string; label: string }[];
   /** When provided, the page header shows job details and data is scoped to this job. */
   job?: Job | null;
   parentClaim?: Claim | null;
@@ -59,7 +61,9 @@ export function QuotesListClient({
   statusOptions,
   quoteTypes,
   jobNameById,
+  jobTypeById,
   jobAssigneeNameById,
+  filterJobs: initialFilterJobs,
   job,
   parentClaim }: QuotesListClientProps) {
   const router = useRouter();
@@ -87,20 +91,32 @@ export function QuotesListClient({
   const [assigneeOptions, setAssigneeOptions] = useState<
     { id: string; name: string }[]
   >([]);
+  const [quoteFilterJobs, setQuoteFilterJobs] = useState<
+    { id: string; label: string }[] | undefined
+  >(initialFilterJobs);
 
   const selectedJobIds = useMemo(
     () => parseSelectedJobIds(jobId, jobIdsParam),
     [jobId, jobIdsParam],
   );
+  const resolvedJobNameById = useMemo(
+    () => mergeJobLabelsFromRows(jobNameById, data.data),
+    [jobNameById, data.data],
+  );
+  const resolvedJobTypeById = useMemo(
+    () => mergeJobTypesFromRows(jobTypeById, data.data),
+    [jobTypeById, data.data],
+  );
   const filterJobs = useMemo(
     () =>
       buildListJobFilterOptions({
-        jobNameById,
+        jobs: quoteFilterJobs,
+        jobNameById: resolvedJobNameById,
         currentJob: job
           ? { id: job.id, label: jobDisplayName(job) }
           : null,
         jobId }),
-    [jobNameById, job, jobId],
+    [quoteFilterJobs, resolvedJobNameById, job, jobId],
   );
   const uniqueJobs = useMemo(
     () => buildServerJobFilterOptions(filterJobs),
@@ -159,6 +175,7 @@ export function QuotesListClient({
 
   useEffect(() => {
     fetchQuoteFilterAssigneesAction().then(setAssigneeOptions);
+    fetchQuoteFilterJobsAction().then(setQuoteFilterJobs);
   }, []);
 
   // URL sync — skip no-op replace so a create→detail router.push is not cancelled
@@ -434,7 +451,8 @@ export function QuotesListClient({
         <>
           <QuotesTable
             quotes={visibleRows}
-            jobNameById={jobNameById}
+            jobNameById={resolvedJobNameById}
+            jobTypeById={resolvedJobTypeById}
             jobAssigneeNameById={jobAssigneeNameById}
             onRowClick={(q) => {
               const jobId = searchParams.get('jobId');

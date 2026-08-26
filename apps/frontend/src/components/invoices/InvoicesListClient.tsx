@@ -77,6 +77,7 @@ export interface InvoicesListClientProps {
   initialData: PaginatedResponse<Invoice>;
   statusOptions: StatusOption[];
   jobNameById?: Record<string, string>;
+  jobTypeById?: Record<string, string>;
   headerAction?: React.ReactNode;
   job?: Job | null;
   parentClaim?: Claim | null;
@@ -86,6 +87,7 @@ export function InvoicesListClient({
   initialData,
   statusOptions,
   jobNameById,
+  jobTypeById,
   headerAction,
   job,
   parentClaim }: InvoicesListClientProps) {
@@ -446,7 +448,7 @@ export function InvoicesListClient({
                       )}
                       {isVisible('job') && (
                         <td className="px-4 py-3 text-slate-600">
-                          <JobCellLink jobId={inv.jobId} jobNameById={jobNameById} />
+                          <JobCellLink jobId={inv.jobId} jobNameById={jobNameById} jobTypeById={jobTypeById} />
                         </td>
                       )}
                       {isVisible('status') && (

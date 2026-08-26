@@ -82,6 +82,7 @@ export interface JournalsPageClientProps {
   job?: Job | null;
   parentClaim?: Claim | null;
   jobNameById?: Record<string, string>;
+  jobTypeById?: Record<string, string>;
   jobs?: JobOption[];
 }
 
@@ -92,6 +93,7 @@ export function JournalsPageClient({
   job,
   parentClaim,
   jobNameById,
+  jobTypeById,
   jobs = [] }: JournalsPageClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -420,7 +422,7 @@ export function JournalsPageClient({
                     )}
                     {isVisible('job') && (
                       <td className="px-4 py-3 text-slate-600">
-                        <JobCellLink jobId={journal.jobId} jobNameById={jobNameById} />
+                        <JobCellLink jobId={journal.jobId} jobNameById={jobNameById} jobTypeById={jobTypeById} />
                       </td>
                     )}
                     {isVisible('status') && (

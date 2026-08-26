@@ -155,11 +155,28 @@ export function scheduleEventHref(eventType: string, id: string): string {
   }
 }
 
-export function jobSubtitle(
-  job?: { externalReference?: string | null; name?: string | null } | null,
-): string | undefined {
+export type JobNumberSource = {
+  internalNumber?: string | null;
+  name?: string | null;
+  externalJobId?: string | null;
+  externalReference?: string | null;
+};
+
+/** Prefer tenant-internal job number over CW / insurer refs (matches jobDisplayName). */
+export function jobDisplayTitle(job?: JobNumberSource | null, fallback = ''): string {
+  if (!job) return fallback;
+  return humanizeTitle(
+    fallback,
+    job.internalNumber,
+    job.name,
+    job.externalJobId,
+    job.externalReference,
+  );
+}
+
+export function jobSubtitle(job?: JobNumberSource | null): string | undefined {
   if (!job) return undefined;
-  return humanizeTitle('', job.externalReference, job.name) || undefined;
+  return jobDisplayTitle(job) || undefined;
 }
 
 export function utcDayBounds(now = new Date()): { from: string; to: string } {

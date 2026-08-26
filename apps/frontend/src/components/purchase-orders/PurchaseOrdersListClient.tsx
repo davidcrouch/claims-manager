@@ -87,6 +87,7 @@ export interface PurchaseOrdersListClientProps {
   statusOptions: StatusOption[];
   vendorOptions: StatusOption[];
   jobNameById?: Record<string, string>;
+  jobTypeById?: Record<string, string>;
   job?: Job | null;
   parentClaim?: Claim | null;
 }
@@ -96,6 +97,7 @@ export function PurchaseOrdersListClient({
   statusOptions,
   vendorOptions,
   jobNameById,
+  jobTypeById,
   job,
   parentClaim }: PurchaseOrdersListClientProps) {
   const router = useRouter();
@@ -481,7 +483,7 @@ export function PurchaseOrdersListClient({
                       )}
                       {isVisible('job') && (
                         <td className="px-4 py-3 text-slate-600">
-                          <JobCellLink jobId={po.jobId} jobNameById={jobNameById} />
+                          <JobCellLink jobId={po.jobId} jobNameById={jobNameById} jobTypeById={jobTypeById} />
                         </td>
                       )}
                       {isVisible('status') && (

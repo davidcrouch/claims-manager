@@ -3,24 +3,29 @@
 import { Undo2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { DetailSaveTone } from '@/components/shared/detail-autosave';
+import { cn } from '@/lib/utils';
 
 export function DetailSaveStatus({
   statusLabel,
   tone,
+  className,
 }: {
   statusLabel: string | null;
   tone: DetailSaveTone;
+  className?: string;
 }) {
   if (!statusLabel) return null;
   return (
     <span
-      className={`text-sm ${
+      className={cn(
+        'text-sm',
         tone === 'error'
           ? 'text-red-600'
           : tone === 'busy'
             ? 'text-slate-500'
-            : 'text-emerald-600'
-      }`}
+            : 'text-emerald-600',
+        className,
+      )}
       aria-live="polite"
     >
       {statusLabel}

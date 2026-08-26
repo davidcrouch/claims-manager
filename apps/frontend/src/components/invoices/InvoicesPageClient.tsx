@@ -12,6 +12,7 @@ export interface InvoicesPageClientProps {
   initialData: PaginatedResponse<Invoice>;
   workOrders: WorkOrder[];
   jobNameById: Record<string, string>;
+  jobTypeById?: Record<string, string>;
   statusOptions: { id: string; name: string }[];
   job?: Job | null;
   parentClaim?: Claim | null;
@@ -21,6 +22,7 @@ export function InvoicesPageClient({
   initialData,
   workOrders,
   jobNameById,
+  jobTypeById,
   statusOptions,
   job,
   parentClaim,
@@ -43,6 +45,7 @@ export function InvoicesPageClient({
         initialData={initialData}
         statusOptions={statusOptions}
         jobNameById={jobNameById}
+        jobTypeById={jobTypeById}
         job={job}
         parentClaim={parentClaim}
       />

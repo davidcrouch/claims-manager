@@ -1,8 +1,9 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { TasksListClient } from '@/components/tasks/TasksListClient';
-import {buildJobNameById, toJobOptions,
+import {buildJobNameById, buildJobTypeById, toJobOptions,
   mergeCurrentJobIntoNameById,
+  mergeCurrentJobIntoTypeById,
   mergeCurrentJobIntoOptions } from '@/components/shared/job-label';
 import type { Job, Claim, PaginatedResponse } from '@/types/api';
 
@@ -54,6 +55,10 @@ export default async function TasksPage({
     buildJobNameById(jobsRes?.data ?? []),
     job,
   );
+  const jobTypeById = mergeCurrentJobIntoTypeById(
+    buildJobTypeById(jobsRes?.data ?? []),
+    job,
+  );
   const jobs = mergeCurrentJobIntoOptions(
     toJobOptions(jobsRes?.data ?? []),
     job,
@@ -64,6 +69,7 @@ export default async function TasksPage({
       job={job}
       parentClaim={parentClaim}
       jobNameById={jobNameById}
+      jobTypeById={jobTypeById}
       jobs={jobs}
     />
   );

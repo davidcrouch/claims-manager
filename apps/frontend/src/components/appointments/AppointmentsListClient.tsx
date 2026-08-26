@@ -95,6 +95,14 @@ export function AppointmentsListClient({
     for (const j of jobs) map[j.id] = j.label;
     return map;
   }, [jobs]);
+  const jobTypeById = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const j of jobs) {
+      const type = j.jobType?.trim();
+      if (type) map[j.id] = type;
+    }
+    return map;
+  }, [jobs]);
 
   const filterJobs = useMemo(
     () =>
@@ -391,6 +399,7 @@ export function AppointmentsListClient({
           sortOrder={sortOrder}
           onSort={handleSort}
           jobNameById={jobNameById}
+          jobTypeById={jobTypeById}
           statusColumnFilter={{
             options: uniqueStatuses,
             selected: statusColumnSelected,

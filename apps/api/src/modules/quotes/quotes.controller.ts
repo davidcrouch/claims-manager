@@ -42,6 +42,12 @@ export class QuotesController {
     return this.quotesService.findFilterAssignees();
   }
 
+  @Get('filter-jobs')
+  @RequirePermission(P.procurement.read)
+  async findFilterJobs() {
+    return this.quotesService.findFilterJobs();
+  }
+
   @Get()
   @RequirePermission(P.procurement.read)
   async findAll(

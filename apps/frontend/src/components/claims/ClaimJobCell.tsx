@@ -31,16 +31,16 @@ export function ClaimJobCell({ jobs }: { jobs?: ClaimJobRef[] | null }) {
       <div className="inline-flex items-center gap-1.5">
         <Link
           href={`/jobs/${primary.id}`}
-          className="text-primary hover:underline"
+          className="inline-flex items-center gap-1.5"
           aria-label={
             extraCount > 0
-              ? `${primaryLabel} and ${extraCount} more job${extraCount === 1 ? '' : 's'}`
-              : `Open ${primaryLabel}`
+              ? `${primaryLabel}${primaryType ? ` ${primaryType}` : ''} and ${extraCount} more job${extraCount === 1 ? '' : 's'}`
+              : `Open ${primaryLabel}${primaryType ? ` ${primaryType}` : ''}`
           }
         >
-          {primaryLabel}
+          <span className="text-primary hover:underline">{primaryLabel}</span>
+          {primaryType ? <TypeBadge type={primaryType} /> : null}
         </Link>
-        {primaryType ? <TypeBadge type={primaryType} /> : null}
         {extraCount > 0 ? (
           <span className="text-xs font-medium text-slate-500">+{extraCount}</span>
         ) : null}

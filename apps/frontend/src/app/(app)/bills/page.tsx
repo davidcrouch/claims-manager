@@ -1,8 +1,9 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { BillsPageClient } from '@/components/bills/BillsPageClient';
-import {buildJobNameById, toJobOptions,
+import {buildJobNameById, buildJobTypeById, toJobOptions,
   mergeCurrentJobIntoNameById,
+  mergeCurrentJobIntoTypeById,
   mergeCurrentJobIntoOptions } from '@/components/shared/job-label';
 import type { Bill, Job, Claim, PaginatedResponse } from '@/types/api';
 
@@ -71,6 +72,7 @@ export default async function BillsPage({
     name: vendor.name?.trim() ? vendor.name : 'Unknown' }));
   const jobs = jobsRes?.data ?? [];
   const jobNameById = mergeCurrentJobIntoNameById(buildJobNameById(jobs), job);
+  const jobTypeById = mergeCurrentJobIntoTypeById(buildJobTypeById(jobs), job);
 
   return (
     <BillsPageClient
@@ -78,6 +80,7 @@ export default async function BillsPage({
       statusOptions={statusOptions}
       vendorOptions={vendorOptions}
       jobNameById={jobNameById}
+      jobTypeById={jobTypeById}
       jobs={mergeCurrentJobIntoOptions(toJobOptions(jobs), job)}
       job={job}
       parentClaim={parentClaim}

@@ -81,6 +81,7 @@ export interface BillsListClientProps {
   statusOptions: StatusOption[];
   vendorOptions: StatusOption[];
   jobNameById?: Record<string, string>;
+  jobTypeById?: Record<string, string>;
   job?: Job | null;
   parentClaim?: Claim | null;
 }
@@ -92,6 +93,7 @@ export function BillsListClient({
   statusOptions,
   vendorOptions,
   jobNameById,
+  jobTypeById,
   job,
   parentClaim }: BillsListClientProps) {
   const router = useRouter();
@@ -471,7 +473,7 @@ export function BillsListClient({
                       )}
                       {isVisible('job') && (
                         <td className="px-4 py-3 text-slate-600">
-                          <JobCellLink jobId={bill.jobId} jobNameById={jobNameById} />
+                          <JobCellLink jobId={bill.jobId} jobNameById={jobNameById} jobTypeById={jobTypeById} />
                         </td>
                       )}
                       {isVisible('status') && (

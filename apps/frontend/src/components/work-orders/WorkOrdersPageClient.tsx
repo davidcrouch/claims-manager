@@ -15,6 +15,7 @@ export interface WorkOrdersPageClientProps {
   statusOptions: StatusOption[];
   workOrderTypes: StatusOption[];
   jobNameById?: Record<string, string>;
+  jobTypeById?: Record<string, string>;
   jobs: JobOption[];
   job?: Job | null;
   parentClaim?: Claim | null;
@@ -25,6 +26,7 @@ export function WorkOrdersPageClient({
   statusOptions,
   workOrderTypes,
   jobNameById,
+  jobTypeById,
   jobs,
   job,
   parentClaim,
@@ -48,6 +50,7 @@ export function WorkOrdersPageClient({
         statusOptions={statusOptions}
         workOrderTypes={workOrderTypes}
         jobNameById={jobNameById}
+        jobTypeById={jobTypeById}
         job={job}
         parentClaim={parentClaim}
       />

@@ -72,6 +72,7 @@ export interface AssessmentsPageClientProps {
   job?: Job | null;
   parentClaim?: Claim | null;
   jobNameById?: Record<string, string>;
+  jobTypeById?: Record<string, string>;
   jobs?: JobOption[];
 }
 
@@ -82,6 +83,7 @@ export function AssessmentsPageClient({
   job,
   parentClaim,
   jobNameById,
+  jobTypeById,
   jobs = [] }: AssessmentsPageClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -418,7 +420,7 @@ export function AssessmentsPageClient({
                     )}
                     {isVisible('job') && (
                       <td className="px-4 py-3 text-slate-600">
-                        <JobCellLink jobId={assessment.jobId} jobNameById={jobNameById} />
+                        <JobCellLink jobId={assessment.jobId} jobNameById={jobNameById} jobTypeById={jobTypeById} />
                       </td>
                     )}
                     {isVisible('status') && (

@@ -41,18 +41,22 @@ export class JobContactsRepository {
       name: string | null;
       externalReference: string | null;
       externalJobId: string | null;
+      jobTypeName: string | null;
     }>
   > {
     const db = params.tx ?? this.db;
+    const typeLookup = aliasedTable(lookupValues, 'job_type_lookup');
     const rows = await db
       .select({
         id: jobs.id,
         name: jobs.name,
         externalReference: jobs.externalReference,
         externalJobId: jobs.externalJobId,
+        jobTypeName: typeLookup.name,
       })
       .from(jobContacts)
       .innerJoin(jobs, eq(jobs.id, jobContacts.jobId))
+      .leftJoin(typeLookup, eq(jobs.jobTypeLookupId, typeLookup.id))
       .where(
         and(
           eq(jobContacts.tenantId, params.tenantId),
@@ -60,7 +64,7 @@ export class JobContactsRepository {
           isNull(jobs.deletedAt),
         ),
       )
-      .groupBy(jobs.id, jobs.name, jobs.externalReference, jobs.externalJobId)
+      .groupBy(jobs.id, jobs.name, jobs.externalReference, jobs.externalJobId, typeLookup.name)
       .orderBy(jobs.name);
 
     return rows;
@@ -78,11 +82,13 @@ export class JobContactsRepository {
         name: string | null;
         externalReference: string | null;
         externalJobId: string | null;
+        jobTypeName: string | null;
       }>
     >
   > {
     if (params.contactIds.length === 0) return {};
     const db = params.tx ?? this.db;
+    const typeLookup = aliasedTable(lookupValues, 'job_type_lookup');
     const rows = await db
       .select({
         contactId: jobContacts.contactId,
@@ -90,9 +96,11 @@ export class JobContactsRepository {
         name: jobs.name,
         externalReference: jobs.externalReference,
         externalJobId: jobs.externalJobId,
+        jobTypeName: typeLookup.name,
       })
       .from(jobContacts)
       .innerJoin(jobs, eq(jobs.id, jobContacts.jobId))
+      .leftJoin(typeLookup, eq(jobs.jobTypeLookupId, typeLookup.id))
       .where(
         and(
           eq(jobContacts.tenantId, params.tenantId),
@@ -109,6 +117,7 @@ export class JobContactsRepository {
         name: string | null;
         externalReference: string | null;
         externalJobId: string | null;
+        jobTypeName: string | null;
       }>
     > = {};
     for (const row of rows) {
@@ -118,6 +127,7 @@ export class JobContactsRepository {
         name: row.name,
         externalReference: row.externalReference,
         externalJobId: row.externalJobId,
+        jobTypeName: row.jobTypeName,
       });
     }
     return out;

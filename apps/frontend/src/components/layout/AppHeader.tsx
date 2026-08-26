@@ -6,7 +6,11 @@ import {
   SidebarRail,
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
-import { BreadcrumbConsumer, HeaderActionsConsumer } from './BreadcrumbProvider';
+import {
+  BreadcrumbConsumer,
+  HeaderActionsConsumer,
+  HeaderStatusConsumer,
+} from './BreadcrumbProvider';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { UserAvatarMenu } from './UserAvatarMenu';
 import type { AppSidebarUser } from './AppSidebar';
@@ -29,6 +33,7 @@ export function AppHeader({
       data-slot="app-header"
       className="sticky top-0 z-20 flex min-h-20 items-stretch gap-4 border-b border-sidebar-border px-4 py-2 text-sidebar-foreground"
     >
+      <HeaderStatusConsumer />
       <SidebarTrigger className="self-center text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground" />
       <SidebarRail />
       <div className="flex min-w-0 flex-1 items-stretch gap-4">
