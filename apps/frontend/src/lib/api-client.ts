@@ -17,6 +17,7 @@ export { isTransientNetworkError };
 import type {
   Claim,
   Job,
+  JobRelatedCounts,
   Quote,
   PurchaseOrder,
   Invoice,
@@ -398,6 +399,10 @@ export function createApiClient(options?: ApiClientOptions) {
 
     getJob(id: string): Promise<Job | null> {
       return fetchApi<Job | null>(`/jobs/${id}`);
+    },
+
+    getJobRelatedCounts(jobId: string): Promise<JobRelatedCounts> {
+      return fetchApi<JobRelatedCounts>(`/jobs/${jobId}/related-counts`);
     },
 
     getJobQuotes(jobId: string): Promise<Quote[]> {

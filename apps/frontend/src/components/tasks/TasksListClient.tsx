@@ -22,6 +22,7 @@ import { formatDate,
   buildColumnFilterOptions,
   TableEmptyRow,
   statusValuesForTaskListTab,
+  parseTaskListTab,
   type TaskListTab, withUniqueNamedFilterOptions } from '@/components/shared/list-filters';
 import { mergeStatusParamWithTab } from '@/components/shared/archive-list';
 import { TaskFormDrawer } from '@/components/forms/TaskFormDrawer';
@@ -149,11 +150,9 @@ export function TasksListClient({
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [tab, setTab] = useState<TaskListTab>(() => {
-    const raw = searchParams.get('tab');
-    if (raw === 'completed' || raw === 'all' || raw === 'open') return raw;
-    return 'open';
-  });
+  const [tab, setTab] = useState<TaskListTab>(() =>
+    parseTaskListTab(searchParams.get('tab')),
+  );
   const [page, setPage] = useState(() => {
     const p = parseInt(searchParams.get('page') ?? '1', 10);
     return Number.isFinite(p) && p > 0 ? p : 1;
@@ -351,31 +350,19 @@ export function TasksListClient({
     if (assignedToUserId) params.set('assignedToUserId', assignedToUserId);
     else params.delete('assignedToUserId');
     const next = params.toString();
-    replaceListQueryIfNeeded({
-      router,
-      pathname: '/tasks',
-      currentQuery: searchParams.toString(),
-      nextQuery: next,
-    });
-  }, [
-    debouncedSearch,
-    sortParam,
-    tab,
-    page,
-    columnStatusParam,
-    priorityParam,
-    namesParam,
-    taskTypesParam,
-    assignedToUserIdsParam,
-    jobId,
-    jobIdsParam,
-    overdue,
-    assignedToUserId,
-    searchParams,
-    router,
-  ]);
+    // router.replace aborts in-flight server actions — wait for the URL to
+    // settle before fetching, same as the other entity list pages.
+    if (
+      !replaceListQueryIfNeeded({
+        router,
+        pathname: '/tasks',
+        currentQuery: searchParams.toString(),
+        nextQuery: next,
+      })
+    ) {
+      return;
+    }
 
-  useEffect(() => {
     const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
     const priorityKey = priorityParam === null ? '__none__' : (priorityParam ?? '');
     const namesKey = namesParam === null ? '__none__' : (namesParam ?? '');
@@ -433,16 +420,20 @@ export function TasksListClient({
     sortParam,
     tab,
     page,
+    columnStatusParam,
     statusParam,
     priorityParam,
     namesParam,
     taskTypesParam,
     assignedToUserIdsParam,
+    jobId,
+    jobIdsParam,
     fetchJobId,
     fetchJobIds,
     overdue,
     assignedToUserId,
     searchParams,
+    router,
     beginFetch,
     abortFetch,
   ]);

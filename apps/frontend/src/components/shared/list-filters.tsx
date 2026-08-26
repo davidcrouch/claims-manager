@@ -462,6 +462,16 @@ export function formatDate(value?: string | null): string {
 
 export type TaskListTab = 'open' | 'completed' | 'all';
 
+const VALID_TASK_TABS = new Set<TaskListTab>(['open', 'completed', 'all']);
+
+/** Parse `?tab=` for Open / Completed / All on the tasks list. */
+export function parseTaskListTab(param: string | null | undefined): TaskListTab {
+  if (param && VALID_TASK_TABS.has(param as TaskListTab)) {
+    return param as TaskListTab;
+  }
+  return 'open';
+}
+
 /**
  * Status string values implied by Open / Completed / All task list tabs.
  * Open includes in-progress variants used by synced/local tasks; Completed is

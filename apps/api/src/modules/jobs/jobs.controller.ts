@@ -56,6 +56,12 @@ export class JobsController {
     return this.jobsService.findOne({ id });
   }
 
+  @Get(':id/related-counts')
+  @RequirePermission(P.jobs.read)
+  async getRelatedCounts(@Param('id', ParseUUIDPipe) id: string) {
+    return this.jobsService.getRelatedCounts({ id });
+  }
+
   @Post()
   @RequirePermission(P.jobs.create)
   async create(

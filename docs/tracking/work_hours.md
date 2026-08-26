@@ -1005,3 +1005,13 @@
   The dashboard and related screens prefer the internal job number over insurer or partner references.
   Save status on job records appears under the header icons so title and action buttons stay in place.
   Catalogue drag-and-drop onto line items is more reliable.
+
+- `2026-08-26` `pending` **2 h**
+  `15 files | +699 −50 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  Lay summary: Opening a job now shows how many related records sit behind each menu item, the schedule labels jobs more clearly, and the tasks list stays reliable when filters change.
+  **Job-aware navigation counts, clearer schedule job labels, and a more reliable tasks list.**
+  While a job is open, the side menu shows a count next to each related area that already has records.
+  The schedule includes jobs by default and labels them with the internal job number and job type.
+  The tasks list no longer drops or reloads incorrectly when staff change tabs or filters.
+  Staff can see at a glance what is already on a job before opening each list.
+  These updates apply on the website after the next release.

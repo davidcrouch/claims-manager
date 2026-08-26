@@ -1,10 +1,38 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, isNull, desc, asc, sql, gte, ilike, or, inArray, notInArray, aliasedTable, getTableColumns } from 'drizzle-orm';
+import { eq, and, isNull, desc, asc, sql, gte, ilike, or, inArray, notInArray, ne, aliasedTable, getTableColumns } from 'drizzle-orm';
 import { normalizeListUserIds, parseCsvFilterValues } from '../../common/list-job-filter';
 import { addressSearchText, parseSearchTokens } from '../../common/address-search';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
-import { jobs, lookupValues, vendors, integrationConnections, users } from '../schema';
+import {
+  jobs,
+  lookupValues,
+  vendors,
+  integrationConnections,
+  users,
+  quotes,
+  invoices,
+  workOrders,
+  rfqs,
+  proposals,
+  purchaseOrders,
+  bills,
+  tasks,
+  appointments,
+  messages,
+  assessments,
+  journals,
+  journalEntityLinks,
+  jobContacts,
+  contacts,
+  documents,
+} from '../schema';
+import {
+  jobRelatedCountValue,
+  type JobRelatedCounts,
+} from '../../common/job-related-counts';
+
+export type { JobRelatedCounts };
 
 const assigneeJoinOn = sql`${jobs.assignedToUserId} = ${users.id}::text`;
 
@@ -603,6 +631,216 @@ export class JobsRepository {
         ),
       );
     return r?.count ?? 0;
+  }
+
+  async countRelatedByJob(params: {
+    tenantId: string;
+    jobId: string;
+  }): Promise<JobRelatedCounts> {
+    const { tenantId, jobId } = params;
+
+    const [
+      journalsRow,
+      assessmentsRow,
+      quotesRow,
+      workOrdersRow,
+      invoicesRow,
+      rfqsRow,
+      proposalsRow,
+      purchaseOrdersRow,
+      billsRow,
+      tasksRow,
+      scheduleResult,
+      messagesRow,
+      appointmentsRow,
+      contactsRow,
+      documentsRow,
+    ] = await Promise.all([
+      this.db
+        .select({ count: sql<number>`count(distinct ${journals.id})::int` })
+        .from(journals)
+        .innerJoin(journalEntityLinks, eq(journalEntityLinks.journalId, journals.id))
+        .where(
+          and(
+            eq(journals.tenantId, tenantId),
+            isNull(journals.deletedAt),
+            ne(journals.status, 'deleted'),
+            eq(journalEntityLinks.tenantId, tenantId),
+            eq(journalEntityLinks.entityType, 'Job'),
+            eq(journalEntityLinks.entityId, jobId),
+          ),
+        )
+        .then((rows) => rows[0]),
+      this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(assessments)
+        .where(
+          and(
+            eq(assessments.tenantId, tenantId),
+            eq(assessments.jobId, jobId),
+            isNull(assessments.deletedAt),
+          ),
+        )
+        .then((rows) => rows[0]),
+      this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(quotes)
+        .where(
+          and(
+            eq(quotes.tenantId, tenantId),
+            eq(quotes.jobId, jobId),
+            isNull(quotes.deletedAt),
+          ),
+        )
+        .then((rows) => rows[0]),
+      this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(workOrders)
+        .where(
+          and(
+            eq(workOrders.tenantId, tenantId),
+            eq(workOrders.jobId, jobId),
+            isNull(workOrders.deletedAt),
+          ),
+        )
+        .then((rows) => rows[0]),
+      this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(invoices)
+        .where(
+          and(
+            eq(invoices.tenantId, tenantId),
+            eq(invoices.jobId, jobId),
+            eq(invoices.isDeleted, false),
+          ),
+        )
+        .then((rows) => rows[0]),
+      this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(rfqs)
+        .where(
+          and(
+            eq(rfqs.tenantId, tenantId),
+            eq(rfqs.jobId, jobId),
+            isNull(rfqs.deletedAt),
+          ),
+        )
+        .then((rows) => rows[0]),
+      this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(proposals)
+        .where(
+          and(
+            eq(proposals.tenantId, tenantId),
+            eq(proposals.jobId, jobId),
+            isNull(proposals.deletedAt),
+          ),
+        )
+        .then((rows) => rows[0]),
+      this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(purchaseOrders)
+        .where(
+          and(
+            eq(purchaseOrders.tenantId, tenantId),
+            eq(purchaseOrders.jobId, jobId),
+            isNull(purchaseOrders.deletedAt),
+          ),
+        )
+        .then((rows) => rows[0]),
+      this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(bills)
+        .where(
+          and(
+            eq(bills.tenantId, tenantId),
+            eq(bills.jobId, jobId),
+            eq(bills.isDeleted, false),
+          ),
+        )
+        .then((rows) => rows[0]),
+      this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(tasks)
+        .where(and(eq(tasks.tenantId, tenantId), eq(tasks.jobId, jobId)))
+        .then((rows) => rows[0]),
+      this.db.execute<{ count: number }>(sql`
+        SELECT count(*)::int AS count
+        FROM schedule_events
+        WHERE tenant_id = ${tenantId}::uuid
+          AND job_id = ${jobId}::uuid
+      `),
+      this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.tenantId, tenantId),
+            or(eq(messages.fromJobId, jobId), eq(messages.toJobId, jobId)),
+          ),
+        )
+        .then((rows) => rows[0]),
+      this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(appointments)
+        .where(
+          and(eq(appointments.tenantId, tenantId), eq(appointments.jobId, jobId)),
+        )
+        .then((rows) => rows[0]),
+      this.db
+        .select({ count: sql<number>`count(distinct ${contacts.id})::int` })
+        .from(contacts)
+        .innerJoin(jobContacts, eq(jobContacts.contactId, contacts.id))
+        .where(
+          and(
+            eq(contacts.tenantId, tenantId),
+            eq(jobContacts.tenantId, tenantId),
+            eq(jobContacts.jobId, jobId),
+          ),
+        )
+        .then((rows) => rows[0]),
+      this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(documents)
+        .where(
+          and(
+            eq(documents.tenantId, tenantId),
+            isNull(documents.archivedAt),
+            sql`(
+              ${documents.relatedRecordId} = ${jobId}
+              OR ${documents.filesystemId} IN (
+                SELECT id FROM filesystem
+                WHERE tenant_id = ${tenantId}::uuid
+                  AND kind = 'project'
+                  AND job_id = ${jobId}::uuid
+                  AND archived_at IS NULL
+              )
+            )`,
+          ),
+        )
+        .then((rows) => rows[0]),
+    ]);
+
+    const scheduleRows =
+      (scheduleResult as unknown as { rows?: Array<{ count: number }> }).rows ?? [];
+
+    return {
+      journals: jobRelatedCountValue(journalsRow),
+      assessments: jobRelatedCountValue(assessmentsRow),
+      quotes: jobRelatedCountValue(quotesRow),
+      workOrders: jobRelatedCountValue(workOrdersRow),
+      invoices: jobRelatedCountValue(invoicesRow),
+      rfqs: jobRelatedCountValue(rfqsRow),
+      proposals: jobRelatedCountValue(proposalsRow),
+      purchaseOrders: jobRelatedCountValue(purchaseOrdersRow),
+      bills: jobRelatedCountValue(billsRow),
+      tasks: jobRelatedCountValue(tasksRow),
+      schedule: jobRelatedCountValue(scheduleRows[0]),
+      messages: jobRelatedCountValue(messagesRow),
+      appointments: jobRelatedCountValue(appointmentsRow),
+      contacts: jobRelatedCountValue(contactsRow),
+      documents: jobRelatedCountValue(documentsRow),
+    };
   }
 
   async countByStatusGrouped(params: {

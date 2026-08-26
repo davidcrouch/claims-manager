@@ -11,6 +11,7 @@ export {
   type JobInsert,
   type JobViewRow,
   type ClaimJobSummary,
+  type JobRelatedCounts,
 } from './jobs.repository';
 export {
   ContactsRepository,

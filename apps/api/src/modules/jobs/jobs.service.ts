@@ -141,6 +141,14 @@ export class JobsService {
     return this.shapeJobResponse(job);
   }
 
+  async getRelatedCounts(params: { id: string }) {
+    const tenantId = this.tenantContext.getTenantId();
+    const job = await this.jobsRepo.findOne({ id: params.id, tenantId });
+    if (!job) throw new NotFoundException('Job not found');
+    this.logger.debug(`JobsService.getRelatedCounts — jobId=${params.id}`);
+    return this.jobsRepo.countRelatedByJob({ tenantId, jobId: params.id });
+  }
+
   private shapeJobResponse(row: JobViewRow) {
     const { statusName, statusExternalReference, jobTypeName, jobTypeExternalReference, vendorName, vendorExternalReference, connectionProviderCode, assigneeName, ...rest } = row;
     return {

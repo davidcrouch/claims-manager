@@ -68,11 +68,12 @@ const FILTER_ROWS: ScheduleEventType[][] = [
   ['invoice', 'journal', 'assessment', 'rfq', 'proposal', 'purchase_order', 'bill'],
 ];
 
-/** Enabled by default: tasks, appointments, claims, quotes. */
+/** Enabled by default: tasks, appointments, claims, jobs, quotes. */
 const DEFAULT_ENABLED_TYPES: ScheduleEventType[] = [
   'task',
   'appointment',
   'claim',
+  'job',
   'quote',
 ];
 

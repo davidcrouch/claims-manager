@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
@@ -60,6 +60,8 @@ import {
 import { hasFeature } from '@/lib/features';
 import { hasPermission } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
+import { useApiClient } from '@/hooks/useApiClient';
+import type { JobRelatedCounts } from '@/types/api';
 
 export interface AppSidebarUser {
   given_name?: string | null;
@@ -77,6 +79,9 @@ export interface AppSidebarProps {
   onMenuOverrideChange: (view: 'main' | 'admin' | null) => void;
 }
 
+const JOB_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 interface NavItem {
   title: string;
   href: string;
@@ -85,6 +90,8 @@ interface NavItem {
   permission?: string;
   /** When a job is selected, append ?jobId= to this link. */
   jobFilterable?: boolean;
+  /** Job-scoped count key shown as a small badge when the count is > 0. */
+  countKey?: keyof JobRelatedCounts;
 }
 
 interface NavGroup {
@@ -106,33 +113,33 @@ const navGroups: NavGroup[] = [
     items: [
       { title: 'Claims', href: '/claims', icon: FileText },
       { title: 'Jobs', href: '/jobs', icon: Briefcase },
-      { title: 'Journals', href: '/journals', icon: BookOpen, jobFilterable: true },
-      { title: 'Assessments', href: '/assessments', icon: ClipboardList, jobFilterable: true },
-      { title: 'Estimates', href: '/quotes', icon: FileSpreadsheet, jobFilterable: true },
-      { title: 'Work Orders', href: '/work-orders', icon: ClipboardCheck, jobFilterable: true },
-      { title: 'Invoices', href: '/invoices', icon: Receipt, jobFilterable: true },
+      { title: 'Journals', href: '/journals', icon: BookOpen, jobFilterable: true, countKey: 'journals' },
+      { title: 'Assessments', href: '/assessments', icon: ClipboardList, jobFilterable: true, countKey: 'assessments' },
+      { title: 'Estimates', href: '/quotes', icon: FileSpreadsheet, jobFilterable: true, countKey: 'quotes' },
+      { title: 'Work Orders', href: '/work-orders', icon: ClipboardCheck, jobFilterable: true, countKey: 'workOrders' },
+      { title: 'Invoices', href: '/invoices', icon: Receipt, jobFilterable: true, countKey: 'invoices' },
     ],
   },
   {
     label: 'VENDORS',
     defaultOpen: true,
     items: [
-      { title: 'Request for Quotations', href: '/rfqs', icon: FileQuestion, jobFilterable: true },
-      { title: 'Proposals', href: '/proposals', icon: FileInput, jobFilterable: true },
-      { title: 'Purchase Orders', href: '/purchase-orders', icon: ShoppingCart, jobFilterable: true },
-      { title: 'Bills', href: '/bills', icon: ReceiptText, jobFilterable: true },
+      { title: 'Request for Quotations', href: '/rfqs', icon: FileQuestion, jobFilterable: true, countKey: 'rfqs' },
+      { title: 'Proposals', href: '/proposals', icon: FileInput, jobFilterable: true, countKey: 'proposals' },
+      { title: 'Purchase Orders', href: '/purchase-orders', icon: ShoppingCart, jobFilterable: true, countKey: 'purchaseOrders' },
+      { title: 'Bills', href: '/bills', icon: ReceiptText, jobFilterable: true, countKey: 'bills' },
     ],
   },
   {
     label: 'OPERATIONS',
     defaultOpen: true,
     items: [
-      { title: 'Tasks', href: '/tasks', icon: CheckSquare, jobFilterable: true },
-      { title: 'Schedule', href: '/schedule', icon: Calendar, jobFilterable: true },
-      { title: 'Communications', href: '/messages', icon: MessageSquare, jobFilterable: true },
-      { title: 'Appointments', href: '/appointments', icon: CalendarCheck, jobFilterable: true },
-      { title: 'Contacts', href: '/contacts', icon: Users, jobFilterable: true },
-      { title: 'Documents', href: '/documents', icon: FolderOpen, jobFilterable: true },
+      { title: 'Tasks', href: '/tasks', icon: CheckSquare, jobFilterable: true, countKey: 'tasks' },
+      { title: 'Schedule', href: '/schedule', icon: Calendar, jobFilterable: true, countKey: 'schedule' },
+      { title: 'Communications', href: '/messages', icon: MessageSquare, jobFilterable: true, countKey: 'messages' },
+      { title: 'Appointments', href: '/appointments', icon: CalendarCheck, jobFilterable: true, countKey: 'appointments' },
+      { title: 'Contacts', href: '/contacts', icon: Users, jobFilterable: true, countKey: 'contacts' },
+      { title: 'Documents', href: '/documents', icon: FolderOpen, jobFilterable: true, countKey: 'documents' },
     ],
   },
   {
@@ -231,14 +238,40 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const api = useApiClient();
+  const [relatedCounts, setRelatedCounts] = useState<JobRelatedCounts | null>(null);
 
   const jobMatch = pathname.match(/^\/jobs\/([^/?]+)/);
-  const jobId = jobMatch?.[1] ?? searchParams.get('jobId');
+  const rawJobId = jobMatch?.[1] ?? searchParams.get('jobId');
+  const jobId = rawJobId && JOB_ID_RE.test(rawJobId) ? rawJobId : null;
   const menuView = menuOverride ?? (isAdminPath(pathname) ? 'admin' : 'main');
 
   useEffect(() => {
     onMenuOverrideChange(null);
   }, [pathname, onMenuOverrideChange]);
+
+  useEffect(() => {
+    if (!jobId) {
+      setRelatedCounts(null);
+      return;
+    }
+    let cancelled = false;
+    api
+      .getJobRelatedCounts(jobId)
+      .then((counts) => {
+        if (!cancelled) setRelatedCounts(counts);
+      })
+      .catch((err: unknown) => {
+        console.error(
+          'frontend:AppSidebar.getJobRelatedCounts - failed:',
+          err instanceof Error ? err.message : err,
+        );
+        if (!cancelled) setRelatedCounts(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, jobId, pathname]);
 
   const dashboardGroup = navGroups[0];
   const middleGroups = navGroups.filter((g) => g.label !== null);
@@ -261,13 +294,21 @@ export function AppSidebar({
       <SidebarMenu>
         {visibleItems.map((item) => {
           const href = resolveHref(item, jobId);
+          const count = item.countKey ? relatedCounts?.[item.countKey] : undefined;
           return (
             <SidebarMenuItem key={item.href}>
               <SidebarMenuButton
                 render={
                   <Link href={href}>
                     <item.icon className="size-4" />
-                    <span>{item.title}</span>
+                    <span className="inline-flex items-center gap-1.5">
+                      {item.title}
+                      {count != null && count > 0 ? (
+                        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-semibold leading-none text-white tabular-nums">
+                          {count}
+                        </span>
+                      ) : null}
+                    </span>
                   </Link>
                 }
                 isActive={isItemActive(item)}
