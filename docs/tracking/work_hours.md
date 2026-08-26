@@ -1006,7 +1006,7 @@
   Save status on job records appears under the header icons so title and action buttons stay in place.
   Catalogue drag-and-drop onto line items is more reliable.
 
-- `2026-08-26` `pending` **2 h**
+- `2026-08-26` `4737f13` **2 h**
   `15 files | +699 −50 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Opening a job now shows how many related records sit behind each menu item, the schedule labels jobs more clearly, and the tasks list stays reliable when filters change.
   **Job-aware navigation counts, clearer schedule job labels, and a more reliable tasks list.**
