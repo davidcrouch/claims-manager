@@ -18,8 +18,8 @@ import {
   ValueFilterMenu,
   SortableColumnHeader,
   TableEmptyRow,
-  statusIdsForArchiveListTab,
-  mergeStatusParamWithTab } from '@/components/shared/list-filters';
+} from '@/components/shared/list-filters';
+import { statusIdsForArchiveListTab, mergeStatusParamWithTab } from '@/components/shared/archive-list';
 import { jobDisplayName } from '@/components/shared/job-label';
 import { JobCellLink } from '@/components/shared/JobCellLink';
 import { buildServerJobFilterOptions,

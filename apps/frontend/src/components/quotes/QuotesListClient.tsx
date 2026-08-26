@@ -10,10 +10,9 @@ import { type StatusOption,
   commitColumnFilterSelection,
   columnFilterToIdsParam,
   columnFilterToAssigneeIdsParam,
-  statusIdsForArchiveListTab,
-  mergeStatusParamWithTab,
   buildColumnFilterOptions,
   ValueFilterMenu, withUniqueNamedFilterOptions } from '@/components/shared/list-filters';
+import { statusIdsForArchiveListTab, mergeStatusParamWithTab } from '@/components/shared/archive-list';
 import { buildServerJobFilterOptions,
   resolveServerJobFilterSelection,
   selectedJobFilterLabels,

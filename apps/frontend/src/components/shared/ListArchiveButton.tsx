@@ -13,7 +13,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { archiveEntityAction, type ArchiveEntityType } from '@/app/(app)/mutations-archive';
-import { isArchivedStatus } from '@/components/shared/list-filters';
+import { isArchivedStatus } from '@/components/shared/archive-list';
 
 /** Minimal-width header cell for list archive actions. */
 export const LIST_ARCHIVE_TH_CLASS = 'w-px p-0 py-2.5 text-center';

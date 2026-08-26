@@ -17,12 +17,11 @@ import {
   formatDate,
   commitColumnFilterSelection,
   columnFilterToIdsParam,
-  statusIdsForArchiveListTab,
-  mergeStatusParamWithTab,
   ValueFilterMenu,
   SortableColumnHeader,
   TableEmptyRow,
 } from '@/components/shared/list-filters';
+import { statusIdsForArchiveListTab, mergeStatusParamWithTab } from '@/components/shared/archive-list';
 import type { Report } from '@/types/api';
 
 type ListTab = 'active' | 'archived' | 'all';

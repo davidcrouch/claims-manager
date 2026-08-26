@@ -16,9 +16,8 @@ import {
   ValueFilterMenu,
   SortableColumnHeader,
   TableEmptyRow,
-  statusIdsForArchiveListTab,
-  mergeStatusParamWithTab,
 } from '@/components/shared/list-filters';
+import { statusIdsForArchiveListTab, mergeStatusParamWithTab } from '@/components/shared/archive-list';
 import { TablePagination } from '@/components/shared/table-pagination';
 import { JobCellLink } from '@/components/shared/JobCellLink';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';

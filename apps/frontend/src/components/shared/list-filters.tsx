@@ -27,25 +27,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import {
-  ARCHIVED_STATUS_NAMES,
-  isArchivedStatus,
-  type ArchiveListTab,
-  parseArchiveListTab,
-  statusIdsForArchiveListTab,
-  statusValuesForArchiveListTab,
-  mergeStatusParamWithTab,
-} from '@/components/shared/archive-list';
-
-export {
-  ARCHIVED_STATUS_NAMES,
-  isArchivedStatus,
-  type ArchiveListTab,
-  parseArchiveListTab,
-  statusIdsForArchiveListTab,
-  statusValuesForArchiveListTab,
-  mergeStatusParamWithTab,
-};
 
 export interface StatusOption {
   id: string;

@@ -17,10 +17,12 @@ import {
   COLUMN_FILTER_BLANK,
   columnFilterKey,
   formatDate,
+} from '@/components/shared/list-filters';
+import {
   parseArchiveListTab,
   statusValuesForArchiveListTab,
   type ArchiveListTab,
-} from '@/components/shared/list-filters';
+} from '@/components/shared/archive-list';
 import { TablePagination } from '@/components/shared/table-pagination';
 import {
   ColumnSettingsHeaderCell,

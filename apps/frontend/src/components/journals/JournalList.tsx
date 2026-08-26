@@ -18,9 +18,8 @@ import {
   TableEmptyRow,
   commitColumnFilterSelection,
   columnFilterToValuesParam,
-  statusValuesForArchiveListTab,
-  mergeStatusParamWithTab,
 } from '@/components/shared/list-filters';
+import { statusValuesForArchiveListTab, mergeStatusParamWithTab } from '@/components/shared/archive-list';
 import {
   ColumnSettingsHeaderCell,
   useColumnVisibility,

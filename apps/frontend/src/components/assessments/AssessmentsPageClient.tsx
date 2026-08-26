@@ -12,11 +12,14 @@ import {
   SortableColumnHeader,
   commitColumnFilterSelection,
   columnFilterToValuesParam,
+  TableEmptyRow,
+} from '@/components/shared/list-filters';
+import {
   statusValuesForArchiveListTab,
   mergeStatusParamWithTab,
   parseArchiveListTab,
   type ArchiveListTab,
-  TableEmptyRow } from '@/components/shared/list-filters';
+} from '@/components/shared/archive-list';
 import { buildServerJobFilterOptions,
   resolveServerJobFilterSelection,
   selectedJobFilterLabels,

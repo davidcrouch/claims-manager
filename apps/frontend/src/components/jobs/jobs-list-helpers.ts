@@ -1,7 +1,5 @@
-import {
-  COLUMN_FILTER_BLANK,
-  type ArchiveListTab,
-} from '@/components/shared/list-filters';
+import { COLUMN_FILTER_BLANK } from '@/components/shared/list-filters';
+import type { ArchiveListTab } from '@/components/shared/archive-list';
 
 const ARCHIVED_STATUS_NAMES = new Set(['archived', 'closed']);
 

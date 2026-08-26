@@ -22,8 +22,8 @@ import { formatDate,
   buildColumnFilterOptions,
   TableEmptyRow,
   statusValuesForTaskListTab,
-  mergeStatusParamWithTab,
   type TaskListTab, withUniqueNamedFilterOptions } from '@/components/shared/list-filters';
+import { mergeStatusParamWithTab } from '@/components/shared/archive-list';
 import { TaskFormDrawer } from '@/components/forms/TaskFormDrawer';
 import { TablePagination } from '@/components/shared/table-pagination';
 import {

@@ -18,12 +18,11 @@ import { type StatusOption,
   columnFilterToIdsParam,
   columnFilterToValuesParam,
   columnFilterToAssigneeIdsParam,
-  statusIdsForArchiveListTab,
-  mergeStatusParamWithTab,
   buildColumnFilterOptions,
   ValueFilterMenu,
   SortableColumnHeader,
   TableEmptyRow, withUniqueNamedFilterOptions } from '@/components/shared/list-filters';
+import { statusIdsForArchiveListTab, mergeStatusParamWithTab } from '@/components/shared/archive-list';
 import { TablePagination } from '@/components/shared/table-pagination';
 import {
   ColumnSettingsHeaderCell,

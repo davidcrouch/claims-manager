@@ -27,12 +27,14 @@ import {
   SortableColumnHeader,
   commitColumnFilterSelection,
   columnFilterToIdsParam,
+  TableEmptyRow,
+} from '@/components/shared/list-filters';
+import {
   statusIdsForArchiveListTab,
   mergeStatusParamWithTab,
   parseArchiveListTab,
   type ArchiveListTab,
-  TableEmptyRow,
-} from '@/components/shared/list-filters';
+} from '@/components/shared/archive-list';
 import {
   ColumnSettingsHeaderCell,
   useColumnVisibility,

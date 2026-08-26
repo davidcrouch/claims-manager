@@ -23,7 +23,7 @@ import {
   BottomFormDrawerError,
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
-import { isArchivedStatus } from '@/components/shared/list-filters';
+import { isArchivedStatus } from '@/components/shared/archive-list';
 import { createInvoiceAction } from '@/app/(app)/mutations';
 import {
   CreateSubmitOverlay,

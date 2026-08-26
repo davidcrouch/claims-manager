@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { archiveEntityAction, type ArchiveEntityType } from '@/app/(app)/mutations-archive';
-import { isArchivedStatus } from '@/components/shared/list-filters';
+import { isArchivedStatus } from '@/components/shared/archive-list';
 
 const ENTITY_LABELS: Record<ArchiveEntityType, string> = {
   job: 'job',
