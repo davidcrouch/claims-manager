@@ -996,7 +996,7 @@
   Updated the claims page to use those helpers instead of client-only code.
   Staging can load the full claims list on refresh and direct navigation again.
 
-- `2026-08-26` `PENDING` **4 h**
+- `2026-08-26` `456d168` **4 h**
   `62 files | +749 −111 | Tier 2 standard | Moderate orchestration`
   Lay summary: Job lists now show the job type next to the job number, screens prefer the internal job number, and save status no longer crowds the header.
   **Clearer job labels on lists, and a save status that no longer crowds the header.**
