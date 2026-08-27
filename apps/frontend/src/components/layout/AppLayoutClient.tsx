@@ -3,6 +3,7 @@
 import { BreadcrumbProvider } from './BreadcrumbProvider';
 import { AppShell } from './AppShell';
 import { ApiConnectionMonitor } from './ApiConnectionMonitor';
+import { PermissionsProvider } from '@/components/providers/PermissionsProvider';
 import type { AppSidebarUser } from './AppSidebar';
 
 export interface AppLayoutClientProps {
@@ -23,14 +24,16 @@ export function AppLayoutClient({
   return (
     <BreadcrumbProvider>
       <ApiConnectionMonitor />
-      <AppShell
-        user={user}
-        features={features}
-        permissions={permissions}
-        orgName={orgName}
-      >
-        {children}
-      </AppShell>
+      <PermissionsProvider permissions={permissions}>
+        <AppShell
+          user={user}
+          features={features}
+          permissions={permissions}
+          orgName={orgName}
+        >
+          {children}
+        </AppShell>
+      </PermissionsProvider>
     </BreadcrumbProvider>
   );
 }

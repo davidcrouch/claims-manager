@@ -598,3 +598,145 @@ export async function addPasswordIdentityToUser(params: {
    }
 }
 
+const BCRYPT_SALT_ROUNDS = 12;
+
+/**
+ * Set or replace the password for an existing user.
+ *
+ * Used by password reset. Unlike addPasswordIdentityToUser this updates an
+ * existing password identity in place — reset previously called add, which
+ * refused when the identity already existed and the caller ignored the error.
+ */
+export async function setPasswordForUser(params: {
+   userId: string;
+   email: string;
+   password: string;
+}): Promise<{ success: boolean; identityId?: string; error?: string; errorCode?: RegistrationErrorCode }> {
+   const functionName = 'setPasswordForUser';
+
+   log.info(
+      { functionName, userId: params.userId, email: params.email },
+      'auth-server:identity-registration:setPasswordForUser - Setting password',
+   );
+
+   try {
+      if (!params.password || params.password.length < 8) {
+         return {
+            success: false,
+            error: 'Password must be at least 8 characters',
+            errorCode: 'INVALID_PASSWORD',
+         };
+      }
+
+      const user = await usersService.getUser(systemContext, params.userId);
+      if (!user) {
+         log.warn(
+            { functionName, userId: params.userId },
+            'auth-server:identity-registration:setPasswordForUser - User not found',
+         );
+         return { success: false, error: 'User not found', errorCode: 'VALIDATION_ERROR' };
+      }
+
+      if ((user.email || '').toLowerCase() !== params.email.toLowerCase()) {
+         log.warn(
+            { functionName, userId: params.userId, email: params.email, userEmail: user.email },
+            'auth-server:identity-registration:setPasswordForUser - Email mismatch',
+         );
+         return {
+            success: false,
+            error: 'Email does not match user account',
+            errorCode: 'VALIDATION_ERROR',
+         };
+      }
+
+      const bcrypt = await import('bcrypt');
+      const passwordHash = await bcrypt.hash(params.password, BCRYPT_SALT_ROUNDS);
+      const passwordSetAt = new Date().toISOString();
+
+      const existing =
+         (await userIdentitiesService.getWithCredentials({
+            context: systemContext,
+            provider: 'password',
+            providerUserId: params.email,
+         })) ??
+         (params.email !== user.email
+            ? await userIdentitiesService.getWithCredentials({
+                 context: systemContext,
+                 provider: 'password',
+                 providerUserId: user.email,
+              })
+            : null);
+
+      if (existing) {
+         if (existing.userId !== params.userId) {
+            log.warn(
+               { functionName, userId: params.userId, existingUserId: existing.userId },
+               'auth-server:identity-registration:setPasswordForUser - Password identity belongs to a different user',
+            );
+            return {
+               success: false,
+               error: 'An account with this email and password already exists',
+               errorCode: 'IDENTITY_ALREADY_EXISTS',
+            };
+         }
+
+         const previousProfile =
+            existing.rawProfile && typeof existing.rawProfile === 'object'
+               ? (existing.rawProfile as Record<string, unknown>)
+               : {};
+         const updated = await userIdentitiesService.updateRawProfile(
+            systemContext,
+            existing.id,
+            { ...previousProfile, passwordHash, passwordSetAt },
+         );
+         if (!updated) {
+            return {
+               success: false,
+               error: 'Failed to update password',
+               errorCode: 'DATABASE_ERROR',
+            };
+         }
+
+         log.info(
+            { functionName, userId: params.userId, identityId: existing.id },
+            'auth-server:identity-registration:setPasswordForUser - Password identity updated',
+         );
+         return { success: true, identityId: existing.id };
+      }
+
+      const createdIdentity = await userIdentitiesService.createUserIdentity(systemContext, {
+         userId: params.userId,
+         provider: 'password',
+         providerUserId: user.email || params.email,
+         displayName: user.name || null,
+         avatarUrl: null,
+         rawProfile: { passwordHash, passwordSetAt },
+         accessToken: null,
+         refreshToken: null,
+         tokenExpiresAt: null,
+      });
+
+      log.info(
+         { functionName, userId: params.userId, identityId: createdIdentity.id },
+         'auth-server:identity-registration:setPasswordForUser - Password identity created',
+      );
+      return { success: true, identityId: createdIdentity.id };
+   } catch (error: any) {
+      log.error(
+         {
+            functionName,
+            userId: params.userId,
+            email: params.email,
+            error: error.message,
+            stack: error.stack,
+         },
+         'auth-server:identity-registration:setPasswordForUser - Failed to set password',
+      );
+      return {
+         success: false,
+         error: error.message || 'Failed to set password',
+         errorCode: 'DATABASE_ERROR',
+      };
+   }
+}
+

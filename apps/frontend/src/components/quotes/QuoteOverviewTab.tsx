@@ -50,6 +50,7 @@ import {
   type QuoteEditPending,
   type QuoteOverviewDraft,
 } from '@/components/quotes/quote-edit.types';
+import { quoteInsurerRef } from '@/components/quotes/quote-label';
 
 export interface QuoteOverviewTabHandle {
   getPendingUpdate: () => QuoteEditPending | null;
@@ -280,6 +281,7 @@ export const QuoteOverviewTab = forwardRef(function QuoteOverviewTab(
             label="Estimate number"
             value={quote.internalNumber ?? quote.quoteNumber ?? '—'}
           />
+          <DefRow label="Insurer Ref" value={quoteInsurerRef(quote) ?? '—'} />
           <DefRow
             label="Name"
             value={

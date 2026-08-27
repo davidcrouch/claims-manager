@@ -71,6 +71,14 @@ export {
   uniqueFilterOptions,
 } from './lib/parse';
 
+export type { CatalogUpdateMode } from './lib/catalog-update';
+export {
+  CATALOG_UPDATE_MODE_STORAGE_KEY,
+  parseCatalogUpdateMode,
+  collectCatalogSourceUpdates,
+} from './lib/catalog-update';
+export type { CatalogSourcePushItem } from './lib/catalog-update';
+
 export type {
   ApiLookup,
   ApiItem,

@@ -36,6 +36,7 @@ import {
 } from '@/components/layout/PageHeaderLayout';
 import { HeaderActionToolbar } from '@/components/layout/HeaderActionToolbar';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
+import { HeaderSaveStatus } from '@/components/shared/HeaderSaveStatus';
 import {
   DefRow,
   SectionCard,
@@ -102,13 +103,9 @@ import {
   MAX_UNDO,
   SAVE_STATUS_CLEAR_MS,
   cloneJson,
-  detailSaveStatus,
   pushUndoEntry,
 } from '@/components/shared/detail-autosave';
-import {
-  DetailSaveStatus,
-  DetailUndoButton,
-} from '@/components/shared/DetailAutosaveActions';
+import { DetailUndoButton } from '@/components/shared/DetailAutosaveActions';
 
 type UndoEntry =
   | { kind: 'fields'; snapshot: QuoteFieldsSnapshot }
@@ -614,13 +611,6 @@ export function QuoteDetail({
     persistPending,
   ]);
 
-  const { label: saveStatusLabel, tone: saveStatusTone } = detailSaveStatus({
-    saving: anySaving,
-    saveError,
-    justSaved,
-    dirty: anyDirty,
-  });
-
   const tabs: Array<{ id: QuoteTab; label: string; icon: typeof Calendar }> = [
     { id: 'overview', label: 'Overview', icon: FileSignature },
     { id: 'line-items', label: 'Take Off', icon: Layers },
@@ -634,8 +624,13 @@ export function QuoteDetail({
 
   return (
     <div className="flex flex-col">
+      <HeaderSaveStatus
+        saving={anySaving}
+        saveError={saveError}
+        justSaved={justSaved}
+        dirty={anyDirty}
+      />
       <SetHeaderActions>
-        <DetailSaveStatus statusLabel={saveStatusLabel} tone={saveStatusTone} />
         {showTakeOffActions && (
           <Button
             size="default"

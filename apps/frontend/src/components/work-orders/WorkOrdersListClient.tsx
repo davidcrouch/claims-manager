@@ -42,6 +42,7 @@ import { computeStatusBreakdown } from '@/components/layout/ListPageHeader';
 import { CapturePoDrawer } from '@/components/forms/CapturePoDrawer';
 import { fetchWorkOrdersAction } from '@/app/(app)/work-orders/actions';
 import { entityDisplayLabel } from '@/components/shared/entity-label';
+import { workOrderInsurerPo } from '@/components/work-orders/work-order-label';
 import {
   ColumnSettingsHeaderCell,
   useColumnVisibility } from '@/components/shared/column-visibility';
@@ -70,6 +71,7 @@ function formatAmount(value?: string | null): string {
 
 type WOSortField =
   | 'name'
+  | 'insurer_po'
   | 'job'
   | 'status'
   | 'wo_type'
@@ -81,7 +83,8 @@ type WOSortField =
 interface ColDef { key: WOSortField; label: string; filterable?: boolean; locked?: boolean }
 
 const TABLE_COLUMNS: ColDef[] = [
-  { key: 'name', label: 'Name', locked: true },
+  { key: 'name', label: 'Work Order #', locked: true },
+  { key: 'insurer_po', label: 'Insurer PO' },
   { key: 'job', label: 'Job', filterable: true },
   { key: 'status', label: 'Status', filterable: true },
   { key: 'wo_type', label: 'Type', filterable: true },
@@ -131,7 +134,7 @@ export function WorkOrdersListClient({
   const [statusFilterActive, setStatusFilterActive] = useState(false);
   const [captureDrawerOpen, setCaptureDrawerOpen] = useState(false);
   const { isVisible, toggle, visibleCount } = useColumnVisibility(
-    'work-orders',
+    'work-orders-v2',
     TABLE_COLUMNS,
   );
 
@@ -246,7 +249,10 @@ export function WorkOrdersListClient({
       if (prev.field === field) {
         return { field, order: prev.order === 'asc' ? 'desc' : 'asc' };
       }
-      return { field, order: field === 'name' ? 'asc' : 'desc' };
+      return {
+        field,
+        order: field === 'name' || field === 'insurer_po' ? 'asc' : 'desc',
+      };
     });
     setPage(1);
   };
@@ -400,7 +406,7 @@ export function WorkOrdersListClient({
               size={16}
             />
             <Input
-              placeholder="Search work orders by WO #, name or job ref..."
+              placeholder="Search work orders by WO #, insurer PO or name..."
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
               className="h-10 w-full pl-9 pr-9"
@@ -463,6 +469,7 @@ export function WorkOrdersListClient({
                       activeField={columnSort.field}
                       sortOrder={columnSort.order}
                       onSort={handleColumnSort}
+                      className={col.key === 'insurer_po' ? 'text-center' : undefined}
                       filter={
                         col.key === 'job'
                           ? jobFilterProps
@@ -512,6 +519,11 @@ export function WorkOrdersListClient({
                       {isVisible('name') && (
                         <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
                           {displayName}
+                        </td>
+                      )}
+                      {isVisible('insurer_po') && (
+                        <td className="whitespace-nowrap px-4 py-3 text-center text-slate-600">
+                          {workOrderInsurerPo(wo) ?? '—'}
                         </td>
                       )}
                       {isVisible('job') && (

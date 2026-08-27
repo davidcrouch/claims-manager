@@ -1903,6 +1903,368 @@ export class CatalogSelectionService {
     };
   }
 
+  /**
+   * Map PO (preferred) or work-order line items into CW invoice group shape
+   * (quantity, unitCost, tax as percentage points). Used to overlay pricing
+   * onto a vendor-tax invoice cloned from the purchase order.
+   */
+  async buildOutboundInvoiceGroups(params: {
+    purchaseOrderId?: string | null;
+    workOrderId?: string | null;
+  }): Promise<Record<string, unknown>[]> {
+    const tenantId = this.getTenantId();
+    if (params.purchaseOrderId) {
+      const fromPo = await this.buildOutboundInvoiceGroupsFromPurchaseOrder({
+        tenantId,
+        purchaseOrderId: params.purchaseOrderId,
+      });
+      if (fromPo.length > 0) return fromPo;
+    }
+    if (params.workOrderId) {
+      return this.buildOutboundInvoiceGroupsFromWorkOrder({
+        tenantId,
+        workOrderId: params.workOrderId,
+      });
+    }
+    return [];
+  }
+
+  private async buildOutboundInvoiceGroupsFromPurchaseOrder(params: {
+    tenantId: string;
+    purchaseOrderId: string;
+  }): Promise<Record<string, unknown>[]> {
+    const groups = await this.db
+      .select()
+      .from(purchaseOrderGroups)
+      .where(
+        and(
+          eq(purchaseOrderGroups.tenantId, params.tenantId),
+          eq(purchaseOrderGroups.purchaseOrderId, params.purchaseOrderId),
+          isNull(purchaseOrderGroups.deletedAt),
+        ),
+      )
+      .orderBy(purchaseOrderGroups.sortIndex);
+    if (groups.length === 0) return [];
+
+    const groupIds = groups.map((g) => g.id);
+    const combos = await this.db
+      .select()
+      .from(purchaseOrderCombos)
+      .where(
+        and(
+          eq(purchaseOrderCombos.tenantId, params.tenantId),
+          inArray(purchaseOrderCombos.purchaseOrderGroupId, groupIds),
+          isNull(purchaseOrderCombos.deletedAt),
+        ),
+      )
+      .orderBy(purchaseOrderCombos.sortIndex);
+
+    const comboIds = combos.map((c) => c.id);
+    const directItems =
+      groupIds.length > 0
+        ? await this.db
+            .select()
+            .from(purchaseOrderItems)
+            .where(
+              and(
+                eq(purchaseOrderItems.tenantId, params.tenantId),
+                inArray(purchaseOrderItems.purchaseOrderGroupId, groupIds),
+                isNull(purchaseOrderItems.deletedAt),
+              ),
+            )
+            .orderBy(purchaseOrderItems.sortIndex)
+        : [];
+    const comboItems =
+      comboIds.length > 0
+        ? await this.db
+            .select()
+            .from(purchaseOrderItems)
+            .where(
+              and(
+                eq(purchaseOrderItems.tenantId, params.tenantId),
+                inArray(purchaseOrderItems.purchaseOrderComboId, comboIds),
+                isNull(purchaseOrderItems.deletedAt),
+              ),
+            )
+            .orderBy(purchaseOrderItems.sortIndex)
+        : [];
+
+    return this.assembleOutboundInvoiceGroups({
+      tenantId: params.tenantId,
+      groups,
+      combos,
+      directItems,
+      comboItems,
+      comboGroupId: (combo) => combo.purchaseOrderGroupId,
+      itemGroupId: (item) => item.purchaseOrderGroupId,
+      itemComboId: (item) => item.purchaseOrderComboId,
+    });
+  }
+
+  private async buildOutboundInvoiceGroupsFromWorkOrder(params: {
+    tenantId: string;
+    workOrderId: string;
+  }): Promise<Record<string, unknown>[]> {
+    const groups = await this.db
+      .select()
+      .from(workOrderGroups)
+      .where(
+        and(
+          eq(workOrderGroups.tenantId, params.tenantId),
+          eq(workOrderGroups.workOrderId, params.workOrderId),
+          isNull(workOrderGroups.deletedAt),
+        ),
+      )
+      .orderBy(workOrderGroups.sortIndex);
+    if (groups.length === 0) return [];
+
+    const groupIds = groups.map((g) => g.id);
+    const combos = await this.db
+      .select()
+      .from(workOrderCombos)
+      .where(
+        and(
+          eq(workOrderCombos.tenantId, params.tenantId),
+          inArray(workOrderCombos.workOrderGroupId, groupIds),
+          isNull(workOrderCombos.deletedAt),
+        ),
+      )
+      .orderBy(workOrderCombos.sortIndex);
+
+    const comboIds = combos.map((c) => c.id);
+    const directItems =
+      groupIds.length > 0
+        ? await this.db
+            .select()
+            .from(workOrderItems)
+            .where(
+              and(
+                eq(workOrderItems.tenantId, params.tenantId),
+                inArray(workOrderItems.workOrderGroupId, groupIds),
+                isNull(workOrderItems.deletedAt),
+              ),
+            )
+            .orderBy(workOrderItems.sortIndex)
+        : [];
+    const comboItems =
+      comboIds.length > 0
+        ? await this.db
+            .select()
+            .from(workOrderItems)
+            .where(
+              and(
+                eq(workOrderItems.tenantId, params.tenantId),
+                inArray(workOrderItems.workOrderComboId, comboIds),
+                isNull(workOrderItems.deletedAt),
+              ),
+            )
+            .orderBy(workOrderItems.sortIndex)
+        : [];
+
+    return this.assembleOutboundInvoiceGroups({
+      tenantId: params.tenantId,
+      groups,
+      combos,
+      directItems,
+      comboItems,
+      comboGroupId: (combo) => combo.workOrderGroupId,
+      itemGroupId: (item) => item.workOrderGroupId,
+      itemComboId: (item) => item.workOrderComboId,
+    });
+  }
+
+  private async assembleOutboundInvoiceGroups<
+    TGroup extends {
+      id: string;
+      description: string | null;
+      groupLabelLookupId: string | null;
+      sortIndex: number;
+    },
+    TCombo extends {
+      id: string;
+      name: string | null;
+      description: string | null;
+      catalogComboId: string | null;
+      quantity: string | null;
+      sortIndex: number;
+    },
+    TItem extends {
+      id: string;
+      name: string | null;
+      description: string | null;
+      itemType: string | null;
+      quantity: string | null;
+      tax: string | null;
+      unitCost: string | null;
+      buyCost: string | null;
+      markupType: string | null;
+      markupValue: string | null;
+      unitTypeLookupId: string | null;
+      catalogItemId: string | null;
+      note: string | null;
+      sortIndex: number;
+    },
+  >(params: {
+    tenantId: string;
+    groups: TGroup[];
+    combos: TCombo[];
+    directItems: TItem[];
+    comboItems: TItem[];
+    comboGroupId: (combo: TCombo) => string;
+    itemGroupId: (item: TItem) => string | null;
+    itemComboId: (item: TItem) => string | null;
+  }): Promise<Record<string, unknown>[]> {
+    const lookupIds = new Set<string>();
+    for (const group of params.groups) {
+      if (group.groupLabelLookupId) lookupIds.add(group.groupLabelLookupId);
+    }
+    for (const item of [...params.directItems, ...params.comboItems]) {
+      if (item.unitTypeLookupId) lookupIds.add(item.unitTypeLookupId);
+    }
+    const lookupMap = await this.lookupsRepo.findByIds({
+      ids: [...lookupIds],
+      tenantId: params.tenantId,
+    });
+    const resolveLookup = (id: string | null) => {
+      if (!id) return undefined;
+      const lv = lookupMap.get(id);
+      if (!lv) return undefined;
+      return { name: lv.name, externalReference: lv.externalReference };
+    };
+
+    const catalogItemIds = new Set<string>();
+    for (const item of [...params.directItems, ...params.comboItems]) {
+      if (item.catalogItemId) catalogItemIds.add(item.catalogItemId);
+    }
+    for (const combo of params.combos) {
+      if (combo.catalogComboId) catalogItemIds.add(combo.catalogComboId);
+    }
+    const catalogExtRefMap = await this.itemsRepo.findExternalReferences({
+      tenantId: params.tenantId,
+      ids: [...catalogItemIds],
+    });
+
+    const resolveCwCatalogId = (
+      localCatalogItemId: string | null,
+      field: 'catalogItemId' | 'catalogComboId',
+    ): string | undefined => {
+      if (!localCatalogItemId) return undefined;
+      const extRef = catalogExtRefMap.get(localCatalogItemId);
+      if (!extRef) return undefined;
+      if (!CW_CATALOG_UUID_RE.test(extRef)) {
+        this.logger.warn(
+          `CatalogSelectionService.buildOutboundInvoiceGroups — omitting ${field}=${extRef} ` +
+            `(not a Crunchwork catalog UUID)`,
+        );
+        return undefined;
+      }
+      return extRef;
+    };
+
+    const mapItem = (row: TItem): Record<string, unknown> => {
+      const result: Record<string, unknown> = { completed: true };
+      const cwCatalogItemId = resolveCwCatalogId(row.catalogItemId, 'catalogItemId');
+      if (cwCatalogItemId) result.catalogItemId = cwCatalogItemId;
+      if (row.name) result.name = row.name;
+      if (row.description) result.description = row.description;
+      if (row.itemType) result.type = normaliseCwItemType(row.itemType);
+      result.index = row.sortIndex;
+      if (row.quantity != null && row.quantity !== '') {
+        result.quantity = parseDecimal(row.quantity);
+      }
+      if (row.tax != null && row.tax !== '') {
+        result.tax = rateToPercentPoints(parseDecimal(row.tax));
+      }
+      if (row.unitCost != null && row.unitCost !== '') {
+        result.unitCost = parseDecimal(row.unitCost);
+      }
+      if (row.buyCost != null && row.buyCost !== '') {
+        result.buyCost = parseDecimal(row.buyCost);
+      }
+      const cwMarkup = normaliseCwMarkupType(row.markupType);
+      if (cwMarkup) result.markupType = cwMarkup;
+      if (row.markupValue != null && row.markupValue !== '') {
+        const mk = parseDecimal(row.markupValue);
+        result.markupValue =
+          cwMarkup === 'Percentage' || (!cwMarkup && isPercentMarkupType(row.markupType))
+            ? rateToPercentPoints(mk)
+            : mk;
+      }
+      if (row.note) result.note = row.note;
+      const ut = resolveLookup(row.unitTypeLookupId);
+      if (ut?.externalReference) result.unitType = ut;
+      return result;
+    };
+
+    const combosByGroup = new Map<string, TCombo[]>();
+    for (const combo of params.combos) {
+      const gid = params.comboGroupId(combo);
+      const list = combosByGroup.get(gid) ?? [];
+      list.push(combo);
+      combosByGroup.set(gid, list);
+    }
+    const directByGroup = new Map<string, TItem[]>();
+    for (const item of params.directItems) {
+      const gid = params.itemGroupId(item);
+      if (!gid) continue;
+      const list = directByGroup.get(gid) ?? [];
+      list.push(item);
+      directByGroup.set(gid, list);
+    }
+    const itemsByCombo = new Map<string, TItem[]>();
+    for (const item of params.comboItems) {
+      const cid = params.itemComboId(item);
+      if (!cid) continue;
+      const list = itemsByCombo.get(cid) ?? [];
+      list.push(item);
+      itemsByCombo.set(cid, list);
+    }
+
+    const outbound: Record<string, unknown>[] = [];
+    for (const group of params.groups) {
+      const groupItems = (directByGroup.get(group.id) ?? []).map(mapItem);
+      const groupCombos = (combosByGroup.get(group.id) ?? [])
+        .map((combo) => {
+          const comboResult: Record<string, unknown> = {};
+          const cwCatalogComboId = resolveCwCatalogId(combo.catalogComboId, 'catalogComboId');
+          if (cwCatalogComboId) comboResult.catalogComboId = cwCatalogComboId;
+          if (combo.name) comboResult.name = combo.name;
+          if (combo.description) comboResult.description = combo.description;
+          comboResult.index = combo.sortIndex;
+          if (combo.quantity != null && combo.quantity !== '') {
+            comboResult.quantity = parseDecimal(combo.quantity);
+          }
+          const items = (itemsByCombo.get(combo.id) ?? []).map(mapItem);
+          if (items.length > 0) comboResult.items = items;
+          if (!comboResult.items && !comboResult.catalogComboId && !comboResult.name) {
+            return null;
+          }
+          return comboResult;
+        })
+        .filter((c): c is Record<string, unknown> => c !== null);
+
+      if (groupItems.length === 0 && groupCombos.length === 0) continue;
+
+      const label = resolveLookup(group.groupLabelLookupId);
+      const result: Record<string, unknown> = {
+        index: group.sortIndex,
+      };
+      const name = label?.name ?? group.description;
+      if (name) result.name = name;
+      if (group.description) result.description = group.description;
+      if (groupItems.length > 0) result.items = groupItems;
+      if (groupCombos.length > 0) result.combos = groupCombos;
+      outbound.push(result);
+    }
+
+    this.logger.log(
+      `CatalogSelectionService.buildOutboundInvoiceGroups — groups=${outbound.length} ` +
+        `items=${outbound.reduce((n, g) => n + (Array.isArray(g.items) ? g.items.length : 0), 0)} ` +
+        `combos=${outbound.reduce((n, g) => n + (Array.isArray(g.combos) ? g.combos.length : 0), 0)}`,
+    );
+    return outbound;
+  }
+
   private mapQuoteItemRow(
     row: typeof quoteItems.$inferSelect,
     lookupMap?: Map<string, { id: string; name: string | null; externalReference: string | null; [k: string]: unknown }>,

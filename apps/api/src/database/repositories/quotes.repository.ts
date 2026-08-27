@@ -27,8 +27,10 @@ function buildQuotesOrderBy(sort?: string) {
     case 'created_at_asc':
       return [asc(quotes.createdAt)];
     case 'quote_number_asc':
+    case 'insurer_ref_asc':
       return [asc(quotes.quoteNumber)];
     case 'quote_number_desc':
+    case 'insurer_ref_desc':
       return [desc(quotes.quoteNumber)];
     case 'total_amount_asc':
       return [asc(quotes.totalAmount)];
@@ -105,6 +107,7 @@ export class QuotesRepository {
         whereClause,
         or(
           ilike(quotes.quoteNumber, term),
+          ilike(quotes.internalNumber, term),
           ilike(quotes.name, term),
           ilike(quotes.reference, term),
           ilike(quotes.note, term),

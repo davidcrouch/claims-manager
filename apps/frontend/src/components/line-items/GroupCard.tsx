@@ -31,7 +31,7 @@ import type { ApiGroup } from './lib/types';
 import { ItemRow } from './ItemRow';
 import { AssemblyRow } from './AssemblyRow';
 import { ScopeCard } from './ScopeCard';
-import { LineItemsColGroup, LineItemsThead, LineItemsTableShell } from './lib/table-parts';
+import { LI_HEADER_COUNT, LI_HEADER_TOTAL, LineItemsColGroup, LineItemsThead, LineItemsTableShell } from './lib/table-parts';
 import { HeaderVisibilityToggles } from './lib/header-visibility';
 import { NoteHoverWrap } from './lib/line-note-hover';
 import { filterVisibleItems, isSelectablePicked } from './lib/selection-filter';
@@ -277,14 +277,14 @@ export const GroupCard = memo(function GroupCard({ group, groupIndex, totalGroup
           )}
         </div>
 
-        <span className="shrink-0 text-xs tabular-nums text-blue-700">
+        <span className={cn(LI_HEADER_COUNT, 'text-blue-700')}>
           {totalLineCount} item{totalLineCount !== 1 ? 's' : ''}
           {scopes.length > 0 && ` · ${scopes.length} scope${scopes.length !== 1 ? 's' : ''}`}
           {combos.length > 0 && ` · ${combos.length} assembl${combos.length !== 1 ? 'ies' : 'y'}`}
         </span>
 
         {showGroupPricing && (
-          <span className="shrink-0 text-sm font-medium tabular-nums text-blue-900">
+          <span className={cn(LI_HEADER_TOTAL, 'text-blue-900')}>
             {formatCurrency(groupTotal)}
           </span>
         )}
@@ -341,7 +341,7 @@ export const GroupCard = memo(function GroupCard({ group, groupIndex, totalGroup
       {!isCollapsed && (
         hasContent ? (
         <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
-          <div className="space-y-0">
+          <div className="mx-1 space-y-0">
             {/* Group-level items */}
             {visibleItems.length > 0 && (
               <div className="overflow-x-auto">

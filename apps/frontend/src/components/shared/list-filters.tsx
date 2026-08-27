@@ -739,16 +739,25 @@ export function SortableColumnHeader<K extends string>(props: {
   onSort: (field: K) => void;
   /** When set, shows a filter icon left of the label with a checkbox value popup. */
   filter?: ColumnValueFilter;
+  className?: string;
 }) {
-  const { columnKey, label, activeField, sortOrder, onSort, filter } = props;
+  const { columnKey, label, activeField, sortOrder, onSort, filter, className } = props;
   const isActive = activeField === columnKey;
   return (
     <th
       scope="col"
-      className="cursor-pointer select-none px-4 py-3 transition-colors hover:text-slate-700"
+      className={cn(
+        'cursor-pointer select-none px-4 py-3 transition-colors hover:text-slate-700',
+        className,
+      )}
       onClick={() => onSort(columnKey)}
     >
-      <span className="inline-flex items-center gap-1">
+      <span
+        className={cn(
+          'inline-flex items-center gap-1',
+          className?.includes('text-center') && 'w-full justify-center',
+        )}
+      >
         {filter ? <ColumnFilterButton {...filter} /> : null}
         {label}
         {isActive ? (

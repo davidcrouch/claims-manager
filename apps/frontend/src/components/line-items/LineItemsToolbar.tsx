@@ -23,6 +23,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuGroup,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -56,6 +60,10 @@ export const LineItemsToolbar = memo(function LineItemsToolbar({ hideActions = f
     setShowPricing,
     setShowUnselected,
     toggleAll,
+    catalogUpdateMode,
+    canSetCatalogUpdateMode,
+    setCatalogUpdateMode,
+    isReadOnly,
   } = useLineItems();
 
   const { showPricing, showMarkup, showGst, showQuantities, mode, showColumnVisibilityToggles, labels } = config;
@@ -70,8 +78,7 @@ export const LineItemsToolbar = memo(function LineItemsToolbar({ hideActions = f
     <div
       data-slot="line-items-toolbar"
       className={cn(
-        'sticky z-[9] flex cursor-pointer items-center justify-between rounded-lg border-2 border-slate-400 bg-slate-100 px-5 py-4 shadow-md transition-colors hover:bg-slate-200',
-        'top-0',
+        'sticky top-0 z-[9] flex flex-wrap cursor-pointer items-center justify-between gap-3 rounded-lg border-2 border-slate-400 bg-slate-100 px-5 py-4 shadow-md transition-colors hover:bg-slate-200',
       )}
       onClick={toggleAll}
     >
@@ -136,6 +143,62 @@ export const LineItemsToolbar = memo(function LineItemsToolbar({ hideActions = f
             </DropdownMenuContent>
           </DropdownMenu>
         </span>
+
+        {mode !== 'catalog' && !isReadOnly && (
+          <span className="shrink-0" onClick={(e) => e.stopPropagation()}>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-400 bg-white px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                title={
+                  canSetCatalogUpdateMode
+                    ? 'How estimate edits update the source catalogue item'
+                    : 'You need Update Catalogue from Estimate to change how edits update the catalogue'
+                }
+              >
+                Update Mode
+                <span className="font-semibold text-slate-900">
+                  {catalogUpdateMode === 'none' ? 'None' : catalogUpdateMode === 'prompt' ? 'Prompt' : 'Auto'}
+                </span>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="min-w-[220px]">
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>Catalogue source updates</DropdownMenuLabel>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuRadioGroup
+                    value={catalogUpdateMode}
+                    onValueChange={(value) => {
+                      if (!canSetCatalogUpdateMode) return;
+                      if (value === 'none' || value === 'prompt' || value === 'auto') {
+                        setCatalogUpdateMode(value);
+                      }
+                    }}
+                  >
+                    <DropdownMenuRadioItem value="none">
+                      <span className="flex flex-col">
+                        <span>None</span>
+                        <span className="text-[11px] font-normal text-muted-foreground">Estimate only — catalogue unchanged</span>
+                      </span>
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="prompt" disabled={!canSetCatalogUpdateMode}>
+                      <span className="flex flex-col">
+                        <span>Prompt</span>
+                        <span className="text-[11px] font-normal text-muted-foreground">Ask before updating the catalogue</span>
+                      </span>
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="auto" disabled={!canSetCatalogUpdateMode}>
+                      <span className="flex flex-col">
+                        <span>Auto</span>
+                        <span className="text-[11px] font-normal text-muted-foreground">Always update the source catalogue</span>
+                      </span>
+                    </DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </span>
+        )}
       </div>
 
       {/* Center: search + toggles + buttons */}

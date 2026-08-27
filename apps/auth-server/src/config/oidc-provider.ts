@@ -199,6 +199,42 @@ export async function getStoredAuthResult(userId: string) {
 }
 
 /**
+ * In-memory OIDC session fields we may wipe when Redis no longer has authResult
+ * for the cookie's accountId. The oidc-provider session proxy rejects assigning
+ * a falsy accountId, so callers must `delete` the property.
+ */
+export type OidcSessionLike = {
+   accountId?: string;
+   loginTs?: number;
+   amr?: unknown;
+   acr?: unknown;
+   authorizations?: unknown;
+   touched?: boolean;
+   destroyed?: boolean;
+};
+
+/**
+ * Drop the authenticated identity from an in-memory OIDC session so the login
+ * prompt will fire. Used when Redis has no authResult for the session account
+ * (expired TTL, flush, or leftover cookie after logout).
+ */
+export function forgetStaleSessionAccount(
+   session: OidcSessionLike | undefined | null,
+   accountId: string,
+): boolean {
+   if (!session || session.destroyed || session.accountId !== accountId) {
+      return false;
+   }
+   delete session.accountId;
+   delete session.loginTs;
+   delete session.amr;
+   delete session.acr;
+   session.authorizations = undefined;
+   session.touched = true;
+   return true;
+}
+
+/**
  * Delete the stored auth result (auth:user:{userId}) from Redis.
  * Used during logout to clean up auth data. Safe to call multiple times (idempotent).
  */
@@ -658,6 +694,22 @@ export async function createOidcProvider(): Promise<Provider> {
             
             // Add select_org prompt after login (index 3, since register=0, select_organization=1, login=2)
             basePolicy.add(selectOrg(), 3);
+
+            // Session cookie can outlive Redis authResult. The built-in no_session
+            // check only looks at session.accountId, so a ghost identity skips login
+            // and later 500s. Prompt login when the account could not be loaded.
+            const { Check } = interactionPolicy;
+            const loginPrompt = basePolicy.get('login');
+            loginPrompt?.checks.add(new Check(
+               'stale_account',
+               'End-User authentication is required',
+               (ctx) => {
+                  if (ctx.oidc.session.accountId && !ctx.oidc.account) {
+                     return Check.REQUEST_PROMPT;
+                  }
+                  return Check.NO_NEED_TO_PROMPT;
+               },
+            ));
             
             log.info({ prompts: basePolicy.map(p => p.name) }, 'Interaction policy configured with custom prompts');
             return basePolicy;
@@ -869,24 +921,22 @@ export async function createOidcProvider(): Promise<Provider> {
                };
             }
 
-            // No stored authResult available - this should not happen if session validation is working
-            log.warn({ id }, 'auth-server:oidc-provider:findAccount - No stored authResult available, this should have been caught by session validation');
-            
-            // Throw InvalidAccount error to trigger proper OIDC error handling
-            const error = new Error('Account data not found - please log in again');
-            error.name = 'InvalidAccount';
-            throw error;
-         } catch (error) {
-            // Re-throw InvalidAccount errors to be handled by error handlers
-            if (error.name === 'InvalidAccount') {
-               throw error;
-            }
-            log.error({ error: error.message, id }, 'auth-server:oidc-provider:findAccount - Failed to load account from Redis');
-            
-            // Throw InvalidAccount error to trigger proper OIDC error handling
-            const invalidAccountError = new Error('Account data not found - please log in again');
-            invalidAccountError.name = 'InvalidAccount';
-            throw invalidAccountError;
+            // Cookie still has accountId but Redis authResult is gone. Returning
+            // undefined (and clearing the session identity) lets the login prompt
+            // run instead of throwing, which oidc-provider treats as a 500.
+            const sessionCleared = forgetStaleSessionAccount(ctx?.oidc?.session, id);
+            log.warn(
+               { id, sessionCleared },
+               'auth-server:oidc-provider:findAccount - No stored authResult available, treating session as unauthenticated',
+            );
+            return undefined;
+         } catch (error: any) {
+            log.error(
+               { error: error.message, id },
+               'auth-server:oidc-provider:findAccount - Failed to load account from Redis',
+            );
+            forgetStaleSessionAccount(ctx?.oidc?.session, id);
+            return undefined;
          }
       },
 

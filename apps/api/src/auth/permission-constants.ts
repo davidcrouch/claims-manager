@@ -77,6 +77,7 @@ export const P = {
   catalogs: {
     read: 'catalogs.read',
     manage: 'catalogs.manage',
+    updateFromEstimate: 'catalogs.update-from-estimate',
   },
   contacts: {
     read: 'contacts.read',

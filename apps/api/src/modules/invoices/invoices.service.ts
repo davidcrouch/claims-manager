@@ -13,7 +13,15 @@ import { ConnectionResolverService } from '../external/connection-resolver.servi
 import { LookupResolver } from '../external/lookup-resolver.service';
 import { OutboundEventsService } from '../outbound-events/outbound-events.service';
 import { RecordNumberService } from '../../common/record-number/record-number.service';
-import { preferExistingAmount } from './invoice-publish.utils';
+import { CatalogSelectionService } from '../catalog/services/catalog-selection.service';
+import { CatalogOutboundService } from '../catalog/services/catalog-outbound.service';
+import {
+  applyLocalPricingToCrunchworkInvoiceGroups,
+  buildCrunchworkVendorTaxInvoiceCreateBody,
+  crunchworkInvoiceGroupsFromPayload,
+  preferExistingAmount,
+  toInvoiceUpdateGroups,
+} from './invoice-publish.utils';
 
 @Injectable()
 export class InvoicesService {
@@ -28,7 +36,9 @@ export class InvoicesService {
     private readonly crunchworkService: CrunchworkService,
     private readonly lookupResolver: LookupResolver,
     private readonly recordNumberService: RecordNumberService,
+    private readonly catalogSelectionService: CatalogSelectionService,
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
+    @Optional() private readonly catalogOutbound?: CatalogOutboundService,
     @Optional() private readonly connectionResolver?: ConnectionResolverService,
     @Optional() private readonly outboundEvents?: OutboundEventsService,
   ) {}
@@ -246,9 +256,6 @@ export class InvoicesService {
     if (!existing) {
       throw new BadRequestException('Invoice not found');
     }
-    if (existing.sourceExternalReference) {
-      throw new BadRequestException('Invoice already published');
-    }
 
     const providerPurchaseOrderId = await this.resolveProviderPurchaseOrderId({
       tenantId,
@@ -267,37 +274,81 @@ export class InvoicesService {
       throw new BadRequestException('No active provider connection for tenant');
     }
 
-    const cwBody: Record<string, unknown> = {
-      purchaseOrderId: providerPurchaseOrderId,
-      // CreateVendorTaxInvoiceInput — CW resolves this to a Vendor Tax Invoice.
-      // Omitting invoiceType causes upstream: Cannot read properties of undefined (reading 'externalReference').
-      invoiceType: { externalReference: 'Invoice' },
-    };
-    if (existing.invoiceNumber) cwBody.invoiceNumber = existing.invoiceNumber;
-    if (existing.issueDate) {
-      cwBody.issueDate =
-        existing.issueDate instanceof Date
-          ? existing.issueDate.toISOString()
-          : String(existing.issueDate);
-    }
-    if (existing.comments) cwBody.comments = existing.comments;
-    if (existing.totalTax != null) cwBody.totalTax = Number(existing.totalTax);
-    if (existing.totalAmount != null) cwBody.total = Number(existing.totalAmount);
+    const reusedCwInvoiceId = await this.resolveExistingCrunchworkInvoiceId({
+      tenantId,
+      invoice: existing,
+    });
 
     this.logger.log(
-      `${logPrefix} — pushing invoice=${params.id} to provider connectionId=${connectionId} purchaseOrderId=${providerPurchaseOrderId} invoiceType=Invoice`,
+      `${logPrefix} — pushing invoice=${params.id} to provider connectionId=${connectionId} purchaseOrderId=${providerPurchaseOrderId}` +
+        (reusedCwInvoiceId ? ` reusingCwInvoiceId=${reusedCwInvoiceId}` : ' invoiceType=Invoice'),
     );
 
-    const apiInvoice = await this.crunchworkService.createInvoice({
-      connectionId,
-      body: cwBody,
-    });
-    const apiObj = apiInvoice as Record<string, unknown>;
-    const cwInvoiceId = apiObj.id as string | undefined;
-    if (!cwInvoiceId) {
-      throw new BadRequestException(
-        'Provider did not return an invoice id after publish',
+    let apiObj: Record<string, unknown>;
+    let cwInvoiceId: string;
+
+    if (reusedCwInvoiceId) {
+      apiObj = await this.crunchworkService.getInvoice({
+        connectionId,
+        invoiceId: reusedCwInvoiceId,
+      });
+      cwInvoiceId = reusedCwInvoiceId;
+    } else {
+      try {
+        apiObj = await this.crunchworkService.createInvoice({
+          connectionId,
+          body: buildCrunchworkVendorTaxInvoiceCreateBody({
+            purchaseOrderId: providerPurchaseOrderId,
+          }),
+        });
+      } catch (err) {
+        const recoveredId = await this.resolveExistingCrunchworkInvoiceId({
+          tenantId,
+          invoice: existing,
+        });
+        if (!recoveredId) throw err;
+        this.logger.warn(
+          `${logPrefix} — create rejected; reusing existing Crunchwork invoice ${recoveredId}`,
+        );
+        apiObj = await this.crunchworkService.getInvoice({
+          connectionId,
+          invoiceId: recoveredId,
+        });
+      }
+      const createdId = apiObj.id as string | undefined;
+      if (!createdId) {
+        throw new BadRequestException(
+          'Provider did not return an invoice id after publish',
+        );
+      }
+      cwInvoiceId = createdId;
+    }
+
+    const issueDateIso = existing.issueDate
+      ? existing.issueDate instanceof Date
+        ? existing.issueDate.toISOString()
+        : String(existing.issueDate)
+      : undefined;
+
+    let apiObjAfterGroups = apiObj;
+    try {
+      apiObjAfterGroups = await this.applyCrunchworkInvoiceGroupPricing({
+        logPrefix,
+        connectionId,
+        cwInvoiceId,
+        createResponse: apiObj,
+        purchaseOrderId: existing.purchaseOrderId,
+        workOrderId: existing.workOrderId,
+        vendorInvoiceNumber: existing.invoiceNumber,
+        issueDate: issueDateIso,
+        note: existing.comments,
+      });
+    } catch (err) {
+      this.logger.error(
+        `${logPrefix} — Crunchwork invoice ${cwInvoiceId} group totals failed: ` +
+          `${err instanceof Error ? err.message : String(err)}`,
       );
+      throw err;
     }
 
     const submittedStatusId = await this.resolveStatusLookupId({
@@ -307,8 +358,12 @@ export class InvoicesService {
 
     // UI titles use invoiceNumber; CW returns a display name plus a numeric invoiceNumber.
     const cwInvoiceNumber =
-      (typeof apiObj.name === 'string' && apiObj.name.trim() ? apiObj.name.trim() : null) ??
-      (apiObj.invoiceNumber != null ? String(apiObj.invoiceNumber) : null);
+      (typeof apiObjAfterGroups.name === 'string' && apiObjAfterGroups.name.trim()
+        ? apiObjAfterGroups.name.trim()
+        : null) ??
+      (apiObjAfterGroups.invoiceNumber != null
+        ? String(apiObjAfterGroups.invoiceNumber)
+        : existing.invoiceNumber);
 
     await this.invoicesRepo.update({
       id: params.id,
@@ -316,10 +371,13 @@ export class InvoicesService {
         sourceExternalReference: cwInvoiceId,
         statusLookupId: submittedStatusId ?? existing.statusLookupId,
         invoiceNumber: cwInvoiceNumber ?? existing.invoiceNumber,
-        subTotal: preferExistingAmount(apiObj.subTotal, existing.subTotal),
-        totalTax: preferExistingAmount(apiObj.totalTax, existing.totalTax),
-        totalAmount: preferExistingAmount(apiObj.totalAmount ?? apiObj.total, existing.totalAmount),
-        invoicePayload: apiInvoice as Record<string, unknown>,
+        subTotal: preferExistingAmount(apiObjAfterGroups.subTotal, existing.subTotal),
+        totalTax: preferExistingAmount(apiObjAfterGroups.totalTax, existing.totalTax),
+        totalAmount: preferExistingAmount(
+          apiObjAfterGroups.totalAmount ?? apiObjAfterGroups.total,
+          existing.totalAmount,
+        ),
+        invoicePayload: apiObjAfterGroups,
         ...(params.userId ? { updatedByUserId: params.userId } : {}),
       },
     });
@@ -329,6 +387,112 @@ export class InvoicesService {
     );
 
     return this.invoicesRepo.findOne({ id: params.id, tenantId });
+  }
+
+  private async resolveExistingCrunchworkInvoiceId(params: {
+    tenantId: string;
+    invoice: {
+      id: string;
+      purchaseOrderId?: string | null;
+      sourceExternalReference?: string | null;
+    };
+  }): Promise<string | undefined> {
+    if (params.invoice.sourceExternalReference) {
+      return params.invoice.sourceExternalReference;
+    }
+
+    if (params.invoice.purchaseOrderId) {
+      const siblings = await this.invoicesRepo.findByPurchaseOrder({
+        purchaseOrderId: params.invoice.purchaseOrderId,
+        tenantId: params.tenantId,
+      });
+      const siblingRef = siblings.find(
+        (row) => row.id !== params.invoice.id && row.sourceExternalReference,
+      )?.sourceExternalReference;
+      if (siblingRef) return siblingRef;
+    }
+
+    // GET /jobs/{id}/invoices is Phase 2 Insurance-only (REST API v17 §3.2.2).
+    // Vendor credentials return 500 "Not Authorised!" — do not call it.
+    return undefined;
+  }
+
+  /**
+   * Vendor-tax create clones PO groups with unitCost 0 and completed=false,
+   * so CW group totals stay 0. Overlay local PO/WO pricing and POST
+   * UpdateInvoiceInput (groups[].items[].completed + unitCost/quantity/tax).
+   */
+  private async applyCrunchworkInvoiceGroupPricing(params: {
+    logPrefix: string;
+    connectionId: string;
+    cwInvoiceId: string;
+    createResponse: Record<string, unknown>;
+    purchaseOrderId?: string | null;
+    workOrderId?: string | null;
+    vendorInvoiceNumber?: string | null;
+    issueDate?: string;
+    note?: string | null;
+  }): Promise<Record<string, unknown>> {
+    let cwGroups = crunchworkInvoiceGroupsFromPayload(params.createResponse);
+    if (cwGroups.length === 0) {
+      const fetched = await this.crunchworkService.getInvoice({
+        connectionId: params.connectionId,
+        invoiceId: params.cwInvoiceId,
+      });
+      cwGroups = crunchworkInvoiceGroupsFromPayload(fetched);
+    }
+    if (cwGroups.length === 0) {
+      this.logger.warn(
+        `${params.logPrefix} — Crunchwork invoice ${params.cwInvoiceId} has no groups to price`,
+      );
+      return params.createResponse;
+    }
+
+    let localGroups = await this.catalogSelectionService.buildOutboundInvoiceGroups({
+      purchaseOrderId: params.purchaseOrderId,
+      workOrderId: params.workOrderId,
+    });
+    const tenantId = this.tenantContext.getTenantId();
+    if (this.catalogOutbound && localGroups.length > 0) {
+      const enriched = await this.catalogOutbound.enrichPayload({
+        tenantId,
+        body: { groups: localGroups },
+      });
+      localGroups = Array.isArray(enriched.groups)
+        ? (enriched.groups as Record<string, unknown>[])
+        : localGroups;
+    }
+
+    const priced = applyLocalPricingToCrunchworkInvoiceGroups({
+      cwGroups,
+      localGroups,
+    });
+    const updateGroups = toInvoiceUpdateGroups(priced);
+    if (updateGroups.length === 0) {
+      this.logger.warn(
+        `${params.logPrefix} — no Crunchwork group ids to update on invoice ${params.cwInvoiceId}`,
+      );
+      return params.createResponse;
+    }
+
+    const updateBody: Record<string, unknown> = { groups: updateGroups };
+    if (params.vendorInvoiceNumber) {
+      updateBody.vendorInvoiceNumber = params.vendorInvoiceNumber;
+    }
+    if (params.issueDate) updateBody.issueDate = params.issueDate;
+    if (params.note) updateBody.note = params.note;
+
+    this.logger.log(
+      `${params.logPrefix} — updating Crunchwork invoice ${params.cwInvoiceId} ` +
+        `groups=${updateGroups.length} with completed line pricing`,
+    );
+
+    const updated = await this.crunchworkService.updateInvoice({
+      connectionId: params.connectionId,
+      invoiceId: params.cwInvoiceId,
+      body: updateBody,
+    });
+    return updated as Record<string, unknown>;
   }
 
   async update(params: {

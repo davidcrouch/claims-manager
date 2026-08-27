@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Check, Loader2, Mail, User } from 'lucide-react';
+import { Mail, User } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -14,16 +14,18 @@ import {
   PageHeaderLayout,
 } from '@/components/layout/PageHeaderLayout';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
-import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { ContactRelatedJobsSection } from '@/components/contacts/ContactRelatedJobsSection';
+import { HeaderSaveStatus } from '@/components/shared/HeaderSaveStatus';
+import {
+  AUTOSAVE_DEBOUNCE_MS,
+  SAVE_STATUS_CLEAR_MS,
+} from '@/components/shared/detail-autosave';
 import { SectionCard, formatDateTime } from '@/components/shared/detail';
 import {
   fetchContactTypeLookupsAction,
   updateContactAction,
 } from '@/app/(app)/mutations';
 import type { Contact, ContactRelatedJob } from '@/types/api';
-
-const AUTOSAVE_DEBOUNCE_MS = 600;
 
 type ContactDraft = {
   firstName: string;
@@ -138,35 +140,6 @@ function ReadOnlyFieldRow({ label, value }: { label: string; value: string | nul
   );
 }
 
-function ContactSaveStatus({
-  saveState,
-  saveError,
-}: {
-  saveState: SaveState;
-  saveError: string | null;
-}) {
-  if (saveState === 'saving' || saveState === 'pending') {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        Saving…
-      </span>
-    );
-  }
-  if (saveState === 'saved') {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600">
-        <Check className="h-3.5 w-3.5" />
-        Saved
-      </span>
-    );
-  }
-  if (saveState === 'error' && saveError) {
-    return <span className="text-xs text-destructive">{saveError}</span>;
-  }
-  return null;
-}
-
 function ContactPageHeader({
   contact,
   draft,
@@ -174,8 +147,6 @@ function ContactPageHeader({
   backHref,
   backLabel,
   typeLookups,
-  saveState,
-  saveError,
 }: {
   contact: Contact;
   draft: ContactDraft;
@@ -183,8 +154,6 @@ function ContactPageHeader({
   backHref: string;
   backLabel: string;
   typeLookups: ContactTypeLookup[];
-  saveState: SaveState;
-  saveError: string | null;
 }) {
   const displayContact: Contact = {
     ...contact,
@@ -197,52 +166,47 @@ function ContactPageHeader({
   const typeLabels = contactTypeLabels(displayContact, typeLookups);
 
   return (
-    <>
-      <SetHeaderActions>
-        <ContactSaveStatus saveState={saveState} saveError={saveError} />
-      </SetHeaderActions>
-      <PageHeaderLayout
-        leading={<BackButton href={backHref} label={backLabel} />}
-        icon={
-          <PageHeaderIcon
-            icon={User}
-            className="bg-muted"
-            iconClassName="text-muted-foreground"
-          />
-        }
-        title={title}
-        topRow={
-          <>
-            {typeLabels.map((label) => (
-              <span
-                key={label}
-                className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-800"
+    <PageHeaderLayout
+      leading={<BackButton href={backHref} label={backLabel} />}
+      icon={
+        <PageHeaderIcon
+          icon={User}
+          className="bg-muted"
+          iconClassName="text-muted-foreground"
+        />
+      }
+      title={title}
+      topRow={
+        <>
+          {typeLabels.map((label) => (
+            <span
+              key={label}
+              className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-800"
+            >
+              {label}
+            </span>
+          ))}
+        </>
+      }
+      bottomRow={
+        <>
+          {displayContact.email && (
+            <div className="flex items-baseline gap-1">
+              <span className="text-muted-foreground">Email:</span>
+              <a
+                href={`mailto:${displayContact.email}`}
+                className="font-medium text-primary hover:underline"
               >
-                {label}
-              </span>
-            ))}
-          </>
-        }
-        bottomRow={
-          <>
-            {displayContact.email && (
-              <div className="flex items-baseline gap-1">
-                <span className="text-muted-foreground">Email:</span>
-                <a
-                  href={`mailto:${displayContact.email}`}
-                  className="font-medium text-primary hover:underline"
-                >
-                  {displayContact.email}
-                </a>
-              </div>
-            )}
-            {relatedJobCount > 0 && (
-              <PageHeaderField label="Related jobs">{relatedJobCount}</PageHeaderField>
-            )}
-          </>
-        }
-      />
-    </>
+                {displayContact.email}
+              </a>
+            </div>
+          )}
+          {relatedJobCount > 0 && (
+            <PageHeaderField label="Related jobs">{relatedJobCount}</PageHeaderField>
+          )}
+        </>
+      }
+    />
   );
 }
 
@@ -350,7 +314,7 @@ export function ContactDetailClient({
 
   useEffect(() => {
     if (saveState !== 'saved') return;
-    const timer = setTimeout(() => setSaveState('idle'), 2000);
+    const timer = setTimeout(() => setSaveState('idle'), SAVE_STATUS_CLEAR_MS);
     return () => clearTimeout(timer);
   }, [saveState]);
 
@@ -369,6 +333,12 @@ export function ContactDetailClient({
 
   return (
     <>
+      <HeaderSaveStatus
+        saving={saveState === 'saving'}
+        saveError={saveError}
+        justSaved={saveState === 'saved'}
+        dirty={dirty}
+      />
       <SetPageHeader>
         <ContactPageHeader
           contact={contact}
@@ -377,8 +347,6 @@ export function ContactDetailClient({
           backHref={backHref}
           backLabel={backLabel}
           typeLookups={typeLookups}
-          saveState={saveState}
-          saveError={saveError}
         />
       </SetPageHeader>
 

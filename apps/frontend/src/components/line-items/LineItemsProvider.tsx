@@ -36,6 +36,7 @@ import {
   type ResolvedHeaderVisibility,
   resolveHeaderVisibility,
 } from './lib/header-visibility';
+import type { CatalogUpdateMode } from './lib/catalog-update';
 
 // --- Actions (callbacks the consumer provides) ---
 
@@ -117,6 +118,10 @@ export interface LineItemsContextValue {
   bulkSelection?: BulkSelection;
   bulkSelectedIds: Set<string>;
 
+  // Catalogue update mode (estimate → source catalogue)
+  catalogUpdateMode: CatalogUpdateMode;
+  canSetCatalogUpdateMode: boolean;
+
   // Actions
   actions: LineItemsActions;
 
@@ -141,6 +146,7 @@ export interface LineItemsContextValue {
   setShowQuantities: (v: boolean) => void;
   setShowPricing: (v: boolean) => void;
   setShowUnselected: (v: boolean) => void;
+  setCatalogUpdateMode: (mode: CatalogUpdateMode) => void;
   resolveHeaderVisibility: (key: string, parentQty: boolean, parentPrice: boolean) => ResolvedHeaderVisibility;
   isHeaderOverridden: (key: string) => boolean;
   toggleHeaderOverride: (key: string, parentQty: boolean, parentPrice: boolean) => void;
@@ -174,6 +180,9 @@ export interface LineItemsProviderProps {
   quantitiesVisible?: boolean;
   pricingVisible?: boolean;
   labels?: Partial<LineItemLabels>;
+  catalogUpdateMode?: CatalogUpdateMode;
+  onCatalogUpdateModeChange?: (mode: CatalogUpdateMode) => void;
+  canSetCatalogUpdateMode?: boolean;
 }
 
 export function LineItemsProvider({
@@ -192,6 +201,9 @@ export function LineItemsProvider({
   quantitiesVisible,
   pricingVisible,
   labels: labelOverrides,
+  catalogUpdateMode = 'none',
+  onCatalogUpdateModeChange,
+  canSetCatalogUpdateMode = false,
 }: LineItemsProviderProps) {
   const groups = useMemo(() => normalizeLineItemGroups(rawGroups), [rawGroups]);
   const isReadOnly = mode === 'readonly' || mode === 'selection';
@@ -388,6 +400,14 @@ export function LineItemsProvider({
     [bulkSelectedIds, setBulkSelectedIds],
   );
 
+  const setCatalogUpdateMode = useCallback(
+    (mode: CatalogUpdateMode) => {
+      if (!canSetCatalogUpdateMode) return;
+      onCatalogUpdateModeChange?.(mode);
+    },
+    [canSetCatalogUpdateMode, onCatalogUpdateModeChange],
+  );
+
   // --- Dirty change notification ---
   const actionsRef = useRef(actions);
   actionsRef.current = actions;
@@ -423,6 +443,8 @@ export function LineItemsProvider({
       selection,
       bulkSelection,
       bulkSelectedIds,
+      catalogUpdateMode: canSetCatalogUpdateMode ? catalogUpdateMode : 'none',
+      canSetCatalogUpdateMode,
       actions,
       setEditState,
       setEditInputs,
@@ -444,6 +466,7 @@ export function LineItemsProvider({
       setShowQuantities,
       setShowPricing,
       setShowUnselected,
+      setCatalogUpdateMode,
       resolveHeaderVisibility: resolveVisibility,
       isHeaderOverridden,
       toggleHeaderOverride,
@@ -469,6 +492,8 @@ export function LineItemsProvider({
       selection,
       bulkSelection,
       bulkSelectedIds,
+      catalogUpdateMode,
+      canSetCatalogUpdateMode,
       actions,
       setEditState,
       setEditInputs,
@@ -482,6 +507,7 @@ export function LineItemsProvider({
       setSearchTerm,
       setHiddenGroupIds,
       handleBulkToggle,
+      setCatalogUpdateMode,
       resolveVisibility,
       isHeaderOverridden,
       toggleHeaderOverride,

@@ -21,7 +21,7 @@ import { computeItemMoney, initScopeInputs } from './lib/money';
 import { LineScopeStatusBadge } from './lib/badges';
 import { displayLabelText } from './lib/display';
 import { RowLeadCheckbox, RowLeadDrag, RowLeadExpand, ROW_LEAD_ROW_CLS } from './lib/row-lead';
-import { LineItemsColGroup, LineItemsThead, LineItemsTableShell } from './lib/table-parts';
+import { LI_HEADER_COUNT, LI_HEADER_TOTAL, LineItemsColGroup, LineItemsThead, LineItemsTableShell } from './lib/table-parts';
 import { HeaderVisibilityToggles } from './lib/header-visibility';
 import { NoteHoverWrap } from './lib/line-note-hover';
 import { filterVisibleCombos, filterVisibleItems, isSelectablePicked } from './lib/selection-filter';
@@ -244,7 +244,7 @@ export const ScopeCard = memo(function ScopeCard({
         <Layers className="h-4 w-4 shrink-0 text-violet-500" />
 
         {isEditing && scopeInputs ? (
-          <div className="flex min-w-0 flex-1 flex-col" onClick={(e) => e.stopPropagation()}>
+          <div className="flex min-w-0 flex-1 flex-col pl-2" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-1">
               <input
                 className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-violet-900 outline-none placeholder:text-violet-300"
@@ -273,7 +273,7 @@ export const ScopeCard = memo(function ScopeCard({
             />
           </div>
         ) : (
-          <div className="flex min-w-0 flex-1 items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2 pl-2">
             <span className="truncate text-sm font-semibold text-violet-900">
               {scopeName}
               {scopeComponent && <span className="font-normal text-violet-600"> — {scopeComponent}</span>}
@@ -286,10 +286,11 @@ export const ScopeCard = memo(function ScopeCard({
         )}
 
         {showQuantities && (
-          <span className="shrink-0 text-right font-mono text-sm text-violet-600">
+          <span className="flex shrink-0 items-baseline justify-end gap-1 pl-3 text-violet-600" title="Scope quantity">
+            <span className="text-[10px] font-medium uppercase tracking-wide text-violet-500">Qty</span>
             {isEditing && scopeInputs ? (
               <input
-                className="w-16 bg-transparent text-right font-mono text-sm outline-none"
+                className="w-12 bg-transparent text-right font-mono text-sm outline-none"
                 value={scopeInputs.quantity}
                 onChange={(e) => handleInputChange(scopeKey, 'quantity', e.target.value)}
                 onKeyDown={handleCellKeyDown}
@@ -297,18 +298,20 @@ export const ScopeCard = memo(function ScopeCard({
                 onClick={(e) => e.stopPropagation()}
               />
             ) : (
-              scopeInputs?.quantity ?? scope.quantity ?? ''
+              <span className="min-w-[1.5rem] text-right font-mono text-sm">
+                {scopeInputs?.quantity ?? scope.quantity ?? ''}
+              </span>
             )}
           </span>
         )}
 
-        <span className="shrink-0 text-xs tabular-nums text-violet-600">
+        <span className={cn(LI_HEADER_COUNT, 'text-violet-600')}>
           {totalChildLines} item{totalChildLines !== 1 ? 's' : ''}
           {scopeCombos.length > 0 && ` · ${visibleScopeCombos.length} assembl${visibleScopeCombos.length !== 1 ? 'ies' : 'y'}`}
         </span>
 
         {showPricing && (
-          <span className="shrink-0 text-sm font-medium tabular-nums text-violet-900">
+          <span className={cn(LI_HEADER_TOTAL, 'text-violet-900')}>
             {formatCurrency(scopeTotal)}
           </span>
         )}
@@ -349,7 +352,7 @@ export const ScopeCard = memo(function ScopeCard({
 
       {/* Scope content */}
       {!isCollapsed && (visibleScopeItems.length > 0 || visibleScopeCombos.length > 0) && (
-        <div className="border-t border-violet-100">
+        <div className="mx-3 border-t border-violet-100">
           {/* Scope-level items */}
           {visibleScopeItems.length > 0 && (
             <div className="overflow-x-auto">

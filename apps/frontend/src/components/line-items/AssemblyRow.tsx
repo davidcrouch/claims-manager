@@ -21,7 +21,7 @@ import { computeItemMoney, initComboInputs } from './lib/money';
 import { LineScopeStatusBadge, PublishStatusBadge } from './lib/badges';
 import { displayLabelText } from './lib/display';
 import { RowLeadCheckbox, RowLeadDrag, RowLeadExpand, ROW_LEAD_ROW_CLS } from './lib/row-lead';
-import { LineItemsColGroup, LineItemsThead, LineItemsTableShell } from './lib/table-parts';
+import { LI_HEADER_COUNT, LI_HEADER_TOTAL, LineItemsColGroup, LineItemsThead, LineItemsTableShell } from './lib/table-parts';
 import { HeaderVisibilityToggles } from './lib/header-visibility';
 import { NoteHoverWrap } from './lib/line-note-hover';
 import { filterVisibleItems, isSelectablePicked } from './lib/selection-filter';
@@ -252,19 +252,17 @@ export const AssemblyRow = memo(function AssemblyRow({
               {comboName}
               {comboComponent && <span className="font-normal text-slate-500"> — {comboComponent}</span>}
             </span>
-            <span className="shrink-0 rounded-full bg-slate-300 px-2 py-0.5 text-[10px] font-medium text-slate-700">
-              {visibleComboItems.length} item{visibleComboItems.length !== 1 ? 's' : ''}
-            </span>
             <LineScopeStatusBadge status={combo.lineScopeStatus} />
             <PublishStatusBadge status={combo.publishStatus} />
           </div>
         )}
 
         {showQuantities && (
-          <span className="shrink-0 text-right font-mono text-sm text-slate-600">
+          <span className="flex shrink-0 items-baseline justify-end gap-1 pl-3 text-slate-600" title="Assembly quantity">
+            <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Qty</span>
             {isEditing && comboInputs ? (
               <input
-                className="w-16 bg-transparent text-right font-mono text-sm outline-none"
+                className="w-12 bg-transparent text-right font-mono text-sm outline-none"
                 value={comboInputs.quantity}
                 onChange={(e) => handleInputChange(comboKey, 'quantity', e.target.value)}
                 onKeyDown={handleCellKeyDown}
@@ -272,13 +270,19 @@ export const AssemblyRow = memo(function AssemblyRow({
                 onClick={(e) => e.stopPropagation()}
               />
             ) : (
-              comboInputs?.quantity ?? combo.quantity ?? ''
+              <span className="min-w-[1.5rem] text-right font-mono text-sm">
+                {comboInputs?.quantity ?? combo.quantity ?? ''}
+              </span>
             )}
           </span>
         )}
 
+        <span className={cn(LI_HEADER_COUNT, 'text-slate-600')}>
+          {visibleComboItems.length} item{visibleComboItems.length !== 1 ? 's' : ''}
+        </span>
+
         {showPricing && (
-          <span className={cn('shrink-0 text-sm font-medium tabular-nums text-slate-800', assemblyContentDisabled.pricing && 'opacity-30')}>
+          <span className={cn(LI_HEADER_TOTAL, 'text-slate-800', assemblyContentDisabled.pricing && 'opacity-30')}>
             {assemblyContentDisabled.pricing ? '—' : formatCurrency(comboTotal)}
           </span>
         )}
@@ -319,7 +323,7 @@ export const AssemblyRow = memo(function AssemblyRow({
 
       {/* Assembly child items */}
       {!isCollapsed && visibleComboItems.length > 0 && (
-        <div className="overflow-x-auto border-t border-slate-100">
+        <div className="mx-3 overflow-x-auto border-t border-slate-100">
           <LineItemsTableShell
             showOverrides={showColumnVisibilityToggles}
             overrides={

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { CrunchworkAuthService } from './crunchwork-auth.service';
+import { isRetryableCrunchworkFailure } from './crunchwork-errors';
 import {
   BadRequestException,
   InternalServerErrorException,
@@ -87,17 +88,23 @@ export class CrunchworkService {
     const url = `${restBase.replace(/\/$/, '')}${options.path}`;
     this.logger.debug(`CrunchworkService.request — ${options.method} ${url}`);
 
+    // GET must not send Content-Type / a JSON body. CW treats unexpected payload
+    // as a 500 "Not Authorised!" rather than a 400 validation error.
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+      'active-tenant-id': creds.activeTenantId,
+      Accept: 'application/json',
+    };
+    if (options.body !== undefined) {
+      headers['Content-Type'] = 'application/json';
+    }
+
     const response = await firstValueFrom(
       this.httpService.request({
         method: options.method,
         url,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'active-tenant-id': creds.activeTenantId,
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        data: options.body,
+        headers,
+        ...(options.body !== undefined ? { data: options.body } : {}),
         params: options.params,
       }),
     );
@@ -172,6 +179,16 @@ export class CrunchworkService {
           continue;
         }
         if (status && status >= 500) {
+          const { body } = this.extractUpstreamDetail(error);
+          if (!isRetryableCrunchworkFailure({ status, body })) {
+            this.logger.warn(
+              `CrunchworkService.requestWithRetry — ${options.method} ${options.path} ` +
+                `rejected with application error (status=${status}): ${body}`,
+            );
+            throw new BadRequestException(
+              body || 'Crunchwork rejected the request',
+            );
+          }
           if (attempt < this.maxRetries) {
             const delay = Math.pow(2, attempt) * 1000;
             this.logger.warn(

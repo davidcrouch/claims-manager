@@ -1,21 +1,25 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertTriangle,
   Building2,
   ClipboardCheck,
   Home,
-  Save,
   ShieldAlert,
   Stethoscope,
   Users,
   Wrench,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { HeaderActionToolbar } from '@/components/layout/HeaderActionToolbar';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
+import { HeaderSaveStatus } from '@/components/shared/HeaderSaveStatus';
+import {
+  AUTOSAVE_DEBOUNCE_MS,
+  SAVE_STATUS_CLEAR_MS,
+  cloneJson,
+} from '@/components/shared/detail-autosave';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import {
   DetailAssignee,
@@ -89,11 +93,20 @@ export function AssessmentDetailClient({ assessment, job, claim }: AssessmentDet
   const [sections, setSections] = useState<AssessmentSections>(() =>
     sectionsFromAssessment(assessment),
   );
+  const [baseline, setBaseline] = useState<AssessmentSections>(() =>
+    cloneJson(sectionsFromAssessment(assessment)),
+  );
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [publishOpen, setPublishOpen] = useState(false);
+  const saveInFlightRef = useRef(false);
+  const sectionsRef = useRef(sections);
+  sectionsRef.current = sections;
   const locked = isAssessmentLocked(assessment.status);
   const assignee = resolveDetailAssignee({ job });
+  const dirty =
+    !locked && JSON.stringify(sections) !== JSON.stringify(baseline);
 
   const onTabChange = useCallback(
     (value: TabValue) => {
@@ -106,6 +119,14 @@ export function AssessmentDetailClient({ assessment, job, claim }: AssessmentDet
     [pathname, router, searchParams],
   );
 
+  useEffect(() => {
+    const next = sectionsFromAssessment(assessment);
+    setSections(next);
+    setBaseline(cloneJson(next));
+    setSaveError(null);
+    setJustSaved(false);
+  }, [assessment.id]);
+
   const setKey = useCallback(
     (section: AssessmentSectionKey, key: string, value: unknown) => {
       if (locked) return;
@@ -113,35 +134,59 @@ export function AssessmentDetailClient({ assessment, job, claim }: AssessmentDet
         ...prev,
         [section]: { ...prev[section], [key]: value },
       }));
-      setSaved(false);
+      setJustSaved(false);
     },
     [locked],
   );
 
-  const persistForm = async (): Promise<boolean> => {
-    if (locked) return false;
+  const persistForm = useCallback(async (): Promise<boolean> => {
+    if (locked || saveInFlightRef.current) return false;
+    const current = sectionsRef.current;
+    saveInFlightRef.current = true;
     setSaving(true);
+    setJustSaved(false);
+    setSaveError(null);
     try {
       const payload: Partial<Assessment> = { name: assessment.name };
       for (const key of ASSESSMENT_SECTIONS) {
-        payload[key] = sections[key];
+        payload[key] = current[key];
       }
       await updateAssessmentAction(assessment.id, payload);
-      setSaved(true);
+      setBaseline(cloneJson(current));
+      setJustSaved(true);
       router.refresh();
       return true;
     } catch (err) {
-      console.error('AssessmentDetailClient.persistForm:', err);
+      console.error('[frontend:AssessmentDetailClient.persistForm]', err);
+      setSaveError(err instanceof Error ? err.message : 'Failed to save assessment');
       return false;
     } finally {
+      saveInFlightRef.current = false;
       setSaving(false);
     }
-  };
+  }, [assessment.id, assessment.name, locked, router]);
+
+  useEffect(() => {
+    if (!dirty || saving || locked) return;
+    const timer = setTimeout(() => {
+      void persistForm();
+    }, AUTOSAVE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [dirty, saving, locked, persistForm, sections]);
+
+  useEffect(() => {
+    if (!justSaved || dirty || saving || saveError) return;
+    const timer = setTimeout(() => setJustSaved(false), SAVE_STATUS_CLEAR_MS);
+    return () => clearTimeout(timer);
+  }, [justSaved, dirty, saving, saveError]);
 
   const handleOpenPublish = async () => {
     if (locked) return;
-    const ok = await persistForm();
-    if (ok) setPublishOpen(true);
+    if (dirty) {
+      const ok = await persistForm();
+      if (!ok) return;
+    }
+    setPublishOpen(true);
   };
 
   const attData = {
@@ -152,18 +197,15 @@ export function AssessmentDetailClient({ assessment, job, claim }: AssessmentDet
 
   return (
     <div className="flex flex-col">
+      {!locked && (
+        <HeaderSaveStatus
+          saving={saving}
+          saveError={saveError}
+          justSaved={justSaved}
+          dirty={dirty}
+        />
+      )}
       <SetHeaderActions>
-        {!locked && (
-          <Button
-            size="default"
-            onClick={() => void persistForm()}
-            disabled={saving}
-            className="h-9 gap-1.5 bg-blue-600 text-white hover:bg-blue-500"
-          >
-            <Save className="size-4" />
-            {saving ? 'Saving...' : saved ? 'Saved' : 'Save'}
-          </Button>
-        )}
         <HeaderActionToolbar>
           {!locked && (
             <PublishButton

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef, type MutableRefObject } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -14,7 +14,6 @@ import {
   ClipboardList,
   MessageSquare,
   Loader2,
-  Save,
   Send,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -28,6 +27,11 @@ import {
 import { HeaderActionToolbar } from '@/components/layout/HeaderActionToolbar';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { Button } from '@/components/ui/button';
+import { HeaderSaveStatus } from '@/components/shared/HeaderSaveStatus';
+import {
+  AUTOSAVE_DEBOUNCE_MS,
+  SAVE_STATUS_CLEAR_MS,
+} from '@/components/shared/detail-autosave';
 import {
   DefRow,
   SectionCard,
@@ -310,6 +314,8 @@ type ScopeSaveControls = {
   saving: boolean;
   estimateLoading: boolean;
   canEdit: boolean;
+  saveError: string | null;
+  justSaved: boolean;
 };
 
 function ScopeItemsTab({
@@ -318,16 +324,12 @@ function ScopeItemsTab({
   includeQuantities: savedIncludeQuantities,
   includePricing: savedIncludePricing,
   onSaveControlsChange,
-  saveRef,
-  cancelRef,
 }: {
   rfqId: string;
   quoteId: string | null;
   includeQuantities: boolean;
   includePricing: boolean;
   onSaveControlsChange?: (controls: ScopeSaveControls | null) => void;
-  saveRef?: MutableRefObject<(() => void) | null>;
-  cancelRef?: MutableRefObject<(() => void) | null>;
 }) {
   const router = useRouter();
   const [rfqGroups, setRfqGroups] = useState<ApiGroup[] | null>(null);
@@ -341,6 +343,7 @@ function ScopeItemsTab({
   const [committedQuantities, setCommittedQuantities] = useState(savedIncludeQuantities);
   const [committedPricing, setCommittedPricing] = useState(savedIncludePricing);
   const [saving, setSaving] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [noteTarget, setNoteTarget] = useState<LineNoteTarget | null>(null);
   const [noteDrawerOpen, setNoteDrawerOpen] = useState(false);
@@ -441,6 +444,7 @@ function ScopeItemsTab({
       return;
     }
     setSaving(true);
+    setJustSaved(false);
     setSaveError(null);
     try {
       if (flagsDirty) {
@@ -466,6 +470,7 @@ function ScopeItemsTab({
       if (flagsDirty) {
         router.refresh();
       }
+      setJustSaved(true);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to save changes');
     } finally {
@@ -481,28 +486,23 @@ function ScopeItemsTab({
     router,
   ]);
 
-  const handleCancelEdit = useCallback(() => {
-    setSelectedIds(new Set(rfqSourceIds));
-    setIncludeQuantities(committedQuantities);
-    setIncludePricing(committedPricing);
-    setSaveError(null);
-  }, [rfqSourceIds, committedQuantities, committedPricing]);
-
   const canSave =
     pageDirty && !saving && (!selectionDirty || selectedIds.size > 0);
   const canEdit = !!quoteId && !!rfqGroups && rfqGroups.length > 0 && !loading && !error;
 
   useEffect(() => {
-    if (saveRef) {
-      saveRef.current = quoteId ? () => void handleSaveScope() : null;
-    }
-  }, [saveRef, quoteId, handleSaveScope]);
+    if (!canSave) return;
+    const timer = setTimeout(() => {
+      void handleSaveScope();
+    }, AUTOSAVE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [canSave, handleSaveScope, selectedIds, includeQuantities, includePricing]);
 
   useEffect(() => {
-    if (cancelRef) {
-      cancelRef.current = handleCancelEdit;
-    }
-  }, [cancelRef, handleCancelEdit]);
+    if (!justSaved || pageDirty || saving || saveError) return;
+    const timer = setTimeout(() => setJustSaved(false), SAVE_STATUS_CLEAR_MS);
+    return () => clearTimeout(timer);
+  }, [justSaved, pageDirty, saving, saveError]);
 
   useEffect(() => {
     if (!onSaveControlsChange) return;
@@ -512,16 +512,25 @@ function ScopeItemsTab({
       saving,
       estimateLoading,
       canEdit,
+      saveError,
+      justSaved,
     });
-  }, [onSaveControlsChange, canSave, pageDirty, saving, estimateLoading, canEdit]);
+  }, [
+    onSaveControlsChange,
+    canSave,
+    pageDirty,
+    saving,
+    estimateLoading,
+    canEdit,
+    saveError,
+    justSaved,
+  ]);
 
   useEffect(() => {
     return () => {
       onSaveControlsChange?.(null);
-      if (saveRef) saveRef.current = null;
-      if (cancelRef) cancelRef.current = null;
     };
-  }, [onSaveControlsChange, saveRef, cancelRef]);
+  }, [onSaveControlsChange]);
 
   if (loading) {
     return (
@@ -941,8 +950,6 @@ export function RfqDetail({
   const [tab, setTab] = useState<RfqTab>('overview');
   const [scopeSave, setScopeSave] = useState<ScopeSaveControls | null>(null);
   const [sendDrawerOpen, setSendDrawerOpen] = useState(false);
-  const scopeSaveRef = useRef<(() => void) | null>(null);
-  const scopeCancelRef = useRef<(() => void) | null>(null);
 
   const handleScopeSaveControls = useCallback((controls: ScopeSaveControls | null) => {
     setScopeSave((prev) => {
@@ -951,7 +958,9 @@ export function RfqDetail({
         prev?.pageDirty === controls?.pageDirty &&
         prev?.saving === controls?.saving &&
         prev?.estimateLoading === controls?.estimateLoading &&
-        prev?.canEdit === controls?.canEdit
+        prev?.canEdit === controls?.canEdit &&
+        prev?.saveError === controls?.saveError &&
+        prev?.justSaved === controls?.justSaved
       ) {
         return prev;
       }
@@ -963,10 +972,6 @@ export function RfqDetail({
     if (tab !== 'requests') setSendDrawerOpen(false);
   }, [tab]);
 
-  const handleCancel = useCallback(() => {
-    scopeCancelRef.current?.();
-  }, []);
-
   const tabs: Array<{ id: RfqTab; label: string; icon: typeof Calendar }> = [
     { id: 'overview', label: 'Overview', icon: FileSignature },
     { id: 'scope-items', label: 'Scope Items', icon: Layers },
@@ -977,13 +982,18 @@ export function RfqDetail({
     { id: 'timeline', label: 'Timeline', icon: Calendar },
   ];
 
-  const showScopeActions = tab === 'scope-items' && (scopeSave?.canEdit ?? !!rfq.quoteId);
   const scopeDirty = scopeSave?.pageDirty ?? false;
   const scopeSaving = scopeSave?.saving ?? false;
   const showSendRequest = tab === 'requests';
 
   return (
     <div className="flex flex-col">
+      <HeaderSaveStatus
+        saving={scopeSaving}
+        saveError={scopeSave?.saveError}
+        justSaved={scopeSave?.justSaved}
+        dirty={scopeDirty}
+      />
       <SetHeaderActions>
         {showSendRequest && (
           <Button
@@ -994,32 +1004,6 @@ export function RfqDetail({
             <Send className="h-3.5 w-3.5" />
             Send Request
           </Button>
-        )}
-        {showScopeActions && (
-          <>
-            <Button
-              size="default"
-              variant="outline"
-              onClick={handleCancel}
-              disabled={scopeSaving || !scopeDirty}
-              className="h-9 gap-1.5 px-4"
-            >
-              Cancel
-            </Button>
-            <Button
-              size="default"
-              onClick={() => scopeSaveRef.current?.()}
-              disabled={!scopeSave?.canSave}
-              className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
-            >
-              {scopeSaving ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Save className="h-3.5 w-3.5" />
-              )}
-              {scopeSaving ? 'Saving...' : 'Save'}
-            </Button>
-          </>
         )}
         <HeaderActionToolbar>
           <PrintButton documentType="rfq" entityId={rfq.id} jobId={job?.id} />
@@ -1063,8 +1047,6 @@ export function RfqDetail({
             includeQuantities={!!rfq.includeQuantities}
             includePricing={!!rfq.includePricing}
             onSaveControlsChange={handleScopeSaveControls}
-            saveRef={scopeSaveRef}
-            cancelRef={scopeCancelRef}
           />
         </div>
         {tab === 'proposals' && (

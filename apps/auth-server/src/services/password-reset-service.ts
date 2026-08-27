@@ -1,9 +1,8 @@
 import { randomBytes } from 'crypto';
-import bcrypt from 'bcrypt';
 import { GlobalCacheManager } from '../lib/cache/global-cache-manager.js';
 import { createLogger, LoggerType } from '../lib/logger.js';
 import { createTelemetryLogger } from '@morezero/telemetry';
-import { getUserByEmail, addPasswordIdentityToUser } from './identity-registration-service.js';
+import { getUserByEmail, setPasswordForUser } from './identity-registration-service.js';
 import { getBaseUrl } from '../config/env-validation.js';
 import { sendPasswordResetEmail as sendResetEmail } from './email/index.js';
 
@@ -79,13 +78,19 @@ export async function confirmPasswordReset(params: { token: string; password: st
       return { success: false, error: 'Account not found. The reset token may be stale.' };
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    await addPasswordIdentityToUser({
+    const setResult = await setPasswordForUser({
       userId: user.userId,
-      email,
-      password: hashedPassword,
+      email: user.email || email,
+      password,
     });
+
+    if (!setResult.success) {
+      log.warn(
+        { email, error: setResult.error, errorCode: setResult.errorCode },
+        'auth-server:password-reset:confirmPasswordReset - Failed to persist new password',
+      );
+      return { success: false, error: setResult.error || 'Failed to reset password. Please try again.' };
+    }
 
     await redis.del(`${RESET_TOKEN_PREFIX}${token}`);
 

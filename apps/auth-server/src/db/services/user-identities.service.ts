@@ -34,6 +34,14 @@ export class UserIdentitiesService {
     return this.repo.create(context, data);
   }
 
+  async updateRawProfile(
+    context: AccessContext,
+    id: string,
+    rawProfile: Record<string, unknown>,
+  ): Promise<boolean> {
+    return this.repo.updateRawProfile(context, id, rawProfile);
+  }
+
   async hasIdentities(context: AccessContext, userId: string): Promise<boolean> {
     return this.repo.hasIdentities(context, userId);
   }

@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { sql } from 'drizzle-orm';
 import {
   ExternalObjectsRepository,
   ExternalProcessingLogRepository,
@@ -100,6 +101,14 @@ export class InProcessProjectionService {
     }
 
     return this.db.transaction(async (tx) => {
+      // Serialize concurrent projections for the same external object.
+      // Two webhooks for the same entity (e.g. NEW then UPDATE) can arrive
+      // milliseconds apart and race into separate transactions. Without this
+      // lock both see "no existing link" and both create a new internal entity.
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${params.externalObjectId}))`,
+      );
+
       const ucResult = await useCase.execute({
         externalObject: externalObject as unknown as Record<string, unknown>,
         tenantId: params.tenantId,

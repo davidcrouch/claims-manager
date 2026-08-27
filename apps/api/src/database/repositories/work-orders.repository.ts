@@ -27,8 +27,10 @@ function buildWorkOrdersOrderBy(sort?: string) {
       return [asc(workOrders.name)];
     case 'name_desc':
       return [desc(workOrders.name)];
+    case 'insurer_po_asc':
     case 'work_order_number_asc':
       return [asc(workOrders.workOrderNumber)];
+    case 'insurer_po_desc':
     case 'work_order_number_desc':
       return [desc(workOrders.workOrderNumber)];
     case 'total_amount_asc':
@@ -108,9 +110,11 @@ export class WorkOrdersRepository {
         whereClause,
         or(
           ilike(workOrders.workOrderNumber, term),
+          ilike(workOrders.internalNumber, term),
           ilike(workOrders.name, term),
           ilike(workOrders.externalId, term),
           ilike(workOrders.sourceExternalReference, term),
+          sql`${workOrders.workOrderPayload}->>'purchaseOrderNumber' ILIKE ${term}`,
           ilike(workOrders.woForName, term),
           ilike(workOrders.note, term),
         )!,

@@ -1015,3 +1015,14 @@
   The tasks list no longer drops or reloads incorrectly when staff change tabs or filters.
   Staff can see at a glance what is already on a job before opening each list.
   These updates apply on the website after the next release.
+
+- `2026-08-27` `pending` **8 h**
+  `60 files | +3071 −327 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  Lay summary: Staff can update the catalogue from an estimate, invoices send more reliably to the insurer, and lists show clearer record numbers.
+  **Catalogue updates from estimates, more reliable insurer invoicing, and clearer record labels.**
+  Organisation admins can choose whether saving an estimate also updates matching catalogue items, either after a prompt or automatically.
+  Invoices published to the insurer now handle vendor tax invoices and line totals more accurately.
+  Quotes, invoices, and work orders show the insurer reference where it differs from the internal number, and save status sits under the header icons.
+  Sign-in recovers more cleanly from an old session, and password reset is more reliable.
+  The same insurer record can no longer create two work orders from one purchase order.
+

@@ -69,7 +69,7 @@ interface ColDef {
 }
 
 const TABLE_COLUMNS: ColDef[] = [
-  { key: 'external_reference', label: 'Job Ref', locked: true, filterable: true },
+  { key: 'external_reference', label: 'Job #', locked: true, filterable: true },
   { key: 'external_job_id', label: 'Insurer Ref' },
   { key: 'job_type', label: 'Type', filterable: true },
   { key: 'status', label: 'Status', filterable: true },

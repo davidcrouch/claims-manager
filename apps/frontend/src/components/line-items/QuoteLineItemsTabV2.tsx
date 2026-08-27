@@ -32,6 +32,8 @@ import {
   moveQuoteLineItemAction,
   duplicateQuoteLineItemAction,
 } from '@/app/(app)/quotes/actions';
+import { updateCatalogFromEstimateAction } from '@/app/(app)/admin/catalog/actions';
+import { useCanUpdateCatalogFromEstimate } from '@/components/providers/PermissionsProvider';
 
 import {
   LineItemsProvider,
@@ -46,6 +48,14 @@ import {
 } from '@/components/line-items';
 import { swapGroups, applyReorderParams } from './lib/reorder';
 import { parseRowKey } from './lib/row-keys';
+import { CatalogUpdateConfirmDialog } from './CatalogUpdateConfirmDialog';
+import {
+  CATALOG_UPDATE_MODE_STORAGE_KEY,
+  collectCatalogSourceUpdates,
+  parseCatalogUpdateMode,
+  type CatalogSourcePushItem,
+  type CatalogUpdateMode,
+} from './lib/catalog-update';
 
 const PREFIX = 'frontend:QuoteLineItemsTabV2';
 
@@ -97,6 +107,46 @@ export const QuoteLineItemsTabV2 = forwardRef(function QuoteLineItemsTabV2(
   const onSaveStateChangeRef = useRef(onSaveStateChange);
   onUndoCaptureRef.current = onUndoCapture;
   onSaveStateChangeRef.current = onSaveStateChange;
+
+  const canSetCatalogUpdateMode = useCanUpdateCatalogFromEstimate();
+  const [catalogUpdateMode, setCatalogUpdateModeState] = useState<CatalogUpdateMode>('none');
+
+  useEffect(() => {
+    if (!canSetCatalogUpdateMode) return;
+    setCatalogUpdateModeState(
+      parseCatalogUpdateMode(window.localStorage.getItem(CATALOG_UPDATE_MODE_STORAGE_KEY)),
+    );
+  }, [canSetCatalogUpdateMode]);
+
+  const setCatalogUpdateMode = useCallback((mode: CatalogUpdateMode) => {
+    setCatalogUpdateModeState(mode);
+    try {
+      window.localStorage.setItem(CATALOG_UPDATE_MODE_STORAGE_KEY, mode);
+    } catch {
+      /* ignore quota / private mode */
+    }
+  }, []);
+
+  const catalogUpdateModeRef = useRef<CatalogUpdateMode>('none');
+  catalogUpdateModeRef.current = canSetCatalogUpdateMode ? catalogUpdateMode : 'none';
+  const [catalogPromptItems, setCatalogPromptItems] = useState<CatalogSourcePushItem[] | null>(null);
+  const [catalogPromptPending, setCatalogPromptPending] = useState(false);
+
+  const applyCatalogUpdates = useCallback(async (catalogItems: CatalogSourcePushItem[]) => {
+    const catalogResult = await updateCatalogFromEstimateAction({
+      items: catalogItems.map(({ label: _label, ...rest }) => rest),
+    });
+    if (!catalogResult.success) {
+      console.error(`${PREFIX}.applyCatalogUpdates — catalogue update failed`, catalogResult.error);
+      toast.error(catalogResult.error ?? 'Estimate saved, but the catalogue could not be updated');
+      return false;
+    }
+    const n = catalogResult.updated ?? catalogItems.length;
+    toast.success(
+      n === 1 ? 'Catalogue item updated' : `${n} catalogue items updated`,
+    );
+    return true;
+  }, []);
 
   const visibleGroupIds = useMemo(() => {
     if (hiddenGroupIds.size === 0 || groupSummaries.length === 0) return undefined;
@@ -393,6 +443,19 @@ export const QuoteLineItemsTabV2 = forwardRef(function QuoteLineItemsTabV2(
         return;
       }
 
+      const catalogMode = catalogUpdateModeRef.current;
+      if (catalogMode !== 'none') {
+        const catalogItems = collectCatalogSourceUpdates(dbGroups, { items, combos });
+        console.log(`${PREFIX}.handleSave — catalogMode=${catalogMode} catalogItems=${catalogItems.length}`);
+        if (catalogItems.length > 0) {
+          if (catalogMode === 'auto') {
+            await applyCatalogUpdates(catalogItems);
+          } else {
+            setCatalogPromptItems(catalogItems);
+          }
+        }
+      }
+
       if (!skipUndo && Object.keys(originals).length > 0) {
         onUndoCaptureRef.current?.(originals);
       }
@@ -401,7 +464,7 @@ export const QuoteLineItemsTabV2 = forwardRef(function QuoteLineItemsTabV2(
       await loadLineItems();
       setResetEditsKey((k) => k + 1);
     });
-  }, [quote.id, dbGroups, loadLineItems]);
+  }, [quote.id, dbGroups, loadLineItems, applyCatalogUpdates]);
 
   const latestEditsRef = useRef<Record<string, Record<EditableFieldKey, string>>>({});
   const saveRef = useRef(handleSave);
@@ -489,9 +552,30 @@ export const QuoteLineItemsTabV2 = forwardRef(function QuoteLineItemsTabV2(
         actions={lineItemsActions}
         resetEditsKey={resetEditsKey}
         structurallyDirty={structurallyDirty}
+        catalogUpdateMode={catalogUpdateMode}
+        onCatalogUpdateModeChange={setCatalogUpdateMode}
+        canSetCatalogUpdateMode={canSetCatalogUpdateMode}
       >
         <LineItemsTable hideToolbarActions={hideToolbarActions} />
       </LineItemsProvider>
+
+      <CatalogUpdateConfirmDialog
+        open={catalogPromptItems !== null && catalogPromptItems.length > 0}
+        items={catalogPromptItems ?? []}
+        pending={catalogPromptPending}
+        onCancel={() => {
+          if (catalogPromptPending) return;
+          setCatalogPromptItems(null);
+        }}
+        onConfirm={() => {
+          if (!catalogPromptItems || catalogPromptPending) return;
+          setCatalogPromptPending(true);
+          void applyCatalogUpdates(catalogPromptItems).finally(() => {
+            setCatalogPromptPending(false);
+            setCatalogPromptItems(null);
+          });
+        }}
+      />
     </div>
   );
 });

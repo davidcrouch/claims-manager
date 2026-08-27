@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { getSession, getAccessToken } from '@/lib/auth';
 import { createApiClient } from '@/lib/api-client';
+import { canUpdateCatalogFromEstimate } from '@/lib/permissions';
 
 async function getApi() {
   const session = await getSession();
@@ -680,6 +681,27 @@ export async function saveCatalogLineItemsAction(params: {
       error: err instanceof Error ? err.message : 'Failed to save catalogue items',
     };
   }
+}
+
+export async function updateCatalogFromEstimateAction(params: {
+  items: Array<{
+    id: string;
+    name?: string;
+    description?: string;
+    unitType?: string;
+    unitCost?: string;
+    markupValue?: string;
+    tax?: string;
+  }>;
+}): Promise<{ success: boolean; updated?: number; error?: string }> {
+  const PREFIX = 'catalog/actions.updateCatalogFromEstimateAction';
+  const session = await getSession();
+  if (!session.authenticated) return { success: false, error: 'Not authenticated' };
+  if (!canUpdateCatalogFromEstimate(session.identity?.permissions)) {
+    console.warn(`${PREFIX} — missing catalogue-from-estimate permission`);
+    return { success: false, error: 'You do not have permission to update catalogue items from an estimate' };
+  }
+  return saveCatalogLineItemsAction({ items: params.items });
 }
 
 export async function deleteCatalogItemAction(

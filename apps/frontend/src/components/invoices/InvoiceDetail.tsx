@@ -37,6 +37,7 @@ import { PublishButton } from '@/components/shared/PublishButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { jobDisplayName } from '@/components/shared/job-label';
 import { entityArchiveLabel, entityDetailHeaderTitles } from '@/components/shared/EntityDetailTitle';
+import { invoiceInsurerRef } from '@/components/invoices/invoice-label';
 import { JournalList } from '@/components/journals/JournalList';
 import {
   fetchJournalsByEntityAction,
@@ -204,6 +205,7 @@ function OverviewTab({ invoice }: { invoice: Invoice }) {
           icon={<FileSignature className="h-4 w-4 text-muted-foreground" />}
         >
           <DefRow label="Invoice number" value={invoice.invoiceNumber ?? '—'} />
+          <DefRow label="Insurer Ref" value={invoiceInsurerRef(invoice) ?? '—'} />
           <DefRow label="Status" value={<StatusBadge status={status} />} />
           <DefRow label="Total amount" value={formatCurrency(invoice.totalAmount)} />
           <DefRow label="Sub-total" value={formatCurrency(invoice.subTotal)} />

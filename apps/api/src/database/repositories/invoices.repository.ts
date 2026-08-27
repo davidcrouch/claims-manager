@@ -8,6 +8,9 @@ import { invoices } from '../schema';
 export type InvoiceRow = typeof invoices.$inferSelect;
 export type InvoiceInsert = typeof invoices.$inferInsert;
 
+/** CW insurer invoice # (e.g. 781) on invoice_payload.invoiceNumber. */
+const insurerInvoiceNumber = sql`(NULLIF(${invoices.invoicePayload}->>'invoiceNumber', ''))::numeric`;
+
 function buildInvoicesOrderBy(sort?: string) {
   switch (sort) {
     case 'updated_at_asc':
@@ -20,6 +23,10 @@ function buildInvoicesOrderBy(sort?: string) {
       return [asc(invoices.invoiceNumber)];
     case 'invoice_number_desc':
       return [desc(invoices.invoiceNumber)];
+    case 'insurer_ref_asc':
+      return [asc(insurerInvoiceNumber)];
+    case 'insurer_ref_desc':
+      return [desc(insurerInvoiceNumber)];
     case 'total_amount_asc':
       return [asc(invoices.totalAmount)];
     case 'total_amount_desc':
@@ -85,6 +92,8 @@ export class InvoicesRepository {
         whereClause,
         or(
           ilike(invoices.invoiceNumber, term),
+          ilike(invoices.internalNumber, term),
+          sql`${invoices.invoicePayload}->>'invoiceNumber' ILIKE ${term}`,
           ilike(invoices.sourceExternalReference, term),
           ilike(invoices.comments, term),
         )!,

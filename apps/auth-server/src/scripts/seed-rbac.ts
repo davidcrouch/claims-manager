@@ -76,6 +76,24 @@ const ROLES: RoleDef[] = [
     sortOrder: 20,
   },
   {
+    roleName: 'senior_estimator',
+    scope: 'org',
+    label: 'Senior Estimator',
+    description: 'Creates estimates and can push line-item changes back to the source catalogue',
+    isSystem: false,
+    isDefault: false,
+    sortOrder: 22,
+  },
+  {
+    roleName: 'estimator',
+    scope: 'org',
+    label: 'Estimator',
+    description: 'Creates estimates from catalogues without updating source catalogue items',
+    isSystem: false,
+    isDefault: false,
+    sortOrder: 24,
+  },
+  {
     roleName: 'member',
     scope: 'org',
     label: 'Member',
@@ -150,6 +168,7 @@ const PERMISSIONS: PermissionDef[] = [
   { permissionName: 'filesystems.manage', label: 'Manage Filesystems', description: 'Configure filesystems and templates', category: 'domain', scope: 'org' },
   { permissionName: 'catalogs.read', label: 'Read Catalogues', description: 'View catalogue items and types', category: 'domain', scope: 'org' },
   { permissionName: 'catalogs.manage', label: 'Manage Catalogues', description: 'Create and update catalogues', category: 'domain', scope: 'org' },
+  { permissionName: 'catalogs.update-from-estimate', label: 'Update Catalogue from Estimate', description: 'Push estimate line-item changes back to the source catalogue (None / Prompt / Auto)', category: 'domain', scope: 'org' },
   { permissionName: 'contacts.read', label: 'Read Contacts', description: 'View contacts', category: 'domain', scope: 'org' },
   { permissionName: 'contacts.manage', label: 'Manage Contacts', description: 'Create and update contacts', category: 'domain', scope: 'org' },
   { permissionName: 'journals.read', label: 'Read Journals', description: 'View journals and pages', category: 'domain', scope: 'org' },
@@ -177,6 +196,26 @@ const PERMISSIONS: PermissionDef[] = [
   { permissionName: 'integrations.manage', label: 'Manage Integrations', description: 'Configure MCP integrations and connections', category: 'integrations', scope: 'org' },
 ];
 
+/** Shared access for creating and editing estimates (quotes) on jobs. */
+const ESTIMATOR_PERMISSIONS: string[] = [
+  'claims.read',
+  'jobs.read', 'jobs.update',
+  'invoices.read', 'finance.read', 'reports.read',
+  'documents.read', 'documents.manage',
+  'filesystems.read',
+  'catalogs.read',
+  'contacts.read', 'contacts.manage',
+  'journals.read', 'journals.manage',
+  'assessments.read', 'assessments.manage',
+  'procurement.read', 'procurement.manage',
+  'vendors.read',
+  'messaging.read', 'messaging.send',
+  'workflows.read', 'workflows.manage',
+  'lookups.read',
+  'ai.read', 'ai.manage',
+  'integrations.read',
+];
+
 const ROLE_PERMISSIONS: Record<string, string[]> = {
   platform_admin: ['*'],
   admin: [
@@ -190,7 +229,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'finance.read', 'finance.manage', 'reports.read',
     'documents.read', 'documents.manage',
     'filesystems.read', 'filesystems.manage',
-    'catalogs.read', 'catalogs.manage',
+    'catalogs.read', 'catalogs.manage', 'catalogs.update-from-estimate',
     'contacts.read', 'contacts.manage',
     'journals.read', 'journals.manage',
     'assessments.read', 'assessments.manage',
@@ -221,6 +260,13 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'lookups.read', 'lookups.manage',
     'ai.read', 'ai.manage',
     'integrations.read', 'integrations.manage',
+  ],
+  senior_estimator: [
+    ...ESTIMATOR_PERMISSIONS,
+    'catalogs.update-from-estimate',
+  ],
+  estimator: [
+    ...ESTIMATOR_PERMISSIONS,
   ],
   member: [
     'claims.create', 'claims.read', 'claims.update',

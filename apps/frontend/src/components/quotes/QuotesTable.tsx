@@ -10,6 +10,7 @@ import { jobDisplayName } from '@/components/shared/job-label';
 import { resolveDetailAssignee } from '@/components/shared/DetailAssignee';
 import { ListArchiveButton, LIST_ARCHIVE_TH_CLASS, LIST_ARCHIVE_TD_CLASS, LIST_ARCHIVE_SPACER_TD_CLASS } from '@/components/shared/ListArchiveButton';
 import { entityDisplayLabel } from '@/components/shared/entity-label';
+import { quoteInsurerRef } from '@/components/quotes/quote-label';
 import { TypeBadge } from '@/components/ui/type-badge';
 import { StatusBadge } from '@/components/ui/status-badge';
 import type { Quote } from '@/types/api';
@@ -68,6 +69,7 @@ function formatAmount(value?: string | null): string {
 
 export type QuoteSortField =
   | 'quote_number'
+  | 'insurer_ref'
   | 'job'
   | 'assignee'
   | 'status'
@@ -87,6 +89,7 @@ interface ColDef {
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'quote_number', label: 'Estimate #', locked: true },
+  { key: 'insurer_ref', label: 'Insurer Ref' },
   { key: 'job', label: 'Job', filterable: true },
   { key: 'assignee', label: 'Assigned', filterable: true },
   { key: 'reference', label: 'Reference', defaultHidden: true },
@@ -129,7 +132,7 @@ export function QuotesTable({
   estimateTypeColumnFilter,
 }: QuotesTableProps) {
   const { isVisible, toggle, visibleCount } = useColumnVisibility(
-    'quotes-v2',
+    'quotes-v3',
     TABLE_COLUMNS,
   );
   const visibleColumns = TABLE_COLUMNS.filter((col) => isVisible(col.key));
@@ -153,6 +156,7 @@ export function QuotesTable({
                     activeField={sortField ?? null}
                     sortOrder={sortOrder}
                     onSort={onSort ?? (() => {})}
+                    className={col.key === 'insurer_ref' ? 'text-center' : undefined}
                     filter={
                       col.key === 'job'
                         ? jobColumnFilter
@@ -167,7 +171,11 @@ export function QuotesTable({
                   />
                 ))
               : visibleColumns.map((col) => (
-                  <th key={col.key} scope="col" className="px-4 py-3">
+                  <th
+                    key={col.key}
+                    scope="col"
+                    className={col.key === 'insurer_ref' ? 'px-4 py-3 text-center' : 'px-4 py-3'}
+                  >
                     {col.label}
                   </th>
                 ))}
@@ -203,6 +211,11 @@ export function QuotesTable({
                 {isVisible('quote_number') && (
                   <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
                     {num}
+                  </td>
+                )}
+                {isVisible('insurer_ref') && (
+                  <td className="whitespace-nowrap px-4 py-3 text-center text-slate-600">
+                    {quoteInsurerRef(quote) ?? '—'}
                   </td>
                 )}
                 {isVisible('job') && (

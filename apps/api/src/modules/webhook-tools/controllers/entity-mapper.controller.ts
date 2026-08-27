@@ -10,6 +10,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { sql } from 'drizzle-orm';
 import { Public } from '../../../auth/decorators/public.decorator';
 import {
   ExternalObjectsRepository,
@@ -75,6 +76,9 @@ export class EntityMapperController {
     }
 
     const result = await this.db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${body.externalObjectId}))`,
+      );
       return useCase.execute({
         externalObject: externalObject as unknown as Record<string, unknown>,
         tenantId: body.tenantId,

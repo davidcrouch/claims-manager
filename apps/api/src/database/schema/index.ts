@@ -1190,6 +1190,9 @@ export const externalLinks = pgTable(
       t.internalEntityId,
       t.linkRole,
     ),
+    uniqueIndex('UQ_ext_link_primary_per_type')
+      .on(t.externalObjectId, t.internalEntityType, t.linkRole)
+      .where(sql`is_primary = true`),
     index('idx_ext_link_internal').on(t.internalEntityType, t.internalEntityId),
     index('idx_ext_link_external').on(t.externalObjectId),
   ],

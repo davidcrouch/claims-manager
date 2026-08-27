@@ -108,6 +108,19 @@ export class UserIdentitiesRepository {
     return row;
   }
 
+  async updateRawProfile(
+    context: AccessContext,
+    id: string,
+    rawProfile: Record<string, unknown>,
+  ): Promise<boolean> {
+    const [row] = await this.db()
+      .update(userIdentities)
+      .set({ rawProfile, updatedAt: new Date() } as Record<string, unknown>)
+      .where(eq(userIdentities.id, id))
+      .returning({ id: userIdentities.id });
+    return !!row;
+  }
+
   private mapToIdentity(row: typeof userIdentities.$inferSelect): UserIdentity {
     return {
       id: row.id,

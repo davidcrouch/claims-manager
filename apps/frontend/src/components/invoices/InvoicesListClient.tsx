@@ -35,6 +35,7 @@ import { EntityPageHeader, type EntityBreakdownItem } from '@/components/shared/
 import { computeStatusBreakdown } from '@/components/layout/ListPageHeader';
 import { fetchInvoicesAction } from '@/app/(app)/invoices/actions';
 import { entityDisplayLabel } from '@/components/shared/entity-label';
+import { invoiceInsurerRef } from '@/components/invoices/invoice-label';
 import {
   ColumnSettingsHeaderCell,
   useColumnVisibility } from '@/components/shared/column-visibility';
@@ -54,6 +55,7 @@ function parseTab(param: string | null): ListTab {
 
 type InvSortField =
   | 'invoice_number'
+  | 'insurer_ref'
   | 'job'
   | 'status'
   | 'total_amount'
@@ -65,6 +67,7 @@ interface ColDef { key: InvSortField; label: string; filterable?: boolean; locke
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'invoice_number', label: 'Invoice #', locked: true },
+  { key: 'insurer_ref', label: 'Insurer Ref' },
   { key: 'job', label: 'Job', filterable: true },
   { key: 'status', label: 'Status', filterable: true },
   { key: 'total_amount', label: 'Total' },
@@ -220,7 +223,10 @@ export function InvoicesListClient({
       if (prev.field === field) {
         return { field, order: prev.order === 'asc' ? 'desc' : 'asc' };
       }
-      return { field, order: field === 'invoice_number' ? 'asc' : 'desc' };
+      return {
+        field,
+        order: field === 'invoice_number' || field === 'insurer_ref' ? 'asc' : 'desc',
+      };
     });
     setPage(1);
   };
@@ -336,7 +342,7 @@ export function InvoicesListClient({
               size={16}
             />
             <Input
-              placeholder="Search invoices by invoice #..."
+              placeholder="Search invoices by invoice # or insurer ref..."
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
               className="h-10 w-full pl-9 pr-9"
@@ -391,6 +397,7 @@ export function InvoicesListClient({
                       activeField={columnSort.field}
                       sortOrder={columnSort.order}
                       onSort={handleColumnSort}
+                      className={col.key === 'insurer_ref' ? 'text-center' : undefined}
                       filter={
                         col.key === 'job'
                           ? {
@@ -444,6 +451,11 @@ export function InvoicesListClient({
                       {isVisible('invoice_number') && (
                         <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
                           {num}
+                        </td>
+                      )}
+                      {isVisible('insurer_ref') && (
+                        <td className="whitespace-nowrap px-4 py-3 text-center text-slate-600">
+                          {invoiceInsurerRef(inv) ?? '—'}
                         </td>
                       )}
                       {isVisible('job') && (

@@ -46,6 +46,7 @@ import type { WorkOrder, Job } from '@/types/api';
 import { PrintButton } from '@/components/shared/PrintButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { entityArchiveLabel, entityDetailName, entityDetailHeaderTitles } from '@/components/shared/EntityDetailTitle';
+import { workOrderInsurerPo } from '@/components/work-orders/work-order-label';
 import { jobDisplayName } from '@/components/shared/job-label';
 import { PagedLineItemsTable } from '@/components/quotes/PagedLineItemsTable';
 import { groupsFromDocumentPayload } from '@/components/line-items';
@@ -310,6 +311,7 @@ function OverviewTab({ wo }: { wo: WorkOrder }) {
           title="Identifiers"
           icon={<FileSignature className="h-4 w-4 text-muted-foreground" />}
         >
+          <DefRow label="Insurer PO" value={workOrderInsurerPo(wo) ?? '—'} />
           <DefRow label="WO / PO number" value={wo.workOrderNumber ?? '—'} />
           <DefRow label="External ID" value={wo.externalId ?? '—'} />
           <DefRow label="Name" value={wo.name ?? '—'} />

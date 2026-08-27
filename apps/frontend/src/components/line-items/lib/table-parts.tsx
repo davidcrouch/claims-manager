@@ -12,6 +12,10 @@ export const LI_TH_MONEY = 'pl-6 pr-4 py-1.5 text-right';
 export const LI_TD_CELL = 'px-4 py-2.5';
 export const LI_TD_CELL_RIGHT = 'px-4 py-2.5 text-right';
 export const LI_TD_MONEY = 'pl-6 pr-4 py-2.5 text-right font-mono text-sm';
+/** Right-aligned child count on group / scope / assembly headers. */
+export const LI_HEADER_COUNT = 'shrink-0 pl-4 text-right text-xs tabular-nums';
+/** Left inset for group / scope / assembly header totals so they sit clear of the item count. */
+export const LI_HEADER_TOTAL = 'shrink-0 pl-6 text-sm font-medium tabular-nums';
 export const LI_TD_MONEY_INPUT = 'w-full bg-transparent pl-6 pr-4 py-2.5 outline-none text-right font-mono text-slate-700';
 export const LI_TD_ACTIONS = 'w-10 px-2 py-2.5';
 export const LI_TH_ACTIONS = 'w-10 px-2 py-1.5';

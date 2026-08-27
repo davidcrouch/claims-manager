@@ -270,7 +270,7 @@ export function QuotesListClient({
       if (prev.field === field) {
         return { field, order: prev.order === 'asc' ? 'desc' : 'asc' };
       }
-      return { field, order: field === 'quote_number' ? 'asc' : 'desc' };
+      return { field, order: field === 'quote_number' || field === 'insurer_ref' ? 'asc' : 'desc' };
     });
     setPage(1);
     setPage(1);
@@ -407,7 +407,7 @@ export function QuotesListClient({
               size={16}
             />
             <Input
-              placeholder="Search estimates by estimate # or reference..."
+              placeholder="Search estimates by estimate #, insurer ref or name..."
               value={search}
               onChange={handleSearchChange}
               className="h-10 w-full pl-9 pr-9"
