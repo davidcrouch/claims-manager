@@ -14,16 +14,17 @@ const MIN_KEYWORD_SCORE = 0.35;
 const PAGE_CATEGORY_BOOST = 0.3;
 const TAB_SKILL_BOOST = 0.2;
 
+/** Tab key → installed skill `name` (packs store slug only on artefacts, not on SkillConfig). */
 const TAB_SKILL_MAP: Record<string, string> = {
-  attendance: 'assessment-attendance',
-  building: 'assessment-building',
-  habitability: 'assessment-habitability',
-  hazards: 'assessment-hazards',
-  damage: 'assessment-damage',
-  makeSafe: 'assessment-make-safe',
-  temporaryAccommodation: 'assessment-temp-accommodation',
-  specialists: 'assessment-specialists',
-  recommendation: 'assessment-recommendation',
+  attendance: 'Assessment – Attendance',
+  building: 'Assessment – Building',
+  habitability: 'Assessment – Habitability',
+  hazards: 'Assessment – Hazards',
+  damage: 'Assessment – Damage & Cause',
+  makeSafe: 'Assessment – Make Safe',
+  temporaryAccommodation: 'Assessment – Temp Accommodation',
+  specialists: 'Assessment – Specialists',
+  recommendation: 'Assessment – Recommendation',
 };
 
 @Injectable()
@@ -116,10 +117,10 @@ export class SkillMatcherService {
     }
 
     if (activeTab) {
-      const tabSkillSlug = TAB_SKILL_MAP[activeTab];
-      if (tabSkillSlug) {
+      const tabSkillName = TAB_SKILL_MAP[activeTab];
+      if (tabSkillName) {
         for (const match of results) {
-          if (match.skill.slug === tabSkillSlug) {
+          if (match.skill.name === tabSkillName) {
             match.similarity = Math.min(1.0, match.similarity + TAB_SKILL_BOOST);
           }
         }

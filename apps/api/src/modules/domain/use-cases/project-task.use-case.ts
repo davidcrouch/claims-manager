@@ -46,7 +46,9 @@ export class ProjectTaskUseCase implements ProjectionUseCase {
     const result = this.transformer.transform({
       payload,
       tenantId,
-      existingEntity: existingEntity ? (existingEntity as Record<string, unknown>) : undefined,
+      existingEntity: existingEntity
+        ? (existingEntity as unknown as Record<string, unknown>)
+        : undefined,
     });
 
     const parentRefs = existingId

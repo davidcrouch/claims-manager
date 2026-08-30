@@ -1037,3 +1037,12 @@
   Sign-in and organisation setup handle hosted database connections more reliably, and the assistant tools connection follows standard sign-in discovery.
   Unused hosting access was removed so insurer webhook and cloud services use a simpler, tighter setup.
 
+- `2026-08-30` `pending` **0.5 h**
+  `3 files | +25 −13 | Tier 2 standard | Light orchestration`
+  Lay summary: Fixed a release check so the latest updates can go live on the hosted site.
+  **Unblocked the hosted release after a type-check failure.**
+  Corrected how existing tasks are passed when records sync from the insurer.
+  Matched assessment chat skills by their displayed names so the right helper is boosted on each tab.
+  Confirmed the application type-check and package build succeed locally.
+  The hosted site can pick up the latest job, task, appointment, and assistant updates.
+
