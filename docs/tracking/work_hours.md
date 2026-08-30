@@ -1037,7 +1037,7 @@
   Sign-in and organisation setup handle hosted database connections more reliably, and the assistant tools connection follows standard sign-in discovery.
   Unused hosting access was removed so insurer webhook and cloud services use a simpler, tighter setup.
 
-- `2026-08-30` `pending` **0.5 h**
+- `2026-08-30` `ebdb1f1` **0.5 h**
   `3 files | +25 −13 | Tier 2 standard | Light orchestration`
   Lay summary: Fixed a release check so the latest updates can go live on the hosted site.
   **Unblocked the hosted release after a type-check failure.**
