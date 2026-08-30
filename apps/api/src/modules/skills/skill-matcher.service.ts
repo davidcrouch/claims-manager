@@ -12,6 +12,19 @@ const DEFAULT_TOP_K = 5;
 const MIN_SIMILARITY_THRESHOLD = 0.45;
 const MIN_KEYWORD_SCORE = 0.35;
 const PAGE_CATEGORY_BOOST = 0.3;
+const TAB_SKILL_BOOST = 0.2;
+
+const TAB_SKILL_MAP: Record<string, string> = {
+  attendance: 'assessment-attendance',
+  building: 'assessment-building',
+  habitability: 'assessment-habitability',
+  hazards: 'assessment-hazards',
+  damage: 'assessment-damage',
+  makeSafe: 'assessment-make-safe',
+  temporaryAccommodation: 'assessment-temp-accommodation',
+  specialists: 'assessment-specialists',
+  recommendation: 'assessment-recommendation',
+};
 
 @Injectable()
 export class SkillMatcherService {
@@ -29,6 +42,7 @@ export class SkillMatcherService {
     agent: AgentConfig,
     _user: AuthenticatedUser,
     pageEntityType?: string,
+    activeTab?: string,
   ): Promise<SkillMatchResult[]> {
     const tenantId = this.tenantContext.getTenantId();
     const results: SkillMatchResult[] = [];
@@ -101,8 +115,19 @@ export class SkillMatcherService {
       }
     }
 
+    if (activeTab) {
+      const tabSkillSlug = TAB_SKILL_MAP[activeTab];
+      if (tabSkillSlug) {
+        for (const match of results) {
+          if (match.skill.slug === tabSkillSlug) {
+            match.similarity = Math.min(1.0, match.similarity + TAB_SKILL_BOOST);
+          }
+        }
+      }
+    }
+
     this.logger.log(
-      `[${LOG_PREFIX}.findMatches] matched ${results.length} skill(s) for agent ${agent.id}${pageCategory ? ` (page-category: ${pageCategory})` : ''}`,
+      `[${LOG_PREFIX}.findMatches] matched ${results.length} skill(s) for agent ${agent.id}${pageCategory ? ` (page-category: ${pageCategory})` : ''}${activeTab ? ` (active-tab: ${activeTab})` : ''}`,
     );
     return results;
   }

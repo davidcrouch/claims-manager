@@ -1,6 +1,12 @@
 import { redirect, notFound } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
-import { loadClaim, loadInvoice, loadJob } from '@/lib/cached-entity-loaders';
+import {
+  loadClaim,
+  loadInvoice,
+  loadJob,
+  loadPurchaseOrder,
+  loadWorkOrder,
+} from '@/lib/cached-entity-loaders';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { InvoiceDetail, InvoicePageHeader } from '@/components/invoices/InvoiceDetail';
 import type { Metadata } from 'next';
@@ -30,6 +36,13 @@ export default async function InvoiceDetailPage({
   if (!invoice) notFound();
 
   const job = invoice.jobId ? await loadJob(invoice.jobId) : null;
+  const workOrder = invoice.workOrderId
+    ? await loadWorkOrder(invoice.workOrderId)
+    : null;
+  const purchaseOrderId = invoice.purchaseOrderId ?? workOrder?.purchaseOrderId ?? null;
+  const purchaseOrder = purchaseOrderId
+    ? await loadPurchaseOrder(purchaseOrderId)
+    : null;
 
   let claim: Claim | null = job?.claim ?? null;
   const claimId = job?.claimId ?? job?.parentClaimId ?? null;
@@ -40,7 +53,13 @@ export default async function InvoiceDetailPage({
   return (
     <>
       <SetPageHeader>
-        <InvoicePageHeader invoice={invoice} job={job} claim={claim} />
+        <InvoicePageHeader
+          invoice={invoice}
+          job={job}
+          claim={claim}
+          workOrder={workOrder}
+          purchaseOrder={purchaseOrder}
+        />
       </SetPageHeader>
       <InvoiceDetail invoice={invoice} />
     </>

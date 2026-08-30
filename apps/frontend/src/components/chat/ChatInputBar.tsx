@@ -1,7 +1,12 @@
 'use client';
 
 import {
+  forwardRef,
+  memo,
   useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -34,9 +39,14 @@ import {
 } from '@/lib/ai/file-processing';
 import { DocumentAttachMenu } from './DocumentAttachMenu';
 
+export interface ChatInputHandle {
+  setDraft: (value: string) => void;
+  appendDraft: (text: string) => void;
+  clearDraft: () => void;
+  focus: () => void;
+}
+
 interface ChatInputBarProps {
-  input: string;
-  onInputChange: (value: string) => void;
   onSubmit: (text?: string) => void;
   onStop: () => void;
   isLoading: boolean;
@@ -50,7 +60,6 @@ interface ChatInputBarProps {
   onFilesSelected?: (e: ChangeEvent<HTMLInputElement>) => void;
   onRemoveFile?: (index: number) => void;
   onAddFiles?: (files: File[]) => void;
-  inputRef?: RefObject<HTMLTextAreaElement | null>;
   pendingAttachmentParts?: FilePart[];
   onRemovePendingAttachment?: (index: number) => void;
   relatedRecordType?: string;
@@ -112,45 +121,72 @@ function SelectedFileChip({ file, onRemove }: { file: File; onRemove: () => void
   );
 }
 
-export function ChatInputBar({
-  input,
-  onInputChange,
-  onSubmit,
-  onStop,
-  isLoading,
-  isProcessingFiles = false,
-  agents,
-  selectedAgentId,
-  onSelectAgent,
-  selectedFiles = [],
-  fileErrors = [],
-  fileInputRef: externalFileInputRef,
-  onFilesSelected,
-  onRemoveFile,
-  onAddFiles,
-  inputRef,
-  pendingAttachmentParts = [],
-  onRemovePendingAttachment,
-  relatedRecordType,
-  relatedRecordId,
-  supportsVision = true,
-  visionError,
-  onClearVisionError,
-  onVisionBlocked,
-  onAttachDocument,
-  isSpeechSupported = false,
-  isListening = false,
-  interimTranscript = '',
-  onToggleSpeech,
-  speechError,
-}: ChatInputBarProps) {
+function resizeTextarea(el: HTMLTextAreaElement) {
+  const max = Math.round(window.innerHeight * 0.5);
+  el.style.height = 'auto';
+  el.style.height = `${Math.min(el.scrollHeight, max)}px`;
+}
+
+export const ChatInputBar = memo(
+  forwardRef<ChatInputHandle, ChatInputBarProps>(function ChatInputBar(
+    {
+      onSubmit,
+      onStop,
+      isLoading,
+      isProcessingFiles = false,
+      agents,
+      selectedAgentId,
+      onSelectAgent,
+      selectedFiles = [],
+      fileErrors = [],
+      fileInputRef: externalFileInputRef,
+      onFilesSelected,
+      onRemoveFile,
+      onAddFiles,
+      pendingAttachmentParts = [],
+      onRemovePendingAttachment,
+      relatedRecordType,
+      relatedRecordId,
+      supportsVision = true,
+      visionError,
+      onClearVisionError,
+      onVisionBlocked,
+      onAttachDocument,
+      isSpeechSupported = false,
+      isListening = false,
+      interimTranscript = '',
+      onToggleSpeech,
+      speechError,
+    },
+    ref,
+  ) {
+  const [draft, setDraft] = useState('');
   const [showAgentMenu, setShowAgentMenu] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const internalFileInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = externalFileInputRef ?? internalFileInputRef;
   const agentMenuRef = useRef<HTMLDivElement>(null);
   const selectedAgent = agents.find((a) => a.id === selectedAgentId) ?? agents[0];
   const busy = isLoading || isProcessingFiles;
   const hasAttachments = selectedFiles.length > 0 || pendingAttachmentParts.length > 0;
+
+  useImperativeHandle(ref, () => ({
+    setDraft: (value: string) => setDraft(value),
+    appendDraft: (text: string) => {
+      setDraft((prev) => (prev ? `${prev.trimEnd()} ${text}` : text));
+    },
+    clearDraft: () => {
+      setDraft('');
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
+    },
+    focus: () => textareaRef.current?.focus(),
+  }));
+
+  useLayoutEffect(() => {
+    if (textareaRef.current) resizeTextarea(textareaRef.current);
+  }, [draft]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -174,12 +210,9 @@ export function ChatInputBar({
   }, [isSpeechSupported, onToggleSpeech]);
 
   function handleFormSubmit(overrideText?: string) {
-    const text = overrideText ?? input;
+    const text = overrideText ?? draft;
     if (busy || (!text.trim() && !hasAttachments)) return;
     onSubmit(text);
-    if (inputRef?.current) {
-      inputRef.current.style.height = 'auto';
-    }
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
@@ -223,14 +256,18 @@ export function ChatInputBar({
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
-  function handleTextareaInput(el: HTMLTextAreaElement) {
-    el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, window.innerHeight * 0.5)}px`;
-  }
-
-  const yourAgents = agents.filter((a) => a.visibility === 'private' || !a.visibility);
-  const orgAgents = agents.filter((a) => a.visibility === 'org');
-  const publicAgents = agents.filter((a) => a.visibility === 'public');
+  const yourAgents = useMemo(
+    () => agents.filter((a) => a.visibility === 'private' || !a.visibility),
+    [agents],
+  );
+  const orgAgents = useMemo(
+    () => agents.filter((a) => a.visibility === 'org'),
+    [agents],
+  );
+  const publicAgents = useMemo(
+    () => agents.filter((a) => a.visibility === 'public'),
+    [agents],
+  );
 
   function renderAgentGroup(label: string, list: Agent[]) {
     if (list.length === 0) return null;
@@ -377,12 +414,9 @@ export function ChatInputBar({
             </div>
 
             <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => {
-                onInputChange(e.target.value);
-                handleTextareaInput(e.target);
-              }}
+              ref={textareaRef}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
               placeholder={
@@ -453,7 +487,7 @@ export function ChatInputBar({
                 type="button"
                 size="icon"
                 onClick={() => handleFormSubmit()}
-                disabled={(!input.trim() && !hasAttachments) || isProcessingFiles}
+                disabled={(!draft.trim() && !hasAttachments) || isProcessingFiles}
                 title="Send"
                 className="h-8 w-8"
               >
@@ -469,4 +503,5 @@ export function ChatInputBar({
       </div>
     </div>
   );
-}
+  }),
+);

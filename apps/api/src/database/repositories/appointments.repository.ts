@@ -132,14 +132,35 @@ export class AppointmentsRepository {
   async findOne(params: {
     id: string;
     tenantId: string;
+    tx?: DrizzleDbOrTx;
   }): Promise<AppointmentRow | null> {
-    const [row] = await this.db
+    const db = params.tx ?? this.db;
+    const [row] = await db
       .select()
       .from(appointments)
       .where(
         and(
           eq(appointments.id, params.id),
           eq(appointments.tenantId, params.tenantId),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
+  async findByExternalReference(params: {
+    tenantId: string;
+    externalReference: string;
+    tx?: DrizzleDbOrTx;
+  }): Promise<AppointmentRow | null> {
+    const db = params.tx ?? this.db;
+    const [row] = await db
+      .select()
+      .from(appointments)
+      .where(
+        and(
+          eq(appointments.tenantId, params.tenantId),
+          eq(appointments.externalReference, params.externalReference),
         ),
       )
       .limit(1);

@@ -79,7 +79,7 @@ export function EstimatePublishWizard({
           result.error ??
             (isInternal
               ? 'Failed to publish estimate'
-              : 'Failed to send estimate to insurer'),
+              : 'Failed to send estimate to Insurer'),
         );
         return;
       }
@@ -103,9 +103,9 @@ export function EstimatePublishWizard({
         const excludedItems = prov?.excludedItems ?? 0;
         toast.success(
           prov
-            ? `Estimate sent to insurer (${prov.sentItems} items in ${prov.sentGroups} groups` +
+            ? `Estimate sent to Insurer (${prov.sentItems} items in ${prov.sentGroups} groups` +
               (excludedItems > 0 ? `, ${excludedItems} item${excludedItems > 1 ? 's' : ''} excluded` : '') + ')'
-            : 'Estimate sent to insurer',
+            : 'Estimate sent to Insurer',
         );
       }
     } finally {
@@ -142,7 +142,7 @@ export function EstimatePublishWizard({
                 <>
                   <p className="font-medium flex items-center gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-600" />
-                    Estimate sent to insurer
+                    Estimate sent to Insurer
                   </p>
                   <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
                     {prov?.providerReference && (
@@ -170,7 +170,7 @@ export function EstimatePublishWizard({
                       </>
                     )}
                     <dt className="text-muted-foreground">Status</dt>
-                    <dd>Pending (awaiting insurer review)</dd>
+                    <dd>Pending (awaiting Insurer review)</dd>
                   </dl>
                 </>
               ) : (
@@ -219,11 +219,11 @@ export function EstimatePublishWizard({
     <BottomFormDrawer
       open={open}
       onOpenChange={handleOpenChange}
-      title={isInternal ? 'Publish estimate' : 'Publish estimate to insurer'}
+      title={isInternal ? 'Publish estimate' : 'Publish estimate to Insurer'}
       description={
         isInternal
           ? 'Review the claim, job, and estimate summary, then publish. It will be locked afterwards.'
-          : 'Review the claim, job, and estimate summary, then send this estimate to the insurer.'
+          : 'Review the claim, job, and estimate summary, then send this estimate to the Insurer.'
       }
       icon={
         isInternal ? (
@@ -247,18 +247,16 @@ export function EstimatePublishWizard({
             </div>
           ) : (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-950">
-              <p className="font-medium">This will be pushed to the insurer</p>
+              <p className="font-medium">This will be pushed to the Insurer</p>
               <p className="mt-2 text-amber-900/80">
-                Submitting creates the estimate in Crunchwork for the insurer. Status will change
+                Submitting creates the estimate in Crunchwork for the Insurer. Status will change
                 to Pending and the estimate will be locked. This cannot be undone from this
                 screen.
               </p>
             </div>
           )}
 
-          <PublishEntityContext job={job} claim={claim} />
-
-          <PublishSummaryCard title="Estimate summary">
+          <PublishSummaryCard title="Estimate Summary">
             <PublishSummaryRow label="Name" value={title} />
             <PublishSummaryRow label="Status" value={statusName} />
             <PublishSummaryRow label="Estimate number" value={quote.quoteNumber ?? '—'} />
@@ -269,6 +267,8 @@ export function EstimatePublishWizard({
               value={quote.quoteDate ? formatDate(quote.quoteDate) : '—'}
             />
           </PublishSummaryCard>
+
+          <PublishEntityContext job={job} claim={claim} />
         </div>
 
         <BottomFormDrawerError error={error} />
@@ -301,10 +301,10 @@ export function EstimatePublishWizard({
           {publishing
             ? isInternal
               ? 'Publishing…'
-              : 'Sending to insurer…'
+              : 'Sending to Insurer…'
             : isInternal
               ? 'Publish estimate'
-              : 'Submit to insurer'}
+              : 'Submit to Insurer'}
         </Button>
       </BottomFormDrawerFooter>
     </BottomFormDrawer>

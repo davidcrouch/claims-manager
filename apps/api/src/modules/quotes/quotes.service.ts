@@ -34,6 +34,7 @@ import { DocumentIssuanceService } from '../domain/services/document-issuance.se
 import { OutboundEventsService } from '../outbound-events/outbound-events.service';
 import { ActivitiesService } from '../activities/activities.service';
 import { RecordNumberService } from '../../common/record-number/record-number.service';
+import { OutboundSyncService } from '../domain/outbound/outbound-sync.service';
 
 export interface PublishResult {
   quote: Record<string, unknown> | null;
@@ -71,6 +72,7 @@ export class QuotesService {
     @Optional() private readonly catalogOutbound?: CatalogOutboundService,
     @Optional() private readonly outboundEvents?: OutboundEventsService,
     @Optional() private readonly activitiesService?: ActivitiesService,
+    @Optional() private readonly outboundSync?: OutboundSyncService,
   ) {}
 
   private async resolvePublishedStatus(params: { tenantId: string }): Promise<{
@@ -651,67 +653,45 @@ export class QuotesService {
       `items=${groups.reduce((n, g) => n + (Array.isArray((g as any).items) ? (g as any).items.length : 0), 0)}, ` +
       `combos=${groups.reduce((n, g) => n + (Array.isArray((g as any).combos) ? (g as any).combos.length : 0), 0)}`,
     );
-    const createResponse = await this.crunchworkService.createQuote({
-      connectionId,
-      body: enriched,
-    });
-
-    const createObj = createResponse as Record<string, unknown>;
-    const cwQuoteId = createObj.id as string | undefined;
-    if (!cwQuoteId) {
-      throw new BadRequestException('Crunchwork did not return a quote id after upload');
-    }
-    this.logger.log(
-      `QuotesService.publish — draft quote uploaded to Crunchwork (cwQuoteId=${cwQuoteId})`,
-    );
-
-    this.assertCrunchworkGroupsHaveContent({
-      sentGroups: groups,
-      cwResponse: createObj,
-      cwQuoteId,
-    });
-
-    // Provider-facing status remains Published; local estimate status is Pending.
-    const publishedStatus = await this.resolvePublishedStatus({ tenantId });
-    const publishBody: Record<string, unknown> = {
-      status: publishedStatus.outbound,
-    };
-    const enrichedPublish = this.catalogOutbound
-      ? await this.catalogOutbound.enrichPayload({ tenantId, body: publishBody })
-      : publishBody;
-    const updateResponse = await this.crunchworkService.updateQuote({
-      connectionId,
-      quoteId: cwQuoteId,
-      body: enrichedPublish,
-    });
-
-    const updateObj = updateResponse as Record<string, unknown>;
-    this.logger.log(
-      `QuotesService.publish — Crunchwork quote status updated to Published; local status Pending (cwQuoteId=${cwQuoteId})`,
-    );
-
-    const updateData = this.applyQuoteApiFields({
-      apiObj: updateObj,
-      fallbackApiObj: createObj,
-      existing,
-      base: {
-        externalReference: cwQuoteId,
+    await this.quotesRepo.update({
+      id: params.id,
+      data: {
         statusLookupId: pendingStatus.lookupId,
-        apiPayload: updateResponse as Record<string, unknown>,
+        syncStatus: 'pending',
         ...(params.userId ? { updatedByUserId: params.userId } : {}),
       },
     });
 
-    await this.quotesRepo.update({ id: params.id, data: updateData });
-
-    // Stamp publish_status on items and combos
     await this.stampPublishStatuses({
       sentItemIds,
       sentComboIds,
       excludedItemIds,
       excludedComboIds,
-      cwResponse: createObj,
+      cwResponse: {},
     });
+
+    if (this.outboundSync) {
+      try {
+        await this.outboundSync.enqueue({
+          tenantId,
+          connectionId,
+          entityType: 'quote',
+          entityId: params.id,
+          action: 'publish',
+          payload: {
+            createBody: enriched,
+            publishBody: { status: (await this.resolvePublishedStatus({ tenantId })).outbound },
+          },
+          sourceEvent: 'api:publish',
+          idempotencyKey: `quote:${params.id}:publish`,
+          tx: this.outboundSync['db'],
+        });
+      } catch (err) {
+        this.logger.warn(
+          `QuotesService.publish — failed to enqueue outbound sync for quote ${params.id}: ${err instanceof Error ? err.message : err}`,
+        );
+      }
+    }
 
     await this.maybeIssueCrossTenantProposal({
       quoteId: params.id,
@@ -764,7 +744,6 @@ export class QuotesService {
         (excludedItems > 0 ? `, ${excludedItems} item${excludedItems > 1 ? 's' : ''} excluded` : '') + ')',
       detail: {
         publishMode: 'external',
-        providerReference: cwQuoteId,
         sentGroups,
         sentCombos,
         sentItems,
@@ -784,8 +763,7 @@ export class QuotesService {
       quote: updated ? this.shapeQuoteResponse(updated) : null,
       publishMode: 'external',
       provider: {
-        confirmed: true,
-        providerReference: cwQuoteId,
+        confirmed: false,
         sentGroups,
         sentItems,
         sentCombos,

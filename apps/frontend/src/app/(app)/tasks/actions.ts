@@ -1,5 +1,6 @@
 'use server';
 
+import { connection } from 'next/server';
 import { getSession, getAccessToken } from '@/lib/auth';
 import { createApiClient } from '@/lib/api-client';
 import type { Task, PaginatedResponse } from '@/types/api';
@@ -28,6 +29,7 @@ export async function fetchTasksAction(params?: {
   taskTypes?: string;
   overdue?: boolean;
 }): Promise<PaginatedResponse<Task>> {
+  await connection();
   const api = await getApi();
   if (!api) return { data: [], total: 0 };
   try {

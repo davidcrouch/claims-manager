@@ -12,7 +12,7 @@
 
 import { sql } from 'drizzle-orm';
 import { createLogger, LoggerType } from '../lib/logger.js';
-import { getDb } from '../db/client.js';
+import { getDb, resetDb } from '../db/client.js';
 import { organizations } from '../db/schema.js';
 
 const log = createLogger(
@@ -41,13 +41,43 @@ function parseForceOverride(): boolean | null {
   return null;
 }
 
+function isRetryableConnectionError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const code = 'code' in err ? String((err as { code: unknown }).code) : '';
+  const message = err instanceof Error ? err.message : String(err);
+  return (
+    code === 'ECONNRESET' ||
+    code === 'ECONNREFUSED' ||
+    code === 'ETIMEDOUT' ||
+    code === 'CONNECTION_CLOSED' ||
+    message.includes('ECONNRESET')
+  );
+}
+
 /** Count of organisations in the shared claims_manager database. */
 export async function countOrganizations(): Promise<number> {
-  const db = getDb();
-  const [row] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(organizations);
-  return Number(row?.count ?? 0);
+  const run = async () => {
+    const db = getDb();
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(organizations);
+    return Number(row?.count ?? 0);
+  };
+
+  try {
+    return await run();
+  } catch (err) {
+    if (!isRetryableConnectionError(err)) throw err;
+    log.warn(
+      {
+        functionName: 'countOrganizations',
+        error: err instanceof Error ? err.message : String(err),
+      },
+      'auth-server:services:public-org-signup-policy:countOrganizations - connection error, resetting client and retrying',
+    );
+    await resetDb('countOrganizations connection error');
+    return run();
+  }
 }
 
 /**

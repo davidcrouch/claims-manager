@@ -70,6 +70,7 @@ export class JobTransformer implements EntityTransformer<JobInsert> {
       jobInstructions: asString(payload.jobInstructions) ?? asString(payload.instructions),
       apiPayload: payload,
       customData,
+      syncStatus: params.existingEntity?.syncStatus ?? 'synced',
     };
 
     // ── Address ─────────────────────────────────────────────────────

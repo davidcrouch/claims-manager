@@ -6,13 +6,8 @@ import {
   Receipt,
   ExternalLink,
   Calendar,
-  DollarSign,
   FileSignature,
   Package,
-  ClipboardList,
-  MessageSquare,
-  Paperclip,
-  BookOpen,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -31,31 +26,23 @@ import {
   formatDateTime,
   formatCurrency,
 } from '@/components/shared/detail';
-import type { Claim, Invoice, Job } from '@/types/api';
+import type { Claim, Invoice, Job, PurchaseOrder, WorkOrder } from '@/types/api';
 import { PrintButton } from '@/components/shared/PrintButton';
 import { PublishButton } from '@/components/shared/PublishButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { jobDisplayName } from '@/components/shared/job-label';
 import { entityArchiveLabel, entityDetailHeaderTitles } from '@/components/shared/EntityDetailTitle';
 import { invoiceInsurerRef } from '@/components/invoices/invoice-label';
-import { JournalList } from '@/components/journals/JournalList';
-import {
-  fetchJournalsByEntityAction,
-  fetchJournalsListAction,
-  createJournalAction,
-  linkJournalAction,
-  unlinkJournalAction,
-} from '@/app/(app)/journals/actions';
 import { LineItemsProvider, LineItemsTable } from '@/components/line-items';
 import { PagedLineItemsTable } from '@/components/quotes/PagedLineItemsTable';
 import { groupsFromDocumentPayload } from '@/components/line-items';
 import { getPurchaseOrderLineItemsAction } from '@/app/(app)/purchase-orders/actions';
 import { getWorkOrderLineItemsAction } from '@/app/(app)/work-orders/actions';
-import { EntityAttachmentsTab } from '@/components/shared/EntityAttachmentsTab';
 import {
   InvoicePublishWizard,
   type InvoicePublishMode,
 } from '@/components/invoices/InvoicePublishWizard';
+import { SyncStatusIndicator } from '@/components/shared/SyncStatusIndicator';
 
 // ---------- header ----------------------------------------------------------
 
@@ -63,10 +50,14 @@ export function InvoicePageHeader({
   invoice,
   job,
   claim,
+  workOrder,
+  purchaseOrder,
 }: {
   invoice: Invoice;
   job?: Job | null;
   claim?: Claim | null;
+  workOrder?: WorkOrder | null;
+  purchaseOrder?: PurchaseOrder | null;
 }) {
   const [publishWizardOpen, setPublishWizardOpen] = useState(false);
   const statusName = invoice.status?.name ?? 'Unknown';
@@ -107,6 +98,8 @@ export function InvoicePageHeader({
         invoice={invoice}
         job={job}
         claim={claim}
+        workOrder={workOrder}
+        purchaseOrder={purchaseOrder}
         mode={publishMode}
       />
       <PageHeaderLayout
@@ -124,6 +117,9 @@ export function InvoicePageHeader({
         topRow={
           <>
             <StatusBadge status={statusName} />
+            {(invoice as any).syncStatus && (
+              <SyncStatusIndicator syncStatus={(invoice as any).syncStatus} compact />
+            )}
             {invoice.purchaseOrderId && (
               <Link
                 href={`/purchase-orders/${invoice.purchaseOrderId}`}
@@ -171,112 +167,19 @@ function OverviewTab({ invoice }: { invoice: Invoice }) {
   const status = invoice.status?.name ?? 'Unknown';
 
   return (
-    <div className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card size="sm">
-          <CardContent className="px-4">
-            <p className="text-xs text-muted-foreground">Status</p>
-            <p className="mt-1 text-sm font-medium">{status}</p>
-          </CardContent>
-        </Card>
-        <Card size="sm">
-          <CardContent className="px-4">
-            <p className="text-xs text-muted-foreground">Total amount</p>
-            <p className="mt-1 text-sm font-medium">{formatCurrency(invoice.totalAmount)}</p>
-          </CardContent>
-        </Card>
-        <Card size="sm">
-          <CardContent className="px-4">
-            <p className="text-xs text-muted-foreground">Sub-total</p>
-            <p className="mt-1 text-sm font-medium">{formatCurrency(invoice.subTotal)}</p>
-          </CardContent>
-        </Card>
-        <Card size="sm">
-          <CardContent className="px-4">
-            <p className="text-xs text-muted-foreground">Tax</p>
-            <p className="mt-1 text-sm font-medium">{formatCurrency(invoice.tax)}</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <SectionCard
-          title="Invoice Details"
-          icon={<FileSignature className="h-4 w-4 text-muted-foreground" />}
-        >
-          <DefRow label="Invoice number" value={invoice.invoiceNumber ?? '—'} />
-          <DefRow label="Insurer Ref" value={invoiceInsurerRef(invoice) ?? '—'} />
-          <DefRow label="Status" value={<StatusBadge status={status} />} />
-          <DefRow label="Total amount" value={formatCurrency(invoice.totalAmount)} />
-          <DefRow label="Sub-total" value={formatCurrency(invoice.subTotal)} />
-          <DefRow label="Tax" value={formatCurrency(invoice.tax)} />
-          <DefRow label="Excess amount" value={formatCurrency(invoice.excessAmount)} />
-          <DefRow label="Issue date" value={formatDate(invoice.issueDate)} />
-        </SectionCard>
-
-        <SectionCard
-          title="Linked Entities"
-          icon={<DollarSign className="h-4 w-4 text-muted-foreground" />}
-        >
-          <DefRow
-            label="Purchase order"
-            value={
-              invoice.purchaseOrderId ? (
-                <Link
-                  href={`/purchase-orders/${invoice.purchaseOrderId}`}
-                  className="inline-flex items-center gap-1 text-primary hover:underline"
-                >
-                  {invoice.purchaseOrderId}
-                  <ExternalLink className="h-3 w-3" />
-                </Link>
-              ) : (
-                '—'
-              )
-            }
-          />
-          <DefRow
-            label="Work order"
-            value={
-              invoice.workOrderId ? (
-                <Link
-                  href={`/work-orders/${invoice.workOrderId}`}
-                  className="inline-flex items-center gap-1 text-primary hover:underline"
-                >
-                  {invoice.workOrderId}
-                  <ExternalLink className="h-3 w-3" />
-                </Link>
-              ) : (
-                '—'
-              )
-            }
-          />
-          <DefRow
-            label="Job"
-            value={
-              invoice.jobId ? (
-                <Link
-                  href={`/jobs/${invoice.jobId}`}
-                  className="inline-flex items-center gap-1 text-primary hover:underline"
-                >
-                  {invoice.jobId}
-                  <ExternalLink className="h-3 w-3" />
-                </Link>
-              ) : (
-                '—'
-              )
-            }
-          />
-        </SectionCard>
-      </div>
-
-      <SectionCard
-        title="Audit"
-        icon={<ClipboardList className="h-4 w-4 text-muted-foreground" />}
-      >
-        <DefRow label="Created" value={formatDateTime(invoice.createdAt)} />
-        <DefRow label="Updated" value={formatDateTime(invoice.updatedAt)} />
-      </SectionCard>
-    </div>
+    <SectionCard
+      title="Invoice Details"
+      icon={<FileSignature className="h-4 w-4 text-muted-foreground" />}
+    >
+      <DefRow label="Invoice number" value={invoice.invoiceNumber ?? '—'} />
+      <DefRow label="Insurer Ref" value={invoiceInsurerRef(invoice) ?? '—'} />
+      <DefRow label="Status" value={<StatusBadge status={status} />} />
+      <DefRow label="Total amount" value={formatCurrency(invoice.totalAmount)} />
+      <DefRow label="Sub-total" value={formatCurrency(invoice.subTotal)} />
+      <DefRow label="Tax" value={formatCurrency(invoice.tax)} />
+      <DefRow label="Excess amount" value={formatCurrency(invoice.excessAmount)} />
+      <DefRow label="Issue date" value={formatDate(invoice.issueDate)} />
+    </SectionCard>
   );
 }
 
@@ -367,39 +270,6 @@ function LineItemsTab({ invoice }: { invoice: Invoice }) {
   );
 }
 
-function ActivitiesTab() {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Activities</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">
-          Tasks linked to this invoice will appear here once the activities API
-          is connected.
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
-
-function CommunicationsTab() {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Communications</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">
-          Emails associated with this invoice will appear here once the
-          communications API is connected.
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
-
-
 function TimelineTab({ invoice }: { invoice: Invoice }) {
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -416,14 +286,7 @@ function TimelineTab({ invoice }: { invoice: Invoice }) {
 
 // ---------- container -------------------------------------------------------
 
-type InvTab =
-  | 'overview'
-  | 'line-items'
-  | 'activities'
-  | 'communications'
-  | 'attachments'
-  | 'journals'
-  | 'timeline';
+type InvTab = 'overview' | 'line-items' | 'timeline';
 
 export function InvoiceDetail({ invoice }: { invoice: Invoice }) {
   const [tab, setTab] = useState<InvTab>('overview');
@@ -431,10 +294,6 @@ export function InvoiceDetail({ invoice }: { invoice: Invoice }) {
   const tabs: Array<{ id: InvTab; label: string; icon: typeof Calendar }> = [
     { id: 'overview', label: 'Overview', icon: FileSignature },
     { id: 'line-items', label: 'Line Items', icon: Package },
-    { id: 'activities', label: 'Activities', icon: ClipboardList },
-    { id: 'communications', label: 'Communications', icon: MessageSquare },
-    { id: 'attachments', label: 'Attachments', icon: Paperclip },
-    { id: 'journals', label: 'Journals', icon: BookOpen },
     { id: 'timeline', label: 'Timeline', icon: Calendar },
   ];
 
@@ -464,22 +323,6 @@ export function InvoiceDetail({ invoice }: { invoice: Invoice }) {
       <div className="pt-4">
         {tab === 'overview' && <OverviewTab invoice={invoice} />}
         {tab === 'line-items' && <LineItemsTab invoice={invoice} />}
-        {tab === 'activities' && <ActivitiesTab />}
-        {tab === 'communications' && <CommunicationsTab />}
-        {tab === 'attachments' && <EntityAttachmentsTab entityId={invoice.id} relatedRecordType="Invoice" entityLabel="this invoice" />}
-        {tab === 'journals' && (
-          <JournalList
-            entityType="Invoice"
-            entityId={invoice.id}
-            fetchJournals={(params) =>
-              fetchJournalsByEntityAction('Invoice', invoice.id, params)
-            }
-            fetchAllJournals={() => fetchJournalsListAction()}
-            createJournal={(data) => createJournalAction(data)}
-            linkJournal={(jId) => linkJournalAction(jId, 'Invoice', invoice.id)}
-            unlinkJournal={(jId) => unlinkJournalAction(jId, 'Invoice', invoice.id)}
-          />
-        )}
         {tab === 'timeline' && <TimelineTab invoice={invoice} />}
       </div>
     </div>

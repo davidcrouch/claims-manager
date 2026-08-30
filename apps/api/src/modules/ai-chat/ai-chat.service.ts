@@ -78,6 +78,7 @@ const CANVAS_TOOL_MAP: Record<string, string> = {
   fill_assessment_specialists: 'AssessmentSpecialistsDrawer',
   open_assessment_recommendation: 'AssessmentRecommendationDrawer',
   fill_assessment_recommendation: 'AssessmentRecommendationDrawer',
+  open_print_assessment: 'AssessmentPrintDrawer',
   open_catalog: 'CatalogFormDrawer',
   fill_catalog: 'CatalogFormDrawer',
   open_catalog_item: 'CatalogItemFormDrawer',
@@ -196,8 +197,8 @@ export class AiChatService {
     const aiConfig = this.configService.get('ai', { infer: true });
     const project = aiConfig?.vertexProject ?? '';
     const locations = {
-      primary: aiConfig?.vertexLocation ?? 'us-central1',
-      extended: aiConfig?.vertexLocation ?? 'us-central1',
+      primary: aiConfig?.vertexLocation ?? 'global',
+      extended: aiConfig?.vertexLocation ?? 'global',
     };
 
     const modelName = agent.model;
@@ -238,6 +239,7 @@ export class AiChatService {
       rawMessages,
       params.user,
       pageContext?.entityType,
+      pageContext?.activeTab,
     );
     let systemPrompt = await this.buildSystemInstructions(
       agent,
@@ -309,6 +311,9 @@ export class AiChatService {
         },
         tools,
         maxSteps: agent.maxSteps ?? 10,
+        autonomousMode: agent.autonomousMode ?? false,
+        pauseAfterToolSteps: agent.pauseAfterToolSteps ?? 4,
+        maxDurationMs: (agent.maxDurationSeconds ?? 120) * 1000,
         messageId,
         getInstructions: () => systemPrompt,
         onToolCall: (toolCall: ToolCall) => {
@@ -442,11 +447,12 @@ export class AiChatService {
     messages: ChatMessage[],
     user: AuthenticatedUser,
     pageEntityType?: string,
+    activeTab?: string,
   ): Promise<SkillMatchResult[]> {
     const lastUserMessage = extractLastUserMessage(messages);
     if (!lastUserMessage.trim()) return [];
     try {
-      return await this.skillMatcher.findMatches(lastUserMessage, agent, user, pageEntityType);
+      return await this.skillMatcher.findMatches(lastUserMessage, agent, user, pageEntityType, activeTab);
     } catch (err) {
       this.logger.warn(
         `[${LOG_PREFIX}.matchSkillsForTurn] skill matching failed: ${String(err)}`,

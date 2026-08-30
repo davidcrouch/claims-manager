@@ -35,6 +35,7 @@ export const CANVAS_TOOL_COMPONENT_MAP: Record<string, string> = {
   fill_assessment_specialists: 'AssessmentSpecialistsDrawer',
   open_assessment_recommendation: 'AssessmentRecommendationDrawer',
   fill_assessment_recommendation: 'AssessmentRecommendationDrawer',
+  open_print_assessment: 'AssessmentPrintDrawer',
   open_catalog: 'CatalogFormDrawer',
   fill_catalog: 'CatalogFormDrawer',
   open_catalog_item: 'CatalogItemFormDrawer',

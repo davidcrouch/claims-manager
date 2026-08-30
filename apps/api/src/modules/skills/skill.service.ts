@@ -160,7 +160,7 @@ export class SkillService {
     if (mode === 'isolated') {
       const aiConfig = this.configService.get('ai', { infer: true });
       const project = aiConfig?.vertexProject ?? '';
-      const location = aiConfig?.vertexLocation ?? 'us-central1';
+      const location = aiConfig?.vertexLocation ?? 'global';
       const parentModel = skill.modelOverride ?? 'gemini-2.5-flash';
 
       const isolated = await runSkillIsolated(

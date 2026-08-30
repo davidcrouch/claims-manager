@@ -10,7 +10,7 @@ import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { loadConfig } from './config.js';
+import { loadConfig, type ClaimsMcpConfig } from './config.js';
 import {
   createClaimsMcpServer,
   implementedCategories,
@@ -23,6 +23,14 @@ import {
   parseCategoryList,
   type CategoryId,
 } from './categories.js';
+import {
+  authIssuerUrl,
+  handleDiscoveryRequest,
+  isWellKnownPath,
+  MCP_OAUTH_SCOPE,
+  publicOrigin,
+  wwwAuthenticate,
+} from './oauth-discovery.js';
 
 const LOG_PREFIX = 'claims-mcp.main';
 const AUTH_TOKEN_KEY = '__claims_mcp_token';
@@ -38,15 +46,29 @@ function log(
   console[level](`[${LOG_PREFIX}.${method}] ${payload}`);
 }
 
-function createAuthMiddleware() {
+function createAuthMiddleware(config: ClaimsMcpConfig) {
   return (req: Request, res: Response, next: NextFunction) => {
+    if (req.method === 'OPTIONS') {
+      return next();
+    }
     if (req.path === '/healthz' && req.method === 'GET') {
+      return next();
+    }
+    if (isWellKnownPath(req.path)) {
       return next();
     }
 
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith('Bearer ')) {
+      const origin = publicOrigin(req, config);
+      const metadataUrl = `${origin}/.well-known/oauth-protected-resource${
+        req.path.endsWith('/mcp') ? req.path : '/mcp'
+      }`;
       log('warn', 'createAuthMiddleware', 'missing bearer token', { path: req.path });
+      res.set(
+        'WWW-Authenticate',
+        wwwAuthenticate(metadataUrl, MCP_OAUTH_SCOPE),
+      );
       res.status(401).json({ error: 'unauthorized', message: 'Bearer token required' });
       return;
     }
@@ -148,16 +170,49 @@ async function startHttp(): Promise<void> {
   const app = express();
   app.use(express.json());
 
-  app.use((_req, res, next) => {
-    res.set('Access-Control-Expose-Headers', 'Mcp-Session-Id');
+  app.use((req, res, next) => {
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
     res.set(
       'Access-Control-Allow-Headers',
-      'Content-Type, Authorization, Mcp-Session-Id, x-tenant-id',
+      'Content-Type, Authorization, Mcp-Session-Id, MCP-Protocol-Version, x-tenant-id',
     );
+    res.set('Access-Control-Expose-Headers', 'Mcp-Session-Id, WWW-Authenticate');
+    if (req.method === 'OPTIONS') {
+      res.status(204).end();
+      return;
+    }
     next();
   });
 
-  app.use(createAuthMiddleware());
+  const catalogCtx = () => ({ token: 'catalog', tenantId: undefined });
+  const implemented = implementedCategories();
+  const categoryCatalogs = MCP_CATEGORIES.map((id) => {
+    const server = createClaimsMcpServer(config, catalogCtx, { categories: [id] });
+    const tools = catalogFromServer(server);
+    return { id, tools: tools.length, toolNames: tools.map((t) => t.name) };
+  });
+  const aggregateServer = createClaimsMcpServer(config, catalogCtx);
+  const aggregateTools = catalogFromServer(aggregateServer);
+  const discoveryCatalog = {
+    categories: categoryCatalogs.map(({ id, tools }) => ({ id, tools })),
+    aggregateTools: aggregateTools.length,
+  };
+
+  app.use((req, res, next) => {
+    const handled = handleDiscoveryRequest(req, res, config, discoveryCatalog);
+    if (handled) {
+      log('info', 'handleDiscoveryRequest', 'served discovery document', {
+        path: req.path,
+        kind: handled.kind,
+        resourcePath: handled.resourcePath,
+      });
+      return;
+    }
+    next();
+  });
+
+  app.use(createAuthMiddleware(config));
 
   /** Separate transport maps per mount so session IDs never collide across categories. */
   const transportsByMount = new Map<string, Map<string, StreamableHTTPServerTransport>>();
@@ -170,16 +225,6 @@ async function startHttp(): Promise<void> {
     }
     return map;
   }
-
-  const catalogCtx = () => ({ token: 'catalog', tenantId: undefined });
-  const implemented = implementedCategories();
-  const categoryCatalogs = MCP_CATEGORIES.map((id) => {
-    const server = createClaimsMcpServer(config, catalogCtx, { categories: [id] });
-    const tools = catalogFromServer(server);
-    return { id, tools: tools.length, toolNames: tools.map((t) => t.name) };
-  });
-  const aggregateServer = createClaimsMcpServer(config, catalogCtx);
-  const aggregateTools = catalogFromServer(aggregateServer);
 
   app.get('/healthz', (_req, res) => {
     res.json({
@@ -221,6 +266,7 @@ async function startHttp(): Promise<void> {
       host: config.CLAIMS_MCP_HOST,
       port: config.CLAIMS_MCP_PORT,
       apiUrl: config.CLAIMS_API_URL,
+      authIssuer: authIssuerUrl(config),
       mounts: ['/mcp', ...MCP_CATEGORIES.map((c) => `/${c}/mcp`)],
       tools: aggregateTools.length,
     });

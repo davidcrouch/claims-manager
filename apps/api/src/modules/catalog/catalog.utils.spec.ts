@@ -3,6 +3,7 @@ import {
   bomComponentRuleMessage,
   buildComboPayload,
   comboKindFromPayload,
+  copyUnitCostToBuyCostForCrunchwork,
   computeLineTotals,
   formatDecimal,
   hoistProviderCombos,
@@ -24,6 +25,20 @@ describe('catalog.utils', () => {
     it('parses numeric strings', () => {
       expect(parseDecimal('12.5')).toBe(12.5);
       expect(parseDecimal(null)).toBe(0);
+    });
+  });
+
+  describe('copyUnitCostToBuyCostForCrunchwork', () => {
+    it('copies unitCost onto buyCost', () => {
+      const item = { unitCost: 45.5, buyCost: 12 };
+      copyUnitCostToBuyCostForCrunchwork(item);
+      expect(item.buyCost).toBe(45.5);
+    });
+
+    it('leaves buyCost unchanged when unitCost is missing', () => {
+      const item = { buyCost: 12 };
+      copyUnitCostToBuyCostForCrunchwork(item);
+      expect(item.buyCost).toBe(12);
     });
   });
 

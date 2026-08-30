@@ -8,6 +8,7 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { TypeBadge } from '@/components/ui/type-badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { SyncStatusIndicator } from '@/components/shared/SyncStatusIndicator';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { PrintButton } from '@/components/shared/PrintButton';
@@ -274,7 +275,7 @@ export function TasksListClient({
     });
   }, []);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (
       statusParam === null ||
       priorityParam === null ||
@@ -284,10 +285,10 @@ export function TasksListClient({
     ) {
       setTasks([]);
       setTotal(0);
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!opts?.silent) setLoading(true);
     try {
       const res = await fetchTasksAction({
         page,
@@ -307,7 +308,7 @@ export function TasksListClient({
       setTasks(res.data);
       setTotal(res.total);
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   }, [
     debouncedSearch,
@@ -323,6 +324,19 @@ export function TasksListClient({
     overdue,
     assignedToUserId,
   ]);
+
+  const hasPendingSync = tasks.some((t) => t.syncStatus === 'pending');
+  useEffect(() => {
+    if (!hasPendingSync) return;
+    const interval = setInterval(() => {
+      void load({ silent: true });
+    }, 2500);
+    const stop = setTimeout(() => clearInterval(interval), 60_000);
+    return () => {
+      clearInterval(interval);
+      clearTimeout(stop);
+    };
+  }, [hasPendingSync, load]);
 
   useEffect(() => {
     const params = new URLSearchParams(searchParams.toString());
@@ -789,7 +803,12 @@ export function TasksListClient({
                       className="cursor-pointer transition-colors hover:bg-slate-50"
                     >
                       {isVisible('name') && (
-                        <td className="px-4 py-3 font-medium text-slate-900">{task.name}</td>
+                        <td className="px-4 py-3 font-medium text-slate-900">
+                          <span className="flex items-center gap-1.5">
+                            <span>{task.name}</span>
+                            <SyncStatusIndicator syncStatus={task.syncStatus} compact />
+                          </span>
+                        </td>
                       )}
                       {isVisible('job') && (
                         <td className="px-4 py-3 text-slate-600">

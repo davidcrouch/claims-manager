@@ -3,6 +3,9 @@ import { ExternalModule } from '../external/external.module';
 import { WorkflowModule } from './workflows/workflow.module';
 import { ActivitiesModule } from '../activities/activities.module';
 import { TasksModule } from '../tasks/tasks.module';
+import { OutboundModule } from './outbound/outbound.module';
+import { OutboundRetryController } from './outbound/outbound-retry.controller';
+import { TenantModule } from '../../tenant/tenant.module';
 
 // Transformers
 import { ClaimTransformer } from './transformers/claim.transformer';
@@ -50,11 +53,14 @@ import { UseCaseRegistry } from './use-cases/use-case.registry';
 
 @Module({
   imports: [
+    TenantModule,
     forwardRef(() => ExternalModule),
     forwardRef(() => WorkflowModule),
     ActivitiesModule,
     forwardRef(() => TasksModule),
+    OutboundModule,
   ],
+  controllers: [OutboundRetryController],
   providers: [
     // Transformers
     ClaimTransformer,

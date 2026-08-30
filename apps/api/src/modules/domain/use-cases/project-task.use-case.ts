@@ -33,12 +33,23 @@ export class ProjectTaskUseCase implements ProjectionUseCase {
 
     this.logger.log(`ProjectTaskUseCase.execute — externalObjectId=${externalObjectId}`);
 
-    const existingLinks = await this.externalLinksRepo.findByExternalObjectId({ externalObjectId, tx });
-    const existingLink = existingLinks.find((l) => l.internalEntityType === 'task');
+    const existingId = await this.resolveExistingTaskId({
+      tenantId,
+      externalObjectId,
+      payload,
+      tx,
+    });
+    const existingEntity = existingId
+      ? await this.tasksRepo.findOne({ id: existingId, tenantId, tx })
+      : null;
 
-    const result = this.transformer.transform({ payload, tenantId });
+    const result = this.transformer.transform({
+      payload,
+      tenantId,
+      existingEntity: existingEntity ? (existingEntity as Record<string, unknown>) : undefined,
+    });
 
-    const parentRefs = existingLink
+    const parentRefs = existingId
       ? result.parentRefs.map((r) => ({ ...r, required: false }))
       : result.parentRefs;
 
@@ -54,7 +65,7 @@ export class ProjectTaskUseCase implements ProjectionUseCase {
     if (claimId) (result.entity as Record<string, unknown>).claimId = claimId;
     if (jobId) (result.entity as Record<string, unknown>).jobId = jobId;
 
-    if (!existingLink && !claimId && !jobId) {
+    if (!existingId && !claimId && !jobId) {
       throw new ParentNotProjectedError(
         'task',
         externalObjectId,
@@ -75,34 +86,66 @@ export class ProjectTaskUseCase implements ProjectionUseCase {
     }
 
     let taskId: string;
-    if (existingLink) {
+    if (existingId) {
       await this.tasksRepo.update({
-        id: existingLink.internalEntityId,
+        id: existingId,
         data: result.entity as Partial<TaskInsert>,
         tx,
       });
-      taskId = existingLink.internalEntityId;
+      taskId = existingId;
     } else {
       const created = await this.tasksRepo.create({
         data: { tenantId, ...result.entity, originType: 'provider' } as TaskInsert,
         tx,
       });
       taskId = created.id;
-
-      await this.externalLinksRepo.upsert({
-        data: {
-          tenantId,
-          externalObjectId,
-          internalEntityType: 'task',
-          internalEntityId: taskId,
-          linkRole: 'source',
-          isPrimary: true,
-          metadata: {},
-        },
-        tx,
-      });
     }
 
+    await this.externalLinksRepo.upsert({
+      data: {
+        tenantId,
+        externalObjectId,
+        internalEntityType: 'task',
+        internalEntityId: taskId,
+        linkRole: 'source',
+        isPrimary: true,
+        metadata: {},
+      },
+      tx,
+    });
+
     return { status: 'completed', internalEntityId: taskId, internalEntityType: 'task' };
+  }
+
+  private async resolveExistingTaskId(params: {
+    tenantId: string;
+    externalObjectId: string;
+    payload: Record<string, unknown>;
+    tx: DrizzleDbOrTx;
+  }): Promise<string | null> {
+    const existingLinks = await this.externalLinksRepo.findByExternalObjectId({
+      externalObjectId: params.externalObjectId,
+      tx: params.tx,
+    });
+    const link = existingLinks.find((l) => l.internalEntityType === 'task');
+    if (link) return link.internalEntityId;
+
+    const cwTaskId =
+      typeof params.payload.id === 'string' ? params.payload.id.trim() : '';
+    if (!cwTaskId) return null;
+
+    const byExtRef = await this.tasksRepo.findByExternalReference({
+      tenantId: params.tenantId,
+      externalReference: cwTaskId,
+      tx: params.tx,
+    });
+    if (byExtRef) {
+      this.logger.log(
+        `ProjectTaskUseCase.execute — matched existing task ${byExtRef.id} by Crunchwork id ${cwTaskId}`,
+      );
+      return byExtRef.id;
+    }
+
+    return null;
   }
 }

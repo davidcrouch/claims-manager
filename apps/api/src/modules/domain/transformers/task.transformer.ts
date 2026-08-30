@@ -37,6 +37,8 @@ export class TaskTransformer implements EntityTransformer {
       ? asString(payload.createdBy.externalReference)
       : asString(payload.createdByUserId);
 
+    const cwTaskId = asString(payload.id) ?? asString(payload.externalReference);
+
     const entity: Record<string, unknown> = {
       tenantId,
       name: asString(payload.name) ?? 'Untitled Task',
@@ -53,6 +55,7 @@ export class TaskTransformer implements EntityTransformer {
       assignedToExternalReference: asString(payload.assignedTo),
       createdByUserId: createdByRef,
       taskPayload: payload,
+      ...(cwTaskId ? { externalReference: cwTaskId } : {}),
     };
 
     // taskType from CW payload (IdNameExternalReference)

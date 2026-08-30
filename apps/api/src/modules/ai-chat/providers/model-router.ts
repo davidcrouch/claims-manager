@@ -71,33 +71,13 @@ export function getSupportedModels(): Record<'google' | 'anthropic', string[]> {
 }
 
 export function resolveModelLocation(
-  provider: ChatProviderId,
+  _provider: ChatProviderId,
   model: string,
   locations: { primary: string; extended: string },
 ): string {
-  const normalized = normalizeProvider(provider);
-  const overrides: Record<string, string> = {
-    'claude-opus-4-8': 'us-east5',
-    'claude-haiku-4-5@20251001': 'us-east5',
-    'gemini-3.1-pro-preview': 'global',
-  };
-
-  const override = overrides[model];
-  if (override) {
-    logger.log(`[ModelRouter.resolveModelLocation] ${model} routed to ${override}`);
-    return override;
-  }
-
-  if (normalized === 'anthropic') {
-    return locations.extended;
-  }
-
-  if (model.startsWith('gemini-3') || model.startsWith('gemini-4')) {
-    logger.log(`[ModelRouter.resolveModelLocation] ${model} using extended region`);
-    return locations.extended;
-  }
-
-  return locations.primary;
+  const location = locations.primary || 'global';
+  logger.log(`[ModelRouter.resolveModelLocation] ${model} routed to ${location}`);
+  return location;
 }
 
 // ── Query Routing Heuristics ──

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
@@ -122,7 +122,7 @@ function findToolResult(
 
 const messageTimestamps = new Map<string, number>();
 
-export function MessageRenderer({
+export const MessageRenderer = memo(function MessageRenderer({
   message,
   allMessages,
   agentInfo,
@@ -576,7 +576,7 @@ export function MessageRenderer({
       />
     </>
   );
-}
+});
 
 function ReasoningBlock({ text }: { text: string }) {
   const [expanded, setExpanded] = useState(false);

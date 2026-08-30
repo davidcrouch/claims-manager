@@ -20,17 +20,6 @@ output "subnet_name" {
   value = google_compute_subnetwork.private.name
 }
 
-# Kept for the dormant production GKE module (secondary range names).
-output "pod_range_name" {
-  value       = local.secondary_range_a
-  description = "First secondary range name (historically GKE pods)"
-}
-
-output "service_range_name" {
-  value       = local.secondary_range_b
-  description = "Second secondary range name (historically GKE services)"
-}
-
 output "secondary_range_a_name" {
   value = local.secondary_range_a
 }

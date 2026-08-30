@@ -80,6 +80,9 @@ export function rowToConfig(row: AgentRow): AgentConfig {
     avatarUrl: row.avatarUrl ?? undefined,
     supportsVision: row.supportsVision ?? undefined,
     maxSteps: row.maxSteps ?? undefined,
+    autonomousMode: row.autonomousMode ?? false,
+    pauseAfterToolSteps: row.pauseAfterToolSteps ?? 4,
+    maxDurationSeconds: row.maxDurationSeconds ?? 120,
     pinnedSkills: row.pinnedSkills ?? [],
     semanticSkills: (row.semanticSkills as AgentConfig['semanticSkills']) ?? 'all',
   };
@@ -235,6 +238,9 @@ export class AgentService {
       pinnedSkills: dto.pinnedSkills ?? [],
       semanticSkills: dto.semanticSkills ?? 'all',
       ...(dto.maxSteps !== undefined && { maxSteps: dto.maxSteps }),
+      ...(dto.autonomousMode !== undefined && { autonomousMode: dto.autonomousMode }),
+      ...(dto.pauseAfterToolSteps !== undefined && { pauseAfterToolSteps: dto.pauseAfterToolSteps }),
+      ...(dto.maxDurationSeconds !== undefined && { maxDurationSeconds: dto.maxDurationSeconds }),
       ...(dto.packInstallId !== undefined && { packInstallId: dto.packInstallId }),
     });
 
@@ -269,6 +275,9 @@ export class AgentService {
       ...(dto.avatarUrl !== undefined && { avatarUrl: dto.avatarUrl }),
       ...(dto.supportsVision !== undefined && { supportsVision: dto.supportsVision }),
       ...(dto.maxSteps !== undefined && { maxSteps: dto.maxSteps }),
+      ...(dto.autonomousMode !== undefined && { autonomousMode: dto.autonomousMode }),
+      ...(dto.pauseAfterToolSteps !== undefined && { pauseAfterToolSteps: dto.pauseAfterToolSteps }),
+      ...(dto.maxDurationSeconds !== undefined && { maxDurationSeconds: dto.maxDurationSeconds }),
       ...(dto.enabledTools !== undefined && { enabledToolRefs: dto.enabledTools }),
       ...(dto.pinnedSkills !== undefined && { pinnedSkills: dto.pinnedSkills }),
       ...(dto.semanticSkills !== undefined && { semanticSkills: dto.semanticSkills }),

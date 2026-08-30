@@ -11,7 +11,6 @@ import {
 import { TenantContext } from '../../tenant/tenant-context';
 import { CrunchworkService } from '../../crunchwork/crunchwork.service';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
-import { OutboundEventsService } from '../outbound-events/outbound-events.service';
 import { CreateAssessmentDto } from './dto/create-assessment.dto';
 import { UpdateAssessmentDto } from './dto/update-assessment.dto';
 import {
@@ -40,7 +39,6 @@ export class AssessmentsService {
     private readonly tenantContext: TenantContext,
     private readonly crunchworkService: CrunchworkService,
     @Optional() private readonly connectionResolver?: ConnectionResolverService,
-    @Optional() private readonly outboundEvents?: OutboundEventsService,
   ) {}
 
   async findAll(params: {
@@ -150,105 +148,12 @@ export class AssessmentsService {
   }
 
   async publish(params: { id: string; userId?: string }) {
-    const tenantId = this.tenantContext.getTenantId();
-    const { assessment, job, claim, body, errors, customData } = await this.buildPublishPayload({
-      id: params.id,
-    });
-
-    if (assessment.status === 'archived') {
-      throw new BadRequestException('Archived assessments cannot be published');
-    }
-    if (assessment.status === 'published') {
-      throw new BadRequestException('Published assessments are locked and cannot be re-published');
-    }
-    if (errors.length > 0) {
-      throw new BadRequestException({
-        message: 'Field Assessment is missing required data',
-        details: errors,
-      });
-    }
-    if (!body.jobId) {
-      throw new BadRequestException(
-        'Job has no Crunchwork reference — sync the job to NRMA before publishing',
-      );
-    }
-
-    const connectionId = await this.resolveConnectionId({
-      tenantId,
-      jobConnectionId: job.connectionId,
-    });
-
-    const existingCwId = assessment.reportExternalReference;
-    let apiReport: Record<string, unknown>;
-    if (existingCwId) {
-      this.logger.log(
-        `AssessmentsService.publish — updating Field Assessment report assessmentId=${params.id} cwReportId=${existingCwId}`,
-      );
-      apiReport = (await this.crunchworkService.updateReport({
-        connectionId,
-        reportId: existingCwId,
-        body: {
-          title: assessment.name,
-          customData,
-        },
-      })) as Record<string, unknown>;
-    } else {
-      this.logger.log(
-        `AssessmentsService.publish — creating Field Assessment report assessmentId=${params.id} cwJobId=${String(body.jobId)}`,
-      );
-      apiReport = (await this.crunchworkService.createReport({
-        connectionId,
-        body,
-      })) as Record<string, unknown>;
-    }
-
-    const cwReportId =
-      (typeof apiReport?.id === 'string' ? apiReport.id : undefined) ?? existingCwId ?? null;
-    this.logger.log(
-      `AssessmentsService.publish — Crunchwork report saved assessmentId=${params.id} cwReportId=${cwReportId ?? 'none'}`,
+    this.logger.warn(
+      `AssessmentsService.publish — refused assessmentId=${params.id}; NRMA does not support Field Assessment reports`,
     );
-
-    const reportTypeLookupId = await this.resolveReportTypeLookupId(tenantId);
-    await this.reportsRepo.create({
-      data: {
-        tenantId,
-        jobId: job.id,
-        claimId: job.claimId ?? null,
-        title: assessment.name,
-        reportTypeLookupId: reportTypeLookupId ?? null,
-        reportData: customData,
-        reportMeta: {
-          source: 'assessment',
-          assessmentId: assessment.id,
-          cwReportId,
-        },
-        apiPayload: apiReport ?? {},
-        createdByUserId: params.userId ?? null,
-        updatedByUserId: params.userId ?? null,
-      },
-    });
-
-    const updated = await this.assessmentsRepo.update({
-      id: assessment.id,
-      tenantId,
-      data: {
-        status: 'published',
-        reportExternalReference: cwReportId,
-        updatedByUserId: params.userId ?? assessment.updatedByUserId,
-      },
-    });
-
-    if (this.outboundEvents && job.id) {
-      this.outboundEvents.emitDocumentUploaded({
-        documentId: assessment.id,
-        jobId: job.id,
-        tenantId,
-        documentType: 'Assessment Report',
-        uploadedAt: new Date().toISOString(),
-      }).catch(() => {});
-    }
-
-    return updated ?? assessment;
+    throw new BadRequestException(
+      'Publishing assessments to NRMA is not supported. Print the assessment instead to generate the assessment detail report.',
+    );
   }
 
   private async buildPublishPayload(params: { id: string }) {

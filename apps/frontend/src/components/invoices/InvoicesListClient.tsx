@@ -43,6 +43,7 @@ import { ListArchiveButton, LIST_ARCHIVE_TH_CLASS, LIST_ARCHIVE_TD_CLASS, LIST_A
 import { TablePagination } from '@/components/shared/table-pagination';
 import type { Claim, Invoice, Job, PaginatedResponse } from '@/types/api';
 import { formatCurrency } from '@/components/shared/detail';
+import { SyncStatusIndicator } from '@/components/shared/SyncStatusIndicator';
 
 const PAGE_SIZE = 20;
 
@@ -450,7 +451,10 @@ export function InvoicesListClient({
                     >
                       {isVisible('invoice_number') && (
                         <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
-                          {num}
+                          <span className="flex items-center gap-1.5">
+                            <span>{num}</span>
+                            <SyncStatusIndicator syncStatus={inv.syncStatus} compact />
+                          </span>
                         </td>
                       )}
                       {isVisible('insurer_ref') && (

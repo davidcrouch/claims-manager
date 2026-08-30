@@ -46,7 +46,12 @@ export class WebhookSweepService implements OnModuleInit, OnModuleDestroy {
     }
 
     const intervalMs = this.configService.get<number>('webhook.sweepIntervalMs', 30_000);
-    this.sweepInterval = setInterval(() => void this.sweep(), intervalMs);
+    this.sweepInterval = setInterval(() => {
+      void this.sweep().catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.error(`WebhookSweepService.sweep — unexpected error: ${message}`);
+      });
+    }, intervalMs);
     this.logger.log(`WebhookSweepService — started polling every ${intervalMs}ms`);
   }
 
@@ -238,6 +243,9 @@ export class WebhookSweepService implements OnModuleInit, OnModuleDestroy {
           `WebhookSweepService.sweep — resolved=${resolved} reprocessed=${reprocessed} redriven=${redriven} failed=${failed}`,
         );
       }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(`WebhookSweepService.sweep — unexpected error: ${message}`);
     } finally {
       this.sweeping = false;
     }

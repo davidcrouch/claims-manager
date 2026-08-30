@@ -36,59 +36,65 @@ function isGcsAuthError(err: unknown): boolean {
   return ADC_REAUTH_REQUIRED_RE.test(message);
 }
 
-/** Files expected under `data/templates/`. */
+/** Files expected under `data/templates/seed/`. */
 const TEMPLATE_FILES = [
-  'INVOICE.docx',
   'Invoice Template.docx',
-  'SCOPE OF WORK.docx',
-  'REQUEST FOR QUOTATION.docx',
-  'ASSESSMENT.docx',
+  'Scope of Work Template.docx',
+  'Request for Quotation Template.docx',
+  'Assessment Template.docx',
+  'Purchase Order Template.docx',
 ] as const;
+
+const SOW = 'Scope of Work Template.docx';
+const INVOICE = 'Invoice Template.docx';
+const RFQ = 'Request for Quotation Template.docx';
+const PO = 'Purchase Order Template.docx';
+const ASSESSMENT = 'Assessment Template.docx';
 
 /**
  * Map each Document Templates scenario to one of the standard Word files.
  * Scenarios without a dedicated file reuse the closest match.
  */
 const DOCUMENT_TYPE_TO_FILE: Record<AssignableTemplateType, (typeof TEMPLATE_FILES)[number]> = {
-  default: 'SCOPE OF WORK.docx',
-  invoice: 'Invoice Template.docx',
-  bill: 'INVOICE.docx',
-  rfq: 'REQUEST FOR QUOTATION.docx',
-  quote: 'REQUEST FOR QUOTATION.docx',
-  purchase_order: 'REQUEST FOR QUOTATION.docx',
-  work_order: 'SCOPE OF WORK.docx',
-  proposal: 'SCOPE OF WORK.docx',
-  report: 'SCOPE OF WORK.docx',
-  job_details: 'SCOPE OF WORK.docx',
-  scope_of_work: 'SCOPE OF WORK.docx',
-  claim: 'SCOPE OF WORK.docx',
-  contact: 'SCOPE OF WORK.docx',
-  task: 'SCOPE OF WORK.docx',
-  appointment: 'SCOPE OF WORK.docx',
-  message: 'SCOPE OF WORK.docx',
-  journal: 'SCOPE OF WORK.docx',
-  vendor: 'SCOPE OF WORK.docx',
-  assessment: 'ASSESSMENT.docx',
-  document: 'SCOPE OF WORK.docx',
-  jobs_list: 'SCOPE OF WORK.docx',
-  quotes_list: 'SCOPE OF WORK.docx',
-  invoices_list: 'SCOPE OF WORK.docx',
-  bills_list: 'SCOPE OF WORK.docx',
-  work_orders_list: 'SCOPE OF WORK.docx',
-  purchase_orders_list: 'SCOPE OF WORK.docx',
-  proposals_list: 'SCOPE OF WORK.docx',
-  rfqs_list: 'SCOPE OF WORK.docx',
-  reports_list: 'SCOPE OF WORK.docx',
-  claims_list: 'SCOPE OF WORK.docx',
-  contacts_list: 'SCOPE OF WORK.docx',
-  tasks_list: 'SCOPE OF WORK.docx',
-  appointments_list: 'SCOPE OF WORK.docx',
-  messages_list: 'SCOPE OF WORK.docx',
-  journals_list: 'SCOPE OF WORK.docx',
-  vendors_list: 'SCOPE OF WORK.docx',
-  assessments_list: 'SCOPE OF WORK.docx',
-  documents_list: 'SCOPE OF WORK.docx',
-  schedule_list: 'SCOPE OF WORK.docx',
+  default: SOW,
+  invoice: INVOICE,
+  bill: INVOICE,
+  rfq: RFQ,
+  quote: RFQ,
+  purchase_order: PO,
+  work_order: SOW,
+  proposal: SOW,
+  report: SOW,
+  job_details: SOW,
+  scope_of_work: SOW,
+  claim: SOW,
+  contact: SOW,
+  task: SOW,
+  appointment: SOW,
+  message: SOW,
+  journal: SOW,
+  vendor: SOW,
+  assessment: ASSESSMENT,
+  document: SOW,
+  jobs_list: SOW,
+  quotes_list: SOW,
+  invoices_list: SOW,
+  bills_list: SOW,
+  work_orders_list: SOW,
+  purchase_orders_list: SOW,
+  proposals_list: SOW,
+  rfqs_list: SOW,
+  reports_list: SOW,
+  claims_list: SOW,
+  contacts_list: SOW,
+  tasks_list: SOW,
+  appointments_list: SOW,
+  messages_list: SOW,
+  journals_list: SOW,
+  vendors_list: SOW,
+  assessments_list: SOW,
+  documents_list: SOW,
+  schedule_list: SOW,
 };
 
 function safeGcsFileName(fileName: string): string {
@@ -427,7 +433,7 @@ async function run(ctx: SeedContext): Promise<SeedResult> {
 const seed: Seed = {
   name: 'document-templates',
   description:
-    'Upload data/templates/*.docx into Templates & Forms and assign Document Templates settings',
+    'Upload data/templates/seed/*.docx into Templates & Forms and assign Document Templates settings',
   run,
 };
 

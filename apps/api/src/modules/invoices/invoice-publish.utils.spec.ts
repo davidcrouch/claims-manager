@@ -78,11 +78,31 @@ describe('applyLocalPricingToCrunchworkInvoiceGroups', () => {
       id: 'i1',
       completed: true,
       unitCost: 45.5,
+      buyCost: 45.5,
       quantity: 12,
       tax: 10,
       markupType: 'Percentage',
       markupValue: 19,
     });
+  });
+
+  it('copies unitCost onto buyCost even when local buyCost differs', () => {
+    const overlaid = applyLocalPricingToCrunchworkInvoiceGroups({
+      cwGroups: [
+        {
+          id: 'g1',
+          items: [{ id: 'i1', name: 'Plasterboard', unitCost: 0, buyCost: 10 }],
+        },
+      ],
+      localGroups: [
+        {
+          items: [{ name: 'Plasterboard', unitCost: 45.5, buyCost: 20 }],
+        },
+      ],
+    });
+    const item = (overlaid[0].items as Record<string, unknown>[])[0];
+    expect(item.unitCost).toBe(45.5);
+    expect(item.buyCost).toBe(45.5);
   });
 
   it('matches combo items by catalog id when names differ', () => {
@@ -120,6 +140,7 @@ describe('applyLocalPricingToCrunchworkInvoiceGroups', () => {
     )[0];
     expect(item.completed).toBe(true);
     expect(item.unitCost).toBe(80);
+    expect(item.buyCost).toBe(80);
     expect(item.quantity).toBe(2);
   });
 
@@ -132,6 +153,7 @@ describe('applyLocalPricingToCrunchworkInvoiceGroups', () => {
     });
     expect((overlaid[0].items as Record<string, unknown>[])[0].completed).toBe(true);
     expect((overlaid[0].items as Record<string, unknown>[])[0].unitCost).toBe(0);
+    expect((overlaid[0].items as Record<string, unknown>[])[0].buyCost).toBe(0);
   });
 });
 
@@ -164,6 +186,7 @@ describe('toInvoiceUpdateGroups', () => {
             id: 'i1',
             completed: true,
             unitCost: 45.5,
+            buyCost: 45.5,
             quantity: 12,
             tax: 10,
             unitType: { externalReference: 'M2' },
@@ -173,14 +196,34 @@ describe('toInvoiceUpdateGroups', () => {
     ]);
   });
 
-  it('drops groups and items that have no Crunchwork id', () => {
-    expect(
-      toInvoiceUpdateGroups([
-        { name: 'No id', items: [{ name: 'line', unitCost: 10 }] },
-      ]),
-    ).toEqual([]);
+    it('copies unitCost onto buyCost even when the source item has a different buyCost', () => {
+      const groups = toInvoiceUpdateGroups([
+        {
+          id: 'g1',
+          items: [
+            {
+              id: 'i1',
+              completed: true,
+              unitCost: 45.5,
+              buyCost: 12,
+            },
+          ],
+        },
+      ]);
+      expect((groups[0].items as Record<string, unknown>[])[0]).toMatchObject({
+        unitCost: 45.5,
+        buyCost: 45.5,
+      });
+    });
+
+    it('drops groups and items that have no Crunchwork id', () => {
+      expect(
+        toInvoiceUpdateGroups([
+          { name: 'No id', items: [{ name: 'line', unitCost: 10 }] },
+        ]),
+      ).toEqual([]);
+    });
   });
-});
 
 describe('crunchworkInvoiceGroupsFromPayload', () => {
   it('returns groups from a create/get response', () => {

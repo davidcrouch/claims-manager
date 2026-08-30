@@ -11,7 +11,6 @@ import {
   DollarSign,
   FileSignature,
   Hash,
-  Layers,
   Package,
   Phone,
   Plus,
@@ -51,7 +50,6 @@ import { jobDisplayName } from '@/components/shared/job-label';
 import { PagedLineItemsTable } from '@/components/quotes/PagedLineItemsTable';
 import { groupsFromDocumentPayload } from '@/components/line-items';
 import { getWorkOrderLineItemsAction } from '@/app/(app)/work-orders/actions';
-import { EntityAttachmentsTab } from '@/components/shared/EntityAttachmentsTab';
 
 // ---------- helpers ---------------------------------------------------------
 
@@ -279,33 +277,6 @@ function OverviewTab({ wo }: { wo: WorkOrder }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card size="sm">
-          <CardContent className="px-4">
-            <p className="text-xs text-muted-foreground">Status</p>
-            <p className="mt-1 text-sm font-medium">{status}</p>
-          </CardContent>
-        </Card>
-        <Card size="sm">
-          <CardContent className="px-4">
-            <p className="text-xs text-muted-foreground">Type</p>
-            <p className="mt-1 text-sm font-medium">{woType}</p>
-          </CardContent>
-        </Card>
-        <Card size="sm">
-          <CardContent className="px-4">
-            <p className="text-xs text-muted-foreground">Total</p>
-            <p className="mt-1 text-sm font-medium">{formatCurrency(wo.totalAmount)}</p>
-          </CardContent>
-        </Card>
-        <Card size="sm">
-          <CardContent className="px-4">
-            <p className="text-xs text-muted-foreground">Adjusted total</p>
-            <p className="mt-1 text-sm font-medium">{formatCurrency(wo.adjustedTotal)}</p>
-          </CardContent>
-        </Card>
-      </div>
-
       <div className="grid gap-4 md:grid-cols-2">
         <SectionCard
           title="Identifiers"
@@ -321,50 +292,6 @@ function OverviewTab({ wo }: { wo: WorkOrder }) {
         </SectionCard>
 
         <SectionCard
-          title="Linked Entities"
-          icon={<Layers className="h-4 w-4 text-muted-foreground" />}
-        >
-          <DefRow
-            label="Job"
-            value={
-              wo.jobId ? (
-                <Link
-                  href={`/jobs/${wo.jobId}?tab=work-orders`}
-                  className="inline-flex items-center gap-1 text-primary hover:underline"
-                >
-                  {wo.jobId}
-                  <ExternalLink className="h-3 w-3" />
-                </Link>
-              ) : (
-                '—'
-              )
-            }
-          />
-          <DefRow
-            label="Claim"
-            value={
-              wo.claimId ? (
-                <Link
-                  href={`/claims/${wo.claimId}`}
-                  className="inline-flex items-center gap-1 text-primary hover:underline"
-                >
-                  {wo.claimId}
-                  <ExternalLink className="h-3 w-3" />
-                </Link>
-              ) : (
-                '—'
-              )
-            }
-          />
-          <DefRow
-            label="Source Estimate"
-            value={asString(pick(payload, 'quoteReference', 'quoteId', 'sourceQuoteId')) ?? '—'}
-          />
-        </SectionCard>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <SectionCard
           title="Service Window"
           icon={<Calendar className="h-4 w-4 text-muted-foreground" />}
         >
@@ -374,7 +301,9 @@ function OverviewTab({ wo }: { wo: WorkOrder }) {
           <DefRow label="End time" value={wo.endTime ?? '—'} />
           <DefRow label="Expires in (days)" value={expiresInDays ?? '—'} />
         </SectionCard>
+      </div>
 
+      <div className="grid gap-4 md:grid-cols-2">
         <SectionCard
           title="Financial"
           icon={<DollarSign className="h-4 w-4 text-muted-foreground" />}
@@ -479,38 +408,6 @@ function LineItemsTab({ wo }: { wo: WorkOrder }) {
   );
 }
 
-function ActivitiesTab() {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Activities</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">
-          Tasks and appointments linked to this work order will appear here once
-          the activities API is connected.
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
-
-function CommunicationsTab() {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Communications</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">
-          Emails and messages associated with this work order will appear here
-          once the communications API is connected.
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
-
 function TimelineTab({ wo }: { wo: WorkOrder }) {
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -531,14 +428,7 @@ function TimelineTab({ wo }: { wo: WorkOrder }) {
 
 // ---------- container -------------------------------------------------------
 
-type WoTab =
-  | 'overview'
-  | 'parties'
-  | 'line-items'
-  | 'activities'
-  | 'communications'
-  | 'timeline'
-  | 'attachments';
+type WoTab = 'overview' | 'parties' | 'line-items' | 'timeline';
 
 export function WorkOrderDetail({ wo }: { wo: WorkOrder }) {
   const [tab, setTab] = useState<WoTab>('overview');
@@ -547,10 +437,7 @@ export function WorkOrderDetail({ wo }: { wo: WorkOrder }) {
     { id: 'overview', label: 'Overview', icon: Calendar },
     { id: 'parties', label: 'Parties', icon: Users },
     { id: 'line-items', label: 'Line Items', icon: Package },
-    { id: 'activities', label: 'Activities', icon: ClipboardCheck },
-    { id: 'communications', label: 'Communications', icon: FileSignature },
     { id: 'timeline', label: 'Timeline', icon: Calendar },
-    { id: 'attachments', label: 'Attachments', icon: Layers },
   ];
 
   return (
@@ -580,10 +467,7 @@ export function WorkOrderDetail({ wo }: { wo: WorkOrder }) {
         {tab === 'overview' && <OverviewTab wo={wo} />}
         {tab === 'parties' && <PartiesTab wo={wo} />}
         {tab === 'line-items' && <LineItemsTab wo={wo} />}
-        {tab === 'activities' && <ActivitiesTab />}
-        {tab === 'communications' && <CommunicationsTab />}
         {tab === 'timeline' && <TimelineTab wo={wo} />}
-        {tab === 'attachments' && <EntityAttachmentsTab entityId={wo.id} relatedRecordType="PurchaseOrder" entityLabel="this work order" />}
       </div>
     </div>
   );

@@ -114,6 +114,13 @@ export const drawerRegistry: Record<string, DrawerRegistryEntry> = {
         default: m.AssessmentRecommendationDrawer as unknown as ComponentType<CanvasDrawerProps>,
       })),
   },
+  AssessmentPrintDrawer: {
+    title: 'Print assessment',
+    loader: () =>
+      import('@/components/assessments/drawers/AssessmentPrintDrawer').then((m) => ({
+        default: m.AssessmentPrintDrawer as unknown as ComponentType<CanvasDrawerProps>,
+      })),
+  },
   TaskDetailDrawer: {
     title: 'Edit Task',
     loader: () =>

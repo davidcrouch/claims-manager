@@ -53,13 +53,17 @@ export function SelectField({
       <Label className="text-xs font-medium text-slate-500">{label}</Label>
       <Select
         value={value || EMPTY_PLACEHOLDER}
-        onValueChange={(v) => onChange(!v || v === EMPTY_PLACEHOLDER ? '' : v)}
+        onValueChange={(v) => {
+          const next = !v || v === EMPTY_PLACEHOLDER ? '' : String(v);
+          if (next !== value) onChange(next);
+        }}
         disabled={disabled}
       >
         <SelectTrigger className="h-9 w-full" disabled={disabled}>
           <SelectValue placeholder="Select..." />
         </SelectTrigger>
-        <SelectContent>
+        {/* Item-aligned positioner loops inside the transformed form drawer. */}
+        <SelectContent alignItemWithTrigger={false} align="start">
           <SelectItem value={EMPTY_PLACEHOLDER}>-- None --</SelectItem>
           {options.map((opt) => (
             <SelectItem key={opt} value={opt}>

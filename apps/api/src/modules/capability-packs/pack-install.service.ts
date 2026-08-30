@@ -626,6 +626,9 @@ export class PackInstallService {
           semanticSkills: entry.data.semanticSkills,
           supportsVision: entry.data.supportsVision,
           maxSteps: entry.data.maxSteps,
+          autonomousMode: entry.data.autonomousMode,
+          pauseAfterToolSteps: entry.data.pauseAfterToolSteps,
+          maxDurationSeconds: entry.data.maxDurationSeconds,
           packInstallId: installId,
         });
         await this.db
@@ -658,6 +661,9 @@ export class PackInstallService {
           semanticSkills: entry.data.semanticSkills,
           supportsVision: entry.data.supportsVision,
           maxSteps: entry.data.maxSteps,
+          autonomousMode: entry.data.autonomousMode,
+          pauseAfterToolSteps: entry.data.pauseAfterToolSteps,
+          maxDurationSeconds: entry.data.maxDurationSeconds,
           isDefault: entry.data.isDefault,
           packInstallId: installId,
         });

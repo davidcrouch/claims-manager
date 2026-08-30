@@ -30,6 +30,7 @@ import {
 } from '@/components/shared/column-visibility';
 import { ListArchiveButton, LIST_ARCHIVE_TH_CLASS, LIST_ARCHIVE_TD_CLASS, LIST_ARCHIVE_SPACER_TD_CLASS } from '@/components/shared/ListArchiveButton';
 import { formatAddress } from '@/components/shared/detail';
+import { SyncStatusIndicator } from '@/components/shared/SyncStatusIndicator';
 import { jobDisplayName, jobInsurerReference } from '@/components/shared/job-label';
 import { fetchJobsAction, fetchJobFilterOptionsAction } from '@/app/(app)/jobs/actions';
 import {
@@ -679,10 +680,13 @@ export function JobsListClient({
                     >
                       {isVisible('external_reference') && (
                         <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
-                          {isUnread && !isSelected && (
-                            <span className="mr-2 inline-block h-2 w-2 rounded-full bg-blue-500" />
-                          )}
-                          {ref}
+                          <span className="flex items-center gap-1.5">
+                            {isUnread && !isSelected && (
+                              <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-blue-500" />
+                            )}
+                            <span>{ref}</span>
+                            <SyncStatusIndicator syncStatus={job.syncStatus} compact />
+                          </span>
                         </td>
                       )}
                       {isVisible('external_job_id') && (

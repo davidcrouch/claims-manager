@@ -1,17 +1,50 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { MessageSquare } from 'lucide-react';
 import type { ChatMessage, CanvasArtifact } from '@/lib/ai/chat-types';
 import { MessageRenderer, type AgentAvatarInfo } from './MessageRenderer';
+import type { PageContext } from '@/lib/ai/use-page-context';
 
-const SUGGESTIONS = [
+const DEFAULT_SUGGESTIONS = [
   'Show me open claims',
   'List tasks due this week',
   'Find recent jobs for a claim',
   'Summarise accounts receivable',
   'What vendors do we have?',
 ];
+
+const ASSESSMENT_TAB_LABELS: Record<string, string> = {
+  attendance: 'Attendance',
+  building: 'Building',
+  habitability: 'Habitability',
+  hazards: 'Hazards',
+  damage: 'Damage & Cause',
+  makeSafe: 'Make Safe',
+  temporaryAccommodation: 'Temp Accommodation',
+  specialists: 'Specialists',
+  recommendation: 'Recommendation',
+};
+
+function getSuggestions(ctx?: PageContext): string[] {
+  if (ctx?.entityType === 'assessment') {
+    if (!ctx.entityId) {
+      return [
+        'Create a new assessment for this job',
+        'What assessments exist for this job?',
+        'Open a blank assessment form',
+      ];
+    }
+    const tabLabel = ASSESSMENT_TAB_LABELS[ctx.activeTab ?? 'attendance'] ?? 'Attendance';
+    return [
+      `Help me fill the ${tabLabel} section`,
+      'Complete all remaining tabs',
+      'Review journals for evidence',
+      'Print this assessment as a PDF',
+    ];
+  }
+  return DEFAULT_SUGGESTIONS;
+}
 
 interface ChatMessageListProps {
   messages: ChatMessage[];
@@ -29,9 +62,10 @@ interface ChatMessageListProps {
   onBranch?: (messageId: string) => void;
   interruptedMessageId?: string | null;
   conversationId?: string;
+  pageContext?: PageContext;
 }
 
-export function ChatMessageList({
+export const ChatMessageList = memo(function ChatMessageList({
   messages,
   isStreaming,
   isSubmitting,
@@ -47,6 +81,7 @@ export function ChatMessageList({
   onBranch,
   interruptedMessageId,
   conversationId,
+  pageContext,
 }: ChatMessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -65,7 +100,7 @@ export function ChatMessageList({
           Ask about claims, jobs, invoices, contacts, or anything in your workspace.
         </p>
         <div className="grid w-full max-w-lg gap-2 sm:grid-cols-2">
-          {SUGGESTIONS.map((suggestion) => (
+          {getSuggestions(pageContext).map((suggestion) => (
             <button
               key={suggestion}
               type="button"
@@ -114,4 +149,4 @@ export function ChatMessageList({
       </div>
     </div>
   );
-}
+});

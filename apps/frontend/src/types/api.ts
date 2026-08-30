@@ -138,6 +138,7 @@ export interface Job {
 
   apiPayload?: Record<string, unknown>;
   customData?: Record<string, unknown>;
+  syncStatus?: 'pending' | 'synced' | 'failed' | null;
 
   createdAt?: string;
   updatedAt?: string;
@@ -270,6 +271,7 @@ export interface Quote {
   updatedByUserId?: string | null;
   assignedToUserId?: string | null;
   assigneeName?: string | null;
+  syncStatus?: 'pending' | 'synced' | 'failed' | null;
   createdAt?: string;
   updatedAt?: string;
   status?: LookupRef;
@@ -380,6 +382,7 @@ export interface Invoice {
   sourceExternalReference?: string | null;
   invoicePayload?: Record<string, unknown> | null;
   apiPayload?: Record<string, unknown> | null;
+  syncStatus?: 'pending' | 'synced' | 'failed' | null;
   createdAt?: string;
   updatedAt?: string;
   status?: LookupRef;
@@ -563,6 +566,8 @@ export interface Task {
   originType?: string | null;
   createdByUserId?: string | null;
   completedAt?: string | null;
+  syncStatus?: 'pending' | 'synced' | 'failed' | null;
+  externalReference?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -670,6 +675,8 @@ export interface Appointment {
   cancellationReason?: string | null;
   cancelledAt?: string | null;
   attendees?: AppointmentAttendee[];
+  syncStatus?: 'pending' | 'synced' | 'failed' | null;
+  externalReference?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -1215,6 +1222,10 @@ export interface CreateAgentPayload {
   chatEnabled?: boolean;
   enabledTools?: string[];
   connectionIds?: string[];
+  autonomousMode?: boolean;
+  pauseAfterToolSteps?: number;
+  maxDurationSeconds?: number;
+  maxSteps?: number;
 }
 
 export interface CreateSkillPayload {

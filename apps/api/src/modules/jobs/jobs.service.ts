@@ -151,8 +151,13 @@ export class JobsService {
 
   private shapeJobResponse(row: JobViewRow) {
     const { statusName, statusExternalReference, jobTypeName, jobTypeExternalReference, vendorName, vendorExternalReference, connectionProviderCode, assigneeName, ...rest } = row;
+    const payload = (rest.apiPayload ?? {}) as Record<string, unknown>;
+    const payloadId = typeof payload.id === 'string' ? payload.id.trim() : '';
+    const externalRef = (rest.externalReference ?? '').trim() || payloadId;
+    const syncStatus = rest.syncStatus ?? (externalRef ? 'synced' : null);
     return {
       ...rest,
+      syncStatus,
       provider: connectionProviderCode ?? 'internal',
       assigneeName: assigneeName ?? null,
       status: row.statusLookupId
@@ -352,54 +357,23 @@ export class JobsService {
       `JobsService.create — id=${job.id} assignedToUserId=${job.assignedToUserId ?? 'none'}`,
     );
 
-    // Push create to Crunchwork in-request so callers get a real success/failure
-    // (and the CW payload) instead of a fire-and-forget queue result.
     if (needsSync && outboundPayload) {
       try {
-        const result = await this.crunchworkOutbound.push({
+        await this.outboundSync.enqueue({
+          tenantId,
           connectionId,
           entityType: 'job',
           entityId: job.id,
           action: 'create',
           payload: outboundPayload,
-        });
-        const syncPatch: Partial<JobInsert> = { syncStatus: 'synced' };
-        if (result.externalReference) {
-          syncPatch.externalReference = result.externalReference;
-        }
-        if (result.responsePayload) {
-          syncPatch.apiPayload = result.responsePayload;
-          const insurerRef = asNonEmptyString(result.responsePayload.externalReference);
-          if (insurerRef) {
-            syncPatch.externalJobId = insurerRef;
-          }
-        }
-        await this.jobsRepo.update({
-          id: job.id,
-          data: syncPatch,
+          sourceEvent: 'api:create',
+          idempotencyKey: `job:${job.id}:create`,
+          tx: this.db,
         });
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : 'Failed to create job in Crunchwork';
-        this.logger.error(
-          `JobsService.create — Crunchwork create failed jobId=${job.id}: ${message}`,
+        this.logger.warn(
+          `JobsService.create — failed to enqueue outbound sync for job ${job.id}: ${err instanceof Error ? err.message : err}`,
         );
-        this.logger.error(
-          `JobsService.create — Crunchwork request payload jobId=${job.id}: ${JSON.stringify(outboundPayload)}`,
-        );
-        await this.jobsRepo.update({
-          id: job.id,
-          data: { syncStatus: 'failed' },
-        });
-        await this.outboundSync.cancelPending({
-          tenantId,
-          entityType: 'job',
-          entityId: job.id,
-        });
-        throw new BadRequestException({
-          message,
-          outboundPayload,
-        });
       }
     }
 

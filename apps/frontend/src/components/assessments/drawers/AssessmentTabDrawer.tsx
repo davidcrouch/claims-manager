@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type ComponentType } from 'react';
+import { useCallback, useEffect, useRef, useState, type ComponentType } from 'react';
 import { useRouter } from 'next/navigation';
 import { Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -34,6 +34,50 @@ interface AssessmentTabDrawerConfig {
   FormComponent: ComponentType<TabFormProps>;
 }
 
+const AI_FIELD_CHROME_KEYS = new Set([
+  'aiAssistEnabled',
+  'jobId',
+  'claimId',
+]);
+
+/** Rest props excluding drawer chrome; used as an AI field payload. */
+function collectAiFields(raw: Record<string, unknown>): Record<string, unknown> {
+  const filtered: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (v !== undefined && !AI_FIELD_CHROME_KEYS.has(k)) {
+      filtered[k] = v;
+    }
+  }
+  return filtered;
+}
+
+function snapshotAiFields(raw: Record<string, unknown>): string {
+  try {
+    return JSON.stringify(collectAiFields(raw));
+  } catch {
+    return '{}';
+  }
+}
+
+function parseAiFieldsSnapshot(snapshot: string): Record<string, unknown> {
+  if (!snapshot || snapshot === '{}') return {};
+  try {
+    return JSON.parse(snapshot) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+function aiFieldsUnchanged(
+  prev: Record<string, unknown>,
+  incoming: Record<string, unknown>,
+): boolean {
+  for (const [k, v] of Object.entries(incoming)) {
+    if (JSON.stringify(prev[k]) !== JSON.stringify(v)) return false;
+  }
+  return true;
+}
+
 export function createAssessmentTabDrawer(config: AssessmentTabDrawerConfig) {
   const { sectionKey, title, icon: Icon, FormComponent } = config;
 
@@ -50,6 +94,12 @@ export function createAssessmentTabDrawer(config: AssessmentTabDrawerConfig) {
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    // Rest `aiFields` is a new object every render. Depend on a value snapshot so
+    // this effect does not setState in a loop (max update depth).
+    const aiFieldsSnapshot = snapshotAiFields(aiFields);
+    const aiFieldsSnapshotRef = useRef(aiFieldsSnapshot);
+    aiFieldsSnapshotRef.current = aiFieldsSnapshot;
+
     useEffect(() => {
       if (!open || !assessmentId) return;
       let cancelled = false;
@@ -58,7 +108,8 @@ export function createAssessmentTabDrawer(config: AssessmentTabDrawerConfig) {
         if (cancelled) return;
         setAssessment(result);
         if (result) {
-          setLocalData(sectionDict(result, sectionKey));
+          const overlay = parseAiFieldsSnapshot(aiFieldsSnapshotRef.current);
+          setLocalData({ ...sectionDict(result, sectionKey), ...overlay });
         }
         setError(null);
       })();
@@ -67,21 +118,17 @@ export function createAssessmentTabDrawer(config: AssessmentTabDrawerConfig) {
 
     useEffect(() => {
       if (!open) return;
-      const filtered: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(aiFields)) {
-        if (v !== undefined && k !== 'aiAssistEnabled') {
-          filtered[k] = v;
-        }
-      }
-      if (Object.keys(filtered).length > 0) {
-        setLocalData((prev) => ({ ...prev, ...filtered }));
-      }
-    }, [open, aiFields]);
+      const filtered = parseAiFieldsSnapshot(aiFieldsSnapshot);
+      if (Object.keys(filtered).length === 0) return;
+      setLocalData((prev) =>
+        aiFieldsUnchanged(prev, filtered) ? prev : { ...prev, ...filtered },
+      );
+    }, [open, aiFieldsSnapshot]);
 
     const locked = isAssessmentLocked(assessment?.status);
 
     const handleChange = useCallback((key: string, value: unknown) => {
-      setLocalData((prev) => ({ ...prev, [key]: value }));
+      setLocalData((prev) => (Object.is(prev[key], value) ? prev : { ...prev, [key]: value }));
     }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {

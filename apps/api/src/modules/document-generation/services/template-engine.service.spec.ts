@@ -5,7 +5,7 @@ import { TemplateEngineService } from './template-engine.service';
 
 describe('TemplateEngineService', () => {
   const service = new TemplateEngineService();
-  const templatesDir = path.join(process.cwd(), '../../data/templates');
+  const templatesDir = path.join(process.cwd(), '../../data/templates/seed');
   const rfqTemplatePath = path.join(templatesDir, 'Request for Quotation Template.docx');
   const poTemplatePath = path.join(templatesDir, 'Purchase Order Template.docx');
   const invoiceTemplatePath = path.join(templatesDir, 'Invoice Template.docx');

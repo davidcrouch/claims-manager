@@ -39,7 +39,3 @@ DNS A records (grey-cloud / DNS-only) for `app-staging` / `auth-staging` / `prov
 The LB terminates TLS with a Google-managed cert and routes to Cloud Run via serverless NEGs. No Workers, Origin Rules, or code changes needed.
 
 Set `use_public_hostnames=true` in staging `terraform.tfvars` (already done) so OIDC issuer/callbacks match.
-
-## Orphan networking note
-
-`claims-manager-gke-staging` may still appear in the VPC. It is unused; delete when GCP releases the serverless address reservations on it.

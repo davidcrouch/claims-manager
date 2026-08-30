@@ -36,6 +36,9 @@ export const packAgentSchema = z.object({
   semanticSkills: z.enum(['all', 'none', 'pinned_only']).default('all'),
   supportsVision: z.boolean().default(false),
   maxSteps: z.number().int().positive().default(10),
+  autonomousMode: z.boolean().default(false),
+  pauseAfterToolSteps: z.number().int().positive().default(4),
+  maxDurationSeconds: z.number().int().positive().default(120),
   isDefault: z.boolean().default(false),
 });
 

@@ -14,6 +14,9 @@ function createDrizzle(databaseUrl: string) {
   const pool = new Pool({
     connectionString: databaseUrl,
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    keepAlive: true,
+    connectionTimeoutMillis: 10_000,
+    idleTimeoutMillis: 20_000,
   });
   return drizzle({ client: pool, schema });
 }

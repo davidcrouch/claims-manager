@@ -21,7 +21,7 @@ export class VertexGeminiProvider implements CompletionProvider {
 
   constructor(
     private readonly projectId: string,
-    private readonly location: string = 'us-central1',
+    private readonly location: string = 'global',
   ) {}
 
   async generate(params: {
@@ -37,8 +37,12 @@ export class VertexGeminiProvider implements CompletionProvider {
       throw new Error(`${LOG}.generate: failed to obtain GCP access token`);
     }
 
+    const host =
+      this.location === 'global'
+        ? 'aiplatform.googleapis.com'
+        : `${this.location}-aiplatform.googleapis.com`;
     const url =
-      `https://${this.location}-aiplatform.googleapis.com/v1/projects/` +
+      `https://${host}/v1/projects/` +
       `${this.projectId}/locations/${this.location}/publishers/google/models/` +
       `${params.model}:generateContent`;
 

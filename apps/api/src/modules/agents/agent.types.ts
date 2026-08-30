@@ -26,6 +26,9 @@ export interface AgentConfig {
   avatarColor?: string;
   supportsVision?: boolean;
   maxSteps?: number;
+  autonomousMode?: boolean;
+  pauseAfterToolSteps?: number;
+  maxDurationSeconds?: number;
   pinnedSkills?: string[];
   semanticSkills?: 'all' | 'none' | 'pinned_only';
 }
@@ -46,6 +49,9 @@ export interface CreateAgentDto {
   avatarUrl?: string;
   supportsVision?: boolean;
   maxSteps?: number;
+  autonomousMode?: boolean;
+  pauseAfterToolSteps?: number;
+  maxDurationSeconds?: number;
   pinnedSkills?: string[];
   semanticSkills?: 'all' | 'none' | 'pinned_only';
   /** Set when materializing from a capability pack install. */
@@ -74,4 +80,7 @@ export const DEFAULT_AGENT_CONFIG: Omit<AgentConfig, 'id'> = {
   systemPrompt: DEFAULT_SYSTEM_PROMPT,
   isDefault: true,
   visibility: 'org',
+  autonomousMode: false,
+  pauseAfterToolSteps: 4,
+  maxDurationSeconds: 120,
 };

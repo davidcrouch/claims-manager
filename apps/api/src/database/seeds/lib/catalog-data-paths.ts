@@ -26,8 +26,9 @@ export function assemblyBomPath(): string {
   return join(resolveRepoDataDir(), 'internal-assembly-bom.json');
 }
 
+/** Canonical Word templates seeded into tenant Templates & Forms. */
 export function templatesDir(): string {
-  return join(resolveRepoDataDir(), 'templates');
+  return join(resolveRepoDataDir(), 'templates', 'seed');
 }
 
 const IAG_CW_STABLE = 'iag-2026-04-35.csv';

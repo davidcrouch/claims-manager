@@ -10,8 +10,6 @@ import {
   FileSignature,
   Calendar,
   ClipboardList,
-  MessageSquare,
-  Paperclip,
   Package,
   BookOpen,
   Lock,
@@ -84,7 +82,6 @@ import {
   linkJournalAction,
   unlinkJournalAction,
 } from '@/app/(app)/journals/actions';
-import { EntityAttachmentsTab } from '@/components/shared/EntityAttachmentsTab';
 import {
   EstimatePublishWizard,
   type EstimatePublishMode,
@@ -106,6 +103,7 @@ import {
   pushUndoEntry,
 } from '@/components/shared/detail-autosave';
 import { DetailUndoButton } from '@/components/shared/DetailAutosaveActions';
+import { SyncStatusIndicator } from '@/components/shared/SyncStatusIndicator';
 
 type UndoEntry =
   | { kind: 'fields'; snapshot: QuoteFieldsSnapshot }
@@ -222,6 +220,9 @@ export function QuotePageHeader({
       topRow={
         <>
           <StatusBadge status={statusName} />
+          {(quote as any).syncStatus && (
+            <SyncStatusIndicator syncStatus={(quote as any).syncStatus} compact />
+          )}
           {locked && (
             <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
               <Lock className="h-3 w-3" />
@@ -295,22 +296,6 @@ function ActivitiesTab({ quoteId }: { quoteId: string }) {
   );
 }
 
-function CommunicationsTab() {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Communications</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">
-          Emails associated with this estimate will appear here once the
-          communications API is connected.
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
-
 function TimelineTab({ quote }: { quote: Quote }) {
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -336,9 +321,7 @@ type QuoteTab =
   | 'line-items'
   | 'parties'
   | 'activities'
-  | 'communications'
   | 'timeline'
-  | 'attachments'
   | 'journals';
 
 export function QuoteDetail({
@@ -616,8 +599,6 @@ export function QuoteDetail({
     { id: 'line-items', label: 'Take Off', icon: Layers },
     { id: 'parties', label: 'Parties', icon: Users },
     { id: 'activities', label: 'Activities', icon: ClipboardList },
-    { id: 'communications', label: 'Communications', icon: MessageSquare },
-    { id: 'attachments', label: 'Attachments', icon: Paperclip },
     { id: 'journals', label: 'Journals', icon: BookOpen },
     { id: 'timeline', label: 'Timeline', icon: Calendar },
   ];
@@ -793,9 +774,7 @@ export function QuoteDetail({
           />
         </div>
         {tab === 'activities' && <ActivitiesTab quoteId={quote.id} />}
-        {tab === 'communications' && <CommunicationsTab />}
         {tab === 'timeline' && <TimelineTab quote={quote} />}
-        {tab === 'attachments' && <EntityAttachmentsTab entityId={quote.id} relatedRecordType="Quote" entityLabel="this estimate" />}
         {tab === 'journals' && (
           <JournalList
             entityType="Quote"

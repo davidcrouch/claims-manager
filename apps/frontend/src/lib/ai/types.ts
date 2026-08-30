@@ -68,6 +68,9 @@ export interface Agent extends AISettings {
   avatarUrl?: string;
   supportsVision?: boolean;
   maxSteps?: number;
+  autonomousMode?: boolean;
+  pauseAfterToolSteps?: number;
+  maxDurationSeconds?: number;
   pinnedSkills?: string[];
   semanticSkills?: 'all' | 'none' | 'pinned_only';
 }

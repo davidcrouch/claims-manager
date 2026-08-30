@@ -8,7 +8,7 @@ import type { Agent } from '@/lib/ai/types';
 import { DEFAULT_AGENT_ID } from '@/lib/ai/types';
 import { agentSupportsVision, isImageFilePart } from '@/lib/ai/vision-capability';
 import { ChatMessageList } from './ChatMessageList';
-import { ChatInputBar } from './ChatInputBar';
+import { ChatInputBar, type ChatInputHandle } from './ChatInputBar';
 import { MessageAuditDrawer } from './MessageAuditDrawer';
 import { useAuditInspector } from './hooks/use-audit-inspector';
 import { useFileUpload } from './hooks/useFileUpload';
@@ -21,6 +21,7 @@ interface ChatInterfaceProps {
   initialMessages?: ChatMessage[];
   agents: Agent[];
   pageContext?: PageContext;
+  preferredAgentId?: string;
   onMessagesChange?: (messages: ChatMessage[]) => void;
   onOpenCanvas?: (artifact: CanvasArtifact) => void;
   onOpenCanvasComponent?: (event: {
@@ -40,6 +41,7 @@ export function ChatInterface({
   initialMessages,
   agents,
   pageContext,
+  preferredAgentId,
   onMessagesChange,
   onOpenCanvas,
   onOpenCanvasComponent,
@@ -50,13 +52,13 @@ export function ChatInterface({
   relatedRecordId,
   startWithMic,
 }: ChatInterfaceProps) {
-  const [input, setInput] = useState('');
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [interruptedMessageId, setInterruptedMessageId] = useState<string | null>(null);
   const [pendingAttachmentParts, setPendingAttachmentParts] = useState<FilePart[]>([]);
   const [visionError, setVisionError] = useState<string | null>(null);
   const selectedAgentIdRef = useRef<string | null>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const userPickedAgentRef = useRef(false);
+  const inputBarRef = useRef<ChatInputHandle>(null);
   const prevStatusRef = useRef<string>('ready');
   const stoppedRef = useRef(false);
   const didAutoStartMicRef = useRef(false);
@@ -64,7 +66,7 @@ export function ChatInterface({
   const fileUpload = useFileUpload(conversationId);
 
   const handleSpeechTranscript = useCallback((text: string) => {
-    setInput((prev) => (prev ? `${prev.trimEnd()} ${text}` : text));
+    inputBarRef.current?.appendDraft(text);
   }, []);
 
   const {
@@ -89,16 +91,27 @@ export function ChatInterface({
     // Prefer real agents over the client-side DEFAULT_AGENT sentinel (id: "default").
     const realAgents = agents.filter((a) => a.id !== DEFAULT_AGENT_ID);
     const pool = realAgents.length > 0 ? realAgents : agents;
-    const defaultAgent = pool.find((a) => a.isDefault) ?? pool[0];
-    if (!defaultAgent) return;
 
     const selectionValid =
       !!selectedAgentId && pool.some((a) => a.id === selectedAgentId);
-    if (!selectionValid) {
-      setSelectedAgentId(defaultAgent.id);
-      selectedAgentIdRef.current = defaultAgent.id;
+    if (selectionValid) return;
+
+    // Use page-preferred agent when the user hasn't manually picked one
+    if (!userPickedAgentRef.current && preferredAgentId) {
+      const preferred = pool.find((a) => a.id === preferredAgentId);
+      if (preferred) {
+        setSelectedAgentId(preferred.id);
+        selectedAgentIdRef.current = preferred.id;
+        return;
+      }
     }
-  }, [agents, selectedAgentId]);
+
+    const defaultAgent = pool.find((a) => a.isDefault) ?? pool[0];
+    if (!defaultAgent) return;
+
+    setSelectedAgentId(defaultAgent.id);
+    selectedAgentIdRef.current = defaultAgent.id;
+  }, [agents, selectedAgentId, preferredAgentId]);
 
   const handleCanvasAction = useCallback(
     (artifact: CanvasArtifact) => {
@@ -179,6 +192,12 @@ export function ChatInterface({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, conversationId]);
 
+  const handleSelectAgent = useCallback((agentId: string) => {
+    userPickedAgentRef.current = true;
+    setSelectedAgentId(agentId);
+    selectedAgentIdRef.current = agentId;
+  }, []);
+
   const selectedAgent = agents.find((a) => a.id === selectedAgentId) ?? null;
   const supportsVision = selectedAgent ? agentSupportsVision(selectedAgent) : true;
   const selectedAgentAvatar: AgentAvatarInfo | undefined = useMemo(
@@ -247,7 +266,7 @@ export function ChatInterface({
         && !(document.activeElement as HTMLElement | null)?.isContentEditable
       ) {
         e.preventDefault();
-        inputRef.current?.focus();
+        inputBarRef.current?.focus();
       }
     };
 
@@ -256,7 +275,7 @@ export function ChatInterface({
   }, [isStreaming, isLoading, messages, handleStop]);
 
   const submitMessage = useCallback(async (overrideText?: string) => {
-    const trimmed = (overrideText ?? input).trim();
+    const trimmed = (overrideText ?? '').trim();
     if (
       (!trimmed && fileUpload.selectedFiles.length === 0 && pendingAttachmentParts.length === 0)
       || isLoading
@@ -288,8 +307,16 @@ export function ChatInterface({
     });
 
     setPendingAttachmentParts([]);
-    setInput('');
-  }, [input, isLoading, fileUpload, sendMessage, pendingAttachmentParts, supportsVision]);
+    inputBarRef.current?.clearDraft();
+  }, [
+    isLoading,
+    fileUpload.selectedFiles,
+    fileUpload.isProcessingFiles,
+    fileUpload.processFiles,
+    sendMessage,
+    pendingAttachmentParts,
+    supportsVision,
+  ]);
 
   const handleAttachDocument = useCallback(
     (part: FilePart) => {
@@ -302,9 +329,28 @@ export function ChatInterface({
     [supportsVision],
   );
 
+  const handleAddFiles = useCallback(
+    (files: File[]) => {
+      if (!supportsVision && files.some((f) => f.type.startsWith('image/'))) {
+        setVisionError('This agent does not support image attachments.');
+        return;
+      }
+      fileUpload.addFiles(files);
+    },
+    [supportsVision, fileUpload.addFiles],
+  );
+
+  const handleRemovePendingAttachment = useCallback((index: number) => {
+    setPendingAttachmentParts((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const handleClearVisionError = useCallback(() => {
+    setVisionError(null);
+  }, []);
+
   const handleSuggestionClick = useCallback((suggestion: string) => {
-    setInput(suggestion);
-    setTimeout(() => inputRef.current?.focus(), 0);
+    inputBarRef.current?.setDraft(suggestion);
+    setTimeout(() => inputBarRef.current?.focus(), 0);
   }, []);
 
   const handleRegenerate = useCallback((assistantMessageId: string) => {
@@ -346,8 +392,8 @@ export function ChatInterface({
 
     const fileParts = msg.parts.filter((p): p is FilePart => p.type === 'file');
     setPendingAttachmentParts(fileParts);
-    setInput(textContent);
-    inputRef.current?.focus();
+    inputBarRef.current?.setDraft(textContent);
+    inputBarRef.current?.focus();
   }, [messages]);
 
   const handleBranch = useCallback((messageId: string) => {
@@ -372,6 +418,7 @@ export function ChatInterface({
         onBranch={onBranch ? handleBranch : undefined}
         interruptedMessageId={interruptedMessageId}
         conversationId={conversationId}
+        pageContext={pageContext}
       />
 
       {error && (
@@ -382,37 +429,27 @@ export function ChatInterface({
       )}
 
       <ChatInputBar
-        input={input}
-        onInputChange={setInput}
+        ref={inputBarRef}
         onSubmit={submitMessage}
         onStop={handleStop}
         isLoading={isLoading}
         isProcessingFiles={fileUpload.isProcessingFiles}
         agents={agents}
         selectedAgentId={selectedAgentId}
-        onSelectAgent={setSelectedAgentId}
+        onSelectAgent={handleSelectAgent}
         selectedFiles={fileUpload.selectedFiles}
         fileErrors={fileUpload.fileErrors}
         fileInputRef={fileUpload.fileInputRef}
         onFilesSelected={fileUpload.handleFilesSelected}
         onRemoveFile={fileUpload.removeFile}
-        onAddFiles={(files) => {
-          if (!supportsVision && files.some((f) => f.type.startsWith('image/'))) {
-            setVisionError('This agent does not support image attachments.');
-            return;
-          }
-          fileUpload.addFiles(files);
-        }}
-        inputRef={inputRef}
+        onAddFiles={handleAddFiles}
         pendingAttachmentParts={pendingAttachmentParts}
-        onRemovePendingAttachment={(index) =>
-          setPendingAttachmentParts((prev) => prev.filter((_, i) => i !== index))
-        }
+        onRemovePendingAttachment={handleRemovePendingAttachment}
         relatedRecordType={relatedRecordType}
         relatedRecordId={relatedRecordId}
         supportsVision={supportsVision}
         visionError={visionError}
-        onClearVisionError={() => setVisionError(null)}
+        onClearVisionError={handleClearVisionError}
         onVisionBlocked={setVisionError}
         onAttachDocument={handleAttachDocument}
         isSpeechSupported={isSpeechSupported}

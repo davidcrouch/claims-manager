@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useForm, Controller } from 'react-hook-form';
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
@@ -36,19 +35,13 @@ import {
   CreateSubmitOverlay,
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
+import { SyncStatusIndicator } from '@/components/shared/SyncStatusIndicator';
 import { CW_TASK_TYPES } from '@/lib/cw-task-types';
 import type { LookupRef, Task } from '@/types/api';
 
 const TASK_TYPES = CW_TASK_TYPES;
 
-const TASK_STATUSES = [
-  'Open',
-  'In Progress',
-  'On Hold',
-  'Completed',
-  'Failed',
-  'Cancelled',
-] as const;
+const TASK_STATUSES = ['Open', 'Completed', 'Failed'] as const;
 
 const TASK_PRIORITIES = ['Low', 'Medium', 'High', 'Critical'] as const;
 
@@ -56,7 +49,7 @@ const taskFormSchema = z.object({
   jobId: z.string().optional(),
   claimId: z.string().optional(),
   name: z.string().min(1, 'Name is required'),
-  taskType: z.string().optional(),
+  taskType: z.string().min(1, 'Type is required'),
   status: z.string().min(1, 'Status is required'),
   priority: z.string().min(1, 'Priority is required'),
   startDate: z.string().optional(),
@@ -157,6 +150,7 @@ export interface TaskFormDrawerProps {
   jobs?: JobOption[];
   task?: Task | null;
   taskId?: string | null;
+  onSuccess?: () => void;
   renderMode?: 'drawer' | 'canvas';
   aiAssistEnabled?: boolean;
   companionChatOpen?: boolean;
@@ -170,11 +164,11 @@ export function TaskFormDrawer({
   jobs: jobsProp,
   task: taskProp,
   taskId,
+  onSuccess,
   renderMode = 'drawer',
   aiAssistEnabled = false,
   companionChatOpen: companionChatOpenProp,
 }: TaskFormDrawerProps) {
-  const router = useRouter();
   const { phase, busy, startCreating, resetPhase } = useCreateSubmitPhase();
   const [task, setTask] = useState<Task | null>(taskProp ?? null);
   const [loadingTask, setLoadingTask] = useState(false);
@@ -258,6 +252,7 @@ export function TaskFormDrawer({
 
   const watchedJobId = form.watch('jobId');
   const watchedTaskType = form.watch('taskType');
+  const watchedStatus = form.watch('status');
   const typeOptions = useMemo(() => {
     const current = watchedTaskType?.trim();
     if (current && !(TASK_TYPES as readonly string[]).includes(current)) {
@@ -265,6 +260,13 @@ export function TaskFormDrawer({
     }
     return [...TASK_TYPES];
   }, [watchedTaskType]);
+  const statusOptions = useMemo(() => {
+    const current = watchedStatus?.trim();
+    if (current && !(TASK_STATUSES as readonly string[]).includes(current)) {
+      return [current, ...TASK_STATUSES];
+    }
+    return [...TASK_STATUSES];
+  }, [watchedStatus]);
   const selectedJob = useMemo(
     () => jobs.find((j) => j.id === watchedJobId),
     [jobs, watchedJobId],
@@ -308,9 +310,9 @@ export function TaskFormDrawer({
 
       if (result.success) {
         if (!isEdit) resetPhase();
+        onSuccess?.();
         onOpenChange(false);
         form.reset(emptyFormValues(jobId, claimId));
-        router.refresh();
       } else {
         setError(result.error ?? (isEdit ? 'Failed to update task' : 'Failed to create task'));
         if (!isEdit) resetPhase();
@@ -352,6 +354,9 @@ export function TaskFormDrawer({
       <BottomFormDrawerBody>
         {loadingTask && (
           <p className="text-sm text-slate-500">Loading task…</p>
+        )}
+        {isEdit && task?.syncStatus && (
+          <SyncStatusIndicator syncStatus={task.syncStatus} />
         )}
         <div className="space-y-5">
           <FormSection title="Assignment">
@@ -410,7 +415,9 @@ export function TaskFormDrawer({
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="task-type">Type</Label>
+                <Label htmlFor="task-type">
+                  Type <span className="text-destructive">*</span>
+                </Label>
                 <Controller
                   control={form.control}
                   name="taskType"
@@ -432,6 +439,9 @@ export function TaskFormDrawer({
                     </Select>
                   )}
                 />
+                {form.formState.errors.taskType && (
+                  <p className="text-xs text-destructive">{form.formState.errors.taskType.message}</p>
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -450,7 +460,7 @@ export function TaskFormDrawer({
                         <SelectValue placeholder="Select status" />
                       </SelectTrigger>
                       <SelectContent>
-                        {TASK_STATUSES.map((status) => (
+                        {statusOptions.map((status) => (
                           <SelectItem key={status} value={status}>
                             {status}
                           </SelectItem>
@@ -569,6 +579,11 @@ export function TaskFormDrawer({
                 <div className="flex gap-1.5">
                   <dt className="font-medium text-slate-400">Origin</dt>
                   <dd className="capitalize">{task.originType}</dd>
+                </div>
+              )}
+              {task?.syncStatus && (
+                <div className="col-span-2">
+                  <SyncStatusIndicator syncStatus={task.syncStatus} />
                 </div>
               )}
             </dl>

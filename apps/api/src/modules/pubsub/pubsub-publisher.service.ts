@@ -28,7 +28,12 @@ export class PubSubPublisherService implements OnModuleInit, OnModuleDestroy {
       this.logger.log('PubSubPublisherService.onModuleInit — PUBSUB_ENABLED!=true, poller disabled');
       return;
     }
-    this.timer = setInterval(() => this.pollAndPublish(), POLL_INTERVAL_MS);
+    this.timer = setInterval(() => {
+      void this.pollAndPublish().catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.error(`PubSubPublisherService.pollAndPublish — unexpected error: ${message}`);
+      });
+    }, POLL_INTERVAL_MS);
     this.logger.log('PubSubPublisherService.onModuleInit — poller started');
   }
 
@@ -45,6 +50,9 @@ export class PubSubPublisherService implements OnModuleInit, OnModuleDestroy {
     this.publishing = true;
     try {
       await this.processBatch();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(`PubSubPublisherService.pollAndPublish — unexpected error: ${message}`);
     } finally {
       this.publishing = false;
     }

@@ -5,22 +5,39 @@ import { createPortal } from 'react-dom';
 import { usePathname, useRouter } from 'next/navigation';
 import { Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import {
-  fetchUnreadCountAction,
-  fetchNotificationsAction,
-  markNotificationReadAction,
-} from '@/app/(app)/notifications/actions';
+import { useApiClient } from '@/hooks/useApiClient';
+import { ApiError } from '@/lib/api-client';
 import type { AppNotification } from '@/types/api';
 
 const LOG_PREFIX = 'frontend:NotificationBell';
 const POLL_INTERVAL_MS = 30_000;
 
+function errorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    return error.message || `HTTP ${error.status}`;
+  }
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
 function isAuthFailure(error: unknown): boolean {
-  const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
+  if (error instanceof ApiError && error.status === 401) return true;
+  const message = errorMessage(error).toLowerCase();
   return (
     message.includes('unauthorized') ||
     message.includes('401') ||
     message.includes('not authenticated')
+  );
+}
+
+function isIgnorablePollError(error: unknown): boolean {
+  if (error instanceof DOMException && error.name === 'AbortError') return true;
+  const message = errorMessage(error).toLowerCase();
+  return (
+    message === '' ||
+    message === '[object object]' ||
+    message.includes('abort') ||
+    message.includes('failed to find server action')
   );
 }
 
@@ -58,6 +75,7 @@ function timeAgo(dateStr: string): string {
 export function NotificationBell() {
   const router = useRouter();
   const pathname = usePathname();
+  const api = useApiClient();
   const [count, setCount] = useState(0);
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<AppNotification[]>([]);
@@ -83,16 +101,27 @@ export function NotificationBell() {
   const refreshCount = useCallback(async () => {
     if (stopPollingRef.current) return;
     try {
-      const c = await fetchUnreadCountAction();
+      const result = await api.getUnreadNotificationCount();
       if (stopPollingRef.current) return;
-      setCount(c);
+      const next = Number(result?.count ?? 0);
+      setCount(Number.isFinite(next) ? next : 0);
     } catch (error) {
-      console.error(`${LOG_PREFIX}:refreshCount - request failed`, {
-        error: error instanceof Error ? error.message : String(error),
+      if (stopPollingRef.current) return;
+      if (isIgnorablePollError(error)) return;
+      if (error instanceof ApiError && (error.status === 403 || error.status === 404)) {
+        setCount(0);
+        return;
+      }
+      if (isAuthFailure(error)) {
+        redirectToLogin();
+        return;
+      }
+      // Background poll — warn only so Next.js does not promote this to the overlay.
+      console.warn(`${LOG_PREFIX}:refreshCount - request failed`, {
+        error: errorMessage(error),
       });
-      if (isAuthFailure(error)) redirectToLogin();
     }
-  }, [redirectToLogin]);
+  }, [api, redirectToLogin]);
 
   useEffect(() => {
     refreshCount();
@@ -125,14 +154,17 @@ export function NotificationBell() {
     setOpen(true);
     setLoading(true);
     try {
-      const res = await fetchNotificationsAction({ isRead: false, limit: 15 });
+      const res = await api.getNotifications({ isRead: false, limit: 15 });
       if (stopPollingRef.current) return;
       setItems(res?.data ?? []);
     } catch (error) {
-      console.error(`${LOG_PREFIX}:handleOpen - request failed`, {
-        error: error instanceof Error ? error.message : String(error),
+      if (isAuthFailure(error)) {
+        redirectToLogin();
+        return;
+      }
+      console.warn(`${LOG_PREFIX}:handleOpen - request failed`, {
+        error: errorMessage(error),
       });
-      if (isAuthFailure(error)) redirectToLogin();
     } finally {
       setLoading(false);
     }
@@ -140,7 +172,14 @@ export function NotificationBell() {
 
   const handleItemClick = async (item: AppNotification) => {
     setOpen(false);
-    markNotificationReadAction(item.id).then(() => refreshCount());
+    void api
+      .markNotificationRead(item.id)
+      .then(() => refreshCount())
+      .catch((error: unknown) => {
+        console.warn(`${LOG_PREFIX}:handleItemClick - mark read failed`, {
+          error: errorMessage(error),
+        });
+      });
 
     const route = ENTITY_ROUTE_MAP[item.entityType] ?? item.entityType;
     const jobId = (item.metadata?.jobId as string) ?? null;

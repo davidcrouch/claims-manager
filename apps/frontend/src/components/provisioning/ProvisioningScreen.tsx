@@ -58,21 +58,39 @@ export function ProvisioningScreen() {
   }, []);
 
   const loadTemplates = useCallback(async () => {
-    try {
-      const [companyRes, projectRes] = await Promise.all([
-        fetch('/api/filesystem-templates?kind=company'),
-        fetch('/api/filesystem-templates?kind=project'),
+    const fetchKind = async (kind: 'company' | 'project') => {
+      const res = await fetch(`/api/filesystem-templates?kind=${kind}`);
+      if (!res.ok) {
+        throw new Error(`Failed to load ${kind} filesystem templates (${res.status})`);
+      }
+      const json = (await res.json()) as { data?: TemplateOption[] };
+      return json.data ?? [];
+    };
+
+    const attempt = async () => {
+      const [company, project] = await Promise.all([
+        fetchKind('company'),
+        fetchKind('project'),
       ]);
-      const companyJson = companyRes.ok ? await companyRes.json() : { data: [] };
-      const projectJson = projectRes.ok ? await projectRes.json() : { data: [] };
-      const company = (companyJson.data ?? []) as TemplateOption[];
-      const project = (projectJson.data ?? []) as TemplateOption[];
       setCompanyTemplates(company);
       setProjectTemplates(project);
       setCompanyTemplateId(company.find((t) => t.isDefault)?.id ?? company[0]?.id ?? '');
       setProjectTemplateId(project.find((t) => t.isDefault)?.id ?? project[0]?.id ?? '');
+    };
+
+    try {
+      try {
+        await attempt();
+      } catch {
+        await attempt();
+      }
       setTemplatesLoaded(true);
-    } catch {
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to load filesystem templates',
+      );
       setTemplatesLoaded(true);
     }
   }, []);

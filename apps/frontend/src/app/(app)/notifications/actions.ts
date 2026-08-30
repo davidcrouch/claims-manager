@@ -20,18 +20,22 @@ export async function fetchNotificationsAction(params?: {
 }
 
 export async function fetchUnreadCountAction(): Promise<number> {
-  const session = await getSession();
-  if (!session.authenticated) return 0;
-
-  const token = await getAccessToken();
-  if (!token) return 0;
-
   try {
+    const session = await getSession();
+    if (!session.authenticated) return 0;
+
+    const token = await getAccessToken();
+    if (!token) return 0;
+
     const api = createApiClient({ token });
     const result = await api.getUnreadNotificationCount();
-    return result.count;
+    const next = Number(result?.count ?? 0);
+    return Number.isFinite(next) ? next : 0;
   } catch (err) {
-    console.error('[notifications/actions.fetchUnreadCountAction]', err);
+    console.warn(
+      '[notifications/actions.fetchUnreadCountAction]',
+      err instanceof Error ? err.message : err,
+    );
     return 0;
   }
 }

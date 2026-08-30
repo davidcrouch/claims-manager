@@ -163,9 +163,9 @@ export function AppointmentsListClient({
     [typeFilterActive, typeFilter, typeOptions],
   );
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
     const gen = ++loadGenRef.current;
-    setLoading(true);
+    if (!opts?.silent) setLoading(true);
     try {
       if (
         statusParam === '__none__' ||
@@ -192,7 +192,7 @@ export function AppointmentsListClient({
       setAppointments(res.data);
       setTotal(res.total);
     } finally {
-      if (gen === loadGenRef.current) setLoading(false);
+      if (gen === loadGenRef.current && !opts?.silent) setLoading(false);
     }
   }, [
     page,
@@ -209,6 +209,19 @@ export function AppointmentsListClient({
   useEffect(() => {
     load();
   }, [load]);
+
+  const hasPendingSync = appointments.some((a) => a.syncStatus === 'pending');
+  useEffect(() => {
+    if (!hasPendingSync) return;
+    const interval = setInterval(() => {
+      void load({ silent: true });
+    }, 2500);
+    const stop = setTimeout(() => clearInterval(interval), 60_000);
+    return () => {
+      clearInterval(interval);
+      clearTimeout(stop);
+    };
+  }, [hasPendingSync, load]);
 
   useEffect(() => {
     fetchAppointmentFilterLocationsAction().then(setLocationOptions);
@@ -446,6 +459,9 @@ export function AppointmentsListClient({
         jobId={editingAppointment?.jobId ?? job?.id}
         jobs={jobs}
         appointment={editingAppointment ?? undefined}
+        onSuccess={() => {
+          void load({ silent: true });
+        }}
       />
     </div>
   );

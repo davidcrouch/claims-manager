@@ -89,9 +89,8 @@ module "artifact_registry" {
 module "iam" {
   source = "../../modules/iam"
 
-  project_id                   = var.project_id
-  environment                  = var.environment
-  enable_gke_workload_identity = false
+  project_id  = var.project_id
+  environment = var.environment
 }
 
 module "secrets" {

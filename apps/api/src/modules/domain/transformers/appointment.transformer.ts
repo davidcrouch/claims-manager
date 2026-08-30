@@ -30,6 +30,8 @@ export class AppointmentTransformer implements EntityTransformer {
     // cancellationDetails — stored in its own column
     const cancellationDetails = isPlainObject(payload.cancellationDetails) ? payload.cancellationDetails : {};
 
+    const cwAppointmentId = asString(payload.id) ?? asString(payload.externalReference);
+
     const entity: Record<string, unknown> = {
       tenantId,
       name: asString(payload.name) ?? 'Untitled Appointment',
@@ -39,6 +41,7 @@ export class AppointmentTransformer implements EntityTransformer {
       status: asString(payload.status),
       cancellationDetails,
       appointmentPayload,
+      ...(cwAppointmentId ? { externalReference: cwAppointmentId } : {}),
     };
 
     // Skip on create if missing required dates (update path is fine)

@@ -101,8 +101,8 @@ jobs:
       - name: Sync platform templates to GCS
         run: |
           BUCKET="claims-manager-staging-documents"
-          echo "Syncing data/templates/ → gs://${BUCKET}/platform/templates/"
-          gcloud storage cp data/templates/*.docx "gs://${BUCKET}/platform/templates/"
+          echo "Syncing data/templates/seed/ → gs://${BUCKET}/platform/templates/"
+          gcloud storage cp data/templates/seed/*.docx "gs://${BUCKET}/platform/templates/"
 
   migrate:
     needs: [deploy]

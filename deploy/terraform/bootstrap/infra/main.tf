@@ -174,7 +174,7 @@ resource "google_service_account" "ci_deployer" {
 #                              (writer alone cannot call repositories.getIamPolicy,
 #                              which terraform refresh needs to reconcile the
 #                              google_artifact_registry_repository_iam_member
-#                              resources that grant staging-vm-sa + compute SA
+#                              resources that grant Cloud Run / compute SA
 #                              reader access on the claims-manager repo.)
 #   storage.admin            - read/write terraform state bucket
 #   logging.logWriter        - write logs from CI

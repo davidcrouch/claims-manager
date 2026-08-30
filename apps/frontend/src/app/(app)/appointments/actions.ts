@@ -1,5 +1,6 @@
 'use server';
 
+import { connection } from 'next/server';
 import { getSession, getAccessToken } from '@/lib/auth';
 import { createApiClient } from '@/lib/api-client';
 import type { Appointment, PaginatedResponse } from '@/types/api';
@@ -24,6 +25,7 @@ export async function fetchAppointmentsAction(params?: {
   jobId?: string;
   jobIds?: string[];
 }): Promise<PaginatedResponse<Appointment>> {
+  await connection();
   const api = await getApi();
   if (!api) return { data: [], total: 0 };
   try {

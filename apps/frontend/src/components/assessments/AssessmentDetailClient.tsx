@@ -26,9 +26,7 @@ import {
   resolveDetailAssignee,
 } from '@/components/shared/DetailAssignee';
 import { PrintButton } from '@/components/shared/PrintButton';
-import { PublishButton } from '@/components/shared/PublishButton';
 import { updateAssessmentAction } from '@/app/(app)/assessments/actions';
-import { AssessmentPublishDrawer } from './drawers/AssessmentPublishDrawer';
 import {
   ASSESSMENT_SECTIONS,
   isAssessmentLocked,
@@ -85,7 +83,7 @@ const DETAIL_TABS: Array<{ id: TabValue; label: string; icon: typeof Building2 }
   { id: 'recommendation', label: 'Recommendation', icon: ClipboardCheck },
 ];
 
-export function AssessmentDetailClient({ assessment, job, claim }: AssessmentDetailClientProps) {
+export function AssessmentDetailClient({ assessment, job }: AssessmentDetailClientProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -99,7 +97,6 @@ export function AssessmentDetailClient({ assessment, job, claim }: AssessmentDet
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [publishOpen, setPublishOpen] = useState(false);
   const saveInFlightRef = useRef(false);
   const sectionsRef = useRef(sections);
   sectionsRef.current = sections;
@@ -180,15 +177,6 @@ export function AssessmentDetailClient({ assessment, job, claim }: AssessmentDet
     return () => clearTimeout(timer);
   }, [justSaved, dirty, saving, saveError]);
 
-  const handleOpenPublish = async () => {
-    if (locked) return;
-    if (dirty) {
-      const ok = await persistForm();
-      if (!ok) return;
-    }
-    setPublishOpen(true);
-  };
-
   const attData = {
     ...sections.attendance,
     builderEstimatorName:
@@ -207,17 +195,6 @@ export function AssessmentDetailClient({ assessment, job, claim }: AssessmentDet
       )}
       <SetHeaderActions>
         <HeaderActionToolbar>
-          {!locked && (
-            <PublishButton
-              onClick={() => void handleOpenPublish()}
-              disabled={saving || !assessment.jobId}
-              title={
-                assessment.jobId
-                  ? 'Publish'
-                  : 'Link this assessment to a job to publish'
-              }
-            />
-          )}
           <PrintButton
             documentType="assessment"
             entityId={assessment.id}
@@ -299,14 +276,6 @@ export function AssessmentDetailClient({ assessment, job, claim }: AssessmentDet
           <RecommendationTabForm data={sections.recommendation} onChange={(k, v) => setKey('recommendation', k, v)} locked={locked} />
         )}
       </div>
-
-      <AssessmentPublishDrawer
-        open={publishOpen}
-        onOpenChange={setPublishOpen}
-        assessment={{ ...assessment, ...sections }}
-        job={job}
-        claim={claim}
-      />
     </div>
   );
 }

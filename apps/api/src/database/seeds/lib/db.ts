@@ -8,6 +8,7 @@ import 'dotenv/config';
 import { Pool } from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import * as schema from '../../schema';
+import { rewriteLocalhostToIpv4 } from '../../../config/pg-url';
 
 export type SeedDb = ReturnType<typeof drizzle<typeof schema>>;
 
@@ -64,8 +65,8 @@ export function getDbHost(url: string): string {
 }
 
 export function openDb(): DbHandle {
-  const url = resolveDatabaseUrl();
-  const pool = new Pool({ connectionString: url });
+  const url = rewriteLocalhostToIpv4(resolveDatabaseUrl());
+  const pool = new Pool({ connectionString: url, keepAlive: true });
   const db = drizzle({ client: pool, schema });
   return { db, pool, url };
 }

@@ -20,6 +20,7 @@ import {
   type AIContextPayload,
 } from '@/lib/ai/use-ai-context';
 import { usePageContext } from '@/lib/ai/use-page-context';
+import { resolvePageAgent } from '@/lib/ai/use-page-agent';
 import { cn } from '@/lib/utils';
 import { CHAT_BESIDE_FORM_WIDTH_CLASS, CHAT_DRAWER_WIDTH_CLASS } from '@/components/forms/form-drawer-layout';
 import { useEntityDrawer } from '@/components/layout/EntityDrawerHost';
@@ -170,6 +171,12 @@ export function ChatDrawer({
     [agents],
   );
 
+  const preferredAgentId = useMemo(() => {
+    if (initialContext) return undefined;
+    const pageAgent = resolvePageAgent(pageContext, chatAgents);
+    return pageAgent?.id;
+  }, [initialContext, pageContext, chatAgents]);
+
   const handleMessagesChange = useCallback(async (messages: ChatMessage[]) => {
     if (messages.length === 0) return;
     setLiveMessages(messages);
@@ -287,9 +294,21 @@ export function ChatDrawer({
       ) {
         mergedProps.appointmentId = mergedProps.id;
       }
+      if (event.component === 'AssessmentPrintDrawer' && !mergedProps.entityId) {
+        if (typeof mergedProps.id === 'string' && mergedProps.id.trim()) {
+          mergedProps.entityId = mergedProps.id;
+        } else if (
+          typeof mergedProps.assessmentId === 'string' &&
+          mergedProps.assessmentId.trim()
+        ) {
+          mergedProps.entityId = mergedProps.assessmentId;
+        } else if (pageContext.entityType === 'assessment' && pageContext.entityId) {
+          mergedProps.entityId = pageContext.entityId;
+        }
+      }
       openEntityDrawer({ component: event.component, props: mergedProps });
     },
-    [pageContext.jobId, openEntityDrawer],
+    [pageContext.jobId, pageContext.entityId, pageContext.entityType, openEntityDrawer],
   );
 
   const handleArtifactOpenChange = useCallback((nextOpen: boolean) => {
@@ -400,6 +419,7 @@ export function ChatDrawer({
                       initialMessages={initialMessages}
                       agents={chatAgents}
                       pageContext={initialContext ? undefined : pageContext}
+                      preferredAgentId={preferredAgentId}
                       onMessagesChange={handleMessagesChange}
                       onOpenCanvas={handleOpenCanvas}
                       onOpenCanvasComponent={handleOpenCanvasComponent}

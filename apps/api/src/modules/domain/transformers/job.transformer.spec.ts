@@ -16,6 +16,23 @@ describe('JobTransformer', () => {
 
   describe('transform with real CW payload shape', () => {
 
+    it('marks inbound jobs as synced when no existing sync status', () => {
+      const result = transformer.transform({
+        payload: basePayload,
+        tenantId: 'test-tenant',
+      });
+      expect(result.entity.syncStatus).toBe('synced');
+    });
+
+    it('preserves an existing pending or failed sync status', () => {
+      const result = transformer.transform({
+        payload: basePayload,
+        tenantId: 'test-tenant',
+        existingEntity: { syncStatus: 'pending' } as never,
+      });
+      expect(result.entity.syncStatus).toBe('pending');
+    });
+
     it('extracts jobInstructions from payload.jobInstructions', () => {
       const result = transformer.transform({
         payload: { ...basePayload, jobInstructions: 'Home Pack' },

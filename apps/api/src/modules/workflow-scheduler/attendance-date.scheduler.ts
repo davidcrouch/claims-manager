@@ -33,7 +33,12 @@ export class AttendanceDateScheduler implements OnModuleInit, OnModuleDestroy {
     this.logger.log(
       `AttendanceDateScheduler — starting with interval ${this.intervalMs / 60_000}m`,
     );
-    this.interval = setInterval(() => this.tick(), this.intervalMs);
+    this.interval = setInterval(() => {
+      void this.tick().catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.error(`AttendanceDateScheduler.tick — unexpected error: ${message}`);
+      });
+    }, this.intervalMs);
   }
 
   onModuleDestroy(): void {

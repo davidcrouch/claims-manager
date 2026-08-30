@@ -313,9 +313,17 @@ export class DocumentGenerationService {
       const canConvertPdf = this.pdfConverter.isAvailable();
       let pdfBuffer: Buffer | null = null;
       if (canConvertPdf) {
-        pdfBuffer = await this.pdfConverter.convertDocxToPdf({
-          docxBuffer: populatedDocx,
-        });
+        try {
+          pdfBuffer = await this.pdfConverter.convertDocxToPdf({
+            docxBuffer: populatedDocx,
+          });
+        } catch (error) {
+          this.logger.warn(
+            `${logPrefix} — PDF conversion failed, completing with DOCX only id=${params.recordId}: ${
+              error instanceof Error ? error.message : error
+            }`,
+          );
+        }
       } else {
         this.logger.warn(
           `${logPrefix} — no PDF converter available; completing with DOCX only id=${params.recordId}`,

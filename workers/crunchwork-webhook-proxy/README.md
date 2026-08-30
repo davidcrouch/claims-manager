@@ -1,9 +1,11 @@
 # Crunchwork Webhook Proxy
 
-Cloudflare Worker that intercepts Crunchwork staging webhooks at `providers-staging.branlamie.com/api/v1/webhooks/crunchwork` and fans out to both the staging HTTPS LB and the local dev tunnel:
+Cloudflare Worker that intercepts Crunchwork staging webhooks at `providers-staging.branlamie.com/api/v1/webhooks/crunchwork` and fans out to hosted staging and the local dev tunnel:
 
-- **Primary (awaited):** `api-staging.branlamie.com/api/v1/webhooks/crunchwork` (grey-cloud DNS → GCP HTTPS LB → `api-server` Cloud Run)
+- **Primary (awaited):** Cloud Run `provider-server` internal ingest (`/api/v1/internal/webhooks/crunchwork`)
 - **Secondary (fire-and-forget):** `api-dev.branlamie.com/api/v1/webhooks/crunchwork` → local `:5001`
+
+The public path is intercepted on Cloudflare, so staging must be reached on the **internal** Cloud Run URL. That avoids looping back through this Worker and does not depend on `api-staging.branlamie.com` (that hostname is not in DNS; staging `api-server` is VPC-internal).
 
 ## Architecture
 
@@ -23,16 +25,15 @@ Crunchwork SaaS
                    │                       │
                    ▼                       ▼
 ┌─────────────────────────────────┐  ┌────────────────────────────┐
-│ GCP HTTPS LB (grey-cloud DNS)  │  │ api-dev (tunnel)           │
-│ api-staging.branlamie.com       │  │ api-dev.branlamie.com      │
-│ → api-server Cloud Run          │  │ → local :5001              │
-│ /api/v1/webhooks/crunchwork    │  │ /api/v1/webhooks/crunchwork│
+│ Cloud Run origin (direct)      │  │ api-dev (tunnel)           │
+│ provider-server *.run.app       │  │ api-dev.branlamie.com      │
+│ /api/v1/internal/webhooks/…    │  │ /api/v1/webhooks/crunchwork│
 └─────────────────────────────────┘  └────────────────────────────┘
 ```
 
 ### DNS setup
 
-`providers-staging.branlamie.com` is **orange-cloud** (Cloudflare-proxied) so the Worker can intercept. `api-staging.branlamie.com` is **grey-cloud** (DNS-only) pointing to the GCP HTTPS LB IP so Google can validate the managed SSL certificate.
+`providers-staging.branlamie.com` is **orange-cloud** (Cloudflare-proxied) so this Worker can intercept the public Crunchwork path. Other `providers-staging` paths are handled by `cloudrun-hostname-proxy`.
 
 ### Production
 
@@ -40,7 +41,7 @@ Production does not use a Worker. Crunchwork posts directly to the provider host
 
 | Environment | URL | Routing |
 |---|---|---|
-| Staging | `providers-staging.branlamie.com/…` | CF Worker → LB (`api-staging`) + dev tunnel |
+| Staging | `providers-staging.branlamie.com/…` | CF Worker → Cloud Run internal ingest + dev tunnel |
 | Production | `providers.branlamie.com/…` | Grey-cloud → LB → `provider-server` (direct) |
 
 ## Prerequisites
@@ -91,13 +92,10 @@ npm run deploy
 After deployment, confirm the proxy is working:
 
 ```bash
-curl -X POST \
-  https://providers-staging.branlamie.com/api/v1/webhooks/crunchwork \
-  -H "Content-Type: application/json" \
-  -d '{"test": true}'
+curl https://providers-staging.branlamie.com/api/v1/webhooks/crunchwork
 ```
 
-The response should come from `api-server` via the staging HTTPS LB, with the original status code and body intact.
+Expected: `{"service":"provider-server","path":"/api/v1/internal/webhooks/crunchwork","method":"POST","status":"ready"}`.
 
 ## Monitoring
 

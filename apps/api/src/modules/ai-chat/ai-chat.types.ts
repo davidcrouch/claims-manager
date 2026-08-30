@@ -1,9 +1,13 @@
 export interface PageContext {
   pathname: string;
+  section?: 'admin' | 'app';
   entityType?: string;
   entityId?: string;
   jobId?: string;
   pageLabel?: string;
+  adminArea?: string;
+  parentEntityId?: string;
+  activeTab?: string;
 }
 
 export interface StreamChatDto {

@@ -18,7 +18,9 @@ import {
   PublishSummaryRow,
 } from '@/components/shared/PublishEntityContext';
 import { publishInvoiceAction } from '@/app/(app)/mutations';
-import type { Claim, Invoice, Job } from '@/types/api';
+import { entityDisplayLabel } from '@/components/shared/entity-label';
+import { workOrderInsurerPo } from '@/components/work-orders/work-order-label';
+import type { Claim, Invoice, Job, PurchaseOrder, WorkOrder } from '@/types/api';
 
 export type InvoicePublishMode = 'internal' | 'external';
 
@@ -28,6 +30,8 @@ export interface InvoicePublishWizardProps {
   invoice: Invoice;
   job?: Job | null;
   claim?: Claim | null;
+  workOrder?: WorkOrder | null;
+  purchaseOrder?: PurchaseOrder | null;
   mode: InvoicePublishMode;
 }
 
@@ -37,6 +41,8 @@ export function InvoicePublishWizard({
   invoice,
   job,
   claim,
+  workOrder,
+  purchaseOrder,
   mode,
 }: InvoicePublishWizardProps) {
   const router = useRouter();
@@ -69,13 +75,13 @@ export function InvoicePublishWizard({
           result.error ??
             (isInternal
               ? 'Failed to publish invoice'
-              : 'Failed to send invoice to NRMA'),
+              : 'Failed to send invoice to Insurer'),
         );
         return;
       }
 
       toast.success(
-        isInternal ? 'Invoice published' : 'Invoice sent to NRMA',
+        isInternal ? 'Invoice published' : 'Invoice sent to Insurer',
       );
       onOpenChange(false);
       reset();
@@ -86,17 +92,22 @@ export function InvoicePublishWizard({
   }
 
   const statusName = invoice.status?.name ?? (invoice.sourceExternalReference ? 'Unknown' : 'Draft');
-  const title = invoice.invoiceNumber ?? invoice.id;
+  const invoiceNumber = entityDisplayLabel(invoice.internalNumber, invoice.invoiceNumber);
+  const workOrderNumber = entityDisplayLabel(workOrder?.internalNumber);
+  const purchaseOrderNumber =
+    purchaseOrder?.purchaseOrderNumber?.trim() ||
+    (workOrder ? workOrderInsurerPo(workOrder) : undefined) ||
+    '—';
 
   return (
     <BottomFormDrawer
       open={open}
       onOpenChange={handleOpenChange}
-      title={isInternal ? 'Publish invoice' : 'Publish invoice to NRMA'}
+      title={isInternal ? 'Publish invoice' : 'Publish invoice to Insurer'}
       description={
         isInternal
           ? 'Review the claim, job, and invoice summary, then publish. It will be locked afterwards.'
-          : 'Review the claim, job, and invoice summary, then send this invoice to NRMA.'
+          : 'Review the claim, job, and invoice summary, then send this invoice to Insurer.'
       }
       icon={
         isInternal ? (
@@ -119,9 +130,9 @@ export function InvoicePublishWizard({
             </div>
           ) : (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-950">
-              <p className="font-medium">This will be pushed to NRMA</p>
+              <p className="font-medium">This will be pushed to Insurer</p>
               <p className="mt-2 text-amber-900/80">
-                Submitting creates the invoice in Crunchwork for NRMA against the
+                Submitting creates the invoice in Crunchwork for Insurer against the
                 linked work order. Status will change to Submitted and the invoice
                 will be locked. This cannot be undone from this screen.
               </p>
@@ -129,7 +140,7 @@ export function InvoicePublishWizard({
           )}
 
           <PublishSummaryCard title="Invoice summary">
-            <PublishSummaryRow label="Invoice number" value={title} />
+            <PublishSummaryRow label="Invoice number" value={invoiceNumber} />
             <PublishSummaryRow label="Status" value={statusName} />
             <PublishSummaryRow
               label="Total"
@@ -141,11 +152,11 @@ export function InvoicePublishWizard({
             />
             <PublishSummaryRow
               label="Work order"
-              value={invoice.workOrderId ?? '—'}
+              value={workOrderNumber}
             />
             <PublishSummaryRow
               label="Purchase order"
-              value={invoice.purchaseOrderId ?? '—'}
+              value={purchaseOrderNumber}
             />
           </PublishSummaryCard>
 
@@ -182,10 +193,10 @@ export function InvoicePublishWizard({
           {publishing
             ? isInternal
               ? 'Publishing…'
-              : 'Sending to NRMA…'
+              : 'Sending to Insurer…'
             : isInternal
               ? 'Publish invoice'
-              : 'Submit to NRMA'}
+              : 'Submit to Insurer'}
         </Button>
       </BottomFormDrawerFooter>
     </BottomFormDrawer>

@@ -20,6 +20,7 @@ import {
 } from '@/components/layout/PageHeaderLayout';
 import { JobsPickerDrawer } from '@/components/jobs/JobsPickerDrawer';
 import { formatDate, formatDateTime, formatCurrency, formatAddress, BoolPill } from '@/components/shared/detail';
+import { SyncStatusIndicator } from '@/components/shared/SyncStatusIndicator';
 import { jobHeaderSubtitle, jobHeaderTitle } from '@/components/shared/job-label';
 import type { Job, Claim } from '@/types/api';
 
@@ -139,6 +140,9 @@ export function JobPageHeader({
         topRow={
           <>
             <StatusBadge status={statusName} />
+            {job.syncStatus && (
+              <SyncStatusIndicator syncStatus={job.syncStatus} compact />
+            )}
             {jobTypeName && <TypeBadge type={jobTypeName} />}
             {address && (
               <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">

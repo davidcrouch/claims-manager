@@ -366,7 +366,15 @@ export default function createAuthRoutes(
             const resetPasswordUrl = `${baseUrl}/reset-password?interaction=${encodeURIComponent(uid)}`;
             const appSlug = await getAppSlug(uid) || undefined;
             const startOverUrl = error ? await getStartOverUrl(uid, req, res) : undefined;
-            const showSignUp = await isPublicOrgSignupAllowed();
+            let showSignUp = false;
+            try {
+               showSignUp = await isPublicOrgSignupAllowed();
+            } catch (policyErr) {
+               log.warn(
+                  { functionName: 'login', error: (policyErr as Error).message },
+                  'auth-server:auth-routes:login - signup policy check failed; hiding signup and continuing',
+               );
+            }
 
             const html = renderPage(
                React.createElement(LoginPage, {

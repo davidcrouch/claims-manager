@@ -166,7 +166,7 @@ module "cloud_run_api" {
     NODE_ENV               = "production"
     GCP_PROJECT_ID         = var.project_id
     VERTEX_AI_PROJECT      = var.project_id
-    VERTEX_AI_LOCATION     = "us-central1"
+    VERTEX_AI_LOCATION     = "global"
     VERTEX_EMBEDDING_MODEL = "text-embedding-005"
     SEED_NEW_TENANTS       = "true"
     # Documents / provisioning template uploads (CI syncs data/templates → platform/templates/)

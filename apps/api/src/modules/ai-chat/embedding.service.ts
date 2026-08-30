@@ -15,7 +15,7 @@ export class EmbeddingService {
     const aiConfig = this.configService.get('ai', { infer: true });
     this.model = aiConfig?.embeddingModel ?? 'text-embedding-005';
     const project = aiConfig?.vertexProject ?? '';
-    const location = aiConfig?.vertexLocation ?? 'us-central1';
+    const location = aiConfig?.vertexLocation ?? 'global';
 
     if (!project) {
       this.logger.warn(

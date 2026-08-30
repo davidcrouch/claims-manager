@@ -1,4 +1,5 @@
 import { registerAs } from '@nestjs/config';
+import { rewriteLocalhostToIpv4 } from './pg-url';
 
 /**
  * Builds a postgres URL with properly encoded user and password.
@@ -18,7 +19,9 @@ function buildDatabaseUrl(rawUrl: string): string {
     const encodedUser = encodeURIComponent(user);
     const encodedPassword = encodeURIComponent(password);
 
-    return `postgresql://${encodedUser}:${encodedPassword}@${hostPart}${path ?? ''}`;
+    return rewriteLocalhostToIpv4(
+      `postgresql://${encodedUser}:${encodedPassword}@${hostPart}${path ?? ''}`,
+    );
   } catch {
     return rawUrl;
   }
@@ -54,6 +57,6 @@ export default registerAs('database', () => {
   }
   assertExpectedDatabase(rawUrl);
   return {
-    databaseUrl: buildDatabaseUrl(rawUrl),
+    databaseUrl: rewriteLocalhostToIpv4(buildDatabaseUrl(rawUrl)),
   };
 });

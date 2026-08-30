@@ -35,9 +35,9 @@ function normalizeTemplateKey(name: string): string {
 
 function resolveLocalTemplatesDir(): string | null {
   const candidates = [
-    join(process.cwd(), 'data', 'templates'),
-    join(process.cwd(), '../../data/templates'),
-    join(process.cwd(), '../../../data/templates'),
+    join(process.cwd(), 'data', 'templates', 'seed'),
+    join(process.cwd(), '../../data/templates/seed'),
+    join(process.cwd(), '../../../data/templates/seed'),
   ];
   return (
     candidates.find(
@@ -511,7 +511,7 @@ export class TemplateRegistryService {
       });
       if (localBuffer) {
         this.logger.warn(
-          `${logPrefix} — GCS download failed; using local data/templates fallback ` +
+          `${logPrefix} — GCS download failed; using local data/templates/seed fallback ` +
             `(type=${params.documentType}): ${err instanceof Error ? err.message : err}`,
         );
         return localBuffer;
@@ -636,7 +636,7 @@ export class TemplateRegistryService {
 
   /**
    * Dev fallback when ADC lacks GCS read access to provisioned template objects.
-   * Matches by linked document fileName against `data/templates/*.docx`.
+   * Matches by linked document fileName against `data/templates/seed/*.docx`.
    */
   private async tryLoadLocalTemplateFallback(params: {
     tenantId: string;

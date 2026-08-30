@@ -514,7 +514,7 @@ export function registerAssessmentsTools(server: McpServer, api: ClaimsApiClient
 
   server.tool(
     'validate_assessment',
-    '[Category: operations] Validate an assessment for publish readiness.',
+    '[Category: operations] Validate an assessment for completeness before printing.',
     {
       id: z.string().describe('Assessment UUID'),
     },
@@ -530,19 +530,47 @@ export function registerAssessmentsTools(server: McpServer, api: ClaimsApiClient
   );
 
   server.tool(
-    'publish_assessment',
-    '[Category: operations] Publish an assessment.',
+    'open_print_assessment',
+    '[Category: operations] Open the Print report drawer for an assessment. This generates the assessment detail PDF via the report generator. Do not publish assessments to NRMA.',
     {
       id: z.string().describe('Assessment UUID'),
+      jobId: z.string().optional().describe('Job UUID for the job-folder save destination'),
     },
-    async ({ id }) => {
+    async ({ id, jobId }) => {
       try {
-        return toolResult(
-          await api.request(`/assessments/${id}/publish`, { method: 'POST' }),
-        );
+        let resolvedJobId = jobId;
+        if (!resolvedJobId) {
+          const assessment = (await api.request(`/assessments/${id}`).catch(() => null)) as
+            | { jobId?: string }
+            | null;
+          if (assessment?.jobId) resolvedJobId = assessment.jobId;
+        }
+        return toolResult({
+          action: 'open_drawer',
+          drawer: 'AssessmentPrintDrawer',
+          documentType: 'assessment',
+          id,
+          entityId: id,
+          jobId: resolvedJobId,
+        });
       } catch (err) {
         return toolError(err);
       }
+    },
+  );
+
+  server.tool(
+    'publish_assessment',
+    '[Category: operations] Not supported. Crunchwork does not accept Field Assessment reports. Ask the user to print instead (open_print_assessment).',
+    {
+      id: z.string().describe('Assessment UUID'),
+    },
+    async () => {
+      return toolError(
+        new Error(
+          'Publishing assessments to NRMA is not supported. Ask the user to print the assessment instead.',
+        ),
+      );
     },
   );
 

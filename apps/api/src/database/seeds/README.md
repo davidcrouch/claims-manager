@@ -20,7 +20,7 @@ staging connection) that make the app usable in dev and staging.
 | `iag-catalog` | **Tenant** | Replaces catalogues with the IAG Crunchwork 2026-04-35 export + Ensure scope catalogue. Skips when that Crunchwork catalogue already has a full item set (`REPLACE_IAG_CATALOG=true` to force). |
 | `document-template-transforms` | **Tenant** | Sync saved RFQ / PO / WO JSONata transforms to current code defaults (idempotent). |
 
-> **Document templates** — uploading `.docx` files from `data/templates/` and assigning
+> **Document templates** — uploading `.docx` files from `data/templates/seed/` and assigning
 > Admin → Document Templates is handled by the **first-login provisioning flow**
 > (`ProvisioningService`), not seeds. This ensures uploads go through the real API
 > pipeline (thumbnails, pipelines, etc.). Platform templates are synced to GCS by CI/CD.

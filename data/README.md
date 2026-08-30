@@ -88,29 +88,30 @@ always resolves to a `primitive` row's `code` in the CSV — the generator asser
 and fails the build if any reference is missing. Use this file when seeding assemblies
 that should price dynamically from their components rather than a fixed lump sum.
 
-## Word document templates (`templates/`)
+## Word document templates (`templates/seed/`)
 
 Standard `.docx` blanks seeded into each tenant’s **Templates & Forms** folder and
-wired to Admin → Document Templates:
+wired to Admin → Document Templates. Working copies and patch scripts live in
+`templates/`; only `templates/seed/` is uploaded to tenants.
 
 | File | Assigned scenarios |
 |------|--------------------|
-| `Invoice Template.docx` | Invoice |
-| `INVOICE.docx` | Bill |
-| `REQUEST FOR QUOTATION.docx` | RFQ, Quote, Purchase Order |
-| `ASSESSMENT.docx` | Assessment |
-| `SCOPE OF WORK.docx` | Work Order, Proposal, Report |
+| `Invoice Template.docx` | Invoice, Bill |
+| `Request for Quotation Template.docx` | RFQ, Quote |
+| `Purchase Order Template.docx` | Purchase Order |
+| `Assessment Template.docx` | Assessment |
+| `Scope of Work Template.docx` | Work Order, Proposal, Report, and remaining scenarios |
 
 **How it works:**
 
-1. CI/CD syncs `data/templates/*.docx` → `gs://{bucket}/platform/templates/` on deploy
+1. CI/CD syncs `data/templates/seed/*.docx` → `gs://{bucket}/platform/templates/` on deploy
 2. On a tenant's first login, `ProvisioningService` reads from the GCS platform
-   prefix (or local `data/templates/` fallback for dev) and uploads through the
+   prefix (or local `data/templates/seed/` fallback for dev) and uploads through the
    real API pipeline (thumbnails, upload pipelines, etc.)
 3. Document Templates settings are then assigned to match each scenario
 
 For local dev, ensure ADC is configured (`gcloud auth application-default login`)
-or templates will be read from the local `data/templates/` directory as a fallback.
+or templates will be read from the local `data/templates/seed/` directory as a fallback.
 
 ## Regenerate
 

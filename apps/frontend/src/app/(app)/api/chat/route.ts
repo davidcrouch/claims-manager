@@ -1,7 +1,7 @@
 import { getApiBaseUrl } from '@/lib/env';
 import { getUpstreamApiAuth } from '@/lib/upstream-api';
 
-export const maxDuration = 120;
+export const maxDuration = 600;
 
 export async function POST(req: Request) {
   try {

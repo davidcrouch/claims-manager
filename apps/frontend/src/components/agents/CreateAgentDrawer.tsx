@@ -55,6 +55,10 @@ interface DraftAgent {
   systemPrompt: string;
   connectionIds: string[];
   enabledTools?: string[];
+  autonomousMode: boolean;
+  pauseAfterToolSteps: number;
+  maxDurationSeconds: number;
+  maxSteps: number;
 }
 
 const INITIAL_DRAFT: DraftAgent = {
@@ -69,6 +73,10 @@ const INITIAL_DRAFT: DraftAgent = {
   systemPrompt: DEFAULT_AI_SETTINGS.systemPrompt,
   connectionIds: [],
   enabledTools: undefined,
+  autonomousMode: false,
+  pauseAfterToolSteps: 4,
+  maxDurationSeconds: 120,
+  maxSteps: 10,
 };
 
 export function CreateAgentDrawer({ open, onOpenChange, onCreated }: CreateAgentDrawerProps) {
@@ -132,6 +140,10 @@ export function CreateAgentDrawer({ open, onOpenChange, onCreated }: CreateAgent
         chatEnabled: draft.chatEnabled,
         connectionIds: draft.connectionIds.length > 0 ? draft.connectionIds : undefined,
         enabledTools: draft.enabledTools,
+        autonomousMode: draft.autonomousMode,
+        pauseAfterToolSteps: draft.pauseAfterToolSteps,
+        maxDurationSeconds: draft.maxDurationSeconds,
+        maxSteps: draft.maxSteps,
       });
       if (!result.success || !result.agent) {
         setError(result.error ?? 'Failed to create agent');
@@ -160,6 +172,10 @@ export function CreateAgentDrawer({ open, onOpenChange, onCreated }: CreateAgent
     systemPrompt: draft.systemPrompt,
     connectionIds: draft.connectionIds,
     enabledTools: draft.enabledTools,
+    autonomousMode: draft.autonomousMode,
+    pauseAfterToolSteps: draft.pauseAfterToolSteps,
+    maxDurationSeconds: draft.maxDurationSeconds,
+    maxSteps: draft.maxSteps,
   };
 
   const providerModels = modelOptions[draft.provider] ?? [];

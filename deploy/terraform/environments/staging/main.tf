@@ -29,11 +29,9 @@ locals {
 module "networking" {
   source = "../../modules/networking"
 
-  project_id  = var.project_id
-  region      = var.region
-  environment = var.environment
-  # Active subnet. Orphan claims-manager-gke-staging may remain in GCP until
-  # serverless address reservations on it are released.
+  project_id           = var.project_id
+  region               = var.region
+  environment          = var.environment
   subnet_ip_cidr_range = "10.2.0.0/20"
   secondary_ip_cidr_a  = "10.18.0.0/16"
   secondary_ip_cidr_b  = "10.19.0.0/22"
@@ -92,9 +90,8 @@ module "artifact_registry" {
 module "iam" {
   source = "../../modules/iam"
 
-  project_id                   = var.project_id
-  environment                  = var.environment
-  enable_gke_workload_identity = false
+  project_id  = var.project_id
+  environment = var.environment
 }
 
 module "secrets" {

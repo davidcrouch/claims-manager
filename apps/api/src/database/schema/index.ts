@@ -341,6 +341,7 @@ export const quotes = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    syncStatus: text('sync_status'),
   },
   (t) => [
     check('chk_quote_parent', sql`claim_id IS NOT NULL OR job_id IS NOT NULL`),
@@ -699,6 +700,7 @@ export const invoices = pgTable(
     updatedByUserId: text('updated_by_user_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    syncStatus: text('sync_status'),
   },
   (t) => [
     check(
@@ -767,6 +769,8 @@ export const tasks = pgTable(
     originType: text('origin_type').notNull().default('user'),
     createdByUserId: text('created_by_user_id'),
     completedAt: timestamp('completed_at', { withTimezone: true }),
+    syncStatus: text('sync_status'),
+    externalReference: text('external_reference'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -843,6 +847,8 @@ export const appointments = pgTable(
     status: text('status'),
     cancellationDetails: jsonb('cancellation_details').notNull().default({}),
     appointmentPayload: jsonb('appointment_payload').notNull().default({}),
+    syncStatus: text('sync_status'),
+    externalReference: text('external_reference'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -2849,6 +2855,9 @@ export const agent = pgTable(
     visibility: text('visibility').notNull().default('org'),
     supportsVision: boolean('supports_vision').notNull().default(false),
     maxSteps: integer('max_steps').notNull().default(10),
+    autonomousMode: boolean('autonomous_mode').notNull().default(false),
+    pauseAfterToolSteps: integer('pause_after_tool_steps').notNull().default(4),
+    maxDurationSeconds: integer('max_duration_seconds').notNull().default(120),
     avatarUrl: text('avatar_url'),
     isDefault: boolean('is_default').notNull().default(false),
     pinnedSkills: uuid('pinned_skills').array().default([]),

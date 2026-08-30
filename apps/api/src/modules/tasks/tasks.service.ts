@@ -1,10 +1,17 @@
 import { Injectable, Optional, BadRequestException, Logger } from '@nestjs/common';
-import { TasksRepository, type TaskInsert } from '../../database/repositories';
+import {
+  TasksRepository,
+  JobsRepository,
+  ClaimsRepository,
+  type TaskInsert,
+  type TaskViewRow,
+} from '../../database/repositories';
 import { TenantContext } from '../../tenant/tenant-context';
 import { CrunchworkService } from '../../crunchwork/crunchwork.service';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
 import { OutboundEventsService } from '../outbound-events/outbound-events.service';
-import { CW_TASK_TYPES, extractCwTaskTypeName } from './cw-task-types';
+import { OutboundSyncService } from '../domain/outbound/outbound-sync.service';
+import { CW_TASK_TYPES } from './cw-task-types';
 
 function parseOptionalUserId(value: unknown): string | null | undefined {
   if (value === undefined) return undefined;
@@ -76,11 +83,102 @@ export class TasksService {
 
   constructor(
     private readonly tasksRepo: TasksRepository,
+    private readonly jobsRepo: JobsRepository,
+    private readonly claimsRepo: ClaimsRepository,
     private readonly tenantContext: TenantContext,
     private readonly crunchworkService: CrunchworkService,
+    private readonly outboundSync: OutboundSyncService,
     @Optional() private readonly connectionResolver?: ConnectionResolverService,
     @Optional() private readonly outboundEvents?: OutboundEventsService,
   ) {}
+
+  private resolveCwId(entity: {
+    apiPayload?: unknown;
+    externalReference?: string | null;
+  } | null): string | null {
+    if (!entity) return null;
+    const payload = (entity.apiPayload ?? {}) as Record<string, unknown>;
+    const fromPayload = typeof payload.id === 'string' ? payload.id.trim() : '';
+    if (fromPayload) return fromPayload;
+    const fromRef = typeof entity.externalReference === 'string' ? entity.externalReference.trim() : '';
+    return fromRef || null;
+  }
+
+  private cwTaskTypeName(taskType: unknown): string | null {
+    if (typeof taskType === 'string') {
+      const trimmed = taskType.trim();
+      return trimmed || null;
+    }
+    if (!taskType || typeof taskType !== 'object' || Array.isArray(taskType)) return null;
+    const obj = taskType as Record<string, unknown>;
+    for (const key of ['name', 'externalReference'] as const) {
+      const raw = obj[key];
+      if (typeof raw === 'string' && raw.trim()) return raw.trim();
+    }
+    return null;
+  }
+
+  private async buildOutboundBody(
+    body: Record<string, unknown>,
+    tenantId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const outbound: Record<string, unknown> = {};
+    if (typeof body.name === 'string' && body.name.trim()) outbound.name = body.name.trim();
+
+    const internalJobId = typeof body.jobId === 'string' ? body.jobId.trim() : '';
+    if (internalJobId) {
+      const job = await this.jobsRepo.findOne({ id: internalJobId, tenantId });
+      const cwJobId = this.resolveCwId(job);
+      if (!cwJobId) {
+        this.logger.warn(
+          `TasksService.buildOutboundBody — job ${internalJobId} has no Crunchwork id`,
+        );
+        return null;
+      }
+      outbound.jobId = cwJobId;
+    }
+
+    const internalClaimId = typeof body.claimId === 'string' ? body.claimId.trim() : '';
+    if (internalClaimId) {
+      const claim = await this.claimsRepo.findOne({ id: internalClaimId, tenantId });
+      const cwClaimId = this.resolveCwId(claim);
+      if (cwClaimId) outbound.claimId = cwClaimId;
+    }
+
+    if (typeof body.description === 'string' && body.description.trim()) {
+      outbound.description = body.description.trim();
+    }
+    if (typeof body.dueDate === 'string' && body.dueDate) outbound.dueDate = body.dueDate;
+    if (typeof body.priority === 'string' && body.priority) outbound.priority = body.priority;
+
+    const status = typeof body.status === 'string' ? body.status : '';
+    if (status === 'Completed' || status === 'Failed' || status === 'Open') {
+      outbound.status = status;
+    } else if (status) {
+      outbound.status = 'Open';
+    }
+
+    const typeName = this.cwTaskTypeName(body.taskType);
+    if (typeName) {
+      // CW create API requires taskType.externalReference — the `id` field is
+      // read-only on CW responses and rejected as sole identifier on create.
+      // Some CW task types (e.g. "Submission Required") come back with
+      // externalReference: null on GET, so we always use the canonical name.
+      this.logger.log(
+        `TasksService.buildOutboundBody — sending taskType externalReference "${typeName}"`,
+      );
+      outbound.taskType = { externalReference: typeName };
+    }
+
+    if (!outbound.jobId && !outbound.claimId) {
+      this.logger.warn(
+        `TasksService.buildOutboundBody — no Crunchwork job or claim id`,
+      );
+      return null;
+    }
+
+    return outbound;
+  }
 
   private async resolveConnectionId(tenantId: string): Promise<string> {
     if (!this.connectionResolver) return tenantId;
@@ -89,6 +187,24 @@ export class TasksService {
       throw new BadRequestException('No active CW connection for tenant');
     }
     return connection.id;
+  }
+
+  /** Infer synced state for tasks created before sync_status was tracked. */
+  private shapeTask<T extends TaskViewRow | TaskInsert>(task: T): T {
+    if (task.syncStatus) return task;
+    const payload = (task.taskPayload ?? {}) as Record<string, unknown>;
+    const payloadId = typeof payload.id === 'string' ? payload.id.trim() : '';
+    const externalRef = (task.externalReference ?? '').trim() || payloadId;
+    if (!externalRef) return task;
+    return {
+      ...task,
+      syncStatus: 'synced',
+      externalReference: task.externalReference ?? externalRef,
+    };
+  }
+
+  private shapeTasks(tasks: TaskViewRow[]): TaskViewRow[] {
+    return tasks.map((task) => this.shapeTask(task));
   }
 
   listCanonicalTaskTypes(): string[] {
@@ -114,7 +230,7 @@ export class TasksService {
     sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
-    return this.tasksRepo.findAll({
+    const result = await this.tasksRepo.findAll({
       tenantId,
       page: params.page,
       limit: params.limit,
@@ -133,6 +249,7 @@ export class TasksService {
       overdue: params.overdue,
       sort: params.sort,
     });
+    return { ...result, data: this.shapeTasks(result.data) };
   }
 
   async findFilterOptions() {
@@ -142,31 +259,38 @@ export class TasksService {
 
   async findOne(params: { id: string }) {
     const tenantId = this.tenantContext.getTenantId();
-    return this.tasksRepo.findOne({ id: params.id, tenantId });
+    const row = await this.tasksRepo.findOne({ id: params.id, tenantId });
+    return row ? this.shapeTask(row) : null;
   }
 
   async findByJob(params: { jobId: string }) {
     const tenantId = this.tenantContext.getTenantId();
-    return this.tasksRepo.findByJob({ jobId: params.jobId, tenantId });
+    return this.shapeTasks(
+      await this.tasksRepo.findByJob({ jobId: params.jobId, tenantId }),
+    );
   }
 
   async findByClaim(params: { claimId: string }) {
     const tenantId = this.tenantContext.getTenantId();
-    return this.tasksRepo.findByClaim({ claimId: params.claimId, tenantId });
+    return this.shapeTasks(
+      await this.tasksRepo.findByClaim({ claimId: params.claimId, tenantId }),
+    );
   }
 
   async findByEntity(params: { entityType: string; entityId: string }) {
     const tenantId = this.tenantContext.getTenantId();
-    return this.tasksRepo.findByEntity({
-      tenantId,
-      entityType: params.entityType,
-      entityId: params.entityId,
-    });
+    return this.shapeTasks(
+      await this.tasksRepo.findByEntity({
+        tenantId,
+        entityType: params.entityType,
+        entityId: params.entityId,
+      }),
+    );
   }
 
   async findOverdue() {
     const tenantId = this.tenantContext.getTenantId();
-    return this.tasksRepo.findOverdue({ tenantId });
+    return this.shapeTasks(await this.tasksRepo.findOverdue({ tenantId }));
   }
 
   async create(params: { body: Record<string, unknown>; userId?: string }) {
@@ -203,54 +327,67 @@ export class TasksService {
       completedAt: completedAtForStatus(status) ?? undefined,
     };
 
-    let created: Awaited<ReturnType<typeof this.tasksRepo.create>>;
+    let hasConnection = false;
     try {
-      const connectionId = await this.resolveConnectionId(tenantId);
-      const apiTask = await this.crunchworkService.createTask({
-        connectionId,
-        body: params.body,
-      });
-
-      const apiObj = apiTask as Record<string, unknown>;
-      const insertData: TaskInsert = {
-        tenantId,
-        relatedEntityType,
-        relatedEntityId,
-        claimId: (apiObj.claimId ?? claimId) as string,
-        jobId: (apiObj.jobId ?? jobId) as string,
-        name: (apiObj.name ?? params.body?.name) as string,
-        description: (apiObj.description ?? params.body.description) as string,
-        dueDate: apiObj.dueDate
-          ? new Date(apiObj.dueDate as string)
-          : parseOptionalDate(params.body.dueDate) ?? undefined,
-        priority: (apiObj.priority ?? params.body?.priority ?? 'Low') as string,
-        status: (apiObj.status ?? status) as string,
-        assignedToUserId,
-        createdByUserId: params.userId ?? null,
-        taskPayload: apiTask as Record<string, unknown>,
-        ...localFields,
-      };
-      insertData.taskType =
-        explicitType ?? extractCwTaskTypeName(apiObj) ?? insertData.taskType;
-      created = await this.tasksRepo.create({ data: insertData });
+      await this.resolveConnectionId(tenantId);
+      hasConnection = true;
     } catch {
-      const insertData: TaskInsert = {
-        tenantId,
-        relatedEntityType,
-        relatedEntityId,
-        claimId: claimId as string,
-        jobId: jobId as string,
-        name: params.body.name as string,
-        description: params.body.description as string,
-        dueDate: parseOptionalDate(params.body.dueDate) ?? undefined,
-        priority: (params.body.priority as string) ?? 'Low',
-        status,
-        assignedToUserId,
-        createdByUserId: params.userId ?? null,
-        taskPayload: {},
-        ...localFields,
-      };
-      created = await this.tasksRepo.create({ data: insertData });
+      hasConnection = false;
+    }
+
+    if (hasConnection && !explicitType) {
+      throw new BadRequestException('Task type is required to sync to Crunchwork');
+    }
+
+    const insertData: TaskInsert = {
+      tenantId,
+      relatedEntityType,
+      relatedEntityId,
+      claimId: claimId as string,
+      jobId: jobId as string,
+      name: params.body.name as string,
+      description: params.body.description as string,
+      dueDate: parseOptionalDate(params.body.dueDate) ?? undefined,
+      priority: (params.body.priority as string) ?? 'Low',
+      status,
+      assignedToUserId,
+      createdByUserId: params.userId ?? null,
+      taskPayload: {},
+      syncStatus: hasConnection ? 'pending' : null,
+      ...localFields,
+    };
+    insertData.taskType = explicitType ?? insertData.taskType;
+    const created = await this.tasksRepo.create({ data: insertData });
+
+    if (hasConnection) {
+      try {
+        const connectionId = await this.resolveConnectionId(tenantId);
+        const outboundBody = await this.buildOutboundBody(params.body, tenantId);
+        if (!outboundBody) {
+          this.logger.warn(
+            `TasksService.create — skipping outbound enqueue for task ${created.id}: missing Crunchwork parent id`,
+          );
+        } else {
+          const queueId = await this.outboundSync.enqueue({
+            tenantId,
+            connectionId,
+            entityType: 'task',
+            entityId: created.id,
+            action: 'create',
+            payload: outboundBody,
+            sourceEvent: 'api:create',
+            idempotencyKey: `task:${created.id}:create`,
+            tx: this.outboundSync['db'],
+          });
+          this.logger.log(
+            `TasksService.create — enqueued outbound sync task:${created.id} queueId=${queueId}`,
+          );
+        }
+      } catch (err) {
+        this.logger.warn(
+          `TasksService.create — failed to enqueue outbound sync for task ${created.id}: ${err instanceof Error ? err.message : err}`,
+        );
+      }
     }
 
     if (this.outboundEvents && created && jobId) {
@@ -263,7 +400,7 @@ export class TasksService {
       }).catch(() => {});
     }
 
-    return created;
+    return this.shapeTask(created);
   }
 
   async update(params: { id: string; body: Record<string, unknown> }) {
@@ -332,41 +469,85 @@ export class TasksService {
       `TasksService.update — id=${params.id} assignedToUserId=${assignedToUserId === undefined ? 'unchanged' : assignedToUserId ?? 'none'}`,
     );
 
-    let updated = existing;
+    let hasConnection = false;
     try {
-      const connectionId = await this.resolveConnectionId(tenantId);
-      const apiTask = await this.crunchworkService.updateTask({
-        connectionId,
-        taskId: params.id,
-        body: params.body,
-      });
-
-      const apiObj = apiTask as Record<string, unknown>;
-      const cwType = extractCwTaskTypeName(apiObj);
-      const row = await this.tasksRepo.update({
-        id: params.id,
-        data: {
-          ...localPatch,
-          taskPayload: apiTask as Record<string, unknown>,
-          status: (apiObj.status as string) ?? localPatch.status ?? existing.status,
-          ...(localPatch.taskType === undefined && cwType ? { taskType: cwType } : {}),
-        },
-      });
-      if (row) updated = { ...existing, ...row };
+      await this.resolveConnectionId(tenantId);
+      hasConnection = true;
     } catch {
-      if (Object.keys(localPatch).length === 0) return existing;
-      const row = await this.tasksRepo.update({
-        id: params.id,
-        data: localPatch,
-      });
-      if (row) updated = { ...existing, ...row };
+      hasConnection = false;
+    }
+
+    if (Object.keys(localPatch).length === 0) return existing;
+
+    if (hasConnection) {
+      localPatch.syncStatus = 'pending';
+    }
+
+    const row = await this.tasksRepo.update({
+      id: params.id,
+      data: localPatch,
+    });
+    const updated = row ? { ...existing, ...row } : existing;
+
+    if (hasConnection) {
+      try {
+        const connectionId = await this.resolveConnectionId(tenantId);
+        const outboundBody = await this.buildOutboundBody(
+          {
+            ...params.body,
+            jobId: params.body.jobId ?? existing.jobId,
+            claimId: params.body.claimId ?? existing.claimId,
+            taskType: params.body.taskType ?? existing.taskType,
+          },
+          tenantId,
+        );
+        if (!outboundBody) {
+          this.logger.warn(
+            `TasksService.update — skipping outbound enqueue for task ${params.id}: missing Crunchwork parent id`,
+          );
+        } else {
+          const externalRef =
+            typeof existing.externalReference === 'string' ? existing.externalReference.trim() : '';
+          const action = externalRef ? 'update' : 'create';
+          const payload: Record<string, unknown> = { ...outboundBody };
+          if (externalRef) {
+            payload.externalId = externalRef;
+            // Existing CW tasks already have a type. Sending the display name
+            // as externalReference 500s on IAG (mapping key is often null).
+            delete payload.taskType;
+          }
+          await this.outboundSync.cancelPending({
+            tenantId,
+            entityType: 'task',
+            entityId: params.id,
+          });
+          const queueId = await this.outboundSync.enqueue({
+            tenantId,
+            connectionId,
+            entityType: 'task',
+            entityId: params.id,
+            action,
+            payload,
+            sourceEvent: 'api:update',
+            idempotencyKey: `task:${params.id}:${action}:${Date.now()}`,
+            tx: this.outboundSync['db'],
+          });
+          this.logger.log(
+            `TasksService.update — enqueued outbound sync task:${params.id} action=${action} queueId=${queueId}`,
+          );
+        }
+      } catch (err) {
+        this.logger.warn(
+          `TasksService.update — failed to enqueue outbound sync for task ${params.id}: ${err instanceof Error ? err.message : err}`,
+        );
+      }
     }
 
     this.emitStatusChange(
       existing as unknown as Record<string, unknown>,
       updated as unknown as Record<string, unknown>,
     );
-    return updated;
+    return this.shapeTask(updated);
   }
 
   private emitStatusChange(

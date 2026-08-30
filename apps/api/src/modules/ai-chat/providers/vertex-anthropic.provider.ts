@@ -25,6 +25,9 @@ export class VertexAnthropicProvider implements CompletionProvider {
     this.client = new AnthropicVertex({
       projectId: project,
       region: location,
+      ...(location === 'global'
+        ? { baseURL: 'https://aiplatform.googleapis.com/v1' }
+        : {}),
     });
     this.model = model;
   }

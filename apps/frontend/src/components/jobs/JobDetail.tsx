@@ -19,7 +19,6 @@ import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { DetailAssignee } from '@/components/shared/DetailAssignee';
 import { AddJobContactsDrawer } from '@/components/forms/AddJobContactsDrawer';
 import { PrintButton } from '@/components/shared/PrintButton';
-import { PublishButton } from '@/components/shared/PublishButton';
 import { buildJobReportTypes } from '@/components/shared/PrintDocumentDrawer';
 import { QuoteFormDrawer } from '@/components/forms/QuoteFormDrawer';
 import {
@@ -33,7 +32,6 @@ import { JobTypeDetailsTab, type JobTypeDetailsSnapshot, type JobTypeDetailsTabH
 import { JobPartiesTab } from './tabs/JobPartiesTab';
 import { JobReportsTab } from './tabs/JobReportsTab';
 import { JobTimelineTab } from './tabs/JobTimelineTab';
-import { JobPublishWizard } from './JobPublishWizard';
 import { JobCreateMakeSafeDrawer } from './JobCreateMakeSafeDrawer';
 import { EntityAttachmentsTab } from '@/components/shared/EntityAttachmentsTab';
 import { hasTypeDetails } from './util/jobType';
@@ -255,10 +253,8 @@ export function JobDetail({
   const saveInFlightRef = useRef(false);
   const skipFieldUndoRef = useRef(false);
   const [saving, setSaving] = useState(false);
-  const [publishing, setPublishing] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [justSaved, setJustSaved] = useState(false);
-  const [justPublished, setJustPublished] = useState(false);
   const [fieldEditTick, setFieldEditTick] = useState(0);
   const [undoStack, setUndoStack] = useState<JobFieldsSnapshot[]>([]);
   const [contactDrawerOpen, setContactDrawerOpen] = useState(false);
@@ -269,7 +265,6 @@ export function JobDetail({
     useState<AppointmentCreateDefaults | undefined>(undefined);
   const [appointmentJobParties, setAppointmentJobParties] = useState<JobParty[]>([]);
   const [appointmentDefaultAddress, setAppointmentDefaultAddress] = useState('');
-  const [publishWizardOpen, setPublishWizardOpen] = useState(false);
   const [makeSafeDrawerOpen, setMakeSafeDrawerOpen] = useState(false);
   const [assignedToUserId, setAssignedToUserId] = useState(job.assignedToUserId ?? '');
   const [committedAssignee, setCommittedAssignee] = useState(job.assignedToUserId ?? '');
@@ -277,15 +272,11 @@ export function JobDetail({
   assignedToUserIdRef.current = assignedToUserId;
   const [overviewDirty, setOverviewDirty] = useState(false);
   const [typeDetailsDirty, setTypeDetailsDirty] = useState(false);
-  /** Sticky: CW field edits enable Publish until the user clicks Publish (survives autosave). */
-  const [cwPublishPending, setCwPublishPending] = useState(false);
 
   const assigneeDirty = assignedToUserId !== committedAssignee;
   const pageDirty = overviewDirty || typeDetailsDirty || assigneeDirty;
-  const anySaving = saving || publishing;
+  const anySaving = saving;
   const canUndo = pageDirty || undoStack.length > 0;
-  /** Overview + type-details drafts are the CW-bound fields (not assignee). */
-  const cwFieldsDirty = overviewDirty || typeDetailsDirty;
 
   const pushUndo = useCallback((entry: JobFieldsSnapshot) => {
     setUndoStack((prev) => pushUndoEntry(prev, entry, MAX_UNDO));
@@ -322,8 +313,6 @@ export function JobDetail({
     setTypeDetailsDirty(false);
     setSaveError(null);
     setJustSaved(false);
-    setJustPublished(false);
-    setCwPublishPending(false);
     setUndoStack([]);
   }, [job.id]);
 
@@ -331,13 +320,6 @@ export function JobDetail({
     if (activeTab !== 'parties') setContactDrawerOpen(false);
     if (activeTab !== 'reports') setReportDrawerOpen(false);
   }, [activeTab]);
-
-  useEffect(() => {
-    if (isCrunchwork && cwFieldsDirty) {
-      setCwPublishPending(true);
-      setJustPublished(false);
-    }
-  }, [isCrunchwork, cwFieldsDirty]);
 
   const onTabChange = useCallback(
     (value: string | null) => {
@@ -354,9 +336,7 @@ export function JobDetail({
     [pathname, router, searchParams],
   );
 
-  const persistPending = useCallback(async (opts?: {
-    forceDates?: boolean;
-  }): Promise<{
+  const persistPending = useCallback(async (): Promise<{
     success: boolean;
     error?: string;
   }> => {
@@ -365,12 +345,6 @@ export function JobDetail({
     }
 
     const overviewPending = overviewRef.current?.getPendingUpdate() ?? null;
-    const publishDates = opts?.forceDates
-      ? overviewRef.current?.getCurrentDates() ?? null
-      : null;
-    const hasPublishDates = Boolean(
-      publishDates?.bookedDate || publishDates?.attendanceDate,
-    );
     const typePending =
       isCrunchwork && showTypeDetails
         ? typeDetailsRef.current?.getPendingUpdate() ?? null
@@ -378,7 +352,7 @@ export function JobDetail({
     const assigneeSnapshot = assignedToUserIdRef.current;
     const assigneeChanged = assigneeSnapshot !== committedAssignee;
 
-    if (!overviewPending && !typePending && !assigneeChanged && !hasPublishDates) {
+    if (!overviewPending && !typePending && !assigneeChanged) {
       setSaveError(null);
       return { success: true };
     }
@@ -387,15 +361,7 @@ export function JobDetail({
     skipFieldUndoRef.current = false;
 
     const typeSnapshot = JSON.stringify(typePending);
-    const overviewPayload = {
-      ...(overviewPending ?? {}),
-      ...(hasPublishDates
-        ? {
-            bookedDate: publishDates?.bookedDate ?? null,
-            attendanceDate: publishDates?.attendanceDate ?? null,
-          }
-        : {}),
-    };
+    const overviewPayload = overviewPending ?? {};
 
     saveInFlightRef.current = true;
     setSaving(true);
@@ -421,7 +387,7 @@ export function JobDetail({
         setSaveError(message);
         return { success: false, error: message };
       }
-      if (overviewPending || hasPublishDates) {
+      if (overviewPending) {
         overviewRef.current?.markClean(overviewPayload);
       }
       const typeNow = JSON.stringify(
@@ -476,12 +442,6 @@ export function JobDetail({
     return () => clearTimeout(timer);
   }, [justSaved, pageDirty, anySaving, saveError]);
 
-  useEffect(() => {
-    if (!justPublished || cwPublishPending) return;
-    const timer = setTimeout(() => setJustPublished(false), SAVE_STATUS_CLEAR_MS);
-    return () => clearTimeout(timer);
-  }, [justPublished, cwPublishPending]);
-
   const handleUndo = useCallback(() => {
     if (anySaving) return;
 
@@ -507,32 +467,6 @@ export function JobDetail({
     });
     void persistPending();
   }, [anySaving, pageDirty, undoStack, committedAssignee, persistPending]);
-
-  const handlePublishConfirm = useCallback(async (): Promise<{
-    success: boolean;
-    error?: string;
-  }> => {
-    if (!isCrunchwork || !cwPublishPending) {
-      return { success: false, error: 'No Crunchwork changes to publish' };
-    }
-    setPublishing(true);
-    setSaveError(null);
-    try {
-      const result = await persistPending({ forceDates: true });
-      if (!result.success) {
-        return {
-          success: false,
-          error: result.error ?? 'Failed to save job before publishing',
-        };
-      }
-      setCwPublishPending(false);
-      setJustPublished(true);
-      router.refresh();
-      return { success: true };
-    } finally {
-      setPublishing(false);
-    }
-  }, [isCrunchwork, cwPublishPending, persistPending, router]);
 
   const claimId = job.claimId ?? undefined;
   const isAlreadyMakeSafe =
@@ -598,9 +532,6 @@ export function JobDetail({
     />
   );
 
-  const canPublish =
-    isCrunchwork && cwPublishPending && !saving && !publishing && !saveError;
-
   const showEditActions =
     activeTab === 'overview' || (isCrunchwork && activeTab === 'type-details');
 
@@ -664,17 +595,6 @@ export function JobDetail({
           undoDisabled={anySaving}
           onUndo={handleUndo}
         />
-        {isCrunchwork && (
-          <PublishButton
-            onClick={() => setPublishWizardOpen(true)}
-            disabled={!canPublish}
-            title={
-              cwPublishPending
-                ? 'Review and publish Crunchwork field changes to the insurer'
-                : 'Enter Crunchwork fields (e.g. booked or attendance date) to enable Publish'
-            }
-          />
-        )}
         {printButton}
         {archiveButton}
       </HeaderActionToolbar>
@@ -690,10 +610,8 @@ export function JobDetail({
       <SetHeaderActions>{headerActions}</SetHeaderActions>
       <HeaderSaveStatus
         saving={saving}
-        publishing={publishing}
         saveError={saveError}
         justSaved={justSaved}
-        justPublished={justPublished}
         dirty={pageDirty}
       />
       <div className="flex w-full flex-wrap items-center gap-x-4 border-b border-slate-200">
@@ -805,15 +723,6 @@ export function JobDetail({
         createDefaults={appointmentCreateDefaults}
         onSuccess={() => router.refresh()}
       />
-      {isCrunchwork && (
-        <JobPublishWizard
-          open={publishWizardOpen}
-          onOpenChange={setPublishWizardOpen}
-          job={job}
-          claim={parentClaim}
-          onPublish={handlePublishConfirm}
-        />
-      )}
       {!existingMakeSafeJobId && canCreateMakeSafe && makeSafeJobType?.id && (
         <JobCreateMakeSafeDrawer
           open={makeSafeDrawerOpen}

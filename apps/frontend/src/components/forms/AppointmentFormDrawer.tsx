@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
 import { useForm, Controller } from 'react-hook-form';
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
@@ -40,6 +39,7 @@ import { createAppointmentAction, updateAppointmentAction, searchContactsAction,
 import { fetchAppointmentAction } from '@/app/(app)/appointments/actions';
 import { JobSelectField } from '@/components/forms/JobSelectField';
 import type { JobOption } from '@/components/shared/job-label';
+import { SyncStatusIndicator } from '@/components/shared/SyncStatusIndicator';
 import type { Appointment } from '@/types/api';
 
 const APPOINTMENT_TYPES = [
@@ -342,7 +342,6 @@ export function AppointmentFormDrawer({
   onSuccess,
   companionChatOpen = false,
 }: AppointmentFormDrawerProps) {
-  const router = useRouter();
   const [appointment, setAppointment] = useState<Appointment | undefined>(appointmentProp);
   const [loadingAppointment, setLoadingAppointment] = useState(false);
   const isEdit = !!appointment;
@@ -541,7 +540,6 @@ export function AppointmentFormDrawer({
         if (!isEdit) resetPhase();
         onSuccess?.(values.startDate);
         onOpenChange(false);
-        router.refresh();
       } else {
         setError(result.error ?? (isEdit ? 'Failed to update appointment' : 'Failed to create appointment'));
         if (!isEdit) resetPhase();
@@ -881,6 +879,11 @@ export function AppointmentFormDrawer({
           </div>
 
           <BottomFormDrawerError error={error} />
+          {(appointment as any)?.syncStatus && (
+            <div className="px-6 pb-4">
+              <SyncStatusIndicator syncStatus={(appointment as any).syncStatus} />
+            </div>
+          )}
         </BottomFormDrawerBody>
 
         <BottomFormDrawerFooter>

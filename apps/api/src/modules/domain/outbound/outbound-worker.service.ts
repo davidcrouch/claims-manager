@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy, Inject } from '@nestjs/common';
 import { eq, and, lte, sql, inArray } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
-import { outboundSyncQueue, integrationConnections, jobs } from '../../../database/schema';
+import { outboundSyncQueue, integrationConnections, jobs, tasks, appointments, quotes, invoices } from '../../../database/schema';
 import type { OutboundAdapter, OutboundPushResult } from './outbound-adapter.interface';
 
 interface OutboundQueueRow {
@@ -40,7 +40,12 @@ export class OutboundWorkerService implements OnModuleInit, OnModuleDestroy {
 
     const intervalMs = parseInt(process.env.OUTBOUND_POLL_INTERVAL_MS ?? '5000', 10);
     this.polling = true;
-    this.pollInterval = setInterval(() => this.poll(), intervalMs);
+    this.pollInterval = setInterval(() => {
+      void this.poll().catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.error(`OutboundWorker.poll — unexpected error: ${message}`);
+      });
+    }, intervalMs);
     this.logger.log(`OutboundWorker — started polling every ${intervalMs}ms`);
   }
 
@@ -166,21 +171,43 @@ export class OutboundWorkerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async patchEntity(record: OutboundQueueRow, result: OutboundPushResult): Promise<void> {
-    if (record.entityType === 'job') {
-      const patchData: Record<string, unknown> = {
-        syncStatus: 'synced',
-        updatedAt: new Date(),
-      };
-      if (result.externalReference) {
-        patchData.externalReference = result.externalReference;
+    const now = new Date();
+    switch (record.entityType) {
+      case 'job': {
+        const patch: Record<string, unknown> = { syncStatus: 'synced', updatedAt: now };
+        if (result.externalReference) patch.externalReference = result.externalReference;
+        if (result.responsePayload) patch.apiPayload = result.responsePayload;
+        await this.db.update(jobs).set(patch).where(eq(jobs.id, record.entityId));
+        break;
       }
-      if (result.responsePayload) {
-        patchData.apiPayload = result.responsePayload;
+      case 'task': {
+        const patch: Record<string, unknown> = { syncStatus: 'synced', updatedAt: now };
+        if (result.externalReference) patch.externalReference = result.externalReference;
+        if (result.responsePayload) patch.taskPayload = result.responsePayload;
+        await this.db.update(tasks).set(patch).where(eq(tasks.id, record.entityId));
+        break;
       }
-      await this.db
-        .update(jobs)
-        .set(patchData)
-        .where(eq(jobs.id, record.entityId));
+      case 'appointment': {
+        const patch: Record<string, unknown> = { syncStatus: 'synced', updatedAt: now };
+        if (result.externalReference) patch.externalReference = result.externalReference;
+        if (result.responsePayload) patch.appointmentPayload = result.responsePayload;
+        await this.db.update(appointments).set(patch).where(eq(appointments.id, record.entityId));
+        break;
+      }
+      case 'quote': {
+        const patch: Record<string, unknown> = { syncStatus: 'synced', updatedAt: now };
+        if (result.externalReference) patch.externalReference = result.externalReference;
+        if (result.responsePayload) patch.apiPayload = result.responsePayload;
+        await this.db.update(quotes).set(patch).where(eq(quotes.id, record.entityId));
+        break;
+      }
+      case 'invoice': {
+        const patch: Record<string, unknown> = { syncStatus: 'synced', updatedAt: now };
+        if (result.externalReference) patch.sourceExternalReference = result.externalReference;
+        if (result.responsePayload) patch.invoicePayload = result.responsePayload;
+        await this.db.update(invoices).set(patch).where(eq(invoices.id, record.entityId));
+        break;
+      }
     }
   }
 
@@ -197,11 +224,23 @@ export class OutboundWorkerService implements OnModuleInit, OnModuleDestroy {
       .set({ status: 'failed', lastError: error })
       .where(eq(outboundSyncQueue.id, id));
 
-    if (entityType === 'job') {
-      await this.db
-        .update(jobs)
-        .set({ syncStatus: 'failed', updatedAt: new Date() })
-        .where(eq(jobs.id, entityId));
+    const now = new Date();
+    switch (entityType) {
+      case 'job':
+        await this.db.update(jobs).set({ syncStatus: 'failed', updatedAt: now }).where(eq(jobs.id, entityId));
+        break;
+      case 'task':
+        await this.db.update(tasks).set({ syncStatus: 'failed', updatedAt: now }).where(eq(tasks.id, entityId));
+        break;
+      case 'appointment':
+        await this.db.update(appointments).set({ syncStatus: 'failed', updatedAt: now }).where(eq(appointments.id, entityId));
+        break;
+      case 'quote':
+        await this.db.update(quotes).set({ syncStatus: 'failed', updatedAt: now }).where(eq(quotes.id, entityId));
+        break;
+      case 'invoice':
+        await this.db.update(invoices).set({ syncStatus: 'failed', updatedAt: now }).where(eq(invoices.id, entityId));
+        break;
     }
   }
 

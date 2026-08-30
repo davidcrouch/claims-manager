@@ -15,6 +15,7 @@ import {
 } from '@/components/shared/column-visibility';
 import { formatDateTime } from '@/components/shared/detail';
 import { JobCellLink } from '@/components/shared/JobCellLink';
+import { SyncStatusIndicator } from '@/components/shared/SyncStatusIndicator';
 import type { Appointment, AppointmentAttendee } from '@/types/api';
 
 const APPOINTMENT_COLUMNS: ColumnVisibilityDef[] = [
@@ -292,7 +293,12 @@ export function AppointmentsTable({
                     </button>
                   </td>
                   {isVisible('name') && (
-                    <td className="px-4 py-2.5 font-medium">{a.name}</td>
+                    <td className="px-4 py-2.5">
+                      <span className="flex items-center gap-1.5">
+                        <span className="font-medium">{a.name}</span>
+                        <SyncStatusIndicator syncStatus={(a as any).syncStatus} compact />
+                      </span>
+                    </td>
                   )}
                   {isVisible('job') && (
                     <td className="px-4 py-2.5 text-slate-600">

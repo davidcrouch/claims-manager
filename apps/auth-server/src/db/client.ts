@@ -14,6 +14,14 @@ export interface DatabaseConfig {
   connectionUrl: string;
 }
 
+/**
+ * Windows + Docker: Node often resolves `localhost` to `::1` first, while
+ * Postgres is published on IPv4 only. That hangs ~30s then `read ECONNRESET`.
+ */
+export function rewriteLocalhostToIpv4(connectionUrl: string): string {
+  return connectionUrl.replace(/@localhost(?=[:/?]|$)/gi, '@127.0.0.1');
+}
+
 function buildDatabaseUrl(): string {
   const host = process.env.DB_HOST;
   const port = process.env.DB_PORT;
@@ -40,7 +48,7 @@ export function getDatabaseUrl(): string {
     throw new Error('auth-server:db:client - DATABASE_URL is not set and DB_* fallback is incomplete');
   }
   assertExpectedDatabase(url);
-  return url;
+  return rewriteLocalhostToIpv4(url);
 }
 
 /**
@@ -75,13 +83,28 @@ export function loadDatabaseConfig(): DatabaseConfig {
 let _client: ReturnType<typeof postgres> | null = null;
 let _db: ReturnType<typeof drizzle> | null = null;
 
+export async function resetDb(reason: string): Promise<void> {
+  const client = _client;
+  _client = null;
+  _db = null;
+  if (!client) return;
+  log.warn({ reason }, 'auth-server:db:client.resetDb - closing postgres client');
+  try {
+    await client.end({ timeout: 2 });
+  } catch {
+    // Connection may already be dead after ECONNRESET / schema rebuild.
+  }
+}
+
 export function getDb() {
   if (!_db) {
     const config = loadDatabaseConfig();
     _client = postgres(config.connectionUrl, {
       max: 10,
       idle_timeout: 20,
-      connect_timeout: 60,
+      connect_timeout: 10,
+      max_lifetime: 60 * 10,
+      prepare: false,
       transform: { undefined: null },
     });
     _db = drizzle(_client, { schema });

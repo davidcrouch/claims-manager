@@ -1,9 +1,10 @@
 import { config } from 'dotenv';
 import { defineConfig } from 'drizzle-kit';
+import { rewriteLocalhostHost } from './src/config/pg-url';
 
 config({ path: ['.env', '../.env', '../../.env'] });
 
-const DB_HOST=process.env.DB_HOST
+const DB_HOST = rewriteLocalhostHost(process.env.DB_HOST ?? 'localhost')
 const DB_PORT=process.env.DB_PORT
 const DB_NAME=process.env.DB_NAME
 const DB_USER=process.env.DB_USER

@@ -28,7 +28,7 @@ Claims Manager runs **Cloud Run only** (staging and production). No GKE, no Comp
 - First login → frontend provisioning flow (`filesystem` / templates / catalog / lookups) when `organizations.provisioning_status != complete`.
 - CD after migrate runs `seed-api-lookups` (idempotent lookups, claim-lookup backfill, IAG catalogue replace, and document-template JSONata sync for every tenant) in both staging and production.
 
-**Networking:** Active subnet is `claims-manager-private-<env>`. An orphan `claims-manager-gke-staging` subnet may remain until GCP releases stuck serverless address reservations — it is unused.
+**Networking:** Active subnet is `claims-manager-private-<env>`.
 
 ## Terraform
 

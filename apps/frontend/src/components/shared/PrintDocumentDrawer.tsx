@@ -109,6 +109,7 @@ export interface PrintDocumentDrawerProps {
   entityId?: string;
   jobId?: string;
   reportTypes?: readonly PrintReportTypeOption[];
+  companionChatOpen?: boolean;
 }
 
 function isDocx(doc: FSDocument): boolean {
@@ -200,6 +201,7 @@ export function PrintDocumentDrawer({
   entityId,
   jobId,
   reportTypes,
+  companionChatOpen,
 }: PrintDocumentDrawerProps) {
   const typeOptions = reportTypes?.length
     ? reportTypes
@@ -448,6 +450,7 @@ export function PrintDocumentDrawer({
       description="Review the report type, template, and where the PDF will be saved."
       icon={<Printer className="h-5 w-5" />}
       preventClose={generating || folderPickerOpen}
+      companionChatOpen={companionChatOpen}
     >
       <BottomFormDrawerBody>
         <div className="mx-auto max-w-xl space-y-5">

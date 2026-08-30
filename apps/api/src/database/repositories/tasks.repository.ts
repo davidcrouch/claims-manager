@@ -246,14 +246,71 @@ export class TasksRepository {
     return rows as TaskViewRow[];
   }
 
-  async findOne(params: { id: string; tenantId: string }): Promise<TaskViewRow | null> {
-    const [row] = await this.db
+  async findOne(params: {
+    id: string;
+    tenantId: string;
+    tx?: DrizzleDbOrTx;
+  }): Promise<TaskViewRow | null> {
+    const db = params.tx ?? this.db;
+    const [row] = await db
       .select(this.taskViewColumns())
       .from(tasks)
       .leftJoin(users, assigneeJoinOn)
       .where(and(eq(tasks.id, params.id), eq(tasks.tenantId, params.tenantId)))
       .limit(1);
     return (row as TaskViewRow) ?? null;
+  }
+
+  async findByExternalReference(params: {
+    tenantId: string;
+    externalReference: string;
+    tx?: DrizzleDbOrTx;
+  }): Promise<TaskRow | null> {
+    const db = params.tx ?? this.db;
+    const [row] = await db
+      .select()
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.tenantId, params.tenantId),
+          eq(tasks.externalReference, params.externalReference),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
+  /**
+   * Crunchwork type UUID from a previously ingested task of the same type name.
+   * IAG GET payloads often have taskType.externalReference = null, so outbound
+   * create must send the CW id rather than the display name.
+   */
+  async findCwTaskTypeId(params: {
+    tenantId: string;
+    typeName: string;
+  }): Promise<string | null> {
+    const typeName = params.typeName.trim();
+    if (!typeName) return null;
+    const [row] = await this.db
+      .select({
+        id: sql<string>`${tasks.taskPayload}->'taskType'->>'id'`,
+      })
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.tenantId, params.tenantId),
+          sql`(${tasks.taskPayload}->'taskType'->>'id') IS NOT NULL`,
+          sql`btrim(${tasks.taskPayload}->'taskType'->>'id') <> ''`,
+          or(
+            eq(tasks.taskType, typeName),
+            sql`(${tasks.taskPayload}->'taskType'->>'name') = ${typeName}`,
+          ),
+        ),
+      )
+      .orderBy(desc(tasks.updatedAt))
+      .limit(1);
+    const id = row?.id?.trim();
+    return id || null;
   }
 
   async findByJob(params: { jobId: string; tenantId: string }): Promise<TaskViewRow[]> {

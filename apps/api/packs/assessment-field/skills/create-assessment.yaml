@@ -131,7 +131,10 @@ instructionPrompt: |
 
   After all 9 tabs:
   - Offer to validate: call validate_assessment.
-  - If valid, offer to publish: call publish_assessment.
+  - Do NOT publish. Crunchwork / NRMA does not support Field Assessment reports.
+  - Ask the user to print the assessment. Call open_print_assessment with the assessment id
+    so the Print report drawer opens. Printing generates the assessment detail PDF via the
+    report generator (document type "assessment").
   - If validation errors, show them and offer to fix.
 
   Rules:
@@ -245,7 +248,7 @@ requiredToolRefs:
   - integration: Claims Operations
     tool: validate_assessment
   - integration: Claims Operations
-    tool: publish_assessment
+    tool: open_print_assessment
 category: assessments
 invocationMode: inline
 includeHistory: true

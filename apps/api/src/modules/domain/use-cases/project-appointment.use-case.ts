@@ -34,11 +34,14 @@ export class ProjectAppointmentUseCase implements ProjectionUseCase {
 
     this.logger.log(`ProjectAppointmentUseCase.execute — externalObjectId=${externalObjectId}`);
 
-    // 1. Check for existing entity
-    const existingLinks = await this.externalLinksRepo.findByExternalObjectId({ externalObjectId, tx });
-    const existingLink = existingLinks.find((l) => l.internalEntityType === 'appointment');
-    const existingEntity = existingLink
-      ? await this.appointmentsRepo.findOne({ id: existingLink.internalEntityId, tenantId })
+    const existingId = await this.resolveExistingAppointmentId({
+      tenantId,
+      externalObjectId,
+      payload,
+      tx,
+    });
+    const existingEntity = existingId
+      ? await this.appointmentsRepo.findOne({ id: existingId, tenantId, tx })
       : null;
 
     // 2. Transform (pass existingEntity so transformer can skip validation for updates)
@@ -71,13 +74,13 @@ export class ProjectAppointmentUseCase implements ProjectionUseCase {
 
     // 4. Upsert
     let appointmentId: string;
-    if (existingLink) {
+    if (existingId) {
       await this.appointmentsRepo.update({
-        id: existingLink.internalEntityId,
+        id: existingId,
         data: result.entity as Partial<AppointmentInsert>,
         tx,
       });
-      appointmentId = existingLink.internalEntityId;
+      appointmentId = existingId;
     } else {
       const jobId = (result.entity as Record<string, unknown>).jobId as string | undefined;
       if (!jobId) {
@@ -101,21 +104,53 @@ export class ProjectAppointmentUseCase implements ProjectionUseCase {
         tx,
       });
       appointmentId = created.id;
-
-      await this.externalLinksRepo.upsert({
-        data: {
-          tenantId,
-          externalObjectId,
-          internalEntityType: 'appointment',
-          internalEntityId: appointmentId,
-          linkRole: 'source',
-          isPrimary: true,
-          metadata: {},
-        },
-        tx,
-      });
     }
 
+    await this.externalLinksRepo.upsert({
+      data: {
+        tenantId,
+        externalObjectId,
+        internalEntityType: 'appointment',
+        internalEntityId: appointmentId,
+        linkRole: 'source',
+        isPrimary: true,
+        metadata: {},
+      },
+      tx,
+    });
+
     return { status: 'completed', internalEntityId: appointmentId, internalEntityType: 'appointment' };
+  }
+
+  private async resolveExistingAppointmentId(params: {
+    tenantId: string;
+    externalObjectId: string;
+    payload: Record<string, unknown>;
+    tx: DrizzleDbOrTx;
+  }): Promise<string | null> {
+    const existingLinks = await this.externalLinksRepo.findByExternalObjectId({
+      externalObjectId: params.externalObjectId,
+      tx: params.tx,
+    });
+    const link = existingLinks.find((l) => l.internalEntityType === 'appointment');
+    if (link) return link.internalEntityId;
+
+    const cwAppointmentId =
+      typeof params.payload.id === 'string' ? params.payload.id.trim() : '';
+    if (!cwAppointmentId) return null;
+
+    const byExtRef = await this.appointmentsRepo.findByExternalReference({
+      tenantId: params.tenantId,
+      externalReference: cwAppointmentId,
+      tx: params.tx,
+    });
+    if (byExtRef) {
+      this.logger.log(
+        `ProjectAppointmentUseCase.execute — matched existing appointment ${byExtRef.id} by Crunchwork id ${cwAppointmentId}`,
+      );
+      return byExtRef.id;
+    }
+
+    return null;
   }
 }

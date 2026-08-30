@@ -73,3 +73,33 @@ export const loadInvoice = cache(async (id: string) => {
     throw err;
   }
 });
+
+export const loadWorkOrder = cache(async (id: string) => {
+  const api = await getServerApiClient();
+  if (!api) return null;
+  try {
+    return await api.getWorkOrder(id);
+  } catch (err: unknown) {
+    if (isNotFoundError(err)) return null;
+    console.error(
+      'frontend:cached-entity-loaders:loadWorkOrder — failed:',
+      err instanceof Error ? err.message : err,
+    );
+    throw err;
+  }
+});
+
+export const loadPurchaseOrder = cache(async (id: string) => {
+  const api = await getServerApiClient();
+  if (!api) return null;
+  try {
+    return await api.getPurchaseOrder(id);
+  } catch (err: unknown) {
+    if (isNotFoundError(err)) return null;
+    console.error(
+      'frontend:cached-entity-loaders:loadPurchaseOrder — failed:',
+      err instanceof Error ? err.message : err,
+    );
+    throw err;
+  }
+});

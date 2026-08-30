@@ -155,7 +155,7 @@ New environment variables (API):
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `VERTEX_AI_PROJECT` | Yes (prod) | — | GCP project for Vertex AI |
-| `VERTEX_AI_LOCATION` | No | `us-central1` | Vertex AI region |
+| `VERTEX_AI_LOCATION` | No | `global` | Vertex AI region |
 | `VERTEX_EMBEDDING_MODEL` | No | `text-embedding-005` | Embedding model for skills |
 | `DEFAULT_CHAT_MODEL` | No | `gemini-2.5-flash` | Default model when agent has none |
 | `DEFAULT_CHAT_PROVIDER` | No | `vertex-gemini` | Default provider |
@@ -1187,7 +1187,7 @@ No Vercel AI SDK (`ai`, `@ai-sdk/*`) — the streaming layer is native.
 | Variable | App | Phase | Required | Default | Description |
 |----------|-----|-------|----------|---------|-------------|
 | `VERTEX_AI_PROJECT` | api | 0 | Prod | — | GCP project for Vertex AI |
-| `VERTEX_AI_LOCATION` | api | 0 | No | `us-central1` | Vertex AI region |
+| `VERTEX_AI_LOCATION` | api | 0 | No | `global` | Vertex AI region |
 | `VERTEX_EMBEDDING_MODEL` | api | 0 | No | `text-embedding-005` | Embedding model |
 | `DEFAULT_CHAT_MODEL` | api | 0 | No | `gemini-2.5-flash` | Default chat model |
 | `DEFAULT_CHAT_PROVIDER` | api | 0 | No | `vertex-gemini` | Default provider |

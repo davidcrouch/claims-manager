@@ -41,7 +41,9 @@ export class SystemAgentRunner {
     this.provider = projectId
       ? new VertexGeminiProvider(
           projectId,
-          this.config.get<string>('VERTEX_LOCATION') || 'us-central1',
+          this.config.get<string>('VERTEX_AI_LOCATION') ||
+            this.config.get<string>('VERTEX_LOCATION') ||
+            'global',
         )
       : null;
   }

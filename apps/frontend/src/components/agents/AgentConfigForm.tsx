@@ -168,6 +168,89 @@ export function AgentConfigForm({ agent, onChange, readOnly }: AgentConfigFormPr
       </div>
 
       <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <h3 className="mb-4 text-sm font-semibold text-slate-800">Execution</h3>
+        <div className="space-y-5">
+          <div>
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={agent.autonomousMode ?? false}
+                disabled={readOnly}
+                onChange={(e) => update('autonomousMode', e.target.checked)}
+                className="rounded border-slate-300"
+              />
+              Autonomous mode
+            </label>
+            <p className="mt-1 text-[10px] text-slate-400">
+              When on, the agent reports progress instead of asking permission at pause checkpoints and continues calling tools automatically.
+            </p>
+          </div>
+
+          <div className="grid gap-5 lg:grid-cols-3">
+            <div>
+              <Label htmlFor="agent-max-steps" className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Max Steps
+              </Label>
+              <Input
+                id="agent-max-steps"
+                type="number"
+                min={1}
+                max={100}
+                step={1}
+                value={agent.maxSteps ?? 10}
+                disabled={readOnly}
+                onChange={(e) => update('maxSteps', parseInt(e.target.value, 10) || 10)}
+                className="mt-1"
+              />
+              <p className="mt-1 text-[10px] text-slate-400">
+                Hard ceiling on provider rounds per request.
+              </p>
+            </div>
+
+            <div>
+              <Label htmlFor="agent-pause-steps" className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Pause After Tool Steps
+              </Label>
+              <Input
+                id="agent-pause-steps"
+                type="number"
+                min={1}
+                max={100}
+                step={1}
+                value={agent.pauseAfterToolSteps ?? 4}
+                disabled={readOnly}
+                onChange={(e) => update('pauseAfterToolSteps', parseInt(e.target.value, 10) || 4)}
+                className="mt-1"
+              />
+              <p className="mt-1 text-[10px] text-slate-400">
+                Consecutive tool-only turns before a pause checkpoint.
+              </p>
+            </div>
+
+            <div>
+              <Label htmlFor="agent-max-duration" className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Max Duration (seconds)
+              </Label>
+              <Input
+                id="agent-max-duration"
+                type="number"
+                min={30}
+                max={600}
+                step={30}
+                value={agent.maxDurationSeconds ?? 120}
+                disabled={readOnly}
+                onChange={(e) => update('maxDurationSeconds', parseInt(e.target.value, 10) || 120)}
+                className="mt-1"
+              />
+              <p className="mt-1 text-[10px] text-slate-400">
+                Wall-clock timeout for the entire stream.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <h3 className="mb-4 text-sm font-semibold text-slate-800">Avatar</h3>
 
         <div className="mb-5 flex items-center gap-4">

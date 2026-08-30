@@ -35,50 +35,59 @@ import {
 
 const LOG = 'ProvisioningService';
 
+/** Process-wide lock. ProvisioningService is request-scoped (TenantContext), so an instance Set is empty on every GET. */
+const activeProvisioningTenants = new Set<string>();
+
 const DOCX_MIME =
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
-/** Canonical filenames under data/templates/ (spaces, as stored in document.file_name). */
+/** Canonical filenames under data/templates/seed/ (spaces, as stored in document.file_name). */
+const SOW = 'Scope of Work Template.docx';
+const INVOICE = 'Invoice Template.docx';
+const RFQ = 'Request for Quotation Template.docx';
+const PO = 'Purchase Order Template.docx';
+const ASSESSMENT = 'Assessment Template.docx';
+
 const DOCUMENT_TYPE_TO_FILE: Record<AssignableTemplateType, string> = {
-  default: 'SCOPE OF WORK.docx',
-  invoice: 'Invoice Template.docx',
-  bill: 'INVOICE.docx',
-  rfq: 'REQUEST FOR QUOTATION.docx',
-  quote: 'REQUEST FOR QUOTATION.docx',
-  purchase_order: 'REQUEST FOR QUOTATION.docx',
-  work_order: 'SCOPE OF WORK.docx',
-  proposal: 'SCOPE OF WORK.docx',
-  report: 'SCOPE OF WORK.docx',
-  job_details: 'SCOPE OF WORK.docx',
-  scope_of_work: 'SCOPE OF WORK.docx',
-  claim: 'SCOPE OF WORK.docx',
-  contact: 'SCOPE OF WORK.docx',
-  task: 'SCOPE OF WORK.docx',
-  appointment: 'SCOPE OF WORK.docx',
-  message: 'SCOPE OF WORK.docx',
-  journal: 'SCOPE OF WORK.docx',
-  vendor: 'SCOPE OF WORK.docx',
-  assessment: 'ASSESSMENT.docx',
-  document: 'SCOPE OF WORK.docx',
-  jobs_list: 'SCOPE OF WORK.docx',
-  quotes_list: 'SCOPE OF WORK.docx',
-  invoices_list: 'SCOPE OF WORK.docx',
-  bills_list: 'SCOPE OF WORK.docx',
-  work_orders_list: 'SCOPE OF WORK.docx',
-  purchase_orders_list: 'SCOPE OF WORK.docx',
-  proposals_list: 'SCOPE OF WORK.docx',
-  rfqs_list: 'SCOPE OF WORK.docx',
-  reports_list: 'SCOPE OF WORK.docx',
-  claims_list: 'SCOPE OF WORK.docx',
-  contacts_list: 'SCOPE OF WORK.docx',
-  tasks_list: 'SCOPE OF WORK.docx',
-  appointments_list: 'SCOPE OF WORK.docx',
-  messages_list: 'SCOPE OF WORK.docx',
-  journals_list: 'SCOPE OF WORK.docx',
-  vendors_list: 'SCOPE OF WORK.docx',
-  assessments_list: 'SCOPE OF WORK.docx',
-  documents_list: 'SCOPE OF WORK.docx',
-  schedule_list: 'SCOPE OF WORK.docx',
+  default: SOW,
+  invoice: INVOICE,
+  bill: INVOICE,
+  rfq: RFQ,
+  quote: RFQ,
+  purchase_order: PO,
+  work_order: SOW,
+  proposal: SOW,
+  report: SOW,
+  job_details: SOW,
+  scope_of_work: SOW,
+  claim: SOW,
+  contact: SOW,
+  task: SOW,
+  appointment: SOW,
+  message: SOW,
+  journal: SOW,
+  vendor: SOW,
+  assessment: ASSESSMENT,
+  document: SOW,
+  jobs_list: SOW,
+  quotes_list: SOW,
+  invoices_list: SOW,
+  bills_list: SOW,
+  work_orders_list: SOW,
+  purchase_orders_list: SOW,
+  proposals_list: SOW,
+  rfqs_list: SOW,
+  reports_list: SOW,
+  claims_list: SOW,
+  contacts_list: SOW,
+  tasks_list: SOW,
+  appointments_list: SOW,
+  messages_list: SOW,
+  journals_list: SOW,
+  vendors_list: SOW,
+  assessments_list: SOW,
+  documents_list: SOW,
+  schedule_list: SOW,
 };
 
 function normalizeTemplateKey(name: string): string {
@@ -157,7 +166,17 @@ export class ProvisioningService {
       throw new Error(`${LOG}.${fn} — organization not found tenantId=${tenantId}`);
     }
 
-    if (org.provisioningStatus === 'provisioning') {
+    if (org.provisioningStatus === 'provisioning' && activeProvisioningTenants.has(tenantId)) {
+      this.logger.log(`[${LOG}.${fn}] already running in-process tenantId=${tenantId}`);
+      return this.getStatus();
+    }
+
+    // Stale lock after process restart: DB says provisioning but no in-process run.
+    if (org.provisioningStatus === 'provisioning' && !activeProvisioningTenants.has(tenantId)) {
+      this.logger.warn(
+        `[${LOG}.${fn}] stale provisioning lock — resuming tenantId=${tenantId}`,
+      );
+      void this.runProvisioning(tenantId);
       return this.getStatus();
     }
 
@@ -167,17 +186,7 @@ export class ProvisioningService {
       this.logger.log(
         `[${LOG}.${fn}] repair path — re-running template + mcp + lookups steps tenantId=${tenantId}`,
       );
-      try {
-        await this.runStep('upload_templates', tenantId);
-        await this.runStep('assign_document_templates', tenantId);
-        await this.runStep('seed_mcp', tenantId);
-        await this.runStep('seed_lookups', tenantId);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        this.logger.error(
-          `[${LOG}.${fn}] repair failed tenantId=${tenantId}: ${message}`,
-        );
-      }
+      void this.runRepairSteps(tenantId);
       return this.getStatus();
     }
 
@@ -186,17 +195,33 @@ export class ProvisioningService {
       defaultProjectFilesystemTemplateId: options?.defaultProjectFilesystemTemplateId,
     };
 
-    await this.db
-      .update(organizations)
-      .set({
-        provisioningStatus: 'provisioning',
-        provisioningStartedAt: new Date(),
-      })
-      .where(eq(organizations.id, tenantId));
+    void this.runProvisioning(tenantId);
+    return this.getStatus();
+  }
 
-    this.logger.log(`[${LOG}.${fn}] starting provisioning tenantId=${tenantId}`);
+  /**
+   * Runs remaining first-login steps. Safe to call after a process restart
+   * left organizations.provisioning_status stuck at 'provisioning'.
+   */
+  private async runProvisioning(tenantId: string): Promise<void> {
+    const fn = 'runProvisioning';
+    if (activeProvisioningTenants.has(tenantId)) {
+      this.logger.log(`[${LOG}.${fn}] already running tenantId=${tenantId} — skipping`);
+      return;
+    }
+    activeProvisioningTenants.add(tenantId);
 
     try {
+      await this.db
+        .update(organizations)
+        .set({
+          provisioningStatus: 'provisioning',
+          provisioningStartedAt: new Date(),
+        })
+        .where(eq(organizations.id, tenantId));
+
+      this.logger.log(`[${LOG}.${fn}] starting provisioning tenantId=${tenantId}`);
+
       await this.runStep('filesystem_setup', tenantId);
       await this.runStep('upload_templates', tenantId);
       await this.runStep('assign_document_templates', tenantId);
@@ -221,9 +246,22 @@ export class ProvisioningService {
         .update(organizations)
         .set({ provisioningStatus: 'failed' })
         .where(eq(organizations.id, tenantId));
+    } finally {
+      activeProvisioningTenants.delete(tenantId);
     }
+  }
 
-    return this.getStatus();
+  private async runRepairSteps(tenantId: string): Promise<void> {
+    const fn = 'runRepairSteps';
+    try {
+      await this.runStep('upload_templates', tenantId);
+      await this.runStep('assign_document_templates', tenantId);
+      await this.runStep('seed_mcp', tenantId);
+      await this.runStep('seed_lookups', tenantId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`[${LOG}.${fn}] repair failed tenantId=${tenantId}: ${message}`);
+    }
   }
 
   private async runStep(step: ProvisioningStep, tenantId: string): Promise<void> {
@@ -326,47 +364,76 @@ export class ProvisioningService {
       return;
     }
 
-    for (const { fileName, buffer } of templateFiles) {
-      const existingDocs = await this.documentsService.findAll({
-        categoryId: templatesCategory.id,
-        search: fileName,
-        uploadStatus: 'complete',
-      });
-      if (
-        existingDocs.data.some(
-          (d: { fileName: string }) =>
-            d.fileName.toLowerCase() === fileName.toLowerCase(),
-        )
-      ) {
-        this.logger.log(
-          `[${LOG}.stepUploadTemplates] "${fileName}" already exists — skipping`,
+    try {
+      for (const { fileName, buffer } of templateFiles) {
+        const existingDocs = await this.documentsService.findAll({
+          categoryId: templatesCategory.id,
+          search: fileName,
+        });
+        if (
+          existingDocs.data.some(
+            (d: { fileName: string; uploadStatus?: string }) =>
+              d.fileName.toLowerCase() === fileName.toLowerCase() &&
+              d.uploadStatus !== 'failed',
+          )
+        ) {
+          this.logger.log(
+            `[${LOG}.stepUploadTemplates] "${fileName}" already exists — skipping`,
+          );
+          continue;
+        }
+
+        const uploadResult = await this.documentsService.generateUploadUrl({
+          fileName,
+          mimeType: DOCX_MIME,
+          fileSizeBytes: buffer.length,
+          categoryId: templatesCategory.id,
+        });
+
+        await this.storage
+          .bucket(this.bucket)
+          .file(uploadResult.storageKey)
+          .save(buffer, { contentType: DOCX_MIME, resumable: false });
+
+        await this.documentsService.markUploadComplete(
+          uploadResult.documentId,
+          undefined,
+          { skipThumbnail: true },
         );
-        continue;
+
+        this.logger.log(
+          `[${LOG}.stepUploadTemplates] uploaded "${fileName}" id=${uploadResult.documentId}`,
+        );
       }
-
-      const uploadResult = await this.documentsService.generateUploadUrl({
-        fileName,
-        mimeType: DOCX_MIME,
-        fileSizeBytes: buffer.length,
-        categoryId: templatesCategory.id,
-      });
-
-      await this.storage
-        .bucket(this.bucket)
-        .file(uploadResult.storageKey)
-        .save(buffer, { contentType: DOCX_MIME, resumable: false });
-
-      await this.documentsService.markUploadComplete(uploadResult.documentId);
-
-      this.logger.log(
-        `[${LOG}.stepUploadTemplates] uploaded "${fileName}" id=${uploadResult.documentId}`,
-      );
+    } catch (error) {
+      if (this.isLocalGcsPermissionDenied(error)) {
+        this.logger.warn(
+          `[${LOG}.stepUploadTemplates] GCS not writable — skipping Word template upload. ADC is not an account with storage.objects.create on bucket=${this.bucket}. Run: gcloud auth application-default login`,
+        );
+        return;
+      }
+      throw error;
     }
+  }
+
+  /** Local/dev ADC often still points at an account without bucket IAM. */
+  private isLocalGcsPermissionDenied(error: unknown): boolean {
+    if (process.env.NODE_ENV === 'production') return false;
+    const code =
+      error && typeof error === 'object' && 'code' in error
+        ? Number((error as { code: unknown }).code)
+        : NaN;
+    const message = error instanceof Error ? error.message : String(error);
+    return (
+      code === 403 ||
+      message.includes('storage.objects.') ||
+      message.includes('"code": 403')
+    );
   }
 
   /**
    * Load platform templates from GCS platform prefix, falling back to local
-   * `data/templates/` for dev environments where CI hasn't synced to GCS yet.
+   * `data/templates/seed/` for dev environments where CI hasn't synced to GCS yet.
    */
   private async loadPlatformTemplates(): Promise<
     Array<{ fileName: string; buffer: Buffer }>
@@ -400,9 +467,9 @@ export class ProvisioningService {
     }
 
     const localCandidates = [
-      join(process.cwd(), 'data', 'templates'),
-      join(process.cwd(), '../../data/templates'),
-      join(process.cwd(), '../../../data/templates'),
+      join(process.cwd(), 'data', 'templates', 'seed'),
+      join(process.cwd(), '../../data/templates/seed'),
+      join(process.cwd(), '../../../data/templates/seed'),
     ];
     const localDir = localCandidates.find(
       (dir) => existsSync(dir) && readdirSync(dir).some((f) => f.endsWith('.docx')),

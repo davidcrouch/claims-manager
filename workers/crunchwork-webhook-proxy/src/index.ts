@@ -1,8 +1,9 @@
-// Primary: api-server via GCP HTTPS LB (grey-cloud DNS → LB → Cloud Run).
-// The CF Worker intercepts providers-staging.branlamie.com/api/v1/webhooks/crunchwork
-// (orange-cloud DNS) and forwards through the LB to api-server's webhook endpoint.
+// Primary: Cloud Run origin directly (bypasses Cloudflare Workers on the same
+// zone). api-staging.branlamie.com has no DNS record — staging api-server is
+// VPC-internal. The public path /api/v1/webhooks/crunchwork is intercepted by
+// this Worker, so staging receives on the internal path instead.
 const PRIMARY_URL =
-  "https://api-staging.branlamie.com/api/v1/webhooks/crunchwork";
+  "https://provider-server-981956656190.australia-southeast1.run.app/api/v1/internal/webhooks/crunchwork";
 
 // Secondary: dev tunnel for local dual-delivery during development.
 const SECONDARY_URLS = [

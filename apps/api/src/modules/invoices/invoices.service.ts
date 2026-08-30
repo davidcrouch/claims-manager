@@ -15,6 +15,7 @@ import { OutboundEventsService } from '../outbound-events/outbound-events.servic
 import { RecordNumberService } from '../../common/record-number/record-number.service';
 import { CatalogSelectionService } from '../catalog/services/catalog-selection.service';
 import { CatalogOutboundService } from '../catalog/services/catalog-outbound.service';
+import { OutboundSyncService } from '../domain/outbound/outbound-sync.service';
 import {
   applyLocalPricingToCrunchworkInvoiceGroups,
   buildCrunchworkVendorTaxInvoiceCreateBody,
@@ -41,6 +42,7 @@ export class InvoicesService {
     @Optional() private readonly catalogOutbound?: CatalogOutboundService,
     @Optional() private readonly connectionResolver?: ConnectionResolverService,
     @Optional() private readonly outboundEvents?: OutboundEventsService,
+    @Optional() private readonly outboundSync?: OutboundSyncService,
   ) {}
 
   private async resolveConnectionId(tenantId: string): Promise<string | null> {
@@ -280,111 +282,47 @@ export class InvoicesService {
     });
 
     this.logger.log(
-      `${logPrefix} — pushing invoice=${params.id} to provider connectionId=${connectionId} purchaseOrderId=${providerPurchaseOrderId}` +
+      `${logPrefix} — publishing invoice=${params.id} via outbox connectionId=${connectionId} purchaseOrderId=${providerPurchaseOrderId}` +
         (reusedCwInvoiceId ? ` reusingCwInvoiceId=${reusedCwInvoiceId}` : ' invoiceType=Invoice'),
     );
-
-    let apiObj: Record<string, unknown>;
-    let cwInvoiceId: string;
-
-    if (reusedCwInvoiceId) {
-      apiObj = await this.crunchworkService.getInvoice({
-        connectionId,
-        invoiceId: reusedCwInvoiceId,
-      });
-      cwInvoiceId = reusedCwInvoiceId;
-    } else {
-      try {
-        apiObj = await this.crunchworkService.createInvoice({
-          connectionId,
-          body: buildCrunchworkVendorTaxInvoiceCreateBody({
-            purchaseOrderId: providerPurchaseOrderId,
-          }),
-        });
-      } catch (err) {
-        const recoveredId = await this.resolveExistingCrunchworkInvoiceId({
-          tenantId,
-          invoice: existing,
-        });
-        if (!recoveredId) throw err;
-        this.logger.warn(
-          `${logPrefix} — create rejected; reusing existing Crunchwork invoice ${recoveredId}`,
-        );
-        apiObj = await this.crunchworkService.getInvoice({
-          connectionId,
-          invoiceId: recoveredId,
-        });
-      }
-      const createdId = apiObj.id as string | undefined;
-      if (!createdId) {
-        throw new BadRequestException(
-          'Provider did not return an invoice id after publish',
-        );
-      }
-      cwInvoiceId = createdId;
-    }
-
-    const issueDateIso = existing.issueDate
-      ? existing.issueDate instanceof Date
-        ? existing.issueDate.toISOString()
-        : String(existing.issueDate)
-      : undefined;
-
-    let apiObjAfterGroups = apiObj;
-    try {
-      apiObjAfterGroups = await this.applyCrunchworkInvoiceGroupPricing({
-        logPrefix,
-        connectionId,
-        cwInvoiceId,
-        createResponse: apiObj,
-        purchaseOrderId: existing.purchaseOrderId,
-        workOrderId: existing.workOrderId,
-        vendorInvoiceNumber: existing.invoiceNumber,
-        issueDate: issueDateIso,
-        note: existing.comments,
-      });
-    } catch (err) {
-      this.logger.error(
-        `${logPrefix} — Crunchwork invoice ${cwInvoiceId} group totals failed: ` +
-          `${err instanceof Error ? err.message : String(err)}`,
-      );
-      throw err;
-    }
 
     const submittedStatusId = await this.resolveStatusLookupId({
       tenantId,
       name: 'Submitted',
     });
 
-    // UI titles use invoiceNumber; CW returns a display name plus a numeric invoiceNumber.
-    const cwInvoiceNumber =
-      (typeof apiObjAfterGroups.name === 'string' && apiObjAfterGroups.name.trim()
-        ? apiObjAfterGroups.name.trim()
-        : null) ??
-      (apiObjAfterGroups.invoiceNumber != null
-        ? String(apiObjAfterGroups.invoiceNumber)
-        : existing.invoiceNumber);
-
     await this.invoicesRepo.update({
       id: params.id,
       data: {
-        sourceExternalReference: cwInvoiceId,
         statusLookupId: submittedStatusId ?? existing.statusLookupId,
-        invoiceNumber: cwInvoiceNumber ?? existing.invoiceNumber,
-        subTotal: preferExistingAmount(apiObjAfterGroups.subTotal, existing.subTotal),
-        totalTax: preferExistingAmount(apiObjAfterGroups.totalTax, existing.totalTax),
-        totalAmount: preferExistingAmount(
-          apiObjAfterGroups.totalAmount ?? apiObjAfterGroups.total,
-          existing.totalAmount,
-        ),
-        invoicePayload: apiObjAfterGroups,
+        syncStatus: 'pending',
         ...(params.userId ? { updatedByUserId: params.userId } : {}),
       },
     });
 
-    this.logger.log(
-      `${logPrefix} — published invoice=${params.id} providerId=${cwInvoiceId}`,
-    );
+    if (this.outboundSync) {
+      try {
+        await this.outboundSync.enqueue({
+          tenantId,
+          connectionId,
+          entityType: 'invoice',
+          entityId: params.id,
+          action: 'publish',
+          payload: {
+            purchaseOrderId: providerPurchaseOrderId,
+            reusedCwInvoiceId,
+            invoiceId: params.id,
+          },
+          sourceEvent: 'api:publish',
+          idempotencyKey: `invoice:${params.id}:publish`,
+          tx: this.outboundSync['db'],
+        });
+      } catch (err) {
+        this.logger.warn(
+          `InvoicesService.publish — failed to enqueue outbound sync for invoice ${params.id}: ${err instanceof Error ? err.message : err}`,
+        );
+      }
+    }
 
     return this.invoicesRepo.findOne({ id: params.id, tenantId });
   }

@@ -61,7 +61,10 @@ instructionPrompt: |
   - Specialists → journals (specialist mentions), reports
   - Recommendation → ALL sources combined, especially claim event type and prior reports
 
-  After all tabs, offer to validate with validate_assessment and publish with publish_assessment.
+  After all tabs, offer to validate with validate_assessment.
+  Do NOT publish — Crunchwork / NRMA does not support Field Assessment reports.
+  Ask the user to print the assessment and call open_print_assessment so the Print
+  report drawer opens (assessment detail PDF via the report generator).
 
   Rules: Never invent dates, people, costs, or recommendations. Cite evidence sources.
   If unsure, ask.
@@ -149,7 +152,7 @@ requiredToolRefs:
   - integration: Claims Operations
     tool: validate_assessment
   - integration: Claims Operations
-    tool: publish_assessment
+    tool: open_print_assessment
 category: assessments
 invocationMode: inline
 includeHistory: true

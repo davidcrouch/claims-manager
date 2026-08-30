@@ -12,6 +12,8 @@
  * (they are not on CreateVendorTaxInvoiceInput and can prevent the PO clone).
  */
 
+import { copyUnitCostToBuyCostForCrunchwork } from '../catalog/catalog.utils';
+
 type JsonObject = Record<string, unknown>;
 
 /**
@@ -94,7 +96,8 @@ export function pickCrunchworkInvoiceIdForPurchaseOrder(params: {
 
 /**
  * Copy local unitCost/quantity/tax/markup onto CW-cloned invoice groups and
- * mark every line completed so CW will compute group totals.
+ * mark every line completed so CW will compute group totals. buyCost on the
+ * outbound payload is always a copy of unitCost.
  */
 export function applyLocalPricingToCrunchworkInvoiceGroups(params: {
   cwGroups: JsonObject[];
@@ -165,7 +168,7 @@ function toInvoiceUpdateItem(item: JsonObject): JsonObject | null {
   const out: JsonObject = { id: item.id, completed: true };
   copyNumberIfPresent(item, out, 'quantity');
   copyNumberIfPresent(item, out, 'unitCost');
-  copyNumberIfPresent(item, out, 'buyCost');
+  copyUnitCostToBuyCostForCrunchwork(out);
   copyNumberIfPresent(item, out, 'tax');
   copyNumberIfPresent(item, out, 'markupValue');
   if (typeof item.markupType === 'string' && item.markupType) {
@@ -214,13 +217,13 @@ function overlayItems(params: {
       applyItemPricing(cwItem, params.localItems[localIdx]);
     }
     cwItem.completed = true;
+    copyUnitCostToBuyCostForCrunchwork(cwItem);
   }
 }
 
 const PRICING_FIELDS = [
   'quantity',
   'unitCost',
-  'buyCost',
   'tax',
   'markupType',
   'markupValue',

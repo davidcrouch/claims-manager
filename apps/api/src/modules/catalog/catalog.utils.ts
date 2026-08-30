@@ -192,6 +192,17 @@ export function parseDecimal(value: string | null | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/**
+ * Crunchwork item create/update accepts both unitCost (resell) and buyCost
+ * (wholesale). Local catalogue/quote/invoice rows keep those fields separate;
+ * on outbound always copy unitCost onto buyCost so a single maintained rate
+ * is pushed.
+ */
+export function copyUnitCostToBuyCostForCrunchwork(item: Record<string, unknown>): void {
+  if (item.unitCost == null || item.unitCost === '') return;
+  item.buyCost = item.unitCost;
+}
+
 export function formatDecimal(value: number, scale = 4): string {
   return value.toFixed(scale);
 }

@@ -951,6 +951,10 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<Task>(`/tasks/${id}`, { method: 'POST', body: JSON.stringify(body) });
     },
 
+    retrySyncStatus(entityType: string, entityId: string): Promise<{ success: boolean; syncStatus: string }> {
+      return fetchApi<{ success: boolean; syncStatus: string }>(`/outbound-sync/${entityType}/${entityId}/retry`, { method: 'POST' });
+    },
+
     listOrgUsersForSelect(): Promise<{ id: string; type: 'USER'; name: string; email?: string }[]> {
       return fetchApi(`/contacts/search-users?limit=100`);
     },

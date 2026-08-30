@@ -214,7 +214,11 @@ export class DocumentsService {
     return { uploads: results };
   }
 
-  async markUploadComplete(documentId: string, thumbnailObjectPath?: string) {
+  async markUploadComplete(
+    documentId: string,
+    thumbnailObjectPath?: string,
+    options?: { skipThumbnail?: boolean },
+  ) {
     const logPrefix = 'DocumentsService.markUploadComplete';
     const tenantId = this.tenantContext.getTenantId();
     const doc = await this.documentsRepo.findOne(documentId, tenantId);
@@ -222,43 +226,45 @@ export class DocumentsService {
 
     const metadata = await this.gcsStorage.getMetadata(doc.gcsObjectPath);
 
-    let resolvedThumbnailPath = thumbnailObjectPath ?? null;
-
-    // Client only generates thumbnails for images/PDFs. Word: LibreOffice, or .docx text preview.
-    if (!resolvedThumbnailPath && this.isWordDocument(doc.mimeType, doc.fileName)) {
-      try {
-        resolvedThumbnailPath = await this.generateWordThumbnail({
-          tenantId,
-          documentId,
-          gcsObjectPath: doc.gcsObjectPath,
-          fileName: doc.fileName,
-        });
-      } catch (error) {
-        const err = error as Error;
-        this.logger.warn(
-          `${logPrefix} — word thumbnail failed docId=${documentId}: ${err.message}`,
-        );
-      }
-    }
-
-    const thumbnailUri = resolvedThumbnailPath
-      ? `https://storage.googleapis.com/${doc.gcsBucket}/${resolvedThumbnailPath}`
-      : doc.mimeType?.startsWith('image/')
+    const clientThumbnailUri = thumbnailObjectPath
+      ? `https://storage.googleapis.com/${doc.gcsBucket}/${thumbnailObjectPath}`
+      : null;
+    const imageFallbackUri =
+      !clientThumbnailUri && doc.mimeType?.startsWith('image/')
         ? `https://storage.googleapis.com/${doc.gcsBucket}/${doc.gcsObjectPath}`
         : null;
+    const initialThumbnailUri = clientThumbnailUri ?? imageFallbackUri ?? null;
 
-    const updateData: Record<string, unknown> = {
+    const completeData: Record<string, unknown> = {
       uploadStatus: 'complete',
-      ...(thumbnailUri ? { thumbnailUri } : {}),
+      ...(initialThumbnailUri ? { thumbnailUri: initialThumbnailUri } : {}),
     };
     if (metadata) {
-      updateData.fileSizeBytes = metadata.size;
+      completeData.fileSizeBytes = metadata.size;
     }
 
-    const updated = await this.documentsRepo.update(documentId, tenantId, updateData);
+    // Persist complete before Word thumbnail work. LibreOffice conversion can
+    // exceed the 15s client timeout; aborting must not leave the row pending or
+    // the document-templates admin page hides the file.
+    const updated = await this.documentsRepo.update(documentId, tenantId, completeData);
     this.logger.debug(
-      `${logPrefix} — docId=${documentId} verified=${!!metadata} thumbnail=${!!thumbnailUri}`,
+      `${logPrefix} — docId=${documentId} status=complete verified=${!!metadata}`,
     );
+
+    if (
+      !options?.skipThumbnail &&
+      !thumbnailObjectPath &&
+      this.isWordDocument(doc.mimeType, doc.fileName)
+    ) {
+      this.attachWordThumbnailInBackground({
+        tenantId,
+        documentId,
+        gcsBucket: doc.gcsBucket,
+        gcsObjectPath: doc.gcsObjectPath,
+        fileName: doc.fileName,
+        mimeType: doc.mimeType,
+      });
+    }
 
     // Enqueue matching pipelines (executeRun stays background). Await enqueue so
     // the response includes pipelineStatus pending | skipped.
@@ -317,28 +323,7 @@ export class DocumentsService {
       (params.fileName.toLowerCase().endsWith('.docx') ||
         (params.buffer.length >= 2 && params.buffer[0] === 0x50 && params.buffer[1] === 0x4b));
 
-    try {
-      const pngBuffer = await this.officeConverter.convertToPng({
-        buffer: params.buffer,
-        sourceFileName: this.officeThumbnailSourceName(params.fileName, params.mimeType),
-      });
-      const thumbnailObjectPath = `tenants/${params.tenantId}/documents/${params.documentId}/thumbnail.png`;
-      await this.gcsStorage.uploadBuffer({
-        objectPath: thumbnailObjectPath,
-        buffer: pngBuffer,
-        contentType: 'image/png',
-      });
-      this.logger.debug(
-        `${logPrefix} — docId=${params.documentId} uploaded png ${pngBuffer.length} bytes to ${thumbnailObjectPath}`,
-      );
-      return thumbnailObjectPath;
-    } catch (error) {
-      if (isPdf || !isDocx) throw error;
-      this.logger.warn(
-        `${logPrefix} — LibreOffice unavailable, using docx text preview docId=${params.documentId}: ${
-          error instanceof Error ? error.message : error
-        }`,
-      );
+    if (isDocx) {
       const svgBuffer = renderDocxPreviewSvg(params.buffer, params.fileName);
       const thumbnailObjectPath = `tenants/${params.tenantId}/documents/${params.documentId}/thumbnail.svg`;
       await this.gcsStorage.uploadBuffer({
@@ -347,10 +332,57 @@ export class DocumentsService {
         contentType: 'image/svg+xml',
       });
       this.logger.debug(
-        `${logPrefix} — docId=${params.documentId} uploaded svg ${svgBuffer.length} bytes to ${thumbnailObjectPath}`,
+        `${logPrefix} — docId=${params.documentId} uploaded svg ${svgBuffer.length} bytes (skip LibreOffice png)`,
       );
       return thumbnailObjectPath;
     }
+
+    const pngBuffer = await this.officeConverter.convertToPng({
+      buffer: params.buffer,
+      sourceFileName: this.officeThumbnailSourceName(params.fileName, params.mimeType),
+    });
+    const thumbnailObjectPath = `tenants/${params.tenantId}/documents/${params.documentId}/thumbnail.png`;
+    await this.gcsStorage.uploadBuffer({
+      objectPath: thumbnailObjectPath,
+      buffer: pngBuffer,
+      contentType: 'image/png',
+    });
+    this.logger.debug(
+      `${logPrefix} — docId=${params.documentId} uploaded png ${pngBuffer.length} bytes to ${thumbnailObjectPath}`,
+    );
+    return thumbnailObjectPath;
+  }
+
+  private attachWordThumbnailInBackground(params: {
+    tenantId: string;
+    documentId: string;
+    gcsBucket: string;
+    gcsObjectPath: string;
+    fileName: string;
+    mimeType?: string | null;
+  }): void {
+    const logPrefix = 'DocumentsService.attachWordThumbnailInBackground';
+    void this.generateWordThumbnail({
+      tenantId: params.tenantId,
+      documentId: params.documentId,
+      gcsObjectPath: params.gcsObjectPath,
+      fileName: params.fileName,
+      mimeType: params.mimeType,
+    })
+      .then(async (objectPath) => {
+        const thumbnailUri = `https://storage.googleapis.com/${params.gcsBucket}/${objectPath}`;
+        await this.documentsRepo.update(params.documentId, params.tenantId, { thumbnailUri });
+        this.logger.debug(
+          `${logPrefix} — docId=${params.documentId} thumbnail=${objectPath}`,
+        );
+      })
+      .catch((error) => {
+        this.logger.warn(
+          `${logPrefix} — docId=${params.documentId}: ${
+            error instanceof Error ? error.message : error
+          }`,
+        );
+      });
   }
 
   private async generateWordThumbnail(params: {

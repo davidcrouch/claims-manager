@@ -32,6 +32,7 @@ import {
   buildItemSnapshotFields,
   catalogItemAllowsProvider,
   computeLineTotals,
+  copyUnitCostToBuyCostForCrunchwork,
   formatDecimal,
   hoistProviderCombos,
   isCatalogBomParentKind,
@@ -1781,7 +1782,7 @@ export class CatalogSelectionService {
       if (row.quantity) result.quantity = parseDecimal(row.quantity);
       if (row.tax) result.tax = rateToPercentPoints(parseDecimal(row.tax));
       if (row.unitCost) result.unitCost = parseDecimal(row.unitCost);
-      if (row.buyCost) result.buyCost = parseDecimal(row.buyCost);
+      copyUnitCostToBuyCostForCrunchwork(result);
       const cwMarkup = normaliseCwMarkupType(row.markupType);
       if (cwMarkup) result.markupType = cwMarkup;
       if (row.markupValue) {
@@ -2178,9 +2179,7 @@ export class CatalogSelectionService {
       if (row.unitCost != null && row.unitCost !== '') {
         result.unitCost = parseDecimal(row.unitCost);
       }
-      if (row.buyCost != null && row.buyCost !== '') {
-        result.buyCost = parseDecimal(row.buyCost);
-      }
+      copyUnitCostToBuyCostForCrunchwork(result);
       const cwMarkup = normaliseCwMarkupType(row.markupType);
       if (cwMarkup) result.markupType = cwMarkup;
       if (row.markupValue != null && row.markupValue !== '') {

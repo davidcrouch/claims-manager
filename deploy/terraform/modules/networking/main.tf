@@ -37,8 +37,7 @@ resource "google_compute_network" "vpc" {
   depends_on = [google_project_service.networking_apis]
 }
 
-# Primary private subnet for Cloud Run Direct VPC / VMs.
-# Name defaults to claims-manager-private-<env> (not GKE-specific).
+# Primary private subnet for Cloud Run Direct VPC.
 resource "google_compute_subnetwork" "private" {
   name                     = local.subnet_name
   project                  = var.project_id

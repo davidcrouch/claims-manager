@@ -1,13 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { convertWithOptions } from 'libreoffice-convert';
 import { existsSync, readdirSync } from 'fs';
-import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
-import { delimiter, join } from 'path';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
-
-const execFileAsync = promisify(execFile);
+import { delimiter, dirname, join } from 'path';
+import { spawn } from 'child_process';
+import { pathToFileURL } from 'url';
 
 const SOFFICE_CANDIDATES = [
   process.env.LIBREOFFICE_PATH,
@@ -90,15 +87,18 @@ function sofficeFromProgramFolders(): string[] {
   return found;
 }
 
+const CONVERT_TIMEOUT_MS = 60_000;
+
 @Injectable()
 export class OfficeConverterService {
   private readonly logger = new Logger('OfficeConverterService');
   private resolvedSoffice: string | null | undefined;
   private resolvedWinWord: string | null | undefined;
   private wordQueue: Promise<unknown> = Promise.resolve();
+  private loQueue: Promise<unknown> = Promise.resolve();
 
   isAvailable(): boolean {
-    return this.resolveSofficeBinary() != null;
+    return this.resolveSofficeBinary() != null || this.resolveWinWordBinary() != null;
   }
 
   resolveSofficeBinary(): string | null {
@@ -184,26 +184,139 @@ export class OfficeConverterService {
     sourceFileName: string;
     soffice: string;
   }): Promise<Buffer> {
-    return new Promise<Buffer>((resolve, reject) => {
-      convertWithOptions(
-        params.buffer,
-        params.format,
-        undefined,
-        {
-          sofficeBinaryPaths: [params.soffice],
-          fileName: params.sourceFileName,
-        },
-        (err, result) => {
-          if (err) reject(err);
-          else if (!result?.length) reject(new Error(`${params.format} conversion returned empty buffer`));
-          else resolve(result);
-        },
+    const run = () => this.convertWithLibreOfficeOnce(params);
+    const queued = this.loQueue.then(run, run);
+    this.loQueue = queued.then(
+      () => undefined,
+      () => undefined,
+    );
+    return queued;
+  }
+
+  private async convertWithLibreOfficeOnce(params: {
+    buffer: Buffer;
+    format: 'pdf' | 'png';
+    sourceFileName: string;
+    soffice: string;
+  }): Promise<Buffer> {
+    const logPrefix = 'OfficeConverterService.convertWithLibreOfficeOnce';
+    const dir = await mkdtemp(join(tmpdir(), 'cm-lo-'));
+    const profileDir = join(dir, 'profile');
+    const outDir = join(dir, 'out');
+    const sourcePath = join(dir, params.sourceFileName);
+    await mkdir(profileDir, { recursive: true });
+    await mkdir(outDir, { recursive: true });
+    await writeFile(sourcePath, params.buffer);
+
+    const args = [
+      '--headless',
+      '--norestore',
+      '--nolockcheck',
+      '--nologo',
+      '--nodefault',
+      '--nofirststartwizard',
+      `-env:UserInstallation=${pathToFileURL(profileDir).href}`,
+      '--convert-to',
+      params.format,
+      '--outdir',
+      outDir,
+      sourcePath,
+    ];
+
+    try {
+      await this.runProcess(params.soffice, args, CONVERT_TIMEOUT_MS);
+      const produced = (await readdir(outDir)).find((name) =>
+        name.toLowerCase().endsWith(`.${params.format}`),
       );
+      if (!produced) {
+        throw new Error(`${params.format} conversion produced no output`);
+      }
+      const output = await readFile(join(outDir, produced));
+      if (!output.length) {
+        throw new Error(`${params.format} conversion returned empty buffer`);
+      }
+      this.logger.debug(
+        `${logPrefix} — format=${params.format} complete bytes=${output.length}`,
+      );
+      return output;
+    } finally {
+      await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
+
+  private runProcess(bin: string, args: string[], timeoutMs: number): Promise<void> {
+    const logPrefix = 'OfficeConverterService.runProcess';
+    return new Promise((resolve, reject) => {
+      const child = spawn(bin, args, {
+        cwd: dirname(bin),
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      let stdout = '';
+      let stderr = '';
+      child.stdout?.on('data', (chunk) => {
+        stdout += String(chunk);
+      });
+      child.stderr?.on('data', (chunk) => {
+        stderr += String(chunk);
+      });
+
+      let settled = false;
+      const finish = (err?: Error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (err) reject(err);
+        else resolve();
+      };
+
+      const timer = setTimeout(() => {
+        this.logger.warn(
+          `${logPrefix} — timed out after ${timeoutMs}ms bin=${bin} pid=${child.pid}`,
+        );
+        this.killProcessTree(child.pid);
+        finish(new Error(`Office conversion timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+
+      child.on('error', (err) => finish(err));
+      child.on('close', (code) => {
+        if (code === 0) {
+          finish();
+          return;
+        }
+        const detail = (stderr || stdout).trim().slice(0, 500);
+        finish(
+          new Error(
+            `Office converter exited ${code}${detail ? `: ${detail}` : ''}`,
+          ),
+        );
+      });
     });
+  }
+
+  private killProcessTree(pid: number | undefined): void {
+    if (!pid) return;
+    if (process.platform === 'win32') {
+      spawn('taskkill', ['/pid', String(pid), '/T', '/F'], {
+        windowsHide: true,
+        stdio: 'ignore',
+      });
+      return;
+    }
+    try {
+      process.kill(-pid, 'SIGKILL');
+    } catch {
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch {
+        /* already gone */
+      }
+    }
   }
 
   private convertPdfWithWord(buffer: Buffer): Promise<Buffer> {
     const run = async () => {
+      const logPrefix = 'OfficeConverterService.convertPdfWithWord';
       const dir = await mkdtemp(join(tmpdir(), 'cm-word-pdf-'));
       const docxPath = join(dir, 'source.docx');
       const pdfPath = join(dir, 'source.pdf');
@@ -211,7 +324,7 @@ export class OfficeConverterService {
       try {
         await writeFile(docxPath, buffer);
         await writeFile(scriptPath, WORD_CONVERT_PS1, 'utf8');
-        await execFileAsync(
+        await this.runProcess(
           'powershell.exe',
           [
             '-NoProfile',
@@ -225,11 +338,12 @@ export class OfficeConverterService {
             '-Pdf',
             pdfPath,
           ],
-          { timeout: 120_000, windowsHide: true },
+          CONVERT_TIMEOUT_MS,
         );
         if (!existsSync(pdfPath)) {
           throw new Error('Microsoft Word did not produce a PDF');
         }
+        this.logger.debug(`${logPrefix} — produced ${pdfPath}`);
         return await readFile(pdfPath);
       } finally {
         await rm(dir, { recursive: true, force: true }).catch(() => undefined);

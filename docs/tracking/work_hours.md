@@ -1026,3 +1026,14 @@
   Sign-in recovers more cleanly from an old session, and password reset is more reliable.
   The same insurer record can no longer create two work orders from one purchase order.
 
+- `2026-08-30` `pending` **16 h**
+  `151 files | +5 029 −1 989 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
+  Lay summary: Jobs, tasks, and appointments now show whether they have reached the insurer, the in-app assistant follows the page and assessment section you are on, and printing and sign-in are more reliable.
+  **Insurer sync status across jobs, tasks, and appointments, plus a page-aware in-app assistant.**
+  Staff can see when a job, task, or appointment is still sending, has arrived, or failed to reach the insurer, and failed sends retry automatically.
+  The in-app assistant follows the current page and, on assessments, the active section so suggestions match the work in front of you.
+  Assessments can be printed from the record, and organisation assistants can be configured to act with less manual prompting.
+  Document templates for invoices and related paperwork sit in a dedicated folder so new environments start with the right forms.
+  Sign-in and organisation setup handle hosted database connections more reliably, and the assistant tools connection follows standard sign-in discovery.
+  Unused hosting access was removed so insurer webhook and cloud services use a simpler, tighter setup.
+

@@ -17,9 +17,6 @@ import {
   Droplets,
   ExternalLink,
   Clock,
-  Paperclip,
-  MessageSquare,
-  ListTodo,
   UserCheck,
 } from 'lucide-react';
 import {
@@ -56,9 +53,6 @@ import {
   type Dict,
 } from '@/components/shared/detail';
 import { LocationMap } from '@/components/shared/LocationMap';
-import { EntityAttachmentsTab } from '@/components/shared/EntityAttachmentsTab';
-import { EntityMessagesTab } from '@/components/shared/EntityMessagesTab';
-import { MessageFormDrawer } from '@/components/forms/MessageFormDrawer';
 import { JobFormDrawer } from '@/components/forms/JobFormDrawer';
 import {
   toJobFormClaimOption,
@@ -845,20 +839,6 @@ function ComplianceTab({ claim }: { claim: Claim }) {
   );
 }
 
-function ActivitiesTab() {
-  return (
-    <Card>
-      <CardContent className="py-8 text-center">
-        <p className="text-sm text-muted-foreground">
-          Tasks and appointments linked to this claim will appear here once the
-          activities API is connected.
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
-
-
 function TimelineTab({ claim }: { claim: Claim }) {
   const api = getApi(claim);
   const custom = getCustomData(claim);
@@ -945,10 +925,7 @@ type ClaimTab =
   | 'parties'
   | 'jobs'
   | 'compliance'
-  | 'activities'
-  | 'communications'
-  | 'timeline'
-  | 'attachments';
+  | 'timeline';
 
 export function ClaimDetail({
   claim,
@@ -961,7 +938,6 @@ export function ClaimDetail({
 }) {
   const jobs = claim.jobs ?? [];
   const [tab, setTab] = useState<ClaimTab>('overview');
-  const [messageDrawerOpen, setMessageDrawerOpen] = useState(false);
   const [jobDrawerOpen, setJobDrawerOpen] = useState(false);
 
   const claimOptions: JobFormClaimOption[] = [toJobFormClaimOption(claim)];
@@ -983,10 +959,7 @@ export function ClaimDetail({
       count: jobs.length > 0 ? jobs.length : undefined,
     },
     { id: 'compliance', label: 'Compliance', icon: ShieldAlert },
-    { id: 'activities', label: 'Activities', icon: ListTodo },
-    { id: 'communications', label: 'Communications', icon: MessageSquare },
     { id: 'timeline', label: 'Timeline', icon: Clock },
-    { id: 'attachments', label: 'Attachments', icon: Paperclip },
   ];
 
   return (
@@ -1000,16 +973,6 @@ export function ClaimDetail({
           <Briefcase className="h-3.5 w-3.5" />
           Create Job
         </Button>
-        {tab === 'communications' ? (
-          <Button
-            size="default"
-            onClick={() => setMessageDrawerOpen(true)}
-            className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
-          >
-            <Mail className="h-3.5 w-3.5" />
-            Send Message
-          </Button>
-        ) : null}
         <HeaderActionToolbar>
           <PrintButton documentType="claim" entityId={claim.id} />
           <ArchiveEntityButton
@@ -1029,10 +992,7 @@ export function ClaimDetail({
             <button
               key={t.id}
               type="button"
-                onClick={() => {
-                  if (t.id !== 'communications') setMessageDrawerOpen(false);
-                  setTab(t.id);
-                }}
+              onClick={() => setTab(t.id)}
               className={`inline-flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t-md ${
                 active
                   ? 'border-blue-600 bg-blue-50 text-blue-600'
@@ -1068,16 +1028,8 @@ export function ClaimDetail({
           />
         )}
         {tab === 'compliance' && <ComplianceTab claim={claim} />}
-        {tab === 'activities' && <ActivitiesTab />}
-        {tab === 'communications' && <EntityMessagesTab entityId={claim.id} entityType="claim" />}
         {tab === 'timeline' && <TimelineTab claim={claim} />}
-        {tab === 'attachments' && <EntityAttachmentsTab entityId={claim.id} relatedRecordType="Claim" entityLabel="this claim" />}
       </div>
-      <MessageFormDrawer
-        open={messageDrawerOpen}
-        onOpenChange={setMessageDrawerOpen}
-        claimId={claim.id}
-      />
       <JobFormDrawer
         open={jobDrawerOpen}
         onOpenChange={setJobDrawerOpen}

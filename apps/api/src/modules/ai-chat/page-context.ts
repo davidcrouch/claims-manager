@@ -28,14 +28,14 @@ const ENTITY_MAP: Record<string, PageEntityMapping> = {
     detailDocType: 'assessment',
     listDocType: 'assessments_list',
     listHints: [
-      'Create a new assessment for this job',
-      'Open and edit existing assessments',
-      'Search or filter the assessment list',
+      'Say "create assessment" and I\'ll review all journals (photos, notes), job info, claim details, contacts, and appointments to pre-fill every section',
+      'Say "new assessment" for a blank form to fill manually',
+      'Search or filter existing assessments',
     ],
     detailHints: [
-      'Edit assessment sections (building, hazards, etc.)',
-      'Validate or publish this assessment',
-      'Review section completion status',
+      'I can fill the current tab using journals, photos, and data from other completed sections',
+      'Say "complete all tabs" to walk through every remaining section',
+      'When the assessment is complete, ask me to print it to generate the assessment detail report',
     ],
   },
   job: {
@@ -201,6 +201,61 @@ const ENTITY_MAP: Record<string, PageEntityMapping> = {
     listHints: ['Schedule a new appointment', 'View upcoming appointments'],
     detailHints: ['Reschedule', 'Cancel appointment'],
   },
+  catalog: {
+    category: 'catalog',
+    label: 'Catalogues',
+    listHints: [
+      'Create a new catalogue',
+      'Browse or search catalogues',
+      'Import catalogue items from CSV',
+    ],
+    detailHints: [
+      'Add or edit catalogue items (primitives, assemblies, scopes)',
+      'Manage categories and types',
+      'Compose BOM (bill of materials) for assemblies and scopes',
+      'Open a catalogue form or item form for editing',
+    ],
+  },
+  'agent-config': {
+    category: 'agents',
+    label: 'Agents',
+    listHints: [
+      'Create a new agent',
+      'Browse existing agent configurations',
+      'Configure agent tools, skills, and connections',
+    ],
+    detailHints: [
+      'Edit agent system prompt and model settings',
+      'Configure enabled tools and MCP connections',
+      'Manage pinned skills',
+    ],
+  },
+  'capability-pack': {
+    category: 'capability-packs',
+    label: 'Capability Packs',
+    listHints: [
+      'Browse available capability packs',
+      'Install or uninstall packs',
+    ],
+    detailHints: [
+      'View pack contents (agents, skills, connections)',
+      'Install or update this pack',
+    ],
+  },
+  connection: {
+    category: 'connections',
+    label: 'Connections',
+    listHints: [
+      'Browse MCP connections',
+      'Add a new connection',
+      'Check connection status',
+    ],
+    detailHints: [
+      'Edit connection settings',
+      'View available tools',
+      'Test connectivity',
+    ],
+  },
 };
 
 /**
@@ -289,6 +344,147 @@ function formatPageDataSummary(documentType: string, data: TemplateData): string
   return lines.join('\n');
 }
 
+// ── Assessment tab-aware context helpers ──
+
+const ASSESSMENT_TAB_LABELS: Record<string, string> = {
+  attendance: 'Attendance',
+  building: 'Building',
+  habitability: 'Habitability',
+  hazards: 'Hazards',
+  damage: 'Damage & Cause',
+  makeSafe: 'Make Safe',
+  temporaryAccommodation: 'Temp Accommodation',
+  specialists: 'Specialists',
+  recommendation: 'Recommendation',
+};
+
+type SectionStatus = 'complete' | 'partial' | 'empty';
+
+function isSectionEmpty(section: unknown): boolean {
+  if (!section || typeof section !== 'object' || Array.isArray(section)) return true;
+  const dict = section as Record<string, unknown>;
+  return Object.values(dict).every(
+    (v) => v === null || v === undefined || v === '' || v === false,
+  );
+}
+
+function classifySectionStatus(section: unknown): SectionStatus {
+  if (isSectionEmpty(section)) return 'empty';
+  const dict = section as Record<string, unknown>;
+  const values = Object.values(dict);
+  const filled = values.filter(
+    (v) => v !== null && v !== undefined && v !== '' && v !== false,
+  );
+  if (filled.length >= values.length * 0.6) return 'complete';
+  return 'partial';
+}
+
+interface AssessmentSectionSummaryField {
+  key: string;
+  label: string;
+}
+
+const SECTION_SUMMARY_FIELDS: Record<string, AssessmentSectionSummaryField[]> = {
+  attendance: [
+    { key: 'date_booked', label: 'Site visit' },
+    { key: 'persons_attending', label: 'Attendees' },
+    { key: 'builder_estimator_name', label: 'Builder/estimator' },
+    { key: 'occupancy_type', label: 'Occupancy' },
+  ],
+  building: [
+    { key: 'building_type', label: 'Type' },
+    { key: 'construction', label: 'Construction' },
+    { key: 'roof_type', label: 'Roof' },
+    { key: 'design_type', label: 'Design' },
+  ],
+  habitability: [
+    { key: 'habitable', label: 'Habitable' },
+    { key: 'uninhabitable_reason', label: 'Reason' },
+  ],
+  hazards: [
+    { key: 'safety_hazards', label: 'Safety' },
+    { key: 'environmental_hazards', label: 'Environmental' },
+  ],
+  damage: [
+    { key: 'resultant_damage', label: 'Damage observed' },
+    { key: 'cause_of_damage', label: 'Cause' },
+    { key: 'damage_caused_by_listed_event', label: 'Covered by policy' },
+  ],
+  makeSafe: [
+    { key: 'make_safe', label: 'Required' },
+    { key: 'make_safe_type', label: 'Type' },
+  ],
+  temporaryAccommodation: [
+    { key: 'temp_accom_required', label: 'Required' },
+    { key: 'temp_accom_estimated_duration', label: 'Duration' },
+  ],
+  specialists: [
+    { key: 'specialist_required', label: 'Required' },
+    { key: 'specialist_type', label: 'Type' },
+  ],
+  recommendation: [
+    { key: 'claim_recommendation', label: 'Recommendation' },
+    { key: 'cost_estimate_for_repairs', label: 'Cost estimate' },
+  ],
+};
+
+function formatAssessmentSectionContext(
+  data: TemplateData,
+  activeTab?: string,
+): string {
+  const statusLines: string[] = ['Section Completion:'];
+  const crossTabLines: string[] = [];
+
+  for (const [sectionKey, label] of Object.entries(ASSESSMENT_TAB_LABELS)) {
+    const summaryFields = SECTION_SUMMARY_FIELDS[sectionKey] ?? [];
+    const filledFields = summaryFields.filter(
+      (f) => data[f.key] && String(data[f.key]).trim() && String(data[f.key]) !== 'No',
+    );
+
+    let status: SectionStatus;
+    if (filledFields.length === 0) {
+      status = 'empty';
+    } else if (filledFields.length >= summaryFields.length * 0.6) {
+      status = 'complete';
+    } else {
+      status = 'partial';
+    }
+
+    const marker = sectionKey === activeTab ? ' (current tab)' : '';
+    statusLines.push(`  - ${label}: ${status}${marker}`);
+
+    if (status !== 'empty' && sectionKey !== activeTab) {
+      const snippets = filledFields
+        .slice(0, 3)
+        .map((f) => `${f.label}: ${String(data[f.key])}`)
+        .join(', ');
+      crossTabLines.push(`  ${label}: ${snippets}`);
+    }
+  }
+
+  const parts = [statusLines.join('\n')];
+  if (crossTabLines.length > 0) {
+    parts.push('Completed Section Summaries:\n' + crossTabLines.join('\n'));
+  }
+  return parts.join('\n\n');
+}
+
+function getAssessmentDetailHints(activeTab?: string): string[] {
+  if (!activeTab) {
+    return [
+      'I can fill the current tab using journals, photos, and data from other completed sections',
+      'Say "complete all tabs" to walk through every remaining section',
+      'Review and validate this assessment for publishing',
+    ];
+  }
+  const tabLabel = ASSESSMENT_TAB_LABELS[activeTab] ?? activeTab;
+  return [
+    `Help fill the ${tabLabel} section using evidence from journals, photos, and job data`,
+    'Review already-completed sections for cross-references',
+    'Complete remaining empty tabs after this one',
+  ];
+}
+
 export async function resolvePageContextBlock(
   pageContext: PageContext | undefined,
   fetchPageData?: PageDataFetcher,
@@ -338,6 +534,16 @@ export async function resolvePageContextBlock(
             lines.push(`\nCurrent Entity (${mapping.label} Detail):`);
             lines.push(summary);
           }
+
+          if (pageContext.entityType === 'assessment') {
+            const activeTab = pageContext.activeTab;
+            if (activeTab) {
+              const tabLabel = ASSESSMENT_TAB_LABELS[activeTab] ?? activeTab;
+              lines.push(`\nActive Tab: ${tabLabel}`);
+            }
+            const sectionContext = formatAssessmentSectionContext(entityData, activeTab);
+            lines.push(`\n${sectionContext}`);
+          }
         }
       } catch (err) {
         logger.debug(
@@ -371,7 +577,12 @@ export async function resolvePageContextBlock(
   lines.push(`\nCurrent Page: ${pageLabel}${scope}`);
 
   if (mapping) {
-    const hints = isDetail ? mapping.detailHints : mapping.listHints;
+    let hints: string[];
+    if (pageContext.entityType === 'assessment' && isDetail) {
+      hints = getAssessmentDetailHints(pageContext.activeTab);
+    } else {
+      hints = isDetail ? mapping.detailHints : mapping.listHints;
+    }
     if (hints.length > 0) {
       lines.push('\nYou can help the user:');
       for (const hint of hints) {
