@@ -1026,7 +1026,7 @@
   Sign-in recovers more cleanly from an old session, and password reset is more reliable.
   The same insurer record can no longer create two work orders from one purchase order.
 
-- `2026-08-30` `pending` **16 h**
+- `2026-08-30` `08515fe` **16 h**
   `151 files | +5 029 −1 989 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
   Lay summary: Jobs, tasks, and appointments now show whether they have reached the insurer, the in-app assistant follows the page and assessment section you are on, and printing and sign-in are more reliable.
   **Insurer sync status across jobs, tasks, and appointments, plus a page-aware in-app assistant.**
