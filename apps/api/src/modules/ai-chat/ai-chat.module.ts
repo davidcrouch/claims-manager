@@ -8,6 +8,7 @@ import { ConversationsModule } from '../conversations/conversations.module';
 import { DocumentGenerationModule } from '../document-generation/document-generation.module';
 import { McpIntegrationModule } from '../mcp-integration/mcp-integration.module';
 import { SkillsModule } from '../skills/skills.module';
+import { GuidesModule } from '../guides/guides.module';
 import { AiCanvasController } from './ai-canvas.controller';
 import { AiCanvasService } from './ai-canvas.service';
 import { AiChatController } from './ai-chat.controller';
@@ -32,6 +33,7 @@ import { AiSettingsService } from './ai-settings.service';
     DocumentGenerationModule,
     McpIntegrationModule,
     SkillsModule,
+    GuidesModule,
     MulterModule.register({ limits: { fileSize: 20 * 1024 * 1024 } }),
   ],
   controllers: [

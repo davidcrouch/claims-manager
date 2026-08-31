@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   AlertCircle,
   Check,
@@ -17,6 +17,7 @@ import { BottomFormDrawer } from '@/components/forms/BottomFormDrawer';
 import { cn } from '@/lib/utils';
 import type { AiAuditRecord, AttachmentMeta } from '@/lib/ai/types';
 import type { ToolCallDetail } from './hooks/use-audit-inspector';
+import { toolResultErrorMessage } from '@/lib/ai/tool-result-error';
 
 interface MessageAuditDrawerProps {
   open: boolean;
@@ -44,6 +45,11 @@ export function MessageAuditDrawer({
   const [copied, setCopied] = useState(false);
   const [expandedToolIdx, setExpandedToolIdx] = useState<number | null>(null);
 
+  useEffect(() => {
+    const idx = toolCalls?.findIndex((tc) => tc.isError) ?? -1;
+    setExpandedToolIdx(idx >= 0 ? idx : null);
+  }, [toolCalls]);
+
   const copySystemPrompt = async () => {
     if (!audit?.systemPrompt) return;
     await navigator.clipboard.writeText(audit.systemPrompt);
@@ -54,6 +60,7 @@ export function MessageAuditDrawer({
   const isError = audit?.status === 'error';
   const detailedTools = toolCalls && toolCalls.length > 0 ? toolCalls : null;
   const fallbackTools = audit?.toolsInvoked ?? [];
+  const recoveredToolErrors = detailedTools?.some((tc) => tc.isError) ?? false;
 
   return (
     <BottomFormDrawer
@@ -63,7 +70,7 @@ export function MessageAuditDrawer({
       icon={<Cpu className="h-5 w-5 text-violet-500" />}
     >
       <div className="space-y-5 overflow-y-auto px-14 py-6">
-        {!audit ? (
+        {!audit && !detailedTools ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <Clock className="mb-3 h-8 w-8 text-slate-300" />
             <p className="text-sm font-medium text-slate-600">No audit data for this message</p>
@@ -73,6 +80,7 @@ export function MessageAuditDrawer({
           </div>
         ) : (
           <>
+            {audit ? (
             <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
               <div
                 className="flex h-10 w-10 items-center justify-center rounded-full text-xs font-bold text-white"
@@ -87,6 +95,8 @@ export function MessageAuditDrawer({
                 <div className="flex items-center gap-1.5">
                   {isError ? (
                     <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+                  ) : recoveredToolErrors ? (
+                    <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
                   ) : (
                     <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
                   )}
@@ -99,7 +109,9 @@ export function MessageAuditDrawer({
                 </p>
               </div>
             </div>
+            ) : null}
 
+            {audit ? (
             <section>
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Model & Settings
@@ -117,8 +129,9 @@ export function MessageAuditDrawer({
                 />
               </div>
             </section>
+            ) : null}
 
-            {audit.systemPrompt && (
+            {audit?.systemPrompt && (
               <section>
                 <div className="mb-1 flex items-center justify-between">
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -188,6 +201,7 @@ export function MessageAuditDrawer({
               </section>
             )}
 
+            {audit ? (
             <section>
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Token Usage
@@ -202,38 +216,68 @@ export function MessageAuditDrawer({
                 />
               </div>
             </section>
+            ) : null}
 
             {(detailedTools || fallbackTools.length > 0) && (
               <section>
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
                   Tools Invoked ({detailedTools?.length ?? fallbackTools.length})
                 </h3>
+                {recoveredToolErrors && !isError ? (
+                  <div className="mb-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    A tool returned an error and the assistant recovered. Expand a highlighted
+                    tool for the captured detail.
+                  </div>
+                ) : null}
                 {detailedTools ? (
                   <div className="space-y-1.5">
                     {detailedTools.map((tc, i) => {
                       const isExpanded = expandedToolIdx === i;
+                      const errorText = tc.isError
+                        ? toolResultErrorMessage(tc.result)
+                        : undefined;
                       return (
-                        <div key={i} className="rounded-md border border-slate-200 bg-slate-50">
+                        <div
+                          key={i}
+                          className={cn(
+                            'rounded-md border bg-slate-50',
+                            tc.isError
+                              ? 'border-amber-300 bg-amber-50/60'
+                              : 'border-slate-200',
+                          )}
+                        >
                           <button
                             type="button"
                             onClick={() => setExpandedToolIdx(isExpanded ? null : i)}
                             className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-slate-100"
                           >
-                            <CheckCircle2
-                              className={cn(
-                                'h-3.5 w-3.5 shrink-0',
-                                tc.state === 'complete' ? 'text-green-500' : 'text-slate-400',
-                              )}
-                            />
+                            {tc.isError ? (
+                              <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+                            ) : (
+                              <CheckCircle2
+                                className={cn(
+                                  'h-3.5 w-3.5 shrink-0',
+                                  tc.state === 'complete' ? 'text-green-500' : 'text-slate-400',
+                                )}
+                              />
+                            )}
                             <span className="flex-1 truncate text-xs font-medium text-slate-700">
                               {tc.displayName}
                             </span>
+                            {tc.isError ? (
+                              <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                                Error
+                              </span>
+                            ) : null}
                             <span className="text-[10px] text-slate-400">
                               {isExpanded ? 'Collapse' : 'Expand'}
                             </span>
                           </button>
                           {isExpanded && (
                             <div className="space-y-2 border-t border-slate-200 px-3 py-2">
+                              {errorText ? (
+                                <p className="text-xs text-amber-800">{errorText}</p>
+                              ) : null}
                               <div>
                                 <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                                   Input
@@ -281,7 +325,7 @@ export function MessageAuditDrawer({
               </section>
             )}
 
-            {audit.attachmentsMetadata && audit.attachmentsMetadata.length > 0 && (
+            {audit?.attachmentsMetadata && audit.attachmentsMetadata.length > 0 && (
               <section>
                 <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
                   <Paperclip className="h-3.5 w-3.5" />
@@ -295,6 +339,7 @@ export function MessageAuditDrawer({
               </section>
             )}
 
+            {audit ? (
             <section>
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Request Metrics
@@ -313,13 +358,20 @@ export function MessageAuditDrawer({
                   <div
                     className={cn(
                       'h-2.5 w-2.5 rounded-full',
-                      audit.status === 'success' ? 'bg-green-500' : 'bg-red-500',
+                      audit.status === 'success'
+                        ? recoveredToolErrors
+                          ? 'bg-amber-500'
+                          : 'bg-green-500'
+                        : 'bg-red-500',
                     )}
                   />
                   <div>
                     <p className="text-[10px] text-slate-500">Status</p>
                     <p className="text-sm font-medium capitalize text-slate-800">
                       {audit.status}
+                      {audit.status === 'success' && recoveredToolErrors
+                        ? ' (recovered errors)'
+                        : ''}
                     </p>
                   </div>
                 </div>
@@ -330,8 +382,9 @@ export function MessageAuditDrawer({
                 </div>
               )}
             </section>
+            ) : null}
 
-            {audit.enabledTools && audit.enabledTools.length > 0 && (
+            {audit?.enabledTools && audit.enabledTools.length > 0 && (
               <section>
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
                   Enabled Tools ({audit.enabledTools.length})

@@ -23,7 +23,7 @@ import { displayLabelText } from './lib/display';
 import { RowLeadCheckbox, RowLeadDrag, RowLeadExpand, ROW_LEAD_ROW_CLS } from './lib/row-lead';
 import { LI_HEADER_COUNT, LI_HEADER_TOTAL, LineItemsColGroup, LineItemsThead, LineItemsTableShell } from './lib/table-parts';
 import { HeaderVisibilityToggles } from './lib/header-visibility';
-import { NoteHoverWrap } from './lib/line-note-hover';
+import { LineDetailHoverWrap } from './lib/line-detail-hover';
 import { filterVisibleItems, isSelectablePicked } from './lib/selection-filter';
 import type { ApiCombo } from './lib/types';
 import { ItemRow } from './ItemRow';
@@ -69,7 +69,7 @@ export const AssemblyRow = memo(function AssemblyRow({
     toggleHeaderField,
   } = useLineItems();
 
-  const { showMarkup, showGst, enableLineNotes, showQuantities: globalQuantities, showPricing: globalPricing, showCategory, showColumnVisibilityToggles } = config;
+  const { showMarkup, showGst, enableLineNotes, showQuantities: globalQuantities, showPricing: globalPricing, showCategory, showColumnVisibilityToggles, hideComponent } = config;
   const parentQty = parentShowQuantities ?? globalQuantities;
   const parentPrice = parentShowPricing ?? globalPricing;
   const resolvedAssembly = resolveHeaderVisibility(comboKey, parentQty, parentPrice);
@@ -160,9 +160,12 @@ export const AssemblyRow = memo(function AssemblyRow({
     >
       <DropIndicatorLine rowKey={comboKey} variant="card" />
       {/* Assembly header */}
-      <NoteHoverWrap
+      <LineDetailHoverWrap
+        title={comboName}
+        component={comboInputs?.component ?? combo.component}
+        description={comboInputs?.description ?? combo.description}
         note={combo.note}
-        enabled={enableLineNotes}
+        hideComponent={hideComponent}
         className={cn(
           ROW_LEAD_ROW_CLS,
           'cursor-pointer py-2 pr-3 transition-colors',
@@ -228,6 +231,7 @@ export const AssemblyRow = memo(function AssemblyRow({
                 onFocus={() => setEditState({ rowKey: comboKey, field: 'name' })}
                 placeholder="Name…"
               />
+              {!hideComponent && (
               <input
                 className="min-w-0 flex-1 bg-transparent text-sm text-slate-600 outline-none placeholder:text-slate-300"
                 value={comboInputs.component}
@@ -236,6 +240,7 @@ export const AssemblyRow = memo(function AssemblyRow({
                 onFocus={() => setEditState({ rowKey: comboKey, field: 'component' })}
                 placeholder="Component…"
               />
+              )}
             </div>
             <input
               className="w-full bg-transparent text-xs text-slate-500 outline-none placeholder:text-slate-300"
@@ -250,7 +255,7 @@ export const AssemblyRow = memo(function AssemblyRow({
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <span className="truncate text-sm font-semibold text-slate-700">
               {comboName}
-              {comboComponent && <span className="font-normal text-slate-500"> — {comboComponent}</span>}
+              {!hideComponent && comboComponent && <span className="font-normal text-slate-500"> — {comboComponent}</span>}
             </span>
             <LineScopeStatusBadge status={combo.lineScopeStatus} />
             <PublishStatusBadge status={combo.publishStatus} />
@@ -319,7 +324,7 @@ export const AssemblyRow = memo(function AssemblyRow({
             </DropdownMenu>
           )}
         </div>
-      </NoteHoverWrap>
+      </LineDetailHoverWrap>
 
       {/* Assembly child items */}
       {!isCollapsed && visibleComboItems.length > 0 && (

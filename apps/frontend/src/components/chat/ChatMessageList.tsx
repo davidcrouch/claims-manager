@@ -27,9 +27,15 @@ const ASSESSMENT_TAB_LABELS: Record<string, string> = {
 };
 
 function getSuggestions(ctx?: PageContext): string[] {
+  const helpSuggestion =
+    ctx?.pageLabel
+      ? `Help me with this page: ${ctx.pageLabel}`
+      : 'Help me with this page';
+
   if (ctx?.entityType === 'assessment') {
     if (!ctx.entityId) {
       return [
+        helpSuggestion,
         'Create a new assessment for this job',
         'What assessments exist for this job?',
         'Open a blank assessment form',
@@ -37,13 +43,24 @@ function getSuggestions(ctx?: PageContext): string[] {
     }
     const tabLabel = ASSESSMENT_TAB_LABELS[ctx.activeTab ?? 'attendance'] ?? 'Attendance';
     return [
+      helpSuggestion,
       `Help me fill the ${tabLabel} section`,
       'Complete all remaining tabs',
       'Review journals for evidence',
       'Print this assessment as a PDF',
     ];
   }
-  return DEFAULT_SUGGESTIONS;
+
+  if (ctx?.entityType === 'role' || ctx?.entityType === 'user') {
+    return [
+      helpSuggestion,
+      'How do I create a custom role?',
+      'What does invoices.approve control?',
+      'How do I assign roles to a user?',
+    ];
+  }
+
+  return [helpSuggestion, ...DEFAULT_SUGGESTIONS];
 }
 
 interface ChatMessageListProps {

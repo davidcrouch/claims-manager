@@ -94,8 +94,9 @@ export function getEditableFields(
   showGst: boolean,
   showQuantities = true,
   showPricing = true,
+  hideComponent = false,
 ): EditableFieldKey[] {
-  const fields: EditableFieldKey[] = ['name', 'component', 'description'];
+  const fields: EditableFieldKey[] = hideComponent ? ['name', 'description'] : ['name', 'component', 'description'];
   if (showQuantities) fields.push('quantity', 'unitType');
   if (showPricing) {
     fields.push('unitCost');
@@ -109,6 +110,22 @@ export const NAME_COL_FIELDS: EditableFieldKey[] = ['name', 'component', 'descri
 export const ASSEMBLY_EDITABLE_FIELDS: EditableFieldKey[] = ['name', 'component', 'description', 'quantity'];
 export const SCOPE_EDITABLE_FIELDS: EditableFieldKey[] = ['name', 'component', 'description', 'quantity'];
 
+export function getNameColFields(hideComponent = false): EditableFieldKey[] {
+  return hideComponent ? ['name', 'description'] : NAME_COL_FIELDS;
+}
+
+export function getAssemblyEditableFields(hideComponent = false): EditableFieldKey[] {
+  return hideComponent
+    ? ['name', 'description', 'quantity']
+    : ASSEMBLY_EDITABLE_FIELDS;
+}
+
+export function getScopeEditableFields(hideComponent = false): EditableFieldKey[] {
+  return hideComponent
+    ? ['name', 'description', 'quantity']
+    : SCOPE_EDITABLE_FIELDS;
+}
+
 /** Find the nearest editable field when a non-editable column is clicked. */
 export function nearestEditableField(
   clicked: string,
@@ -116,8 +133,9 @@ export function nearestEditableField(
   showGst: boolean,
   showQuantities = true,
   showPricing = true,
+  hideComponent = false,
 ): EditableFieldKey {
-  const editableFields = getEditableFields(showMarkup, showGst, showQuantities, showPricing);
+  const editableFields = getEditableFields(showMarkup, showGst, showQuantities, showPricing, hideComponent);
   if ((editableFields as string[]).includes(clicked)) return clicked as EditableFieldKey;
 
   const allCols: string[] = ['name', 'type', 'category'];

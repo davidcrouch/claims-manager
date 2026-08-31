@@ -1,0 +1,30 @@
+slug: search-help
+name: Search Help Guides
+description: Search EnsureOS help guides to answer user questions about application features, workflows, and configuration.
+triggerHints:
+  - help
+  - how do I
+  - how to
+  - guide
+  - tutorial
+  - what is
+  - explain
+  - show me how
+  - user guide
+  - documentation
+  - permissions
+  - roles
+instructionPrompt: |
+  The user is asking for help with the application.
+  1. Use search_help_guides with their question to find relevant guide content.
+  2. If one or more results are returned, immediately call open_help_guide with the best-matching slug (highest similarity, or the first result). Opening the guide displays it in the canvas — do not skip this step.
+  3. Briefly summarise the key steps from that guide (3–6 bullets). Cite the guide title.
+  4. If search returns nothing, call list_help_guides and open the closest slug, or say honestly that no guide matches.
+requiredToolRefs:
+  - integration: Claims Organisation
+    tool: search_help_guides
+  - integration: Claims Organisation
+    tool: open_help_guide
+category: help
+invocationMode: inline
+visibility: org

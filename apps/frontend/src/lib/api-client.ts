@@ -1448,6 +1448,43 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<Catalog>(`/catalogs/${id}`, { method: 'DELETE' });
     },
 
+    copyCatalogItem(targetCatalogId: string, body: {
+      catalogItemId: string;
+      parentId?: string;
+      nestUnderId?: string;
+    }): Promise<CatalogItem> {
+      return fetchApi<CatalogItem>(`/catalogs/${targetCatalogId}/copy-items`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+
+    moveCatalogLineItem(catalogId: string, body: {
+      itemId?: string;
+      comboId?: string;
+      targetGroupId: string;
+      targetComboId?: string;
+      insertAtIndex?: number;
+    }): Promise<{ success: boolean }> {
+      return fetchApi(`/catalogs/${catalogId}/move-line-item`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+
+    reorderCatalogLineItems(catalogId: string, body: {
+      groupId: string;
+      parentComboId?: string;
+      items?: Array<{ id: string; sortIndex: number }>;
+      combos?: Array<{ id: string; sortIndex: number }>;
+      scopes?: Array<{ id: string; sortIndex: number }>;
+    }): Promise<{ success: boolean }> {
+      return fetchApi(`/catalogs/${catalogId}/reorder-line-items`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+
     getCatalogTypes(): Promise<CatalogItemType[]> {
       return fetchApi<CatalogItemType[]>('/catalog/types');
     },
@@ -2513,6 +2550,27 @@ export function createApiClient(options?: ApiClientOptions) {
 
     refreshMcpTools(body: { connectionId: string }): Promise<{ ok: boolean; toolCount?: number; error?: string }> {
       return fetchApi('/mcp-tools/refresh', { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    getGuidesByRoute(route: string): Promise<
+      Array<{
+        slug: string;
+        title: string;
+        description: string | null;
+        routes: string[];
+        content?: string;
+      }>
+    > {
+      const qs = new URLSearchParams({ route });
+      return fetchApi(`/guides/by-route?${qs}`);
+    },
+
+    getGuideContent(slug: string): Promise<{
+      slug?: string;
+      title?: string;
+      content: string | null;
+    }> {
+      return fetchApi(`/guides/${encodeURIComponent(slug)}/content`);
     },
 
     // ── AI Chat & Conversations ──

@@ -1,9 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState, type KeyboardEvent } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { Code, Copy, Download, FileText, Save } from 'lucide-react';
+import { BookOpen, Code, Copy, Download, FileText, Save } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { CanvasArtifact } from '@/lib/ai/chat-types';
 import {
@@ -12,6 +10,7 @@ import {
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
 import { Button } from '@/components/ui/button';
+import { GuideMarkdown } from './GuideMarkdown';
 
 interface ChatArtifactDrawerProps {
   artifact: CanvasArtifact | null;
@@ -31,8 +30,11 @@ export function ChatArtifactDrawer({
   onSave,
   companionChatOpen = false,
 }: ChatArtifactDrawerProps) {
+  const isGuide = !!artifact && artifact.id.startsWith('guide_');
+  const isMarkdown = artifact?.contentType === 'markdown';
+
   const [content, setContent] = useState(artifact?.content ?? '');
-  const [isPreview, setIsPreview] = useState(false);
+  const [isPreview, setIsPreview] = useState(isMarkdown);
   const [hasChanges, setHasChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -40,13 +42,14 @@ export function ChatArtifactDrawer({
   useEffect(() => {
     if (artifact) {
       setContent(artifact.content);
-      setIsPreview(false);
+      // Guides are read-only docs; other markdown opens in preview by default.
+      setIsPreview(artifact.contentType === 'markdown');
       setHasChanges(false);
     }
-  }, [artifact?.id, artifact?.content]);
+  }, [artifact?.id, artifact?.content, artifact?.contentType]);
 
   const handleSave = useCallback(async () => {
-    if (!artifact || !onSave || !hasChanges) return;
+    if (!artifact || !onSave || !hasChanges || isGuide) return;
     setIsSaving(true);
     try {
       await onSave(artifact.id, content);
@@ -54,16 +57,17 @@ export function ChatArtifactDrawer({
     } finally {
       setIsSaving(false);
     }
-  }, [artifact, content, onSave, hasChanges]);
+  }, [artifact, content, onSave, hasChanges, isGuide]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
+      if (isGuide) return;
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
         void handleSave();
       }
     },
-    [handleSave],
+    [handleSave, isGuide],
   );
 
   const handleCopy = useCallback(async () => {
@@ -91,28 +95,34 @@ export function ChatArtifactDrawer({
   if (!artifact) return null;
 
   const isCode = artifact.contentType === 'code';
+  const showMarkdownPreview = isMarkdown && (isGuide || isPreview);
+  const description = isGuide
+    ? 'Help guide'
+    : artifact.language
+      ? `${artifact.contentType ?? 'document'} · ${artifact.language}`
+      : (artifact.contentType ?? 'document');
 
   return (
     <BottomFormDrawer
       open={open}
       onOpenChange={onOpenChange}
       title={artifact.title || 'Canvas'}
-      description={
-        artifact.language
-          ? `${artifact.contentType ?? 'document'} · ${artifact.language}`
-          : (artifact.contentType ?? 'document')
-      }
+      description={description}
       icon={
-        isCode ? <Code className="h-5 w-5" /> : <FileText className="h-5 w-5" />
+        isGuide ? (
+          <BookOpen className="h-5 w-5" />
+        ) : isCode ? (
+          <Code className="h-5 w-5" />
+        ) : (
+          <FileText className="h-5 w-5" />
+        )
       }
       companionChatOpen={companionChatOpen}
     >
       <div className="flex min-h-0 flex-1 flex-col" onKeyDown={handleKeyDown}>
         <BottomFormDrawerBody className="!px-0 !py-0">
-          {isPreview ? (
-            <div className="prose prose-sm max-w-none p-6">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
-            </div>
+          {showMarkdownPreview ? (
+            <GuideMarkdown content={content} />
           ) : (
             <textarea
               value={content}
@@ -125,6 +135,7 @@ export function ChatArtifactDrawer({
                 isCode && 'bg-slate-900 text-slate-200',
               )}
               spellCheck={!isCode}
+              readOnly={isGuide}
             />
           )}
         </BottomFormDrawerBody>
@@ -139,7 +150,7 @@ export function ChatArtifactDrawer({
               <Download className="mr-1.5 h-3.5 w-3.5" />
               Download
             </Button>
-            {artifact.contentType === 'markdown' && (
+            {isMarkdown && !isGuide && (
               <Button
                 type="button"
                 variant="outline"
@@ -151,11 +162,13 @@ export function ChatArtifactDrawer({
             )}
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-400">
-              v{artifact.version}
-              {hasChanges ? ' · unsaved' : ''}
-            </span>
-            {onSave && (
+            {!isGuide && (
+              <span className="text-xs text-slate-400">
+                v{artifact.version}
+                {hasChanges ? ' · unsaved' : ''}
+              </span>
+            )}
+            {onSave && !isGuide && (
               <Button
                 type="button"
                 size="sm"

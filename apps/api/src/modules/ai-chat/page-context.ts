@@ -256,6 +256,32 @@ const ENTITY_MAP: Record<string, PageEntityMapping> = {
       'Test connectivity',
     ],
   },
+  role: {
+    category: 'organisation',
+    label: 'Roles & Permissions',
+    listHints: [
+      'View and manage roles and their permissions',
+      'Create a custom role for your organisation',
+      'Ask "how do I create a custom role?" for a help guide walkthrough',
+    ],
+    detailHints: [
+      'Edit permissions for this role',
+      'Understand what each permission controls',
+    ],
+  },
+  user: {
+    category: 'organisation',
+    label: 'Users',
+    listHints: [
+      'View organisation members',
+      'Invite a new user to the organisation',
+      'Edit a user\'s role assignments',
+    ],
+    detailHints: [
+      'Change this user\'s roles',
+      'Remove this user from the organisation',
+    ],
+  },
 };
 
 /**

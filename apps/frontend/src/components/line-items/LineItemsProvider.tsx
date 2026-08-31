@@ -180,6 +180,7 @@ export interface LineItemsProviderProps {
   quantitiesVisible?: boolean;
   pricingVisible?: boolean;
   labels?: Partial<LineItemLabels>;
+  hideComponent?: boolean;
   catalogUpdateMode?: CatalogUpdateMode;
   onCatalogUpdateModeChange?: (mode: CatalogUpdateMode) => void;
   canSetCatalogUpdateMode?: boolean;
@@ -201,6 +202,7 @@ export function LineItemsProvider({
   quantitiesVisible,
   pricingVisible,
   labels: labelOverrides,
+  hideComponent = false,
   catalogUpdateMode = 'none',
   onCatalogUpdateModeChange,
   canSetCatalogUpdateMode = false,
@@ -231,12 +233,13 @@ export function LineItemsProvider({
       showQuantities,
       showPricing,
       showCategory,
+      hideComponent,
       enableLineNotes,
       compact,
       labels,
       showColumnVisibilityToggles: showColumnToggles,
     }),
-    [mode, showMarkup, showGst, showQuantities, showPricing, showCategory, enableLineNotes, compact, labels, showColumnToggles],
+    [mode, showMarkup, showGst, showQuantities, showPricing, showCategory, hideComponent, enableLineNotes, compact, labels, showColumnToggles],
   );
 
   // --- Structural dirty ---
@@ -366,6 +369,7 @@ export function LineItemsProvider({
     showGst,
     showQuantities,
     showPricing,
+    hideComponent,
     selectedRows,
     setSelectedRows,
     initRow: edit.initRow,

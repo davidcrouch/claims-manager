@@ -50,6 +50,7 @@ import type { SSEEvent } from './stream/types';
 import type { ChatMessage, PageContext, StreamChatParams } from './ai-chat.types';
 import { resolvePageContextBlock, type PageDataFetcher } from './page-context';
 import { DocumentGenerationService } from '../document-generation/document-generation.service';
+import { GuideService } from '../guides/guide.service';
 
 const LOG_PREFIX = 'AiChatService';
 
@@ -109,6 +110,7 @@ export class AiChatService {
     private readonly tenantContext: TenantContext,
     private readonly configService: ConfigService,
     private readonly documentGenService: DocumentGenerationService,
+    private readonly guideService: GuideService,
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
   ) {}
 
@@ -348,6 +350,11 @@ export class AiChatService {
           if (canvasEvent) {
             yield canvasEvent;
           }
+
+          const guideCanvas = await this.buildGuideCanvasEvent(event);
+          if (guideCanvas) {
+            yield guideCanvas;
+          }
         }
 
         if (event.type === 'finish') {
@@ -442,6 +449,69 @@ export class AiChatService {
     };
   }
 
+  /**
+   * When open_help_guide (or a successful search_help_guides) returns a guide,
+   * open it as a canvas artifact so the user can read the full guide beside chat.
+   */
+  private async buildGuideCanvasEvent(event: {
+    toolCallId: string;
+    toolName: string;
+    result: unknown;
+    isError?: boolean;
+  }): Promise<SSEEvent | null> {
+    if (event.isError) return null;
+
+    const originalName = resolveOriginalToolName(event.toolName);
+
+    if (originalName === 'open_help_guide') {
+      const payload = unwrapGuideToolResult(event.result);
+      if (!payload?.content) return null;
+      const title = payload.title?.trim() || payload.slug || 'Help Guide';
+      const artifactId = `guide_${payload.slug ?? event.toolCallId}`;
+      this.logger.log(
+        `[${LOG_PREFIX}.buildGuideCanvasEvent] opening guide canvas title=${title}`,
+      );
+      return {
+        type: 'canvas-action',
+        action: 'open',
+        artifactId,
+        title,
+        contentType: 'markdown',
+        content: payload.content,
+        version: 1,
+      };
+    }
+
+    if (originalName !== 'search_help_guides') return null;
+
+    const hits = unwrapGuideSearchHits(event.result);
+    const top = hits[0];
+    if (!top?.slug) return null;
+
+    try {
+      const tenantId = this.tenantContext.getTenantId();
+      const doc = await this.guideService.getGuideContent(tenantId, top.slug);
+      if (!doc?.content) return null;
+      this.logger.log(
+        `[${LOG_PREFIX}.buildGuideCanvasEvent] opening top search hit slug=${doc.slug}`,
+      );
+      return {
+        type: 'canvas-action',
+        action: 'open',
+        artifactId: `guide_${doc.slug}`,
+        title: doc.title,
+        contentType: 'markdown',
+        content: doc.content,
+        version: 1,
+      };
+    } catch (err) {
+      this.logger.warn(
+        `[${LOG_PREFIX}.buildGuideCanvasEvent] failed to open search hit: ${String(err)}`,
+      );
+      return null;
+    }
+  }
+
   private async matchSkillsForTurn(
     agent: AgentConfig,
     messages: ChatMessage[],
@@ -483,6 +553,24 @@ export class AiChatService {
 
     if (skillMatches.length > 0) {
       enrichedPrompt += buildSkillPromptBlock(skillMatches);
+    }
+
+    if (pageContext?.pathname) {
+      try {
+        const tenantId = this.tenantContext.getTenantId();
+        const guides = await this.guideService.getGuidesByRoute(tenantId, pageContext.pathname);
+        if (guides.length > 0) {
+          const guideList = guides.map(
+            (g) =>
+              `- **${g.title}** (slug: \`${g.slug}\`, routes: ${(g.routes ?? []).join(', ')}): ${g.description ?? ''}`,
+          );
+          enrichedPrompt += `\n\n## Available Help Guides\nCurrent pathname: \`${pageContext.pathname}\`\nCall \`get_guides_for_route\` with route=\`${pageContext.pathname}\` (not the page label), then \`open_help_guide\` with the guide slug so it opens in the canvas.\n${guideList.join('\n')}`;
+        }
+      } catch (err) {
+        this.logger.warn(
+          `[${LOG_PREFIX}.buildSystemInstructions] guide lookup failed: ${String(err)}`,
+        );
+      }
     }
 
     try {
@@ -730,4 +818,107 @@ function extractLastUserMessage(messages: ChatMessage[]): string {
   }
 
   return '';
+}
+
+function unwrapGuideToolResult(
+  result: unknown,
+): { content?: string; title?: string; slug?: string } | null {
+  if (!result) return null;
+
+  if (typeof result === 'object' && result !== null && 'content' in result) {
+    const obj = result as {
+      content?: unknown;
+      title?: string;
+      slug?: string;
+    };
+
+    // Direct API shape: { content, title, slug }
+    if (typeof obj.content === 'string') {
+      return { content: obj.content, title: obj.title, slug: obj.slug };
+    }
+
+    // MCP content envelope: { content: [{ type: 'text', text: '...' }] }
+    if (Array.isArray(obj.content)) {
+      const textPart = obj.content.find(
+        (part): part is { type: string; text: string } =>
+          !!part &&
+          typeof part === 'object' &&
+          'type' in part &&
+          (part as { type: string }).type === 'text' &&
+          typeof (part as { text?: unknown }).text === 'string',
+      );
+      if (textPart?.text) {
+        try {
+          const parsed = JSON.parse(textPart.text) as {
+            content?: string;
+            title?: string;
+            slug?: string;
+          };
+          if (parsed?.content) return parsed;
+        } catch {
+          return { content: textPart.text };
+        }
+      }
+    }
+  }
+
+  if (typeof result === 'string') {
+    try {
+      return unwrapGuideToolResult(JSON.parse(result));
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+function unwrapGuideSearchHits(
+  result: unknown,
+): Array<{ slug?: string; title?: string }> {
+  const parsed = unwrapJsonValue(result);
+  if (Array.isArray(parsed)) {
+    return parsed.filter(
+      (item): item is { slug?: string; title?: string } =>
+        !!item && typeof item === 'object',
+    );
+  }
+  return [];
+}
+
+function unwrapJsonValue(result: unknown): unknown {
+  if (!result) return null;
+
+  if (Array.isArray(result)) return result;
+
+  if (typeof result === 'object' && result !== null && 'content' in result) {
+    const obj = result as { content?: unknown };
+    if (Array.isArray(obj.content)) {
+      const textPart = obj.content.find(
+        (part): part is { type: string; text: string } =>
+          !!part &&
+          typeof part === 'object' &&
+          'type' in part &&
+          (part as { type: string }).type === 'text' &&
+          typeof (part as { text?: unknown }).text === 'string',
+      );
+      if (textPart?.text) {
+        try {
+          return JSON.parse(textPart.text);
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+
+  if (typeof result === 'string') {
+    try {
+      return JSON.parse(result);
+    } catch {
+      return null;
+    }
+  }
+
+  return result;
 }

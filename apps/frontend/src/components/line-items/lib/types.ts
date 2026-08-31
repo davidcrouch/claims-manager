@@ -223,6 +223,7 @@ export interface LineItemsConfig {
   showQuantities: boolean;
   showPricing: boolean;
   showCategory: boolean;
+  hideComponent: boolean;
   enableLineNotes: boolean;
   compact: boolean;
   labels: LineItemLabels;

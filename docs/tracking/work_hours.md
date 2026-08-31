@@ -1046,3 +1046,14 @@
   Confirmed the application type-check and package build succeed locally.
   The hosted site can pick up the latest job, task, appointment, and assistant updates.
 
+- `2026-08-31` `PENDING` **9 h**
+  `144 files | +16 996 −293 | Tier 1 mechanical / Tier 2 standard / Tier 3 complex | Heavy orchestration`
+  Lay summary: Staff can open in-product help for the page they are on, manage catalogues more easily, and see clearer details on estimate line items.
+  **In-product help, catalogue management, and clearer line-item details.**
+  Staff can press help on a page or ask in chat and open a matching guide beside the conversation, with search across the full help set.
+  Operations and configuration guides cover claims, jobs, assessments, estimates, invoices, vendors, and admin settings.
+  Catalogue administrators can copy catalogues, work with structure, and import an updated item file.
+  Line items show more useful detail on hover, with smoother keyboard movement around groups and assemblies.
+  Invoices and quotes keep related components aligned when records are published or updated.
+  Help documents are stored so they can be searched and opened the same way for every organisation.
+

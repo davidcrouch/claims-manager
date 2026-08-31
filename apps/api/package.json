@@ -26,7 +26,8 @@
     "db:studio": "drizzle-kit studio",
     "db:seed": "ts-node src/database/seeds/index.ts",
     "db:seed:mcp": "ts-node scripts/seed-mcp.ts",
-    "db:flush": "ts-node src/database/seeds/flush.ts"
+    "db:flush": "ts-node src/database/seeds/flush.ts",
+    "guides:ingest": "tsx scripts/ingest-guides.mts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
@@ -103,6 +104,7 @@
     "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
+    "tsx": "^4.23.13",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0"
   },

@@ -23,7 +23,7 @@ import { displayLabelText } from './lib/display';
 import { RowLeadCheckbox, RowLeadDrag, RowLeadExpand, ROW_LEAD_ROW_CLS } from './lib/row-lead';
 import { LI_HEADER_COUNT, LI_HEADER_TOTAL, LineItemsColGroup, LineItemsThead, LineItemsTableShell } from './lib/table-parts';
 import { HeaderVisibilityToggles } from './lib/header-visibility';
-import { NoteHoverWrap } from './lib/line-note-hover';
+import { LineDetailHoverWrap } from './lib/line-detail-hover';
 import { filterVisibleCombos, filterVisibleItems, isSelectablePicked } from './lib/selection-filter';
 import type { ApiItem, ApiScope } from './lib/types';
 import { ItemRow } from './ItemRow';
@@ -79,6 +79,7 @@ export const ScopeCard = memo(function ScopeCard({
     showQuantities: globalQuantities,
     showPricing: globalPricing,
     showColumnVisibilityToggles,
+    hideComponent,
   } = config;
   const parentQty = parentShowQuantities ?? globalQuantities;
   const parentPrice = parentShowPricing ?? globalPricing;
@@ -186,9 +187,12 @@ export const ScopeCard = memo(function ScopeCard({
     >
       <DropIndicatorLine rowKey={scopeKey} variant="card" />
       {/* Scope header */}
-      <NoteHoverWrap
+      <LineDetailHoverWrap
+        title={scopeName}
+        component={scopeInputs?.component ?? scope.component}
+        description={scopeInputs?.description ?? scope.description}
         note={scope.note}
-        enabled={enableLineNotes}
+        hideComponent={hideComponent}
         className={cn(
           ROW_LEAD_ROW_CLS,
           'cursor-pointer py-2.5 pr-3 transition-colors',
@@ -254,6 +258,7 @@ export const ScopeCard = memo(function ScopeCard({
                 onFocus={() => setEditState({ rowKey: scopeKey, field: 'name' })}
                 placeholder="Name…"
               />
+              {!hideComponent && (
               <input
                 className="min-w-0 flex-1 bg-transparent text-sm text-violet-600 outline-none placeholder:text-violet-300"
                 value={scopeInputs.component}
@@ -262,6 +267,7 @@ export const ScopeCard = memo(function ScopeCard({
                 onFocus={() => setEditState({ rowKey: scopeKey, field: 'component' })}
                 placeholder="Component…"
               />
+              )}
             </div>
             <input
               className="w-full bg-transparent text-xs text-violet-500 outline-none placeholder:text-violet-300"
@@ -276,7 +282,7 @@ export const ScopeCard = memo(function ScopeCard({
           <div className="flex min-w-0 flex-1 items-center gap-2 pl-2">
             <span className="truncate text-sm font-semibold text-violet-900">
               {scopeName}
-              {scopeComponent && <span className="font-normal text-violet-600"> — {scopeComponent}</span>}
+              {!hideComponent && scopeComponent && <span className="font-normal text-violet-600"> — {scopeComponent}</span>}
             </span>
             {scopeDescription && (
               <span className="hidden truncate text-xs text-violet-400 sm:inline">{scopeDescription}</span>
@@ -348,7 +354,7 @@ export const ScopeCard = memo(function ScopeCard({
             </DropdownMenu>
           )}
         </div>
-      </NoteHoverWrap>
+      </LineDetailHoverWrap>
 
       {/* Scope content */}
       {!isCollapsed && (visibleScopeItems.length > 0 || visibleScopeCombos.length > 0) && (

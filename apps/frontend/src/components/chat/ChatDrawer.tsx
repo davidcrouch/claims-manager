@@ -8,6 +8,7 @@ import {
   createConversationAction,
   deleteConversationAction,
   getConversationAction,
+  getPageHelpGuideAction,
   listChatAgentsAction,
   listConversationsAction,
   updateConversationAction,
@@ -20,7 +21,11 @@ import {
   type AIContextPayload,
 } from '@/lib/ai/use-ai-context';
 import { usePageContext } from '@/lib/ai/use-page-context';
-import { resolvePageAgent } from '@/lib/ai/use-page-agent';
+import {
+  buildPageHelpMessage,
+  resolveHelpAgent,
+  resolvePageAgent,
+} from '@/lib/ai/use-page-agent';
 import { cn } from '@/lib/utils';
 import { CHAT_BESIDE_FORM_WIDTH_CLASS, CHAT_DRAWER_WIDTH_CLASS } from '@/components/forms/form-drawer-layout';
 import { useEntityDrawer } from '@/components/layout/EntityDrawerHost';
@@ -42,6 +47,10 @@ export interface ChatDrawerProps {
   besideCanvas?: boolean;
   /** Override panel width classes. Defaults depend on canvas / besideCanvas. */
   widthClassName?: string;
+  /** Opened via header Help (?) — prefer help agent and auto-send page help. */
+  helpMode?: boolean;
+  /** Bumps when Help is clicked again so a new help turn starts. */
+  helpSessionKey?: number;
 }
 
 function newConversationId(): string {
@@ -66,6 +75,8 @@ export function ChatDrawer({
   relatedEntityId,
   besideCanvas = false,
   widthClassName,
+  helpMode = false,
+  helpSessionKey = 0,
 }: ChatDrawerProps) {
   const {
     openEntityDrawer,
@@ -75,6 +86,7 @@ export function ChatDrawer({
   } = useEntityDrawer();
   const [mounted, setMounted] = useState(false);
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [agentsLoaded, setAgentsLoaded] = useState(false);
   const [sessionKey, setSessionKey] = useState(0);
   const [conversationId, setConversationId] = useState(newConversationId);
   const [initialMessages, setInitialMessages] = useState<ChatMessage[] | undefined>();
@@ -120,8 +132,14 @@ export function ChatDrawer({
   }, [open, besideForm, onOpenChange]);
 
   useEffect(() => {
-    if (!open) return;
-    void listChatAgentsAction().then(setAgents);
+    if (!open) {
+      setAgentsLoaded(false);
+      return;
+    }
+    void listChatAgentsAction().then((list) => {
+      setAgents(list);
+      setAgentsLoaded(true);
+    });
     void listConversationsAction().then((list) => {
       setConversations(
         list.map((c) => ({
@@ -164,7 +182,36 @@ export function ChatDrawer({
       id,
       agentId,
     });
-  }, [open, initialContext, agentId, relatedEntityType, relatedEntityId]);
+  }, [open, initialContext, agentId, relatedEntityType, relatedEntityId, helpSessionKey]);
+
+  useEffect(() => {
+    if (!open || !helpMode || initialContext) return;
+    const route = pageContext.pathname?.trim();
+    if (!route) return;
+    let cancelled = false;
+    void getPageHelpGuideAction(route).then((guide) => {
+      if (cancelled || !guide) return;
+      setHistoryOpen(false);
+      closeEntityDrawer();
+      setCanvasArtifact({
+        id: `guide_${guide.slug}`,
+        title: guide.title,
+        contentType: 'markdown',
+        content: guide.content,
+        version: 1,
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    open,
+    helpMode,
+    helpSessionKey,
+    initialContext,
+    pageContext.pathname,
+    closeEntityDrawer,
+  ]);
 
   const chatAgents = useMemo(
     () => (agents.length > 0 ? agents : [DEFAULT_AGENT]),
@@ -173,9 +220,18 @@ export function ChatDrawer({
 
   const preferredAgentId = useMemo(() => {
     if (initialContext) return undefined;
-    const pageAgent = resolvePageAgent(pageContext, chatAgents);
-    return pageAgent?.id;
-  }, [initialContext, pageContext, chatAgents]);
+    if (helpMode) {
+      return resolveHelpAgent(chatAgents)?.id;
+    }
+    return resolvePageAgent(pageContext, chatAgents)?.id;
+  }, [initialContext, helpMode, pageContext, chatAgents]);
+
+  const helpAgentMissing = helpMode && agentsLoaded && !preferredAgentId;
+
+  const autoSendMessage = useMemo(() => {
+    if (!helpMode || !agentsLoaded || initialContext) return undefined;
+    return buildPageHelpMessage(pageContext);
+  }, [helpMode, agentsLoaded, initialContext, pageContext]);
 
   const handleMessagesChange = useCallback(async (messages: ChatMessage[]) => {
     if (messages.length === 0) return;
@@ -315,8 +371,14 @@ export function ChatDrawer({
     if (!nextOpen) setCanvasArtifact(null);
   }, []);
 
-  const title = initialContext ? 'AI Assist' : 'Chat';
-  const description = initialContext?.scope ?? 'Ask questions and take actions across your workspace';
+  const title = initialContext ? 'AI Assist' : helpMode ? 'Help' : 'Chat';
+  const description = initialContext?.scope
+    ? initialContext.scope
+    : helpAgentMissing
+      ? 'Install the Help System capability pack to enable Help Assistant'
+      : helpMode
+        ? 'Guides and steps for the page you are on'
+        : 'Ask questions and take actions across your workspace';
 
   const resolvedWidthClassName =
     widthClassName ??
@@ -413,6 +475,7 @@ export function ChatDrawer({
 
                 <div className="flex min-h-0 flex-1 overflow-hidden">
                   <div className="min-h-0 min-w-0 flex-1">
+                    {(agentsLoaded || !helpMode) && (
                     <ChatInterface
                       key={`${conversationId}-${sessionKey}`}
                       conversationId={conversationId}
@@ -420,6 +483,8 @@ export function ChatDrawer({
                       agents={chatAgents}
                       pageContext={initialContext ? undefined : pageContext}
                       preferredAgentId={preferredAgentId}
+                      forcePreferredAgent={helpMode && !helpAgentMissing}
+                      autoSendMessage={helpAgentMissing ? undefined : autoSendMessage}
                       onMessagesChange={handleMessagesChange}
                       onOpenCanvas={handleOpenCanvas}
                       onOpenCanvasComponent={handleOpenCanvasComponent}
@@ -427,6 +492,7 @@ export function ChatDrawer({
                       relatedRecordType={relatedEntityType}
                       relatedRecordId={relatedEntityId}
                     />
+                    )}
                   </div>
 
                   <div

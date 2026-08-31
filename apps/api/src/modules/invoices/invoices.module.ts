@@ -3,11 +3,12 @@ import { TenantModule } from '../../tenant/tenant.module';
 import { CrunchworkModule } from '../../crunchwork/crunchwork.module';
 import { CatalogModule } from '../catalog/catalog.module';
 import { ExternalModule } from '../external/external.module';
+import { OutboundModule } from '../domain/outbound/outbound.module';
 import { InvoicesController } from './invoices.controller';
 import { InvoicesService } from './invoices.service';
 
 @Module({
-  imports: [TenantModule, CrunchworkModule, CatalogModule, ExternalModule],
+  imports: [TenantModule, CrunchworkModule, CatalogModule, ExternalModule, OutboundModule],
   controllers: [InvoicesController],
   providers: [InvoicesService],
   exports: [InvoicesService],

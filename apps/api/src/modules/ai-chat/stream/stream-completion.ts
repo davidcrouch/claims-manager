@@ -47,6 +47,22 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+function isSoftToolError(result: unknown): boolean {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) return false;
+  const obj = result as Record<string, unknown>;
+  if (obj.error === true) return true;
+  if (typeof obj.error === 'string' && obj.error.trim().length > 0) return true;
+  return false;
+}
+
+function softToolErrorMessage(result: unknown): string | undefined {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) return undefined;
+  const obj = result as Record<string, unknown>;
+  if (typeof obj.message === 'string' && obj.message.trim()) return obj.message.slice(0, 240);
+  if (typeof obj.error === 'string' && obj.error.trim()) return obj.error.slice(0, 240);
+  return undefined;
+}
+
 function toUserFacingProviderError(err: unknown): string {
   const message = errorMessage(err);
   const modelMatch = message.match(/models\/([^/`\s]+)/);
@@ -266,6 +282,13 @@ export async function* streamCompletion(opts: StreamCompletionOptions): AsyncGen
           };
           isError = true;
           logger.warn(`[StreamCompletion.streamCompletion] tool "${toolCall.name}" failed: ${errMsg}`);
+        }
+        if (!isError && isSoftToolError(result)) {
+          isError = true;
+          const detail = softToolErrorMessage(result);
+          logger.warn(
+            `[StreamCompletion.streamCompletion] tool "${toolCall.name}" returned error payload${detail ? `: ${detail}` : ''}`,
+          );
         }
       }
 

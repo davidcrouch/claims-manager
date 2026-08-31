@@ -275,6 +275,14 @@ export class InvoicesService {
     if (!connectionId) {
       throw new BadRequestException('No active provider connection for tenant');
     }
+    if (!this.outboundSync) {
+      this.logger.error(
+        `InvoicesService.publish — OutboundSyncService not available, cannot send invoice ${params.id} to provider`,
+      );
+      throw new BadRequestException(
+        'Cannot publish to provider: outbound sync is not configured',
+      );
+    }
 
     const reusedCwInvoiceId = await this.resolveExistingCrunchworkInvoiceId({
       tenantId,
@@ -300,28 +308,29 @@ export class InvoicesService {
       },
     });
 
-    if (this.outboundSync) {
-      try {
-        await this.outboundSync.enqueue({
-          tenantId,
-          connectionId,
-          entityType: 'invoice',
-          entityId: params.id,
-          action: 'publish',
-          payload: {
-            purchaseOrderId: providerPurchaseOrderId,
-            reusedCwInvoiceId,
-            invoiceId: params.id,
-          },
-          sourceEvent: 'api:publish',
-          idempotencyKey: `invoice:${params.id}:publish`,
-          tx: this.outboundSync['db'],
-        });
-      } catch (err) {
-        this.logger.warn(
-          `InvoicesService.publish — failed to enqueue outbound sync for invoice ${params.id}: ${err instanceof Error ? err.message : err}`,
-        );
-      }
+    try {
+      await this.outboundSync.enqueue({
+        tenantId,
+        connectionId,
+        entityType: 'invoice',
+        entityId: params.id,
+        action: 'publish',
+        payload: {
+          purchaseOrderId: providerPurchaseOrderId,
+          reusedCwInvoiceId,
+          invoiceId: params.id,
+        },
+        sourceEvent: 'api:publish',
+        idempotencyKey: `invoice:${params.id}:publish`,
+        tx: this.outboundSync['db'],
+      });
+    } catch (err) {
+      this.logger.error(
+        `InvoicesService.publish — failed to enqueue outbound sync for invoice ${params.id}: ${err instanceof Error ? err.message : err}`,
+      );
+      throw new BadRequestException(
+        `Failed to queue invoice for Crunchwork: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
 
     return this.invoicesRepo.findOne({ id: params.id, tenantId });

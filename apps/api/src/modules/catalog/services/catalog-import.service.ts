@@ -320,11 +320,26 @@ export class CatalogImportService {
 
       try {
         const rowData = await this.buildRowData(ctx, i, categoryByCode);
-        const existing = await this.itemsRepo.findByCode({
+        let existing = await this.itemsRepo.findByCode({
           tenantId: ctx.tenantId,
           code,
           catalogId: ctx.catalogId,
         });
+
+        // Transition path: if code changed (UUID → slug), match by externalReference
+        if (!existing) {
+          const extRef = cellByField(ctx, cells, 'externalReference');
+          if (extRef) {
+            existing = await this.itemsRepo.findByExternalReference({
+              tenantId: ctx.tenantId,
+              externalReference: extRef,
+              catalogId: ctx.catalogId,
+            }) ?? null;
+            if (existing) {
+              await this.itemsRepo.update({ tenantId: ctx.tenantId, id: existing.id, data: { code } });
+            }
+          }
+        }
 
         let itemId: string;
         let itemKind: string;
@@ -336,13 +351,18 @@ export class CatalogImportService {
           results.push({ row: i + 1, code, status: 'updated' });
           updated++;
         } else {
+          const finalCode = await this.resolveUniqueImportCode({
+            tenantId: ctx.tenantId,
+            catalogId: ctx.catalogId,
+            baseCode: code,
+          });
           const row = await this.itemsRepo.create({
             tenantId: ctx.tenantId,
-            data: { ...rowData, code, catalogId: ctx.catalogId, isActive: true },
+            data: { ...rowData, code: finalCode, catalogId: ctx.catalogId, isActive: true },
           });
           itemId = row.id;
           itemKind = row.kind;
-          results.push({ row: i + 1, code, status: 'created' });
+          results.push({ row: i + 1, code: finalCode, status: 'created' });
           created++;
         }
 
@@ -494,10 +514,6 @@ export class CatalogImportService {
       const explicitCode = cellByField(ctx, cells, 'code');
       if (explicitCode) return explicitCode;
 
-      // Prefer CW id as stable code when present
-      const extRef = cellByField(ctx, cells, 'externalReference');
-      if (extRef) return extRef;
-
       const name = cellByField(ctx, cells, 'name');
       return name
         .toUpperCase()
@@ -506,6 +522,23 @@ export class CatalogImportService {
         .slice(0, 80) || '';
     }
     return cellByField(ctx, cells, 'code');
+  }
+
+  private async resolveUniqueImportCode(params: {
+    tenantId: string;
+    catalogId?: string;
+    baseCode: string;
+  }): Promise<string> {
+    const { tenantId, catalogId, baseCode } = params;
+    const existing = await this.itemsRepo.findByCode({ tenantId, code: baseCode, catalogId });
+    if (!existing) return baseCode;
+
+    for (let i = 2; i <= 100; i++) {
+      const candidate = `${baseCode}-${i}`;
+      const dup = await this.itemsRepo.findByCode({ tenantId, code: candidate, catalogId });
+      if (!dup) return candidate;
+    }
+    return `${baseCode}-${Date.now()}`;
   }
 
   private collectCodesInFile(ctx: ImportParseContext): Map<string, { kind: string }> {

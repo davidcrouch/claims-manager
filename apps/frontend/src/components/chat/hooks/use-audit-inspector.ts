@@ -3,6 +3,11 @@
 import { useState, useCallback, useRef } from 'react';
 import type { ChatMessage } from '@/lib/ai/chat-types';
 import type { AiAuditRecord } from '@/lib/ai/types';
+import {
+  isToolCallFailure,
+  isToolResultError,
+  findToolResultPart,
+} from '@/lib/ai/tool-result-error';
 import { getConversationAuditAction } from '@/app/(app)/chat/actions';
 
 export interface ToolCallDetail {
@@ -11,6 +16,7 @@ export interface ToolCallDetail {
   args: Record<string, unknown>;
   result?: unknown;
   state: string;
+  isError: boolean;
 }
 
 function stripMcpPrefix(name: string): string {
@@ -33,22 +39,22 @@ function extractToolCallDetails(message: ChatMessage): ToolCallDetail[] {
   for (const part of message.parts) {
     if (part.type !== 'tool-call') continue;
 
-    const matchedResult = message.parts.find(
-      (p) => p.type === 'tool-result' && p.toolCallId === part.toolCallId,
-    );
+    const matchedResult = findToolResultPart(message.parts, part.toolCallId);
     const result =
-      matchedResult && matchedResult.type === 'tool-result'
+      matchedResult
         ? matchedResult.result
         : part.state === 'error'
-          ? { error: 'Tool call failed' }
+          ? { error: true, message: 'Tool call failed' }
           : undefined;
+    const isError = isToolCallFailure(part, matchedResult) || isToolResultError(result);
 
     details.push({
       toolName: part.toolName,
       displayName: formatToolDisplayName(part.toolName),
       args: (part.args ?? {}) as Record<string, unknown>,
       result,
-      state: part.state,
+      state: isError ? 'error' : part.state,
+      isError,
     });
   }
 

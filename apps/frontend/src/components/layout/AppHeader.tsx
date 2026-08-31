@@ -1,6 +1,6 @@
 'use client';
 
-import { Settings } from 'lucide-react';
+import { CircleHelp, Settings } from 'lucide-react';
 import {
   SidebarTrigger,
   SidebarRail,
@@ -20,6 +20,7 @@ export interface AppHeaderProps {
   showAdminSettings?: boolean;
   onOpenAdminSettings?: () => void;
   adminSettingsActive?: boolean;
+  onOpenHelp?: () => void;
 }
 
 export function AppHeader({
@@ -27,6 +28,7 @@ export function AppHeader({
   showAdminSettings = false,
   onOpenAdminSettings,
   adminSettingsActive = false,
+  onOpenHelp,
 }: AppHeaderProps) {
   return (
     <header
@@ -56,6 +58,19 @@ export function AppHeader({
             </Button>
           ) : null}
           <NotificationBell />
+          {onOpenHelp ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Help for this page"
+              title="Help for this page"
+              onClick={onOpenHelp}
+              className="h-9 w-9 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+            >
+              <CircleHelp className="h-4 w-4" />
+            </Button>
+          ) : null}
         </div>
       </div>
     </header>

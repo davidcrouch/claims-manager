@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { CanvasArtifact } from '@/lib/ai/chat-types';
+import { isToolResultError, toolResultErrorMessage } from '@/lib/ai/tool-result-error';
 
 interface ToolInvocationProps {
   toolName: string;
@@ -122,8 +123,33 @@ function SkillToolCard({ toolName, args, state, result }: ToolInvocationProps) {
   const isSearch = stripped === 'search_skills' || toolName === 'search_skills';
   const argObj = (args ?? {}) as Record<string, unknown>;
   const res = result as Record<string, unknown> | undefined;
-  const skillName = res?.skillName ?? argObj.skillId ?? 'Skill';
+  const failed = !isLoading && isToolResultError(result, state === 'error');
+  const skillName = res?.skillName ?? (typeof argObj.skillId === 'string' ? argObj.skillId : null);
+  const readableName =
+    typeof skillName === 'string' && !looksLikeUuid(skillName) ? skillName : null;
   const mode = res?.mode as string | undefined;
+  const errorDetail = toolResultErrorMessage(result);
+
+  if (failed) {
+    return (
+      <div className="my-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5">
+        <div className="flex items-center gap-2">
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-red-100">
+            <XCircle className="h-3.5 w-3.5 text-red-600" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-red-800">
+              {isSearch ? 'Skill search failed' : 'Skill activation failed'}
+              {readableName ? `: ${readableName}` : ''}
+            </p>
+            {errorDetail ? (
+              <p className="text-xs text-red-600">{errorDetail}</p>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="my-2 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2.5">
@@ -140,8 +166,8 @@ function SkillToolCard({ toolName, args, state, result }: ToolInvocationProps) {
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-purple-800">
             {isLoading
-              ? (isSearch ? 'Searching skills...' : `Activating ${String(skillName)}...`)
-              : (isSearch ? 'Skill Search' : `Skill: ${String(skillName)}`)}
+              ? (isSearch ? 'Searching skills...' : `Activating ${readableName ?? 'skill'}...`)
+              : (isSearch ? 'Skill Search' : `Skill: ${readableName ?? 'Skill'}`)}
           </p>
           {!isLoading && mode && (
             <p className="text-xs text-purple-500">Mode: {mode}</p>
@@ -156,6 +182,10 @@ function SkillToolCard({ toolName, args, state, result }: ToolInvocationProps) {
       </div>
     </div>
   );
+}
+
+function looksLikeUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
 
 export function ToolInvocation({

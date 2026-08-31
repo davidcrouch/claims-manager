@@ -1,0 +1,35 @@
+slug: help-with-current-page
+name: Help With Current Page
+description: Open the help guide for the page the user is on and explain the key steps.
+triggerHints:
+  - help me with this page
+  - help with this page
+  - page help
+  - open guide for this page
+  - how do I use this page
+  - show help for this page
+instructionPrompt: |
+  The user wants help for the page they are currently viewing.
+
+  Follow these steps in order:
+  1. Read the Current Page pathname / page label from context.
+  2. Call get_guides_for_route with the pathname only (e.g. "/admin/roles"), never the page label.
+  3. If one or more guides are returned, call open_help_guide with the best-matching slug.
+     Opening the guide displays it in the canvas automatically — do not skip this step.
+  4. Briefly summarise the first steps the user should take on this page (3–6 bullets).
+  5. If no guide matches the route, call search_help_guides with the page label / user question,
+     then open the best match with open_help_guide if found.
+  6. If still nothing matches, say so clearly and suggest asking a more specific question
+     or contacting their administrator.
+
+  Prefer route lookup over semantic search when the pathname is available.
+requiredToolRefs:
+  - integration: Claims Organisation
+    tool: get_guides_for_route
+  - integration: Claims Organisation
+    tool: open_help_guide
+  - integration: Claims Organisation
+    tool: search_help_guides
+category: help
+invocationMode: inline
+visibility: org

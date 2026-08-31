@@ -1,0 +1,13 @@
+id: help-system
+version: 1.0.1
+name: Help System
+description: Online help guides for EnsureOS. Provides a help assistant agent and skills for searching and displaying user guides via chat.
+integrationRefs:
+  - Claims Organisation
+agents:
+  - file: agents/help-assistant.yaml
+skills:
+  - file: skills/help-with-current-page.yaml
+  - file: skills/search-help.yaml
+  - file: skills/open-guide.yaml
+prompts: []

@@ -297,10 +297,22 @@ export async function searchCatalogItemsAction(params: {
   }
 }
 
+export async function fetchCatalogCategoriesAction() {
+  const api = await getApi();
+  if (!api) return [];
+  try {
+    return api.getCatalogCategoriesTree();
+  } catch (err) {
+    console.error('[catalog/actions.fetchCatalogCategoriesAction]', err);
+    return [];
+  }
+}
+
 export async function fetchCatalogItemsAction(params: {
   catalogId?: string;
   q?: string;
   kind?: 'primitive' | 'assembly' | 'scope';
+  categoryIds?: string[];
   page?: number;
   limit?: number;
   sort?: string;
@@ -312,6 +324,7 @@ export async function fetchCatalogItemsAction(params: {
       catalogId: params.catalogId,
       q: params.q,
       kind: params.kind,
+      categoryIds: params.categoryIds,
       page: params.page ?? 1,
       limit: params.limit ?? 50,
       sort: params.sort,
@@ -464,7 +477,7 @@ export async function getCatalogGroupedItemsAction(params: {
           return {
             id: c.id,
             name: c.component?.name ?? '',
-            component: c.component?.code ?? '',
+            component: '',
             description: c.component?.description ?? '',
             kind: (c.component?.kind ?? 'primitive') as 'primitive' | 'assembly' | 'scope',
             type: (c.component?.typeId ? itemTypeMap.get(c.component.typeId) : undefined) ?? '',
@@ -515,7 +528,7 @@ export async function getCatalogGroupedItemsAction(params: {
       const items: CatalogGroupedItem[] = bucket.items.map((item) => ({
         id: item.id,
         name: item.name,
-        component: item.code,
+        component: '',
         description: item.description ?? '',
         kind: item.kind,
         type: itemTypeMap.get(item.typeId) ?? '',
@@ -537,7 +550,7 @@ export async function getCatalogGroupedItemsAction(params: {
       const combos: CatalogGroupedAssembly[] = bucket.assemblies.map((asm) => ({
         id: asm.id,
         name: asm.name,
-        component: asm.code,
+        component: '',
         description: asm.description ?? '',
         category: catInfo.name,
         subCategory: null,
@@ -553,7 +566,7 @@ export async function getCatalogGroupedItemsAction(params: {
         return {
           id: scopeItem.id,
           name: scopeItem.name,
-          component: scopeItem.code,
+          component: '',
           description: scopeItem.description ?? '',
           category: catInfo.name,
           subCategory: null,
@@ -744,6 +757,95 @@ export async function replaceCatalogBomAction(
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to update BOM',
+    };
+  }
+}
+
+export async function addCatalogItemToCatalogAction(params: {
+  targetCatalogId: string;
+  catalogItemId: string;
+  parentId?: string;
+  nestUnderId?: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const PREFIX = 'catalog/actions.addCatalogItemToCatalogAction';
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+
+  try {
+    await api.copyCatalogItem(params.targetCatalogId, {
+      catalogItemId: params.catalogItemId,
+      parentId: params.parentId,
+      nestUnderId: params.nestUnderId,
+    });
+    revalidatePath('/admin/catalog');
+    revalidatePath(`/admin/catalog/${params.targetCatalogId}`);
+    return { success: true };
+  } catch (err) {
+    console.error(`[${PREFIX}]`, err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to copy catalogue item',
+    };
+  }
+}
+
+export async function moveCatalogLineItemAction(params: {
+  catalogId: string;
+  itemId?: string;
+  comboId?: string;
+  targetGroupId: string;
+  targetComboId?: string;
+  insertAtIndex?: number;
+}): Promise<{ success: boolean; error?: string }> {
+  const PREFIX = 'catalog/actions.moveCatalogLineItemAction';
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+
+  try {
+    await api.moveCatalogLineItem(params.catalogId, {
+      itemId: params.itemId,
+      comboId: params.comboId,
+      targetGroupId: params.targetGroupId,
+      targetComboId: params.targetComboId,
+      insertAtIndex: params.insertAtIndex,
+    });
+    revalidatePath(`/admin/catalog/${params.catalogId}`);
+    return { success: true };
+  } catch (err) {
+    console.error(`[${PREFIX}]`, err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to move catalogue item',
+    };
+  }
+}
+
+export async function reorderCatalogLineItemsAction(params: {
+  catalogId: string;
+  groupId: string;
+  parentComboId?: string;
+  items?: Array<{ id: string; sortIndex: number }>;
+  combos?: Array<{ id: string; sortIndex: number }>;
+  scopes?: Array<{ id: string; sortIndex: number }>;
+}): Promise<{ success: boolean; error?: string }> {
+  const PREFIX = 'catalog/actions.reorderCatalogLineItemsAction';
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+
+  try {
+    await api.reorderCatalogLineItems(params.catalogId, {
+      groupId: params.groupId,
+      parentComboId: params.parentComboId,
+      items: params.items,
+      combos: params.combos,
+      scopes: params.scopes,
+    });
+    return { success: true };
+  } catch (err) {
+    console.error(`[${PREFIX}]`, err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to reorder catalogue items',
     };
   }
 }

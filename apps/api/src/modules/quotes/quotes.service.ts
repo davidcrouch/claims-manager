@@ -592,6 +592,14 @@ export class QuotesService {
     }
 
     const connectionId = await this.resolveConnectionId({ tenantId, job });
+    if (!this.outboundSync) {
+      this.logger.error(
+        `QuotesService.publish — OutboundSyncService not available, cannot send quote ${params.id} to provider`,
+      );
+      throw new BadRequestException(
+        'Cannot publish to provider: outbound sync is not configured',
+      );
+    }
 
     const claim = existing.claimId
       ? await this.claimsRepo.findOne({ id: existing.claimId, tenantId })
@@ -670,27 +678,31 @@ export class QuotesService {
       cwResponse: {},
     });
 
-    if (this.outboundSync) {
-      try {
-        await this.outboundSync.enqueue({
-          tenantId,
-          connectionId,
-          entityType: 'quote',
-          entityId: params.id,
-          action: 'publish',
-          payload: {
-            createBody: enriched,
-            publishBody: { status: (await this.resolvePublishedStatus({ tenantId })).outbound },
-          },
-          sourceEvent: 'api:publish',
-          idempotencyKey: `quote:${params.id}:publish`,
-          tx: this.outboundSync['db'],
-        });
-      } catch (err) {
-        this.logger.warn(
-          `QuotesService.publish — failed to enqueue outbound sync for quote ${params.id}: ${err instanceof Error ? err.message : err}`,
-        );
-      }
+    try {
+      const queueId = await this.outboundSync.enqueue({
+        tenantId,
+        connectionId,
+        entityType: 'quote',
+        entityId: params.id,
+        action: 'publish',
+        payload: {
+          createBody: enriched,
+          publishBody: { status: (await this.resolvePublishedStatus({ tenantId })).outbound },
+        },
+        sourceEvent: 'api:publish',
+        idempotencyKey: `quote:${params.id}:publish`,
+        tx: this.outboundSync['db'],
+      });
+      this.logger.log(
+        `QuotesService.publish — enqueued outbound sync for quote ${params.id} queueId=${queueId || 'none'}`,
+      );
+    } catch (err) {
+      this.logger.error(
+        `QuotesService.publish — failed to enqueue outbound sync for quote ${params.id}: ${err instanceof Error ? err.message : err}`,
+      );
+      throw new BadRequestException(
+        `Failed to queue estimate for Crunchwork: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
 
     await this.maybeIssueCrossTenantProposal({

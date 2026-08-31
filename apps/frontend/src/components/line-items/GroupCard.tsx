@@ -33,7 +33,7 @@ import { AssemblyRow } from './AssemblyRow';
 import { ScopeCard } from './ScopeCard';
 import { LI_HEADER_COUNT, LI_HEADER_TOTAL, LineItemsColGroup, LineItemsThead, LineItemsTableShell } from './lib/table-parts';
 import { HeaderVisibilityToggles } from './lib/header-visibility';
-import { NoteHoverWrap } from './lib/line-note-hover';
+import { LineDetailHoverWrap } from './lib/line-detail-hover';
 import { filterVisibleItems, isSelectablePicked } from './lib/selection-filter';
 
 interface GroupCardProps {
@@ -226,9 +226,10 @@ export const GroupCard = memo(function GroupCard({ group, groupIndex, totalGroup
       {...dropHandlers}
     >
       {/* Group header — grab, checkbox, expand, then content */}
-      <NoteHoverWrap
+      <LineDetailHoverWrap
+        title={label}
+        description={group.description}
         note={group.note}
-        enabled={enableLineNotes}
         className={cn(
           ROW_LEAD_ROW_CLS,
           'relative cursor-pointer bg-blue-100 py-3 pr-3 transition-colors hover:bg-blue-200',
@@ -335,7 +336,7 @@ export const GroupCard = memo(function GroupCard({ group, groupIndex, totalGroup
             </DropdownMenu>
           </div>
         )}
-      </NoteHoverWrap>
+      </LineDetailHoverWrap>
 
       {/* Group content */}
       {!isCollapsed && (

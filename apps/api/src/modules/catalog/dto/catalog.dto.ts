@@ -315,3 +315,76 @@ export class AddCatalogAssemblyDto {
   @IsUUID()
   quoteComboId?: string;
 }
+
+export class CopyCatalogItemDto {
+  @IsUUID()
+  catalogItemId!: string;
+
+  /** Target category id (group). Omit or pass null for uncategorized. */
+  @IsOptional()
+  @IsUUID()
+  parentId?: string;
+
+  /** Nest the copied item under this assembly or scope (BOM parent). */
+  @IsOptional()
+  @IsUUID()
+  nestUnderId?: string;
+}
+
+export class MoveCatalogLineItemDto {
+  @IsOptional()
+  @IsUUID()
+  itemId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  comboId?: string;
+
+  @IsUUID()
+  targetGroupId!: string;
+
+  @IsOptional()
+  @IsUUID()
+  targetComboId?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  insertAtIndex?: number;
+}
+
+export class ReorderCatalogLineItemsDto {
+  @IsUUID()
+  groupId!: string;
+
+  @IsOptional()
+  @IsUUID()
+  parentComboId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CatalogSortEntryDto)
+  items?: CatalogSortEntryDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CatalogSortEntryDto)
+  combos?: CatalogSortEntryDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CatalogSortEntryDto)
+  scopes?: CatalogSortEntryDto[];
+}
+
+export class CatalogSortEntryDto {
+  @IsUUID()
+  id!: string;
+
+  @IsInt()
+  @Min(0)
+  sortIndex!: number;
+}

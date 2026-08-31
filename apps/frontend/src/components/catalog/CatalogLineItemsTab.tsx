@@ -1,6 +1,16 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type Ref,
+} from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { CreateSubmitOverlay } from '@/components/forms/CreateSubmitOverlay';
@@ -10,20 +20,34 @@ import { DeleteItemDialog } from '@/components/quotes/DeleteItemDialog';
 import {
   LineItemsProvider,
   LineItemsTable,
+  buildLineItemOriginals,
   type ApiGroup,
   type DeleteItemRequest,
   type EditableFieldKey,
   type LineItemsActions,
   LINE_ITEMS_PAGE_SIZE,
+  applyReorderParams,
 } from '@/components/line-items';
 import { uiMarkupToStored, uiTaxToStored } from '@/lib/rates';
 import {
   getCatalogGroupedItemsAction,
   saveCatalogLineItemsAction,
   deleteCatalogItemAction,
+  addCatalogItemToCatalogAction,
+  moveCatalogLineItemAction,
+  reorderCatalogLineItemsAction,
 } from '@/app/(app)/admin/catalog/actions';
+import type { CatalogDragPayload } from '@/components/catalog/catalog-drag';
+import type { CatalogType } from '@/types/api';
 
 const PREFIX = 'frontend:CatalogLineItemsTab';
+
+export type CatalogLineItemEdits = Record<string, Record<string, string>>;
+
+export interface CatalogLineItemsTabHandle {
+  save: (edits?: CatalogLineItemEdits) => void;
+  resetEdits: () => void;
+}
 
 function findCatalogItemMarkupType(groups: ApiGroup[], catalogItemId: string): string | undefined {
   for (const g of groups) {
@@ -159,17 +183,30 @@ function mapCatalogGroupsToApiGroups(
   }));
 }
 
-export function CatalogLineItemsTab({
-  catalogId,
-  search,
-  onDirtyChange,
-  reloadToken = 0,
-}: {
-  catalogId: string;
-  search?: string;
-  onDirtyChange?: (dirty: boolean, save: () => void) => void;
-  reloadToken?: number;
-}) {
+export const CatalogLineItemsTab = forwardRef(function CatalogLineItemsTab(
+  {
+    catalogId,
+    catalogType,
+    search,
+    onDirtyChange,
+    reloadToken = 0,
+    drawerOpen,
+    onDrawerOpenChange,
+    onUndoCapture,
+    onSaveStateChange,
+  }: {
+    catalogId: string;
+    catalogType?: CatalogType;
+    search?: string;
+    onDirtyChange?: (dirty: boolean, save: () => void) => void;
+    reloadToken?: number;
+    drawerOpen?: boolean;
+    onDrawerOpenChange?: (open: boolean) => void;
+    onUndoCapture?: (restoreEdits: CatalogLineItemEdits) => void;
+    onSaveStateChange?: (state: 'saving' | 'saved' | 'error', error?: string) => void;
+  },
+  ref: Ref<CatalogLineItemsTabHandle>,
+) {
   const router = useRouter();
   const [groups, setGroups] = useState<ApiGroup[]>([]);
   const [page, setPage] = useState(1);
@@ -179,8 +216,14 @@ export function CatalogLineItemsTab({
   const [initialLoad, setInitialLoad] = useState(true);
   const [pending, startTransition] = useTransition();
   const [structurallyDirty, setStructurallyDirty] = useState(false);
+  const [resetEditsKey, setResetEditsKey] = useState(0);
   const latestEditsRef = useRef<Record<string, Record<string, string>>>({});
   const saveRef = useRef<((edits: Record<string, Record<string, string>>) => void) | null>(null);
+  const skipUndoRef = useRef(false);
+  const onUndoCaptureRef = useRef(onUndoCapture);
+  const onSaveStateChangeRef = useRef(onSaveStateChange);
+  onUndoCaptureRef.current = onUndoCapture;
+  onSaveStateChangeRef.current = onSaveStateChange;
 
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [deletingGroupId, setDeletingGroupId] = useState<string | null>(null);
@@ -275,6 +318,78 @@ export function CatalogLineItemsTab({
       router.refresh();
     });
   }
+
+  const handleCatalogDrop = useCallback(
+    (payload: CatalogDragPayload, groupId?: string, quoteComboId?: string) => {
+      startTransition(async () => {
+        const nestUnderId = payload.kind === 'scope' ? undefined : quoteComboId;
+        const result = await addCatalogItemToCatalogAction({
+          targetCatalogId: catalogId,
+          catalogItemId: payload.id,
+          parentId: groupId && groupId !== '__uncategorized__' ? groupId : undefined,
+          nestUnderId,
+        });
+        if (!result.success) {
+          toast.error(result.error ?? 'Failed to add catalogue item');
+          return;
+        }
+        toast.success(`Added ${payload.name ?? payload.code} to catalogue`);
+        setStructurallyDirty(true);
+        await loadGroupedItems();
+        router.refresh();
+      });
+    },
+    [catalogId, loadGroupedItems, router],
+  );
+
+  const handleReorderLineItems = useCallback(
+    (params: {
+      groupId: string;
+      parentComboId?: string;
+      items?: Array<{ id: string; sortIndex: number }>;
+      combos?: Array<{ id: string; sortIndex: number }>;
+      scopes?: Array<{ id: string; sortIndex: number }>;
+    }) => {
+      setGroups((prev) => applyReorderParams(prev, params));
+      startTransition(async () => {
+        const result = await reorderCatalogLineItemsAction({
+          catalogId,
+          ...params,
+        });
+        if (!result.success) {
+          toast.error(result.error ?? 'Failed to reorder');
+          await loadGroupedItems();
+        }
+      });
+    },
+    [catalogId, loadGroupedItems],
+  );
+
+  const handleMoveLineItem = useCallback(
+    (params: {
+      itemId?: string;
+      comboId?: string;
+      targetGroupId: string;
+      targetComboId?: string;
+      insertAtIndex?: number;
+    }) => {
+      startTransition(async () => {
+        const result = await moveCatalogLineItemAction({
+          catalogId,
+          ...params,
+        });
+        if (!result.success) {
+          toast.error(result.error ?? 'Failed to move item');
+          return;
+        }
+        toast.success('Item moved');
+        setStructurallyDirty(true);
+        await loadGroupedItems();
+        router.refresh();
+      });
+    },
+    [catalogId, loadGroupedItems, router],
+  );
 
   function handleSaveLineItems(edits: Record<string, Record<string, string>>) {
     startTransition(async () => {
@@ -402,25 +517,46 @@ export function CatalogLineItemsTab({
 
       if (items.length === 0 && bomUpdates.length === 0) {
         setStructurallyDirty(false);
-        toast.success('Changes saved');
+        onSaveStateChangeRef.current?.('saved');
         return;
       }
+
+      const originals = buildLineItemOriginals(groups, edits);
+      const skipUndo = skipUndoRef.current;
+      skipUndoRef.current = false;
+      onSaveStateChangeRef.current?.('saving');
 
       const result = await saveCatalogLineItemsAction({ items, bomUpdates });
       if (!result.success) {
         console.error(`${PREFIX}.handleSaveLineItems — ${result.error}`);
         toast.error(result.error ?? 'Failed to save catalogue items');
+        onSaveStateChangeRef.current?.('error', result.error ?? 'Failed to save');
         return;
       }
 
-      toast.success(`Saved ${result.updated} item${result.updated !== 1 ? 's' : ''}`);
+      if (!skipUndo && Object.keys(originals).length > 0) {
+        onUndoCaptureRef.current?.(originals);
+      }
       setStructurallyDirty(false);
+      onSaveStateChangeRef.current?.('saved');
       await loadGroupedItems();
+      setResetEditsKey((k) => k + 1);
       router.refresh();
     });
   }
 
   saveRef.current = handleSaveLineItems;
+
+  useImperativeHandle(ref, () => ({
+    save: (edits) => {
+      if (edits) skipUndoRef.current = true;
+      handleSaveLineItems(edits ?? {});
+    },
+    resetEdits: () => {
+      setResetEditsKey((k) => k + 1);
+      setStructurallyDirty(false);
+    },
+  }), [handleSaveLineItems]);
 
   const handleTableDirtyChange = useCallback(
     (dirty: boolean, edits: Record<string, Record<string, string>>) => {
@@ -456,7 +592,17 @@ export function CatalogLineItemsTab({
     onMoveGroupUp: (id: string) => handleMoveGroup(id, 'up'),
     onMoveGroupDown: (id: string) => handleMoveGroup(id, 'down'),
     onDirtyChange: handleTableDirtyChange,
-  }), [handleDeleteCombo, handleDeleteScope, loadGroupedItems, handleTableDirtyChange]);
+    onCatalogDrop: handleCatalogDrop,
+    onReorderLineItems: handleReorderLineItems,
+    onMoveLineItem: handleMoveLineItem,
+  }), [
+    handleDeleteCombo,
+    handleDeleteScope,
+    handleTableDirtyChange,
+    handleCatalogDrop,
+    handleReorderLineItems,
+    handleMoveLineItem,
+  ]);
 
   return (
     <div className="space-y-4">
@@ -464,6 +610,7 @@ export function CatalogLineItemsTab({
       <LineItemsProvider
         groups={groups}
         mode="catalog"
+        hideComponent
         paging={{
           page,
           pageSize: LINE_ITEMS_PAGE_SIZE,
@@ -476,6 +623,7 @@ export function CatalogLineItemsTab({
         }}
         actions={catalogActions}
         structurallyDirty={structurallyDirty}
+        resetEditsKey={resetEditsKey}
       >
         <LineItemsTable />
       </LineItemsProvider>
@@ -512,4 +660,4 @@ export function CatalogLineItemsTab({
       )}
     </div>
   );
-}
+});

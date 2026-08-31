@@ -13,7 +13,7 @@ import { useLineItems } from './LineItemsProvider';
 import { useDropIndicatorBorder } from './DropIndicatorLine';
 import { useDropTargetHighlight } from './lib/drop-highlight';
 import { RowLeadCheckbox, RowLeadDrag, ROW_LEAD_TD_CHECK, ROW_LEAD_TD_CHECK_LEAD, ROW_LEAD_TD_DRAG } from './lib/row-lead';
-import { useLineNoteHover } from './lib/line-note-hover';
+import { useLineDetailHover } from './lib/line-detail-hover';
 import {
   LI_TD_ACTIONS,
   LI_TD_CELL,
@@ -61,6 +61,7 @@ export const ItemRow = memo(function ItemRow({
   } = useLineItems();
 
   const { showMarkup, showGst, enableLineNotes } = config;
+  const hideComponent = config.hideComponent;
   const showQuantities = parentShowQuantities ?? config.showQuantities;
   const showPricing = parentShowPricing ?? config.showPricing;
   const showCategory = config.showCategory;
@@ -69,7 +70,6 @@ export const ItemRow = memo(function ItemRow({
   const showDragHandle = !isReadOnly && !!actions.onReorderLineItems;
   const qtyDisabled = contentDisabled?.quantities ?? false;
   const priceDisabled = contentDisabled?.pricing ?? false;
-  const noteHover = useLineNoteHover(item.note, enableLineNotes);
 
   const isEditing = editState?.rowKey === rowKey || (selectedRows.has(rowKey) && editState !== null);
   const isPrimaryEdit = editState?.rowKey === rowKey;
@@ -125,7 +125,7 @@ export const ItemRow = memo(function ItemRow({
     }
     const td = (e.target as HTMLElement).closest('td');
     const col = (td?.dataset.col as ColumnKey) ?? null;
-    const field = col ? nearestEditableField(col, showMarkup, showGst, showQuantities, showPricing) : 'name';
+    const field = col ? nearestEditableField(col, showMarkup, showGst, showQuantities, showPricing, hideComponent) : 'name';
 
     setEditInputs((prev) => {
       if (prev[rowKey]) return prev;
@@ -226,15 +226,23 @@ export const ItemRow = memo(function ItemRow({
       : storedMarkupToUi(item.markupType, item.markupValue);
   const displayTax = inputs ? (parseFloat(inputs.tax) || 0) : storedTaxToUi(typeof item.tax === 'number' ? item.tax : 0);
 
+  const detailHover = useLineDetailHover({
+    title: displayName,
+    component: displayComponent,
+    description: displayDescription,
+    note: item.note,
+    hideComponent,
+  });
+
   return (
     <>
-      {noteHover.popup}
+      {detailHover.popup}
       <tr
         ref={setNodeRef}
         style={style}
         data-item-row
         data-row-key={rowKey}
-        {...noteHover.handlers}
+        {...detailHover.handlers}
       className={cn(
         'cursor-pointer transition-colors',
         showSelect && !isPicked && 'opacity-40',
@@ -298,6 +306,7 @@ export const ItemRow = memo(function ItemRow({
                   className={cn(inputCls('left'), 'truncate')}
                 />
               </div>
+              {!hideComponent && (
               <div
                 className={cn('flex-1 min-w-0 border-l border-slate-200', subCellCls('component'))}
                 onClick={selectField('component')}
@@ -312,6 +321,7 @@ export const ItemRow = memo(function ItemRow({
                   className={cn(inputCls('left'), 'truncate font-normal text-slate-600')}
                 />
               </div>
+              )}
             </div>
             <div
               className={cn('border-t border-slate-100', subCellCls('description'))}
@@ -332,7 +342,7 @@ export const ItemRow = memo(function ItemRow({
           <div className={cn('min-w-0', indented && 'pl-7')}>
             <div className="truncate text-sm font-medium text-slate-900">
               {displayName || '—'}
-              {displayComponent && (
+              {!hideComponent && displayComponent && (
                 <span className="font-normal text-slate-600"> — {displayComponent}</span>
               )}
               {item.internal && (

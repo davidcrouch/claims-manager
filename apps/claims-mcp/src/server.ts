@@ -27,6 +27,7 @@ import { registerVendorsTools } from './tools/vendors.tool.js';
 import { registerOrganisationsTools } from './tools/organisations.tool.js';
 import { registerUsersTools } from './tools/users.tool.js';
 import { registerNotificationsTools } from './tools/notifications.tool.js';
+import { registerGuidesTools } from './tools/guides.tool.js';
 import { registerDashboardTools } from './tools/dashboard.tool.js';
 import { registerFilesystemTools } from './tools/filesystem.tool.js';
 import { registerCatalogTools } from './tools/catalog.tool.js';
@@ -98,6 +99,7 @@ export const CATEGORY_REGISTRARS: Partial<Record<CategoryId, ToolRegistrar>> = {
     registerOrganisationsTools,
     registerUsersTools,
     registerNotificationsTools,
+    registerGuidesTools,
   ),
 };
 

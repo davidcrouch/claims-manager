@@ -29,6 +29,10 @@ import {
   resolveVisionImageUrl,
 } from '@/lib/ai/vision-block';
 import { cn } from '@/lib/utils';
+import {
+  messageHasToolErrors,
+  shouldShowToolCallInTimeline,
+} from '@/lib/ai/tool-result-error';
 import { ToolInvocation } from './ToolInvocation';
 import { ImageLightbox } from './ImageLightbox';
 import { ImageAnnotation } from './ImageAnnotation';
@@ -165,6 +169,8 @@ export const MessageRenderer = memo(function MessageRenderer({
   const hasVisibleText = message.parts.some(
     (p) => p.type === 'text' && p.text,
   );
+  const processTerminated = message.metadata?.error === true;
+  const hasCapturedIssue = processTerminated || messageHasToolErrors(message.parts);
 
   return (
     <>
@@ -379,6 +385,9 @@ export const MessageRenderer = memo(function MessageRenderer({
             }
 
             if (part.type === 'tool-call') {
+              if (!shouldShowToolCallInTimeline(part, message.parts, processTerminated)) {
+                return null;
+              }
               const toolResult = findToolResult(message.parts, part.toolCallId);
               const visionResult =
                 part.state === 'complete' && toolResult?.result && isVisionResult(toolResult.result)
@@ -504,7 +513,7 @@ export const MessageRenderer = memo(function MessageRenderer({
               .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
               .map((p) => p.text)
               .join('\n\n');
-            if (!messageText) return null;
+            if (!messageText && !hasCapturedIssue) return null;
             const confidence = calculateConfidence(message);
 
             return (
@@ -520,8 +529,8 @@ export const MessageRenderer = memo(function MessageRenderer({
                     Regenerate
                   </button>
                 )}
-                <CopyButton message={message} />
-                <SpeakButton text={messageText} />
+                {messageText ? <CopyButton message={message} /> : null}
+                {messageText ? <SpeakButton text={messageText} /> : null}
                 {onFeedback && (
                   <MessageFeedback
                     messageId={message.id}
@@ -533,11 +542,33 @@ export const MessageRenderer = memo(function MessageRenderer({
                   <button
                     type="button"
                     onClick={() => onInspect(message.id)}
-                    className="flex items-center gap-1 text-xs text-slate-400 transition-colors hover:text-slate-600"
-                    title="Inspect audit data for this message"
+                    className={cn(
+                      'flex items-center gap-1 text-xs transition-colors',
+                      hasCapturedIssue
+                        ? processTerminated
+                          ? 'text-red-600 hover:text-red-800'
+                          : 'text-amber-600 hover:text-amber-800'
+                        : 'text-slate-400 hover:text-slate-600',
+                    )}
+                    title={
+                      hasCapturedIssue
+                        ? processTerminated
+                          ? 'Inspect audit data — this request failed'
+                          : 'Inspect audit data — a tool error was recovered during this reply'
+                        : 'Inspect audit data for this message'
+                    }
                   >
                     <Settings className="h-3 w-3" />
                     Inspect
+                    {hasCapturedIssue ? (
+                      <AlertCircle
+                        className={cn(
+                          'h-3 w-3',
+                          processTerminated ? 'text-red-500' : 'text-amber-500',
+                        )}
+                        aria-hidden
+                      />
+                    ) : null}
                   </button>
                 )}
                 {onBranch && (

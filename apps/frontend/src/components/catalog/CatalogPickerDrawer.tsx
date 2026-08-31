@@ -8,9 +8,13 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useSidebar } from '@/components/ui/sidebar';
-import { fetchCatalogItemsAction, fetchCatalogsAction } from '@/app/(app)/admin/catalog/actions';
+import {
+  fetchCatalogCategoriesAction,
+  fetchCatalogItemsAction,
+  fetchCatalogsAction,
+} from '@/app/(app)/admin/catalog/actions';
 import { fetchGroupLabelLookupsAction } from '@/app/(app)/quotes/actions';
-import type { Catalog, CatalogItem, CatalogType } from '@/types/api';
+import type { Catalog, CatalogCategory, CatalogItem, CatalogType } from '@/types/api';
 import {
   setCatalogDragData,
   setGroupLabelDragData,
@@ -24,12 +28,34 @@ export interface CatalogPickerDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   catalogType?: CatalogType;
+  /** Hide this catalogue from the source catalogue dropdown (e.g. the current catalogue being edited). */
+  excludeCatalogId?: string;
+  /** Controls subtitle text and tab visibility. Defaults to 'estimate'. */
+  context?: 'estimate' | 'catalog';
+}
+
+const DRAWER_WIDTH = '32rem';
+
+const selectClassName =
+  'flex h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring';
+
+function flattenCategories(
+  nodes: CatalogCategory[],
+  depth = 0,
+): Array<CatalogCategory & { depth: number }> {
+  const out: Array<CatalogCategory & { depth: number }> = [];
+  for (const node of nodes) {
+    out.push({ ...node, depth });
+    if (node.children?.length) out.push(...flattenCategories(node.children, depth + 1));
+  }
+  return out;
 }
 
 /** Fetch every page of catalogue items matching the filters (API caps page size). */
 async function fetchAllCatalogItems(params: {
   catalogId?: string;
   q?: string;
+  categoryIds?: string[];
   kind?: 'primitive' | 'assembly' | 'scope';
 }): Promise<CatalogItem[]> {
   const pageSize = params.q ? 500 : 100;
@@ -41,6 +67,7 @@ async function fetchAllCatalogItems(params: {
     const result = await fetchCatalogItemsAction({
       catalogId: params.catalogId,
       q: params.q,
+      categoryIds: params.categoryIds,
       kind: params.kind,
       page,
       limit: pageSize,
@@ -126,7 +153,7 @@ function CatalogRow({ item }: { item: CatalogItem }) {
 
 /* ---- Items Tab ---- */
 
-function ItemsTab({ open, catalogType }: { open: boolean; catalogType?: CatalogType }) {
+function ItemsTab({ open, catalogType, excludeCatalogId }: { open: boolean; catalogType?: CatalogType; excludeCatalogId?: string }) {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [items, setItems] = useState<CatalogItem[]>([]);
@@ -134,6 +161,8 @@ function ItemsTab({ open, catalogType }: { open: boolean; catalogType?: CatalogT
   const [catalogs, setCatalogs] = useState<Catalog[]>([]);
   const [catalogsReady, setCatalogsReady] = useState(false);
   const [selectedCatalogId, setSelectedCatalogId] = useState<string>('');
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
+  const [categories, setCategories] = useState<CatalogCategory[]>([]);
   const [showAssemblies, setShowAssemblies] = useState(true);
   const [showPrimitives, setShowPrimitives] = useState(true);
   const [showScopes, setShowScopes] = useState(true);
@@ -144,7 +173,7 @@ function ItemsTab({ open, catalogType }: { open: boolean; catalogType?: CatalogT
     setCatalogsReady(false);
     void (async () => {
       // Crunchwork jobs still need internal catalogues — assemblies live there.
-      const list =
+      const [list, categoryTree] = await Promise.all([
         catalogType === 'crunchwork'
           ? (
               await Promise.all([
@@ -152,9 +181,11 @@ function ItemsTab({ open, catalogType }: { open: boolean; catalogType?: CatalogT
                 fetchCatalogsAction({ type: 'internal' }),
               ])
             ).flat()
-          : await fetchCatalogsAction({
+          : fetchCatalogsAction({
               type: catalogType === 'internal' ? undefined : catalogType,
-            });
+            }),
+        fetchCatalogCategoriesAction(),
+      ]);
 
       let sorted: Catalog[];
       if (catalogType === 'crunchwork') {
@@ -175,7 +206,11 @@ function ItemsTab({ open, catalogType }: { open: boolean; catalogType?: CatalogT
       } else {
         sorted = list;
       }
+      if (excludeCatalogId) {
+        sorted = sorted.filter((c) => c.id !== excludeCatalogId);
+      }
       setCatalogs(sorted);
+      setCategories(categoryTree);
       // Prefer the tenant default catalogue when the drawer opens.
       const defaultId = sorted.find((c) => c.isDefault)?.id;
       setSelectedCatalogId(
@@ -201,6 +236,7 @@ function ItemsTab({ open, catalogType }: { open: boolean; catalogType?: CatalogT
       const fetched = await fetchAllCatalogItems({
         catalogId: selectedCatalogId || undefined,
         q: debouncedQuery || undefined,
+        categoryIds: selectedCategoryId ? [selectedCategoryId] : undefined,
       });
       if (generation !== fetchGeneration.current) return;
       setItems(fetched);
@@ -210,13 +246,15 @@ function ItemsTab({ open, catalogType }: { open: boolean; catalogType?: CatalogT
     return () => {
       fetchGeneration.current += 1;
     };
-  }, [open, catalogsReady, debouncedQuery, selectedCatalogId]);
+  }, [open, catalogsReady, debouncedQuery, selectedCatalogId, selectedCategoryId]);
 
   useEffect(() => {
     if (open) return;
     setQuery('');
     setDebouncedQuery('');
     setSelectedCatalogId('');
+    setSelectedCategoryId('');
+    setCategories([]);
     setShowAssemblies(true);
     setShowPrimitives(true);
     setShowScopes(true);
@@ -232,9 +270,54 @@ function ItemsTab({ open, catalogType }: { open: boolean; catalogType?: CatalogT
     return false;
   });
 
+  const flatCategories = flattenCategories(categories);
+
   return (
     <>
       <div className="space-y-2 border-b border-slate-100 px-8 py-3">
+        {catalogs.length > 1 && (
+          <select
+            className={`${selectClassName} w-full flex-none`}
+            value={selectedCatalogId}
+            onChange={(e) => setSelectedCatalogId(e.target.value)}
+            aria-label="Filter by catalogue"
+          >
+            <option value="">All catalogues</option>
+            {catalogs.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} ({c.type})
+              </option>
+            ))}
+          </select>
+        )}
+        <div className="flex gap-2">
+          <div className="relative min-w-0 flex-1">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              className="pl-8"
+              placeholder="Search by name, code or description…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              autoFocus
+            />
+          </div>
+          <select
+            className={`${selectClassName} w-38 shrink-0`}
+            value={selectedCategoryId}
+            onChange={(e) => setSelectedCategoryId(e.target.value)}
+            aria-label="Filter by category"
+          >
+            <option value="">All categories</option>
+            <option value="__uncategorized__">Uncategorized</option>
+            {flatCategories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {'\u00a0'.repeat(category.depth * 2)}
+                {category.depth > 0 ? '↳ ' : ''}
+                {category.name}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="flex items-center gap-4">
           <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
             <Checkbox
@@ -260,30 +343,6 @@ function ItemsTab({ open, catalogType }: { open: boolean; catalogType?: CatalogT
             />
             Scopes
           </label>
-        </div>
-        {catalogs.length > 1 && (
-          <select
-            className="flex h-8 w-full rounded-md border border-input bg-transparent px-2 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            value={selectedCatalogId}
-            onChange={(e) => setSelectedCatalogId(e.target.value)}
-          >
-            <option value="">All catalogues</option>
-            {catalogs.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name} ({c.type})
-              </option>
-            ))}
-          </select>
-        )}
-        <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            className="pl-8"
-            placeholder="Search by name, code or description…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            autoFocus
-          />
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-8 py-4">
@@ -416,7 +475,7 @@ function GroupLabelsTab({ open }: { open: boolean }) {
 
 /* ---- Main Drawer ---- */
 
-export function CatalogPickerDrawer({ open, onOpenChange, catalogType }: CatalogPickerDrawerProps) {
+export function CatalogPickerDrawer({ open, onOpenChange, catalogType, excludeCatalogId, context = 'estimate' }: CatalogPickerDrawerProps) {
   const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<string>('items');
   const [pinned, setPinned] = useState(false);
@@ -473,7 +532,7 @@ export function CatalogPickerDrawer({ open, onOpenChange, catalogType }: Catalog
       root.dataset.catalogDrawerPinned = 'true';
       if (inset) {
         inset.style.transition = 'margin-right 0.2s ease';
-        inset.style.marginRight = '28rem';
+        inset.style.marginRight = DRAWER_WIDTH;
       }
     } else {
       delete root.dataset.catalogDrawerPinned;
@@ -531,7 +590,7 @@ export function CatalogPickerDrawer({ open, onOpenChange, catalogType }: Catalog
             role="dialog"
             aria-modal="true"
             aria-labelledby="catalog-picker-title"
-            className="pointer-events-auto absolute inset-y-0 right-0 flex w-full max-w-md flex-col border-l border-slate-200 bg-background shadow-2xl"
+            className="pointer-events-auto absolute inset-y-0 right-0 flex w-full max-w-lg flex-col border-l border-slate-200 bg-background shadow-2xl"
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
@@ -553,7 +612,9 @@ export function CatalogPickerDrawer({ open, onOpenChange, catalogType }: Catalog
                     Catalogue
                   </h2>
                   <p className="mt-0.5 text-xs text-sidebar-foreground/65">
-                    Drag items onto the estimate to add them.
+                    {context === 'catalog'
+                      ? 'Drag items onto this catalogue to add them.'
+                      : 'Drag items onto the estimate to add them.'}
                   </p>
                 </div>
               </div>
@@ -589,20 +650,24 @@ export function CatalogPickerDrawer({ open, onOpenChange, catalogType }: Catalog
                     <Package className="h-3.5 w-3.5" />
                     Items &amp; Assemblies
                   </TabsTrigger>
-                  <TabsTrigger value="groups" className="flex-1 gap-1.5 text-xs">
-                    <Tag className="h-3.5 w-3.5" />
-                    Groups
-                  </TabsTrigger>
+                  {context !== 'catalog' && (
+                    <TabsTrigger value="groups" className="flex-1 gap-1.5 text-xs">
+                      <Tag className="h-3.5 w-3.5" />
+                      Groups
+                    </TabsTrigger>
+                  )}
                 </TabsList>
               </div>
 
               <TabsContent value="items" className="flex min-h-0 flex-1 flex-col">
-                <ItemsTab open={open} catalogType={catalogType} />
+                <ItemsTab open={open} catalogType={catalogType} excludeCatalogId={excludeCatalogId} />
               </TabsContent>
 
-              <TabsContent value="groups" className="flex min-h-0 flex-1 flex-col">
-                <GroupLabelsTab open={open} />
-              </TabsContent>
+              {context !== 'catalog' && (
+                <TabsContent value="groups" className="flex min-h-0 flex-1 flex-col">
+                  <GroupLabelsTab open={open} />
+                </TabsContent>
+              )}
             </Tabs>
           </motion.aside>
         </motion.div>

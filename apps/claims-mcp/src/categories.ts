@@ -74,6 +74,7 @@ export const DOMAIN_CATEGORY: Record<string, CategoryId> = {
   organisations: 'organisation',
   users: 'organisation',
   notifications: 'organisation',
+  guides: 'organisation',
 };
 
 /** Categories seeded as separate trusted integrations. */

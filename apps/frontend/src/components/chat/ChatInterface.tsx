@@ -22,6 +22,13 @@ interface ChatInterfaceProps {
   agents: Agent[];
   pageContext?: PageContext;
   preferredAgentId?: string;
+  /**
+   * When true, keep applying preferredAgentId until the user manually picks an agent.
+   * Used by Help (?) so page agents (e.g. Catalogue Assistant) cannot win a load race.
+   */
+  forcePreferredAgent?: boolean;
+  /** When set, send this message once after the agent is selected and chat is ready. */
+  autoSendMessage?: string;
   onMessagesChange?: (messages: ChatMessage[]) => void;
   onOpenCanvas?: (artifact: CanvasArtifact) => void;
   onOpenCanvasComponent?: (event: {
@@ -42,6 +49,8 @@ export function ChatInterface({
   agents,
   pageContext,
   preferredAgentId,
+  forcePreferredAgent = false,
+  autoSendMessage,
   onMessagesChange,
   onOpenCanvas,
   onOpenCanvasComponent,
@@ -62,6 +71,7 @@ export function ChatInterface({
   const prevStatusRef = useRef<string>('ready');
   const stoppedRef = useRef(false);
   const didAutoStartMicRef = useRef(false);
+  const didAutoSendRef = useRef(false);
   const audit = useAuditInspector();
   const fileUpload = useFileUpload(conversationId);
 
@@ -92,26 +102,36 @@ export function ChatInterface({
     const realAgents = agents.filter((a) => a.id !== DEFAULT_AGENT_ID);
     const pool = realAgents.length > 0 ? realAgents : agents;
 
-    const selectionValid =
-      !!selectedAgentId && pool.some((a) => a.id === selectedAgentId);
-    if (selectionValid) return;
-
-    // Use page-preferred agent when the user hasn't manually picked one
     if (!userPickedAgentRef.current && preferredAgentId) {
       const preferred = pool.find((a) => a.id === preferredAgentId);
       if (preferred) {
-        setSelectedAgentId(preferred.id);
-        selectedAgentIdRef.current = preferred.id;
+        // Help mode: always apply preferred (overrides page-agent races).
+        // Normal chat: only apply when nothing valid is selected yet.
+        const selectionValid =
+          !!selectedAgentId && pool.some((a) => a.id === selectedAgentId);
+        if (forcePreferredAgent || !selectionValid) {
+          if (selectedAgentId !== preferred.id) {
+            setSelectedAgentId(preferred.id);
+            selectedAgentIdRef.current = preferred.id;
+          }
+          return;
+        }
+      } else if (forcePreferredAgent) {
+        // Preferred help agent not in pool yet — wait rather than falling back.
         return;
       }
     }
+
+    const selectionValid =
+      !!selectedAgentId && pool.some((a) => a.id === selectedAgentId);
+    if (selectionValid) return;
 
     const defaultAgent = pool.find((a) => a.isDefault) ?? pool[0];
     if (!defaultAgent) return;
 
     setSelectedAgentId(defaultAgent.id);
     selectedAgentIdRef.current = defaultAgent.id;
-  }, [agents, selectedAgentId, preferredAgentId]);
+  }, [agents, selectedAgentId, preferredAgentId, forcePreferredAgent]);
 
   const handleCanvasAction = useCallback(
     (artifact: CanvasArtifact) => {
@@ -316,6 +336,23 @@ export function ChatInterface({
     sendMessage,
     pendingAttachmentParts,
     supportsVision,
+  ]);
+
+  useEffect(() => {
+    if (!autoSendMessage?.trim() || didAutoSendRef.current) return;
+    if (!selectedAgentId) return;
+    if (isLoading) return;
+    if ((initialMessages?.length ?? 0) > 0 || messages.length > 0) return;
+
+    didAutoSendRef.current = true;
+    void submitMessage(autoSendMessage);
+  }, [
+    autoSendMessage,
+    selectedAgentId,
+    isLoading,
+    initialMessages,
+    messages.length,
+    submitMessage,
   ]);
 
   const handleAttachDocument = useCallback(

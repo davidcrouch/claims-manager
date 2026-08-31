@@ -232,6 +232,56 @@ export async function listCanvasArtifactsAction(
   }
 }
 
+type HelpGuideRow = {
+  slug: string;
+  title: string;
+  description?: string | null;
+  routes?: string[];
+  content?: string;
+};
+
+function pickHelpGuide(
+  guides: HelpGuideRow[],
+  pathname: string,
+): HelpGuideRow | null {
+  if (guides.length === 0) return null;
+  const segment = pathname.split('/').filter(Boolean).pop() ?? '';
+  const bySlug = guides.find((g) => g.slug === segment);
+  if (bySlug) return bySlug;
+  const specific = guides.filter((g) => g.slug !== 'getting-started');
+  return specific[0] ?? guides[0] ?? null;
+}
+
+/** Resolve the best help guide for the current page (used by header ?). */
+export async function getPageHelpGuideAction(
+  pathname: string,
+): Promise<{ slug: string; title: string; content: string } | null> {
+  const api = await getApi();
+  if (!api || !pathname.trim()) return null;
+  try {
+    const guides = await api.getGuidesByRoute(pathname.trim());
+    const picked = pickHelpGuide(guides, pathname.trim());
+    if (!picked) return null;
+    if (picked.content?.trim()) {
+      return {
+        slug: picked.slug,
+        title: picked.title,
+        content: picked.content,
+      };
+    }
+    const body = await api.getGuideContent(picked.slug);
+    if (!body.content?.trim()) return null;
+    return {
+      slug: body.slug ?? picked.slug,
+      title: body.title ?? picked.title,
+      content: body.content,
+    };
+  } catch (err) {
+    console.error('[frontend:chat/actions.getPageHelpGuideAction]', err);
+    return null;
+  }
+}
+
 export async function getConversationAuditAction(
   conversationId: string,
 ): Promise<AiAuditRecord[]> {

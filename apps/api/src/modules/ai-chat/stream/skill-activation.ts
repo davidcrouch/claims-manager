@@ -73,7 +73,7 @@ async function activateSkill(
 ): Promise<unknown> {
   const skillId = typeof args.skillId === 'string' ? args.skillId.trim() : '';
   if (!skillId) {
-    return { error: true, message: 'skillId is required' };
+    return { error: true, message: 'skillId is required', skillId: null };
   }
 
   const skill = ctx.skillsById.get(skillId);
@@ -81,6 +81,7 @@ async function activateSkill(
     return {
       error: true,
       message: `Skill "${skillId}" is not available in this turn. Use an ID from Available Skills.`,
+      skillId,
     };
   }
 

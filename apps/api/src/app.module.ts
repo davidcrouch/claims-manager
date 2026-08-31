@@ -65,6 +65,7 @@ import { ConversationsModule } from './modules/conversations/conversations.modul
 import { AiChatModule } from './modules/ai-chat/ai-chat.module';
 import { SkillsModule } from './modules/skills/skills.module';
 import { CapabilityPacksModule } from './modules/capability-packs/capability-packs.module';
+import { GuidesModule } from './modules/guides/guides.module';
 import { AuthServerModule } from './modules/auth-server/auth-server.module';
 import { UserManagementModule } from './modules/user-management/user-management.module';
 import { RbacModule } from './modules/rbac/rbac.module';
@@ -162,6 +163,7 @@ import { OfficeModule } from './common/office/office.module';
     AiChatModule,
     SkillsModule,
     CapabilityPacksModule,
+    GuidesModule,
     AuthServerModule,
     UserManagementModule,
     RbacModule,

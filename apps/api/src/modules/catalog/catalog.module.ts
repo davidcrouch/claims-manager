@@ -17,6 +17,8 @@ import { CatalogAssemblyService } from './services/catalog-assembly.service';
 import { CatalogPricingService } from './services/catalog-pricing.service';
 import { CatalogSelectionService } from './services/catalog-selection.service';
 import { CatalogImportService } from './services/catalog-import.service';
+import { CatalogCopyService } from './services/catalog-copy.service';
+import { CatalogStructureService } from './services/catalog-structure.service';
 import { CatalogResolutionService } from './services/catalog-resolution.service';
 import { CatalogMismatchService } from './services/catalog-mismatch.service';
 import { CatalogOutboundService } from './services/catalog-outbound.service';
@@ -41,6 +43,8 @@ import { CatalogInboundService } from './services/catalog-inbound.service';
     CatalogAssemblyService,
     CatalogPricingService,
     CatalogSelectionService,
+    CatalogCopyService,
+    CatalogStructureService,
     CatalogImportService,
     CatalogResolutionService,
     CatalogMismatchService,

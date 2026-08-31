@@ -592,6 +592,7 @@ export const purchaseOrderCombos = pgTable(
     }),
     quoteComboId: uuid('quote_combo_id'),
     name: text('name'),
+    component: text('component'),
     description: text('description'),
     category: text('category'),
     subCategory: text('sub_category'),
@@ -628,6 +629,7 @@ export const purchaseOrderItems = pgTable(
     quoteLineItemId: uuid('quote_line_item_id'),
     unitTypeLookupId: uuid('unit_type_lookup_id'),
     name: text('name'),
+    component: text('component'),
     description: text('description'),
     category: text('category'),
     subCategory: text('sub_category'),
@@ -1402,6 +1404,7 @@ export const workOrderCombos = pgTable(
     }),
     quoteComboId: uuid('quote_combo_id'),
     name: text('name'),
+    component: text('component'),
     description: text('description'),
     category: text('category'),
     subCategory: text('sub_category'),
@@ -1438,6 +1441,7 @@ export const workOrderItems = pgTable(
     quoteLineItemId: uuid('quote_line_item_id'),
     unitTypeLookupId: uuid('unit_type_lookup_id'),
     name: text('name'),
+    component: text('component'),
     description: text('description'),
     category: text('category'),
     subCategory: text('sub_category'),
@@ -2030,6 +2034,7 @@ export const catalogItems = pgTable(
     computedUnitCost: numeric('computed_unit_cost', { precision: 14, scale: 4 }),
     computedCostAt: timestamp('computed_cost_at', { withTimezone: true }),
     externalReference: text('external_reference'),
+    sourceItemId: uuid('source_item_id'),
     /** Provider affinity tags used to filter outbound publish payloads (e.g. crunchwork, internal). */
     providerCodes: text('provider_codes').array().notNull().default([]),
     isActive: boolean('is_active').notNull().default(true),
@@ -2051,6 +2056,7 @@ export const catalogItems = pgTable(
     index('idx_catalog_items_kind').on(t.tenantId, t.kind),
     index('idx_catalog_items_catalog').on(t.tenantId, t.catalogId, t.isActive, t.deletedAt),
     index('idx_catalog_items_provider_codes').using('gin', t.providerCodes),
+    index('idx_catalog_items_source').on(t.tenantId, t.sourceItemId),
     check('chk_catalog_items_kind', sql`kind IN ('primitive', 'assembly', 'scope')`),
     check(
       'chk_catalog_items_primitive_unit',
@@ -3577,4 +3583,53 @@ export const tenantRecordSequences = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.tenantId, t.sequenceKey] })],
+);
+
+// ---------------------------------------------------------------------------
+// Guide documents + chunks (online help system)
+// ---------------------------------------------------------------------------
+export const guideDocument = pgTable(
+  'guide_document',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id').references(() => organizations.id, { onDelete: 'cascade' }),
+    slug: text('slug').notNull(),
+    title: text('title').notNull(),
+    description: text('description'),
+    section: text('section').notNull().default('operations'),
+    area: text('area'),
+    routes: jsonb('routes').$type<string[]>().notNull().default([]),
+    audience: text('audience').notNull().default('all'),
+    tags: jsonb('tags').$type<string[]>().notNull().default([]),
+    relatedGuides: jsonb('related_guides').$type<string[]>().notNull().default([]),
+    content: text('content').notNull().default(''),
+    contentHash: text('content_hash').notNull().default(''),
+    version: integer('version').notNull().default(1),
+    filePath: text('file_path'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('guide_document_tenant_slug_uidx').on(t.tenantId, t.slug),
+    index('guide_document_tenant_section_idx').on(t.tenantId, t.section),
+  ],
+);
+
+export const guideChunk = pgTable(
+  'guide_chunk',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    guideDocumentId: uuid('guide_document_id')
+      .notNull()
+      .references(() => guideDocument.id, { onDelete: 'cascade' }),
+    chunkIndex: integer('chunk_index').notNull().default(0),
+    content: text('content').notNull().default(''),
+    tokenCount: integer('token_count').notNull().default(0),
+    headingPath: text('heading_path'),
+    embeddingVec: vector('embedding_vec'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('guide_chunk_document_idx').on(t.guideDocumentId, t.chunkIndex),
+  ],
 );

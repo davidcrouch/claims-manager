@@ -49,6 +49,8 @@ const ADMIN_ROUTE_MAP: Record<string, RouteEntityEntry> = {
   connections: { entityType: 'connection', label: 'Connections' },
   provisioning: { entityType: 'provisioning', label: 'Provisioning' },
   settings: { entityType: 'settings', label: 'Settings' },
+  roles: { entityType: 'role', label: 'Roles & Permissions' },
+  users: { entityType: 'user', label: 'Users' },
 };
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -108,6 +110,11 @@ export function usePageContext(): PageContext {
         if (segments.length >= 2 && isUuid(segments[1])) {
           entityId = segments[1];
           pageLabel = `${mapping.label} Detail`;
+        } else if (
+          mapping.entityType === 'dashboard' ||
+          mapping.entityType === 'schedule'
+        ) {
+          pageLabel = mapping.label;
         } else {
           pageLabel = `${mapping.label} List`;
         }

@@ -1,0 +1,23 @@
+slug: open-guide
+name: Open Help Guide
+description: Open a full help guide in the canvas for the user to read and scroll through.
+triggerHints:
+  - show the guide
+  - open guide
+  - open help
+  - full guide
+  - read the guide
+  - show documentation
+instructionPrompt: |
+  The user wants to read a full help guide.
+  1. Use open_help_guide with the guide slug to retrieve the complete guide content.
+  2. Present the returned markdown content as a canvas artifact so the user can read it in a formatted panel.
+  3. If you don't know the slug, use search_help_guides first to find it, then open it.
+requiredToolRefs:
+  - integration: Claims Organisation
+    tool: open_help_guide
+  - integration: Claims Organisation
+    tool: search_help_guides
+category: help
+invocationMode: inline
+visibility: org
