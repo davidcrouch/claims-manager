@@ -74,6 +74,8 @@ jobs:
               - 'apps/api/**'
               - 'packages/**'
               - 'data/**'
+              - 'docs/guides/**'
+              - '.dockerignore'
             auth-server:
               - 'apps/auth-server/**'
               - 'packages/telemetry/**'
