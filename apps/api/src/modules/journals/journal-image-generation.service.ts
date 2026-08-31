@@ -149,18 +149,14 @@ export class JournalImageGenerationService {
   }
 
   private projectId(): string {
-    const aiConfig = this.configService.get('ai', { infer: true }) as
-      | { vertexProject?: string }
-      | undefined;
+    const aiConfig = this.configService.get<{ vertexProject?: string }>('ai');
     return (aiConfig?.vertexProject || this.configService.get<string>('GCP_PROJECT_ID') || '').trim();
   }
 
   private location(): string {
     const fromEnv = this.configService.get<string>('VERTEX_IMAGEN_LOCATION');
     if (fromEnv?.trim()) return fromEnv.trim();
-    const aiConfig = this.configService.get('ai', { infer: true }) as
-      | { imagenLocation?: string }
-      | undefined;
+    const aiConfig = this.configService.get<{ imagenLocation?: string }>('ai');
     if (aiConfig?.imagenLocation?.trim()) return aiConfig.imagenLocation.trim();
     return DEFAULT_LOCATION;
   }
@@ -168,18 +164,14 @@ export class JournalImageGenerationService {
   private imagenModel(): string {
     const fromEnv = this.configService.get<string>('VERTEX_IMAGEN_MODEL')?.trim();
     if (fromEnv) return fromEnv;
-    const aiConfig = this.configService.get('ai', { infer: true }) as
-      | { imagenModel?: string }
-      | undefined;
+    const aiConfig = this.configService.get<{ imagenModel?: string }>('ai');
     return aiConfig?.imagenModel?.trim() || DEFAULT_IMAGEN_MODEL;
   }
 
   private fallbackModel(): string {
     const fromEnv = this.configService.get<string>('VERTEX_IMAGE_FALLBACK_MODEL')?.trim();
     if (fromEnv) return fromEnv;
-    const aiConfig = this.configService.get('ai', { infer: true }) as
-      | { imageFallbackModel?: string }
-      | undefined;
+    const aiConfig = this.configService.get<{ imageFallbackModel?: string }>('ai');
     return aiConfig?.imageFallbackModel?.trim() || DEFAULT_FALLBACK_MODEL;
   }
 
