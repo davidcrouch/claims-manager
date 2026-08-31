@@ -1085,7 +1085,7 @@
   Photo generation for those journals recovers more cleanly when the image service is busy.
   The assessment helper is set to the current hosted model.
 
-- `2026-09-01` `pending` **4 h**
+- `2026-09-01` `9e86be7` **4 h**
   `38 files | +1 767 −259 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Staff can capture a real site inspection in chat, upload photos into the right project folder, and review those images while writing journal notes.
   **Site-inspection journals with photo upload and project folder mapping.**
