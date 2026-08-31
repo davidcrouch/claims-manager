@@ -480,8 +480,9 @@ resource "google_cloud_run_v2_job" "migrate_api" {
   depends_on = [google_project_service.run]
 }
 
-# Idempotent lookups, claim-lookup backfill, IAG catalogue replace, and
-# document-template JSONata sync for every tenant. Run after migrate-api.
+# Idempotent lookups, claim-lookup backfill, IAG catalogue replace,
+# document-template JSONata sync, MCP integrations, assessment skills,
+# and builtin capability packs for every tenant. Run after migrate-api.
 resource "google_cloud_run_v2_job" "seed_api_lookups" {
   count    = var.enable_cloud_run ? 1 : 0
   project  = var.project_id
@@ -519,6 +520,16 @@ resource "google_cloud_run_v2_job" "seed_api_lookups" {
         }
 
         env {
+          name  = "CLAIMS_MCP_URL"
+          value = "${local.claims_mcp_run_url}/mcp"
+        }
+
+        env {
+          name  = "MS_GRAPH_MCP_URL"
+          value = "${local.ms_graph_mcp_run_url}/mcp"
+        }
+
+        env {
           name = "DATABASE_URL"
           value_source {
             secret_key_ref {
@@ -532,6 +543,83 @@ resource "google_cloud_run_v2_job" "seed_api_lookups" {
   }
 
   depends_on = [google_project_service.run]
+}
+
+# Idempotent online help guide ingest from docs/guides (bundled in api image).
+# Run after migrate-api.
+resource "google_cloud_run_v2_job" "ingest_api_guides" {
+  count    = var.enable_cloud_run ? 1 : 0
+  project  = var.project_id
+  name     = "ingest-api-guides"
+  location = var.region
+
+  template {
+    template {
+      service_account = module.iam.service_account_emails["api-server"]
+      timeout         = "900s"
+      max_retries     = 1
+
+      vpc_access {
+        egress = "PRIVATE_RANGES_ONLY"
+        network_interfaces {
+          network    = regex("projects/.+$", module.networking.vpc_self_link)
+          subnetwork = regex("projects/.+$", module.networking.subnet_self_link)
+        }
+      }
+
+      containers {
+        image   = var.cloud_run_use_bootstrap_image ? local.bootstrap_image : "${local.artifact_host}/api-server:${local.image_tag}"
+        command = ["node", "dist/database/run-ingest-guides.js"]
+
+        resources {
+          limits = {
+            cpu    = "1"
+            memory = "1Gi"
+          }
+        }
+
+        env {
+          name  = "NODE_ENV"
+          value = "production"
+        }
+
+        env {
+          name  = "GCP_PROJECT_ID"
+          value = var.project_id
+        }
+
+        env {
+          name  = "VERTEX_AI_PROJECT"
+          value = var.project_id
+        }
+
+        env {
+          name  = "VERTEX_AI_LOCATION"
+          value = "global"
+        }
+
+        env {
+          name  = "VERTEX_EMBEDDING_MODEL"
+          value = "text-embedding-005"
+        }
+
+        env {
+          name = "DATABASE_URL"
+          value_source {
+            secret_key_ref {
+              secret  = "database-url-api"
+              version = "latest"
+            }
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [
+    google_project_service.run,
+    google_project_service.aiplatform,
+  ]
 }
 
 # Catalogue seed (auth-server image). Run after migrate-api — API owns RBAC DDL.

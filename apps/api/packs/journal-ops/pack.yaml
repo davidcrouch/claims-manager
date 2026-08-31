@@ -1,0 +1,17 @@
+id: journal-ops
+version: 1.2.0
+name: Journal Operations
+description: >
+  Journal assistant that generates realistic site-walk test data — spoken
+  inspector narrative and photos, one entry per thing looked at, with an
+  optional spoken repair aside. Metadata extraction is left to a later
+  journal-processor agent.
+integrationRefs:
+  - Claims Operations
+agents:
+  - file: agents/journal-assistant.yaml
+skills:
+  - file: skills/generate-site-walk.yaml
+  - file: skills/create-site-journal.yaml
+  - file: skills/add-journal-entry.yaml
+prompts: []

@@ -32,6 +32,8 @@ COPY --from=builder /app/apps/api/src/database/migrations-drizzle ./apps/api/dis
 COPY --from=builder /app/apps/api/views ./apps/api/views
 COPY --from=builder /app/apps/api/public ./apps/api/public
 COPY --from=builder /app/apps/api/packs ./apps/api/packs
+# Online help guides (ingested post-deploy by ingest-api-guides job)
+COPY --from=builder /app/docs/guides ./docs/guides
 # Seed / provisioning assets (cwd is /app/apps/api → resolves via ../../data)
 COPY --from=builder /app/data/building-repairs-catalog.csv ./data/building-repairs-catalog.csv
 COPY --from=builder /app/data/internal-assembly-bom.json ./data/internal-assembly-bom.json

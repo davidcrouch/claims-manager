@@ -1057,3 +1057,13 @@
   Invoices and quotes keep related components aligned when records are published or updated.
   Help documents are stored so they can be searched and opened the same way for every organisation.
 
+- `2026-08-31` `SHORT_SHA` **3 h**
+  `55 files | +2891 −465 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
+  Lay summary: Catalogues can now be exported and re-imported without losing structure, and staging receives the same agents, skills, and help content as new sign-ups.
+  **Lossless catalogue round-trip and staging seed parity.**
+  Catalogue export now captures item IDs, hierarchy, source references, quantities, and metadata so they survive a re-import into the same or a different environment.
+  Re-importing handles multi-parent items, cross-catalogue references, and UUID collisions gracefully.
+  Staging and production deployments now seed MCP integrations, assessment skills, and capability packs for every organisation automatically.
+  Journal site entries and walk-through image generation are available from the API and assistant tools.
+  The help-guide ingestion job is created in staging infrastructure and deployment fails clearly if it is missing.
+

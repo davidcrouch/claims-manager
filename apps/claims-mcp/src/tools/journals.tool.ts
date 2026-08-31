@@ -37,7 +37,8 @@ export function registerJournalsTools(server: McpServer, api: ClaimsApiClient): 
   proxyTool(server, api, {
     category: CAT,
     name: 'create_journal',
-    description: 'Create a new journal.',
+    description:
+      'Create a new journal. Pass data: { name, description?, address?, latitude?, longitude?, metadata? }. metadata.visitDate is the inspection date (YYYY-MM-DD). Then call link_journal to attach it to a Job.',
     method: 'POST',
     path: '/journals',
     input: {
@@ -82,7 +83,7 @@ export function registerJournalsTools(server: McpServer, api: ClaimsApiClient): 
   proxyTool(server, api, {
     category: CAT,
     name: 'link_journal',
-    description: 'Link a journal to an entity.',
+    description: 'Link a journal to an entity. Pass data: { entityType: "Job"|"Quote"|"Invoice", entityId }.',
     method: 'POST',
     path: '/journals/{journalId}/link',
     input: {
@@ -229,5 +230,81 @@ export function registerJournalsTools(server: McpServer, api: ClaimsApiClient): 
       pageId: z.string().describe('Page UUID'),
       attachmentId: z.string().describe('Attachment UUID'),
     },
+  });
+
+  proxyTool(server, api, {
+    category: CAT,
+    name: 'create_journal_site_entry',
+    description:
+      'Create one site-walk journal entry as spoken inspector notes and optional photos. One thing looked at per call. Optional scopeOfWork is a second spoken aside about likely repair — plain text, no headings. Do not write report headings or labelled sections.',
+    method: 'POST',
+    path: '/journals/{journalId}/site-entries',
+    input: {
+      journalId: z.string().describe('Journal UUID'),
+      name: z.string().optional().describe('Short place or item for the timeline, e.g. Entry door — not a report heading'),
+      entryKind: z
+        .enum(['intro', 'pre_existing', 'observation', 'scope_of_work', 'damage', 'recommendation', 'other'])
+        .optional()
+        .describe('Walk role: intro, pre_existing, observation (event item), recommendation. damage/scope_of_work alias observation.'),
+      observation: z
+        .string()
+        .optional()
+        .describe('Spoken inspector notes for this item only. No headings or labels.'),
+      scopeOfWork: z
+        .string()
+        .optional()
+        .describe('Optional spoken aside about likely repair for this item. Plain sentences, no "Scope of work:" heading. Omit on intro/wrap-up.'),
+      additionalNotes: z
+        .array(z.string())
+        .optional()
+        .describe('Extra note blocks after the observation'),
+      images: z
+        .array(
+          z.object({
+            prompt: z.string().describe('What the generated inspection photo should show'),
+            caption: z.string().optional().describe('Caption stored on the attachment'),
+          }),
+        )
+        .max(4)
+        .optional()
+        .describe('Up to 4 inspection photos to generate and attach'),
+      locationLabel: z.string().optional().describe('Room or area label'),
+      latitude: z.number().optional(),
+      longitude: z.number().optional(),
+      capturedAt: z.string().optional().describe('ISO timestamp for when the inspector recorded this'),
+    },
+    body: (args) => ({
+      name: args.name,
+      entryKind: args.entryKind,
+      observation: args.observation,
+      scopeOfWork: args.scopeOfWork,
+      additionalNotes: args.additionalNotes,
+      images: args.images,
+      locationLabel: args.locationLabel,
+      latitude: args.latitude,
+      longitude: args.longitude,
+      capturedAt: args.capturedAt,
+    }),
+  });
+
+  proxyTool(server, api, {
+    category: CAT,
+    name: 'generate_journal_page_image',
+    description:
+      'Generate a photorealistic inspection photo and attach it to an existing journal page.',
+    method: 'POST',
+    path: '/journals/{journalId}/pages/{pageId}/generate-image',
+    input: {
+      journalId: z.string().describe('Journal UUID'),
+      pageId: z.string().describe('Journal page UUID'),
+      prompt: z.string().describe('What the generated inspection photo should show'),
+      caption: z.string().optional().describe('Caption stored on the attachment'),
+      fileName: z.string().optional().describe('Optional file name including extension'),
+    },
+    body: (args) => ({
+      prompt: args.prompt,
+      caption: args.caption,
+      fileName: args.fileName,
+    }),
   });
 }

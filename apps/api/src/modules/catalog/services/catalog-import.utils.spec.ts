@@ -70,6 +70,25 @@ describe('catalog-import.utils', () => {
       });
       expect(ordered).toEqual([2, 1, 0]);
     });
+
+    it('visits all rows for a multi-parent code before dependents', () => {
+      const rows = [
+        { code: 'prim', parent: 'asm' },
+        { code: 'asm', parent: 'scope-b' },
+        { code: 'asm', parent: 'scope-a' },
+        { code: 'scope-a', parent: '' },
+        { code: 'scope-b', parent: '' },
+      ];
+      const ordered = sortImportRowIndexes({
+        dataRowIndexes: [0, 1, 2, 3, 4],
+        getCode: (i) => rows[i].code,
+        getParentCode: (i) => rows[i].parent,
+      });
+      expect(ordered.indexOf(3)).toBeLessThan(ordered.indexOf(0));
+      expect(ordered.indexOf(4)).toBeLessThan(ordered.indexOf(0));
+      expect(ordered.indexOf(1)).toBeLessThan(ordered.indexOf(0));
+      expect(ordered.indexOf(2)).toBeLessThan(ordered.indexOf(0));
+    });
   });
 
   describe('validateBomParentChildKinds', () => {

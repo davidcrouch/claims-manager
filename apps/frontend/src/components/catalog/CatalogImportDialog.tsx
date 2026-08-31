@@ -82,7 +82,7 @@ const STEP_LABELS: Record<WizardStep, string> = {
   report: 'Results',
 };
 
-const CHUNK_SIZE = 40;
+const CHUNK_SIZE = 10_000;
 
 const CATALOG_TYPES: { value: CatalogType; label: string }[] = [
   { value: 'internal', label: 'Internal' },
@@ -233,16 +233,28 @@ export function CatalogImportDialog({
       .find((i) => i >= 0);
     const idIdx = headers.indexOf('id');
     const codeIdx = headers.indexOf('code');
+    // Internal round-trip export uses `id` for item UUID; item code is still in `code`.
+    // Prefer `code` when present so parent links resolve against item codes.
     if (parentIdx === undefined || parentIdx < 0) return dataLines;
 
     const parsed = dataLines.map((line, order) => {
       const cells = parseCsvLineSimple(line);
-      const code = String(cells[codeIdx] || cells[idIdx] || '').trim();
+      const code = String(
+        (codeIdx >= 0 ? cells[codeIdx] : '') || (idIdx >= 0 ? cells[idIdx] : '') || '',
+      ).trim();
       const parent = String(cells[parentIdx] || '').trim();
       return { line, order, code, parent };
     });
 
-    const codeToItem = new Map(parsed.filter((p) => p.code).map((p) => [p.code.toLowerCase(), p]));
+    const codeToItems = new Map<string, typeof parsed>();
+    for (const item of parsed) {
+      if (!item.code) continue;
+      const key = item.code.toLowerCase();
+      const list = codeToItems.get(key);
+      if (list) list.push(item);
+      else codeToItems.set(key, [item]);
+    }
+
     const pending = new Set(parsed);
     const ordered: typeof parsed = [];
     const visiting = new Set<(typeof parsed)[number]>();
@@ -251,8 +263,15 @@ export function CatalogImportDialog({
       if (!pending.has(item) || visiting.has(item)) return;
       visiting.add(item);
       if (item.parent) {
-        const parent = codeToItem.get(item.parent.toLowerCase());
-        if (parent && pending.has(parent)) visit(parent);
+        const parents = codeToItems.get(item.parent.toLowerCase()) ?? [];
+        const sortedParents = [...parents].sort((a, b) => {
+          const aHas = a.parent ? 1 : 0;
+          const bHas = b.parent ? 1 : 0;
+          return aHas - bHas;
+        });
+        for (const parent of sortedParents) {
+          if (pending.has(parent)) visit(parent);
+        }
       }
       visiting.delete(item);
       pending.delete(item);

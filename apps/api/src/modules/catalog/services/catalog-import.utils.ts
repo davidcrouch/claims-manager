@@ -46,10 +46,15 @@ export function sortImportRowIndexes(params: {
   getParentCode: (rowIndex: number) => string;
 }): number[] {
   const { dataRowIndexes, getCode, getParentCode } = params;
-  const codeToIndex = new Map<string, number>();
+  // Multi-parent exports repeat the same code on multiple rows — keep every index.
+  const codeToIndexes = new Map<string, number[]>();
   for (const idx of dataRowIndexes) {
     const code = getCode(idx);
-    if (code) codeToIndex.set(code.toLowerCase(), idx);
+    if (!code) continue;
+    const key = code.toLowerCase();
+    const list = codeToIndexes.get(key);
+    if (list) list.push(idx);
+    else codeToIndexes.set(key, [idx]);
   }
 
   const pending = new Set(dataRowIndexes);
@@ -61,9 +66,15 @@ export function sortImportRowIndexes(params: {
     visiting.add(idx);
     const parent = getParentCode(idx);
     if (parent) {
-      const parentIdx = codeToIndex.get(parent.toLowerCase());
-      if (parentIdx !== undefined && pending.has(parentIdx)) {
-        visit(parentIdx);
+      const parentIndexes = codeToIndexes.get(parent.toLowerCase()) ?? [];
+      // Prefer parent rows with no parent of their own first (definition rows).
+      const sortedParents = [...parentIndexes].sort((a, b) => {
+        const aHas = getParentCode(a) ? 1 : 0;
+        const bHas = getParentCode(b) ? 1 : 0;
+        return aHas - bHas;
+      });
+      for (const parentIdx of sortedParents) {
+        if (pending.has(parentIdx)) visit(parentIdx);
       }
     }
     visiting.delete(idx);

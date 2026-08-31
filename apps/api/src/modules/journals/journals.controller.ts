@@ -24,6 +24,8 @@ import {
   UpdateJournalPageDto,
   CreatePageAttachmentDto,
   ReorderPagesDto,
+  CreateJournalSiteEntryDto,
+  GenerateJournalPageImageDto,
 } from './dto';
 
 @Controller('journals')
@@ -163,6 +165,27 @@ export class JournalsController {
     @Body() dto: UpdateJournalPageDto,
   ) {
     return this.journalsService.updatePage({ journalId, pageId, dto });
+  }
+
+  @Post(':journalId/site-entries')
+  @RequirePermission(P.journals.manage)
+  async createSiteEntry(
+    @Param('journalId', ParseUUIDPipe) journalId: string,
+    @Body() dto: CreateJournalSiteEntryDto,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.journalsService.createSiteEntry({ journalId, dto, userId });
+  }
+
+  @Post(':journalId/pages/:pageId/generate-image')
+  @RequirePermission(P.journals.manage)
+  async generatePageImage(
+    @Param('journalId', ParseUUIDPipe) journalId: string,
+    @Param('pageId', ParseUUIDPipe) pageId: string,
+    @Body() dto: GenerateJournalPageImageDto,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.journalsService.generatePageImage({ journalId, pageId, dto, userId });
   }
 
   @Delete(':journalId/pages/:pageId')

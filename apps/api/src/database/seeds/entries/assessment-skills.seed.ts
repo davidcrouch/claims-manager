@@ -339,3 +339,40 @@ export async function seedAssessmentSkillsForTenant(params: {
   logger.info(`${LOG} done: inserted=${inserted} updated=${updated} skipped=${skipped}`);
   return { inserted, updated, skipped };
 }
+
+export async function seedAssessmentSkillsForAllTenants(params: {
+  db: SeedDb;
+  logger?: SeedLogger;
+}): Promise<SeedResult> {
+  const { db } = params;
+  const logger: SeedLogger = params.logger ?? {
+    info: (m: string) => console.log(m),
+    warn: (m: string) => console.warn(m),
+    error: (m: string) => console.error(m),
+  };
+
+  const orgs = await db
+    .select({
+      id: schema.organizations.id,
+      name: schema.organizations.name,
+      subscriptionStatus: schema.organizations.subscriptionStatus,
+    })
+    .from(schema.organizations);
+
+  const tenants = orgs.filter((org) => org.subscriptionStatus !== 'ghost');
+  if (tenants.length === 0) {
+    logger.warn(`${LOG} no organisations in DB — nothing to seed`);
+    return { inserted: 0, updated: 0, skipped: 0, notes: 'no tenant' };
+  }
+
+  const totals: SeedResult = { inserted: 0, updated: 0, skipped: 0 };
+  for (const org of tenants) {
+    logger.info(`${LOG} tenant=${org.name} (${org.id})`);
+    const result = await seedAssessmentSkillsForTenant({ db, tenantId: org.id, logger });
+    totals.inserted += result.inserted;
+    totals.updated += result.updated;
+    totals.skipped += result.skipped;
+  }
+  totals.notes = `tenants=${tenants.length}`;
+  return totals;
+}

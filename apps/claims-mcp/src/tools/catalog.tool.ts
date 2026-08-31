@@ -369,6 +369,25 @@ export function registerCatalogTools(server: McpServer, api: ClaimsApiClient): v
 
   proxyTool(server, api, {
     category: CAT,
+    name: 'export_catalog_csv',
+    description:
+      'Export a catalogue to CSV using the same column profile as import (internal or Crunchwork). Pass catalogId and optional format.',
+    path: '/catalog/import/export',
+    input: {
+      catalogId: z.string().describe('Catalogue UUID to export'),
+      format: z
+        .enum(['internal', 'crunchwork'])
+        .optional()
+        .describe('CSV column profile; defaults to the catalogue type'),
+    },
+    query: (args) => ({
+      catalogId: args.catalogId as string,
+      format: args.format as string | undefined,
+    }),
+  });
+
+  proxyTool(server, api, {
+    category: CAT,
     name: 'list_catalog_unresolved_references',
     description: 'List unresolved catalogue reference mappings from inbound sync.',
     path: '/catalog/unresolved-references',

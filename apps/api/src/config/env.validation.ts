@@ -124,6 +124,18 @@ export class EnvironmentVariables {
 
   @IsString()
   @IsOptional()
+  VERTEX_IMAGEN_MODEL?: string;
+
+  @IsString()
+  @IsOptional()
+  VERTEX_IMAGEN_LOCATION?: string;
+
+  @IsString()
+  @IsOptional()
+  VERTEX_IMAGE_FALLBACK_MODEL?: string;
+
+  @IsString()
+  @IsOptional()
   DEFAULT_CHAT_MODEL?: string;
 
   @IsString()

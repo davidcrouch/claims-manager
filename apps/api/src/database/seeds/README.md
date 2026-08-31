@@ -19,6 +19,9 @@ staging connection) that make the app usable in dev and staging.
 | `backfill-claim-lookups` | **Tenant** | Links existing claims to CW status / loss-type lookup codes from `api_payload`. |
 | `iag-catalog` | **Tenant** | Replaces catalogues with the IAG Crunchwork 2026-04-35 export + Ensure scope catalogue. Skips when that Crunchwork catalogue already has a full item set (`REPLACE_IAG_CATALOG=true` to force). |
 | `document-template-transforms` | **Tenant** | Sync saved RFQ / PO / WO JSONata transforms to current code defaults (idempotent). |
+| `mcp` | **Tenant** | Trusted Claims Tools / Claims AI / category MCP integrations + org connections (`CLAIMS_MCP_URL`). |
+| `assessment-skills` | **Tenant** | Assessment tab skills (Attendance, Building, …). |
+| `builtin-packs` | **Tenant** | Installs builtin packs from `apps/api/packs` (Report Builder, Help Assistant, …). |
 
 > **Document templates** — uploading `.docx` files from `data/templates/seed/` and assigning
 > Admin → Document Templates is handled by the **first-login provisioning flow**
@@ -35,8 +38,10 @@ staging connection) that make the app usable in dev and staging.
 | Caller | How | When |
 |---|---|---|
 | CLI (`pnpm --filter api run db:seed`) | Platform seed + Ensure Construction org/connection + catalog-dev + lookups + IAG catalogues | Manual / bootstrap |
-| `POST /api/v1/internal/seed-tenant` | Catalog-dev + MCP + lookups; Crunchwork staging connection if the tenant is Ensure Construction | Invoked by `auth-server` after a new tenant signs up |
+| `POST /api/v1/internal/seed-tenant` | Catalog-dev + MCP + lookups + assessment skills + builtin packs; Crunchwork staging connection if the tenant is Ensure Construction | Invoked by `auth-server` after a new tenant signs up |
 | **First-login provisioning** | `ProvisioningService` → filesystem + template uploads + doc template settings + catalog | Triggered on user's first authenticated request |
+| **Cloud Run `seed-api-lookups`** | Lookups + claim backfill + IAG catalog + transforms + MCP + assessment skills + builtin packs (all tenants) | Staging/production CD after migrate |
+| **Cloud Run `ingest-api-guides`** | Ingest `docs/guides` into `guide_document` / `guide_chunk` | Staging/production CD after migrate |
 
 The `/internal/seed-tenant` route is guarded by `x-internal-token` (shared
 secret) and gated by `SEED_NEW_TENANTS=true`. See

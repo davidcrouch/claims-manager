@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { Storage } from '@google-cloud/storage';
 import { ConfigService } from '@nestjs/config';
 import { DRIZZLE, type DrizzleDB } from '../../database/drizzle.module';
@@ -18,6 +18,7 @@ import { seedCatalogDevForTenant } from '../../database/seeds/entries/catalog-de
 import { seedLookupsForTenant } from '../../database/seeds/entries/lookups.seed';
 import { seedMcpForTenant } from '../../database/seeds/entries/mcp.seed';
 import { seedAssessmentSkillsForTenant } from '../../database/seeds/entries/assessment-skills.seed';
+import { seedBuiltinPacksForTenant } from '../../database/seeds/entries/builtin-packs.seed';
 import filesystemDefaultSeed from '../../database/seeds/entries/filesystem-default.seed';
 import {
   ASSIGNABLE_TEMPLATE_TYPES,
@@ -573,6 +574,8 @@ export class ProvisioningService {
 
     await seedMcpForTenant({ db: this.db, tenantId, logger });
     await seedAssessmentSkillsForTenant({ db: this.db, tenantId, logger });
+    // Packs last so assessment-field skill content wins over the legacy name-only seed.
+    await seedBuiltinPacksForTenant({ db: this.db, tenantId, logger });
   }
 
   private buildStepStatuses(
@@ -654,17 +657,19 @@ export class ProvisioningService {
         return !!row;
       }
       case 'seed_mcp': {
-        const [row] = await this.db
-          .select({ id: mcpIntegration.id })
+        // Require Claims Tools + Claims AI so older orgs without category
+        // integrations are not treated as done.
+        const rows = await this.db
+          .select({ name: mcpIntegration.name })
           .from(mcpIntegration)
           .where(
             and(
               eq(mcpIntegration.tenantId, tenantId),
-              eq(mcpIntegration.name, 'Claims Tools'),
+              inArray(mcpIntegration.name, ['Claims Tools', 'Claims AI']),
             ),
-          )
-          .limit(1);
-        return !!row;
+          );
+        const names = new Set(rows.map((r) => r.name));
+        return names.has('Claims Tools') && names.has('Claims AI');
       }
       default:
         return false;

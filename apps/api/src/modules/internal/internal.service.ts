@@ -19,6 +19,8 @@ import type { SeedResult } from '../../database/seeds/lib/runner';
 import { seedCatalogDevForTenant } from '../../database/seeds/entries/catalog-dev.seed';
 import { seedMcpForTenant } from '../../database/seeds/entries/mcp.seed';
 import { seedLookupsForTenant } from '../../database/seeds/entries/lookups.seed';
+import { seedAssessmentSkillsForTenant } from '../../database/seeds/entries/assessment-skills.seed';
+import { seedBuiltinPacksForTenant } from '../../database/seeds/entries/builtin-packs.seed';
 import {
   isEnsureConstructionOrg,
   seedCrunchworkStagingConnection,
@@ -111,6 +113,18 @@ export class InternalService {
         logger,
       });
 
+      const assessmentResult = await seedAssessmentSkillsForTenant({
+        db: this.db,
+        tenantId,
+        logger,
+      });
+
+      const packsResult = await seedBuiltinPacksForTenant({
+        db: this.db,
+        tenantId,
+        logger,
+      });
+
       let connectionInserted = 0;
       let connectionSkipped = 0;
       if (attachCrunchwork) {
@@ -128,17 +142,23 @@ export class InternalService {
           catalogResult.inserted +
           mcpResult.inserted +
           lookupsResult.inserted +
+          assessmentResult.inserted +
+          packsResult.inserted +
           connectionInserted,
         updated:
           catalogResult.updated +
           mcpResult.updated +
-          lookupsResult.updated,
+          lookupsResult.updated +
+          assessmentResult.updated +
+          packsResult.updated,
         skipped:
           catalogResult.skipped +
           mcpResult.skipped +
           lookupsResult.skipped +
+          assessmentResult.skipped +
+          packsResult.skipped +
           connectionSkipped,
-        notes: `tenant=${tenantId}; catalog; mcp; lookups${attachCrunchwork ? '; crunchwork-staging' : ''}`,
+        notes: `tenant=${tenantId}; catalog; mcp; lookups; assessment-skills; packs${attachCrunchwork ? '; crunchwork-staging' : ''}`,
       };
 
       this.logger.log(

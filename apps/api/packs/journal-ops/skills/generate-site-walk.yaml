@@ -1,0 +1,94 @@
+slug: generate-site-walk
+name: Generate site-walk journal
+description: >
+  Orchestrate a full inspector site walk as spoken field notes and photos —
+  one entry per thing looked at, optional spoken repair aside, no headings.
+triggerHints:
+  - generate site walk
+  - generate test journal
+  - create inspection journal
+  - site walk journal
+  - mock journal
+  - test data journal
+  - inspector walk
+  - generate journal for this job
+instructionPrompt: |
+  You generate a complete realistic site-inspection journal from the user's brief.
+  Write as spoken inspector notes while walking. No headings or labels in the notes.
+  One stop = one entry. Roof leak + damaged door = two entries.
+
+  PHASE 1 — CONTEXT
+  1. Resolve jobId from page context (jobId or entityType=job), the user message, or ask once.
+  2. Call get_job. If the job has a claimId, call get_claim.
+  3. Call list_contacts_by_job and list_appointments_by_job when a job exists.
+     Use real names when present; otherwise invent a plausible inspector (test data).
+  4. If the user has not described the claim, infer event type from the claim/job.
+     One clarifying question max.
+
+  PHASE 2 — PLAN STOPS
+  Split the brief into the things the inspector will stop at, for example:
+    1. Roof leak at the ridge
+    2. Stained sagging ceiling in the front bedroom
+    3. Water-damaged entry door
+    4. Fence bay down the side
+  Prefer splitting over bundling.
+
+  PHASE 3 — JOURNAL
+  Follow create-site-journal: create_journal then link_journal to Job.
+  Name it like "Site inspection – {suburb or street} – {visit date}".
+  Copy the job address. Set metadata.visitDate (today or appointment date).
+
+  PHASE 4 — WALK (create_journal_site_entry only; one call per entry)
+  Stagger capturedAt by 8–15 minutes. locationLabel = room/area (short, for the UI).
+  name = short place/item for the timeline ("Front bedroom ceiling"), not a heading
+  in the note body.
+
+  A. Intro (entryKind=intro) — once
+     Spoken: who is here, weather, how you got in, what the house is like.
+     1 street/front photo. Do not pass scopeOfWork.
+
+  B. Pre-existing (entryKind=pre_existing) — one old issue per entry
+     Spoken note that it looks like it was already there, with photos.
+     Repair aside only if the user included it.
+
+  C. Event items (entryKind=observation) — one call per planned stop
+     - observation: spoken what you can see, this item only. No headings.
+     - images: 1–3 photos of that item
+     - scopeOfWork: optional second spoken note about likely repair for THIS item
+       only, still conversational, no "Scope of work:" label
+       e.g. "This door's cooked, we'll be putting a new one in."
+     Do not write a works spec. Do not put two items in one entry.
+     Do not add estimate/catalogue metadata — a later journal-processor will do that.
+
+  D. Wrap-up (entryKind=recommendation) — once
+     Spoken thoughts on make-safe, drying, specialists, occupancy.
+     Not a numbered list of every repair. No scopeOfWork field.
+
+  PHASE 5 — CLOSE
+  Summarise journal id/name and what you looked at. Photo success/fail.
+  If a photo failed, offer generate_journal_page_image on that page.
+
+  Rules:
+  - Spoken first person. No headings, markdown titles, or labelled sections.
+  - Stay consistent with event type, address, and names.
+  - Do not create catalogue items, estimates, or assessments.
+  - Continue if a photo fails.
+requiredToolRefs:
+  - integration: Claims Operations
+    tool: get_job
+  - integration: Claims Operations
+    tool: get_claim
+  - integration: Claims Operations
+    tool: list_contacts_by_job
+  - integration: Claims Operations
+    tool: list_appointments_by_job
+  - integration: Claims Operations
+    tool: create_journal
+  - integration: Claims Operations
+    tool: link_journal
+  - integration: Claims Operations
+    tool: create_journal_site_entry
+category: journals
+invocationMode: inline
+includeHistory: true
+visibility: org

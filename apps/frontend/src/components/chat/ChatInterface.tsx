@@ -27,6 +27,8 @@ interface ChatInterfaceProps {
    * Used by Help (?) so page agents (e.g. Catalogue Assistant) cannot win a load race.
    */
   forcePreferredAgent?: boolean;
+  /** Help (?) drawer: guide opens in canvas; user asks follow-up questions manually. */
+  helpMode?: boolean;
   /** When set, send this message once after the agent is selected and chat is ready. */
   autoSendMessage?: string;
   onMessagesChange?: (messages: ChatMessage[]) => void;
@@ -50,6 +52,7 @@ export function ChatInterface({
   pageContext,
   preferredAgentId,
   forcePreferredAgent = false,
+  helpMode = false,
   autoSendMessage,
   onMessagesChange,
   onOpenCanvas,
@@ -456,6 +459,7 @@ export function ChatInterface({
         interruptedMessageId={interruptedMessageId}
         conversationId={conversationId}
         pageContext={pageContext}
+        helpMode={helpMode}
       />
 
       {error && (

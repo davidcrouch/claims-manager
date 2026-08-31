@@ -49,6 +49,8 @@ export class CatalogItemsRepository {
     categoryIds?: string[];
     search?: string;
     isActive?: boolean;
+    /** When true, skip the default is_active=true filter (still excludes soft-deleted). */
+    includeInactive?: boolean;
     page?: number;
     limit?: number;
     sort?: string;
@@ -84,10 +86,12 @@ export class CatalogItemsRepository {
         conditions.push(inArray(catalogItems.categoryId, realIds));
       }
     }
-    if (params.isActive !== undefined) {
-      conditions.push(eq(catalogItems.isActive, params.isActive));
-    } else {
-      conditions.push(eq(catalogItems.isActive, true));
+    if (!params.includeInactive) {
+      if (params.isActive !== undefined) {
+        conditions.push(eq(catalogItems.isActive, params.isActive));
+      } else {
+        conditions.push(eq(catalogItems.isActive, true));
+      }
     }
     if (params.search?.trim()) {
       const term = `%${params.search.trim()}%`;

@@ -1,0 +1,41 @@
+slug: add-journal-entry
+name: Add journal site entry
+description: >
+  Add one spoken inspector entry (notes and photos) for a single thing looked at.
+  Optional spoken repair aside. No headings. Two items means two entries.
+triggerHints:
+  - add journal entry
+  - add inspection entry
+  - record damage in journal
+  - add scope of work to journal
+  - add photos to journal
+instructionPrompt: |
+  Add site-walk entry/entries to an existing journal as spoken inspector notes.
+  No headings or labels in the note text. One stop = one entry. If the user
+  mentions a roof leak AND a damaged door, call create_journal_site_entry twice.
+
+  1. Confirm journalId (page context or this conversation). Call get_journal if needed.
+  2. Choose entryKind: intro | pre_existing | observation | recommendation | other.
+  3. name: short place/item for the timeline ("Entry door"), not a report heading.
+  4. observation: spoken what you can see, this item only. No "Observation:" prefix.
+  5. For an event item, optional scopeOfWork: a second spoken note about likely
+     repair for THIS item only — conversational, no "Scope of work:" heading.
+     e.g. "This door's too far gone, we'll be putting a new one in."
+  6. Photos (1–3) of this item only.
+  7. locationLabel = room/area. capturedAt if known.
+  8. Call create_journal_site_entry once per item.
+  9. Do not add structured estimate/catalogue metadata — a later journal-processor
+     will read notes and photos.
+
+  Intro / wrap-up: no repair aside. Pre-existing: repair aside only if asked.
+requiredToolRefs:
+  - integration: Claims Operations
+    tool: get_journal
+  - integration: Claims Operations
+    tool: create_journal_site_entry
+  - integration: Claims Operations
+    tool: generate_journal_page_image
+category: journals
+invocationMode: inline
+includeHistory: true
+visibility: org

@@ -48,6 +48,7 @@ const ENTITY_MAP: Record<string, PageEntityMapping> = {
       'View job overview and parties',
       'Navigate to related entities (assessments, quotes, work orders)',
       'Update job details or status',
+      'Ask the Journal Assistant to generate a site-walk journal (test inspection notes and photos) for this job',
     ],
   },
   claim: {
@@ -138,8 +139,16 @@ const ENTITY_MAP: Record<string, PageEntityMapping> = {
     label: 'Journals',
     detailDocType: 'journal',
     listDocType: 'journals_list',
-    listHints: ['Create a journal entry', 'Search journals'],
-    detailHints: ['Edit journal entry', 'View attachments'],
+    listHints: [
+      'Say "generate a site walk" with a claim brief — I record spoken inspector notes and photos, one entry per thing looked at',
+      'Create an empty journal for this job',
+      'Search journals',
+    ],
+    detailHints: [
+      'Add another spoken site-walk entry (notes, photos, optional repair aside — no headings)',
+      'Continue or expand the site-walk journal',
+      'View attachments on an entry',
+    ],
   },
   rfq: {
     category: 'rfqs',

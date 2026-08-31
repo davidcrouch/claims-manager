@@ -49,7 +49,7 @@ psql "$DATABASE_URL_ADMIN" -f deploy/scripts/grant-provider-app.sql
 
 1. Push a `v*.*.*` tag (or run `workflow_dispatch` on CI with `force_build_all=true`).
 2. CI builds all six images tagged with the release version.
-3. `cd-production` triggers after CI success — updates Cloud Run revisions, runs `migrate-api`, then `seed-auth-rbac` and `seed-api-lookups`.
+3. `cd-production` triggers after CI success — updates Cloud Run revisions, runs `migrate-api`, then `seed-auth-rbac`, `seed-api-lookups`, and `ingest-api-guides`.
 
 ## 4. Flip bootstrap image off
 
@@ -112,6 +112,7 @@ echo -n "ACTUAL_VALUE" | gcloud secrets versions add <SECRET_NAME> \
 - [ ] `migrate-api` job succeeded
 - [ ] `seed-auth-rbac` job succeeded
 - [ ] `seed-api-lookups` job succeeded
+- [ ] `ingest-api-guides` job succeeded
 - [ ] Auth login flow works end-to-end via `https://app.branlamie.com`
 - [ ] Webhook ingest on `providers.branlamie.com` reaches `provider-server`
 - [ ] Template sync populated GCS bucket (`claims-manager-production-documents`)

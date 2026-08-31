@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { FolderTree, Package, Plus, Search, Upload, X } from 'lucide-react';
+import { FolderTree, Package, Plus, Search, Upload, Download, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,6 +31,7 @@ import {
   MAX_UNDO,
 } from '@/components/shared/detail-autosave';
 import type { CatalogCategory, CatalogItemType, CatalogType } from '@/types/api';
+import { exportCatalogCsvAction } from '@/app/(app)/admin/catalog/actions';
 
 export interface CatalogPageClientProps {
   catalogId: string;
@@ -62,6 +63,7 @@ export function CatalogPageClient({
   const router = useRouter();
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [itemDrawerOpen, setItemDrawerOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -98,6 +100,32 @@ export function CatalogPageClient({
     const next = `${url.pathname}${url.search}${url.hash}`;
     window.history.replaceState(window.history.state, '', next);
   }, []);
+
+  const handleExportCsv = useCallback(async () => {
+    setExporting(true);
+    try {
+      const result = await exportCatalogCsvAction(catalogId);
+      if (!result.success || !result.csv || !result.filename) {
+        toast.error(result.error || 'Catalogue export failed');
+        return;
+      }
+      const blob = new Blob([result.csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = result.filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${result.itemCount ?? 0} catalogue items`);
+    } catch (err) {
+      console.error('[catalog/CatalogPageClient.handleExportCsv]', err);
+      toast.error(err instanceof Error ? err.message : 'Catalogue export failed');
+    } finally {
+      setExporting(false);
+    }
+  }, [catalogId]);
 
   const handleSearchChange = (value: string) => {
     setSearch(value);
@@ -215,6 +243,16 @@ export function CatalogPageClient({
               undoDisabled={saving}
               onUndo={handleUndo}
             />
+            <Button
+              size="icon-lg"
+              variant="outline"
+              onClick={() => void handleExportCsv()}
+              disabled={exporting}
+              title="Export CSV"
+              aria-label="Export CSV"
+            >
+              <Download className="h-4 w-4" />
+            </Button>
             <Button
               size="icon-lg"
               variant="outline"

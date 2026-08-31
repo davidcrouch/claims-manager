@@ -253,3 +253,40 @@ export async function seedMcpForTenant(params: {
     notes: `mcp tenant=${tenantId}`,
   };
 }
+
+export async function seedMcpForAllTenants(params: {
+  db: SeedDb;
+  logger?: SeedLogger;
+}): Promise<SeedResult> {
+  const { db } = params;
+  const logger: SeedLogger = params.logger ?? {
+    info: (msg) => console.log(`${LOG} ${msg}`),
+    warn: (msg) => console.warn(`${LOG} ${msg}`),
+    error: (msg) => console.error(`${LOG} ${msg}`),
+  };
+
+  const orgs = await db
+    .select({
+      id: schema.organizations.id,
+      name: schema.organizations.name,
+      subscriptionStatus: schema.organizations.subscriptionStatus,
+    })
+    .from(schema.organizations);
+
+  const tenants = orgs.filter((org) => org.subscriptionStatus !== 'ghost');
+  if (tenants.length === 0) {
+    logger.warn(`${LOG} no organisations in DB — nothing to seed`);
+    return { inserted: 0, updated: 0, skipped: 0, notes: 'no tenant' };
+  }
+
+  const totals: SeedResult = { inserted: 0, updated: 0, skipped: 0 };
+  for (const org of tenants) {
+    logger.info(`${LOG} tenant=${org.name} (${org.id})`);
+    const result = await seedMcpForTenant({ db, tenantId: org.id, logger });
+    totals.inserted += result.inserted;
+    totals.updated += result.updated;
+    totals.skipped += result.skipped;
+  }
+  totals.notes = `tenants=${tenants.length}`;
+  return totals;
+}

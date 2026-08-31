@@ -74,7 +74,7 @@ flowchart TD
 
 | Path | Mechanism |
 |------|-----------|
-| **Page help (?)** | `buildPageHelpMessage` + skill `help-with-current-page` → `get_guides_for_route(pathname)` → `open_help_guide` |
+| **Page help (?)** | Guide opens in canvas via `getPageHelpGuideAction`; user asks follow-up questions in chat (no auto-send) |
 | **Prompt enrichment** | `AiChatService` appends “Available Help Guides” when `pageContext.pathname` matches `routes` |
 | **Free-form Q&A** | Skill `search-help` → `search_help_guides` (vector) → answer + optional open |
 | **Explicit open** | Skill `open-guide` / tool `open_help_guide` by slug |
@@ -201,7 +201,7 @@ permissions_discussed:               # docs-only today
 | `GET` | `/guides/:slug` | Full document row |
 | `GET` | `/guides/:slug/content` | `{ slug, title, content }` for canvas |
 
-**Ingest CLI:** `pnpm --filter api guides:ingest` → `apps/api/scripts/ingest-guides.mts`
+**Ingest CLI:** `pnpm --filter api guides:ingest` → `apps/api/src/database/run-ingest-guides.ts` (Cloud Run: `node dist/database/run-ingest-guides.js`)
 
 ---
 
@@ -243,7 +243,7 @@ permissions_discussed:               # docs-only today
 |-------|------|-----------|
 | Header **?** | `AppHeader.tsx` | Far right (after notifications) |
 | Help mode | `AppShell.tsx` / `ChatDrawer.tsx` | Prefer `help-assistant`; auto-send page-help message |
-| Agent map | `use-page-agent.ts` | `role` / `user` → `help-assistant`; `buildPageHelpMessage` includes pathname |
+| Page help message | `use-page-agent.ts` | `role` / `user` → `help-assistant`; guide loaded client-side by route |
 | Page context | `use-page-context.ts` | Admin roles/users → entity types for maps |
 | Canvas drawer | `ChatArtifactDrawer.tsx` | `guide_*` → read-only Help guide |
 | Renderer | `GuideMarkdown.tsx` | Professional markdown document view |
@@ -308,7 +308,7 @@ Prioritise guides that unblock common support questions. Each guide needs frontm
 
 | Item | Detail |
 |------|--------|
-| Unify ingest | Prefer calling Nest `GuideService.ingestGuide` from CLI (single chunk/embed path) |
+| Unify ingest | Done — `GuideService` via `run-ingest-guides.ts` / Cloud Run job |
 | Persist `last_updated` | Column or rely on `updated_at` only |
 | Embeddings CI check | Fail ingest loudly if Vertex unset in prod |
 | Related guides UI | Links in `GuideMarkdown` footer from `related_guides` |
@@ -321,13 +321,14 @@ Prioritise guides that unblock common support questions. Each guide needs frontm
 
 ## Ops checklist (per environment)
 
-1. Apply migrations (includes `0093_guide_documents`).  
-2. Configure Vertex project/location for embeddings.  
-3. `pnpm --filter api guides:ingest`.  
-4. Ensure Claims Organisation MCP integration is connected.  
-5. Install capability pack `help-system`.  
-6. Verify agent `help-assistant` appears in chat agent list.  
-7. Smoke: `/admin/roles` → **?** → canvas opens Roles & Permissions rendered as markdown.
+1. Apply migrations (includes `0093_guide_documents`).
+2. Configure Vertex project/location for embeddings (api-server + `ingest-api-guides` job).
+3. Deploy api image (bundles `docs/guides/`).
+4. CD runs `ingest-api-guides` after migrate (or locally: `pnpm --filter api guides:ingest`).
+5. Ensure Claims Organisation MCP integration is connected.
+6. Install capability pack `help-system`.
+7. Verify agent `help-assistant` appears in chat agent list.
+8. Smoke: `/admin/roles` → **?** → canvas opens Roles & Permissions rendered as markdown.
 
 ---
 
@@ -340,7 +341,7 @@ Prioritise guides that unblock common support questions. Each guide needs frontm
 | Schema | `apps/api/src/database/schema/index.ts` (`guideDocument`, `guideChunk`) |
 | Repository | `apps/api/src/database/repositories/guide.repository.ts` |
 | Service / HTTP | `apps/api/src/modules/guides/*` |
-| Ingest | `apps/api/scripts/ingest-guides.mts` |
+| Ingest | `apps/api/src/database/run-ingest-guides.ts` |
 | Chat integration | `apps/api/src/modules/ai-chat/ai-chat.service.ts` |
 | MCP tools | `apps/claims-mcp/src/tools/guides.tool.ts` |
 | Pack | `apps/api/packs/help-system/**` |

@@ -22,7 +22,6 @@ import {
 } from '@/lib/ai/use-ai-context';
 import { usePageContext } from '@/lib/ai/use-page-context';
 import {
-  buildPageHelpMessage,
   resolveHelpAgent,
   resolvePageAgent,
 } from '@/lib/ai/use-page-agent';
@@ -228,11 +227,6 @@ export function ChatDrawer({
 
   const helpAgentMissing = helpMode && agentsLoaded && !preferredAgentId;
 
-  const autoSendMessage = useMemo(() => {
-    if (!helpMode || !agentsLoaded || initialContext) return undefined;
-    return buildPageHelpMessage(pageContext);
-  }, [helpMode, agentsLoaded, initialContext, pageContext]);
-
   const handleMessagesChange = useCallback(async (messages: ChatMessage[]) => {
     if (messages.length === 0) return;
     setLiveMessages(messages);
@@ -377,7 +371,7 @@ export function ChatDrawer({
     : helpAgentMissing
       ? 'Install the Help System capability pack to enable Help Assistant'
       : helpMode
-        ? 'Guides and steps for the page you are on'
+        ? 'Read the guide on the right, then ask questions here'
         : 'Ask questions and take actions across your workspace';
 
   const resolvedWidthClassName =
@@ -484,7 +478,7 @@ export function ChatDrawer({
                       pageContext={initialContext ? undefined : pageContext}
                       preferredAgentId={preferredAgentId}
                       forcePreferredAgent={helpMode && !helpAgentMissing}
-                      autoSendMessage={helpAgentMissing ? undefined : autoSendMessage}
+                      helpMode={helpMode}
                       onMessagesChange={handleMessagesChange}
                       onOpenCanvas={handleOpenCanvas}
                       onOpenCanvasComponent={handleOpenCanvasComponent}

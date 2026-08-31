@@ -1,7 +1,7 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
-import { catalogAssemblyComponents } from '../schema';
+import { catalogAssemblyComponents, catalogItems } from '../schema';
 
 export type CatalogAssemblyComponentRow = typeof catalogAssemblyComponents.$inferSelect;
 export type CatalogAssemblyComponentInsert = typeof catalogAssemblyComponents.$inferInsert;
@@ -9,6 +9,39 @@ export type CatalogAssemblyComponentInsert = typeof catalogAssemblyComponents.$i
 @Injectable()
 export class CatalogAssemblyComponentsRepository {
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
+
+  async findByCatalogId(params: {
+    tenantId: string;
+    catalogId: string;
+  }): Promise<CatalogAssemblyComponentRow[]> {
+    return this.db
+      .select({
+        id: catalogAssemblyComponents.id,
+        tenantId: catalogAssemblyComponents.tenantId,
+        assemblyId: catalogAssemblyComponents.assemblyId,
+        componentId: catalogAssemblyComponents.componentId,
+        quantity: catalogAssemblyComponents.quantity,
+        wasteFactor: catalogAssemblyComponents.wasteFactor,
+        sortIndex: catalogAssemblyComponents.sortIndex,
+        isOptional: catalogAssemblyComponents.isOptional,
+        notes: catalogAssemblyComponents.notes,
+        createdAt: catalogAssemblyComponents.createdAt,
+        updatedAt: catalogAssemblyComponents.updatedAt,
+      })
+      .from(catalogAssemblyComponents)
+      .innerJoin(
+        catalogItems,
+        eq(catalogAssemblyComponents.assemblyId, catalogItems.id),
+      )
+      .where(
+        and(
+          eq(catalogAssemblyComponents.tenantId, params.tenantId),
+          eq(catalogItems.tenantId, params.tenantId),
+          eq(catalogItems.catalogId, params.catalogId),
+        ),
+      )
+      .orderBy(asc(catalogAssemblyComponents.sortIndex));
+  }
 
   async findByAssemblyId(params: {
     tenantId: string;

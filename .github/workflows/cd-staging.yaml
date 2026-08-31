@@ -242,3 +242,50 @@ jobs:
             --project "${STAGING_PROJECT}" \
             --region "${GCP_REGION}" \
             --wait
+
+  ingest-guides:
+    needs: [migrate]
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Resolve image tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            SHA="${{ github.event.workflow_run.head_sha }}"
+          else
+            SHA="${GITHUB_SHA}"
+          fi
+          if [ -n "${{ github.event.inputs.image_tag }}" ]; then
+            echo "IMAGE_TAG=${{ github.event.inputs.image_tag }}" >> "$GITHUB_ENV"
+          else
+            echo "IMAGE_TAG=main-${SHA::7}" >> "$GITHUB_ENV"
+          fi
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ci-deployer@claims-manager-infra-493807.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Run ingest-api-guides Job
+        run: |
+          if ! gcloud run jobs describe ingest-api-guides \
+            --project "${STAGING_PROJECT}" \
+            --region "${GCP_REGION}" > /dev/null 2>&1; then
+            echo "::error::ingest-api-guides job missing; apply staging terraform (cloud_run.tf) then re-run CD"
+            exit 1
+          fi
+          gcloud run jobs update ingest-api-guides \
+            --project "${STAGING_PROJECT}" \
+            --region "${GCP_REGION}" \
+            --image "${{ env.REGISTRY }}/api-server:${IMAGE_TAG}" \
+            --task-timeout=15m
+          gcloud run jobs execute ingest-api-guides \
+            --project "${STAGING_PROJECT}" \
+            --region "${GCP_REGION}" \
+            --wait

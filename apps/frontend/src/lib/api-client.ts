@@ -1594,6 +1594,18 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<{ csv: string; columns: string[]; catalogType: string }>(`/catalog/import/template?${sp}`);
     },
 
+    exportCatalogCsv(
+      catalogId: string,
+      format?: 'internal' | 'crunchwork',
+    ): Promise<{ csv: string; filename: string; format: 'internal' | 'crunchwork'; itemCount: number }> {
+      const sp = new URLSearchParams();
+      sp.set('catalogId', catalogId);
+      if (format) sp.set('format', format);
+      return fetchApi<{ csv: string; filename: string; format: 'internal' | 'crunchwork'; itemCount: number }>(
+        `/catalog/import/export?${sp}`,
+      );
+    },
+
     previewCatalogImport(csv: string, catalogId?: string): Promise<{
       totalRows: number;
       validRows: number;

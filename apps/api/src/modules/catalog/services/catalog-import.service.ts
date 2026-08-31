@@ -19,7 +19,7 @@ import {
   defaultProviderCodesForImport,
   isCatalogBomParentKind,
 } from '../catalog.utils';
-import type { CatalogCategoryRow } from '../../../database/repositories';
+import type { CatalogCategoryRow, CatalogItemRow } from '../../../database/repositories';
 import type { CatalogType } from './catalogs.service';
 import {
   detectImportFormat,
@@ -27,13 +27,35 @@ import {
   sortImportRowIndexes,
   validateBomParentChildKinds,
 } from './catalog-import.utils';
+import {
+  catalogFilenameSlug,
+  csvRow,
+  formatCsvBool,
+  formatCwMarkupType,
+  formatMetadataCsvValue,
+  formatRateForCsv,
+  getNestedValue,
+  kindSortRank,
+  parseMetadataJson,
+} from './catalog-export.utils';
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+interface BomLineData {
+  quantity: string;
+  wasteFactor: string;
+  sortIndex: number;
+  isOptional: boolean;
+  notes?: string;
+}
 
 // ── Column mapping profiles ─────────────────────────────────────
 
 export interface ColumnMapping {
   csvHeader: string;
   aliases?: string[];
-  target: 'column' | 'metadata';
+  target: 'column' | 'metadata' | 'bom';
   field: string;
   required?: boolean;
   transform?: (value: string) => unknown;
@@ -85,13 +107,16 @@ function normaliseImportMarkupType(raw: string): string {
 }
 
 const INTERNAL_PROFILE: ColumnMapping[] = [
+  { csvHeader: 'id', target: 'column', field: 'itemId' },
   { csvHeader: 'code', target: 'column', field: 'code', required: true },
   { csvHeader: 'display_name', aliases: ['name'], target: 'column', field: 'name', required: true },
   { csvHeader: 'line_item_description', aliases: ['description'], target: 'column', field: 'description' },
   { csvHeader: 'kind', target: 'column', field: 'kind', required: true },
   { csvHeader: 'parent', aliases: ['parent_id', 'parent_code'], target: 'column', field: 'parentCode' },
+  { csvHeader: 'parent_catalog', target: 'column', field: 'parentCatalog' },
   { csvHeader: 'type_code', target: 'column', field: 'type_code', required: true },
   { csvHeader: 'category_code', target: 'column', field: 'category_code' },
+  { csvHeader: 'sub_category', aliases: ['sub_category_code'], target: 'column', field: 'sub_category_code' },
   { csvHeader: 'unit_type_ref', target: 'column', field: 'unit_type_ref' },
   { csvHeader: 'unit_cost', target: 'column', field: 'unitCost' },
   { csvHeader: 'buy_cost', target: 'column', field: 'buyCost' },
@@ -102,15 +127,29 @@ const INTERNAL_PROFILE: ColumnMapping[] = [
   { csvHeader: 'fixed_unit_cost', target: 'column', field: 'fixedUnitCost' },
   { csvHeader: 'external_reference', target: 'column', field: 'externalReference' },
   { csvHeader: 'provider_codes', aliases: ['providers'], target: 'column', field: 'providerCodes', transform: toTagArray },
+  { csvHeader: 'is_active', aliases: ['enabled'], target: 'column', field: 'isActive', transform: toBool },
+  { csvHeader: 'archived', target: 'column', field: 'archived', transform: (v) => toBool(v) },
+  { csvHeader: 'effective_from', target: 'column', field: 'effectiveFrom' },
+  { csvHeader: 'effective_to', target: 'column', field: 'effectiveTo' },
+  { csvHeader: 'source_catalog', target: 'column', field: 'sourceCatalog' },
+  { csvHeader: 'source_code', target: 'column', field: 'sourceCode' },
+  { csvHeader: 'quantity', target: 'bom', field: 'bomQuantity' },
+  { csvHeader: 'waste_factor', target: 'bom', field: 'bomWasteFactor' },
+  { csvHeader: 'sort_index', target: 'bom', field: 'bomSortIndex', transform: (v) => parseInt(v, 10) },
+  { csvHeader: 'is_optional', target: 'bom', field: 'bomIsOptional', transform: toBool },
+  { csvHeader: 'bom_notes', target: 'bom', field: 'bomNotes' },
+  { csvHeader: 'metadata', target: 'column', field: 'metadataJson' },
 ];
 
 const CRUNCHWORK_PROFILE: ColumnMapping[] = [
+  { csvHeader: 'item_id', target: 'column', field: 'itemId' },
   { csvHeader: 'id', aliases: ['external_reference'], target: 'column', field: 'externalReference' },
   { csvHeader: 'code', target: 'column', field: 'code' },
   { csvHeader: 'name', aliases: ['display_name'], target: 'column', field: 'name', required: true },
   { csvHeader: 'description', aliases: ['line_item_description'], target: 'column', field: 'description' },
   { csvHeader: 'kind', target: 'column', field: 'kind' },
   { csvHeader: 'parent', aliases: ['parent_id', 'parent_code'], target: 'column', field: 'parentCode' },
+  { csvHeader: 'parent_catalog', target: 'column', field: 'parentCatalog' },
   { csvHeader: 'type', aliases: ['type_code'], target: 'column', field: 'type_code', required: true },
   { csvHeader: 'category', aliases: ['category_code'], target: 'column', field: 'category_code' },
   { csvHeader: 'subcategory', aliases: ['sub_category_code'], target: 'column', field: 'sub_category_code' },
@@ -124,6 +163,15 @@ const CRUNCHWORK_PROFILE: ColumnMapping[] = [
   { csvHeader: 'fixed_unit_cost', target: 'column', field: 'fixedUnitCost' },
   { csvHeader: 'enabled', target: 'column', field: 'isActive', transform: (v) => toBool(v) },
   { csvHeader: 'archived', target: 'column', field: 'archived', transform: (v) => toBool(v) },
+  { csvHeader: 'effective_from', target: 'column', field: 'effectiveFrom' },
+  { csvHeader: 'effective_to', target: 'column', field: 'effectiveTo' },
+  { csvHeader: 'source_catalog', target: 'column', field: 'sourceCatalog' },
+  { csvHeader: 'source_code', target: 'column', field: 'sourceCode' },
+  { csvHeader: 'quantity', target: 'bom', field: 'bomQuantity' },
+  { csvHeader: 'waste_factor', target: 'bom', field: 'bomWasteFactor' },
+  { csvHeader: 'sort_index', target: 'bom', field: 'bomSortIndex', transform: (v) => parseInt(v, 10) },
+  { csvHeader: 'is_optional', target: 'bom', field: 'bomIsOptional', transform: toBool },
+  { csvHeader: 'bom_notes', target: 'bom', field: 'bomNotes' },
   { csvHeader: 'default quantity', target: 'metadata', field: 'defaultQuantity', transform: toNumericOrNull },
   { csvHeader: 'pc/ps', target: 'metadata', field: 'pcPs' },
   { csvHeader: 'low limit pricing threshold', target: 'metadata', field: 'pricingThresholds.low', transform: toNumericOrNull },
@@ -140,6 +188,8 @@ const CRUNCHWORK_PROFILE: ColumnMapping[] = [
   { csvHeader: 'provider_codes', aliases: ['providers'], target: 'column', field: 'providerCodes', transform: toTagArray },
   { csvHeader: 'category id', target: 'metadata', field: 'cwCategoryId' },
   { csvHeader: 'subcategory id', target: 'metadata', field: 'cwSubcategoryId' },
+  { csvHeader: 'Ensure Scope Line Item', target: 'metadata', field: 'ensureScopeLineItem' },
+  { csvHeader: 'metadata', target: 'column', field: 'metadataJson' },
 ];
 
 const COLUMN_PROFILES: Record<string, ColumnMapping[]> = {
@@ -147,8 +197,12 @@ const COLUMN_PROFILES: Record<string, ColumnMapping[]> = {
   crunchwork: CRUNCHWORK_PROFILE,
 };
 
-function getProfile(catalogType: string): ColumnMapping[] {
+export function getCatalogCsvProfile(catalogType: string): ColumnMapping[] {
   return COLUMN_PROFILES[catalogType] ?? INTERNAL_PROFILE;
+}
+
+function getProfile(catalogType: string): ColumnMapping[] {
+  return getCatalogCsvProfile(catalogType);
 }
 
 function buildTemplateFromProfile(profile: ColumnMapping[]): string {
@@ -246,6 +300,201 @@ export class CatalogImportService {
     };
   }
 
+  async exportCsv(params: {
+    catalogId: string;
+    format?: 'internal' | 'crunchwork';
+  }): Promise<{
+    csv: string;
+    filename: string;
+    format: 'internal' | 'crunchwork';
+    itemCount: number;
+  }> {
+    const tenantId = this.tenantContext.getTenantId();
+    const catalog = await this.catalogsRepo.findById({ tenantId, id: params.catalogId });
+    if (!catalog) {
+      throw new NotFoundException(`Catalogue ${params.catalogId} not found`);
+    }
+
+    const format: 'internal' | 'crunchwork' =
+      params.format ?? (catalog.type === 'crunchwork' ? 'crunchwork' : 'internal');
+    const profile = getCatalogCsvProfile(format);
+
+    const items: CatalogItemRow[] = [];
+    let page = 1;
+    const limit = 500;
+    for (;;) {
+      const batch = await this.itemsRepo.findMany({
+        tenantId,
+        catalogId: catalog.id,
+        includeInactive: true,
+        page,
+        limit,
+        sort: 'code_asc',
+      });
+      items.push(...batch.data);
+      if (items.length >= batch.total || batch.data.length === 0) break;
+      page += 1;
+    }
+
+    const [types, categories, units, bomRows, allCatalogs] = await Promise.all([
+      this.typesRepo.findAll({ tenantId, activeOnly: false }),
+      this.categoriesRepo.findAll({ tenantId, activeOnly: false }),
+      this.lookupsRepo.findByDomain({ tenantId, domain: 'unit_type' }),
+      this.bomRepo.findByCatalogId({ tenantId, catalogId: catalog.id }),
+      this.catalogsRepo.findAll({ tenantId, activeOnly: false }),
+    ]);
+
+    const itemById = new Map(items.map((item) => [item.id, item]));
+    const catalogById = new Map(allCatalogs.map((c) => [c.id, c]));
+
+    // Build multi-parent map: componentId → BomEdge[]
+    const bomByComponentId = new Map<string, typeof bomRows>();
+    for (const line of bomRows) {
+      const existing = bomByComponentId.get(line.componentId);
+      if (existing) {
+        existing.push(line);
+      } else {
+        bomByComponentId.set(line.componentId, [line]);
+      }
+    }
+
+    // Resolve source item catalogue names for provenance
+    const sourceItemIds = items
+      .map((i) => i.sourceItemId)
+      .filter((id): id is string => !!id);
+    const sourceItemMap = new Map<string, { code: string; catalogName: string }>();
+    for (const sourceId of sourceItemIds) {
+      const sourceItem = await this.itemsRepo.findById({ tenantId, id: sourceId, includeDeleted: true });
+      if (sourceItem?.catalogId) {
+        const sourceCatalog = catalogById.get(sourceItem.catalogId);
+        if (sourceCatalog) {
+          sourceItemMap.set(sourceId, { code: sourceItem.code, catalogName: sourceCatalog.name });
+        }
+      }
+    }
+
+    const typeById = new Map(types.map((row) => [row.id, row]));
+    const categoryById = new Map(categories.map((row) => [row.id, row]));
+    const unitById = new Map(units.map((row) => [row.id, row]));
+
+    const ranked = [...items].sort((a, b) => {
+      const rank = kindSortRank(a.kind) - kindSortRank(b.kind);
+      if (rank !== 0) return rank;
+      return a.code.localeCompare(b.code);
+    });
+
+    const lines = [csvRow(profile.map((mapping) => mapping.csvHeader))];
+
+    for (const item of ranked) {
+      const bomEdges = bomByComponentId.get(item.id) ?? [];
+      const type = typeById.get(item.typeId);
+      const category = item.categoryId ? categoryById.get(item.categoryId) : undefined;
+      const subCategory = item.subCategoryId ? categoryById.get(item.subCategoryId) : undefined;
+      const unit = item.unitTypeLookupId ? unitById.get(item.unitTypeLookupId) : undefined;
+      const meta = (item.metadata ?? {}) as Record<string, unknown>;
+      const sourceInfo = item.sourceItemId ? sourceItemMap.get(item.sourceItemId) : undefined;
+
+      const buildRow = (
+        parentItem: CatalogItemRow | undefined,
+        bomEdge: (typeof bomRows)[number] | undefined,
+      ) => {
+        const parentCatalogName =
+          parentItem?.catalogId && parentItem.catalogId !== catalog.id
+            ? catalogById.get(parentItem.catalogId)?.name ?? ''
+            : '';
+        const ensureScope =
+          (typeof meta.ensureScopeLineItem === 'string' && meta.ensureScopeLineItem) ||
+          (parentItem?.kind === 'scope' ? parentItem.name : '');
+
+        const fieldValues: Record<string, string> = {
+          itemId: item.id,
+          code: item.code,
+          name: item.name,
+          description: item.description ?? '',
+          kind: item.kind,
+          parentCode: parentItem?.code ?? '',
+          parentCatalog: parentCatalogName,
+          type_code: type?.code ?? '',
+          category_code: category?.code ?? '',
+          sub_category_code: subCategory?.code ?? '',
+          unit_type_ref: unit?.externalReference || unit?.name || '',
+          unitCost: item.unitCost ?? '',
+          buyCost: item.buyCost ?? '',
+          markupType: item.markupType ?? '',
+          markupValue: item.markupValue ?? '',
+          taxRate: item.taxRate ?? '',
+          pricingMode: item.pricingMode ?? '',
+          fixedUnitCost: item.fixedUnitCost ?? '',
+          externalReference: item.externalReference ?? '',
+          providerCodes: (item.providerCodes ?? []).join(','),
+          isActive: formatCsvBool(item.isActive),
+          archived: formatCsvBool(!item.isActive),
+          effectiveFrom: item.effectiveFrom ?? '',
+          effectiveTo: item.effectiveTo ?? '',
+          sourceCatalog: sourceInfo?.catalogName ?? '',
+          sourceCode: sourceInfo?.code ?? '',
+          metadataJson: Object.keys(meta).length > 0 ? JSON.stringify(meta) : '',
+          ensureScopeLineItem: ensureScope,
+          bomQuantity: bomEdge?.quantity ?? '',
+          bomWasteFactor: bomEdge?.wasteFactor ?? '',
+          bomSortIndex: bomEdge?.sortIndex != null ? String(bomEdge.sortIndex) : '',
+          bomIsOptional: bomEdge ? formatCsvBool(bomEdge.isOptional) : '',
+          bomNotes: bomEdge?.notes ?? '',
+        };
+
+        return profile.map((mapping) => {
+          if (mapping.target === 'metadata') {
+            if (mapping.field === 'ensureScopeLineItem') return fieldValues.ensureScopeLineItem;
+            return formatMetadataCsvValue(getNestedValue(meta, mapping.field));
+          }
+          if (mapping.target === 'bom') {
+            return fieldValues[mapping.field] ?? '';
+          }
+          if (mapping.field === 'externalReference' && format === 'crunchwork') {
+            return item.externalReference || item.code;
+          }
+          if (mapping.field === 'markupType' && format === 'crunchwork') {
+            return formatCwMarkupType(item.markupType);
+          }
+          if (mapping.field === 'type_code' && format === 'crunchwork') {
+            return type?.name || type?.code || '';
+          }
+          if (mapping.field === 'markupValue') {
+            return formatRateForCsv({
+              value: item.markupValue,
+              format,
+              markupType: item.markupType,
+              asPercentPoints: true,
+            });
+          }
+          if (mapping.field === 'taxRate' && format === 'crunchwork') {
+            return formatRateForCsv({
+              value: item.taxRate,
+              format,
+              asPercentPoints: true,
+            });
+          }
+          return fieldValues[mapping.field] ?? '';
+        });
+      };
+
+      if (bomEdges.length === 0) {
+        lines.push(csvRow(buildRow(undefined, undefined)));
+      } else {
+        for (const edge of bomEdges) {
+          const parentItem = itemById.get(edge.assemblyId);
+          lines.push(csvRow(buildRow(parentItem, edge)));
+        }
+      }
+    }
+
+    const filename = `${catalogFilenameSlug(catalog.name)}-${format}.csv`;
+    this.logger.log(
+      `CatalogImportService.exportCsv — catalogId=${catalog.id} format=${format} items=${ranked.length}`,
+    );
+    return { csv: `${lines.join('\n')}\n`, filename, format, itemCount: ranked.length };
+  }
+
   async previewCsv(params: {
     csv: string;
     catalogId?: string;
@@ -319,14 +568,65 @@ export class CatalogImportService {
       }
 
       try {
-        const rowData = await this.buildRowData(ctx, i, categoryByCode);
-        let existing = await this.itemsRepo.findByCode({
-          tenantId: ctx.tenantId,
-          code,
-          catalogId: ctx.catalogId,
-        });
+        const parentCode = cellByField(ctx, cells, 'parentCode');
+        const alreadyUpserted = upsertedByCode.get(code.toLowerCase());
 
-        // Transition path: if code changed (UUID → slug), match by externalReference
+        // Multi-parent dedup: if this code was already upserted, skip item upsert and only create BOM edge
+        if (alreadyUpserted && parentCode) {
+          const bomData = this.extractBomData(ctx, cells);
+          const link = await this.ensureBomParentLink({
+            ctx,
+            childCode: code,
+            childId: alreadyUpserted.id,
+            childKind: alreadyUpserted.kind,
+            parentCode,
+            upsertedByCode,
+            bomData,
+          });
+          if (link.error) {
+            results.push({ row: i + 1, code, status: 'error', message: link.error });
+            errors++;
+          } else {
+            const msg = link.created ? `BOM edge to parent ${parentCode}` : `Already linked under ${parentCode}`;
+            results.push({ row: i + 1, code, status: 'skipped', message: msg });
+            skipped++;
+            if (link.parentId) parentsToRefresh.add(link.parentId);
+          }
+          continue;
+        }
+
+        const rowData = await this.buildRowData(ctx, i, categoryByCode);
+
+        // UUID preservation: only reuse id when it belongs to this catalogue (or is free).
+        // Reusing an id from another catalogue in the same tenant would update the wrong
+        // catalogue and break chunked imports (parents never appear in the target).
+        const csvItemId = cellByField(ctx, cells, 'itemId');
+        let preserveId = csvItemId && UUID_RE.test(csvItemId) ? csvItemId : undefined;
+
+        let existing: CatalogItemRow | null = null;
+
+        if (preserveId) {
+          const byId = await this.itemsRepo.findById({
+            tenantId: ctx.tenantId,
+            id: preserveId,
+            includeDeleted: true,
+          });
+          if (byId) {
+            if (!ctx.catalogId || byId.catalogId === ctx.catalogId) {
+              existing = byId;
+            } else {
+              // PK already used by another catalogue — create a new row in the target.
+              preserveId = undefined;
+            }
+          }
+        }
+        if (!existing) {
+          existing = await this.itemsRepo.findByCode({
+            tenantId: ctx.tenantId,
+            code,
+            catalogId: ctx.catalogId,
+          });
+        }
         if (!existing) {
           const extRef = cellByField(ctx, cells, 'externalReference');
           if (extRef) {
@@ -356,9 +656,18 @@ export class CatalogImportService {
             catalogId: ctx.catalogId,
             baseCode: code,
           });
+          const insertData: Record<string, unknown> = {
+            ...rowData,
+            code: finalCode,
+            catalogId: ctx.catalogId,
+            isActive: true,
+          };
+          if (preserveId) {
+            insertData.id = preserveId;
+          }
           const row = await this.itemsRepo.create({
             tenantId: ctx.tenantId,
-            data: { ...rowData, code: finalCode, catalogId: ctx.catalogId, isActive: true },
+            data: insertData as Parameters<typeof this.itemsRepo.create>[0]['data'],
           });
           itemId = row.id;
           itemKind = row.kind;
@@ -368,8 +677,8 @@ export class CatalogImportService {
 
         upsertedByCode.set(code.toLowerCase(), { id: itemId, kind: itemKind, code });
 
-        const parentCode = cellByField(ctx, cells, 'parentCode');
         if (parentCode) {
+          const bomData = this.extractBomData(ctx, cells);
           const link = await this.ensureBomParentLink({
             ctx,
             childCode: code,
@@ -377,6 +686,7 @@ export class CatalogImportService {
             childKind: itemKind,
             parentCode,
             upsertedByCode,
+            bomData,
           });
           if (link.error) {
             const last = results[results.length - 1];
@@ -419,10 +729,29 @@ export class CatalogImportService {
       }
     }
 
-    // Keep result order aligned with CSV row numbers
     results.sort((a, b) => a.row - b.row);
 
     return { created, updated, skipped, errors, results };
+  }
+
+  private extractBomData(
+    ctx: ImportParseContext,
+    cells: string[],
+  ): BomLineData {
+    return {
+      quantity: cellByField(ctx, cells, 'bomQuantity') || '1',
+      wasteFactor: cellByField(ctx, cells, 'bomWasteFactor') || '1',
+      sortIndex: (() => {
+        const raw = cellByField(ctx, cells, 'bomSortIndex');
+        const n = parseInt(raw, 10);
+        return isNaN(n) ? 0 : n;
+      })(),
+      isOptional: (() => {
+        const raw = cellByField(ctx, cells, 'bomIsOptional');
+        return raw ? toBool(raw) : false;
+      })(),
+      notes: cellByField(ctx, cells, 'bomNotes') || undefined,
+    };
   }
 
   private async buildImportContext(
@@ -579,6 +908,7 @@ export class CatalogImportService {
     childKind: string;
     parentCode: string;
     upsertedByCode: Map<string, { id: string; kind: string; code: string }>;
+    bomData?: BomLineData;
   }): Promise<{ parentId?: string; created?: boolean; error?: string }> {
     const parentKey = params.parentCode.toLowerCase();
     let parent = params.upsertedByCode.get(parentKey) ?? null;
@@ -592,6 +922,7 @@ export class CatalogImportService {
       if (row) {
         parent = { id: row.id, kind: row.kind, code: row.code };
         params.upsertedByCode.set(parentKey, parent);
+        params.upsertedByCode.set(row.code.toLowerCase(), parent);
       }
     }
 
@@ -613,11 +944,17 @@ export class CatalogImportService {
       return { parentId: parent.id, created: false };
     }
 
+    const bom = params.bomData ?? { quantity: '1', wasteFactor: '1', sortIndex: 0, isOptional: false };
+
     try {
       await this.assemblyService.addComponent({
         assemblyId: parent.id,
         componentId: params.childId,
-        quantity: '1',
+        quantity: bom.quantity,
+        wasteFactor: bom.wasteFactor,
+        sortIndex: bom.sortIndex,
+        isOptional: bom.isOptional,
+        notes: bom.notes,
       });
       return { parentId: parent.id, created: true };
     } catch (err) {
@@ -789,6 +1126,28 @@ export class CatalogImportService {
     const archivedRaw = cellByField(ctx, cells, 'archived');
     const isActive = archivedRaw ? !toBool(archivedRaw) : (isActiveRaw ? toBool(isActiveRaw) : true);
 
+    // Resolve source provenance
+    const sourceCatalog = cellByField(ctx, cells, 'sourceCatalog');
+    const sourceCode = cellByField(ctx, cells, 'sourceCode');
+    let sourceItemId: string | undefined;
+    if (sourceCatalog && sourceCode) {
+      const srcCatalog = await this.catalogsRepo.findByName({
+        tenantId: ctx.tenantId,
+        name: sourceCatalog,
+      });
+      if (srcCatalog) {
+        const srcItem = await this.itemsRepo.findByCode({
+          tenantId: ctx.tenantId,
+          code: sourceCode,
+          catalogId: srcCatalog.id,
+        });
+        sourceItemId = srcItem?.id;
+      }
+    }
+
+    const effectiveFrom = cellByField(ctx, cells, 'effectiveFrom') || undefined;
+    const effectiveTo = cellByField(ctx, cells, 'effectiveTo') || undefined;
+
     return {
       name: displayName,
       description: cellByField(ctx, cells, 'description') || undefined,
@@ -828,6 +1187,9 @@ export class CatalogImportService {
       })(),
       isActive,
       deletedAt: archivedRaw && toBool(archivedRaw) ? new Date() : undefined,
+      sourceItemId,
+      effectiveFrom,
+      effectiveTo,
       metadata: Object.keys(metadata).length > 0 ? metadata : {},
     };
   }
@@ -836,8 +1198,11 @@ export class CatalogImportService {
     ctx: ImportParseContext,
     cells: string[],
   ): Record<string, unknown> {
-    const result: Record<string, unknown> = {};
+    // Start with JSON metadata column if present (base layer)
+    const jsonRaw = cellByField(ctx, cells, 'metadataJson');
+    const base = parseMetadataJson(jsonRaw) ?? {};
 
+    // Individual metadata columns override JSON blob values
     for (const mapping of ctx.profile) {
       if (mapping.target !== 'metadata') continue;
       const idx = ctx.colIndex.get(mapping.field);
@@ -846,10 +1211,10 @@ export class CatalogImportService {
       if (!raw) continue;
 
       const value = mapping.transform ? mapping.transform(raw) : raw;
-      setNestedValue(result, mapping.field, value);
+      setNestedValue(base, mapping.field, value);
     }
 
-    return result;
+    return base;
   }
 
   private async resolveOrCreateCategory(params: {

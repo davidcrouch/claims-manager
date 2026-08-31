@@ -214,6 +214,36 @@ export async function importCatalogCsvAction(
   }
 }
 
+export async function exportCatalogCsvAction(
+  catalogId: string,
+  format?: 'internal' | 'crunchwork',
+): Promise<{
+  success: boolean;
+  csv?: string;
+  filename?: string;
+  itemCount?: number;
+  error?: string;
+}> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+
+  try {
+    const result = await api.exportCatalogCsv(catalogId, format);
+    return {
+      success: true,
+      csv: result.csv,
+      filename: result.filename,
+      itemCount: result.itemCount,
+    };
+  } catch (err) {
+    console.error('[catalog/actions.exportCatalogCsvAction]', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Export failed',
+    };
+  }
+}
+
 export async function createCatalogCategoryAction(body: {
   code: string;
   name: string;

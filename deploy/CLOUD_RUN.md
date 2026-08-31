@@ -12,6 +12,7 @@ Claims Manager runs **Cloud Run only** (staging and production). No GKE, no Comp
 | `ms-graph-mcp` | IAM-private | Cloud Run IAM (invoker SA) | 1 vCPU / 512Mi | same |
 | `migrate-api` | Job | — | 1 vCPU / 1Gi | same |
 | `seed-api-lookups` | Job | — | 1 vCPU / 1Gi | same |
+| `ingest-api-guides` | Job | — | 1 vCPU / 1Gi | same |
 | `seed-auth-rbac` | Job | — | 1 vCPU / 512Mi | same |
 
 **Data plane:** Cloud SQL Postgres + Memorystore Redis + GCS + Pub/Sub.
@@ -26,7 +27,9 @@ Claims Manager runs **Cloud Run only** (staging and production). No GKE, no Comp
 - Signup creates org → auth-server `SEED_NEW_TENANTS=true` + `API_INTERNAL_URL` → `POST /internal/seed-tenant` (catalog, MCP, lookups; Crunchwork staging connection when the org is Ensure Construction).
 - CLI `pnpm --filter api run db:seed` upserts Ensure Construction Pty Ltd + its Crunchwork staging connection.
 - First login → frontend provisioning flow (`filesystem` / templates / catalog / lookups) when `organizations.provisioning_status != complete`.
-- CD after migrate runs `seed-api-lookups` (idempotent lookups, claim-lookup backfill, IAG catalogue replace, and document-template JSONata sync for every tenant) in both staging and production.
+- CD after migrate runs `seed-api-lookups` (idempotent lookups, claim-lookup backfill, IAG catalogue replace, document-template JSONata sync, MCP integrations including Claims AI, assessment skills, and builtin packs such as Report Builder — for every tenant) and `ingest-api-guides` (idempotent `docs/guides` → Postgres + embeddings) in both staging and production.
+  - If `ingest-api-guides` is missing, CD **fails** until staging/production terraform has been applied (`cloud_run.tf`).
+  - `seed-api-lookups` needs `CLAIMS_MCP_URL` / `MS_GRAPH_MCP_URL` (set in terraform) so MCP URLs point at the environment’s claims-mcp / ms-graph-mcp services.
 
 **Networking:** Active subnet is `claims-manager-private-<env>`.
 
@@ -51,8 +54,8 @@ After first image push, keep `cloud_run_use_bootstrap_image=false` (staging defa
 | Workflow | Role |
 |----------|------|
 | [`.github/workflows/ci.yaml`](../.github/workflows/ci.yaml) | Matrix Docker builds (api / auth / frontend / provider / claims-mcp / ms-graph-mcp) |
-| [`.github/workflows/cd-staging.yaml`](../.github/workflows/cd-staging.yaml) | Update staging Cloud Run images, then `migrate-api`, then `seed-auth-rbac` + `seed-api-lookups` |
-| [`.github/workflows/cd-production.yaml`](../.github/workflows/cd-production.yaml) | Update production Cloud Run on `v*.*.*` tags, then migrate + RBAC seed + lookups seed |
+| [`.github/workflows/cd-staging.yaml`](../.github/workflows/cd-staging.yaml) | Update staging Cloud Run images, then `migrate-api`, then `seed-auth-rbac` + `seed-api-lookups` + `ingest-api-guides` |
+| [`.github/workflows/cd-production.yaml`](../.github/workflows/cd-production.yaml) | Update production Cloud Run on `v*.*.*` tags, then migrate + RBAC seed + lookups seed + guide ingest |
 
 ## App sources
 

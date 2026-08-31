@@ -26,7 +26,31 @@ const ASSESSMENT_TAB_LABELS: Record<string, string> = {
   recommendation: 'Recommendation',
 };
 
-function getSuggestions(ctx?: PageContext): string[] {
+function getSuggestions(ctx?: PageContext, helpMode?: boolean): string[] {
+  if (helpMode) {
+    if (ctx?.entityType === 'role' || ctx?.entityType === 'user') {
+      return [
+        'How do I create a custom role?',
+        'What does invoices.approve control?',
+        'How do I assign roles to a user?',
+      ];
+    }
+    if (ctx?.entityType === 'assessment' && ctx.entityId) {
+      const tabLabel = ASSESSMENT_TAB_LABELS[ctx.activeTab ?? 'attendance'] ?? 'Attendance';
+      return [
+        `Explain the ${tabLabel} section`,
+        'What should I fill in first?',
+        'What evidence belongs in the journals?',
+      ];
+    }
+    const page = ctx?.pageLabel?.trim() || 'this page';
+    return [
+      `What are the first steps on ${page}?`,
+      'What permissions do I need here?',
+      'Where do I find related settings?',
+    ];
+  }
+
   const helpSuggestion =
     ctx?.pageLabel
       ? `Help me with this page: ${ctx.pageLabel}`
@@ -80,6 +104,7 @@ interface ChatMessageListProps {
   interruptedMessageId?: string | null;
   conversationId?: string;
   pageContext?: PageContext;
+  helpMode?: boolean;
 }
 
 export const ChatMessageList = memo(function ChatMessageList({
@@ -99,6 +124,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   interruptedMessageId,
   conversationId,
   pageContext,
+  helpMode = false,
 }: ChatMessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -112,12 +138,16 @@ export const ChatMessageList = memo(function ChatMessageList({
         <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50">
           <MessageSquare className="h-8 w-8 text-blue-500" />
         </div>
-        <h3 className="mb-2 text-lg font-semibold text-slate-800">How can I help you?</h3>
+        <h3 className="mb-2 text-lg font-semibold text-slate-800">
+          {helpMode ? 'Questions about this page?' : 'How can I help you?'}
+        </h3>
         <p className="mb-8 max-w-md text-center text-sm text-slate-500">
-          Ask about claims, jobs, invoices, contacts, or anything in your workspace.
+          {helpMode
+            ? 'The guide is open beside this chat. Ask anything you need clarified.'
+            : 'Ask about claims, jobs, invoices, contacts, or anything in your workspace.'}
         </p>
         <div className="grid w-full max-w-lg gap-2 sm:grid-cols-2">
-          {getSuggestions(pageContext).map((suggestion) => (
+          {getSuggestions(pageContext, helpMode).map((suggestion) => (
             <button
               key={suggestion}
               type="button"

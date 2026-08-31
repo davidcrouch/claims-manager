@@ -17,9 +17,12 @@ import { TenantContext } from '../../tenant/tenant-context';
 import { GcsStorageService } from '../../common/gcs/gcs-storage.service';
 import { CreateJournalDto } from './dto/create-journal.dto';
 import { UpdateJournalDto } from './dto/update-journal.dto';
-import { CreateJournalPageDto } from './dto/create-journal-page.dto';
+import { CreateJournalPageDto, JournalPageBlockDto } from './dto/create-journal-page.dto';
 import { UpdateJournalPageDto } from './dto/update-journal-page.dto';
 import { CreatePageAttachmentDto } from './dto/create-page-attachment.dto';
+import { CreateJournalSiteEntryDto } from './dto/create-journal-site-entry.dto';
+import { GenerateJournalPageImageDto } from './dto/generate-journal-page-image.dto';
+import { JournalImageGenerationService } from './journal-image-generation.service';
 
 const VALID_ENTITY_TYPES = ['Job', 'Quote', 'Invoice'];
 
@@ -46,6 +49,7 @@ export class JournalsService {
     private readonly documentsRepo: DocumentsRepository,
     private readonly tenantContext: TenantContext,
     private readonly gcsStorage: GcsStorageService,
+    private readonly imageGeneration: JournalImageGenerationService,
   ) {}
 
   // -- Journals --
@@ -600,5 +604,217 @@ export class JournalsService {
 
     const stream = this.gcsStorage.getReadStream(attachment.storageKey);
     return { stream, fileName: attachment.fileName, mimeType: attachment.mimeType };
+  }
+
+  // -- Site-walk test data (narrative entry + generated photos) --
+
+  async createSiteEntry(params: {
+    journalId: string;
+    dto: CreateJournalSiteEntryDto;
+    userId: string;
+  }) {
+    const { journalId, dto, userId } = params;
+    const observation = dto.observation?.trim() ?? '';
+    const repairNote = dto.scopeOfWork?.trim() ?? '';
+    const extraNotes = (dto.additionalNotes ?? []).map((n) => n.trim()).filter(Boolean);
+    const images = (dto.images ?? []).filter((img) => img.prompt?.trim());
+    const entryKind =
+      dto.entryKind === 'damage' || dto.entryKind === 'scope_of_work'
+        ? 'observation'
+        : (dto.entryKind ?? 'other');
+
+    if (!observation && !repairNote && extraNotes.length === 0 && images.length === 0) {
+      throw new BadRequestException(
+        'Site entry requires a note or at least one image.',
+      );
+    }
+
+    const noteBlocks: JournalPageBlockDto[] = [];
+    if (observation) {
+      noteBlocks.push({ id: randomUUID(), type: 'note', text: observation });
+    }
+    for (const text of extraNotes) {
+      noteBlocks.push({ id: randomUUID(), type: 'note', text });
+    }
+    const repairBlock: JournalPageBlockDto | null = repairNote
+      ? { id: randomUUID(), type: 'note', text: repairNote }
+      : null;
+
+    const bodyParts = [observation, ...extraNotes, repairNote].filter(Boolean);
+
+    const page = await this.createPage({
+      journalId,
+      userId,
+      dto: {
+        name: dto.name,
+        body: bodyParts.join('\n\n') || undefined,
+        bodyFormat: 'plaintext',
+        latitude: dto.latitude,
+        longitude: dto.longitude,
+        locationLabel: dto.locationLabel,
+        capturedAt: dto.capturedAt,
+        blocks: noteBlocks,
+        metadata: {
+          ...(dto.metadata ?? {}),
+          entryKind,
+          generatedBy: 'journal-assistant',
+        },
+      },
+    });
+
+    const imageResults: Array<{
+      caption: string | null;
+      prompt: string;
+      status: 'ok' | 'failed';
+      attachmentId?: string;
+      error?: string;
+    }> = [];
+    const uploadBlocks: JournalPageBlockDto[] = [];
+
+    for (const image of images) {
+      const caption = image.caption?.trim() || null;
+      try {
+        const generated = await this.attachGeneratedImage({
+          journalId,
+          pageId: page.id,
+          userId,
+          prompt: image.prompt.trim(),
+          caption,
+        });
+        uploadBlocks.push({
+          id: randomUUID(),
+          type: 'upload',
+          attachmentId: generated.attachment.id,
+        });
+        imageResults.push({
+          caption,
+          prompt: image.prompt.trim(),
+          status: 'ok',
+          attachmentId: generated.attachment.id,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.warn(
+          `[JournalsService.createSiteEntry] image failed page=${page.id}: ${message}`,
+        );
+        imageResults.push({
+          caption,
+          prompt: image.prompt.trim(),
+          status: 'failed',
+          error: message,
+        });
+      }
+    }
+
+    const blocks = [
+      ...noteBlocks,
+      ...uploadBlocks,
+      ...(repairBlock ? [repairBlock] : []),
+    ];
+    await this.updatePage({
+      journalId,
+      pageId: page.id,
+      dto: { blocks },
+    });
+
+    this.logger.debug(
+      `[JournalsService.createSiteEntry] journal=${journalId} page=${page.id} kind=${entryKind} images=${imageResults.length}`,
+    );
+
+    const withAttachments = await this.getPage({ journalId, pageId: page.id });
+    return {
+      ...withAttachments,
+      images: imageResults,
+    };
+  }
+
+  async generatePageImage(params: {
+    journalId: string;
+    pageId: string;
+    dto: GenerateJournalPageImageDto;
+    userId: string;
+  }) {
+    const page = await this.getPage({ journalId: params.journalId, pageId: params.pageId });
+    const caption = params.dto.caption?.trim() || null;
+    const generated = await this.attachGeneratedImage({
+      journalId: params.journalId,
+      pageId: params.pageId,
+      userId: params.userId,
+      prompt: params.dto.prompt.trim(),
+      caption,
+      fileName: params.dto.fileName,
+    });
+
+    const existingMeta =
+      page.metadata && typeof page.metadata === 'object' && !Array.isArray(page.metadata)
+        ? (page.metadata as Record<string, unknown>)
+        : {};
+    const existingBlocks = Array.isArray(existingMeta.blocks)
+      ? (existingMeta.blocks as JournalPageBlockDto[])
+      : [];
+    const nextBlocks: JournalPageBlockDto[] = [
+      ...existingBlocks,
+      { id: randomUUID(), type: 'upload', attachmentId: generated.attachment.id },
+    ];
+    await this.updatePage({
+      journalId: params.journalId,
+      pageId: params.pageId,
+      dto: { blocks: nextBlocks },
+    });
+
+    return {
+      attachment: generated.attachment,
+      caption,
+    };
+  }
+
+  private async attachGeneratedImage(params: {
+    journalId: string;
+    pageId: string;
+    userId: string;
+    prompt: string;
+    caption: string | null;
+    fileName?: string;
+  }) {
+    if (!this.gcsStorage.getBucketName()) {
+      throw new ServiceUnavailableException(
+        'Journal uploads not configured. Set GCP_PROJECT_ID and GCS_DOCUMENTS_BUCKET.',
+      );
+    }
+
+    const image = await this.imageGeneration.generateInspectionPhoto(params.prompt);
+    const tenantId = this.tenantContext.getTenantId();
+    const fileId = randomUUID();
+    const ext = image.mimeType.includes('jpeg') || image.mimeType.includes('jpg') ? 'jpg' : 'png';
+    const rawName = params.fileName?.trim() || `site-walk-${fileId.slice(0, 8)}.${ext}`;
+    const safeFileName = rawName.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const storageKey =
+      `tenants/${tenantId}/journals/${params.journalId}/pages/${params.pageId}/` +
+      `${fileId}-${safeFileName}`;
+
+    await this.gcsStorage.uploadBuffer({
+      objectPath: storageKey,
+      buffer: image.buffer,
+      contentType: image.mimeType,
+    });
+
+    const attachment = await this.createAttachment({
+      journalId: params.journalId,
+      pageId: params.pageId,
+      userId: params.userId,
+      dto: {
+        fileName: safeFileName,
+        mimeType: image.mimeType,
+        fileSize: image.buffer.length,
+        storageKey,
+        caption: params.caption ?? undefined,
+      },
+    });
+
+    this.logger.debug(
+      `[JournalsService.attachGeneratedImage] page=${params.pageId} attachment=${attachment.id} bytes=${image.buffer.length}`,
+    );
+
+    return { attachment };
   }
 }

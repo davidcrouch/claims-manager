@@ -1,0 +1,33 @@
+slug: create-site-journal
+name: Create site journal
+description: Create a new journal and link it to the current job for a site inspection.
+triggerHints:
+  - create journal
+  - new journal
+  - start site journal
+  - open a journal for this job
+instructionPrompt: |
+  Create a site-inspection journal for a job, then link it.
+
+  1. Resolve jobId from page context or the user. Call get_job.
+  2. Build create_journal data:
+     - name: "Site inspection – {street or suburb} – {date}"
+     - description: one line of purpose (e.g. "Storm damage site walk for test data")
+     - address: copy from the job when present
+     - latitude / longitude: copy from the job when present
+     - metadata.visitDate: ISO date of the inspection (today unless the user/appointment says otherwise)
+  3. Call create_journal. Note the returned id.
+  4. Call link_journal with data { entityType: "Job", entityId: jobId }.
+  5. Confirm name + id. If the user wanted a full walk, continue with generate-site-walk
+     / add-journal-entry rather than stopping at an empty journal.
+requiredToolRefs:
+  - integration: Claims Operations
+    tool: get_job
+  - integration: Claims Operations
+    tool: create_journal
+  - integration: Claims Operations
+    tool: link_journal
+category: journals
+invocationMode: inline
+includeHistory: true
+visibility: org
