@@ -21,6 +21,10 @@ tfplan
 **/*.log
 apps/frontend/.next
 apps/api/dist
-docs
+# Exclude docs except online-help guides baked into the api-server image
+# for the ingest-api-guides Cloud Run job.
+docs/*
+!docs/guides/
+!docs/guides/**
 .tmp-billie
 **/.DS_Store
