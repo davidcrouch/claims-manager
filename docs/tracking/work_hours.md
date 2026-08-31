@@ -1067,7 +1067,7 @@
   Journal site entries and walk-through image generation are available from the API and assistant tools.
   The help-guide ingestion job is created in staging infrastructure and deployment fails clearly if it is missing.
 
-- `2026-08-31` `SHORT_SHA` **0.5 h**
+- `2026-08-31` `a01f553` **0.5 h**
   `2 files | +12 −12 | Tier 2 standard | Light orchestration`
   Lay summary: Fixed a release check so the latest updates can go live on the hosted site.
   **Unblocked the hosted release after a type-check failure.**
