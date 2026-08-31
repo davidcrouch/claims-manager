@@ -1,8 +1,9 @@
 slug: generate-site-walk
 name: Generate site-walk journal
 description: >
-  Orchestrate a full inspector site walk as spoken field notes and photos —
-  one entry per thing looked at, optional spoken repair aside, no headings.
+  Orchestrate a full inspector site walk as spoken field notes and photos.
+  One overriding cause of damage; one entry per item hit; optional spoken
+  repair aside; no headings.
 triggerHints:
   - generate site walk
   - generate test journal
@@ -15,7 +16,8 @@ triggerHints:
 instructionPrompt: |
   You generate a complete realistic site-inspection journal from the user's brief.
   Write as spoken inspector notes while walking. No headings or labels in the notes.
-  One stop = one entry. Roof leak + damaged door = two entries.
+  One stop = one entry. Roof + fence + window = three entries — but they must all
+  come from the same overriding cause of damage.
 
   PHASE 1 — CONTEXT
   1. Resolve jobId from page context (jobId or entityType=job), the user message, or ask once.
@@ -25,13 +27,22 @@ instructionPrompt: |
   4. If the user has not described the claim, infer event type from the claim/job.
      One clarifying question max.
 
-  PHASE 2 — PLAN STOPS
-  Split the brief into the things the inspector will stop at, for example:
-    1. Roof leak at the ridge
-    2. Stained sagging ceiling in the front bedroom
-    3. Water-damaged entry door
-    4. Fence bay down the side
-  Prefer splitting over bundling.
+  PHASE 2 — ONE CAUSE, THEN STOPS
+  Lock a single overriding cause for this walk. Prefer the claim/job event type
+  and the user's brief. Examples: fallen tree, hailstorm, kitchen fire, burst
+  hot-water pipe. Do not mix perils (no fire plus a fallen tree unless the brief
+  says so). If the brief is thin, pick one plausible cause that fits the claim
+  and stay with it.
+
+  Then split that ONE cause into the things the inspector will stop at — each
+  stop is a physical consequence of the same event. Example, tree on the house:
+    1. Tree through the front roof
+    2. Broken lounge window under the impact
+    3. Side fence bay crushed by the fallen trunk
+  Prefer splitting over bundling. 3–6 event items is typical.
+
+  Pre-existing items are the exception: they are NOT from this event (old rust,
+  a prior crack). Keep them clearly "already there", and keep them few (0–2).
 
   PHASE 3 — JOURNAL
   Follow create-site-journal: create_journal then link_journal to Job.
@@ -44,25 +55,30 @@ instructionPrompt: |
   in the note body.
 
   A. Intro (entryKind=intro) — once
-     Spoken: who is here, weather, how you got in, what the house is like.
-     1 street/front photo. Do not pass scopeOfWork.
+     Spoken: who is here, weather, how you got in, what the house is like, and
+     the reported event in passing ("got the call about a tree through the roof").
+     1 street/front photo consistent with that event. Do not pass scopeOfWork.
 
   B. Pre-existing (entryKind=pre_existing) — one old issue per entry
      Spoken note that it looks like it was already there, with photos.
      Repair aside only if the user included it.
 
   C. Event items (entryKind=observation) — one call per planned stop
+     All of these items are from the same cause. The spoken note should make
+     that link (the tree came through here; hail punched this; smoke stained
+     this) without using labelled "Cause:" headings.
      - observation: spoken what you can see, this item only. No headings.
-     - images: 1–3 photos of that item
+     - images: 1–3 photos of that item, consistent with the same event
      - scopeOfWork: optional second spoken note about likely repair for THIS item
        only, still conversational, no "Scope of work:" label
        e.g. "This door's cooked, we'll be putting a new one in."
      Do not write a works spec. Do not put two items in one entry.
+     Do not add a damaged item from a different peril.
      Do not add estimate/catalogue metadata — a later journal-processor will do that.
 
   D. Wrap-up (entryKind=recommendation) — once
-     Spoken thoughts on make-safe, drying, specialists, occupancy.
-     Not a numbered list of every repair. No scopeOfWork field.
+     Spoken thoughts on make-safe, drying, specialists, occupancy, referring
+     to the same cause. Not a numbered list of every repair. No scopeOfWork field.
 
   PHASE 5 — CLOSE
   Summarise journal id/name and what you looked at. Photo success/fail.
@@ -70,7 +86,7 @@ instructionPrompt: |
 
   Rules:
   - Spoken first person. No headings, markdown titles, or labelled sections.
-  - Stay consistent with event type, address, and names.
+  - Stay consistent with the one cause, event type, address, and names.
   - Do not create catalogue items, estimates, or assessments.
   - Continue if a photo fails.
 requiredToolRefs:

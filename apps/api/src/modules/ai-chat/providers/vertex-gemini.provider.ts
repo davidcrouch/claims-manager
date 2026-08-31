@@ -100,7 +100,7 @@ export class VertexGeminiProvider implements CompletionProvider {
     const contents = toGeminiContents(this.logger, request.messages);
     const tools = request.tools ? toGeminiFunctionDeclarations(request.tools) : undefined;
 
-    const response = await this.client.models.generateContent({
+    const response = await this.generateContentWithQuotaRetry({
       model: this.model,
       contents,
       config: {
@@ -175,6 +175,36 @@ export class VertexGeminiProvider implements CompletionProvider {
       }],
     };
   }
+
+  private async generateContentWithQuotaRetry(
+    args: Parameters<GoogleGenAI['models']['generateContent']>[0],
+  ): ReturnType<GoogleGenAI['models']['generateContent']> {
+    const maxAttempts = 4;
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        return await this.client.models.generateContent(args);
+      } catch (err) {
+        lastErr = err;
+        if (!isQuotaError(err) || attempt === maxAttempts - 1) {
+          throw err;
+        }
+        const delayMs = Math.min(2_000 * 2 ** attempt, 16_000);
+        this.logger.warn(
+          `[VertexGeminiProvider.generate] RESOURCE_EXHAUSTED attempt=${attempt + 1}/${maxAttempts} retry in ${delayMs}ms`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+    throw lastErr;
+  }
+}
+
+function isQuotaError(err: unknown): boolean {
+  const text = err instanceof Error ? err.message : String(err);
+  if (/429|RESOURCE_EXHAUSTED|Resource exhausted/i.test(text)) return true;
+  const rec = err as { status?: number; code?: number | string };
+  return rec.status === 429 || rec.code === 429 || rec.code === 'RESOURCE_EXHAUSTED';
 }
 
 function extractThoughtSignature(part: Part): string | undefined {

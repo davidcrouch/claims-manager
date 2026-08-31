@@ -1075,3 +1075,13 @@
   Confirmed the application type-check succeeds locally.
   The hosted site can pick up catalogue round-trip, seed parity, and journal updates.
 
+- `2026-08-31` `pending` **4.5 h**
+  `29 files | +746 −129 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  Lay summary: Printed reports can be downloaded on the hosted site, insurer updates process more reliably, and site-walk notes and photos stay on one cause of damage.
+  **Printed reports, insurer update processing, and site-walk photos.**
+  Printed reports download even when a direct file link cannot be created, and larger reports have more time to turn into PDFs.
+  Insurer updates are handed to the main application for processing, and failed updates are retried automatically.
+  Site-walk journals keep one cause of damage across spoken notes and photos.
+  Photo generation for those journals recovers more cleanly when the image service is busy.
+  The assessment helper is set to the current hosted model.
+

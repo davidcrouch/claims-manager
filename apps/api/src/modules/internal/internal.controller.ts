@@ -4,6 +4,7 @@ import {
   HttpCode,
   HttpStatus,
   Logger,
+  NotFoundException,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -12,7 +13,9 @@ import { InternalTokenGuard } from './internal-token.guard';
 import { InternalService, type SeedTenantOutcome } from './internal.service';
 import { SeedTenantDto } from './seed-tenant.dto';
 import { EnsureUserContactDto } from './ensure-user-contact.dto';
+import { ProcessWebhookEventDto } from './process-webhook-event.dto';
 import { ContactsService } from '../contacts/contacts.service';
+import { WebhooksService } from '../webhooks/webhooks.service';
 
 const LOG = 'InternalController';
 
@@ -25,6 +28,7 @@ export class InternalController {
   constructor(
     private readonly internalService: InternalService,
     private readonly contactsService: ContactsService,
+    private readonly webhooksService: WebhooksService,
   ) {}
 
   /**
@@ -74,6 +78,60 @@ export class InternalController {
       );
       // Still 202 — signup must not fail because of a seed hiccup.
       return { status: 'seeded', tenantId: dto.tenantId };
+    }
+  }
+
+  /**
+   * Process an inbound webhook event already persisted by provider-server.
+   * Runs the api-server pipeline (inproc by default) so claims/jobs land
+   * without depending on More0 being reachable.
+   */
+  @Post('webhooks/process-event')
+  @HttpCode(HttpStatus.OK)
+  async processWebhookEvent(@Body() dto: ProcessWebhookEventDto): Promise<{
+    status: 'ok' | 'skipped' | 'error';
+    eventId: string;
+    reason?: string;
+  }> {
+    const fn = 'processWebhookEvent';
+    this.logger.log(`[${LOG}.${fn}] eventId=${dto.eventId}`);
+
+    const event = await this.webhooksService.webhookRepo.findById({
+      id: dto.eventId,
+    });
+    if (!event) {
+      throw new NotFoundException(`inbound webhook event ${dto.eventId} not found`);
+    }
+
+    if (!event.connectionId || !event.tenantId) {
+      this.logger.warn(
+        `[${LOG}.${fn}] eventId=${dto.eventId} missing connection/tenant — skipped`,
+      );
+      return {
+        status: 'skipped',
+        eventId: dto.eventId,
+        reason: 'missing_connection',
+      };
+    }
+
+    try {
+      await this.webhooksService.processEventAsync({
+        eventId: event.id,
+        tenantId: event.tenantId,
+        connectionId: event.connectionId,
+        providerCode: event.providerCode ?? 'crunchwork',
+        eventType: event.eventType,
+        providerEntityId: event.payloadEntityId ?? '',
+        eventTimestamp: event.eventTimestamp ?? undefined,
+      });
+      this.logger.log(`[${LOG}.${fn}] completed eventId=${dto.eventId}`);
+      return { status: 'ok', eventId: dto.eventId };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(
+        `[${LOG}.${fn}] failed eventId=${dto.eventId} error=${message}`,
+      );
+      return { status: 'error', eventId: dto.eventId, reason: message };
     }
   }
 

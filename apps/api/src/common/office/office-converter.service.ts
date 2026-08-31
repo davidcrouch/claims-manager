@@ -87,7 +87,13 @@ function sofficeFromProgramFolders(): string[] {
   return found;
 }
 
-const CONVERT_TIMEOUT_MS = 60_000;
+/** Default 3 minutes — large scope-of-work / estimate docs often exceed 60s on Cloud Run. */
+const DEFAULT_CONVERT_TIMEOUT_MS = 180_000;
+
+function convertTimeoutMs(): number {
+  const raw = Number(process.env.LIBREOFFICE_CONVERT_TIMEOUT_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_CONVERT_TIMEOUT_MS;
+}
 
 @Injectable()
 export class OfficeConverterService {
@@ -207,6 +213,9 @@ export class OfficeConverterService {
     await mkdir(profileDir, { recursive: true });
     await mkdir(outDir, { recursive: true });
     await writeFile(sourcePath, params.buffer);
+    this.logger.log(
+      `${logPrefix} — format=${params.format} bytes=${params.buffer.length} timeoutMs=${convertTimeoutMs()} soffice=${params.soffice}`,
+    );
 
     const args = [
       '--headless',
@@ -224,7 +233,7 @@ export class OfficeConverterService {
     ];
 
     try {
-      await this.runProcess(params.soffice, args, CONVERT_TIMEOUT_MS);
+      await this.runProcess(params.soffice, args, convertTimeoutMs());
       const produced = (await readdir(outDir)).find((name) =>
         name.toLowerCase().endsWith(`.${params.format}`),
       );
@@ -247,10 +256,12 @@ export class OfficeConverterService {
   private runProcess(bin: string, args: string[], timeoutMs: number): Promise<void> {
     const logPrefix = 'OfficeConverterService.runProcess';
     return new Promise((resolve, reject) => {
+      const detached = process.platform !== 'win32';
       const child = spawn(bin, args, {
         cwd: dirname(bin),
         windowsHide: true,
         stdio: ['ignore', 'pipe', 'pipe'],
+        detached,
       });
       let stdout = '';
       let stderr = '';
@@ -338,7 +349,7 @@ export class OfficeConverterService {
             '-Pdf',
             pdfPath,
           ],
-          CONVERT_TIMEOUT_MS,
+          convertTimeoutMs(),
         );
         if (!existsSync(pdfPath)) {
           throw new Error('Microsoft Word did not produce a PDF');

@@ -6,8 +6,9 @@ Public Cloud Run service for **inbound provider traffic** (Crunchwork webhooks f
 
 1. HMAC-verify provider webhooks  
 2. Dedupe + persist `inbound_webhook_events`  
-3. Enqueue processing via More0 gateway (`WEBHOOK_PROCESSING_MODE=more0`)  
-4. Return `200` quickly  
+3. Push processing to `api-server` (`API_INTERNAL_URL` + `INTERNAL_API_TOKEN`) — primary path  
+4. Optionally best-effort More0 when gateway is not localhost (`WEBHOOK_PROCESSING_MODE=more0`)  
+5. Return `200` quickly  
 
 Heavy fetch/projection/tool endpoints stay on private `api-server`.
 

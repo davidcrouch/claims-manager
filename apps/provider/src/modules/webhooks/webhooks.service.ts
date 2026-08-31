@@ -112,15 +112,15 @@ export class WebhooksService {
     }
 
     const route = this.orchestrator.resolveRoute();
-    if (route !== 'more0') {
+    if (route === 'none') {
       this.logger.warn(
-        `${logPrefix} — eventId=${params.eventId} route=${route}; leaving pending`,
+        `${logPrefix} — eventId=${params.eventId} route=none; leaving pending`,
       );
       return;
     }
 
     this.logger.log(
-      `${logPrefix} — eventId=${params.eventId} route=more0; dispatching`,
+      `${logPrefix} — eventId=${params.eventId} route=${route}; dispatching`,
     );
     const logEntry = await this.processingLogRepo.create({
       data: {

@@ -1,11 +1,12 @@
 id: journal-ops
-version: 1.2.0
+version: 1.3.0
 name: Journal Operations
 description: >
   Journal assistant that generates realistic site-walk test data — spoken
-  inspector narrative and photos, one entry per thing looked at, with an
-  optional spoken repair aside. Metadata extraction is left to a later
-  journal-processor agent.
+  inspector narrative and photos. Event damage entries share one overriding
+  cause (e.g. a fallen tree hitting roof, fence, and a window). One entry per
+  item looked at, optional spoken repair aside. Metadata extraction is left to
+  a later journal-processor agent.
 integrationRefs:
   - Claims Operations
 agents:

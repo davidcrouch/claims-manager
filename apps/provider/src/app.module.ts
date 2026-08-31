@@ -4,6 +4,7 @@ import appConfig from './config/app.config';
 import databaseConfig from './config/database.config';
 import more0Config from './config/more0.config';
 import webhookConfig from './config/webhook.config';
+import apiInternalConfig from './config/api-internal.config';
 import { validate } from './config/env.validation';
 import { CommonModule } from './common/common.module';
 import { DatabaseModule } from './database/database.module';
@@ -16,7 +17,13 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     CommonModule,
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [appConfig, databaseConfig, more0Config, webhookConfig],
+      load: [
+        appConfig,
+        databaseConfig,
+        more0Config,
+        webhookConfig,
+        apiInternalConfig,
+      ],
       validate,
       envFilePath: ['.env'],
     }),

@@ -2,6 +2,8 @@ slug: assessment-assistant
 name: Assessment Assistant
 description: Guides assessors through site assessment tabs and updates
 chatEnabled: true
+provider: vertex-gemini
+model: gemini-3.1-pro-preview
 systemPrompt: |
   You assist insurance site assessors completing assessments.
 

@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy, Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { and, eq, lt, isNull, isNotNull, desc, sql } from 'drizzle-orm';
+import { and, eq, lt, isNull, isNotNull, desc, sql, or } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../database/drizzle.module';
 import { inboundWebhookEvents } from '../../database/schema';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
@@ -76,14 +76,18 @@ export class WebhookSweepService implements OnModuleInit, OnModuleDestroy {
       const batchSize = this.configService.get<number>('webhook.sweepBatchSize', 10);
       const maxRetries = this.configService.get<number>('webhook.sweepMaxRetries', 10);
 
-      // Pass 1: Reprocess events that have connection but are still pending.
-      // These are guaranteed processable so they get priority.
+      // Pass 1: Reprocess events that have connection but are still pending
+      // (or stuck in dispatch_failed after a More0/gateway outage). These are
+      // guaranteed processable so they get priority.
       const stuckEvents = await this.db
         .select()
         .from(inboundWebhookEvents)
         .where(
           and(
-            eq(inboundWebhookEvents.processingStatus, 'pending'),
+            or(
+              eq(inboundWebhookEvents.processingStatus, 'pending'),
+              eq(inboundWebhookEvents.processingStatus, 'dispatch_failed'),
+            ),
             isNotNull(inboundWebhookEvents.connectionId),
             lt(inboundWebhookEvents.createdAt, staleThreshold),
           ),

@@ -736,14 +736,23 @@ export class JournalsService {
   }) {
     const page = await this.getPage({ journalId: params.journalId, pageId: params.pageId });
     const caption = params.dto.caption?.trim() || null;
-    const generated = await this.attachGeneratedImage({
-      journalId: params.journalId,
-      pageId: params.pageId,
-      userId: params.userId,
-      prompt: params.dto.prompt.trim(),
-      caption,
-      fileName: params.dto.fileName,
-    });
+    let generated;
+    try {
+      generated = await this.attachGeneratedImage({
+        journalId: params.journalId,
+        pageId: params.pageId,
+        userId: params.userId,
+        prompt: params.dto.prompt.trim(),
+        caption,
+        fileName: params.dto.fileName,
+      });
+    } catch (err) {
+      if (err instanceof ServiceUnavailableException || err instanceof NotFoundException) {
+        throw err;
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      throw new ServiceUnavailableException(`Journal image generation failed: ${message}`);
+    }
 
     const existingMeta =
       page.metadata && typeof page.metadata === 'object' && !Array.isArray(page.metadata)

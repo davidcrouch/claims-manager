@@ -4,7 +4,8 @@ export default registerAs('ai', () => ({
   vertexProject: process.env.VERTEX_AI_PROJECT || process.env.GCP_PROJECT_ID || '',
   vertexLocation: process.env.VERTEX_AI_LOCATION || process.env.VERTEX_LOCATION || 'global',
   embeddingModel: process.env.VERTEX_EMBEDDING_MODEL || 'text-embedding-005',
-  imagenModel: process.env.VERTEX_IMAGEN_MODEL || 'imagen-3.0-generate-002',
+  // Imagen 3/4 publisher IDs are discontinued (as of 2026). Leave unset unless a live Imagen model is provisioned.
+  imagenModel: process.env.VERTEX_IMAGEN_MODEL || '',
   imagenLocation: process.env.VERTEX_IMAGEN_LOCATION || 'us-central1',
   imageFallbackModel: process.env.VERTEX_IMAGE_FALLBACK_MODEL || 'gemini-2.5-flash-image',
   defaultModel: process.env.DEFAULT_CHAT_MODEL || process.env.VERTEX_GEMINI_MODEL || 'gemini-2.5-flash',

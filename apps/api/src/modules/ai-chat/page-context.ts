@@ -140,7 +140,7 @@ const ENTITY_MAP: Record<string, PageEntityMapping> = {
     detailDocType: 'journal',
     listDocType: 'journals_list',
     listHints: [
-      'Say "generate a site walk" with a claim brief — I record spoken inspector notes and photos, one entry per thing looked at',
+      'Say "generate a site walk" with a claim brief — I record spoken inspector notes and photos; one cause of damage, one entry per item hit',
       'Create an empty journal for this job',
       'Search journals',
     ],

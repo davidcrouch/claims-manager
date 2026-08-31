@@ -12,7 +12,9 @@ triggerHints:
 instructionPrompt: |
   Add site-walk entry/entries to an existing journal as spoken inspector notes.
   No headings or labels in the note text. One stop = one entry. If the user
-  mentions a roof leak AND a damaged door, call create_journal_site_entry twice.
+  mentions a smashed roof AND a broken window, call create_journal_site_entry
+  twice. Event-damage items must share the same overriding cause already used
+  on this walk (or named by the user) — do not introduce a second peril.
 
   1. Confirm journalId (page context or this conversation). Call get_journal if needed.
   2. Choose entryKind: intro | pre_existing | observation | recommendation | other.

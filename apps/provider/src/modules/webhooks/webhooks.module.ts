@@ -6,10 +6,16 @@ import { WebhookInternalController } from './webhook-internal.controller';
 import { WebhooksService } from './webhooks.service';
 import { WebhookHmacService } from './webhook-hmac.service';
 import { WebhookOrchestratorService } from './webhook-orchestrator.service';
+import { ApiProcessClient } from './api-process.client';
 
 @Module({
   imports: [More0Module],
   controllers: [WebhooksController, WebhookAliasController, WebhookInternalController],
-  providers: [WebhooksService, WebhookHmacService, WebhookOrchestratorService],
+  providers: [
+    WebhooksService,
+    WebhookHmacService,
+    WebhookOrchestratorService,
+    ApiProcessClient,
+  ],
 })
 export class WebhooksModule {}

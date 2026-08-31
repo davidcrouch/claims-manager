@@ -77,6 +77,13 @@ resource "google_project_iam_member" "workload" {
   member  = google_service_account.workload[each.value.service].member
 }
 
+# V4 GCS signed URLs require the runtime SA to sign blobs as itself.
+resource "google_service_account_iam_member" "api_server_self_token_creator" {
+  service_account_id = google_service_account.workload["api-server"].name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = google_service_account.workload["api-server"].member
+}
+
 resource "google_service_account" "ci_deployer" {
   account_id   = "ci-deployer"
   display_name = "ci-deployer"

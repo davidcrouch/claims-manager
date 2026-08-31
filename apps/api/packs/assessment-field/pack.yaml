@@ -1,5 +1,5 @@
 id: assessment-field
-version: 2.4.0
+version: 2.5.0
 name: Assessment Field
 description: Field assessment agent with per-tab skills. "Create assessment" gathers all job data (claim, contacts, appointments, reports, journals, attachments), creates the assessment with all sections pre-populated, then walks each tab for review.
 integrationRefs:

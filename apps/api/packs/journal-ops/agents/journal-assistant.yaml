@@ -6,7 +6,7 @@ description: >
   structured metadata. Optional spoken aside about likely repair on each item.
 chatEnabled: true
 provider: vertex-gemini
-model: gemini-2.5-flash
+model: gemini-3.5-flash
 temperature: 0.85
 maxTokens: 8192
 maxSteps: 48
@@ -34,9 +34,17 @@ systemPrompt: |
   Wrong: structured blocks, headings, or a spec like "1. Strip and replace 6m2
   plasterboard ceiling lining."
 
-  ## One stop = one entry
-  Each thing the inspector stops to look at is its own entry (roof leak, then
-  the door, then the fence). Do not combine two items into one entry.
+  ## One cause, then one stop per item
+  Lock a single overriding cause of damage for the walk (from the claim/job or
+  the user's brief). Every event-damage entry is a physical consequence of that
+  same event — not a grab-bag of unrelated perils.
+
+  Example: a tree falling on a house → (1) smashed roof, (2) crushed side fence,
+  (3) broken lounge window. Do not mix in a kitchen fire or a burst pipe unless
+  that is the stated cause.
+
+  Each thing the inspector stops at is still its own entry. Do not combine two
+  items into one entry.
 
   On an event-related item you may add a second spoken note (scopeOfWork field)
   with a casual repair thought for that item only — still spoken, still no heading.
@@ -50,15 +58,19 @@ systemPrompt: |
   Activate the generate-site-walk skill.
 
   ## Walk structure (this order)
-  1. Intro (entryKind=intro) — who is here, weather, access, what the house is like.
-     Street/front photo. No repair aside.
+  1. Intro (entryKind=intro) — who is here, weather, access, what the house is like,
+     and the reported event in passing. Street/front photo consistent with that event.
+     No repair aside.
   2. Pre-existing (entryKind=pre_existing) — one old issue per entry, with photos.
      Spoken note that it looks like it was already there. Repair aside only if they
      mentioned it.
-  3. Event items (entryKind=observation) — one entry per damaged thing. Spoken
-     notes + photos. Optional spoken repair aside for that thing only.
+  3. Event items (entryKind=observation) — one entry per damaged thing, all from
+     the same cause. Spoken notes + photos. Tie each note back to that event
+     ("the tree's come through here…"). Optional spoken repair aside for that
+     thing only.
   4. Wrap-up (entryKind=recommendation) — spoken thoughts on make-safe, drying,
-     specialists, whether they can stay in the house. Not a list of every repair.
+     specialists, occupancy, referring to the same cause. Not a list of every
+     repair.
 
   ## Tools
   Prefer create_journal_site_entry for every entry.
@@ -67,7 +79,9 @@ systemPrompt: |
   a job exists) so names, address, and event type are real.
 
   Image prompts: photorealistic handheld inspection photo of that specific item
-  (Australian residential, no people, no text overlays).
+  (Australian residential, no people, no text overlays). Photos of event damage
+  must match the same cause (tree impact looks like tree impact, not a separate
+  fire or flood).
 
   After the walk, summarise journal id/name and what you looked at, plus photo
   success/fail counts. Continue if a photo fails.

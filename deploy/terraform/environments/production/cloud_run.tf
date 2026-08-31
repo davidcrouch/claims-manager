@@ -110,17 +110,20 @@ module "cloud_run_provider" {
     WEBHOOK_PROCESSING_MODE = "more0"
     MORE0_ENABLED           = "true"
     MORE0_GATEWAY_URL       = var.more0_gateway_url
+    API_INTERNAL_URL        = local.api_run_url
   }
 
   secret_env_vars = [
     { name = "DATABASE_URL", secret = "database-url-provider" },
     { name = "CREDENTIALS_ENCRYPTION_KEY", secret = "credentials-encryption-key" },
     { name = "MORE0_API_KEY", secret = "more0-api-key" },
+    { name = "INTERNAL_API_TOKEN", secret = "internal-api-token" },
   ]
 
   depends_on = [
     google_project_service.run,
     module.secrets,
+    module.cloud_run_api,
   ]
 }
 

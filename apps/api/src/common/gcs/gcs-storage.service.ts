@@ -5,6 +5,15 @@ import { Storage, Bucket } from '@google-cloud/storage';
 /** Matches expired / reauth-required ADC user credentials (local/dev). */
 const ADC_REAUTH_REQUIRED_RE = /invalid_grant|invalid_rapt|reauth related error|credentials expired/i;
 
+/** Cloud Run SAs need iam.serviceAccounts.signBlob on themselves to mint V4 URLs. */
+const SIGNING_UNAVAILABLE_RE =
+  /cannot sign|client_email|signblob|iam\.serviceaccounts\.signblob/i;
+
+export function isGcsSigningUnavailable(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return SIGNING_UNAVAILABLE_RE.test(message);
+}
+
 export interface GcsUploadUrlResult {
   uploadUrl: string;
   objectPath: string;
@@ -118,10 +127,11 @@ export class GcsStorageService {
       this.logger.debug(`${logPrefix} — path=${params.objectPath} expiresIn=${expiresIn}`);
       return url;
     } catch (error: any) {
-      // ADC user credentials cannot sign — fall back to a stream-based proxy
-      if (error?.message?.includes('Cannot sign') || error?.message?.includes('client_email')) {
+      // Local ADC and Cloud Run SAs without self tokenCreator cannot mint V4 URLs.
+      // Callers fall back to an authenticated stream proxy.
+      if (isGcsSigningUnavailable(error)) {
         this.logger.warn(
-          `${logPrefix} — signed URL unavailable (no service-account key). Use stream proxy for downloads.`,
+          `${logPrefix} — signed URL unavailable (${error?.message ?? 'signing failed'}). Use stream proxy for downloads.`,
         );
         return '';
       }
