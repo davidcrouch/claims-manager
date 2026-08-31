@@ -1085,3 +1085,13 @@
   Photo generation for those journals recovers more cleanly when the image service is busy.
   The assessment helper is set to the current hosted model.
 
+- `2026-09-01` `pending` **4 h**
+  `38 files | +1 767 −259 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  Lay summary: Staff can capture a real site inspection in chat, upload photos into the right project folder, and review those images while writing journal notes.
+  **Site-inspection journals with photo upload and project folder mapping.**
+  Staff can run a site inspection in chat: the assistant interviews them, stores photos in the chosen project folder, and records each topic as a journal entry.
+  Photos can be uploaded from a panel beside chat and reviewed on screen while notes are written.
+  Administrators choose which project folder holds inspection photos in Documents settings.
+  Printed reports can be saved into a chosen folder, not only downloaded.
+  Inspection photos stay linked to the journal so the visit record and images stay together.
+

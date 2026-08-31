@@ -39,6 +39,13 @@ import { UpdateCategoryDto } from './dto/update-category.dto';
 import { ReplaceCategoriesDto } from './dto/replace-categories.dto';
 import { GenerateCategoryDescriptionDto } from './dto/generate-category-description.dto';
 import type { ArtifactExportSettings, ArtifactExportScope, UpdateArtifactExportSettingsDto } from './artifact-export.types';
+import type {
+  FolderMappingRole,
+  ProjectFolderMappings,
+  UpdateProjectFolderMappingsDto,
+  ResolvedFolderMapping,
+} from './folder-mappings.types';
+import { FOLDER_MAPPING_ROLES } from './folder-mappings.types';
 import { SystemAgentRunner } from '../system-agents/system-agent-runner';
 import { AgentRole } from '../system-agents/agent-roles';
 
@@ -862,6 +869,107 @@ export class FilesystemService {
       `${LOG}.updateArtifactExportSettings scope=${scope} tenantId=${tenantId}`,
     );
     return settings;
+  }
+
+  // -- Project folder mappings (role → category slug) --
+
+  async getProjectFolderMappings(): Promise<ProjectFolderMappings> {
+    const tenantId = this.tenantContext.getTenantId();
+    const [row] = await this.db
+      .select({ config: organizations.config })
+      .from(organizations)
+      .where(eq(organizations.id, tenantId))
+      .limit(1);
+
+    const config = (row?.config ?? {}) as Record<string, unknown>;
+    const filesystem = (config.filesystem ?? {}) as Record<string, unknown>;
+    return (filesystem.projectFolderMappings ?? {}) as ProjectFolderMappings;
+  }
+
+  async updateProjectFolderMappings(
+    input: UpdateProjectFolderMappingsDto,
+  ): Promise<ProjectFolderMappings> {
+    const tenantId = this.tenantContext.getTenantId();
+
+    const mappings: ProjectFolderMappings = {};
+    for (const role of FOLDER_MAPPING_ROLES) {
+      if (role in input) {
+        mappings[role] = (input as Record<string, string | null>)[role] ?? null;
+      }
+    }
+
+    const templateId =
+      input.templateId ?? (await this.resolveDefaultProjectTemplateId(tenantId));
+    const template = await this.templatesRepo.findAccessible(templateId, tenantId);
+    if (!template || template.kind !== 'project') {
+      throw new BadRequestException(
+        `${LOG}.updateProjectFolderMappings: project template not found`,
+      );
+    }
+    const categories = await this.templatesRepo.getCategories(template.id);
+    const slugs = new Set(categories.map((c) => c.slug));
+    for (const [role, slug] of Object.entries(mappings)) {
+      if (slug && !slugs.has(slug)) {
+        throw new BadRequestException(
+          `Invalid project category slug for ${role}: ${slug}`,
+        );
+      }
+    }
+
+    const [row] = await this.db
+      .select({ config: organizations.config })
+      .from(organizations)
+      .where(eq(organizations.id, tenantId))
+      .limit(1);
+
+    const config = (row?.config ?? {}) as Record<string, unknown>;
+    const filesystem = (config.filesystem ?? {}) as Record<string, unknown>;
+    const existing = (filesystem.projectFolderMappings ?? {}) as ProjectFolderMappings;
+    const merged = { ...existing, ...mappings };
+
+    const nextConfig = {
+      ...config,
+      filesystem: { ...filesystem, projectFolderMappings: merged },
+    };
+
+    await this.db
+      .update(organizations)
+      .set({ config: nextConfig })
+      .where(eq(organizations.id, tenantId));
+
+    this.logger.log(`${LOG}.updateProjectFolderMappings tenantId=${tenantId}`);
+    return merged;
+  }
+
+  async resolveProjectFolderCategory(
+    jobId: string,
+    role: FolderMappingRole,
+  ): Promise<ResolvedFolderMapping | null> {
+    const tenantId = this.tenantContext.getTenantId();
+    await this.assertJobBelongsToTenant(tenantId, jobId);
+
+    const mappings = await this.getProjectFolderMappings();
+    const slug = mappings[role];
+    if (!slug) return null;
+
+    const filesystem = await this.filesystemsRepo.findByJob(tenantId, jobId);
+    if (!filesystem) {
+      const created = await this.ensureProjectFilesystemForJob(tenantId, jobId);
+      if (!created) return null;
+      return this.resolveSlugOnFilesystem(created.id, slug);
+    }
+
+    return this.resolveSlugOnFilesystem(filesystem.id, slug);
+  }
+
+  private async resolveSlugOnFilesystem(
+    filesystemId: string,
+    slug: string,
+  ): Promise<ResolvedFolderMapping | null> {
+    const categories = await this.filesystemsRepo.getCategoryTree(filesystemId);
+    const match = categories.find((c) => c.slug === slug);
+    if (!match) return null;
+    return { filesystemId, categoryId: match.id, slug: match.slug };
   }
 
   private async assertActiveCategory(filesystemId: string, categoryId: string) {

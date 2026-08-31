@@ -5,6 +5,8 @@ import {
   ServiceUnavailableException,
   Logger,
   Optional,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { DocumentsRepository } from '../../database/repositories/documents.repository';
 import { FilesystemsRepository } from '../../database/repositories/filesystems.repository';
@@ -16,6 +18,7 @@ import { CreateDocumentUploadUrlDto } from './dto/create-document-upload-url.dto
 import { BatchUploadUrlsDto } from './dto/batch-upload-urls.dto';
 import { PipelineService } from '../pipelines/pipeline.service';
 import { OutboundEventsService } from '../outbound-events/outbound-events.service';
+import { FilesystemService } from './filesystem.service';
 
 const ADC_REAUTH_REQUIRED_RE = /invalid_grant|invalid_rapt|reauth related error|credentials expired/i;
 
@@ -67,6 +70,8 @@ export class DocumentsService {
     private readonly gcsStorage: GcsStorageService,
     private readonly officeConverter: OfficeConverterService,
     private readonly tenantContext: TenantContext,
+    @Inject(forwardRef(() => FilesystemService))
+    private readonly filesystemService: FilesystemService,
     @Optional() private readonly pipelineService?: PipelineService,
     @Optional() private readonly outboundEvents?: OutboundEventsService,
   ) {}
@@ -622,7 +627,16 @@ export class DocumentsService {
     let relatedRecordId = dto.relatedRecordId ?? null;
 
     if (dto.jobId) {
-      const projectFs = await this.filesystemsRepo.findByJob(tenantId, dto.jobId);
+      let projectFs = await this.filesystemsRepo.findByJob(tenantId, dto.jobId);
+      if (!projectFs) {
+        this.logger.log(
+          `[DocumentsService.resolveUploadScope] creating project filesystem for job=${dto.jobId}`,
+        );
+        projectFs = await this.filesystemService.ensureProjectFilesystemForJob(
+          tenantId,
+          dto.jobId,
+        );
+      }
       if (!projectFs) {
         throw new BadRequestException('Project filesystem not found for job');
       }

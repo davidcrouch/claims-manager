@@ -2450,6 +2450,7 @@ export function createApiClient(options?: ApiClientOptions) {
       templateId?: string;
       filesystemDocumentId?: string;
       destinationCategoryId?: string;
+      createPdf?: boolean;
     }): Promise<GeneratedDocument> {
       return fetchApi<GeneratedDocument>('/generated-documents/generate', {
         method: 'POST',

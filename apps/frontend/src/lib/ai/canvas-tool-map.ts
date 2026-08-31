@@ -44,6 +44,8 @@ export const CANVAS_TOOL_COMPONENT_MAP: Record<string, string> = {
   fill_catalog_category: 'CatalogCategoriesDrawer',
   open_catalog_bom: 'CatalogBomDrawer',
   fill_catalog_bom: 'CatalogBomDrawer',
+  open_journal_file_upload: 'JournalFileUploadDrawer',
+  show_inspection_image: 'JournalImageViewerDrawer',
 };
 
 export function resolveCanvasComponent(toolName: string): string | null {

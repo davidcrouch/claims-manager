@@ -88,6 +88,8 @@ const CANVAS_TOOL_MAP: Record<string, string> = {
   fill_catalog_category: 'CatalogCategoriesDrawer',
   open_catalog_bom: 'CatalogBomDrawer',
   fill_catalog_bom: 'CatalogBomDrawer',
+  open_journal_file_upload: 'JournalFileUploadDrawer',
+  show_inspection_image: 'JournalImageViewerDrawer',
 };
 
 interface ResolvedMcpTools {
@@ -438,6 +440,10 @@ export class AiChatService {
     const argJobId = typeof args.jobId === 'string' ? args.jobId.trim() : '';
     if (!argJobId && pageContext?.jobId) {
       args.jobId = pageContext.jobId;
+    }
+    const argJournalId = typeof args.journalId === 'string' ? args.journalId.trim() : '';
+    if (!argJournalId && pageContext?.entityType === 'journal' && pageContext.entityId) {
+      args.journalId = pageContext.entityId;
     }
 
     return {

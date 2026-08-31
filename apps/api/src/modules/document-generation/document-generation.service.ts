@@ -189,6 +189,7 @@ export class DocumentGenerationService {
     filesystemDocumentId?: string;
     destinationCategoryId?: string;
     enabledSlugs?: string[];
+    createPdf?: boolean;
     trigger?: GenerationTrigger;
     userId?: string;
   }) {
@@ -202,8 +203,10 @@ export class DocumentGenerationService {
       tenantId,
     });
 
+    const createPdf = params.createPdf !== false;
+
     this.logger.log(
-      `${logPrefix} — type=${params.documentType} entityId=${entityId} trigger=${trigger}` +
+      `${logPrefix} — type=${params.documentType} entityId=${entityId} trigger=${trigger} createPdf=${createPdf}` +
         (params.destinationCategoryId
           ? ` destinationCategoryId=${params.destinationCategoryId}`
           : ''),
@@ -234,6 +237,7 @@ export class DocumentGenerationService {
         filesystemDocumentId: params.filesystemDocumentId,
         destinationCategoryId: params.destinationCategoryId,
         enabledSlugs: params.enabledSlugs,
+        createPdf,
         userId: params.userId,
       }).catch((err: unknown) => {
         const message = err instanceof Error ? err.message : String(err);
@@ -254,6 +258,7 @@ export class DocumentGenerationService {
     filesystemDocumentId?: string;
     destinationCategoryId?: string;
     enabledSlugs?: string[];
+    createPdf: boolean;
     userId?: string;
   }) {
     const logPrefix = 'DocumentGenerationService.runGenerate';
@@ -310,9 +315,13 @@ export class DocumentGenerationService {
         data: mergeData,
       });
 
-      const canConvertPdf = this.pdfConverter.isAvailable();
+      const canConvertPdf = params.createPdf && this.pdfConverter.isAvailable();
       let pdfBuffer: Buffer | null = null;
-      if (canConvertPdf) {
+      if (!params.createPdf) {
+        this.logger.log(
+          `${logPrefix} — skipping PDF conversion id=${params.recordId}`,
+        );
+      } else if (canConvertPdf) {
         try {
           pdfBuffer = await this.pdfConverter.convertDocxToPdf({
             docxBuffer: populatedDocx,

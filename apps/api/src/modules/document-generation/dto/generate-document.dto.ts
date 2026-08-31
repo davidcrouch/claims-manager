@@ -1,4 +1,4 @@
-import { IsArray, IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsArray, IsBoolean, IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { DOCUMENT_TYPES, type DocumentType } from '../types/document-types';
 
@@ -33,11 +33,20 @@ export class GenerateDocumentDto {
 
   @ApiPropertyOptional({
     description:
-      'Company or job filesystem folder to save the generated PDF into. Omit to download only.',
+      'Company or job filesystem folder to save the generated file into. Omit to download only.',
   })
   @IsOptional()
   @IsUUID()
   destinationCategoryId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'When true (default), convert the filled Word file to PDF. When false, skip conversion and return DOCX only.',
+    default: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  createPdf?: boolean;
 
   @ApiPropertyOptional({
     description:

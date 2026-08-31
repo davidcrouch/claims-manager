@@ -26,6 +26,10 @@ import type {
   ArtifactExportScope,
   UpdateArtifactExportSettingsDto,
 } from './artifact-export.types';
+import type {
+  FolderMappingRole,
+  UpdateProjectFolderMappingsDto,
+} from './folder-mappings.types';
 
 @Controller('filesystems')
 export class FilesystemController {
@@ -122,6 +126,28 @@ export class FilesystemController {
   @RequirePermission(P.filesystems.manage)
   async updateArtifactExport(@Body() body: UpdateArtifactExportSettingsDto) {
     return this.filesystemService.updateArtifactExportSettings(body);
+  }
+
+  @Get('folder-mappings')
+  @RequirePermission(P.filesystems.read)
+  async getFolderMappings() {
+    return this.filesystemService.getProjectFolderMappings();
+  }
+
+  @Patch('folder-mappings')
+  @RequirePermission(P.filesystems.manage)
+  async updateFolderMappings(@Body() body: UpdateProjectFolderMappingsDto) {
+    return this.filesystemService.updateProjectFolderMappings(body);
+  }
+
+  @Get('jobs/:jobId/folder-mapping/:role')
+  @RequirePermission(P.filesystems.read)
+  async resolveJobFolderMapping(
+    @Param('jobId', ParseUUIDPipe) jobId: string,
+    @Param('role') role: FolderMappingRole,
+  ) {
+    const resolved = await this.filesystemService.resolveProjectFolderCategory(jobId, role);
+    return resolved ?? { filesystemId: null, categoryId: null, slug: null };
   }
 
   @Put(':id')

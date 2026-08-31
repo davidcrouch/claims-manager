@@ -9,6 +9,8 @@ export interface GenerateDocumentParams {
   templateId?: string;
   filesystemDocumentId?: string;
   destinationCategoryId?: string;
+  /** When false, skip PDF conversion and return the filled Word file. Defaults to true. */
+  createPdf?: boolean;
 }
 
 export interface GenerateDocumentResult {

@@ -24,6 +24,7 @@ import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { ListPageHeader } from '@/components/layout/ListPageHeader';
 import { FilesystemEditorPanel } from './FilesystemEditorPanel';
 import { ArtifactExportDefaultsPanel } from './ArtifactExportDefaultsPanel';
+import { ProjectFolderMappingsPanel } from './ProjectFolderMappingsPanel';
 import { PipelineEditorPanel } from './PipelineEditorPanel';
 import { buildCategoryTree, flattenCategoryTree } from './CategoryTreeEditor';
 import type {
@@ -831,6 +832,12 @@ export function FilesystemSettingsPanel({
                         categories={projectCategoryTree}
                         scope="project"
                         valueMode="slug"
+                        templateId={projectTemplateId}
+                      />
+                    </div>
+                    <div className="border-t border-slate-100 pt-5">
+                      <ProjectFolderMappingsPanel
+                        categories={projectCategoryTree}
                         templateId={projectTemplateId}
                       />
                     </div>

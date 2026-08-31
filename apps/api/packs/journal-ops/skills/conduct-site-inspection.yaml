@@ -1,0 +1,146 @@
+slug: generate-site-walk
+name: Conduct site inspection
+description: >
+  Interview the user to capture a real site-inspection journal from photos and
+  answers. House, attendance, each damage item with repair, and a recommendation
+  — each as its own journal entry. No invented test data.
+triggerHints:
+  - start site inspection
+  - capture site journal
+  - site walk journal
+  - create inspection journal
+  - inspect this job
+  - record site visit
+  - start journal for this job
+  - generate site walk
+  - generate journal for this job
+instructionPrompt: |
+  Capture a complete real site-inspection journal. Do not invent facts or photos.
+  Do not generate mock / test-data walks. Wait for the user between interview
+  batches. Write each confirmed topic as a journal entry before asking the next
+  batch.
+
+  PHASE 1 — CONTEXT
+  1. Resolve jobId from page context (jobId or entityType=job), the user message,
+     or ask once.
+  2. Call get_job. If the job has a claimId, call get_claim.
+  3. Call list_contacts_by_job and list_appointments_by_job when a job exists.
+     Use real names, phones, address, event type, and appointment date/time.
+  4. If a journal already exists for this job (page context journalId, or
+     list_journals / list_journals_by_entity), confirm whether to continue that
+     one or start a new journal.
+
+  PHASE 2 — JOURNAL
+  Follow create-site-journal if you still need a journal: create_journal then
+  link_journal to Job. Name it "Site inspection – {suburb or street} – {visit date}".
+  Copy the job address. Set metadata.visitDate from the appointment or the user.
+  Description: purpose of this visit, not "test data".
+
+  PHASE 3 — PHOTOS FIRST
+  1. Call resolve_project_folder with jobId and role "photos".
+     - If categoryId is returned, proceed. Otherwise warn the user that the
+       photo folder is not configured and ask if they want to continue without
+       photos.
+  2. Call open_journal_file_upload with journalId, jobId, and categoryId.
+     Ask the user to drop inspection photos on the canvas panel. Stop and wait.
+  3. After upload, call list_job_documents with jobId (optionally
+     mimeTypePrefix "image/") to get the uploaded document list.
+  4. For each photo (or logical group), call show_inspection_image with the
+     documentId to display it in the canvas. Ask what the photo shows — damage,
+     pre-existing, or general building feature. Keep track of which documentIds
+     relate to which item.
+
+  If photos are already on the journal (list_journal_pages), skip the upload
+  and review them. If they say they have no photos, continue from answers only.
+
+  PHASE 4 — INTERVIEW AND WRITE (create_journal_site_entry once per entry)
+  NEVER call create_journal_page for these notes. Only create_journal_site_entry.
+  Ask in short batches. Confirm inferences from photos/job/claim/contacts.
+  Write the entry in the same turn you have enough facts — do not wait for a
+  later message. After the user confirms a remaining gap, write or update.
+
+  When creating entries for items that have associated photos, pass the relevant
+  documentIds array so those photos are linked to the journal entry.
+
+  A. Attendance (entryKind=intro) — once
+     Cover: visit date/time, risk address attended (yes/no; other address if not),
+     persons attending, builder/estimator name+phone, insurance assessor present
+     (name+phone), occupancy (Vacant / Occupied / Partially Occupied), access.
+     Do not pass scopeOfWork.
+
+  B. House (entryKind=other, name "Building") — once
+     Cover: house m², build year, building type, design type, construction, roof
+     type, additional structures, main-house roof damage, overall condition,
+     furniture removal/storage, habitable (and reason if not), hazards (pool
+     fence, electrical/gas, sewerage, structural, safety, environmental).
+     Do not pass scopeOfWork.
+
+  C. Pre-existing (entryKind=pre_existing) — one old issue per entry
+     Only if photos or the user mention wear, prior damage, or maintenance.
+     Spoken/field note that it was already there. Repair aside only if they
+     want it addressed.
+
+  D. Event items (entryKind=observation) — one call per damaged thing
+     Lock one overriding cause from the claim/job unless the user names another.
+     Every event item is a consequence of that cause. Prefer splitting over
+     bundling. Ask: what, where, event vs pre-existing, how to fix, make-safe
+     for this item if needed.
+     - observation: what is wrong, this item only. No headings.
+     - scopeOfWork: how to fix THIS item. Omit if they have no repair yet.
+     - locationLabel = room/area. capturedAt if known.
+     - documentIds: photo document UUIDs that show this item.
+     Do not put two items in one entry.
+
+  E. Recommendation (entryKind=recommendation) — once
+     Cover: claim stance (Approve / Decline / Refer / Pending), rough repair cost,
+     repair duration, insured advised, client willing to proceed, customer-arranged
+     repairs, specialists (type if yes), make-safe overall (type/dates if yes),
+     temp accommodation / loss of rent (amount, duration, immediate vs during
+     repairs), conclusion and special notes.
+     Do not pass scopeOfWork.
+
+  PHASE 5 — CLOSE
+  Summarise journal id/name and the entries captured. Offer to add another item.
+
+  Rules:
+  - Never invent people, dates, costs, damage, or photos.
+  - Collect photos with open_journal_file_upload (with categoryId from
+    resolve_project_folder), not chat attachments.
+  - Never generate images (omit the images field; do not call generate_journal_page_image
+    unless the user asks).
+  - Concise questions. Confirm photo inferences. Wait for answers before writing.
+  - Field-note voice. No headings or labelled sections in note text.
+  - Do not create assessments, estimates, quotes, or catalogue items.
+requiredToolRefs:
+  - integration: Claims Operations
+    tool: get_job
+  - integration: Claims Operations
+    tool: get_claim
+  - integration: Claims Operations
+    tool: list_contacts_by_job
+  - integration: Claims Operations
+    tool: list_appointments_by_job
+  - integration: Claims Operations
+    tool: create_journal
+  - integration: Claims Operations
+    tool: link_journal
+  - integration: Claims Operations
+    tool: open_journal_file_upload
+  - integration: Claims Operations
+    tool: create_journal_site_entry
+  - integration: Claims Operations
+    tool: list_journal_pages
+  - integration: Claims Operations
+    tool: get_journal_page
+  - integration: Claims Operations
+    tool: resolve_project_folder
+  - integration: Claims Operations
+    tool: list_job_documents
+  - integration: Claims Operations
+    tool: show_inspection_image
+  - integration: Claims Operations
+    tool: get_document_download_url
+category: journals
+invocationMode: inline
+includeHistory: true
+visibility: org

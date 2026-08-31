@@ -50,6 +50,7 @@ export class DocumentGenerationController {
       filesystemDocumentId: dto.filesystemDocumentId,
       destinationCategoryId: dto.destinationCategoryId,
       enabledSlugs: dto.enabledSlugs,
+      createPdf: dto.createPdf,
       trigger: 'manual',
       userId,
     });

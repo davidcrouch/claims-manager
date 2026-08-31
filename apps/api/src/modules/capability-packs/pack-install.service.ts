@@ -483,7 +483,7 @@ export class PackInstallService {
       integrationNames,
     });
     const allConnIds = [...new Set([...connMap.values()].map((v) => v.connectionId))];
-    await this.resolver.ensureManifests(allConnIds);
+    await this.resolver.ensureManifests(allConnIds, { force: opts?.upgrade === true });
 
     const skillIdBySlug = new Map<string, string>();
 

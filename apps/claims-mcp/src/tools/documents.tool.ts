@@ -128,4 +128,70 @@ export function registerDocumentsTools(server: McpServer, api: ClaimsApiClient):
       }
     },
   );
+
+  server.tool(
+    'list_job_documents',
+    categoryDesc(CAT, 'List documents uploaded for a job. Use to enumerate inspection photos after the user uploads them via the file-upload panel.'),
+    {
+      jobId: z.string().describe('Job UUID'),
+      mimeTypePrefix: z.string().optional().describe('Filter by MIME type prefix, e.g. "image/" to list only images'),
+      page: z.number().int().positive().optional().describe('Page number'),
+      limit: z.number().int().positive().optional().describe('Page size'),
+    },
+    async ({ jobId, mimeTypePrefix, page, limit }) => {
+      try {
+        const query: Record<string, string | number | undefined> = {
+          jobId,
+          page,
+          limit,
+        };
+        if (mimeTypePrefix) {
+          query.search = mimeTypePrefix;
+        }
+        return toolResult(
+          await api.request('/documents', { query }),
+        );
+      } catch (err) {
+        return toolError(err);
+      }
+    },
+  );
+
+  server.tool(
+    'get_document_download_url',
+    categoryDesc(CAT, 'Get a presigned download URL for a document by ID (not the binary stream). Use to preview an image or pass to show_inspection_image.'),
+    {
+      id: z.string().describe('Document UUID'),
+    },
+    async ({ id }) => {
+      try {
+        return toolResult(
+          await api.request(`/documents/${id}/download-url`),
+        );
+      } catch (err) {
+        return toolError(err);
+      }
+    },
+  );
+
+  server.tool(
+    'resolve_project_folder',
+    categoryDesc(
+      CAT,
+      'Resolve a project folder mapping for a job. Returns { filesystemId, categoryId, slug } or nulls. Call with role="photos" before opening the upload panel to get the configured photo folder.',
+    ),
+    {
+      jobId: z.string().describe('Job UUID'),
+      role: z.enum(['photos']).describe('Folder mapping role'),
+    },
+    async ({ jobId, role }) => {
+      try {
+        return toolResult(
+          await api.request(`/filesystems/jobs/${jobId}/folder-mapping/${role}`),
+        );
+      } catch (err) {
+        return toolError(err);
+      }
+    },
+  );
 }

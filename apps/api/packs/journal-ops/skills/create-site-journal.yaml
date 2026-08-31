@@ -12,14 +12,16 @@ instructionPrompt: |
   1. Resolve jobId from page context or the user. Call get_job.
   2. Build create_journal data:
      - name: "Site inspection – {street or suburb} – {date}"
-     - description: one line of purpose (e.g. "Storm damage site walk for test data")
+     - description: one line of purpose (e.g. "Storm damage site inspection")
      - address: copy from the job when present
      - latitude / longitude: copy from the job when present
-     - metadata.visitDate: ISO date of the inspection (today unless the user/appointment says otherwise)
+     - metadata.visitDate: ISO date of the inspection (appointment date, else today
+       unless the user says otherwise)
   3. Call create_journal. Note the returned id.
   4. Call link_journal with data { entityType: "Job", entityId: jobId }.
-  5. Confirm name + id. If the user wanted a full walk, continue with generate-site-walk
-     / add-journal-entry rather than stopping at an empty journal.
+  5. Confirm name + id. If the user wanted a full inspection, continue with
+     generate-site-walk: open_journal_file_upload first, then interview.
+     Do not stop at an empty journal.
 requiredToolRefs:
   - integration: Claims Operations
     tool: get_job

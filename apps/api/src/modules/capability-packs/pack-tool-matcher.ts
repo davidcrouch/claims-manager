@@ -32,3 +32,23 @@ export function matchToolNames(params: {
   }
   return [...out];
 }
+
+/**
+ * Exact (non-glob) pack tool names that did not match the cached MCP list.
+ * Callers should still bind these — cached manifests lag newly added tools.
+ */
+export function unmatchedExactToolNames(params: {
+  toolNames: string[];
+  patterns: string[];
+}): string[] {
+  if (!params.patterns.length) return [];
+  const matched = new Set(matchToolNames(params));
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const pattern of params.patterns) {
+    if (pattern.includes('*') || matched.has(pattern) || seen.has(pattern)) continue;
+    seen.add(pattern);
+    out.push(pattern);
+  }
+  return out;
+}

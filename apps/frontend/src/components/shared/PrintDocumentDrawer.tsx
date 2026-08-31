@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -223,6 +224,7 @@ export function PrintDocumentDrawer({
     null,
   );
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
+  const [createPdf, setCreatePdf] = useState(false);
 
   const reset = useCallback(() => {
     setSelectedType(documentType);
@@ -232,6 +234,7 @@ export function PrintDocumentDrawer({
     setSelectedTemplateId('');
     setDestinationCategoryId(null);
     setFolderPickerOpen(false);
+    setCreatePdf(false);
   }, [documentType]);
 
   useEffect(() => {
@@ -314,7 +317,7 @@ export function PrintDocumentDrawer({
     return {
       documentType: selectedType,
       label: fromSettings?.label ?? selectedType.replace(/_/g, ' '),
-      description: fromSettings?.description ?? 'Generate a PDF from the assigned template.',
+      description: fromSettings?.description ?? 'Generate a document from the assigned template.',
     };
   }, [selectedType, settings, typeOptions]);
 
@@ -414,22 +417,18 @@ export function PrintDocumentDrawer({
         entityId: resolvedEntityId,
         filesystemDocumentId: selectedTemplateId,
         destinationCategoryId: destinationCategoryId ?? undefined,
+        createPdf,
       });
-      if (result.format === 'docx') {
-        toast.success(
-          result.savedToFolder
-            ? `Document saved to ${destinationLabel}`
-            : 'Document downloaded',
-        );
-      } else if (result.savedToFolder) {
-        toast.success(`PDF saved to ${destinationLabel}`);
+      const kind = result.format === 'pdf' ? 'PDF' : 'Word document';
+      if (result.savedToFolder) {
+        toast.success(`${kind} saved to ${destinationLabel}`);
       } else {
-        toast.success('PDF downloaded');
+        toast.success(`${kind} downloaded`);
       }
       onOpenChange(false);
       reset();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'PDF generation failed';
+      const message = err instanceof Error ? err.message : 'Document generation failed';
       setError(message);
       if (!NO_TEMPLATE_PATTERNS.some((p) => message.includes(p))) {
         toast.error(message);
@@ -447,7 +446,7 @@ export function PrintDocumentDrawer({
       open={open}
       onOpenChange={handleOpenChange}
       title="Print report"
-      description="Review the report type, template, and where the PDF will be saved."
+      description="Review the report type, template, and where the file will be saved."
       icon={<Printer className="h-5 w-5" />}
       preventClose={generating || folderPickerOpen}
       companionChatOpen={companionChatOpen}
@@ -577,6 +576,24 @@ export function PrintDocumentDrawer({
                 )}
               </div>
 
+              <div className="flex items-start gap-2">
+                <Checkbox
+                  id="print-create-pdf"
+                  checked={createPdf}
+                  disabled={generating}
+                  onCheckedChange={(checked) => setCreatePdf(!!checked)}
+                  className="mt-0.5"
+                />
+                <div className="min-w-0">
+                  <Label htmlFor="print-create-pdf" className="font-normal">
+                    Create PDF
+                  </Label>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    Off by default — generates a Word document. Turn on to also convert to PDF.
+                  </p>
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="print-destination">Save to folder</Label>
                 <Button
@@ -635,8 +652,12 @@ export function PrintDocumentDrawer({
           {generating
             ? 'Generating…'
             : destinationCategoryId
-              ? 'Save PDF'
-              : 'Download PDF'}
+              ? createPdf
+                ? 'Save PDF'
+                : 'Save Word'
+              : createPdf
+                ? 'Download PDF'
+                : 'Download Word'}
         </Button>
       </BottomFormDrawerFooter>
     </BottomFormDrawer>

@@ -22,7 +22,7 @@ import {
   claimsMcpIntegrationUrl,
   knownClaimsMcpIntegrationByName,
 } from './known-claims-mcp';
-import { matchToolNames } from './pack-tool-matcher';
+import { matchToolNames, unmatchedExactToolNames } from './pack-tool-matcher';
 
 const LOG = 'PackResolverService';
 
@@ -156,14 +156,21 @@ export class PackResolverService {
     return { integrationId: integration.id, connectionId: conn.id };
   }
 
-  async ensureManifests(connectionIds: string[]): Promise<void> {
+  async ensureManifests(
+    connectionIds: string[],
+    opts?: { force?: boolean },
+  ): Promise<void> {
     for (const connectionId of connectionIds) {
       const [existing] = await this.db
         .select()
         .from(mcpToolManifest)
         .where(eq(mcpToolManifest.connectionId, connectionId))
         .limit(1);
-      if (existing?.manifest && Array.isArray(existing.manifest) && existing.manifest.length) {
+      const hasCache =
+        !!existing?.manifest &&
+        Array.isArray(existing.manifest) &&
+        existing.manifest.length > 0;
+      if (hasCache && !opts?.force) {
         continue;
       }
       try {
@@ -194,12 +201,25 @@ export class PackResolverService {
         .where(eq(mcpToolManifest.connectionId, connectionId))
         .limit(1);
       const tools = (row?.manifest as CachedTool[] | null) ?? [];
+      const toolNames = tools.map((t) => t.name);
       const matched = matchToolNames({
-        toolNames: tools.map((t) => t.name),
+        toolNames,
         patterns: params.toolPatterns,
       });
       for (const name of matched) {
         out.add(buildNamespacedToolId(connectionId, name));
+      }
+      const unmatched = unmatchedExactToolNames({
+        toolNames,
+        patterns: params.toolPatterns,
+      });
+      if (unmatched.length > 0) {
+        this.logger.warn(
+          `[${LOG}.resolveEnabledToolRefs] cached manifest missing tools for ${connectionId}: ${unmatched.join(', ')} — binding them anyway`,
+        );
+        for (const name of unmatched) {
+          out.add(buildNamespacedToolId(connectionId, name));
+        }
       }
     }
     return [...out];

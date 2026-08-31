@@ -4,7 +4,11 @@ import {
   KNOWN_CLAIMS_MCP_INTEGRATIONS,
   resolveClaimsMcpBaseUrl,
 } from './known-claims-mcp';
-import { compileToolNamePattern, matchToolNames } from './pack-tool-matcher';
+import {
+  compileToolNamePattern,
+  matchToolNames,
+  unmatchedExactToolNames,
+} from './pack-tool-matcher';
 import {
   packAgentSchema,
   packManifestSchema,
@@ -58,6 +62,20 @@ describe('pack-tool-matcher', () => {
     const matcher = compileToolNamePattern('list_*');
     expect(matcher('list_quotes')).toBe(true);
     expect(matcher('get_quote')).toBe(false);
+  });
+
+  it('unmatchedExactToolNames keeps exact names missing from the cache', () => {
+    expect(
+      unmatchedExactToolNames({
+        toolNames: ['get_journal', 'create_journal'],
+        patterns: [
+          'create_journal',
+          'create_journal_site_entry',
+          'list_*',
+          'create_journal_site_entry',
+        ],
+      }),
+    ).toEqual(['create_journal_site_entry']);
   });
 });
 

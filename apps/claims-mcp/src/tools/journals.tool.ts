@@ -1,6 +1,8 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ClaimsApiClient } from '../server.js';
+import { toolResult } from '../server.js';
 import { proxyTool, pageLimit, dataBody } from './_proxy.js';
+import { categoryDesc } from '../categories.js';
 import { z } from 'zod';
 
 const CAT = 'operations' as const;
@@ -236,7 +238,7 @@ export function registerJournalsTools(server: McpServer, api: ClaimsApiClient): 
     category: CAT,
     name: 'create_journal_site_entry',
     description:
-      'Create one site-walk journal entry as spoken inspector notes and optional photos. One thing looked at per call. Optional scopeOfWork is a second spoken aside about likely repair — plain text, no headings. Do not write report headings or labelled sections.',
+      'Create one site-inspection journal entry from real notes. One thing looked at per call. Optional scopeOfWork is how to repair that item — plain text, no headings. Omit images unless the user asked to generate a photo. Do not invent damage or write report headings.',
     method: 'POST',
     path: '/journals/{journalId}/site-entries',
     input: {
@@ -265,13 +267,20 @@ export function registerJournalsTools(server: McpServer, api: ClaimsApiClient): 
             caption: z.string().optional().describe('Caption stored on the attachment'),
           }),
         )
-        .max(4)
+        .max(1)
         .optional()
-        .describe('Up to 4 inspection photos to generate and attach'),
+        .describe(
+          'Optional generated inspection photo. Omit for real inspections — review chat photos instead. Extra generated photos use generate_journal_page_image.',
+        ),
       locationLabel: z.string().optional().describe('Room or area label'),
       latitude: z.number().optional(),
       longitude: z.number().optional(),
       capturedAt: z.string().optional().describe('ISO timestamp for when the inspector recorded this'),
+      documentIds: z
+        .array(z.string())
+        .max(20)
+        .optional()
+        .describe('Document UUIDs from the project filesystem to attach to this entry. Use after uploading photos via the upload panel.'),
     },
     body: (args) => ({
       name: args.name,
@@ -284,6 +293,7 @@ export function registerJournalsTools(server: McpServer, api: ClaimsApiClient): 
       latitude: args.latitude,
       longitude: args.longitude,
       capturedAt: args.capturedAt,
+      documentIds: args.documentIds,
     }),
   });
 
@@ -307,4 +317,71 @@ export function registerJournalsTools(server: McpServer, api: ClaimsApiClient): 
       fileName: args.fileName,
     }),
   });
+
+  server.tool(
+    'open_journal_file_upload',
+    categoryDesc(
+      CAT,
+      'Open the journal file-upload panel in canvas. When categoryId is provided, photos are saved to the project document folder (not the journal directly). The agent later references them via documentIds on create_journal_site_entry. Call resolve_project_folder first to get the categoryId.',
+    ),
+    {
+      journalId: z
+        .string()
+        .optional()
+        .describe('Journal UUID. Required unless the user is already on that journal page.'),
+      jobId: z.string().optional().describe('Job UUID for upload context'),
+      categoryId: z
+        .string()
+        .optional()
+        .describe('Project filesystem category UUID. When set, files upload to that folder instead of creating a journal page.'),
+      name: z
+        .string()
+        .optional()
+        .describe('Entry title stored on the journal page, e.g. Inspection photos'),
+      entryKind: z
+        .enum(['intro', 'pre_existing', 'observation', 'recommendation', 'other'])
+        .optional()
+        .describe('Walk role for the created entry. Default observation.'),
+      prompt: z
+        .string()
+        .optional()
+        .describe('Short instruction shown on the panel, e.g. Upload photos of the damaged areas'),
+    },
+    async (args) => {
+      return toolResult({
+        action: 'open_drawer',
+        drawer: 'JournalFileUploadDrawer',
+        journalId: args.journalId,
+        jobId: args.jobId,
+        categoryId: args.categoryId,
+        name: args.name,
+        entryKind: args.entryKind,
+        prompt: args.prompt,
+      });
+    },
+  );
+
+  server.tool(
+    'show_inspection_image',
+    categoryDesc(
+      CAT,
+      'Display a document image in the canvas so you can ask the user about it. Use after uploading photos to the project folder and listing them with list_job_documents.',
+    ),
+    {
+      documentId: z.string().describe('Document UUID from the project filesystem'),
+      journalId: z.string().optional().describe('Journal UUID for context'),
+      caption: z.string().optional().describe('Caption to display below the image'),
+      prompt: z.string().optional().describe('Question or instruction shown above the image'),
+    },
+    async (args) => {
+      return toolResult({
+        action: 'open_drawer',
+        drawer: 'JournalImageViewerDrawer',
+        documentId: args.documentId,
+        journalId: args.journalId,
+        caption: args.caption,
+        prompt: args.prompt,
+      });
+    },
+  );
 }

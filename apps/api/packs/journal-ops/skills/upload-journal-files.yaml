@@ -1,0 +1,63 @@
+slug: upload-journal-files
+name: Upload journal files
+description: >
+  Open the canvas file-upload panel so the user can add inspection photos to
+  the project document folder. Photos are stored in the configured photo folder
+  and later referenced from journal entries.
+triggerHints:
+  - upload photos to journal
+  - add photos to journal
+  - upload inspection photos
+  - attach files to journal
+  - journal file upload
+  - add images to journal
+instructionPrompt: |
+  Open the canvas file-upload panel so the user can upload inspection photos
+  into the project document folder. Do not invent files. Do not generate images.
+
+  1. Resolve jobId from page context (jobId or entityType=job), the user, or ask once.
+  2. Resolve journalId:
+     - Page context (entityType=journal → entityId), this conversation, or ask once.
+     - If there is no journal yet, follow create-site-journal first (create_journal,
+       then link_journal to Job). Use the new journal id.
+  3. Call resolve_project_folder with jobId and role "photos".
+     - If it returns a categoryId, use that.
+     - If categoryId is null, tell the user to configure a photo folder in
+       Documents → Settings → Project folder mappings, and skip the upload.
+  4. Call open_journal_file_upload with:
+     - journalId
+     - jobId
+     - categoryId from the resolved folder
+     - name: short entry title (default "Inspection photos")
+     - entryKind: observation for event photos, other for a mixed dump, intro
+       if they are street/front photos only
+     - prompt: one short line telling them what to upload
+  5. Do not claim the panel is open until that tool succeeds.
+  6. Tell the user the upload panel is open beside chat. Ask them to drop files
+     and click Upload. Wait.
+  7. After they confirm (or when they return), call list_job_documents with the
+     jobId to see uploaded photos. You can then show each photo with
+     show_inspection_image and interview the user about it.
+
+  Never use create_journal_page for this. Never pass generated image prompts.
+requiredToolRefs:
+  - integration: Claims Operations
+    tool: open_journal_file_upload
+  - integration: Claims Operations
+    tool: create_journal
+  - integration: Claims Operations
+    tool: link_journal
+  - integration: Claims Operations
+    tool: list_journal_pages
+  - integration: Claims Operations
+    tool: get_journal_page
+  - integration: Claims Operations
+    tool: resolve_project_folder
+  - integration: Claims Operations
+    tool: list_job_documents
+  - integration: Claims Operations
+    tool: show_inspection_image
+category: journals
+invocationMode: inline
+includeHistory: true
+visibility: org

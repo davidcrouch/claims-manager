@@ -8,6 +8,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   ValidateNested,
 } from 'class-validator';
@@ -90,6 +91,13 @@ export class CreateJournalSiteEntryDto {
   @IsOptional()
   @IsDateString()
   capturedAt?: string;
+
+  /** Existing document UUIDs (from the project filesystem) to attach to this entry. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsUUID('4', { each: true })
+  documentIds?: string[];
 
   @IsOptional()
   @IsObject()

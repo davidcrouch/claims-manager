@@ -163,6 +163,20 @@ export const drawerRegistry: Record<string, DrawerRegistryEntry> = {
         default: m.CatalogBomDrawer as unknown as ComponentType<CanvasDrawerProps>,
       })),
   },
+  JournalFileUploadDrawer: {
+    title: 'Upload to journal',
+    loader: () =>
+      import('@/components/journals/JournalFileUploadDrawer').then((m) => ({
+        default: m.JournalFileUploadDrawer as unknown as ComponentType<CanvasDrawerProps>,
+      })),
+  },
+  JournalImageViewerDrawer: {
+    title: 'Inspection photo',
+    loader: () =>
+      import('@/components/journals/JournalImageViewerDrawer').then((m) => ({
+        default: m.JournalImageViewerDrawer as unknown as ComponentType<CanvasDrawerProps>,
+      })),
+  },
 };
 
 export const LazyQuoteFormDrawer = dynamic(

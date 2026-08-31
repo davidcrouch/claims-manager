@@ -7,8 +7,12 @@ const DEFAULT_GEMINI_IMAGE_MODEL = 'gemini-2.5-flash-image';
 const DEFAULT_GEMINI_LOCATION = 'global';
 const DEFAULT_IMAGEN_LOCATION = 'us-central1';
 const REQUEST_TIMEOUT_MS = 90_000;
-const MAX_QUOTA_RETRIES = 4;
-const MIN_GAP_MS = 2_000;
+const MAX_QUOTA_RETRIES = 5;
+/** Vertex Flash Image capacity 429s are common below ~10s between generateContent calls. */
+const MIN_GAP_MS = 10_000;
+const QUOTA_BACKOFF_BASE_MS = 8_000;
+const QUOTA_BACKOFF_CAP_MS = 45_000;
+const QUOTA_BACKOFF_JITTER_MS = 2_000;
 
 export interface GeneratedImage {
   buffer: Buffer;
@@ -287,9 +291,11 @@ export class JournalImageGenerationService {
   private quotaDelayMs(attempt: number, retryAfterHeader?: string | null): number {
     const fromHeader = retryAfterHeader ? Number.parseInt(retryAfterHeader, 10) : NaN;
     if (Number.isFinite(fromHeader) && fromHeader > 0) {
-      return Math.min(fromHeader * 1000, 30_000);
+      return Math.min(fromHeader * 1000, QUOTA_BACKOFF_CAP_MS);
     }
-    return Math.min(2_000 * 2 ** attempt, 16_000);
+    const exponential = Math.min(QUOTA_BACKOFF_BASE_MS * 2 ** attempt, QUOTA_BACKOFF_CAP_MS);
+    const jitter = Math.floor(Math.random() * QUOTA_BACKOFF_JITTER_MS);
+    return exponential + jitter;
   }
 
   private sleep(ms: number): Promise<void> {

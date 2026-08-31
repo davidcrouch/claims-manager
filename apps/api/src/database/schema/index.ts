@@ -2315,6 +2315,11 @@ export interface CategoryConfig {
    * folder is treated as already filed.
    */
   runFilesystemPipelinesOnUpload?: boolean;
+  /**
+   * Semantic role for this category, e.g. 'photos' marks it as the default
+   * location for inspection photos within a project filesystem.
+   */
+  role?: string | null;
   [key: string]: unknown;
 }
 

@@ -1,18 +1,19 @@
 id: journal-ops
-version: 1.3.0
+version: 1.6.0
 name: Journal Operations
 description: >
-  Journal assistant that generates realistic site-walk test data — spoken
-  inspector narrative and photos. Event damage entries share one overriding
-  cause (e.g. a fallen tree hitting roof, fence, and a window). One entry per
-  item looked at, optional spoken repair aside. Metadata extraction is left to
-  a later journal-processor agent.
+  Journal assistant that interviews the user to capture a real site-inspection
+  journal. Uploads photos to the configured project folder, displays each in
+  the canvas for review, then records house details, attendance, each damaged
+  item with repair, and a recommendation — one journal entry each, with photo
+  references linked from the project document folder.
 integrationRefs:
   - Claims Operations
 agents:
   - file: agents/journal-assistant.yaml
 skills:
-  - file: skills/generate-site-walk.yaml
+  - file: skills/conduct-site-inspection.yaml
   - file: skills/create-site-journal.yaml
   - file: skills/add-journal-entry.yaml
+  - file: skills/upload-journal-files.yaml
 prompts: []

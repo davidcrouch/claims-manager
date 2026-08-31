@@ -1,8 +1,8 @@
 slug: add-journal-entry
 name: Add journal site entry
 description: >
-  Add one spoken inspector entry (notes and photos) for a single thing looked at.
-  Optional spoken repair aside. No headings. Two items means two entries.
+  Add one real site-inspection entry from the user's photos and answers.
+  One thing looked at per entry. Optional repair note. No invented content.
 triggerHints:
   - add journal entry
   - add inspection entry
@@ -10,33 +10,32 @@ triggerHints:
   - add scope of work to journal
   - add photos to journal
 instructionPrompt: |
-  Add site-walk entry/entries to an existing journal as spoken inspector notes.
-  No headings or labels in the note text. One stop = one entry. If the user
-  mentions a smashed roof AND a broken window, call create_journal_site_entry
-  twice. Event-damage items must share the same overriding cause already used
-  on this walk (or named by the user) — do not introduce a second peril.
+  Add site-inspection entry/entries to an existing journal from what the user
+  told you or showed in photos. Do not invent. No headings or labels in the
+  note text. One stop = one entry. If they mention a smashed roof AND a broken
+  window, call create_journal_site_entry twice.
 
   1. Confirm journalId (page context or this conversation). Call get_journal if needed.
-  2. Choose entryKind: intro | pre_existing | observation | recommendation | other.
-  3. name: short place/item for the timeline ("Entry door"), not a report heading.
-  4. observation: spoken what you can see, this item only. No "Observation:" prefix.
-  5. For an event item, optional scopeOfWork: a second spoken note about likely
-     repair for THIS item only — conversational, no "Scope of work:" heading.
-     e.g. "This door's too far gone, we'll be putting a new one in."
-  6. Photos (1–3) of this item only.
+  2. If they attached photos, review them and confirm what each item is before writing.
+  3. Choose entryKind: intro | pre_existing | observation | recommendation | other.
+  4. name: short place/item for the timeline ("Entry door"), not a report heading.
+  5. observation: what is wrong / what was recorded, this item only. No "Observation:" prefix.
+  6. For an event item, optional scopeOfWork: how to fix THIS item only —
+     conversational, no "Scope of work:" heading.
   7. locationLabel = room/area. capturedAt if known.
-  8. Call create_journal_site_entry once per item.
-  9. Do not add structured estimate/catalogue metadata — a later journal-processor
-     will read notes and photos.
+  8. If the item has associated photos that were uploaded to the project folder,
+     pass their documentIds so they are linked to the entry.
+  9. Call create_journal_site_entry once per item. Never use create_journal_page
+     for inspection notes. Omit the images field unless the user explicitly asks
+     you to generate a photo.
 
-  Intro / wrap-up: no repair aside. Pre-existing: repair aside only if asked.
+  Intro / house / wrap-up: no repair aside. Pre-existing: repair aside only if asked.
+  Ask a short follow-up only for facts you still need (cause, repair, event vs old).
 requiredToolRefs:
   - integration: Claims Operations
     tool: get_journal
   - integration: Claims Operations
     tool: create_journal_site_entry
-  - integration: Claims Operations
-    tool: generate_journal_page_image
 category: journals
 invocationMode: inline
 includeHistory: true

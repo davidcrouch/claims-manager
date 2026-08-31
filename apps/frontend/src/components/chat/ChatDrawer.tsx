@@ -329,6 +329,15 @@ export function ChatDrawer({
       if (!propJobId && pageContext.jobId) {
         mergedProps.jobId = pageContext.jobId;
       }
+      const propJournalId =
+        typeof mergedProps.journalId === 'string' ? mergedProps.journalId.trim() : '';
+      if (
+        !propJournalId &&
+        pageContext.entityType === 'journal' &&
+        pageContext.entityId
+      ) {
+        mergedProps.journalId = pageContext.entityId;
+      }
       // Normalize common id aliases for detail drawers opened from chat/MCP tools
       if (
         event.component === 'TaskDetailDrawer' &&

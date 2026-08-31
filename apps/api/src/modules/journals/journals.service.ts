@@ -606,7 +606,7 @@ export class JournalsService {
     return { stream, fileName: attachment.fileName, mimeType: attachment.mimeType };
   }
 
-  // -- Site-walk test data (narrative entry + generated photos) --
+  // -- Site-inspection entry (notes; optional generated photo if requested) --
 
   async createSiteEntry(params: {
     journalId: string;
@@ -623,9 +623,11 @@ export class JournalsService {
         ? 'observation'
         : (dto.entryKind ?? 'other');
 
-    if (!observation && !repairNote && extraNotes.length === 0 && images.length === 0) {
+    const documentIds = (dto.documentIds ?? []).filter(Boolean);
+
+    if (!observation && !repairNote && extraNotes.length === 0 && images.length === 0 && documentIds.length === 0) {
       throw new BadRequestException(
-        'Site entry requires a note or at least one image.',
+        'Site entry requires a note, at least one image, or at least one document reference.',
       );
     }
 
@@ -706,9 +708,42 @@ export class JournalsService {
       }
     }
 
+    const docBlocks: JournalPageBlockDto[] = [];
+    for (const docId of documentIds) {
+      try {
+        const tenantId = this.tenantContext.getTenantId();
+        const doc = await this.documentsRepo.findOne(docId, tenantId);
+        if (!doc) {
+          this.logger.warn(`[JournalsService.createSiteEntry] document not found id=${docId}`);
+          continue;
+        }
+        const attachment = await this.createAttachment({
+          journalId,
+          pageId: page.id,
+          dto: {
+            fileName: doc.fileName,
+            mimeType: doc.mimeType ?? 'application/octet-stream',
+            fileSize: doc.fileSizeBytes ?? undefined,
+            storageKey: doc.gcsObjectPath,
+            documentId: docId,
+          },
+          userId,
+        });
+        docBlocks.push({
+          id: randomUUID(),
+          type: 'upload',
+          attachmentId: attachment.id,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`[JournalsService.createSiteEntry] doc attach failed docId=${docId}: ${message}`);
+      }
+    }
+
     const blocks = [
       ...noteBlocks,
       ...uploadBlocks,
+      ...docBlocks,
       ...(repairBlock ? [repairBlock] : []),
     ];
     await this.updatePage({
@@ -718,7 +753,7 @@ export class JournalsService {
     });
 
     this.logger.debug(
-      `[JournalsService.createSiteEntry] journal=${journalId} page=${page.id} kind=${entryKind} images=${imageResults.length}`,
+      `[JournalsService.createSiteEntry] journal=${journalId} page=${page.id} kind=${entryKind} images=${imageResults.length} docs=${docBlocks.length}`,
     );
 
     const withAttachments = await this.getPage({ journalId, pageId: page.id });
