@@ -1075,7 +1075,7 @@
   Confirmed the application type-check succeeds locally.
   The hosted site can pick up catalogue round-trip, seed parity, and journal updates.
 
-- `2026-08-31` `pending` **4.5 h**
+- `2026-08-31` `26884bf` **4.5 h**
   `29 files | +746 −129 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Printed reports can be downloaded on the hosted site, insurer updates process more reliably, and site-walk notes and photos stay on one cause of damage.
   **Printed reports, insurer update processing, and site-walk photos.**
