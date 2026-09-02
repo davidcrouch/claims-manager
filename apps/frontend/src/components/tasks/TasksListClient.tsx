@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { CheckSquare, Search, X } from 'lucide-react';
+import { CheckSquare, Loader2, Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { TypeBadge } from '@/components/ui/type-badge';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SyncStatusIndicator } from '@/components/shared/SyncStatusIndicator';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
@@ -140,6 +141,59 @@ function dueDateClassName(dueDate?: string | null): string {
 }
 
 const PAGE_SIZE = 20;
+
+const SKELETON_ROW_WIDTHS = [
+  ['w-40', 'w-28', 'w-16', 'w-14', 'w-20', 'w-24', 'w-20', 'w-16'],
+  ['w-48', 'w-32', 'w-20', 'w-16', 'w-24', 'w-20', 'w-24', 'w-14'],
+  ['w-36', 'w-24', 'w-16', 'w-12', 'w-28', 'w-28', 'w-16', 'w-16'],
+  ['w-44', 'w-36', 'w-20', 'w-14', 'w-20', 'w-24', 'w-20', 'w-12'],
+  ['w-52', 'w-28', 'w-16', 'w-16', 'w-24', 'w-24', 'w-24', 'w-16'],
+  ['w-32', 'w-40', 'w-20', 'w-12', 'w-16', 'w-20', 'w-16', 'w-14'],
+  ['w-44', 'w-24', 'w-16', 'w-14', 'w-20', 'w-28', 'w-20', 'w-16'],
+  ['w-36', 'w-32', 'w-20', 'w-16', 'w-20', 'w-24', 'w-16', 'w-12'],
+] as const;
+
+function TasksListLoadingPanel({ columnCount }: { columnCount: number }) {
+  const cells = Math.max(columnCount, 1);
+  return (
+    <div
+      className="relative overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <div className="pointer-events-none select-none" aria-hidden>
+        <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+          <div className="flex gap-6">
+            {Array.from({ length: cells }).map((_, i) => (
+              <Skeleton key={`h-${i}`} className="h-3 w-16" />
+            ))}
+          </div>
+        </div>
+        <div className="divide-y divide-slate-100">
+          {SKELETON_ROW_WIDTHS.map((widths, row) => (
+            <div key={row} className="flex items-center gap-6 px-4 py-3.5">
+              {Array.from({ length: cells }).map((_, col) => (
+                <Skeleton
+                  key={`r-${row}-${col}`}
+                  className={`h-4 ${widths[col % widths.length]}`}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="absolute inset-0 flex items-center justify-center bg-white/70 backdrop-blur-[1px]">
+        <div className="flex flex-col items-center gap-2.5 rounded-xl border border-slate-200/80 bg-white/95 px-6 py-5 shadow-lg">
+          <Loader2 className="h-7 w-7 animate-spin text-blue-600" />
+          <p className="text-sm font-medium text-slate-800">Loading tasks…</p>
+          <p className="text-xs text-slate-500">Fetching the latest results</p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function TasksListClient({
   job,
@@ -823,7 +877,10 @@ export function TasksListClient({
         className="flex-1 px-6 pb-6"
         style={{ minHeight: 0, overflow: 'auto' }}
       >
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        {loading ? (
+          <TasksListLoadingPanel columnCount={visibleTableColumns.length + 1} />
+        ) : (
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50">
                 <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -1013,6 +1070,7 @@ export function TasksListClient({
             </table>
             <TablePagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={handlePageChange} />
           </div>
+        )}
       </div>
 
       <TaskFormDrawer

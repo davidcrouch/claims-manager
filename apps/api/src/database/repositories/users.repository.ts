@@ -43,6 +43,55 @@ export class UsersRepository {
     return row ?? null;
   }
 
+  /** Org member whose email matches (case-insensitive). */
+  async findOrgMemberByEmail(params: {
+    organizationId: string;
+    email: string;
+  }): Promise<UserRow | null> {
+    const email = params.email.trim().toLowerCase();
+    if (!email) return null;
+    const [row] = await this.db
+      .select({ user: users })
+      .from(users)
+      .innerJoin(organizationUsers, eq(users.id, organizationUsers.userId))
+      .where(
+        and(
+          eq(organizationUsers.organizationId, params.organizationId),
+          sql`lower(btrim(${users.email})) = ${email}`,
+        ),
+      )
+      .limit(1);
+    return row?.user ?? null;
+  }
+
+  /**
+   * Resolve the org user id for a JWT identity.
+   * Prefer email match (same as frontend resolveCurrentOrgUserId), then JWT sub.
+   */
+  async resolveOrgUserId(params: {
+    organizationId: string;
+    userId?: string | null;
+    email?: string | null;
+  }): Promise<string | null> {
+    const email = params.email?.trim().toLowerCase() || null;
+    const sub = params.userId?.trim() || null;
+    if (email) {
+      const byEmail = await this.findOrgMemberByEmail({
+        organizationId: params.organizationId,
+        email,
+      });
+      if (byEmail) return byEmail.id;
+    }
+    if (sub) {
+      const membership = await this.findOrgMembership({
+        userId: sub,
+        organizationId: params.organizationId,
+      });
+      if (membership) return sub;
+    }
+    return null;
+  }
+
   async findByOrganization(params: { organizationId: string }): Promise<UserRow[]> {
     const rows = await this.db
       .select({ user: users })

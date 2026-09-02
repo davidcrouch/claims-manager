@@ -68,6 +68,11 @@ export class QuotesRepository {
     statusId?: string;
     assignedToUserId?: string;
     assignedToUserIds?: string;
+    /**
+     * When true, combine assignedToUserId(s) and jobIds with OR instead of AND.
+     * Used by dashboard My Work (assignee on quote or quote on my jobs).
+     */
+    matchAssigneeOrJobIds?: boolean;
     search?: string;
     sort?: string;
   }): Promise<{ data: QuoteViewRow[]; total: number }> {
@@ -83,12 +88,52 @@ export class QuotesRepository {
       isNull(quotes.deletedAt),
     );
     const jobIds = normalizeListJobIds({ jobId: params.jobId, jobIds: params.jobIds });
-    if (jobIds) {
-      if (jobIds.length === 0) return { data: [], total: 0 };
-      whereClause = and(
-        whereClause,
-        jobIds.length === 1 ? eq(quotes.jobId, jobIds[0]) : inArray(quotes.jobId, jobIds),
-      );
+    const assigneeIds = normalizeListUserIds({
+      userId: params.assignedToUserId,
+      userIds: params.assignedToUserIds,
+    });
+    const useOrScope = Boolean(params.matchAssigneeOrJobIds);
+
+    if (useOrScope) {
+      const orParts = [];
+      if (assigneeIds && assigneeIds.length > 0) {
+        const realIds = assigneeIds.filter((id) => id !== '__blank__');
+        if (realIds.length > 0) {
+          orParts.push(inArray(quotes.assignedToUserId, realIds));
+        }
+      }
+      if (jobIds && jobIds.length > 0) {
+        orParts.push(
+          jobIds.length === 1 ? eq(quotes.jobId, jobIds[0]) : inArray(quotes.jobId, jobIds),
+        );
+      }
+      if (orParts.length === 0) {
+        return { data: [], total: 0 };
+      }
+      whereClause = and(whereClause, orParts.length === 1 ? orParts[0] : or(...orParts)!)!;
+    } else {
+      if (jobIds) {
+        if (jobIds.length === 0) return { data: [], total: 0 };
+        whereClause = and(
+          whereClause,
+          jobIds.length === 1 ? eq(quotes.jobId, jobIds[0]) : inArray(quotes.jobId, jobIds),
+        );
+      }
+      if (assigneeIds) {
+        if (assigneeIds.length === 0) return { data: [], total: 0 };
+        const includeBlank = assigneeIds.includes('__blank__');
+        const realIds = assigneeIds.filter((id) => id !== '__blank__');
+        if (includeBlank && realIds.length > 0) {
+          whereClause = and(
+            whereClause,
+            or(isNull(quotes.assignedToUserId), inArray(quotes.assignedToUserId, realIds))!,
+          );
+        } else if (includeBlank) {
+          whereClause = and(whereClause, isNull(quotes.assignedToUserId));
+        } else {
+          whereClause = and(whereClause, inArray(quotes.assignedToUserId, realIds));
+        }
+      }
     }
     const statusIds = (params.status ?? params.statusId)?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
     const quoteTypeIds = params.quoteType?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
@@ -114,26 +159,6 @@ export class QuotesRepository {
           ilike(quotes.note, term),
         )!,
       );
-    }
-
-    const assigneeIds = normalizeListUserIds({
-      userId: params.assignedToUserId,
-      userIds: params.assignedToUserIds,
-    });
-    if (assigneeIds) {
-      if (assigneeIds.length === 0) return { data: [], total: 0 };
-      const includeBlank = assigneeIds.includes('__blank__');
-      const realIds = assigneeIds.filter((id) => id !== '__blank__');
-      if (includeBlank && realIds.length > 0) {
-        whereClause = and(
-          whereClause,
-          or(isNull(quotes.assignedToUserId), inArray(quotes.assignedToUserId, realIds))!,
-        );
-      } else if (includeBlank) {
-        whereClause = and(whereClause, isNull(quotes.assignedToUserId));
-      } else {
-        whereClause = and(whereClause, inArray(quotes.assignedToUserId, realIds));
-      }
     }
 
     let orderBy;

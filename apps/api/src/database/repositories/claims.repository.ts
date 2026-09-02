@@ -23,6 +23,7 @@ import {
   contacts,
   jobs,
   lookupValues,
+  users,
 } from '../schema';
 
 const claimAddressSearchText = addressSearchText({
@@ -206,7 +207,22 @@ export class ClaimsRepository {
         : undefined;
 
     const assignedToUserId = params.assignedToUserId?.trim() || null;
-    const assigneeClause = assignedToUserId
+    let assigneeEmail: string | null = null;
+    if (assignedToUserId) {
+      const [assigneeUser] = await this.db
+        .select({ email: users.email })
+        .from(users)
+        .where(eq(users.id, assignedToUserId))
+        .limit(1);
+      assigneeEmail = assigneeUser?.email?.trim().toLowerCase() || null;
+    }
+    const assigneeIdentity =
+      assignedToUserId && assigneeEmail
+        ? or(eq(claimAssignees.userId, assignedToUserId), ilike(claimAssignees.email, assigneeEmail))
+        : assignedToUserId
+          ? eq(claimAssignees.userId, assignedToUserId)
+          : undefined;
+    const assigneeClause = assigneeIdentity
       ? exists(
           this.db
             .select({ one: sql`1` })
@@ -215,7 +231,7 @@ export class ClaimsRepository {
               and(
                 eq(claimAssignees.claimId, claims.id),
                 eq(claimAssignees.tenantId, params.tenantId),
-                eq(claimAssignees.userId, assignedToUserId),
+                assigneeIdentity,
               ),
             ),
         )

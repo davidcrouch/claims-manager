@@ -415,6 +415,8 @@ export class JobsRepository {
     excludeStatusIds?: string[];
     claimIds?: string[];
     assignedToUserId?: string;
+    /** Match CW job assignees snapshotted in custom_data.assignees[].email */
+    assigneeEmail?: string;
     limit?: number;
   }): Promise<{ data: JobViewRow[]; total: number }> {
     const limit = Math.min(params.limit ?? 12, 50);
@@ -423,6 +425,7 @@ export class JobsRepository {
     const excludeStatusIds = params.excludeStatusIds?.filter(Boolean) ?? [];
     const claimIds = params.claimIds?.filter(Boolean) ?? [];
     const assignedToUserId = params.assignedToUserId?.trim() || null;
+    const assigneeEmail = params.assigneeEmail?.trim().toLowerCase() || null;
 
     const whereParts = [
       eq(jobs.tenantId, params.tenantId),
@@ -439,6 +442,16 @@ export class JobsRepository {
     }
     if (assignedToUserId) {
       mineParts.push(eq(jobs.assignedToUserId, assignedToUserId));
+    }
+    if (assigneeEmail) {
+      // CW job assignees live in custom_data.assignees (no job_assignees table yet).
+      mineParts.push(
+        sql`EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(COALESCE(${jobs.customData}->'assignees', '[]'::jsonb)) AS assignee
+          WHERE lower(btrim(assignee->>'email')) = ${assigneeEmail}
+        )`,
+      );
     }
     if (mineParts.length === 1) {
       whereParts.push(mineParts[0]);

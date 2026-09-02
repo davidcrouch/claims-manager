@@ -114,25 +114,45 @@ export function DashboardInboxClient({
   const defaultMine = Boolean(initialInbox.activeJobs?.scopedToUser);
   const [mineOnly, setMineOnly] = useState(defaultMine);
   const [inbox, setInbox] = useState(initialInbox);
+  const [scopeError, setScopeError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const skipNextFetch = useRef(true);
 
-  const loadInbox = useCallback((mine: boolean) => {
+  const loadInbox = useCallback((mine: boolean, previousMine: boolean) => {
     startTransition(async () => {
       const next = await fetchDashboardInboxAction({ mine });
-      if (next) setInbox(next);
+      if (next) {
+        setInbox(next);
+        setScopeError(null);
+        return;
+      }
+      console.error(
+        'frontend:DashboardInboxClient.loadInbox - inbox refetch failed; reverting scope',
+      );
+      setMineOnly(previousMine);
+      setScopeError('Could not update work scope. Try again.');
     });
   }, []);
 
+  const onScopeChange = useCallback(
+    (next: boolean) => {
+      if (next === mineOnly || isPending) return;
+      const previous = mineOnly;
+      setMineOnly(next);
+      setScopeError(null);
+      loadInbox(next, previous);
+    },
+    [mineOnly, isPending, loadInbox],
+  );
+
   useEffect(() => {
-    if (skipNextFetch.current) {
-      skipNextFetch.current = false;
-      // SSR used auto-scope (mine when user has assigned work). If that already
-      // matches the toggle, keep the server payload; otherwise refetch.
-      const ssrWasMine = Boolean(initialInbox.activeJobs?.scopedToUser);
-      if (mineOnly === ssrWasMine) return;
-    }
-    loadInbox(mineOnly);
+    if (!skipNextFetch.current) return;
+    skipNextFetch.current = false;
+    // SSR used auto-scope (mine when user has assigned work). If that already
+    // matches the toggle, keep the server payload; otherwise refetch.
+    const ssrWasMine = Boolean(initialInbox.activeJobs?.scopedToUser);
+    if (mineOnly === ssrWasMine) return;
+    loadInbox(mineOnly, ssrWasMine);
   }, [mineOnly, loadInbox, initialInbox.activeJobs?.scopedToUser]);
 
   const decisionQueues = queuesByKey(inbox.queues, DECISION_KEYS);
@@ -167,8 +187,17 @@ export function DashboardInboxClient({
   return (
     <div className="-mx-1 space-y-6">
       <SetHeaderActions>
-        <MyWorkSwitch mineOnly={mineOnly} onChange={setMineOnly} loading={isPending} />
+        <MyWorkSwitch mineOnly={mineOnly} onChange={onScopeChange} loading={isPending} />
       </SetHeaderActions>
+
+      {scopeError && (
+        <p
+          className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+          role="alert"
+        >
+          {scopeError}
+        </p>
+      )}
 
       <DashboardSnapshotBar snapshot={inbox.snapshot} />
 

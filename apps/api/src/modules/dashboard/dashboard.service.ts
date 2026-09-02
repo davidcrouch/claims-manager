@@ -12,6 +12,7 @@ import {
   ProposalsRepository,
   NotificationsRepository,
   ClaimAssigneesRepository,
+  UsersRepository,
   type TaskRow,
   type TaskViewRow,
 } from '../../database/repositories';
@@ -148,6 +149,7 @@ export class DashboardService {
     private readonly proposalsRepo: ProposalsRepository,
     private readonly notificationsRepo: NotificationsRepository,
     private readonly claimAssigneesRepo: ClaimAssigneesRepository,
+    private readonly usersRepo: UsersRepository,
     private readonly financeService: FinanceService,
     private readonly scheduleService: ScheduleService,
     private readonly tenantContext: TenantContext,
@@ -210,8 +212,14 @@ export class DashboardService {
     mine?: boolean;
   }): Promise<DashboardInboxDto> {
     const tenantId = this.tenantContext.getTenantId();
-    const userId = params.userId?.trim() || null;
-    const email = params.email?.trim() || null;
+    const jwtUserId = params.userId?.trim() || null;
+    const email = params.email?.trim().toLowerCase() || null;
+    const userId =
+      (await this.usersRepo.resolveOrgUserId({
+        organizationId: tenantId,
+        userId: jwtUserId,
+        email,
+      })) || jwtUserId;
     this.logger.log(
       `dashboard:DashboardService.getInbox - tenantId=${tenantId} userId=${userId ? 'set' : 'none'} mine=${params.mine ?? 'auto'}`,
     );
@@ -233,13 +241,15 @@ export class DashboardService {
     ]);
 
     const excludeJobStatusIds = inactiveJobStatusIds(jobStatusLookups);
-    const hasMineScope = Boolean(userId) || assignedClaimIds.length > 0;
+    const hasMineScope =
+      Boolean(userId) || Boolean(email) || assignedClaimIds.length > 0;
     const assignedActiveJobs = hasMineScope
       ? await this.jobsRepo.findActiveForInbox({
           tenantId,
           excludeStatusIds: excludeJobStatusIds,
           claimIds: assignedClaimIds,
           assignedToUserId: userId ?? undefined,
+          assigneeEmail: email ?? undefined,
           limit: ACTIVE_JOBS_LIMIT,
         })
       : { data: [], total: 0 };
@@ -247,9 +257,12 @@ export class DashboardService {
     const mineOnly = params.mine === true ? true : params.mine === false ? false : scopedToUser;
     const myJobIds = assignedActiveJobs.data.map((job) => job.id);
     const assigneeFilter = mineOnly && userId ? userId : undefined;
-    /** Job-linked entities (proposals/RFQs) and fallback when user has claim scope but no userId. */
+    /** Job-linked entities (proposals/RFQs) and WO/quote mine via my jobs. */
     const myJobIdsFilter = mineOnly ? myJobIds : undefined;
     const skipJobLinkedMine = Boolean(mineOnly && myJobIds.length === 0);
+    const matchAssigneeOrJobIds = Boolean(
+      mineOnly && assigneeFilter && myJobIdsFilter && myJobIdsFilter.length > 0,
+    );
 
     const woStatusIds = matchLookupIdsByNames(woLookups, WO_ACCEPT_STATUS_NAMES);
     const proposalStatusIds = matchLookupIdsByNames(
@@ -287,7 +300,8 @@ export class DashboardService {
             tenantId,
             status: woStatusIds.join(','),
             assignedToUserId: assigneeFilter,
-            jobIds: !assigneeFilter ? myJobIdsFilter : undefined,
+            jobIds: mineOnly ? myJobIdsFilter : undefined,
+            matchAssigneeOrJobIds,
             limit: PREVIEW_LIMIT,
             sort: 'updated_at_desc',
           })
@@ -315,7 +329,8 @@ export class DashboardService {
             tenantId,
             status: quoteStatusIds.join(','),
             assignedToUserId: assigneeFilter,
-            jobIds: !assigneeFilter ? myJobIdsFilter : undefined,
+            jobIds: mineOnly ? myJobIdsFilter : undefined,
+            matchAssigneeOrJobIds,
             limit: PREVIEW_LIMIT,
             sort: 'updated_at_desc',
           })

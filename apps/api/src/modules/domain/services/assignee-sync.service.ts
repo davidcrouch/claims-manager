@@ -3,6 +3,7 @@ import type { DrizzleDbOrTx } from '../../../database/drizzle.module';
 import type { RawAssignee } from '../transformers/transformer.interface';
 import {
   ClaimAssigneesRepository,
+  UsersRepository,
   type ClaimAssigneeInsert,
 } from '../../../database/repositories';
 import { LookupResolutionService } from './lookup-resolution.service';
@@ -18,6 +19,7 @@ export class AssigneeSyncService {
 
   constructor(
     private readonly claimAssigneesRepo: ClaimAssigneesRepository,
+    private readonly usersRepo: UsersRepository,
     private readonly lookupResolution: LookupResolutionService,
   ) {}
 
@@ -52,12 +54,25 @@ export class AssigneeSyncService {
         typeLookupId = resolved ?? undefined;
       }
 
+      const email = raw.email?.trim() || null;
+      let userId: string | undefined;
+      if (email) {
+        const orgUser = await this.usersRepo.findOrgMemberByEmail({
+          organizationId: params.tenantId,
+          email,
+        });
+        if (orgUser) {
+          userId = orgUser.id;
+        }
+      }
+
       const data: ClaimAssigneeInsert & { externalReference: string } = {
         tenantId: params.tenantId,
         claimId: params.entityId,
         externalReference: raw.externalReference,
         displayName: raw.displayName,
         email: raw.email,
+        userId,
         assigneeTypeLookupId: typeLookupId,
         assigneePayload: {
           typeName: nameFromLookup(raw.assigneeTypeField),

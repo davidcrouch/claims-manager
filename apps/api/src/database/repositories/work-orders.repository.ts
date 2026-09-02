@@ -95,6 +95,11 @@ export class WorkOrdersRepository {
     workOrderType?: string;
     assignedToUserId?: string;
     assignedToUserIds?: string;
+    /**
+     * When true, combine assignedToUserId(s) and jobIds with OR instead of AND.
+     * Used by dashboard My Work (assignee on WO or WO on my jobs).
+     */
+    matchAssigneeOrJobIds?: boolean;
     search?: string;
     sort?: string;
   }): Promise<{ data: WorkOrderViewRow[]; total: number }> {
@@ -110,12 +115,57 @@ export class WorkOrdersRepository {
       isNull(workOrders.deletedAt),
     );
     const jobIds = normalizeListJobIds({ jobId: params.jobId, jobIds: params.jobIds });
-    if (jobIds) {
-      if (jobIds.length === 0) return { data: [], total: 0 };
-      whereClause = and(
-        whereClause,
-        jobIds.length === 1 ? eq(workOrders.jobId, jobIds[0]) : inArray(workOrders.jobId, jobIds),
-      );
+    const assigneeIds = normalizeListUserIds({
+      userId: params.assignedToUserId,
+      userIds: params.assignedToUserIds,
+    });
+    const useOrScope = Boolean(params.matchAssigneeOrJobIds);
+
+    if (useOrScope) {
+      if (jobIds && jobIds.length === 0) {
+        // __none__ with OR scope: only assignee can match
+      } else if (assigneeIds && assigneeIds.length === 0 && jobIds && jobIds.length === 0) {
+        return { data: [], total: 0 };
+      }
+      const orParts = [];
+      if (assigneeIds && assigneeIds.length > 0) {
+        const realIds = assigneeIds.filter((id) => id !== '__blank__');
+        if (realIds.length > 0) {
+          orParts.push(inArray(workOrders.assignedToUserId, realIds));
+        }
+      }
+      if (jobIds && jobIds.length > 0) {
+        orParts.push(
+          jobIds.length === 1 ? eq(workOrders.jobId, jobIds[0]) : inArray(workOrders.jobId, jobIds),
+        );
+      }
+      if (orParts.length === 0) {
+        return { data: [], total: 0 };
+      }
+      whereClause = and(whereClause, orParts.length === 1 ? orParts[0] : or(...orParts)!)!;
+    } else {
+      if (jobIds) {
+        if (jobIds.length === 0) return { data: [], total: 0 };
+        whereClause = and(
+          whereClause,
+          jobIds.length === 1 ? eq(workOrders.jobId, jobIds[0]) : inArray(workOrders.jobId, jobIds),
+        );
+      }
+      if (assigneeIds) {
+        if (assigneeIds.length === 0) return { data: [], total: 0 };
+        const includeBlank = assigneeIds.includes('__blank__');
+        const realIds = assigneeIds.filter((id) => id !== '__blank__');
+        if (includeBlank && realIds.length > 0) {
+          whereClause = and(
+            whereClause,
+            or(isNull(workOrders.assignedToUserId), inArray(workOrders.assignedToUserId, realIds))!,
+          );
+        } else if (includeBlank) {
+          whereClause = and(whereClause, isNull(workOrders.assignedToUserId));
+        } else {
+          whereClause = and(whereClause, inArray(workOrders.assignedToUserId, realIds));
+        }
+      }
     }
     if (params.purchaseOrderId) {
       whereClause = and(whereClause, eq(workOrders.purchaseOrderId, params.purchaseOrderId));
@@ -143,26 +193,6 @@ export class WorkOrdersRepository {
           ilike(workOrders.note, term),
         )!,
       );
-    }
-
-    const assigneeIds = normalizeListUserIds({
-      userId: params.assignedToUserId,
-      userIds: params.assignedToUserIds,
-    });
-    if (assigneeIds) {
-      if (assigneeIds.length === 0) return { data: [], total: 0 };
-      const includeBlank = assigneeIds.includes('__blank__');
-      const realIds = assigneeIds.filter((id) => id !== '__blank__');
-      if (includeBlank && realIds.length > 0) {
-        whereClause = and(
-          whereClause,
-          or(isNull(workOrders.assignedToUserId), inArray(workOrders.assignedToUserId, realIds))!,
-        );
-      } else if (includeBlank) {
-        whereClause = and(whereClause, isNull(workOrders.assignedToUserId));
-      } else {
-        whereClause = and(whereClause, inArray(workOrders.assignedToUserId, realIds));
-      }
     }
 
     const [data, countResult] = await Promise.all([
