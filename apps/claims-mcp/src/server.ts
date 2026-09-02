@@ -36,6 +36,7 @@ import { registerAiTools } from './tools/ai.tool.js';
 import { registerMcpAdminTools } from './tools/mcp-admin.tool.js';
 import { registerMessagesTools } from './tools/messages.tool.js';
 import { registerProvidersTools } from './tools/providers.tool.js';
+import { cloudRunInvokerAuthorization } from './cloud-run-invoker.js';
 
 export interface RequestContext {
   token: string;
@@ -139,6 +140,11 @@ export class ClaimsApiClient {
 
     if (tenantId) {
       headers['x-tenant-id'] = tenantId;
+    }
+
+    const invokerAuth = await cloudRunInvokerAuthorization(this.config.CLAIMS_API_URL);
+    if (invokerAuth) {
+      headers['X-Serverless-Authorization'] = invokerAuth;
     }
 
     let response: Response;

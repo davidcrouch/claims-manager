@@ -107,9 +107,6 @@ importers:
       jwks-rsa:
         specifier: ^4.0.1
         version: 4.0.1
-      libreoffice-convert:
-        specifier: ^1.8.2
-        version: 1.8.2
       passport:
         specifier: ^0.7.0
         version: 0.7.0
@@ -8013,10 +8010,6 @@ packages:
   libphonenumber-js@1.12.40:
     resolution: {integrity: sha512-HKGs7GowShNls3Zh+7DTr6wYpPk5jC78l508yQQY3e8ZgJChM3A9JZghmMJZuK+5bogSfuTafpjksGSR3aMIEg==}
 
-  libreoffice-convert@1.8.2:
-    resolution: {integrity: sha512-iwSzpoomvQS4ztoZds26Nx/sH/jkLN4nsNPxgu95eTmiF3FVmRQwFQ/2LSErV51vyW8R4w5Q+bqoTL1CaWs4xQ==}
-    engines: {node: '>=6'}
-
   lie@3.3.0:
     resolution: {integrity: sha512-UaiMJzeWRlEujzAuw5LokY1L5ecNQYZKfmyZ9L7wDHb/p5etKaxXhohBcrw0EYby+G/NA52vRSN4N39dxHAIwQ==}
 
@@ -9924,10 +9917,6 @@ packages:
   tldts@7.0.26:
     resolution: {integrity: sha512-WiGwQjr0qYdNNG8KpMKlSvpxz652lqa3Rd+/hSaDcY4Uo6SKWZq2LAF+hsAhUewTtYhXlorBKgNF3Kk8hnjGoQ==}
     hasBin: true
-
-  tmp@0.2.7:
-    resolution: {integrity: sha512-e0votIpp4Uo2AJYSzVHV6xCcawuiez3DzqDAbrTc3YxBkplN6e+dM13ZeIcZnDg/QpSuU2zfZ3rzwY8ukEnaXw==}
-    engines: {node: '>=14.14'}
 
   tmpl@1.0.5:
     resolution: {integrity: sha512-3f0uOEAQwIqGuWW2MVzYg8fV/QNnc/IpuJNG837rLuczAaLVHslWHZQj4IGiEl5Hs3kkbhwL9Ab7Hrsmuj+Smw==}
@@ -19288,11 +19277,6 @@ snapshots:
 
   libphonenumber-js@1.12.40: {}
 
-  libreoffice-convert@1.8.2:
-    dependencies:
-      async: 3.2.6
-      tmp: 0.2.7
-
   lie@3.3.0:
     dependencies:
       immediate: 3.0.6
@@ -21638,8 +21622,6 @@ snapshots:
   tldts@7.0.26:
     dependencies:
       tldts-core: 7.0.26
-
-  tmp@0.2.7: {}
 
   tmpl@1.0.5: {}
 

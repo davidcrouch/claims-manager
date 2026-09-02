@@ -36,6 +36,12 @@ export interface ApiItem {
   total?: number;
   allocatedCost?: number;
   committedCost?: number;
+  /** Bill progress: amount claimed on the current bill for this line. */
+  invoiced?: number;
+  /** Bill progress: sum claimed on earlier bills for this line. */
+  previouslyInvoiced?: number;
+  /** Invoice/bill payload flag — line excluded from claim when false. */
+  completed?: boolean;
 }
 
 export interface ApiCombo {
@@ -87,6 +93,7 @@ export interface ApiGroup {
   id?: string;
   groupLabel?: ApiLookup;
   description?: string;
+  component?: string;
   note?: string | null;
   length?: number;
   width?: number;
@@ -116,7 +123,9 @@ export type EditableFieldKey =
   | 'unitType'
   | 'unitCost'
   | 'markupValue'
-  | 'tax';
+  | 'tax'
+  | 'lineScopeStatus'
+  | 'invoiced';
 
 export type ColumnKey =
   | 'name'
@@ -128,7 +137,9 @@ export type ColumnKey =
   | 'extended'
   | 'markupValue'
   | 'tax'
-  | 'total';
+  | 'total'
+  | 'invoiced'
+  | 'previouslyInvoiced';
 
 export type LineItemsMode = 'edit' | 'catalog' | 'selection' | 'readonly';
 
@@ -216,15 +227,24 @@ export const DEFAULT_LINE_ITEM_LABELS: LineItemLabels = {
   dragHint: 'Drag catalogue items or line items here to add lines',
 };
 
+export type PricingDetail = 'full' | 'total-only';
+
 export interface LineItemsConfig {
   mode: LineItemsMode;
   showMarkup: boolean;
   showGst: boolean;
   showQuantities: boolean;
   showPricing: boolean;
+  /** When `total-only`, hide Unit Price / Extended / Markup / GST but keep Total. */
+  pricingDetail: PricingDetail;
+  /** Show Invoiced + Previously Invoiced columns (bill progress). */
+  showInvoiceProgress: boolean;
+  /** Allow inline edit of Invoiced only (bill progress). */
+  invoiceProgressEditable: boolean;
   showCategory: boolean;
   hideComponent: boolean;
   enableLineNotes: boolean;
+  showLineScopeStatusColumn: boolean;
   compact: boolean;
   labels: LineItemLabels;
   showColumnVisibilityToggles: boolean;

@@ -1095,3 +1095,14 @@
   Printed reports can be saved into a chosen folder, not only downloaded.
   Inspection photos stay linked to the journal so the visit record and images stay together.
 
+
+- `2026-09-03` `PENDING` **18 h**
+  `168 files | +11 322 −1 955 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
+  Lay summary: Staff can issue purchase orders in batches, focus lists on their own work, track bill lines against the job, and assign work orders to people.
+  **Purchase-order issue batches, personal list views, and bill line progress.**
+  Purchase orders can be prepared and sent in batches, with email wording and a clear record of what was issued.
+  Lists for claims, jobs, quotes, tasks, and work orders let staff switch to items assigned to them and keep that preference.
+  Bills show line progress against the job, and invoices are no longer required before a bill can be recorded.
+  Work orders can be assigned to a team member, and estimate groups can record which building component they cover.
+  Catalogue selection and line-item editing are clearer, including scope status on lines.
+  Hosting is updated so related services can call each other securely in staging and production.

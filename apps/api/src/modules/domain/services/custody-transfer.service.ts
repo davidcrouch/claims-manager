@@ -311,13 +311,20 @@ export class CustodyTransferService {
         })
         .where(eq(invoices.id, invoice.id));
 
-      await tx
-        .update(bills)
-        .set({
-          sourceTenantId: issuerTenantId,
-          updatedAt: new Date(),
-        })
-        .where(eq(bills.invoiceId, invoice.id));
+      if (invoice.invoiceNumber) {
+        await tx
+          .update(bills)
+          .set({
+            sourceTenantId: issuerTenantId,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(bills.sourceOrganisationId, ghostOrganisationId),
+              eq(bills.sourceExternalReference, invoice.invoiceNumber),
+            ),
+          );
+      }
 
       transferredIds.push(invoice.id);
     }

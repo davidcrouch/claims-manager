@@ -24,6 +24,7 @@ import {
 } from './lib/table-parts';
 import { computeItemMoney, initItemInputs, nearestEditableField, UNIT_TYPE_OPTIONS } from './lib/money';
 import { LineScopeStatusBadge, PublishStatusBadge } from './lib/badges';
+import { LineScopeStatusField } from './LineScopeStatusField';
 import type { ApiItem, ColumnKey, DeleteItemRequest, EditableFieldKey } from './lib/types';
 
 interface ItemRowProps {
@@ -60,21 +61,29 @@ export const ItemRow = memo(function ItemRow({
     handleBulkToggle,
   } = useLineItems();
 
-  const { showMarkup, showGst, enableLineNotes } = config;
+  const { showMarkup, showGst, enableLineNotes, pricingDetail, showInvoiceProgress, invoiceProgressEditable } = config;
   const hideComponent = config.hideComponent;
   const showQuantities = parentShowQuantities ?? config.showQuantities;
   const showPricing = parentShowPricing ?? config.showPricing;
+  const showPriceBreakdown = showPricing && pricingDetail !== 'total-only';
+  const showMarkupCol = showPriceBreakdown && showMarkup;
+  const showGstCol = showPriceBreakdown && showGst;
   const showCategory = config.showCategory;
   const showSelect = !!selection;
   const showBulkSelect = !isReadOnly && !showSelect;
   const showDragHandle = !isReadOnly && !!actions.onReorderLineItems;
   const qtyDisabled = contentDisabled?.quantities ?? false;
   const priceDisabled = contentDisabled?.pricing ?? false;
+  /** Invoice-only edit mode: other fields stay display-only even when mode is edit. */
+  const invoiceOnlyEdit = invoiceProgressEditable && showInvoiceProgress;
+  const canStartEdit = !isReadOnly || invoiceOnlyEdit;
 
   const isEditing = editState?.rowKey === rowKey || (selectedRows.has(rowKey) && editState !== null);
   const isPrimaryEdit = editState?.rowKey === rowKey;
   const selectedField = editState?.rowKey === rowKey ? editState.field : null;
   const inputs = editInputs[rowKey] ?? null;
+  /** Show inline inputs for normal fields (not in invoice-only edit mode). */
+  const showNormalInputs = isEditing && !!inputs && !invoiceOnlyEdit;
   const isDirtyRow = dirtyRowKeys.has(rowKey);
   const isMultiSelected = selectedRows.size > 1 && selectedRows.has(rowKey);
   const isPicked = !showSelect || (!!item.id && !!selection?.selectedIds.has(item.id));
@@ -118,14 +127,27 @@ export const ItemRow = memo(function ItemRow({
   }, [isEditing, selectedField, isPrimaryEdit]);
 
   const handleRowClick = (e: React.MouseEvent) => {
-    if (isReadOnly) return;
+    if (!canStartEdit) return;
     if (showSelect) {
       if (item.id) selection?.onChange(toggleId(selection.selectedIds, item.id));
       return;
     }
     const td = (e.target as HTMLElement).closest('td');
     const col = (td?.dataset.col as ColumnKey) ?? null;
-    const field = col ? nearestEditableField(col, showMarkup, showGst, showQuantities, showPricing, hideComponent) : 'name';
+
+    if (invoiceOnlyEdit) {
+      if (col !== 'invoiced') return;
+      setEditInputs((prev) => {
+        if (prev[rowKey]) return prev;
+        return { ...prev, [rowKey]: initItemInputs(item) };
+      });
+      setEditState({ rowKey, field: 'invoiced' });
+      return;
+    }
+
+    const field = col
+      ? nearestEditableField(col, showMarkup, showGst, showQuantities, showPricing, hideComponent, false)
+      : 'name';
 
     setEditInputs((prev) => {
       if (prev[rowKey]) return prev;
@@ -289,7 +311,7 @@ export const ItemRow = memo(function ItemRow({
         className={cn(nameColTdCls, 'min-w-0')}
         onClick={cellClick('name')}
       >
-        {isEditing && inputs ? (
+        {showNormalInputs ? (
           <div className={cn(indented && 'pl-7')}>
             <div className="flex">
               <div
@@ -382,12 +404,14 @@ export const ItemRow = memo(function ItemRow({
         </td>
       )}
 
+      <LineScopeStatusField rowKey={rowKey} status={item.lineScopeStatus} />
+
       {/* Quantity */}
       {showQuantities && (
         <td data-col="quantity" className={cn(editRightCellCls('quantity'), qtyDisabled && 'opacity-30')} onClick={qtyDisabled ? undefined : cellClick('quantity')}>
           {qtyDisabled ? (
             <span className="block text-right font-mono text-sm text-slate-400">—</span>
-          ) : isEditing && inputs ? (
+          ) : showNormalInputs ? (
             <input
               ref={(el) => { inputRefs.current.quantity = el; }}
               className={inputCls()}
@@ -409,7 +433,7 @@ export const ItemRow = memo(function ItemRow({
         <td data-col="unitType" className={cn(editRightCellCls('unitType'), qtyDisabled && 'opacity-30')} onClick={qtyDisabled ? undefined : cellClick('unitType')}>
           {qtyDisabled ? (
             <span className="block text-right text-xs text-slate-400">—</span>
-          ) : isEditing && inputs ? (
+          ) : showNormalInputs ? (
             <select
               className={cn('w-full bg-transparent outline-none text-sm', LI_TD_CELL_RIGHT)}
               value={inputs.unitType}
@@ -431,11 +455,11 @@ export const ItemRow = memo(function ItemRow({
       )}
 
       {/* Unit Cost */}
-      {showPricing && (
+      {showPriceBreakdown && (
         <td data-col="unitCost" className={cn(editMoneyCellCls('unitCost'), priceDisabled && 'opacity-30')} onClick={priceDisabled ? undefined : cellClick('unitCost')}>
           {priceDisabled ? (
             <span className="block text-right font-mono text-sm text-slate-400">—</span>
-          ) : isEditing && inputs ? (
+          ) : showNormalInputs ? (
             <input
               ref={(el) => { inputRefs.current.unitCost = el; }}
               className={LI_TD_MONEY_INPUT}
@@ -453,18 +477,18 @@ export const ItemRow = memo(function ItemRow({
       )}
 
       {/* Extended */}
-      {showPricing && (
+      {showPriceBreakdown && (
         <td data-col="extended" className={cn(LI_TD_MONEY, 'text-slate-600', priceDisabled && 'opacity-30')}>
           {priceDisabled ? '—' : formatCurrency(money.extended)}
         </td>
       )}
 
       {/* Markup */}
-      {showPricing && showMarkup && (
+      {showMarkupCol && (
         <td data-col="markupValue" className={cn(editMoneyCellCls('markupValue'), priceDisabled && 'opacity-30')} onClick={priceDisabled ? undefined : cellClick('markupValue')}>
           {priceDisabled ? (
             <span className="block text-right font-mono text-sm text-slate-400">—</span>
-          ) : isEditing && inputs ? (
+          ) : showNormalInputs ? (
             <input
               ref={(el) => { inputRefs.current.markupValue = el; }}
               className={LI_TD_MONEY_INPUT}
@@ -484,11 +508,11 @@ export const ItemRow = memo(function ItemRow({
       )}
 
       {/* Tax */}
-      {showPricing && showGst && (
+      {showGstCol && (
         <td data-col="tax" className={cn(editRightCellCls('tax'), priceDisabled && 'opacity-30')} onClick={priceDisabled ? undefined : cellClick('tax')}>
           {priceDisabled ? (
             <span className="block text-right font-mono text-sm text-slate-400">—</span>
-          ) : isEditing && inputs ? (
+          ) : showNormalInputs ? (
             <input
               ref={(el) => { inputRefs.current.tax = el; }}
               className={inputCls()}
@@ -509,6 +533,94 @@ export const ItemRow = memo(function ItemRow({
       {showPricing && (
         <td data-col="total" className={cn(LI_TD_MONEY, 'font-semibold text-slate-900', priceDisabled && 'opacity-30 text-slate-400')}>
           {priceDisabled ? '—' : formatCurrency(money.total)}
+        </td>
+      )}
+
+      {/* Invoiced / Previously Invoiced (bill progress) */}
+      {showInvoiceProgress && (
+        <td
+          data-col="invoiced"
+          className={cn(
+            invoiceOnlyEdit || (!isReadOnly && showInvoiceProgress)
+              ? editMoneyCellCls('invoiced')
+              : LI_TD_MONEY,
+            'text-slate-700',
+          )}
+          onClick={
+            invoiceOnlyEdit || !isReadOnly
+              ? (e) => {
+                  if (invoiceOnlyEdit) {
+                    e.stopPropagation();
+                    setEditInputs((prev) => {
+                      if (prev[rowKey]) return prev;
+                      return { ...prev, [rowKey]: initItemInputs(item) };
+                    });
+                    setEditState({ rowKey, field: 'invoiced' });
+                    return;
+                  }
+                  cellClick('invoiced')(e);
+                }
+              : undefined
+          }
+        >
+          {isEditing && inputs && (invoiceOnlyEdit || !isReadOnly) ? (
+            <input
+              ref={(el) => { inputRefs.current.invoiced = el; }}
+              className={LI_TD_MONEY_INPUT}
+              value={inputs.invoiced}
+              onChange={(e) => {
+                const raw = e.target.value;
+                // Allow empty / intermediate typing (e.g. "-", "1.") until a full number exists.
+                if (raw.trim() === '' || raw === '-' || raw.endsWith('.')) {
+                  handleInputChange(rowKey, 'invoiced', raw);
+                  return;
+                }
+                const parsed = Number(raw);
+                if (!Number.isFinite(parsed)) {
+                  handleInputChange(rowKey, 'invoiced', raw);
+                  return;
+                }
+                const maxTotal = Math.max(0, money.total);
+                const clamped = Math.min(Math.max(0, parsed), maxTotal);
+                // Preserve typed decimals when under the cap; rewrite when clamped.
+                handleInputChange(
+                  rowKey,
+                  'invoiced',
+                  clamped === parsed ? raw : String(clamped),
+                );
+              }}
+              onBlur={() => {
+                const parsed = Number(inputs.invoiced);
+                const maxTotal = Math.max(0, money.total);
+                if (!Number.isFinite(parsed) || inputs.invoiced.trim() === '') {
+                  handleInputChange(rowKey, 'invoiced', '0');
+                  return;
+                }
+                const clamped = Math.min(Math.max(0, parsed), maxTotal);
+                if (clamped !== parsed) {
+                  handleInputChange(rowKey, 'invoiced', String(clamped));
+                }
+              }}
+              onKeyDown={handleCellKeyDown}
+              onFocus={() => setEditState({ rowKey, field: 'invoiced' })}
+              inputMode="decimal"
+              aria-label={`Invoiced amount (max ${formatCurrency(money.total)})`}
+              title={`Maximum ${formatCurrency(money.total)}`}
+            />
+          ) : (
+            <span className="block text-right font-mono text-sm text-slate-700">
+              {formatCurrency(
+                inputs?.invoiced != null && inputs.invoiced !== ''
+                  ? Number(inputs.invoiced) || 0
+                  : (item.invoiced ?? 0),
+              )}
+            </span>
+          )}
+        </td>
+      )}
+      {showInvoiceProgress && (
+        <td data-col="previouslyInvoiced" className={cn(LI_TD_MONEY, 'text-slate-700')}>
+          {formatCurrency(item.previouslyInvoiced ?? 0)}
         </td>
       )}
 

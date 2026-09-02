@@ -4,6 +4,7 @@ import { DRIZZLE } from '../../../database/drizzle.module';
 import type { DrizzleDB } from '../../../database/drizzle.module';
 import { emailTemplates } from '../../../database/schema';
 import { DEFAULT_RFQ_EMAIL_TEMPLATE } from './default-rfq-email';
+import { DEFAULT_PO_EMAIL_TEMPLATE } from './default-po-email';
 
 export interface ResolvedEmailTemplate {
   subject: string;
@@ -14,6 +15,8 @@ export interface ResolvedEmailTemplate {
 export interface TemplateMergeFields {
   rfq_number?: string;
   rfq_name?: string;
+  po_number?: string;
+  po_name?: string;
   recipient_name?: string;
   sender_name?: string;
   company_name?: string;
@@ -27,6 +30,11 @@ export class EmailTemplateService {
   private readonly logger = new Logger(EmailTemplateService.name);
 
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
+
+  private defaultForType(templateType: string): ResolvedEmailTemplate {
+    if (templateType === 'po_send') return DEFAULT_PO_EMAIL_TEMPLATE;
+    return DEFAULT_RFQ_EMAIL_TEMPLATE;
+  }
 
   async resolve(params: {
     tenantId: string;
@@ -54,7 +62,7 @@ export class EmailTemplateService {
     this.logger.log(
       `communications:email-template-service:resolve - No custom template for ${params.templateType}, using default`,
     );
-    return DEFAULT_RFQ_EMAIL_TEMPLATE;
+    return this.defaultForType(params.templateType);
   }
 
   renderTemplate(template: ResolvedEmailTemplate, fields: TemplateMergeFields): ResolvedEmailTemplate {

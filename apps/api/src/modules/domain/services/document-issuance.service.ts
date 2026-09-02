@@ -425,6 +425,7 @@ export class DocumentIssuanceService {
           workOrderId,
           groupLabelLookupId: (group.groupLabelLookupId as string) ?? null,
           description: (group.description as string) ?? null,
+          component: (group.component as string) ?? null,
           dimensions: (group.dimensions as Record<string, unknown>) ?? {},
           totals: (group.totals as Record<string, unknown>) ?? {},
           sortIndex: (group.sortIndex as number) ?? 0,
@@ -641,6 +642,7 @@ export class DocumentIssuanceService {
       const group = rawGroup as {
         groupLabelLookupId?: string | null;
         description?: string | null;
+        component?: string | null;
         dimensions?: Record<string, unknown>;
         sortIndex?: number;
         totals?: Record<string, unknown>;
@@ -655,6 +657,7 @@ export class DocumentIssuanceService {
           proposalId,
           groupLabelLookupId: group.groupLabelLookupId ?? null,
           description: group.description ?? null,
+          component: group.component ?? null,
           dimensions: group.dimensions ?? {},
           sortIndex: group.sortIndex ?? 0,
           totals: group.totals ?? {},
@@ -829,7 +832,6 @@ export class DocumentIssuanceService {
 
     const billData: Partial<BillInsert> = {
       tenantId: params.recipientTenantId,
-      invoiceId: params.sourceDocumentId,
       purchaseOrderId: src.purchaseOrderId as string | undefined,
       originType: 'tenant',
       billNumber: src.invoiceNumber as string | undefined,

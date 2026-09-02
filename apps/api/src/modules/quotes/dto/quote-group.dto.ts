@@ -21,6 +21,10 @@ export class UpdateQuoteGroupDto {
   description?: string;
 
   @IsOptional()
+  @IsString()
+  component?: string;
+
+  @IsOptional()
   @IsObject()
   dimensions?: Record<string, unknown>;
 }
@@ -66,6 +70,10 @@ export class LineItemUpdateDto {
   @IsOptional()
   @IsString()
   unitType?: string;
+
+  @IsOptional()
+  @IsString()
+  lineScopeStatus?: string;
 }
 
 export class ComboUpdateDto {
@@ -87,6 +95,10 @@ export class ComboUpdateDto {
   @IsOptional()
   @IsString()
   quantity?: string;
+
+  @IsOptional()
+  @IsString()
+  lineScopeStatus?: string;
 }
 
 export class UpdateQuoteLineItemsDto {

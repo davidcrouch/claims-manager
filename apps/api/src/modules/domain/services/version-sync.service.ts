@@ -1,5 +1,5 @@
 import { Injectable, Logger, Inject, NotFoundException } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../../../database/drizzle.module';
 import {
   proposals, workOrders, bills, jobs,
@@ -11,7 +11,8 @@ type ReceiverEntityType = 'proposal' | 'work_order' | 'bill' | 'job';
 const SOURCE_ENTITY_MAP: Record<ReceiverEntityType, { table: any; fkColumn: string; sourceTable: any }> = {
   proposal: { table: proposals, fkColumn: 'quoteId', sourceTable: quotes },
   work_order: { table: workOrders, fkColumn: 'purchaseOrderId', sourceTable: purchaseOrders },
-  bill: { table: bills, fkColumn: 'invoiceId', sourceTable: invoices },
+  // Bills sync from source invoices via sourceExternalReference + sourceTenantId (see loadSourceDocument).
+  bill: { table: bills, fkColumn: 'sourceExternalReference', sourceTable: invoices },
   job: { table: jobs, fkColumn: 'sourceExternalReference', sourceTable: rfqs },
 };
 
@@ -95,6 +96,23 @@ export class VersionSyncService {
         .select()
         .from(rfqs)
         .where(eq(rfqs.id, sourceRfqId))
+        .limit(1);
+      return row ? (row as unknown as Record<string, unknown>) : null;
+    }
+
+    if (entityType === 'bill') {
+      const sourceTenantId = entity.sourceTenantId as string | undefined;
+      const sourceRef = entity.sourceExternalReference as string | undefined;
+      if (!sourceTenantId || !sourceRef) return null;
+      const [row] = await tx
+        .select()
+        .from(invoices)
+        .where(
+          and(
+            eq(invoices.tenantId, sourceTenantId),
+            eq(invoices.invoiceNumber, sourceRef),
+          ),
+        )
         .limit(1);
       return row ? (row as unknown as Record<string, unknown>) : null;
     }

@@ -29,13 +29,13 @@ import {
   navigateToCreated,
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
-import { fetchJobInvoicesAction } from '@/app/(app)/jobs/[id]/actions';
+import { fetchJobPurchaseOrdersAction } from '@/app/(app)/jobs/[id]/actions';
 import { JobSelectField } from '@/components/forms/JobSelectField';
 import type { JobOption } from '@/components/shared/job-label';
-import type { Invoice } from '@/types/api';
+import type { PurchaseOrder } from '@/types/api';
 
 const schema = z.object({
-  invoiceId: z.string().min(1, 'Invoice is required'),
+  purchaseOrderId: z.string().min(1, 'Purchase order is required'),
   billNumber: z.string().optional(),
   totalAmount: z.number().optional(),
   issueDate: z.string().optional(),
@@ -68,32 +68,34 @@ export function BillFormDrawer({
   const { phase, busy, startCreating, startOpening, resetPhase } =
     useCreateSubmitPhase();
   const [error, setError] = useState<string | null>(null);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [pickedJobId, setPickedJobId] = useState('');
   const needsJobPicker = (jobs?.length ?? 0) > 0;
-  const effectiveJobId = needsJobPicker ? pickedJobId : (jobId ?? "");
+  const effectiveJobId = needsJobPicker ? pickedJobId : (jobId ?? '');
 
   useEffect(() => {
     if (open) {
       setPickedJobId(jobId ?? '');
     } else {
       setPickedJobId('');
-      setInvoices([]);
+      setPurchaseOrders([]);
     }
   }, [open, jobId]);
 
   useEffect(() => {
     if (open && effectiveJobId) {
-      fetchJobInvoicesAction(effectiveJobId).then((result) => setInvoices(result.data ?? []));
+      fetchJobPurchaseOrdersAction(effectiveJobId).then((data) =>
+        setPurchaseOrders(data ?? []),
+      );
     } else {
-      setInvoices([]);
+      setPurchaseOrders([]);
     }
   }, [open, effectiveJobId]);
 
   const form = useForm<FormValues>({
     resolver: standardSchemaResolver(schema),
     defaultValues: {
-      invoiceId: '',
+      purchaseOrderId: '',
       billNumber: '',
       totalAmount: undefined,
       issueDate: todayISO(),
@@ -112,12 +114,14 @@ export function BillFormDrawer({
     setError(null);
     try {
       const result = await createBillAction({
-        invoiceId: values.invoiceId,
+        purchaseOrderId: values.purchaseOrderId,
         jobId: effectiveJobId,
         billNumber: values.billNumber || undefined,
         totalAmount: values.totalAmount ?? undefined,
         issueDate: values.issueDate ? new Date(values.issueDate).toISOString() : undefined,
-        receivedDate: values.receivedDate ? new Date(values.receivedDate).toISOString() : undefined,
+        receivedDate: values.receivedDate
+          ? new Date(values.receivedDate).toISOString()
+          : undefined,
         dueDate: values.dueDate ? new Date(values.dueDate).toISOString() : undefined,
         comments: values.comments || undefined,
       });
@@ -142,110 +146,129 @@ export function BillFormDrawer({
 
   return (
     <>
-    <BottomFormDrawer
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Create Bill"
-      description="Record a vendor bill against an invoice."
-      icon={<Receipt className="h-5 w-5" />}
-      preventClose={busy}
-    >
-      <form onSubmit={form.handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col">
-        <BottomFormDrawerBody>
-          <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
-            {needsJobPicker && jobs && (
-              <JobSelectField
-                jobs={jobs}
-                value={pickedJobId}
-                onValueChange={(id) => {
-                  setPickedJobId(id);
-                  form.setValue('invoiceId', '');
-                }}
-              />
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="bill-invoiceId">Invoice</Label>
-              <Select
-                value={form.watch('invoiceId')}
-                onValueChange={(v) => form.setValue('invoiceId', v ?? '')}
-              >
-                <SelectTrigger id="bill-invoiceId">
-                  <SelectValue placeholder="Select invoice" />
-                </SelectTrigger>
-                <SelectContent>
-                  {invoices.map((inv) => (
-                    <SelectItem key={inv.id} value={inv.id}>
-                      {inv.invoiceNumber ?? inv.id}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {form.formState.errors.invoiceId && (
-                <p className="text-sm text-destructive">{form.formState.errors.invoiceId.message}</p>
+      <BottomFormDrawer
+        open={open}
+        onOpenChange={onOpenChange}
+        title="Create Bill"
+        description="Record a vendor bill against a purchase order."
+        icon={<Receipt className="h-5 w-5" />}
+        preventClose={busy}
+      >
+        <form onSubmit={form.handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col">
+          <BottomFormDrawerBody>
+            <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+              {needsJobPicker && jobs && (
+                <JobSelectField
+                  jobs={jobs}
+                  value={pickedJobId}
+                  onValueChange={(id) => {
+                    setPickedJobId(id);
+                    form.setValue('purchaseOrderId', '');
+                  }}
+                />
               )}
-            </div>
+              <div className="space-y-2">
+                <Label htmlFor="bill-purchaseOrderId">Purchase Order</Label>
+                <Select
+                  value={form.watch('purchaseOrderId')}
+                  onValueChange={(v) => form.setValue('purchaseOrderId', v ?? '')}
+                >
+                  <SelectTrigger id="bill-purchaseOrderId">
+                    <SelectValue placeholder="Select purchase order" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {purchaseOrders.map((po) => (
+                      <SelectItem key={po.id} value={po.id}>
+                        {po.purchaseOrderNumber ?? po.externalId ?? po.id}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {form.formState.errors.purchaseOrderId && (
+                  <p className="text-sm text-destructive">
+                    {form.formState.errors.purchaseOrderId.message}
+                  </p>
+                )}
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="bill-billNumber">Bill # (optional)</Label>
-              <Input id="bill-billNumber" {...form.register('billNumber')} placeholder="e.g. BILL-001" />
-            </div>
+              <div className="space-y-2">
+                <Label htmlFor="bill-billNumber">Bill # (optional)</Label>
+                <Input
+                  id="bill-billNumber"
+                  {...form.register('billNumber')}
+                  placeholder="Auto-assigned if blank"
+                />
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="bill-totalAmount">Total Amount (optional)</Label>
-              <Input
-                id="bill-totalAmount"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0.00"
-                {...form.register('totalAmount', {
-                  setValueAs: (v) =>
-                    v === '' || v == null || Number.isNaN(Number(v))
-                      ? undefined
-                      : Number(v),
-                })}
-              />
-            </div>
+              <div className="space-y-2">
+                <Label htmlFor="bill-totalAmount">Total Amount (optional)</Label>
+                <Input
+                  id="bill-totalAmount"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  {...form.register('totalAmount', {
+                    setValueAs: (v) =>
+                      v === '' || v == null || Number.isNaN(Number(v))
+                        ? undefined
+                        : Number(v),
+                  })}
+                />
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="bill-issueDate">Issue Date (optional)</Label>
-              <Input id="bill-issueDate" type="date" {...form.register('issueDate')} />
-            </div>
+              <div className="space-y-2">
+                <Label htmlFor="bill-issueDate">Issue Date (optional)</Label>
+                <Input id="bill-issueDate" type="date" {...form.register('issueDate')} />
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="bill-receivedDate">Received Date (optional)</Label>
-              <Input id="bill-receivedDate" type="date" {...form.register('receivedDate')} />
-            </div>
+              <div className="space-y-2">
+                <Label htmlFor="bill-receivedDate">Received Date (optional)</Label>
+                <Input id="bill-receivedDate" type="date" {...form.register('receivedDate')} />
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="bill-dueDate">Due Date (optional)</Label>
-              <Input id="bill-dueDate" type="date" {...form.register('dueDate')} />
-            </div>
+              <div className="space-y-2">
+                <Label htmlFor="bill-dueDate">Due Date (optional)</Label>
+                <Input id="bill-dueDate" type="date" {...form.register('dueDate')} />
+              </div>
 
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="bill-comments">Comments (optional)</Label>
-              <Textarea id="bill-comments" {...form.register('comments')} placeholder="Add comments..." rows={3} />
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="bill-comments">Comments (optional)</Label>
+                <Textarea
+                  id="bill-comments"
+                  {...form.register('comments')}
+                  placeholder="Add comments..."
+                  rows={3}
+                />
+              </div>
             </div>
-          </div>
-          <BottomFormDrawerError error={error} />
-        </BottomFormDrawerBody>
+            <BottomFormDrawerError error={error} />
+          </BottomFormDrawerBody>
 
-        <BottomFormDrawerFooter>
-          <Button type="button" variant="outline" size="lg" disabled={busy} onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button type="submit" size="lg" disabled={busy}>
-            {busy ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                {phase === 'opening' ? 'Opening…' : 'Creating…'}
-              </>
-            ) : (
-              'Create Bill'
-            )}
-          </Button>
-        </BottomFormDrawerFooter>
-      </form>
-    </BottomFormDrawer>
-    <CreateSubmitOverlay phase={phase} entityLabel="bill" />
+          <BottomFormDrawerFooter>
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              disabled={busy}
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" size="lg" disabled={busy}>
+              {busy ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {phase === 'opening' ? 'Opening…' : 'Creating…'}
+                </>
+              ) : (
+                'Create Bill'
+              )}
+            </Button>
+          </BottomFormDrawerFooter>
+        </form>
+      </BottomFormDrawer>
+      <CreateSubmitOverlay phase={phase} entityLabel="bill" />
     </>
   );
 }

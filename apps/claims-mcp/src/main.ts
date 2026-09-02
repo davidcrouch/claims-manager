@@ -74,9 +74,10 @@ function createAuthMiddleware(config: ClaimsMcpConfig) {
     }
 
     (req as unknown as Record<string, unknown>)[AUTH_TOKEN_KEY] = authHeader.slice(7);
-    const tenantId = req.headers['x-tenant-id'];
-    if (typeof tenantId === 'string' && tenantId.trim()) {
-      (req as unknown as Record<string, unknown>)[AUTH_TENANT_KEY] = tenantId.trim();
+    const tenantHeader =
+      req.headers['x-tenant-id'] ?? req.headers['x-effective-tenant-id'];
+    if (typeof tenantHeader === 'string' && tenantHeader.trim()) {
+      (req as unknown as Record<string, unknown>)[AUTH_TENANT_KEY] = tenantHeader.trim();
     }
 
     next();
@@ -175,7 +176,7 @@ async function startHttp(): Promise<void> {
     res.set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
     res.set(
       'Access-Control-Allow-Headers',
-      'Content-Type, Authorization, Mcp-Session-Id, MCP-Protocol-Version, x-tenant-id',
+      'Content-Type, Authorization, Mcp-Session-Id, MCP-Protocol-Version, x-tenant-id, x-effective-tenant-id',
     );
     res.set('Access-Control-Expose-Headers', 'Mcp-Session-Id, WWW-Authenticate');
     if (req.method === 'OPTIONS') {

@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation';
+import { getSession } from '@/lib/auth';
 import { getServerApiClient } from '@/lib/server-api';
+import { resolveCurrentOrgUserId } from '@/lib/current-org-user';
 import { TasksListClient } from '@/components/tasks/TasksListClient';
 import {buildJobNameById, buildJobTypeById, toJobOptions,
   mergeCurrentJobIntoNameById,
@@ -20,6 +22,8 @@ export default async function TasksPage({
     sort?: string;
     overdue?: string;
     assignedToUserId?: string;
+    tab?: string;
+    archiveState?: string;
   }>;
 }) {
   const api = await getServerApiClient();
@@ -28,13 +32,25 @@ export default async function TasksPage({
   const params = await searchParams;
   const emptyJobs: PaginatedResponse<Job> = { data: [], total: 0 };
 
-  const jobsRes = await api.getJobs({ limit: 100 }).catch((err: unknown) => {
-    console.error(
-      'frontend:TasksPage - getJobs failed:',
-      err instanceof Error ? err.message : err,
-    );
-    return emptyJobs;
-  });
+  const [jobsRes, orgUsers, session] = await Promise.all([
+    api.getJobs({ limit: 100 }).catch((err: unknown) => {
+      console.error(
+        'frontend:TasksPage - getJobs failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return emptyJobs;
+    }),
+    api.listOrgUsersForSelect().catch((err: unknown) => {
+      console.error(
+        'frontend:TasksPage - listOrgUsersForSelect failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return [] as { id: string; email?: string }[];
+    }),
+    getSession(),
+  ]);
+
+  const currentUserId = resolveCurrentOrgUserId(orgUsers, session.identity);
 
   let job: Job | null = null;
   let parentClaim: Claim | null = null;
@@ -71,6 +87,7 @@ export default async function TasksPage({
       jobNameById={jobNameById}
       jobTypeById={jobTypeById}
       jobs={jobs}
+      currentUserId={currentUserId}
     />
   );
 }

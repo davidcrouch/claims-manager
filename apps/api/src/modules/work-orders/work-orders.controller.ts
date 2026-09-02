@@ -14,6 +14,12 @@ export class WorkOrdersController {
     private readonly catalogSelectionService: CatalogSelectionService,
   ) {}
 
+  @Get('filter-assignees')
+  @RequirePermission(P.procurement.read)
+  async findFilterAssignees() {
+    return this.workOrdersService.findFilterAssignees();
+  }
+
   @Get()
   @RequirePermission(P.procurement.read)
   async findAll(
@@ -24,6 +30,8 @@ export class WorkOrdersController {
     @Query('purchaseOrderId') purchaseOrderId?: string,
     @Query('status') status?: string,
     @Query('workOrderType') workOrderType?: string,
+    @Query('assignedToUserId') assignedToUserId?: string,
+    @Query('assignedToUserIds') assignedToUserIds?: string,
     @Query('search') search?: string,
     @Query('sort') sort?: string,
   ) {
@@ -38,6 +46,8 @@ export class WorkOrdersController {
       purchaseOrderId,
       status,
       workOrderType,
+      assignedToUserId,
+      assignedToUserIds,
       search,
       sort,
     });

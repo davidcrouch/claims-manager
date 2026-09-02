@@ -23,6 +23,8 @@ export class ClaimsController {
     @Query('sort') sort?: string,
     @Query('status') status?: string,
     @Query('account') account?: string,
+    @Query('jobType') jobType?: string,
+    @Query('assignedToUserId') assignedToUserId?: string,
   ) {
     return this.claimsService.findAll({
       page: page ? parseInt(page, 10) : 1,
@@ -31,6 +33,8 @@ export class ClaimsController {
       sort,
       status,
       account,
+      jobType,
+      assignedToUserId,
     });
   }
 

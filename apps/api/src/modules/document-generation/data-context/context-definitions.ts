@@ -335,7 +335,6 @@ const BILL_FIELDS: EntityFieldDef[] = [
   f('id', 'Bill ID'),
   f('billNumber', 'Bill number'),
   f('externalReference', 'External reference'),
-  f('invoiceId', 'Invoice ID'),
   f('purchaseOrderId', 'Purchase order ID'),
   f('claimId', 'Claim ID'),
   f('jobId', 'Job ID'),
@@ -775,16 +774,6 @@ const BILL_CONTEXT: DataContextDefinition = {
     fields: BILL_FIELDS,
   },
   relatedEntities: [
-    {
-      entityType: 'Invoice',
-      slug: 'invoice',
-      label: 'Invoice',
-      description: 'Source invoice',
-      cardinality: 'one',
-      traversalPath: ['invoiceId'],
-      fields: INVOICE_FIELDS,
-      defaultEnabled: true,
-    },
     {
       entityType: 'PurchaseOrder',
       slug: 'purchase_order',

@@ -227,6 +227,7 @@ export class ProposalsService {
         id: group.id,
         groupLabel: groupLabelObj,
         description: group.description,
+        component: group.component ?? undefined,
         length: asNumber(dimensions.length),
         width: asNumber(dimensions.width),
         height: asNumber(dimensions.height),

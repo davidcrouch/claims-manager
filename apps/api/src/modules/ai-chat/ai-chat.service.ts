@@ -681,7 +681,7 @@ export class AiChatService {
         );
 
         const headers: Record<string, string> = {
-          'X-Effective-Tenant-Id': tenantId,
+          'x-tenant-id': tenantId,
         };
 
         if (

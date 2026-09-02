@@ -27,6 +27,7 @@ import { computeItemMoney, groupLabel } from './lib/money';
 import { groupDropKey } from './lib/row-keys';
 import { RowLeadCheckbox, RowLeadDrag, RowLeadExpand, ROW_LEAD_ROW_CLS } from './lib/row-lead';
 import { GroupDimensionFields } from './GroupDimensionFields';
+import { GroupComponentField } from './GroupComponentField';
 import type { ApiGroup } from './lib/types';
 import { ItemRow } from './ItemRow';
 import { AssemblyRow } from './AssemblyRow';
@@ -74,6 +75,7 @@ export const GroupCard = memo(function GroupCard({ group, groupIndex, totalGroup
     mode,
     labels,
     showColumnVisibilityToggles,
+    hideComponent,
   } = config;
   const gId = group.id ?? `group-${groupIndex}`;
   const isCollapsed = collapsed.has(gId);
@@ -228,8 +230,10 @@ export const GroupCard = memo(function GroupCard({ group, groupIndex, totalGroup
       {/* Group header — grab, checkbox, expand, then content */}
       <LineDetailHoverWrap
         title={label}
+        component={group.component}
         description={group.description}
         note={group.note}
+        hideComponent={hideComponent}
         className={cn(
           ROW_LEAD_ROW_CLS,
           'relative cursor-pointer bg-blue-100 py-3 pr-3 transition-colors hover:bg-blue-200',
@@ -274,6 +278,14 @@ export const GroupCard = memo(function GroupCard({ group, groupIndex, totalGroup
               perimeter={group.perimeter}
               disabled={isReadOnly}
               onSave={actions.onUpdateGroupDimensions}
+            />
+          )}
+          {mode !== 'catalog' && !hideComponent && group.id && (
+            <GroupComponentField
+              groupId={group.id}
+              component={group.component}
+              disabled={isReadOnly}
+              onSave={actions.onUpdateGroupComponent}
             />
           )}
         </div>
@@ -368,9 +380,12 @@ export const GroupCard = memo(function GroupCard({ group, groupIndex, totalGroup
                     showCategory={showCategory}
                     showQuantities={resolvedGroup.showQuantities}
                     showPricing={resolvedGroup.showPricing}
+                    pricingDetail={config.pricingDetail}
                     showMarkup={showMarkup}
                     showGst={showGst}
+                    showInvoiceProgress={config.showInvoiceProgress}
                     showNotesColumn={showGroupNotesColumn}
+                    showLineScopeStatusColumn={config.showLineScopeStatusColumn}
                   />
                   <LineItemsThead
                     showDragHandle={showDragHandle}
@@ -379,9 +394,12 @@ export const GroupCard = memo(function GroupCard({ group, groupIndex, totalGroup
                     showCategory={showCategory}
                     showQuantities={resolvedGroup.showQuantities}
                     showPricing={resolvedGroup.showPricing}
+                    pricingDetail={config.pricingDetail}
                     showMarkup={showMarkup}
                     showGst={showGst}
+                    showInvoiceProgress={config.showInvoiceProgress}
                     showNotesColumn={showGroupNotesColumn}
+                    showLineScopeStatusColumn={config.showLineScopeStatusColumn}
                   />
                   <tbody className="divide-y divide-slate-50">
                     {visibleItems.map((item, idx) => (

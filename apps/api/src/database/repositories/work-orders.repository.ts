@@ -1,9 +1,21 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, isNull, desc, asc, sql, inArray, aliasedTable, getTableColumns, or, ilike } from 'drizzle-orm';
-import { normalizeListJobIds } from '../../common/list-job-filter';
+import {
+  eq,
+  and,
+  isNull,
+  desc,
+  asc,
+  sql,
+  inArray,
+  aliasedTable,
+  getTableColumns,
+  or,
+  ilike,
+} from 'drizzle-orm';
+import { normalizeListJobIds, normalizeListUserIds } from '../../common/list-job-filter';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
-import { workOrders, lookupValues } from '../schema';
+import { workOrders, lookupValues, users } from '../schema';
 
 export type WorkOrderRow = typeof workOrders.$inferSelect;
 export type WorkOrderInsert = typeof workOrders.$inferInsert;
@@ -13,7 +25,10 @@ export interface WorkOrderViewRow extends WorkOrderRow {
   statusExternalReference: string | null;
   workOrderTypeName: string | null;
   workOrderTypeExternalReference: string | null;
+  assigneeName: string | null;
 }
+
+const assigneeJoinOn = sql`${workOrders.assignedToUserId} = ${users.id}::text`;
 
 function buildWorkOrdersOrderBy(sort?: string) {
   switch (sort) {
@@ -53,6 +68,10 @@ function buildWorkOrdersOrderBy(sort?: string) {
       return [asc(workOrders.sourceExternalReference)];
     case 'source_desc':
       return [desc(workOrders.sourceExternalReference)];
+    case 'assignee_asc':
+      return [asc(users.name)];
+    case 'assignee_desc':
+      return [desc(users.name)];
     case 'updated_at_desc':
     default:
       return [desc(workOrders.updatedAt)];
@@ -74,12 +93,17 @@ export class WorkOrdersRepository {
     status?: string;
     /** Comma-separated work order type lookup IDs. */
     workOrderType?: string;
+    assignedToUserId?: string;
+    assignedToUserIds?: string;
     search?: string;
     sort?: string;
-  }): Promise<{ data: WorkOrderRow[]; total: number }> {
+  }): Promise<{ data: WorkOrderViewRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
     const skip = (page - 1) * limit;
+
+    const statusLookup = aliasedTable(lookupValues, 'status_lookup');
+    const typeLookup = aliasedTable(lookupValues, 'wo_type_lookup');
 
     let whereClause = and(
       eq(workOrders.tenantId, params.tenantId),
@@ -121,10 +145,40 @@ export class WorkOrdersRepository {
       );
     }
 
+    const assigneeIds = normalizeListUserIds({
+      userId: params.assignedToUserId,
+      userIds: params.assignedToUserIds,
+    });
+    if (assigneeIds) {
+      if (assigneeIds.length === 0) return { data: [], total: 0 };
+      const includeBlank = assigneeIds.includes('__blank__');
+      const realIds = assigneeIds.filter((id) => id !== '__blank__');
+      if (includeBlank && realIds.length > 0) {
+        whereClause = and(
+          whereClause,
+          or(isNull(workOrders.assignedToUserId), inArray(workOrders.assignedToUserId, realIds))!,
+        );
+      } else if (includeBlank) {
+        whereClause = and(whereClause, isNull(workOrders.assignedToUserId));
+      } else {
+        whereClause = and(whereClause, inArray(workOrders.assignedToUserId, realIds));
+      }
+    }
+
     const [data, countResult] = await Promise.all([
       this.db
-        .select()
+        .select({
+          ...getTableColumns(workOrders),
+          statusName: statusLookup.name,
+          statusExternalReference: statusLookup.externalReference,
+          workOrderTypeName: typeLookup.name,
+          workOrderTypeExternalReference: typeLookup.externalReference,
+          assigneeName: users.name,
+        })
         .from(workOrders)
+        .leftJoin(statusLookup, eq(workOrders.statusLookupId, statusLookup.id))
+        .leftJoin(typeLookup, eq(workOrders.workOrderTypeLookupId, typeLookup.id))
+        .leftJoin(users, assigneeJoinOn)
         .where(whereClause)
         .orderBy(...buildWorkOrdersOrderBy(params.sort))
         .limit(limit)
@@ -136,16 +190,49 @@ export class WorkOrdersRepository {
     ]);
 
     const total = countResult[0]?.count ?? 0;
-    return { data, total };
+    return { data: data as WorkOrderViewRow[], total };
   }
 
-  async findOne(params: { id: string; tenantId: string }): Promise<WorkOrderRow | null> {
-    const [row] = await this.db
-      .select()
+  async findFilterAssignees(params: {
+    tenantId: string;
+  }): Promise<{ id: string; name: string }[]> {
+    const rows = await this.db
+      .selectDistinct({ id: workOrders.assignedToUserId, name: users.name })
       .from(workOrders)
+      .leftJoin(users, assigneeJoinOn)
+      .where(
+        and(
+          eq(workOrders.tenantId, params.tenantId),
+          isNull(workOrders.deletedAt),
+          sql`${workOrders.assignedToUserId} IS NOT NULL AND btrim(${workOrders.assignedToUserId}) <> ''`,
+        ),
+      )
+      .orderBy(asc(users.name));
+
+    return rows
+      .filter((r): r is { id: string; name: string | null } => !!r.id)
+      .map((r) => ({ id: r.id, name: (r.name ?? '').trim() || r.id }));
+  }
+
+  async findOne(params: { id: string; tenantId: string }): Promise<WorkOrderViewRow | null> {
+    const statusLookup = aliasedTable(lookupValues, 'status_lookup');
+    const typeLookup = aliasedTable(lookupValues, 'wo_type_lookup');
+    const [row] = await this.db
+      .select({
+        ...getTableColumns(workOrders),
+        statusName: statusLookup.name,
+        statusExternalReference: statusLookup.externalReference,
+        workOrderTypeName: typeLookup.name,
+        workOrderTypeExternalReference: typeLookup.externalReference,
+        assigneeName: users.name,
+      })
+      .from(workOrders)
+      .leftJoin(statusLookup, eq(workOrders.statusLookupId, statusLookup.id))
+      .leftJoin(typeLookup, eq(workOrders.workOrderTypeLookupId, typeLookup.id))
+      .leftJoin(users, assigneeJoinOn)
       .where(and(eq(workOrders.id, params.id), eq(workOrders.tenantId, params.tenantId)))
       .limit(1);
-    return row ?? null;
+    return (row as WorkOrderViewRow) ?? null;
   }
 
   async findByJob(params: { jobId: string; tenantId: string }): Promise<WorkOrderViewRow[]> {
@@ -159,10 +246,12 @@ export class WorkOrdersRepository {
         statusExternalReference: statusLookup.externalReference,
         workOrderTypeName: typeLookup.name,
         workOrderTypeExternalReference: typeLookup.externalReference,
+        assigneeName: users.name,
       })
       .from(workOrders)
       .leftJoin(statusLookup, eq(workOrders.statusLookupId, statusLookup.id))
       .leftJoin(typeLookup, eq(workOrders.workOrderTypeLookupId, typeLookup.id))
+      .leftJoin(users, assigneeJoinOn)
       .where(
         and(
           eq(workOrders.jobId, params.jobId),

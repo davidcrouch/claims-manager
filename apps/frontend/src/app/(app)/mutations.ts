@@ -327,3 +327,18 @@ export async function createBillAction(body: Record<string, unknown>): Promise<{
     return { success: false, error: err instanceof Error ? err.message : 'Failed to create bill' };
   }
 }
+
+export async function updateBillAction(
+  id: string,
+  body: Record<string, unknown>,
+): Promise<{ success: boolean; bill?: Bill; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const bill = await api.updateBill(id, body);
+    return { success: true, bill };
+  } catch (err) {
+    console.error('[updateBillAction]', err);
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to update bill' };
+  }
+}

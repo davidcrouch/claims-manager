@@ -398,4 +398,6 @@ export function resolveCatalogItemProviderCodes(params: {
   return [catalogType || 'internal'];
 }
 
+export const UNCATEGORIZED_CATEGORY_FILTER = '__uncategorized__' as const;
+
 

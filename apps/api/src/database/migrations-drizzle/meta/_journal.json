@@ -666,6 +666,41 @@
       "when": 1792500000000,
       "tag": "0095_slugify_uuid_catalog_codes",
       "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1792600000000,
+      "tag": "0096_group_component_column",
+      "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1792700000000,
+      "tag": "0097_work_order_assigned_to_user",
+      "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1792800000000,
+      "tag": "0098_po_send_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1792900000000,
+      "tag": "0099_bills_invoice_optional",
+      "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1793000000000,
+      "tag": "0100_drop_bills_invoice_id",
+      "breakpoints": true
     }
   ]
 }

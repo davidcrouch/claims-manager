@@ -30,12 +30,14 @@ import {
   createListFetchSession,
   replaceListQueryIfNeeded,
   useListPageData } from '@/components/shared/use-list-page-data';
+import { usePersistedListTab } from '@/components/shared/list-tab-storage';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import {
   EntityPageHeader,
   type EntityBreakdownItem } from '@/components/shared/EntityPageHeader';
 import { computeStatusBreakdown } from '@/components/layout/ListPageHeader';
 import { formatCurrency } from '@/components/shared/detail';
+import { billDisplayTitle } from '@/components/bills/bill-label';
 import { TablePagination } from '@/components/shared/table-pagination';
 import { fetchBillsAction } from '@/app/(app)/bills/actions';
 import {
@@ -46,7 +48,7 @@ import type { Bill, Job, Claim, PaginatedResponse } from '@/types/api';
 
 type ListTab = 'active' | 'archived' | 'all';
 const VALID_TABS = new Set<ListTab>(['active', 'archived', 'all']);
-function parseTab(param: string | null): ListTab {
+function parseTab(param: string | null | undefined): ListTab {
   if (param && VALID_TABS.has(param as ListTab)) return param as ListTab;
   return 'active';
 }
@@ -103,7 +105,11 @@ export function BillsListClient({
   const { data, setData, beginFetch, abortFetch } = useListPageData(initialData);
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [debouncedSearch, setDebouncedSearch] = useState(search);
-  const [tab, setTab] = useState<ListTab>(() => parseTab(searchParams.get('tab')));
+  const [tab, setTab] = usePersistedListTab<ListTab>({
+    storageKey: 'bills',
+    urlTab: searchParams.get('tab'),
+    parse: parseTab,
+  });
   const [page, setPage] = useState(() => {
     const p = parseInt(searchParams.get('page') ?? '1', 10);
     return Number.isFinite(p) && p > 0 ? p : 1;
@@ -454,7 +460,7 @@ export function BillsListClient({
                   <TableEmptyRow colSpan={visibleCount + 2} label="No bills found." />
                 ) : (
                   visibleRows.map((bill) => {
-                  const num = bill.billNumber ?? bill.externalReference ?? bill.id;
+                  const num = billDisplayTitle(bill);
                   const statusName = bill.status?.name ?? 'Unknown';
                   return (
                     <tr

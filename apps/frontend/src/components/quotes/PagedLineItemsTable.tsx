@@ -9,6 +9,7 @@ import {
   type ApiGroup,
   type LineItemsMode,
   type LineItemsActions,
+  type PricingDetail,
   LINE_ITEMS_PAGE_SIZE,
 } from '@/components/line-items';
 import type { LineItemsPageQuery } from '@/types/api';
@@ -32,6 +33,15 @@ export interface PagedLineItemsTableProps {
   readOnly?: boolean;
   mode?: LineItemsMode;
   actions?: LineItemsActions;
+  quantitiesVisible?: boolean;
+  pricingVisible?: boolean;
+  pricingDetail?: PricingDetail;
+  showInvoiceProgress?: boolean;
+  invoiceProgressEditable?: boolean;
+  resetEditsKey?: number;
+  hideToolbarActions?: boolean;
+  /** Applied to each loaded page (and fallback) before render. */
+  transformGroups?: (groups: ApiGroup[]) => ApiGroup[];
 }
 
 export function PagedLineItemsTable({
@@ -43,8 +53,16 @@ export function PagedLineItemsTable({
   readOnly = true,
   mode,
   actions,
+  quantitiesVisible,
+  pricingVisible,
+  pricingDetail,
+  showInvoiceProgress,
+  invoiceProgressEditable,
+  resetEditsKey,
+  hideToolbarActions,
+  transformGroups,
 }: PagedLineItemsTableProps) {
-  const [groups, setGroups] = useState<ApiGroup[]>([]);
+  const [rawGroups, setRawGroups] = useState<ApiGroup[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
@@ -56,6 +74,11 @@ export function PagedLineItemsTable({
   const [useFallback, setUseFallback] = useState(false);
   const fallbackRef = useRef(fallbackGroups);
   fallbackRef.current = fallbackGroups;
+
+  const groups = useMemo(
+    () => (transformGroups ? transformGroups(rawGroups) : rawGroups),
+    [rawGroups, transformGroups],
+  );
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
@@ -73,7 +96,7 @@ export function PagedLineItemsTable({
 
   const loadPage = useCallback(async () => {
     if (visibleGroupIds && visibleGroupIds.length === 0) {
-      setGroups([]);
+      setRawGroups([]);
       setTotal(0);
       setUseFallback(false);
       setError(null);
@@ -102,19 +125,19 @@ export function PagedLineItemsTable({
           resultTotal === 0;
         if (canFallback) {
           setUseFallback(true);
-          setGroups(fallback);
+          setRawGroups(fallback);
           setTotal(0);
           setError(null);
         } else {
           setUseFallback(false);
-          setGroups(next);
+          setRawGroups(next);
           setTotal(resultTotal);
           if (result.groupSummaries) setGroupSummaries(result.groupSummaries);
           setError(null);
         }
       } else if (fallbackRef.current?.length) {
         setUseFallback(true);
-        setGroups(fallbackRef.current);
+        setRawGroups(fallbackRef.current);
         setError(null);
       } else {
         console.error(`${PREFIX}.loadPage — ${result.error}`);
@@ -167,12 +190,19 @@ export function PagedLineItemsTable({
     );
   }
 
-  const effectiveMode: LineItemsMode = mode ?? (readOnly ? 'readonly' : 'edit');
+  const effectiveMode: LineItemsMode =
+    mode ?? (readOnly && !invoiceProgressEditable ? 'readonly' : invoiceProgressEditable ? 'edit' : readOnly ? 'readonly' : 'edit');
 
   return (
     <LineItemsProvider
       groups={groups}
       mode={effectiveMode}
+      quantitiesVisible={quantitiesVisible}
+      pricingVisible={pricingVisible}
+      pricingDetail={pricingDetail}
+      showInvoiceProgress={showInvoiceProgress}
+      invoiceProgressEditable={invoiceProgressEditable}
+      resetEditsKey={resetEditsKey}
       paging={
         useFallback
           ? undefined
@@ -191,7 +221,7 @@ export function PagedLineItemsTable({
       }
       actions={actions}
     >
-      <LineItemsTable />
+      <LineItemsTable hideToolbarActions={hideToolbarActions} />
     </LineItemsProvider>
   );
 }

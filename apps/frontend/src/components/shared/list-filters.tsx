@@ -460,9 +460,9 @@ export function formatDate(value?: string | null): string {
   return d.toLocaleDateString();
 }
 
-export type TaskListTab = 'open' | 'completed' | 'all';
+export type TaskListTab = 'mine' | 'open' | 'completed' | 'all';
 
-const VALID_TASK_TABS = new Set<TaskListTab>(['open', 'completed', 'all']);
+const VALID_TASK_TABS = new Set<TaskListTab>(['mine', 'open', 'completed', 'all']);
 
 /** Parse `?tab=` for Open / Completed / All on the tasks list. */
 export function parseTaskListTab(param: string | null | undefined): TaskListTab {
@@ -480,7 +480,7 @@ export function parseTaskListTab(param: string | null | undefined): TaskListTab 
 export function statusValuesForTaskListTab(
   tab: TaskListTab,
 ): string | undefined {
-  if (tab === 'all') return undefined;
+  if (tab === 'all' || tab === 'mine') return undefined;
   if (tab === 'completed') return 'Completed,Failed,Cancelled';
   return 'Open,In Progress,On Hold';
 }

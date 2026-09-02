@@ -767,6 +767,51 @@ export async function deleteCatalogItemAction(
   }
 }
 
+/**
+ * Remove a nested item from a scope/assembly BOM.
+ * Nested rows in the catalogue UI use the BOM line id as `item.id` and the real
+ * catalogue item as `catalogItemId` — so delete must unlink the BOM line (and
+ * optionally soft-delete the copied catalogue item) rather than DELETE by line id.
+ */
+export async function removeCatalogBomComponentAction(params: {
+  assemblyId: string;
+  lineId: string;
+  catalogItemId?: string;
+  catalogId?: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const PREFIX = 'catalog/actions.removeCatalogBomComponentAction';
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+
+  try {
+    await api.deleteCatalogComponent(params.assemblyId, params.lineId);
+
+    if (params.catalogItemId) {
+      try {
+        await api.deleteCatalogItem(params.catalogItemId);
+      } catch (err) {
+        // BOM unlink already succeeded; orphaned copy is non-fatal for the UI.
+        console.warn(
+          `${PREFIX} — BOM line removed but failed to delete catalogue item ${params.catalogItemId}`,
+          err,
+        );
+      }
+    }
+
+    revalidatePath('/admin/catalog');
+    if (params.catalogId) {
+      revalidatePath(`/admin/catalog/${params.catalogId}`);
+    }
+    return { success: true };
+  } catch (err) {
+    console.error(`[${PREFIX}]`, err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to remove item from scope',
+    };
+  }
+}
+
 export async function replaceCatalogBomAction(
   assemblyId: string,
   lines: Array<{

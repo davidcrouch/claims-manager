@@ -54,7 +54,7 @@ export default async function WorkOrderDetailPage({
       <SetPageHeader>
         <WorkOrderPageHeader wo={wo} job={job} />
       </SetPageHeader>
-      <WorkOrderDetail wo={wo} />
+      <WorkOrderDetail wo={wo} job={job} />
     </>
   );
 }

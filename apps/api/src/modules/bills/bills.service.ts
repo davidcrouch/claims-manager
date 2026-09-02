@@ -1,12 +1,43 @@
 import { Injectable } from '@nestjs/common';
 import { BillsRepository } from '../../database/repositories';
 import { TenantContext } from '../../tenant/tenant-context';
+import { RecordNumberService } from '../../common/record-number/record-number.service';
+
+const BILL_DATE_FIELDS = [
+  'issueDate',
+  'receivedDate',
+  'dueDate',
+  'paymentDate',
+] as const;
+
+const BILL_NUMERIC_FIELDS = ['subTotal', 'totalTax', 'totalAmount'] as const;
+
+function coerceBillWrite(body: Record<string, unknown>): Record<string, unknown> {
+  const data = { ...body };
+  for (const key of BILL_DATE_FIELDS) {
+    const value = data[key];
+    if (value === '' || value === null) {
+      data[key] = null;
+    } else if (typeof value === 'string') {
+      const parsed = new Date(value);
+      data[key] = Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+  }
+  for (const key of BILL_NUMERIC_FIELDS) {
+    const value = data[key];
+    if (value != null && typeof value !== 'string') {
+      data[key] = String(value);
+    }
+  }
+  return data;
+}
 
 @Injectable()
 export class BillsService {
   constructor(
     private readonly billsRepo: BillsRepository,
     private readonly tenantContext: TenantContext,
+    private readonly recordNumberService: RecordNumberService,
   ) {}
 
   async findAll(params: {
@@ -17,7 +48,6 @@ export class BillsService {
     purchaseOrderId?: string;
     status?: string;
     vendorId?: string;
-    invoiceId?: string;
     search?: string;
     sort?: string;
   }) {
@@ -31,7 +61,6 @@ export class BillsService {
       purchaseOrderId: params.purchaseOrderId,
       status: params.status,
       vendorId: params.vendorId,
-      invoiceId: params.invoiceId,
       search: params.search,
       sort: params.sort,
     });
@@ -63,20 +92,23 @@ export class BillsService {
     });
   }
 
-  async findByInvoice(params: { invoiceId: string }) {
-    const tenantId = this.tenantContext.getTenantId();
-    return this.billsRepo.findByInvoice({
-      invoiceId: params.invoiceId,
-      tenantId,
-    });
-  }
-
   async create(params: { body: Record<string, unknown>; userId?: string }) {
     const tenantId = this.tenantContext.getTenantId();
-    const { createdByUserId: _c, updatedByUserId: _u, ...rest } = params.body;
+    const {
+      createdByUserId: _c,
+      updatedByUserId: _u,
+      billNumber: bodyBillNumber,
+      ...rest
+    } = params.body;
+    const billNumber = await this.recordNumberService.resolve({
+      tenantId,
+      entity: 'bill',
+      explicit: bodyBillNumber,
+    });
     return this.billsRepo.create({
       data: {
-        ...rest,
+        ...coerceBillWrite(rest),
+        billNumber,
         tenantId,
         createdByUserId: params.userId ?? null,
         updatedByUserId: params.userId ?? null,
@@ -93,7 +125,7 @@ export class BillsService {
     return this.billsRepo.update({
       id: params.id,
       data: {
-        ...rest,
+        ...coerceBillWrite(rest),
         ...(params.userId ? { updatedByUserId: params.userId } : {}),
       } as any,
     });

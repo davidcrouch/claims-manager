@@ -55,6 +55,7 @@ import {
   DocumentTemplateTransformsRepository,
   DocumentTemplateDataContextsRepository,
   RfqSendRequestsRepository,
+  PoSendRequestsRepository,
   EmailTemplatesRepository,
   EntityActivitiesRepository,
 } from './repositories';
@@ -114,6 +115,7 @@ const repositories = [
   DocumentTemplateTransformsRepository,
   DocumentTemplateDataContextsRepository,
   RfqSendRequestsRepository,
+  PoSendRequestsRepository,
   EmailTemplatesRepository,
   EntityActivitiesRepository,
 ];

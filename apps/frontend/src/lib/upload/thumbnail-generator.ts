@@ -4,7 +4,7 @@ const THUMBNAIL_WIDTH = 400;
 
 /**
  * Generates a PNG thumbnail Blob from a File (images and PDFs only).
- * Word (.docx/.doc) thumbnails are generated server-side on upload-complete via LibreOffice.
+ * Word (.docx/.doc) thumbnails are generated server-side on upload-complete (SVG preview).
  * Returns null for unsupported file types or if generation fails.
  */
 export async function generateThumbnailBlob(file: File): Promise<Blob | null> {

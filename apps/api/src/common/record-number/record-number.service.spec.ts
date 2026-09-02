@@ -28,6 +28,7 @@ describe('RecordNumberService', () => {
       expect(RECORD_NUMBER_CONFIG.rfq).toEqual({ prefix: 'RFQ', startValue: 200_001 });
       expect(RECORD_NUMBER_CONFIG.job).toEqual({ prefix: 'JOB', startValue: 200_001 });
       expect(RECORD_NUMBER_CONFIG.estimate).toEqual({ prefix: 'EST', startValue: 200_001 });
+      expect(RECORD_NUMBER_CONFIG.bill).toEqual({ prefix: 'BILL', startValue: 200_001 });
     });
   });
 });

@@ -58,6 +58,7 @@ export class QuotesController {
     @Query('status') status?: string,
     @Query('statusId') statusId?: string,
     @Query('quoteType') quoteType?: string,
+    @Query('assignedToUserId') assignedToUserId?: string,
     @Query('assignedToUserIds') assignedToUserIds?: string,
     @Query('search') search?: string,
     @Query('sort') sort?: string,
@@ -73,6 +74,7 @@ export class QuotesController {
       status,
       statusId,
       quoteType,
+      assignedToUserId,
       assignedToUserIds,
       search,
       sort,
@@ -224,6 +226,7 @@ export class QuotesController {
       groupId,
       groupLabelLookupId: body.groupLabelLookupId,
       description: body.description,
+      component: body.component,
       dimensions: body.dimensions,
     });
   }

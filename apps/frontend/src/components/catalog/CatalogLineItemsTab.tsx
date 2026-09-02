@@ -33,6 +33,7 @@ import {
   getCatalogGroupedItemsAction,
   saveCatalogLineItemsAction,
   deleteCatalogItemAction,
+  removeCatalogBomComponentAction,
   addCatalogItemToCatalogAction,
   moveCatalogLineItemAction,
   reorderCatalogLineItemsAction,
@@ -72,6 +73,40 @@ function findCatalogItemMarkupType(groups: ApiGroup[], catalogItemId: string): s
     }
   }
   return undefined;
+}
+
+/** Nested catalogue rows use BOM line id as `item.id` and real item as `catalogItemId`. */
+function findNestedBomChild(
+  groups: ApiGroup[],
+  lineId: string,
+): { parentId: string; catalogItemId: string } | null {
+  for (const group of groups) {
+    for (const combo of group.combos ?? []) {
+      if (!combo.id) continue;
+      for (const item of combo.items ?? []) {
+        if (item.id === lineId && item.catalogItemId) {
+          return { parentId: combo.id, catalogItemId: item.catalogItemId };
+        }
+      }
+    }
+    for (const scope of group.scopes ?? []) {
+      if (!scope.id) continue;
+      for (const item of scope.items ?? []) {
+        if (item.id === lineId && item.catalogItemId) {
+          return { parentId: scope.id, catalogItemId: item.catalogItemId };
+        }
+      }
+      for (const combo of scope.combos ?? []) {
+        if (!combo.id) continue;
+        for (const item of combo.items ?? []) {
+          if (item.id === lineId && item.catalogItemId) {
+            return { parentId: combo.id, catalogItemId: item.catalogItemId };
+          }
+        }
+      }
+    }
+  }
+  return null;
 }
 
 function mapCatalogGroupsToApiGroups(
@@ -271,18 +306,26 @@ export const CatalogLineItemsTab = forwardRef(function CatalogLineItemsTab(
     setDeletingItem(request);
   }
 
-  function confirmDeleteItem(_removeFromCatalogAssembly: boolean) {
+  function confirmDeleteItem() {
     if (!deletingItem) return;
     const { itemId } = deletingItem;
     setDeletingItem(null);
     startTransition(async () => {
-      const result = await deleteCatalogItemAction(itemId);
+      const nested = findNestedBomChild(groups, itemId);
+      const result = nested
+        ? await removeCatalogBomComponentAction({
+            assemblyId: nested.parentId,
+            lineId: itemId,
+            catalogItemId: nested.catalogItemId,
+            catalogId,
+          })
+        : await deleteCatalogItemAction(itemId);
       if (!result.success) {
         console.error(`${PREFIX}.confirmDeleteItem — ${result.error}`);
-        toast.error(result.error ?? 'Failed to delete item');
+        toast.error(result.error ?? 'Failed to remove item');
         return;
       }
-      toast.success('Item deleted');
+      toast.success('Item removed from catalogue');
       setStructurallyDirty(true);
       await loadGroupedItems();
       router.refresh();
@@ -653,7 +696,6 @@ export const CatalogLineItemsTab = forwardRef(function CatalogLineItemsTab(
           open={!!deletingItem}
           onOpenChange={(open) => { if (!open) setDeletingItem(null); }}
           itemName={deletingItem.itemName}
-          isAssemblyChild={deletingItem.isAssemblyChild}
           onConfirm={confirmDeleteItem}
           pending={pending}
         />

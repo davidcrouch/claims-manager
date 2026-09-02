@@ -109,6 +109,16 @@ const LOOKUP_SPECS: readonly LookupSpec[] = [
  * `externalReference` is the CW code (not the seed- prefixed internal catalogue).
  * Kept separate so LOOKUP_SPECS can stay prefixed for direct/manual flows.
  */
+/** Vendor-set line scope statuses sent to Crunchwork via lineScopeStatus.externalReference. */
+const CW_LINE_SCOPE_STATUSES: ReadonlyArray<{
+  domain: string;
+  name: string;
+  externalReference: string;
+}> = [
+  { domain: 'line_scope_status', name: 'Draft', externalReference: 'Draft' },
+  { domain: 'line_scope_status', name: 'Cash Settled', externalReference: 'Cash Settled' },
+];
+
 const CW_CLAIM_LOOKUPS: ReadonlyArray<{
   domain: string;
   name: string;
@@ -265,6 +275,16 @@ export async function seedLookupsForTenant(params: {
     })),
   );
   logger.info(`crunchwork group labels ready (${CW_GROUP_LABELS.length})`);
+  await insertMissing(
+    { db, tenantId, stats, existing },
+    CW_LINE_SCOPE_STATUSES.map((spec) => ({
+      domain: spec.domain,
+      name: spec.name,
+      externalReference: spec.externalReference,
+      providerCode: 'crunchwork',
+    })),
+  );
+  logger.info(`crunchwork line scope statuses ready (${CW_LINE_SCOPE_STATUSES.length})`);
 
   return {
     inserted: stats.inserted,

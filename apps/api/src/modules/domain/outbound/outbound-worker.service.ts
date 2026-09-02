@@ -197,7 +197,13 @@ export class OutboundWorkerService implements OnModuleInit, OnModuleDestroy {
       case 'quote': {
         const patch: Record<string, unknown> = { syncStatus: 'synced', updatedAt: now };
         if (result.externalReference) patch.externalReference = result.externalReference;
-        if (result.responsePayload) patch.apiPayload = result.responsePayload;
+        if (result.responsePayload) {
+          patch.apiPayload = result.responsePayload;
+          const cwQuoteNumber = result.responsePayload.quoteNumber;
+          if (typeof cwQuoteNumber === 'string' && cwQuoteNumber.trim()) {
+            patch.quoteNumber = cwQuoteNumber.trim();
+          }
+        }
         await this.db.update(quotes).set(patch).where(eq(quotes.id, record.entityId));
         break;
       }

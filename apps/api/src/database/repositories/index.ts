@@ -300,6 +300,13 @@ export {
   type RfqSendRecipientInsert,
 } from './rfq-send-requests.repository';
 export {
+  PoSendRequestsRepository,
+  type PoSendRequestRow,
+  type PoSendRequestInsert,
+  type PoSendRecipientRow,
+  type PoSendRecipientInsert,
+} from './po-send-requests.repository';
+export {
   EmailTemplatesRepository,
   type EmailTemplateRow,
   type EmailTemplateInsert,

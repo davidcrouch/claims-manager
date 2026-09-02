@@ -37,6 +37,8 @@ export class ClaimsService {
     sort?: string;
     status?: string;
     account?: string;
+    jobType?: string;
+    assignedToUserId?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
     const result = await this.claimsRepo.findAll({
@@ -47,12 +49,19 @@ export class ClaimsService {
       sort: params.sort,
       status: params.status,
       account: params.account,
+      jobType: params.jobType,
+      assignedToUserId: params.assignedToUserId,
     });
     const claimIds = result.data.map((row) => row.id);
-    const jobRows =
-      claimIds.length > 0
-        ? await this.jobsRepo.findSummariesByClaimIds({ tenantId, claimIds })
-        : [];
+    const [jobRows, insuredRows] = claimIds.length
+      ? await Promise.all([
+          this.jobsRepo.findSummariesByClaimIds({ tenantId, claimIds }),
+          this.claimsRepo.findInsuredNamesByClaimIds({ tenantId, claimIds }),
+        ])
+      : [
+          [] as Awaited<ReturnType<JobsRepository['findSummariesByClaimIds']>>,
+          [] as Awaited<ReturnType<ClaimsRepository['findInsuredNamesByClaimIds']>>,
+        ];
     this.logger.debug(
       `ClaimsService.findAll — attaching ${jobRows.length} jobs across ${claimIds.length} claims`,
     );
@@ -63,9 +72,13 @@ export class ClaimsService {
       list.push(job);
       jobsByClaimId.set(job.claimId, list);
     }
+    const insuredByClaimId = new Map(
+      insuredRows.map((row) => [row.claimId, row.insuredName] as const),
+    );
     return {
       data: result.data.map((row) => ({
         ...this.shapeClaimResponse(row),
+        insuredName: insuredByClaimId.get(row.id) ?? null,
         jobs: (jobsByClaimId.get(row.id) ?? []).map((job) => ({
           id: job.id,
           internalNumber: job.internalNumber,

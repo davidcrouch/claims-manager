@@ -17,7 +17,6 @@ RUN pnpm --filter api typecheck && pnpm --filter api build
 FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-RUN apk add --no-cache libreoffice-writer font-noto
 # pnpm installs with isolated node_modules: apps/api/node_modules/<dep> is a
 # relative symlink into ../../../node_modules/.pnpm/<dep>@<ver>/.../<dep>.
 # The workspace layout (root node_modules + apps/api/node_modules) must be

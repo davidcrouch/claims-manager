@@ -551,9 +551,9 @@ function InsurerReviewCard({ quote, statusName }: { quote: Quote; statusName: st
             </p>
             <p className="text-xs text-muted-foreground">
               {isPending
-                ? 'The estimate has been submitted. Line item decisions will appear in the Take Off tab when the insurer responds.'
+                ? 'The estimate has been submitted. Line item decisions will appear in the Line Items tab when the insurer responds.'
                 : isApproved
-                  ? 'The insurer has approved this estimate. Check the Take Off tab for per-line decisions.'
+                  ? 'The insurer has approved this estimate. Check the Line Items tab for per-line decisions.'
                   : 'Check the Activities tab for the latest insurer actions.'
               }
             </p>

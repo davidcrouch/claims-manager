@@ -18,8 +18,17 @@ import {
   replaceListQueryIfNeeded,
   useListPageData,
 } from '@/components/shared/use-list-page-data';
+import { usePersistedListTab } from '@/components/shared/list-tab-storage';
 import type { Claim, PaginatedResponse } from '@/types/api';
-import { normalizeSortParam } from './claims-list-helpers';
+import {
+  columnFilterFromIdsParam,
+  normalizeSortParam,
+  parseClaimsListTab,
+  isClaimsMineTab,
+  archiveStateLabel,
+  buildClaimsListFetchKey,
+  type ClaimsListTab,
+} from './claims-list-helpers';
 import {
   compareValues,
   compareDates,
@@ -27,14 +36,17 @@ import {
   SortableColumnHeader,
   commitColumnFilterSelection,
   columnFilterToIdsParam,
+  columnFilterToValuesParam,
   TableEmptyRow,
 } from '@/components/shared/list-filters';
+import { columnFilterFromValuesParam } from '@/components/jobs/jobs-list-helpers';
 import {
   statusIdsForArchiveListTab,
   mergeStatusParamWithTab,
-  parseArchiveListTab,
+  isArchivedStatus,
   type ArchiveListTab,
 } from '@/components/shared/archive-list';
+import { columnFilterToArchiveStateStatusIds } from '@/components/shared/list-mine-tab';
 import {
   ColumnSettingsHeaderCell,
   useColumnVisibility,
@@ -43,8 +55,9 @@ import { ListArchiveButton, LIST_ARCHIVE_TH_CLASS, LIST_ARCHIVE_TD_CLASS, LIST_A
 import { TablePagination } from '@/components/shared/table-pagination';
 import { formatAddress } from '@/components/shared/detail';
 import { ClaimJobCell } from './ClaimJobCell';
+import { ClaimJobTypeCell } from './ClaimJobTypeCell';
 
-type ClaimTab = ArchiveListTab;
+type ClaimTab = ClaimsListTab;
 
 const PAGE_SIZE = 20;
 
@@ -63,7 +76,10 @@ function formatDate(value?: string | null): string {
 
 type ColumnSortField =
   | 'claim_number'
+  | 'job_type'
   | 'status'
+  | 'archive_state'
+  | 'insured'
   | 'policy'
   | 'address'
   | 'account'
@@ -78,13 +94,17 @@ interface ColumnDef {
   filterable?: boolean;
   locked?: boolean;
   sortable?: boolean;
+  defaultHidden?: boolean;
 }
 
 const TABLE_COLUMNS: ColumnDef[] = [
   { key: 'claim_number', label: 'Claim #', locked: true },
   { key: 'jobs', label: 'Job', sortable: false },
+  { key: 'job_type', label: 'Job Type', filterable: true },
   { key: 'status', label: 'Status', filterable: true },
-  { key: 'policy', label: 'Policy' },
+  { key: 'archive_state', label: 'State', filterable: true, sortable: false },
+  { key: 'insured', label: 'Client / Insured' },
+  { key: 'policy', label: 'Policy', defaultHidden: true },
   { key: 'address', label: 'Address' },
   { key: 'account', label: 'Account', filterable: true },
   { key: 'lodgement_date', label: 'Lodged' },
@@ -98,8 +118,12 @@ function getClaimSortValue(
   switch (field) {
     case 'claim_number':
       return claim.claimNumber ?? claim.externalReference ?? claim.id;
+    case 'job_type':
+      return claim.jobs?.[0]?.jobType?.name ?? null;
     case 'status':
       return (claim.status as { name?: string })?.name;
+    case 'insured':
+      return claim.insuredName;
     case 'policy':
       return claim.policyNumber ?? claim.policyName;
     case 'address':
@@ -120,6 +144,9 @@ export interface ClaimsListClientProps {
   initialFetchKey: string;
   statusOptions: { id: string; name: string }[];
   accountOptions: { id: string; name: string }[];
+  jobTypes?: { id: string; name?: string }[];
+  /** Logged-in org user id — required for the My Claims tab filter. */
+  currentUserId?: string | null;
 }
 
 export function ClaimsListClient({
@@ -127,20 +154,34 @@ export function ClaimsListClient({
   initialFetchKey,
   statusOptions,
   accountOptions,
+  jobTypes = [],
+  currentUserId,
 }: ClaimsListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data, setData, beginFetch, abortFetch } = useListPageData(initialData, {
     initialFetchKey,
   });
+  const initialArchiveStateFilter = useMemo(
+    () => columnFilterFromValuesParam(searchParams.get('archiveState')),
+    [searchParams],
+  );
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [sort, setSort] = useState(() =>
     normalizeSortParam(searchParams.get('sort'))
   );
-  const [tab, setTab] = useState<ClaimTab>(() =>
-    parseArchiveListTab(searchParams.get('tab')),
-  );
+  const assignedToUserId = searchParams.get('assignedToUserId');
+  const legacyMineTab =
+    !!assignedToUserId &&
+    !!currentUserId &&
+    assignedToUserId === currentUserId;
+  const [tab, setTab] = usePersistedListTab<ClaimTab>({
+    storageKey: 'claims',
+    urlTab: searchParams.get('tab'),
+    parse: parseClaimsListTab,
+    fallbackTab: legacyMineTab ? 'mine' : undefined,
+  });
   const [page, setPage] = useState(() => {
     const p = parseInt(searchParams.get('page') ?? '1', 10);
     return Number.isFinite(p) && p > 0 ? p : 1;
@@ -153,9 +194,54 @@ export function ClaimsListClient({
   const [accountFilterActive, setAccountFilterActive] = useState(false);
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [statusFilterActive, setStatusFilterActive] = useState(false);
+  const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
+  const [typeFilterActive, setTypeFilterActive] = useState(false);
+  const [archiveStateFilter, setArchiveStateFilter] = useState(initialArchiveStateFilter.selected);
+  const [archiveStateFilterActive, setArchiveStateFilterActive] = useState(
+    initialArchiveStateFilter.active,
+  );
+  const [filtersHydrated, setFiltersHydrated] = useState(false);
+
+  const isMineTab = isClaimsMineTab(tab);
+  const showArchiveStateColumn = isMineTab;
+
+  const listColumns = useMemo(
+    () =>
+      TABLE_COLUMNS.filter(
+        (col) => col.key !== 'archive_state' || showArchiveStateColumn,
+      ),
+    [showArchiveStateColumn],
+  );
+
   const { isVisible, toggle, visibleCount } = useColumnVisibility(
-    'claims',
-    TABLE_COLUMNS,
+    'claims-v2',
+    listColumns,
+  );
+
+  const assignedToUserIdParam = useMemo(
+    () => (isMineTab && currentUserId ? currentUserId : undefined),
+    [isMineTab, currentUserId],
+  );
+
+  const tabStatusIds = useMemo(() => {
+    if (isMineTab) return undefined;
+    return statusIdsForArchiveListTab(tab as ArchiveListTab, statusOptions);
+  }, [isMineTab, tab, statusOptions]);
+
+  const typeOptions = useMemo(
+    () =>
+      jobTypes
+        .map((t) => ({
+          id: t.id,
+          name: t.name?.trim() ? t.name.trim() : 'Unknown',
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [jobTypes],
+  );
+
+  const typeNames = useMemo(
+    () => [...new Set(typeOptions.map((t) => t.name))].sort((a, b) => a.localeCompare(b)),
+    [typeOptions],
   );
 
   useEffect(() => {
@@ -163,13 +249,43 @@ export function ClaimsListClient({
     return () => clearTimeout(t);
   }, [search]);
 
+  useEffect(() => {
+    if (filtersHydrated) return;
+    if (searchParams.get('jobType') && typeOptions.length === 0) return;
+
+    const hydrated = columnFilterFromIdsParam(
+      searchParams.get('jobType'),
+      typeOptions,
+    );
+    setTypeFilter(hydrated.selected);
+    setTypeFilterActive(hydrated.active);
+    setFiltersHydrated(true);
+  }, [filtersHydrated, searchParams, typeOptions]);
+
+  const statusColumnParam = useMemo(
+    () => columnFilterToIdsParam(statusFilterActive, statusFilter, statusOptions),
+    [statusFilterActive, statusFilter, statusOptions],
+  );
+
+  const archiveStateStatusParam = useMemo(
+    () =>
+      isMineTab
+        ? columnFilterToArchiveStateStatusIds(
+            archiveStateFilterActive,
+            archiveStateFilter,
+            statusOptions,
+          )
+        : undefined,
+    [isMineTab, archiveStateFilterActive, archiveStateFilter, statusOptions],
+  );
+
   const statusParam = useMemo(
     () =>
       mergeStatusParamWithTab(
-        columnFilterToIdsParam(statusFilterActive, statusFilter, statusOptions),
-        statusIdsForArchiveListTab(tab, statusOptions),
+        mergeStatusParamWithTab(statusColumnParam, archiveStateStatusParam),
+        tabStatusIds,
       ),
-    [tab, statusFilterActive, statusFilter, statusOptions],
+    [statusColumnParam, archiveStateStatusParam, tabStatusIds],
   );
 
   const accountParam = useMemo(
@@ -177,10 +293,27 @@ export function ClaimsListClient({
     [accountFilterActive, accountFilter, accountOptions],
   );
 
+  const jobTypeParam = useMemo(
+    () => columnFilterToIdsParam(typeFilterActive, typeFilter, typeOptions),
+    [typeFilterActive, typeFilter, typeOptions],
+  );
+
   useEffect(() => {
-    const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
-    const accountKey = accountParam === null ? '__none__' : (accountParam ?? '');
-    const fetchKey = `${debouncedSearch}|${sort}|${tab}|${statusKey}|${accountKey}|${page}`;
+    if (!filtersHydrated) return;
+
+    const fetchKey = buildClaimsListFetchKey({
+      search: debouncedSearch,
+      sort,
+      tab,
+      page,
+      status: statusParam,
+      account: accountParam,
+      jobType: jobTypeParam,
+      assignedToUserId: assignedToUserIdParam,
+      archiveState: isMineTab
+        ? columnFilterToValuesParam(archiveStateFilterActive, archiveStateFilter)
+        : undefined,
+    });
 
     const params = new URLSearchParams(searchParams.toString());
     if (debouncedSearch) params.set('search', debouncedSearch);
@@ -191,6 +324,7 @@ export function ClaimsListClient({
     else params.delete('page');
     if (tab !== 'active') params.set('tab', tab);
     else params.delete('tab');
+    params.delete('assignedToUserId');
     if (statusParam) {
       params.set('status', statusParam);
     } else {
@@ -201,6 +335,16 @@ export function ClaimsListClient({
     } else {
       params.delete('account');
     }
+    if (jobTypeParam) {
+      params.set('jobType', jobTypeParam);
+    } else {
+      params.delete('jobType');
+    }
+    const archiveStateValuesParam = isMineTab
+      ? columnFilterToValuesParam(archiveStateFilterActive, archiveStateFilter)
+      : null;
+    if (archiveStateValuesParam) params.set('archiveState', archiveStateValuesParam);
+    else params.delete('archiveState');
     const next = params.toString();
     if (
       !replaceListQueryIfNeeded({
@@ -218,7 +362,12 @@ export function ClaimsListClient({
 
     setColumnSort(null);
 
-    if (statusParam === null || accountParam === null) {
+    if (
+      statusParam === null ||
+      accountParam === null ||
+      jobTypeParam === null ||
+      (isMineTab && !currentUserId)
+    ) {
       setData({ data: [], total: 0 });
       return session.cleanup;
     }
@@ -228,18 +377,40 @@ export function ClaimsListClient({
       sort,
       status: statusParam,
       account: accountParam,
+      jobType: jobTypeParam,
       page,
       limit: PAGE_SIZE,
+      assignedToUserId: assignedToUserIdParam,
     }).then((res) => {
       if (!session.cancelled && res) setData(res);
     });
 
     return session.cleanup;
-  }, [debouncedSearch, sort, tab, statusParam, accountParam, page, searchParams, router, beginFetch, abortFetch]);
+  }, [
+    filtersHydrated,
+    debouncedSearch,
+    sort,
+    tab,
+    statusParam,
+    accountParam,
+    jobTypeParam,
+    assignedToUserIdParam,
+    archiveStateFilterActive,
+    archiveStateFilter,
+    isMineTab,
+    currentUserId,
+    page,
+    searchParams,
+    router,
+    beginFetch,
+    abortFetch,
+    setData,
+  ]);
 
   const SERVER_SORT_FIELDS = new Set(['claim_number', 'updated_at', 'created_at']);
 
   const handleColumnSort = (field: ColumnSortField) => {
+    if (field === 'archive_state') return;
     if (SERVER_SORT_FIELDS.has(field)) {
       const serverField = field === 'lodgement_date' ? 'created_at' : field;
       const currentServerField = sort.replace(/_(?:asc|desc)$/, '');
@@ -274,6 +445,10 @@ export function ClaimsListClient({
 
   const handleTabChange = (val: string) => {
     setTab(val as ClaimTab);
+    if (val !== 'mine') {
+      setArchiveStateFilter(new Set());
+      setArchiveStateFilterActive(false);
+    }
     setPage(1);
   };
 
@@ -345,6 +520,16 @@ export function ClaimsListClient({
     setPage(1);
   };
 
+  const applyTypeFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: typeNames.length,
+    });
+    setTypeFilter(committed.selected);
+    setTypeFilterActive(committed.active);
+    setPage(1);
+  };
+
   const filteredAndSortedData = useMemo(() => {
     const rows = data.data;
     if (!columnSort) return rows;
@@ -381,6 +566,41 @@ export function ClaimsListClient({
     itemNoun: { singular: 'account', plural: 'accounts' },
   };
 
+  const jobTypeFilterProps = {
+    options: typeNames,
+    selected: typeFilter,
+    active: typeFilterActive,
+    onApply: applyTypeFilter,
+    menuTitle: 'Filter by job type',
+    itemNoun: { singular: 'job type', plural: 'job types' },
+  };
+
+  const archiveStateNames = useMemo(() => ['Active', 'Archived'], []);
+
+  const applyArchiveStateFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: archiveStateNames.length,
+    });
+    setArchiveStateFilter(committed.selected);
+    setArchiveStateFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const archiveStateFilterProps = {
+    options: archiveStateNames,
+    selected: archiveStateFilter,
+    active: archiveStateFilterActive,
+    onApply: applyArchiveStateFilter,
+    menuTitle: 'Filter by state',
+    itemNoun: { singular: 'state', plural: 'states' },
+  };
+
+  const visibleTableColumns = useMemo(
+    () => listColumns.filter((col) => isVisible(col.key)),
+    [listColumns, isVisible],
+  );
+
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
       <SetPageHeader>
@@ -401,6 +621,7 @@ export function ClaimsListClient({
             onValueChange={handleTabChange}
           >
             <TabsList>
+              <TabsTrigger value="mine">My Claims</TabsTrigger>
               <TabsTrigger value="active">Active</TabsTrigger>
               <TabsTrigger value="archived">Archived</TabsTrigger>
               <TabsTrigger value="all">All</TabsTrigger>
@@ -413,7 +634,7 @@ export function ClaimsListClient({
               size={16}
             />
             <Input
-              placeholder="Search claims by claim number, reference, policy, or address..."
+              placeholder="Search by claim #, job, client/insured, address, or policy no..."
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
               className="h-10 w-full pl-9 pr-9"
@@ -458,12 +679,29 @@ export function ClaimsListClient({
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50">
                 <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                  {TABLE_COLUMNS.filter((col) => isVisible(col.key)).map((col) =>
-                    col.sortable === false ? (
-                      <th key={col.key} scope="col" className="px-4 py-3">
-                        {col.label}
-                      </th>
-                    ) : (
+                  {visibleTableColumns.map((col) => {
+                    if (col.key === 'archive_state') {
+                      return (
+                        <SortableColumnHeader
+                          key={col.key}
+                          columnKey={col.key}
+                          label={col.label}
+                          activeField={null}
+                          sortOrder="asc"
+                          onSort={() => {}}
+                          filter={archiveStateFilterProps}
+                          className="cursor-default hover:text-slate-500 [&_span>svg:last-child]:hidden"
+                        />
+                      );
+                    }
+                    if (col.sortable === false) {
+                      return (
+                        <th key={col.key} scope="col" className="px-4 py-3">
+                          {col.label}
+                        </th>
+                      );
+                    }
+                    return (
                       <SortableColumnHeader
                         key={col.key}
                         columnKey={col.key as ColumnSortField}
@@ -476,16 +714,18 @@ export function ClaimsListClient({
                             ? statusFilterProps
                             : col.key === 'account'
                               ? accountFilterProps
-                              : undefined
+                              : col.key === 'job_type'
+                                ? jobTypeFilterProps
+                                : undefined
                         }
                       />
-                    ),
-                  )}
+                    );
+                  })}
                   <th scope="col" className={LIST_ARCHIVE_TH_CLASS}>
                     <span className="sr-only">Actions</span>
                   </th>
                   <ColumnSettingsHeaderCell
-                    columns={TABLE_COLUMNS}
+                    columns={listColumns}
                     isVisible={isVisible}
                     onToggle={toggle}
                   />
@@ -521,9 +761,27 @@ export function ClaimsListClient({
                           <ClaimJobCell jobs={claim.jobs} />
                         </td>
                       )}
+                      {isVisible('job_type') && (
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <ClaimJobTypeCell jobs={claim.jobs} />
+                        </td>
+                      )}
                       {isVisible('status') && (
                         <td className="whitespace-nowrap px-4 py-3">
                           <StatusBadge status={statusName} />
+                        </td>
+                      )}
+                      {showArchiveStateColumn && isVisible('archive_state') && (
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <StatusBadge
+                            status={archiveStateLabel(statusName)}
+                            variant={isArchivedStatus(statusName) ? 'inactive' : 'active'}
+                          />
+                        </td>
+                      )}
+                      {isVisible('insured') && (
+                        <td className="px-4 py-3 text-slate-600">
+                          {claim.insuredName?.trim() || '—'}
                         </td>
                       )}
                       {isVisible('policy') && (

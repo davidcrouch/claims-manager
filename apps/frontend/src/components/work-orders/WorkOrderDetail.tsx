@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -39,6 +39,10 @@ import {
   asString,
   type Dict,
 } from '@/components/shared/detail';
+import {
+  DetailAssignee,
+  resolveDetailAssignee,
+} from '@/components/shared/DetailAssignee';
 import { updateWorkOrderStatusAction } from '@/app/(app)/mutations-status';
 import { InvoiceFormDrawer } from '@/components/forms/InvoiceFormDrawer';
 import type { WorkOrder, Job } from '@/types/api';
@@ -49,7 +53,10 @@ import { workOrderInsurerPo } from '@/components/work-orders/work-order-label';
 import { jobDisplayName } from '@/components/shared/job-label';
 import { PagedLineItemsTable } from '@/components/quotes/PagedLineItemsTable';
 import { groupsFromDocumentPayload } from '@/components/line-items';
-import { getWorkOrderLineItemsAction } from '@/app/(app)/work-orders/actions';
+import {
+  getWorkOrderLineItemsAction,
+  updateWorkOrderAssigneeAction,
+} from '@/app/(app)/work-orders/actions';
 
 // ---------- helpers ---------------------------------------------------------
 
@@ -430,8 +437,48 @@ function TimelineTab({ wo }: { wo: WorkOrder }) {
 
 type WoTab = 'overview' | 'parties' | 'line-items' | 'timeline';
 
-export function WorkOrderDetail({ wo }: { wo: WorkOrder }) {
+export function WorkOrderDetail({
+  wo,
+  job,
+}: {
+  wo: WorkOrder;
+  job?: Job | null;
+}) {
+  const router = useRouter();
   const [tab, setTab] = useState<WoTab>('overview');
+  const woAssigneeId = wo.assignedToUserId ?? '';
+  const [assignedToUserId, setAssignedToUserId] = useState(woAssigneeId);
+  const [savingAssignee, setSavingAssignee] = useState(false);
+
+  useEffect(() => {
+    setAssignedToUserId(wo.assignedToUserId ?? '');
+  }, [wo.id, wo.assignedToUserId]);
+
+  const resolvedAssignee = resolveDetailAssignee({
+    entityAssigneeName:
+      assignedToUserId && assignedToUserId === woAssigneeId
+        ? wo.assigneeName
+        : null,
+    entityAssignedToUserId: assignedToUserId || null,
+    job,
+  });
+
+  async function handleAssigneeChange(userId: string | null) {
+    const previous = assignedToUserId;
+    setAssignedToUserId(userId ?? '');
+    setSavingAssignee(true);
+    const result = await updateWorkOrderAssigneeAction(wo.id, userId);
+    if (!result.success) {
+      console.error(
+        '[frontend:WorkOrderDetail.handleAssigneeChange]',
+        result.error,
+      );
+      setAssignedToUserId(previous);
+    } else {
+      router.refresh();
+    }
+    setSavingAssignee(false);
+  }
 
   const tabs: Array<{ id: WoTab; label: string; icon: typeof Calendar }> = [
     { id: 'overview', label: 'Overview', icon: Calendar },
@@ -442,26 +489,44 @@ export function WorkOrderDetail({ wo }: { wo: WorkOrder }) {
 
   return (
     <div className="flex flex-col">
-      <div className="flex flex-wrap gap-0 border-b border-slate-200">
-        {tabs.map((t) => {
-          const Icon = t.icon;
-          const active = tab === t.id;
-          return (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setTab(t.id)}
-              className={`inline-flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t-md ${
-                active
-                  ? 'border-indigo-600 bg-indigo-50 text-indigo-600'
-                  : 'border-transparent bg-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700'
-              }`}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              {t.label}
-            </button>
-          );
-        })}
+      <div className="flex w-full flex-wrap items-center gap-x-4 border-b border-slate-200">
+        <div className="flex min-w-0 flex-1 flex-wrap gap-0">
+          {tabs.map((t) => {
+            const Icon = t.icon;
+            const active = tab === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTab(t.id)}
+                className={`inline-flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t-md ${
+                  active
+                    ? 'border-indigo-600 bg-indigo-50 text-indigo-600'
+                    : 'border-transparent bg-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+        <DetailAssignee
+          assigneeName={resolvedAssignee.assigneeName}
+          assignedToUserId={assignedToUserId || null}
+          fromJob={resolvedAssignee.fromJob}
+          editing
+          saving={savingAssignee}
+          onChange={(userId) => {
+            void handleAssigneeChange(userId);
+          }}
+          unassignedLabel="Not assigned"
+          fallbackAssigneeName={job?.assigneeName}
+          fallbackAssignedToUserId={job?.assignedToUserId}
+          createdByUserId={wo.createdByUserId}
+          updatedByUserId={wo.updatedByUserId}
+          provider={job?.provider}
+        />
       </div>
       <div className="pt-4">
         {tab === 'overview' && <OverviewTab wo={wo} />}

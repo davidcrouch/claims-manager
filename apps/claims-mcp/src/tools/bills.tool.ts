@@ -18,7 +18,6 @@ export function registerBillsTools(server: McpServer, api: ClaimsApiClient): voi
       purchaseOrderId: args.purchaseOrderId as string | undefined,
       status: args.status as string | undefined,
       vendorId: args.vendorId as string | undefined,
-      invoiceId: args.invoiceId as string | undefined,
       sort: args.sort as string | undefined,
     }),
     input: {
@@ -27,7 +26,6 @@ export function registerBillsTools(server: McpServer, api: ClaimsApiClient): voi
       purchaseOrderId: z.string().optional().describe('Filter by purchase order UUID'),
       status: z.string().optional().describe('Filter by status'),
       vendorId: z.string().optional().describe('Filter by vendor UUID'),
-      invoiceId: z.string().optional().describe('Filter by invoice UUID'),
       sort: z.string().optional().describe('Sort expression'),
     },
   });
@@ -83,13 +81,5 @@ export function registerBillsTools(server: McpServer, api: ClaimsApiClient): voi
     description: 'List bills for a vendor.',
     path: '/bills/vendor/{vendorId}',
     input: { vendorId: z.string().describe('Vendor UUID') },
-  });
-
-  proxyTool(server, api, {
-    category: CAT,
-    name: 'list_bills_by_invoice',
-    description: 'List bills for an invoice.',
-    path: '/bills/invoice/{invoiceId}',
-    input: { invoiceId: z.string().describe('Invoice UUID') },
   });
 }

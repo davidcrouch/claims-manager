@@ -60,7 +60,6 @@ export class BillsRepository {
     /** Comma-separated status lookup IDs. */
     status?: string;
     vendorId?: string;
-    invoiceId?: string;
     search?: string;
     sort?: string;
   }): Promise<{ data: BillRow[]; total: number }> {
@@ -90,9 +89,6 @@ export class BillsRepository {
     }
     if (vendorIds.length > 0) {
       whereClause = and(whereClause, inArray(bills.vendorId, vendorIds));
-    }
-    if (params.invoiceId) {
-      whereClause = and(whereClause, eq(bills.invoiceId, params.invoiceId));
     }
     if (params.search?.trim()) {
       const term = `%${params.search.trim()}%`;
@@ -181,22 +177,6 @@ export class BillsRepository {
       .where(
         and(
           eq(bills.vendorId, params.vendorId),
-          eq(bills.tenantId, params.tenantId),
-        ),
-      )
-      .orderBy(desc(bills.updatedAt));
-  }
-
-  async findByInvoice(params: {
-    invoiceId: string;
-    tenantId: string;
-  }): Promise<BillRow[]> {
-    return this.db
-      .select()
-      .from(bills)
-      .where(
-        and(
-          eq(bills.invoiceId, params.invoiceId),
           eq(bills.tenantId, params.tenantId),
         ),
       )

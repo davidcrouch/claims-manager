@@ -43,6 +43,12 @@ locals {
         "roles/secretmanager.secretAccessor",
       ]
     }
+    # LibreOffice PDF conversion sidecar (Gotenberg). No project roles needed —
+    # only Cloud Run invoker from api-server.
+    gotenberg = {
+      gsa_account_id = "gotenberg-sa"
+      roles          = []
+    }
   }
 
   project_iam_bindings = merge([

@@ -299,6 +299,7 @@ export class LineItemSyncService {
             (typeof group.description === 'string' && group.description.trim()
               ? group.description
               : labelName) ?? undefined,
+          component: asStr(group.component),
           dimensions: extractGroupDimensions(group),
           totals: extractGroupTotals(group),
           sortIndex: cwSortIndex(group, gi),
@@ -442,6 +443,7 @@ export class LineItemSyncService {
             (typeof group.description === 'string' && group.description.trim()
               ? group.description
               : labelName) ?? undefined,
+          component: asStr(group.component),
           dimensions: extractGroupDimensions(group),
           totals: extractGroupTotals(group),
           sortIndex: cwSortIndex(group, gi),
@@ -584,6 +586,7 @@ export class LineItemSyncService {
             (typeof group.description === 'string' && group.description.trim()
               ? group.description
               : labelName) ?? undefined,
+          component: asStr(group.component),
           dimensions: extractGroupDimensions(group),
           totals: extractGroupTotals(group),
           sortIndex: cwSortIndex(group, gi),

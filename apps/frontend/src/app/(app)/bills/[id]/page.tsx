@@ -2,6 +2,7 @@ import { redirect, notFound } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { BillDetail, BillPageHeader } from '@/components/bills/BillDetail';
+import { billDisplayTitle } from '@/components/bills/bill-label';
 import type { Metadata } from 'next';
 
 export async function generateMetadata({
@@ -14,7 +15,7 @@ export async function generateMetadata({
   if (!api) return { title: 'Bill | EnsureOS' };
 
   const bill = await api.getBill(id).catch(() => null);
-  const title = bill?.billNumber ?? bill?.externalReference ?? id;
+  const title = bill ? billDisplayTitle(bill) : id;
   return { title: `${title} | EnsureOS` };
 }
 
@@ -45,7 +46,7 @@ export default async function BillDetailPage({
       <SetPageHeader>
         <BillPageHeader bill={bill} job={job} />
       </SetPageHeader>
-      <BillDetail bill={bill} />
+      <BillDetail bill={bill} job={job} />
     </>
   );
 }

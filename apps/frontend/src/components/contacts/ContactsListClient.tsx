@@ -44,6 +44,7 @@ import {
   replaceListQueryIfNeeded,
   useListPageData,
 } from '@/components/shared/use-list-page-data';
+import { usePersistedListTab } from '@/components/shared/list-tab-storage';
 import { fetchContactsAction } from '@/app/(app)/contacts/actions';
 import type { Contact, PaginatedResponse, Job, Claim } from '@/types/api';
 
@@ -166,9 +167,11 @@ export function ContactsListClient({
   const { data, setData, beginFetch, abortFetch } = useListPageData(initialData);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [tab, setTab] = useState<ListTab>(() =>
-    parseArchiveListTab(searchParams.get('tab')),
-  );
+  const [tab, setTab] = usePersistedListTab<ListTab>({
+    storageKey: 'contacts',
+    urlTab: searchParams.get('tab'),
+    parse: parseArchiveListTab,
+  });
   const [page, setPage] = useState(1);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [columnSort, setColumnSort] = useState<{ field: ContactSortField; order: 'asc' | 'desc' }>({

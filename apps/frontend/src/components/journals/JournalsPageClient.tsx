@@ -32,6 +32,7 @@ import {
   createListFetchSession,
   replaceListQueryIfNeeded,
   useListPageData } from '@/components/shared/use-list-page-data';
+import { usePersistedListTab } from '@/components/shared/list-tab-storage';
 import { TablePagination } from '@/components/shared/table-pagination';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
@@ -104,9 +105,11 @@ export function JournalsPageClient({
   );
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [tab, setTab] = useState<ListTab>(() =>
-    parseArchiveListTab(searchParams.get('tab')),
-  );
+  const [tab, setTab] = usePersistedListTab<ListTab>({
+    storageKey: 'journals',
+    urlTab: searchParams.get('tab'),
+    parse: parseArchiveListTab,
+  });
   const [page, setPage] = useState(1);
   const [columnSort, setColumnSort] = useState<{ field: JournalSortField; order: 'asc' | 'desc' }>({
     field: 'updated_at',

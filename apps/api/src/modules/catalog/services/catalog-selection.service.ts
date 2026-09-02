@@ -72,6 +72,10 @@ const CW_ITEM_TYPE_MAP: Record<string, string> = {
   other: 'Other',
 };
 
+/** Vendor-set statuses pushed to Crunchwork via lineScopeStatus.externalReference. */
+const VENDOR_LINE_SCOPE_STATUS_REFS = new Set(['Draft', 'Cash Settled']);
+const DEFAULT_VENDOR_LINE_SCOPE_STATUS = 'Draft';
+
 function normaliseCwItemType(value: string | null | undefined): string | null {
   if (!value) return null;
   return CW_ITEM_TYPE_MAP[value.toLowerCase()] ?? value;
@@ -160,6 +164,10 @@ export class CatalogSelectionService {
       unitCost: snapshot.unitCost,
       taxRate: snapshot.tax,
     });
+    const defaultScopeStatusId = await this.resolveVendorLineScopeStatusLookupId({
+      tenantId,
+      externalReference: DEFAULT_VENDOR_LINE_SCOPE_STATUS,
+    });
 
     const [row] = await this.db
       .insert(quoteItems)
@@ -170,6 +178,7 @@ export class CatalogSelectionService {
         ...snapshot,
         quantity: params.quantity,
         totals,
+        lineScopeStatusLookupId: defaultScopeStatusId ?? undefined,
       })
       .returning();
 
@@ -270,6 +279,825 @@ export class CatalogSelectionService {
         tx,
       }),
     );
+  }
+
+  async listPurchaseOrderGroups(params: { purchaseOrderId: string }) {
+    const tenantId = this.getTenantId();
+    return this.db
+      .select()
+      .from(purchaseOrderGroups)
+      .where(
+        and(
+          eq(purchaseOrderGroups.tenantId, tenantId),
+          eq(purchaseOrderGroups.purchaseOrderId, params.purchaseOrderId),
+          isNull(purchaseOrderGroups.deletedAt),
+        ),
+      )
+      .orderBy(purchaseOrderGroups.sortIndex);
+  }
+
+  async ensureDefaultPurchaseOrderGroup(params: {
+    purchaseOrderId: string;
+    description?: string;
+  }) {
+    const existing = await this.listPurchaseOrderGroups({
+      purchaseOrderId: params.purchaseOrderId,
+    });
+    if (existing.length > 0) return existing[0];
+
+    const tenantId = this.getTenantId();
+    const [row] = await this.db
+      .insert(purchaseOrderGroups)
+      .values({
+        tenantId,
+        purchaseOrderId: params.purchaseOrderId,
+        description: params.description ?? 'Default group',
+        sortIndex: 0,
+      })
+      .returning();
+    return row;
+  }
+
+  async createPurchaseOrderGroup(params: {
+    purchaseOrderId: string;
+    groupLabelLookupId?: string;
+    description?: string;
+  }) {
+    const tenantId = this.getTenantId();
+    const existing = await this.listPurchaseOrderGroups({
+      purchaseOrderId: params.purchaseOrderId,
+    });
+    const nextIndex =
+      existing.length > 0 ? Math.max(...existing.map((g) => g.sortIndex)) + 1 : 0;
+
+    const [row] = await this.db
+      .insert(purchaseOrderGroups)
+      .values({
+        tenantId,
+        purchaseOrderId: params.purchaseOrderId,
+        groupLabelLookupId: params.groupLabelLookupId ?? null,
+        description: params.description ?? null,
+        sortIndex: nextIndex,
+      })
+      .returning();
+    return row;
+  }
+
+  async updatePurchaseOrderGroup(params: {
+    purchaseOrderId: string;
+    groupId: string;
+    groupLabelLookupId?: string;
+    description?: string;
+    component?: string;
+    dimensions?: Record<string, unknown>;
+  }) {
+    const tenantId = this.getTenantId();
+    const [existing] = await this.db
+      .select()
+      .from(purchaseOrderGroups)
+      .where(
+        and(
+          eq(purchaseOrderGroups.id, params.groupId),
+          eq(purchaseOrderGroups.purchaseOrderId, params.purchaseOrderId),
+          eq(purchaseOrderGroups.tenantId, tenantId),
+          isNull(purchaseOrderGroups.deletedAt),
+        ),
+      );
+    if (!existing) throw new NotFoundException('Purchase order group not found');
+
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    if (params.groupLabelLookupId !== undefined)
+      updates.groupLabelLookupId = params.groupLabelLookupId || null;
+    if (params.description !== undefined) updates.description = params.description || null;
+    if (params.component !== undefined) updates.component = params.component || null;
+    if (params.dimensions !== undefined) updates.dimensions = params.dimensions;
+
+    if (Object.keys(updates).length === 1) return existing;
+
+    const [row] = await this.db
+      .update(purchaseOrderGroups)
+      .set(updates)
+      .where(eq(purchaseOrderGroups.id, params.groupId))
+      .returning();
+    return row;
+  }
+
+  async deletePurchaseOrderGroup(params: { purchaseOrderId: string; groupId: string }) {
+    const tenantId = this.getTenantId();
+    const allGroups = await this.listPurchaseOrderGroups({
+      purchaseOrderId: params.purchaseOrderId,
+    });
+    const target = allGroups.find((g) => g.id === params.groupId);
+    if (!target) throw new NotFoundException('Purchase order group not found');
+
+    const itemCount = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(purchaseOrderItems)
+      .where(
+        and(
+          eq(purchaseOrderItems.tenantId, tenantId),
+          eq(purchaseOrderItems.purchaseOrderGroupId, params.groupId),
+          isNull(purchaseOrderItems.deletedAt),
+        ),
+      );
+
+    const comboCount = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(purchaseOrderCombos)
+      .where(
+        and(
+          eq(purchaseOrderCombos.tenantId, tenantId),
+          eq(purchaseOrderCombos.purchaseOrderGroupId, params.groupId),
+          isNull(purchaseOrderCombos.deletedAt),
+        ),
+      );
+
+    const totalChildren = (itemCount[0]?.count ?? 0) + (comboCount[0]?.count ?? 0);
+    if (allGroups.length <= 1 && totalChildren > 0) {
+      throw new BadRequestException(
+        'Cannot delete the only group when it contains line items — move or delete items first',
+      );
+    }
+
+    await this.db
+      .update(purchaseOrderGroups)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(eq(purchaseOrderGroups.id, params.groupId));
+    return { deleted: true, childrenRemoved: totalChildren };
+  }
+
+  async deletePurchaseOrderItem(params: {
+    purchaseOrderId: string;
+    itemId: string;
+    removeFromCatalogAssembly?: boolean;
+  }) {
+    const tenantId = this.getTenantId();
+    const [item] = await this.db
+      .select({
+        id: purchaseOrderItems.id,
+        purchaseOrderComboId: purchaseOrderItems.purchaseOrderComboId,
+        catalogItemId: purchaseOrderItems.catalogItemId,
+      })
+      .from(purchaseOrderItems)
+      .where(
+        and(
+          eq(purchaseOrderItems.id, params.itemId),
+          eq(purchaseOrderItems.tenantId, tenantId),
+          isNull(purchaseOrderItems.deletedAt),
+        ),
+      );
+    if (!item) throw new NotFoundException('Purchase order item not found');
+
+    await this.db
+      .update(purchaseOrderItems)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(eq(purchaseOrderItems.id, params.itemId));
+
+    let removedFromCatalog = false;
+    if (params.removeFromCatalogAssembly && item.purchaseOrderComboId && item.catalogItemId) {
+      const [combo] = await this.db
+        .select({ catalogComboId: purchaseOrderCombos.catalogComboId })
+        .from(purchaseOrderCombos)
+        .where(eq(purchaseOrderCombos.id, item.purchaseOrderComboId));
+
+      if (combo?.catalogComboId) {
+        const deleted = await this.db
+          .delete(catalogAssemblyComponents)
+          .where(
+            and(
+              eq(catalogAssemblyComponents.tenantId, tenantId),
+              eq(catalogAssemblyComponents.assemblyId, combo.catalogComboId),
+              eq(catalogAssemblyComponents.componentId, item.catalogItemId),
+            ),
+          )
+          .returning({ id: catalogAssemblyComponents.id });
+        removedFromCatalog = deleted.length > 0;
+      }
+    }
+
+    return { deleted: true, removedFromCatalog };
+  }
+
+  async deletePurchaseOrderCombo(params: { purchaseOrderId: string; comboId: string }) {
+    const tenantId = this.getTenantId();
+    const [combo] = await this.db
+      .select({
+        id: purchaseOrderCombos.id,
+        purchaseOrderGroupId: purchaseOrderCombos.purchaseOrderGroupId,
+      })
+      .from(purchaseOrderCombos)
+      .where(
+        and(
+          eq(purchaseOrderCombos.id, params.comboId),
+          eq(purchaseOrderCombos.tenantId, tenantId),
+          isNull(purchaseOrderCombos.deletedAt),
+        ),
+      );
+    if (!combo) throw new NotFoundException('Purchase order assembly not found');
+
+    const siblingCombos = await this.db
+      .select({ id: purchaseOrderCombos.id, comboPayload: purchaseOrderCombos.comboPayload })
+      .from(purchaseOrderCombos)
+      .where(
+        and(
+          eq(purchaseOrderCombos.tenantId, tenantId),
+          eq(purchaseOrderCombos.purchaseOrderGroupId, combo.purchaseOrderGroupId),
+          isNull(purchaseOrderCombos.deletedAt),
+        ),
+      );
+    for (const child of siblingCombos) {
+      if (child.id === params.comboId) continue;
+      if (parentComboIdFromPayload(child.comboPayload) !== params.comboId) continue;
+      await this.deletePurchaseOrderCombo({
+        purchaseOrderId: params.purchaseOrderId,
+        comboId: child.id,
+      });
+    }
+
+    await this.db
+      .update(purchaseOrderCombos)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(eq(purchaseOrderCombos.id, params.comboId));
+
+    await this.db
+      .update(purchaseOrderItems)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(
+        and(
+          eq(purchaseOrderItems.purchaseOrderComboId, params.comboId),
+          eq(purchaseOrderItems.tenantId, tenantId),
+          isNull(purchaseOrderItems.deletedAt),
+        ),
+      );
+
+    return { deleted: true };
+  }
+
+  async reorderPurchaseOrderGroups(params: {
+    purchaseOrderId: string;
+    groupIds: string[];
+  }) {
+    const tenantId = this.getTenantId();
+    const existing = await this.listPurchaseOrderGroups({
+      purchaseOrderId: params.purchaseOrderId,
+    });
+    const existingIds = new Set(existing.map((g) => g.id));
+
+    for (const id of params.groupIds) {
+      if (!existingIds.has(id)) {
+        throw new BadRequestException(`Group ${id} does not belong to this purchase order`);
+      }
+    }
+
+    await Promise.all(
+      params.groupIds.map((id, index) =>
+        this.db
+          .update(purchaseOrderGroups)
+          .set({ sortIndex: index, updatedAt: new Date() })
+          .where(
+            and(
+              eq(purchaseOrderGroups.id, id),
+              eq(purchaseOrderGroups.tenantId, tenantId),
+            ),
+          ),
+      ),
+    );
+
+    return this.listPurchaseOrderGroups({ purchaseOrderId: params.purchaseOrderId });
+  }
+
+  async reorderPurchaseOrderLineItems(params: {
+    purchaseOrderId: string;
+    items?: Array<{ id: string; sortIndex: number }>;
+    combos?: Array<{ id: string; sortIndex: number }>;
+  }) {
+    const tenantId = this.getTenantId();
+    const logPrefix = 'CatalogSelectionService.reorderPurchaseOrderLineItems';
+
+    await this.db.transaction(async (tx) => {
+      if (params.items && params.items.length > 0) {
+        for (const entry of params.items) {
+          await tx
+            .update(purchaseOrderItems)
+            .set({ sortIndex: entry.sortIndex, updatedAt: new Date() })
+            .where(
+              and(
+                eq(purchaseOrderItems.id, entry.id),
+                eq(purchaseOrderItems.tenantId, tenantId),
+                isNull(purchaseOrderItems.deletedAt),
+              ),
+            );
+        }
+        this.logger.debug(`${logPrefix} — reordered ${params.items.length} items`);
+      }
+
+      if (params.combos && params.combos.length > 0) {
+        for (const entry of params.combos) {
+          await tx
+            .update(purchaseOrderCombos)
+            .set({ sortIndex: entry.sortIndex, updatedAt: new Date() })
+            .where(
+              and(
+                eq(purchaseOrderCombos.id, entry.id),
+                eq(purchaseOrderCombos.tenantId, tenantId),
+                isNull(purchaseOrderCombos.deletedAt),
+              ),
+            );
+        }
+        this.logger.debug(`${logPrefix} — reordered ${params.combos.length} combos`);
+      }
+    });
+
+    return { success: true };
+  }
+
+  async movePurchaseOrderLineItem(params: {
+    purchaseOrderId: string;
+    itemId?: string;
+    comboId?: string;
+    targetGroupId: string;
+    targetComboId?: string;
+    insertAtIndex?: number;
+  }) {
+    const tenantId = this.getTenantId();
+    const logPrefix = 'CatalogSelectionService.movePurchaseOrderLineItem';
+
+    if (!params.itemId && !params.comboId) {
+      throw new BadRequestException('Either itemId or comboId must be provided');
+    }
+
+    const [targetGroup] = await this.db
+      .select({ id: purchaseOrderGroups.id })
+      .from(purchaseOrderGroups)
+      .where(
+        and(
+          eq(purchaseOrderGroups.id, params.targetGroupId),
+          eq(purchaseOrderGroups.tenantId, tenantId),
+          eq(purchaseOrderGroups.purchaseOrderId, params.purchaseOrderId),
+          isNull(purchaseOrderGroups.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!targetGroup) throw new NotFoundException('Target group not found');
+
+    if (params.targetComboId) {
+      const [targetCombo] = await this.db
+        .select({ id: purchaseOrderCombos.id, comboPayload: purchaseOrderCombos.comboPayload })
+        .from(purchaseOrderCombos)
+        .where(
+          and(
+            eq(purchaseOrderCombos.id, params.targetComboId),
+            eq(purchaseOrderCombos.tenantId, tenantId),
+            isNull(purchaseOrderCombos.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (!targetCombo) throw new NotFoundException('Target combo not found');
+    }
+
+    await this.db.transaction(async (tx) => {
+      if (params.itemId) {
+        const [item] = await tx
+          .select({
+            id: purchaseOrderItems.id,
+            purchaseOrderGroupId: purchaseOrderItems.purchaseOrderGroupId,
+            purchaseOrderComboId: purchaseOrderItems.purchaseOrderComboId,
+          })
+          .from(purchaseOrderItems)
+          .where(
+            and(
+              eq(purchaseOrderItems.id, params.itemId),
+              eq(purchaseOrderItems.tenantId, tenantId),
+              isNull(purchaseOrderItems.deletedAt),
+            ),
+          )
+          .limit(1);
+        if (!item) throw new NotFoundException('Item not found');
+
+        if (params.insertAtIndex !== undefined) {
+          const parentFilter = params.targetComboId
+            ? eq(purchaseOrderItems.purchaseOrderComboId, params.targetComboId)
+            : and(
+                eq(purchaseOrderItems.purchaseOrderGroupId, params.targetGroupId),
+                isNull(purchaseOrderItems.purchaseOrderComboId),
+              );
+          await tx
+            .update(purchaseOrderItems)
+            .set({ sortIndex: sql`${purchaseOrderItems.sortIndex} + 1` })
+            .where(
+              and(
+                parentFilter,
+                eq(purchaseOrderItems.tenantId, tenantId),
+                isNull(purchaseOrderItems.deletedAt),
+                sql`${purchaseOrderItems.sortIndex} >= ${params.insertAtIndex}`,
+              ),
+            );
+        }
+
+        const updates: Record<string, unknown> = { updatedAt: new Date() };
+        if (params.targetComboId) {
+          updates.purchaseOrderGroupId = null;
+          updates.purchaseOrderComboId = params.targetComboId;
+        } else {
+          updates.purchaseOrderGroupId = params.targetGroupId;
+          updates.purchaseOrderComboId = null;
+        }
+        if (params.insertAtIndex !== undefined) {
+          updates.sortIndex = params.insertAtIndex;
+        }
+        await tx.update(purchaseOrderItems).set(updates).where(eq(purchaseOrderItems.id, params.itemId));
+        this.logger.debug(
+          `${logPrefix} — moved item ${params.itemId} to group=${params.targetGroupId} combo=${params.targetComboId ?? 'none'} at=${params.insertAtIndex ?? 'end'}`,
+        );
+      }
+
+      if (params.comboId) {
+        const [combo] = await tx
+          .select({
+            id: purchaseOrderCombos.id,
+            purchaseOrderGroupId: purchaseOrderCombos.purchaseOrderGroupId,
+            comboPayload: purchaseOrderCombos.comboPayload,
+          })
+          .from(purchaseOrderCombos)
+          .where(
+            and(
+              eq(purchaseOrderCombos.id, params.comboId),
+              eq(purchaseOrderCombos.tenantId, tenantId),
+              isNull(purchaseOrderCombos.deletedAt),
+            ),
+          )
+          .limit(1);
+        if (!combo) throw new NotFoundException('Combo not found');
+
+        const isScope = isScopeComboPayload(combo.comboPayload);
+        if (isScope && params.targetComboId) {
+          throw new BadRequestException('Scopes cannot be placed inside another combo');
+        }
+
+        if (params.insertAtIndex !== undefined) {
+          await tx
+            .update(purchaseOrderCombos)
+            .set({ sortIndex: sql`${purchaseOrderCombos.sortIndex} + 1` })
+            .where(
+              and(
+                eq(purchaseOrderCombos.purchaseOrderGroupId, params.targetGroupId),
+                eq(purchaseOrderCombos.tenantId, tenantId),
+                isNull(purchaseOrderCombos.deletedAt),
+                sql`${purchaseOrderCombos.sortIndex} >= ${params.insertAtIndex}`,
+              ),
+            );
+        }
+
+        const updates: Record<string, unknown> = {
+          purchaseOrderGroupId: params.targetGroupId,
+          updatedAt: new Date(),
+        };
+        if (params.targetComboId) {
+          updates.comboPayload = buildComboPayload({
+            kind: 'assembly',
+            parentComboId: params.targetComboId,
+          });
+        } else {
+          const currentParent = parentComboIdFromPayload(combo.comboPayload);
+          if (currentParent) {
+            updates.comboPayload = buildComboPayload({
+              kind: isScope ? 'scope' : 'assembly',
+              parentComboId: undefined,
+            });
+          }
+        }
+        if (params.insertAtIndex !== undefined) {
+          updates.sortIndex = params.insertAtIndex;
+        }
+        await tx
+          .update(purchaseOrderCombos)
+          .set(updates)
+          .where(eq(purchaseOrderCombos.id, params.comboId));
+        this.logger.debug(
+          `${logPrefix} — moved combo ${params.comboId} to group=${params.targetGroupId} combo=${params.targetComboId ?? 'none'} at=${params.insertAtIndex ?? 'end'}`,
+        );
+      }
+    });
+
+    return { success: true };
+  }
+
+  async duplicatePurchaseOrderLineItem(params: {
+    purchaseOrderId: string;
+    itemId?: string;
+    comboId?: string;
+    targetGroupId: string;
+    targetComboId?: string;
+    insertAtIndex?: number;
+  }) {
+    const tenantId = this.getTenantId();
+    const logPrefix = 'CatalogSelectionService.duplicatePurchaseOrderLineItem';
+
+    if (!params.itemId && !params.comboId) {
+      throw new BadRequestException('Either itemId or comboId must be provided');
+    }
+
+    const [targetGroup] = await this.db
+      .select({ id: purchaseOrderGroups.id })
+      .from(purchaseOrderGroups)
+      .where(
+        and(
+          eq(purchaseOrderGroups.id, params.targetGroupId),
+          eq(purchaseOrderGroups.tenantId, tenantId),
+          eq(purchaseOrderGroups.purchaseOrderId, params.purchaseOrderId),
+          isNull(purchaseOrderGroups.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!targetGroup) throw new NotFoundException('Target group not found');
+
+    return this.db.transaction(async (tx) => {
+      if (params.itemId) {
+        const [source] = await tx
+          .select()
+          .from(purchaseOrderItems)
+          .where(
+            and(
+              eq(purchaseOrderItems.id, params.itemId),
+              eq(purchaseOrderItems.tenantId, tenantId),
+              isNull(purchaseOrderItems.deletedAt),
+            ),
+          )
+          .limit(1);
+        if (!source) throw new NotFoundException('Source item not found');
+
+        const insertIdx = params.insertAtIndex ?? source.sortIndex + 1;
+        const parentFilter = params.targetComboId
+          ? eq(purchaseOrderItems.purchaseOrderComboId, params.targetComboId)
+          : and(
+              eq(purchaseOrderItems.purchaseOrderGroupId, params.targetGroupId),
+              isNull(purchaseOrderItems.purchaseOrderComboId),
+            );
+        await tx
+          .update(purchaseOrderItems)
+          .set({ sortIndex: sql`${purchaseOrderItems.sortIndex} + 1` })
+          .where(
+            and(
+              parentFilter,
+              eq(purchaseOrderItems.tenantId, tenantId),
+              isNull(purchaseOrderItems.deletedAt),
+              sql`${purchaseOrderItems.sortIndex} >= ${insertIdx}`,
+            ),
+          );
+
+        const { id: _id, createdAt: _ca, updatedAt: _ua, deletedAt: _da, ...fields } = source;
+        const [copy] = await tx
+          .insert(purchaseOrderItems)
+          .values({
+            ...fields,
+            purchaseOrderGroupId: params.targetComboId ? null : params.targetGroupId,
+            purchaseOrderComboId: params.targetComboId ?? null,
+            sortIndex: insertIdx,
+          })
+          .returning({ id: purchaseOrderItems.id });
+        this.logger.debug(`${logPrefix} — duplicated item ${params.itemId} → ${copy.id}`);
+        return { success: true, newId: copy.id };
+      }
+
+      if (params.comboId) {
+        const [source] = await tx
+          .select()
+          .from(purchaseOrderCombos)
+          .where(
+            and(
+              eq(purchaseOrderCombos.id, params.comboId),
+              eq(purchaseOrderCombos.tenantId, tenantId),
+              isNull(purchaseOrderCombos.deletedAt),
+            ),
+          )
+          .limit(1);
+        if (!source) throw new NotFoundException('Source combo not found');
+
+        const isScope = isScopeComboPayload(source.comboPayload);
+        if (isScope && params.targetComboId) {
+          throw new BadRequestException('Scopes cannot be placed inside another combo');
+        }
+
+        const insertIdx = params.insertAtIndex ?? source.sortIndex + 1;
+        await tx
+          .update(purchaseOrderCombos)
+          .set({ sortIndex: sql`${purchaseOrderCombos.sortIndex} + 1` })
+          .where(
+            and(
+              eq(purchaseOrderCombos.purchaseOrderGroupId, params.targetGroupId),
+              eq(purchaseOrderCombos.tenantId, tenantId),
+              isNull(purchaseOrderCombos.deletedAt),
+              sql`${purchaseOrderCombos.sortIndex} >= ${insertIdx}`,
+            ),
+          );
+
+        const newPayload = params.targetComboId
+          ? buildComboPayload({ kind: 'assembly', parentComboId: params.targetComboId })
+          : buildComboPayload({ kind: isScope ? 'scope' : 'assembly' });
+
+        const {
+          id: _id,
+          createdAt: _ca,
+          updatedAt: _ua,
+          deletedAt: _da,
+          ...comboFields
+        } = source;
+        const [comboCopy] = await tx
+          .insert(purchaseOrderCombos)
+          .values({
+            ...comboFields,
+            purchaseOrderGroupId: params.targetGroupId,
+            comboPayload: newPayload,
+            sortIndex: insertIdx,
+          })
+          .returning({ id: purchaseOrderCombos.id });
+
+        const childItems = await tx
+          .select()
+          .from(purchaseOrderItems)
+          .where(
+            and(
+              eq(purchaseOrderItems.purchaseOrderComboId, params.comboId),
+              eq(purchaseOrderItems.tenantId, tenantId),
+              isNull(purchaseOrderItems.deletedAt),
+            ),
+          );
+
+        for (const childItem of childItems) {
+          const {
+            id: _cid,
+            createdAt: _cca,
+            updatedAt: _cua,
+            deletedAt: _cda,
+            ...itemFields
+          } = childItem;
+          await tx.insert(purchaseOrderItems).values({
+            ...itemFields,
+            purchaseOrderGroupId: null,
+            purchaseOrderComboId: comboCopy.id,
+          });
+        }
+
+        const childCombos = await tx
+          .select()
+          .from(purchaseOrderCombos)
+          .where(
+            and(
+              eq(purchaseOrderCombos.purchaseOrderGroupId, source.purchaseOrderGroupId),
+              eq(purchaseOrderCombos.tenantId, tenantId),
+              isNull(purchaseOrderCombos.deletedAt),
+            ),
+          );
+        const nestedCombos = childCombos.filter(
+          (c) => parentComboIdFromPayload(c.comboPayload) === params.comboId,
+        );
+
+        for (const nested of nestedCombos) {
+          const {
+            id: _nid,
+            createdAt: _nca,
+            updatedAt: _nua,
+            deletedAt: _nda,
+            ...nestedFields
+          } = nested;
+          const nestedPayload = buildComboPayload({
+            kind: isScopeComboPayload(nested.comboPayload) ? 'scope' : 'assembly',
+            parentComboId: comboCopy.id,
+          });
+          const [nestedCopy] = await tx
+            .insert(purchaseOrderCombos)
+            .values({
+              ...nestedFields,
+              purchaseOrderGroupId: params.targetGroupId,
+              comboPayload: nestedPayload,
+            })
+            .returning({ id: purchaseOrderCombos.id });
+
+          const nestedItems = await tx
+            .select()
+            .from(purchaseOrderItems)
+            .where(
+              and(
+                eq(purchaseOrderItems.purchaseOrderComboId, nested.id),
+                eq(purchaseOrderItems.tenantId, tenantId),
+                isNull(purchaseOrderItems.deletedAt),
+              ),
+            );
+          for (const ni of nestedItems) {
+            const {
+              id: _niid,
+              createdAt: _nica,
+              updatedAt: _niua,
+              deletedAt: _nida,
+              ...niFields
+            } = ni;
+            await tx.insert(purchaseOrderItems).values({
+              ...niFields,
+              purchaseOrderGroupId: null,
+              purchaseOrderComboId: nestedCopy.id,
+            });
+          }
+        }
+
+        this.logger.debug(
+          `${logPrefix} — duplicated combo ${params.comboId} → ${comboCopy.id} (${childItems.length} items, ${nestedCombos.length} nested combos)`,
+        );
+        return { success: true, newId: comboCopy.id };
+      }
+
+      return { success: true };
+    });
+  }
+
+  async updatePurchaseOrderLineItems(params: {
+    purchaseOrderId: string;
+    items: Array<{
+      id: string;
+      name?: string;
+      component?: string;
+      description?: string;
+      quantity?: string;
+      unitCost?: string;
+      markupValue?: string;
+      tax?: string;
+      unitType?: string;
+    }>;
+    combos: Array<{
+      id: string;
+      name?: string;
+      component?: string;
+      description?: string;
+      quantity?: string;
+    }>;
+  }) {
+    const tenantId = this.getTenantId();
+
+    const unitTypeRefs = params.items
+      .map((i) => i.unitType)
+      .filter((v): v is string => !!v);
+    let unitLookupMap = new Map<string, string>();
+    if (unitTypeRefs.length > 0) {
+      const units = await this.lookupsRepo.findByDomain({ tenantId, domain: 'unit_type' });
+      unitLookupMap = new Map(
+        units.map((u) => [(u.externalReference ?? u.name ?? '').toUpperCase(), u.id]),
+      );
+    }
+
+    await this.db.transaction(async (tx) => {
+      for (const item of params.items) {
+        const updates: Record<string, unknown> = { updatedAt: new Date() };
+        if (item.name !== undefined) updates.name = item.name;
+        if (item.component !== undefined) updates.component = item.component;
+        if (item.description !== undefined) updates.description = item.description;
+        if (item.quantity !== undefined) updates.quantity = item.quantity;
+        if (item.unitCost !== undefined) updates.unitCost = item.unitCost;
+        if (item.markupValue !== undefined) updates.markupValue = item.markupValue;
+        if (item.tax !== undefined) updates.tax = coerceToRateString(item.tax);
+        if (item.unitType !== undefined) {
+          const lookupId = item.unitType
+            ? unitLookupMap.get(item.unitType.toUpperCase())
+            : null;
+          updates.unitTypeLookupId = lookupId ?? null;
+        }
+
+        const totals = computeLineTotals({
+          quantity: item.quantity ?? '0',
+          unitCost: item.unitCost ?? '0',
+          taxRate: item.tax,
+        });
+        updates.totals = totals;
+
+        await tx
+          .update(purchaseOrderItems)
+          .set(updates)
+          .where(
+            and(eq(purchaseOrderItems.id, item.id), eq(purchaseOrderItems.tenantId, tenantId)),
+          );
+      }
+
+      for (const combo of params.combos) {
+        const updates: Record<string, unknown> = {};
+        if (combo.name !== undefined) updates.name = combo.name;
+        if (combo.component !== undefined) updates.component = combo.component;
+        if (combo.description !== undefined) updates.description = combo.description;
+        if (combo.quantity !== undefined) updates.quantity = combo.quantity;
+
+        if (Object.keys(updates).length > 0) {
+          updates.updatedAt = new Date();
+          await tx
+            .update(purchaseOrderCombos)
+            .set(updates)
+            .where(
+              and(
+                eq(purchaseOrderCombos.id, combo.id),
+                eq(purchaseOrderCombos.tenantId, tenantId),
+              ),
+            );
+        }
+      }
+    });
+
+    return { updated: params.items.length + params.combos.length };
   }
 
   async addPrimitiveToWorkOrder(params: {
@@ -380,6 +1208,7 @@ export class CatalogSelectionService {
     groupId: string;
     groupLabelLookupId?: string;
     description?: string;
+    component?: string;
     dimensions?: Record<string, unknown>;
   }) {
     const tenantId = this.getTenantId();
@@ -398,6 +1227,7 @@ export class CatalogSelectionService {
     const updates: Record<string, unknown> = {};
     if (params.groupLabelLookupId !== undefined) updates.groupLabelLookupId = params.groupLabelLookupId || null;
     if (params.description !== undefined) updates.description = params.description || null;
+    if (params.component !== undefined) updates.component = params.component || null;
     if (params.dimensions !== undefined) updates.dimensions = params.dimensions;
 
     if (Object.keys(updates).length === 0) return existing;
@@ -919,6 +1749,7 @@ export class CatalogSelectionService {
       markupValue?: string;
       tax?: string;
       unitType?: string;
+      lineScopeStatus?: string;
     }>;
     combos: Array<{
       id: string;
@@ -926,6 +1757,7 @@ export class CatalogSelectionService {
       component?: string;
       description?: string;
       quantity?: string;
+      lineScopeStatus?: string;
     }>;
   }) {
     const tenantId = this.getTenantId();
@@ -941,6 +1773,15 @@ export class CatalogSelectionService {
       );
     }
 
+    const lineScopeRefs = [
+      ...params.items.map((i) => i.lineScopeStatus),
+      ...params.combos.map((c) => c.lineScopeStatus),
+    ].filter((v): v is string => !!v);
+    const lineScopeLookupMap = await this.buildVendorLineScopeStatusLookupMap({
+      tenantId,
+      externalReferences: [...new Set(lineScopeRefs)],
+    });
+
     await this.db.transaction(async (tx) => {
       for (const item of params.items) {
         const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -954,6 +1795,10 @@ export class CatalogSelectionService {
         if (item.unitType !== undefined) {
           const lookupId = item.unitType ? unitLookupMap.get(item.unitType.toUpperCase()) : null;
           updates.unitTypeLookupId = lookupId ?? null;
+        }
+        if (item.lineScopeStatus !== undefined) {
+          updates.lineScopeStatusLookupId =
+            lineScopeLookupMap.get(item.lineScopeStatus) ?? null;
         }
 
         const totals = computeLineTotals({
@@ -975,6 +1820,10 @@ export class CatalogSelectionService {
         if (combo.component !== undefined) updates.component = combo.component;
         if (combo.description !== undefined) updates.description = combo.description;
         if (combo.quantity !== undefined) updates.quantity = combo.quantity;
+        if (combo.lineScopeStatus !== undefined) {
+          updates.lineScopeStatusLookupId =
+            lineScopeLookupMap.get(combo.lineScopeStatus) ?? null;
+        }
 
         if (Object.keys(updates).length > 0) {
           updates.updatedAt = new Date();
@@ -1047,7 +1896,11 @@ export class CatalogSelectionService {
         : [];
 
     for (const item of [...directItems, ...comboItems]) {
+      if (item.lineScopeStatusLookupId) lookupIds.add(item.lineScopeStatusLookupId);
       if (item.unitTypeLookupId) lookupIds.add(item.unitTypeLookupId);
+    }
+    for (const combo of combos) {
+      if (combo.lineScopeStatusLookupId) lookupIds.add(combo.lineScopeStatusLookupId);
     }
     const lookupMap = await this.lookupsRepo.findByIds({ ids: [...lookupIds], tenantId });
 
@@ -1091,6 +1944,9 @@ export class CatalogSelectionService {
       const mapCombo = (combo: (typeof groupCombos)[number]) => {
         const comboTotals = (combo.totals as Record<string, unknown>) ?? {};
         const kind = isScopeComboPayload(combo.comboPayload) ? 'scope' : 'assembly';
+        const lineScopeStatusLookup = combo.lineScopeStatusLookupId
+          ? lookupMap.get(combo.lineScopeStatusLookupId)
+          : undefined;
         return {
           id: combo.id,
           kind,
@@ -1104,6 +1960,13 @@ export class CatalogSelectionService {
           catalogComboId: combo.catalogComboId,
           catalogScopeId: combo.catalogComboId,
           publishStatus: combo.publishStatus ?? undefined,
+          lineScopeStatus: lineScopeStatusLookup
+            ? {
+                id: lineScopeStatusLookup.id,
+                name: lineScopeStatusLookup.name,
+                externalReference: lineScopeStatusLookup.externalReference,
+              }
+            : undefined,
           subTotal: asNumber(comboTotals.subTotal),
           totalTax: asNumber(comboTotals.totalTax),
           total: asNumber(comboTotals.total),
@@ -1119,6 +1982,7 @@ export class CatalogSelectionService {
         id: group.id,
         groupLabel: groupLabelObj,
         description: group.description,
+        component: group.component ?? undefined,
         length: asNumber(dimensions.length),
         width: asNumber(dimensions.width),
         height: asNumber(dimensions.height),
@@ -1277,6 +2141,7 @@ export class CatalogSelectionService {
         id: group.id,
         groupLabel: groupLabelObj,
         description: group.description,
+        component: group.component ?? undefined,
         length: asNumber(dimensions.length),
         width: asNumber(dimensions.width),
         height: asNumber(dimensions.height),
@@ -1435,6 +2300,7 @@ export class CatalogSelectionService {
         id: group.id,
         groupLabel: groupLabelObj,
         description: group.description,
+        component: group.component ?? undefined,
         length: asNumber(dimensions.length),
         width: asNumber(dimensions.width),
         height: asNumber(dimensions.height),
@@ -1731,6 +2597,12 @@ export class CatalogSelectionService {
       return { name: lv.name, externalReference: lv.externalReference };
     };
 
+    const resolveOutboundLineScopeStatus = (id: string | null) =>
+      resolveLookup(id) ?? {
+        name: DEFAULT_VENDOR_LINE_SCOPE_STATUS,
+        externalReference: DEFAULT_VENDOR_LINE_SCOPE_STATUS,
+      };
+
     const catalogItemIds = new Set<string>();
     for (const item of allItems) {
       if (item.catalogItemId) catalogItemIds.add(item.catalogItemId);
@@ -1800,8 +2672,7 @@ export class CatalogSelectionService {
       if (row.note) result.note = row.note;
       const tags = Array.isArray(row.tags) ? (row.tags as string[]) : [];
       if (tags.length > 0) result.tags = tags;
-      const lss = resolveLookup(row.lineScopeStatusLookupId);
-      if (lss) result.lineScopeStatus = lss;
+      result.lineScopeStatus = resolveOutboundLineScopeStatus(row.lineScopeStatusLookupId);
       const ut = resolveLookup(row.unitTypeLookupId);
       if (ut) result.unitType = ut;
       return result;
@@ -1875,8 +2746,9 @@ export class CatalogSelectionService {
               }
               comboResult.index = comboIndex;
               if (combo.quantity) comboResult.quantity = parseDecimal(combo.quantity);
-              const lss = resolveLookup(combo.lineScopeStatusLookupId);
-              if (lss) comboResult.lineScopeStatus = lss;
+              comboResult.lineScopeStatus = resolveOutboundLineScopeStatus(
+                combo.lineScopeStatusLookupId,
+              );
               const items = comboItemRows.map(mapItem);
               items.forEach((item, i) => {
                 item.index = i;
@@ -2280,6 +3152,9 @@ export class CatalogSelectionService {
     const unitTypeLookup = row.unitTypeLookupId && lookupMap
       ? lookupMap.get(row.unitTypeLookupId)
       : undefined;
+    const lineScopeStatusLookup = row.lineScopeStatusLookupId && lookupMap
+      ? lookupMap.get(row.lineScopeStatusLookupId)
+      : undefined;
 
     return {
       id: row.id,
@@ -2298,6 +3173,13 @@ export class CatalogSelectionService {
       markupValue: row.markupValue ? parseDecimal(row.markupValue) : undefined,
       unitType: unitTypeLookup
         ? { id: unitTypeLookup.id, name: unitTypeLookup.name, externalReference: unitTypeLookup.externalReference }
+        : undefined,
+      lineScopeStatus: lineScopeStatusLookup
+        ? {
+            id: lineScopeStatusLookup.id,
+            name: lineScopeStatusLookup.name,
+            externalReference: lineScopeStatusLookup.externalReference,
+          }
         : undefined,
       catalogItemId: row.catalogItemId,
       catalogMissing: hasMissingCatalogRef(row) || undefined,
@@ -2369,6 +3251,14 @@ export class CatalogSelectionService {
         .limit(1);
       if (!group) throw new NotFoundException('Quote group not found');
 
+      const defaultScopeStatusId =
+        assembly.kind === 'assembly'
+          ? await this.resolveVendorLineScopeStatusLookupId({
+              tenantId: params.tenantId,
+              externalReference: DEFAULT_VENDOR_LINE_SCOPE_STATUS,
+            })
+          : null;
+
       const [combo] = await params.tx
         .insert(quoteCombos)
         .values({
@@ -2381,6 +3271,7 @@ export class CatalogSelectionService {
           subCategory: subCategoryName,
           quantity: comboQuantity,
           comboPayload,
+          lineScopeStatusLookupId: defaultScopeStatusId ?? undefined,
         })
         .returning();
       comboRecord = combo;
@@ -2445,6 +3336,13 @@ export class CatalogSelectionService {
     const itemRows: Record<string, unknown>[] = [];
     let comboSubTotal = 0;
     let comboTax = 0;
+    const quoteDefaultScopeStatusId =
+      params.documentKind === 'quote'
+        ? await this.resolveVendorLineScopeStatusLookupId({
+            tenantId: params.tenantId,
+            externalReference: DEFAULT_VENDOR_LINE_SCOPE_STATUS,
+          })
+        : null;
 
     for (let i = 0; i < bomLines.length; i++) {
       const line = bomLines[i];
@@ -2498,6 +3396,7 @@ export class CatalogSelectionService {
             quantity: lineQty,
             sortIndex: i,
             totals,
+            lineScopeStatusLookupId: quoteDefaultScopeStatusId ?? undefined,
           })
           .returning();
         itemRows.push(item);
@@ -2589,6 +3488,75 @@ export class CatalogSelectionService {
       subCategoryName,
       unitCost: price.unitCost,
     });
+  }
+
+  private async resolveVendorLineScopeStatusLookupId(params: {
+    tenantId: string;
+    externalReference: string;
+  }): Promise<string | null> {
+    if (!VENDOR_LINE_SCOPE_STATUS_REFS.has(params.externalReference)) {
+      return null;
+    }
+    const cwRows = await this.lookupsRepo.findByDomain({
+      tenantId: params.tenantId,
+      domain: 'line_scope_status',
+      providerCode: 'crunchwork',
+    });
+    const cwMatch = cwRows.find(
+      (row) =>
+        row.externalReference === params.externalReference ||
+        row.name === params.externalReference,
+    );
+    if (cwMatch) return cwMatch.id;
+
+    const fallback = await this.lookupsRepo.findByName({
+      tenantId: params.tenantId,
+      domain: 'line_scope_status',
+      name: params.externalReference,
+    });
+    if (fallback) return fallback.id;
+
+    // Seed may not have run yet — create the Crunchwork vendor status on demand
+    // so Save does not silently clear line_scope_status_lookup_id back to null.
+    this.logger.warn(
+      `CatalogSelectionService.resolveVendorLineScopeStatusLookupId — ` +
+        `creating missing line_scope_status "${params.externalReference}" for tenant=${params.tenantId}`,
+    );
+    const created = await this.lookupsRepo.create({
+      tenantId: params.tenantId,
+      data: {
+        domain: 'line_scope_status',
+        name: params.externalReference,
+        externalReference: params.externalReference,
+        providerCode: 'crunchwork',
+      },
+    });
+    return created.id;
+  }
+
+  private async buildVendorLineScopeStatusLookupMap(params: {
+    tenantId: string;
+    externalReferences: string[];
+  }): Promise<Map<string, string>> {
+    const map = new Map<string, string>();
+    for (const ref of params.externalReferences) {
+      if (!VENDOR_LINE_SCOPE_STATUS_REFS.has(ref)) {
+        throw new BadRequestException(
+          `Invalid line status "${ref}". Allowed values: Draft, Cash Settled.`,
+        );
+      }
+      const id = await this.resolveVendorLineScopeStatusLookupId({
+        tenantId: params.tenantId,
+        externalReference: ref,
+      });
+      if (!id) {
+        throw new BadRequestException(
+          `Could not resolve line status "${ref}". Try again or re-seed lookups.`,
+        );
+      }
+      map.set(ref, id);
+    }
+    return map;
   }
 }
 

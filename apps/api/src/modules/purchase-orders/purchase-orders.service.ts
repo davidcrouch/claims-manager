@@ -1,6 +1,8 @@
-import { Injectable, Optional, BadRequestException, Logger, Inject } from '@nestjs/common';
+import { Injectable, Optional, BadRequestException, Logger, Inject, NotFoundException } from '@nestjs/common';
+import { and, eq } from 'drizzle-orm';
 import { PurchaseOrdersRepository } from '../../database/repositories';
 import { DRIZZLE, type DrizzleDB } from '../../database/drizzle.module';
+import { lookupValues } from '../../database/schema';
 import { TenantContext } from '../../tenant/tenant-context';
 import { CrunchworkService } from '../../crunchwork/crunchwork.service';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
@@ -61,6 +63,40 @@ export class PurchaseOrdersService {
   async findOne(params: { id: string }) {
     const tenantId = this.tenantContext.getTenantId();
     return this.purchaseOrdersRepo.findOne({ id: params.id, tenantId });
+  }
+
+  async assertPurchaseOrderEditable(params: { id: string }): Promise<void> {
+    const tenantId = this.tenantContext.getTenantId();
+    const row = await this.purchaseOrdersRepo.findOne({ id: params.id, tenantId });
+    if (!row) throw new NotFoundException('Purchase order not found');
+
+    let statusName = '';
+    if (row.statusLookupId) {
+      const [lookup] = await this.db
+        .select({ name: lookupValues.name })
+        .from(lookupValues)
+        .where(
+          and(
+            eq(lookupValues.id, row.statusLookupId),
+            eq(lookupValues.tenantId, tenantId),
+          ),
+        )
+        .limit(1);
+      statusName = (lookup?.name ?? '').trim().toLowerCase();
+    }
+    if (!statusName) {
+      const payload = row.purchaseOrderPayload as Record<string, unknown> | null;
+      const statusBlock = payload?.status;
+      if (statusBlock && typeof statusBlock === 'object') {
+        statusName = String((statusBlock as Record<string, unknown>).name ?? '')
+          .trim()
+          .toLowerCase();
+      }
+    }
+
+    if (statusName === 'archived') {
+      throw new BadRequestException('Archived purchase orders cannot be edited');
+    }
   }
 
   async findByJob(params: { jobId: string }) {

@@ -13,13 +13,25 @@ import {
   formatDate,
   commitColumnFilterSelection,
   columnFilterToIdsParam,
-
-
+  columnFilterToAssigneeIdsParam,
+  columnFilterToValuesParam,
+  buildColumnFilterOptions,
   ValueFilterMenu,
   SortableColumnHeader,
   TableEmptyRow,
+  withUniqueNamedFilterOptions,
 } from '@/components/shared/list-filters';
-import { statusIdsForArchiveListTab, mergeStatusParamWithTab } from '@/components/shared/archive-list';
+import { statusIdsForArchiveListTab, mergeStatusParamWithTab, isArchivedStatus } from '@/components/shared/archive-list';
+import {
+  archiveStateLabel,
+  columnFilterToArchiveStateStatusIds,
+} from '@/components/shared/list-mine-tab';
+import { columnFilterFromValuesParam } from '@/components/jobs/jobs-list-helpers';
+import {
+  isWorkOrdersMineTab,
+  parseWorkOrdersListTab,
+  type WorkOrdersListTab,
+} from '@/components/work-orders/work-orders-list-helpers';
 import { jobDisplayName } from '@/components/shared/job-label';
 import { JobCellLink } from '@/components/shared/JobCellLink';
 import { buildServerJobFilterOptions,
@@ -34,13 +46,20 @@ import {
   createListFetchSession,
   replaceListQueryIfNeeded,
   useListPageData } from '@/components/shared/use-list-page-data';
+import {
+  ARCHIVE_ONLY_LIST_TABS,
+  usePersistedListTab,
+} from '@/components/shared/list-tab-storage';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import {
   EntityPageHeader,
-  type EntityBreakdownItem } from '@/components/shared/EntityPageHeader';
+} from '@/components/shared/EntityPageHeader';
 import { computeStatusBreakdown } from '@/components/layout/ListPageHeader';
 import { CapturePoDrawer } from '@/components/forms/CapturePoDrawer';
-import { fetchWorkOrdersAction } from '@/app/(app)/work-orders/actions';
+import {
+  fetchWorkOrdersAction,
+  fetchWorkOrderFilterAssigneesAction,
+} from '@/app/(app)/work-orders/actions';
 import { entityDisplayLabel } from '@/components/shared/entity-label';
 import { workOrderInsurerPo } from '@/components/work-orders/work-order-label';
 import {
@@ -52,12 +71,7 @@ import type { WorkOrder, PaginatedResponse, Job, Claim } from '@/types/api';
 
 const PAGE_SIZE = 20;
 
-type ListTab = 'active' | 'archived' | 'all';
-const VALID_TABS = new Set<ListTab>(['active', 'archived', 'all']);
-function parseTab(param: string | null): ListTab {
-  if (param && VALID_TABS.has(param as ListTab)) return param as ListTab;
-  return 'active';
-}
+type ListTab = WorkOrdersListTab;
 
 function formatAmount(value?: string | null): string {
   if (!value) return '';
@@ -73,6 +87,8 @@ type WOSortField =
   | 'name'
   | 'insurer_po'
   | 'job'
+  | 'assignee'
+  | 'archive_state'
   | 'status'
   | 'wo_type'
   | 'source'
@@ -80,13 +96,21 @@ type WOSortField =
   | 'start_date'
   | 'updated_at';
 
-interface ColDef { key: WOSortField; label: string; filterable?: boolean; locked?: boolean }
+interface ColDef {
+  key: WOSortField;
+  label: string;
+  filterable?: boolean;
+  locked?: boolean;
+  sortable?: boolean;
+}
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'name', label: 'Work Order #', locked: true },
   { key: 'insurer_po', label: 'Insurer PO' },
   { key: 'job', label: 'Job', filterable: true },
+  { key: 'assignee', label: 'Assigned', filterable: true },
   { key: 'status', label: 'Status', filterable: true },
+  { key: 'archive_state', label: 'State', filterable: true, sortable: false },
   { key: 'wo_type', label: 'Type', filterable: true },
   { key: 'source', label: 'From (upstream)' },
   { key: 'total_amount', label: 'Total' },
@@ -103,6 +127,7 @@ export interface WorkOrdersListClientProps {
   /** When provided, the page header shows job details and data is scoped to this job. */
   job?: Job | null;
   parentClaim?: Claim | null;
+  currentUserId?: string | null;
 }
 
 export function WorkOrdersListClient({
@@ -112,7 +137,9 @@ export function WorkOrdersListClient({
   jobNameById,
   jobTypeById,
   job,
-  parentClaim }: WorkOrdersListClientProps) {
+  parentClaim,
+  currentUserId,
+}: WorkOrdersListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const jobId = searchParams.get('jobId') ?? undefined;
@@ -120,7 +147,19 @@ export function WorkOrdersListClient({
   const { data, setData, beginFetch, abortFetch } = useListPageData(initialData);
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [debouncedSearch, setDebouncedSearch] = useState(search);
-  const [tab, setTab] = useState<ListTab>(() => parseTab(searchParams.get('tab')));
+  const assignedToUserId = searchParams.get('assignedToUserId');
+  const legacyMineTab =
+    !job &&
+    !!assignedToUserId &&
+    !!currentUserId &&
+    assignedToUserId === currentUserId;
+  const [tab, setTab] = usePersistedListTab<ListTab>({
+    storageKey: 'work-orders',
+    urlTab: searchParams.get('tab'),
+    parse: parseWorkOrdersListTab,
+    fallbackTab: legacyMineTab ? 'mine' : undefined,
+    allowedTabs: job ? ARCHIVE_ONLY_LIST_TABS : undefined,
+  });
   const [page, setPage] = useState(() => {
     const p = parseInt(searchParams.get('page') ?? '1', 10);
     return Number.isFinite(p) && p > 0 ? p : 1;
@@ -132,10 +171,35 @@ export function WorkOrdersListClient({
   const [typeFilterActive, setTypeFilterActive] = useState(false);
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [statusFilterActive, setStatusFilterActive] = useState(false);
+  const [assigneeFilter, setAssigneeFilter] = useState<Set<string>>(new Set());
+  const [assigneeFilterActive, setAssigneeFilterActive] = useState(false);
+  const [archiveStateFilter, setArchiveStateFilter] = useState<Set<string>>(() =>
+    columnFilterFromValuesParam(searchParams.get('archiveState')).selected,
+  );
+  const [archiveStateFilterActive, setArchiveStateFilterActive] = useState(
+    () => columnFilterFromValuesParam(searchParams.get('archiveState')).active,
+  );
+  const [assigneeOptions, setAssigneeOptions] = useState<
+    { id: string; name: string }[]
+  >([]);
   const [captureDrawerOpen, setCaptureDrawerOpen] = useState(false);
+
+  const isMineTab = isWorkOrdersMineTab(tab);
+  const showAssigneeColumn = !isMineTab;
+  const showArchiveStateColumn = isMineTab;
+
+  const listColumns = useMemo(
+    () =>
+      TABLE_COLUMNS.filter(
+        (col) =>
+          (col.key !== 'assignee' || showAssigneeColumn) &&
+          (col.key !== 'archive_state' || showArchiveStateColumn),
+      ),
+    [showAssigneeColumn, showArchiveStateColumn],
+  );
   const { isVisible, toggle, visibleCount } = useColumnVisibility(
-    'work-orders-v2',
-    TABLE_COLUMNS,
+    'work-orders-v3',
+    listColumns,
   );
 
   const selectedJobIds = useMemo(
@@ -170,21 +234,58 @@ export function WorkOrdersListClient({
     () => toServerJobFetchParams(selectedJobIds),
     [selectedJobIds],
   );
-  const tabStatusIds = useMemo(
-    () => statusIdsForArchiveListTab(tab, statusOptions),
-    [tab, statusOptions],
+  const tabStatusIds = useMemo(() => {
+    if (isWorkOrdersMineTab(tab)) return undefined;
+    return statusIdsForArchiveListTab(tab, statusOptions);
+  }, [tab, statusOptions]);
+
+  const statusColumnParam = useMemo(
+    () => columnFilterToIdsParam(statusFilterActive, statusFilter, statusOptions),
+    [statusFilterActive, statusFilter, statusOptions],
   );
+
+  const archiveStateStatusParam = useMemo(
+    () =>
+      isMineTab
+        ? columnFilterToArchiveStateStatusIds(
+            archiveStateFilterActive,
+            archiveStateFilter,
+            statusOptions,
+          )
+        : undefined,
+    [isMineTab, archiveStateFilterActive, archiveStateFilter, statusOptions],
+  );
+
   const statusParam = useMemo(
     () =>
       mergeStatusParamWithTab(
-        columnFilterToIdsParam(statusFilterActive, statusFilter, statusOptions),
+        mergeStatusParamWithTab(statusColumnParam, archiveStateStatusParam),
         tabStatusIds,
       ),
-    [statusFilterActive, statusFilter, statusOptions, tabStatusIds],
+    [statusColumnParam, archiveStateStatusParam, tabStatusIds],
   );
   const workOrderTypeParam = useMemo(
     () => columnFilterToIdsParam(typeFilterActive, typeFilter, workOrderTypes),
     [typeFilterActive, typeFilter, workOrderTypes],
+  );
+  const assigneeFilterOptions = useMemo(
+    () => withUniqueNamedFilterOptions(assigneeOptions),
+    [assigneeOptions],
+  );
+  const assignedToUserIdParam = useMemo(
+    () => (isMineTab && currentUserId ? currentUserId : undefined),
+    [isMineTab, currentUserId],
+  );
+  const assignedToUserIdsParam = useMemo(
+    () =>
+      isMineTab
+        ? undefined
+        : columnFilterToAssigneeIdsParam(
+            assigneeFilterActive,
+            assigneeFilter,
+            assigneeFilterOptions,
+          ),
+    [isMineTab, assigneeFilterActive, assigneeFilter, assigneeFilterOptions],
   );
 
   useEffect(() => {
@@ -192,13 +293,13 @@ export function WorkOrdersListClient({
     return () => clearTimeout(t);
   }, [search]);
 
+  useEffect(() => {
+    fetchWorkOrderFilterAssigneesAction().then(setAssigneeOptions);
+  }, []);
+
   const sortParam = `${columnSort.field}_${columnSort.order}`;
 
   useEffect(() => {
-    const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
-    const typeKey = workOrderTypeParam === null ? '__none__' : (workOrderTypeParam ?? '');
-    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${typeKey}|${jobId ?? ''}|${jobIdsParam ?? ''}`;
-
     const params = new URLSearchParams(searchParams.toString());
     if (debouncedSearch) params.set('search', debouncedSearch);
     else params.delete('search');
@@ -210,23 +311,58 @@ export function WorkOrdersListClient({
     else params.delete('sort');
     if (statusParam) params.set('status', statusParam); else params.delete('status');
     if (workOrderTypeParam) params.set('workOrderType', workOrderTypeParam); else params.delete('workOrderType');
+    if (assignedToUserIdsParam) params.set('assignedToUserIds', assignedToUserIdsParam);
+    else params.delete('assignedToUserIds');
+    params.delete('assignedToUserId');
+    const archiveStateValuesParam = isMineTab
+      ? columnFilterToValuesParam(archiveStateFilterActive, archiveStateFilter)
+      : null;
+    if (archiveStateValuesParam) params.set('archiveState', archiveStateValuesParam);
+    else params.delete('archiveState');
     syncServerJobFilterParams(params, jobId, jobIdsParam);
     const next = params.toString();
-    if (
-      !replaceListQueryIfNeeded({
-        router,
-        pathname: '/work-orders',
-        currentQuery: searchParams.toString(),
-        nextQuery: next,
-      })
-    ) {
-      return;
-    }
+    replaceListQueryIfNeeded({
+      router,
+      pathname: '/work-orders',
+      currentQuery: searchParams.toString(),
+      nextQuery: next,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams excluded to avoid infinite loop
+  }, [
+    debouncedSearch,
+    sortParam,
+    tab,
+    page,
+    statusParam,
+    workOrderTypeParam,
+    assignedToUserIdParam,
+    assignedToUserIdsParam,
+    isMineTab,
+    archiveStateFilterActive,
+    archiveStateFilter,
+    jobId,
+    jobIdsParam,
+    searchParams,
+    router,
+  ]);
+
+  useEffect(() => {
+    const statusKey = statusParam === null ? '__none__' : (statusParam ?? '');
+    const typeKey = workOrderTypeParam === null ? '__none__' : (workOrderTypeParam ?? '');
+    const assigneesKey =
+      assignedToUserIdsParam === null ? '__none__' : (assignedToUserIdsParam ?? '');
+    const assigneeKey = assignedToUserIdParam ?? '';
+    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${typeKey}|${assigneeKey}|${assigneesKey}|${jobId ?? ''}|${jobIdsParam ?? ''}`;
 
     const session = createListFetchSession({ fetchKey, beginFetch, abortFetch });
     if (!session) return;
 
-    if (statusParam === null || workOrderTypeParam === null) {
+    if (
+      statusParam === null ||
+      workOrderTypeParam === null ||
+      assignedToUserIdsParam === null ||
+      (isMineTab && !currentUserId)
+    ) {
       setData({ data: [], total: 0 });
       return session.cleanup;
     }
@@ -237,14 +373,39 @@ export function WorkOrdersListClient({
       sort: sortParam,
       status: statusParam,
       workOrderType: workOrderTypeParam,
-      jobId: fetchJobId, jobIds: fetchJobIds,
-      search: debouncedSearch || undefined }).then((res) => {
+      assignedToUserId: assignedToUserIdParam,
+      assignedToUserIds: assignedToUserIdsParam,
+      jobId: fetchJobId,
+      jobIds: fetchJobIds,
+      search: debouncedSearch || undefined,
+    }).then((res) => {
       if (!session.cancelled && res) setData(res);
     });
     return session.cleanup;
-  }, [debouncedSearch, sortParam, tab, page, statusParam, workOrderTypeParam, jobId, jobIdsParam, fetchJobId, fetchJobIds, searchParams, router, beginFetch, abortFetch]);
+  }, [
+    debouncedSearch,
+    sortParam,
+    tab,
+    page,
+    statusParam,
+    workOrderTypeParam,
+    assignedToUserIdParam,
+    assignedToUserIdsParam,
+    isMineTab,
+    currentUserId,
+    archiveStateFilterActive,
+    archiveStateFilter,
+    jobId,
+    jobIdsParam,
+    fetchJobId,
+    fetchJobIds,
+    searchParams,
+    beginFetch,
+    abortFetch,
+  ]);
 
   const handleColumnSort = (field: WOSortField) => {
+    if (field === 'archive_state') return;
     setColumnSort((prev) => {
       if (prev.field === field) {
         return { field, order: prev.order === 'asc' ? 'desc' : 'asc' };
@@ -268,6 +429,13 @@ export function WorkOrdersListClient({
 
   const handleTabChange = (val: string) => {
     setTab(val as ListTab);
+    if (val === 'mine') {
+      setAssigneeFilter(new Set());
+      setAssigneeFilterActive(false);
+    } else {
+      setArchiveStateFilter(new Set());
+      setArchiveStateFilterActive(false);
+    }
     setPage(1);
   };
 
@@ -276,6 +444,14 @@ export function WorkOrdersListClient({
     [workOrderTypes],
   );
 
+  const uniqueAssignees = useMemo(
+    () =>
+      buildColumnFilterOptions(
+        assigneeFilterOptions.map((a) => a.name),
+        { alwaysIncludeBlank: true },
+      ),
+    [assigneeFilterOptions],
+  );
 
   const uniqueStatuses = useMemo(() => {
     const fromOptions = statusOptions
@@ -334,6 +510,25 @@ export function WorkOrdersListClient({
     router.replace(`/work-orders?${params.toString()}`, { scroll: false });
   };
 
+  const applyAssigneeFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: uniqueAssignees.length });
+    setAssigneeFilter(committed.selected);
+    setAssigneeFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const applyArchiveStateFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: 2,
+    });
+    setArchiveStateFilter(committed.selected);
+    setArchiveStateFilterActive(committed.active);
+    setPage(1);
+  };
+
   const statusFilterProps = {
     options: uniqueStatuses,
     selected: statusFilter,
@@ -358,6 +553,24 @@ export function WorkOrdersListClient({
     menuTitle: 'Filter by job',
     itemNoun: { singular: 'job', plural: 'jobs' } };
 
+  const assigneeFilterProps = {
+    options: uniqueAssignees,
+    selected: assigneeFilter,
+    active: assigneeFilterActive,
+    onApply: applyAssigneeFilter,
+    menuTitle: 'Filter by assignee',
+    itemNoun: { singular: 'assignee', plural: 'assignees' },
+  };
+
+  const archiveStateFilterProps = {
+    options: ['Active', 'Archived'],
+    selected: archiveStateFilter,
+    active: archiveStateFilterActive,
+    onApply: applyArchiveStateFilter,
+    menuTitle: 'Filter by state',
+    itemNoun: { singular: 'state', plural: 'states' },
+  };
+
   const visibleRows = data.data;
 
   const breakdown = computeStatusBreakdown(visibleRows, (wo) => wo.status?.name);
@@ -373,6 +586,8 @@ export function WorkOrdersListClient({
       currency: 'AUD',
       maximumFractionDigits: 0 });
   }, [visibleRows]);
+
+  const visibleColumns = listColumns.filter((col) => isVisible(col.key));
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
@@ -394,6 +609,7 @@ export function WorkOrdersListClient({
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
           <Tabs value={tab} onValueChange={handleTabChange}>
             <TabsList>
+              {!job && <TabsTrigger value="mine">My WOs</TabsTrigger>}
               <TabsTrigger value="active">Active</TabsTrigger>
               <TabsTrigger value="archived">Archived</TabsTrigger>
               <TabsTrigger value="all">All</TabsTrigger>
@@ -461,31 +677,49 @@ export function WorkOrdersListClient({
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50">
                 <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                  {TABLE_COLUMNS.filter((col) => isVisible(col.key)).map((col) => (
-                    <SortableColumnHeader
-                      key={col.key}
-                      columnKey={col.key}
-                      label={col.label}
-                      activeField={columnSort.field}
-                      sortOrder={columnSort.order}
-                      onSort={handleColumnSort}
-                      className={col.key === 'insurer_po' ? 'text-center' : undefined}
-                      filter={
-                        col.key === 'job'
-                          ? jobFilterProps
-                          : col.key === 'status'
-                            ? statusFilterProps
-                            : col.key === 'wo_type'
-                              ? typeFilterProps
-                              : undefined
-                      }
-                    />
-                  ))}
+                  {visibleColumns.map((col) => {
+                    if (col.key === 'archive_state') {
+                      return (
+                        <SortableColumnHeader
+                          key={col.key}
+                          columnKey={col.key}
+                          label={col.label}
+                          activeField={null}
+                          sortOrder="asc"
+                          onSort={() => {}}
+                          filter={archiveStateFilterProps}
+                          className="cursor-default hover:text-slate-500 [&_span>svg:last-child]:hidden"
+                        />
+                      );
+                    }
+                    return (
+                      <SortableColumnHeader
+                        key={col.key}
+                        columnKey={col.key}
+                        label={col.label}
+                        activeField={columnSort.field}
+                        sortOrder={columnSort.order}
+                        onSort={handleColumnSort}
+                        className={col.key === 'insurer_po' ? 'text-center' : undefined}
+                        filter={
+                          col.key === 'job'
+                            ? jobFilterProps
+                            : col.key === 'assignee'
+                              ? assigneeFilterProps
+                              : col.key === 'status'
+                                ? statusFilterProps
+                                : col.key === 'wo_type'
+                                  ? typeFilterProps
+                                  : undefined
+                        }
+                      />
+                    );
+                  })}
                   <th scope="col" className={LIST_ARCHIVE_TH_CLASS}>
                     <span className="sr-only">Actions</span>
                   </th>
                   <ColumnSettingsHeaderCell
-                    columns={TABLE_COLUMNS}
+                    columns={listColumns}
                     isVisible={isVisible}
                     onToggle={toggle}
                   />
@@ -510,8 +744,10 @@ export function WorkOrdersListClient({
                     <tr
                       key={wo.id}
                       onClick={() => {
-                        const jobId = searchParams.get('jobId');
-                        const href = jobId ? `/work-orders/${wo.id}?jobId=${jobId}` : `/work-orders/${wo.id}`;
+                        const scopedJobId = searchParams.get('jobId');
+                        const href = scopedJobId
+                          ? `/work-orders/${wo.id}?jobId=${scopedJobId}`
+                          : `/work-orders/${wo.id}`;
                         router.push(href);
                       }}
                       className="cursor-pointer transition-colors hover:bg-slate-50"
@@ -531,9 +767,22 @@ export function WorkOrdersListClient({
                           <JobCellLink jobId={wo.jobId} jobNameById={jobNameById} jobTypeById={jobTypeById} />
                         </td>
                       )}
+                      {showAssigneeColumn && isVisible('assignee') && (
+                        <td className="px-4 py-3 text-slate-600">
+                          {wo.assigneeName?.trim() || '—'}
+                        </td>
+                      )}
                       {isVisible('status') && (
                         <td className="whitespace-nowrap px-4 py-3">
                           <StatusBadge status={statusName} />
+                        </td>
+                      )}
+                      {showArchiveStateColumn && isVisible('archive_state') && (
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <StatusBadge
+                            status={archiveStateLabel(statusName)}
+                            variant={isArchivedStatus(statusName) ? 'inactive' : 'active'}
+                          />
                         </td>
                       )}
                       {isVisible('wo_type') && (

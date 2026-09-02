@@ -230,18 +230,24 @@ export class TasksRepository {
     return rows as TaskViewRow[];
   }
 
-  async findOverdue(params: { tenantId: string }): Promise<TaskViewRow[]> {
+  async findOverdue(params: {
+    tenantId: string;
+    assignedToUserId?: string;
+  }): Promise<TaskViewRow[]> {
+    const assignedToUserId = params.assignedToUserId?.trim() || null;
+    const conditions = [
+      eq(tasks.tenantId, params.tenantId),
+      eq(tasks.status, 'Open'),
+      lt(tasks.dueDate, new Date()),
+    ];
+    if (assignedToUserId) {
+      conditions.push(eq(tasks.assignedToUserId, assignedToUserId));
+    }
     const rows = await this.db
       .select(this.taskViewColumns())
       .from(tasks)
       .leftJoin(users, assigneeJoinOn)
-      .where(
-        and(
-          eq(tasks.tenantId, params.tenantId),
-          eq(tasks.status, 'Open'),
-          lt(tasks.dueDate, new Date()),
-        ),
-      )
+      .where(and(...conditions))
       .orderBy(asc(tasks.dueDate));
     return rows as TaskViewRow[];
   }

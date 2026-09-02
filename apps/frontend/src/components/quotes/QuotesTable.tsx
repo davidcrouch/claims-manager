@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { formatDate, SortableColumnHeader, TableEmptyRow, type ColumnValueFilter } from '@/components/shared/list-filters';
 import {
   ColumnSettingsHeaderCell,
@@ -13,6 +14,8 @@ import { entityDisplayLabel } from '@/components/shared/entity-label';
 import { quoteInsurerRef } from '@/components/quotes/quote-label';
 import { TypeBadge } from '@/components/ui/type-badge';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { archiveStateLabel } from '@/components/shared/list-mine-tab';
+import { isArchivedStatus } from '@/components/shared/archive-list';
 import type { Quote } from '@/types/api';
 
 type Dict = Record<string, unknown>;
@@ -72,6 +75,7 @@ export type QuoteSortField =
   | 'insurer_ref'
   | 'job'
   | 'assignee'
+  | 'archive_state'
   | 'status'
   | 'estimate_type'
   | 'reference'
@@ -85,6 +89,7 @@ interface ColDef {
   filterable?: boolean;
   locked?: boolean;
   defaultHidden?: boolean;
+  sortable?: boolean;
 }
 
 const TABLE_COLUMNS: ColDef[] = [
@@ -94,6 +99,7 @@ const TABLE_COLUMNS: ColDef[] = [
   { key: 'assignee', label: 'Assigned', filterable: true },
   { key: 'reference', label: 'Reference', defaultHidden: true },
   { key: 'status', label: 'Status', filterable: true },
+  { key: 'archive_state', label: 'State', filterable: true, sortable: false },
   { key: 'estimate_type', label: 'Estimate Type', filterable: true },
   { key: 'total_amount', label: 'Total' },
   { key: 'quote_date', label: 'Estimate Date' },
@@ -113,7 +119,10 @@ export interface QuotesTableProps {
   statusColumnFilter?: ColumnValueFilter;
   jobColumnFilter?: ColumnValueFilter;
   assigneeColumnFilter?: ColumnValueFilter;
+  archiveStateColumnFilter?: ColumnValueFilter;
   estimateTypeColumnFilter?: ColumnValueFilter;
+  showAssigneeColumn?: boolean;
+  showArchiveStateColumn?: boolean;
 }
 
 export function QuotesTable({
@@ -129,13 +138,25 @@ export function QuotesTable({
   statusColumnFilter,
   jobColumnFilter,
   assigneeColumnFilter,
+  archiveStateColumnFilter,
   estimateTypeColumnFilter,
+  showAssigneeColumn = true,
+  showArchiveStateColumn = false,
 }: QuotesTableProps) {
+  const listColumns = useMemo(
+    () =>
+      TABLE_COLUMNS.filter(
+        (col) =>
+          (col.key !== 'assignee' || showAssigneeColumn) &&
+          (col.key !== 'archive_state' || showArchiveStateColumn),
+      ),
+    [showAssigneeColumn, showArchiveStateColumn],
+  );
   const { isVisible, toggle, visibleCount } = useColumnVisibility(
     'quotes-v3',
-    TABLE_COLUMNS,
+    listColumns,
   );
-  const visibleColumns = TABLE_COLUMNS.filter((col) => isVisible(col.key));
+  const visibleColumns = listColumns.filter((col) => isVisible(col.key));
   const colSpan = visibleCount + 2;
 
   return (
@@ -147,29 +168,46 @@ export function QuotesTable({
             statusColumnFilter ||
             jobColumnFilter ||
             assigneeColumnFilter ||
+            archiveStateColumnFilter ||
             estimateTypeColumnFilter
-              ? visibleColumns.map((col) => (
-                  <SortableColumnHeader
-                    key={col.key}
-                    columnKey={col.key}
-                    label={col.label}
-                    activeField={sortField ?? null}
-                    sortOrder={sortOrder}
-                    onSort={onSort ?? (() => {})}
-                    className={col.key === 'insurer_ref' ? 'text-center' : undefined}
-                    filter={
-                      col.key === 'job'
-                        ? jobColumnFilter
-                        : col.key === 'assignee'
-                          ? assigneeColumnFilter
-                          : col.key === 'status'
-                            ? statusColumnFilter
-                            : col.key === 'estimate_type'
-                              ? estimateTypeColumnFilter
-                              : undefined
-                    }
-                  />
-                ))
+              ? visibleColumns.map((col) => {
+                  if (col.key === 'archive_state') {
+                    return (
+                      <SortableColumnHeader
+                        key={col.key}
+                        columnKey={col.key}
+                        label={col.label}
+                        activeField={null}
+                        sortOrder="asc"
+                        onSort={() => {}}
+                        filter={archiveStateColumnFilter}
+                        className="cursor-default hover:text-slate-500 [&_span>svg:last-child]:hidden"
+                      />
+                    );
+                  }
+                  return (
+                    <SortableColumnHeader
+                      key={col.key}
+                      columnKey={col.key}
+                      label={col.label}
+                      activeField={sortField ?? null}
+                      sortOrder={sortOrder}
+                      onSort={onSort ?? (() => {})}
+                      className={col.key === 'insurer_ref' ? 'text-center' : undefined}
+                      filter={
+                        col.key === 'job'
+                          ? jobColumnFilter
+                          : col.key === 'assignee'
+                            ? assigneeColumnFilter
+                            : col.key === 'status'
+                              ? statusColumnFilter
+                              : col.key === 'estimate_type'
+                                ? estimateTypeColumnFilter
+                                : undefined
+                      }
+                    />
+                  );
+                })
               : visibleColumns.map((col) => (
                   <th
                     key={col.key}
@@ -183,7 +221,7 @@ export function QuotesTable({
               <span className="sr-only">Actions</span>
             </th>
             <ColumnSettingsHeaderCell
-              columns={TABLE_COLUMNS}
+              columns={listColumns}
               isVisible={isVisible}
               onToggle={toggle}
             />
@@ -243,6 +281,14 @@ export function QuotesTable({
                 {isVisible('status') && (
                   <td className="whitespace-nowrap px-4 py-3">
                     <StatusBadge status={statusName} />
+                  </td>
+                )}
+                {showArchiveStateColumn && isVisible('archive_state') && (
+                  <td className="whitespace-nowrap px-4 py-3">
+                    <StatusBadge
+                      status={archiveStateLabel(statusName)}
+                      variant={isArchivedStatus(statusName) ? 'inactive' : 'active'}
+                    />
                   </td>
                 )}
                 {isVisible('estimate_type') && (

@@ -34,9 +34,22 @@ services:
       - RESEND_API_KEY=${RESEND_API_KEY:-}
       - EMAIL_FROM=${EMAIL_FROM:-noreply@ensureos.com}
       - EMAIL_REPLY_TO=${EMAIL_REPLY_TO:-}
+      # Word → PDF via Gotenberg (LibreOffice runs in the sidecar, not the API image).
+      - GOTENBERG_URL=${GOTENBERG_URL:-http://gotenberg:3000}
     depends_on:
       - postgres
       - minio
+      - gotenberg
+
+  gotenberg:
+    image: gotenberg/gotenberg:8.36.0-libreoffice
+    ports:
+      - "3000:3000"
+    # Host pnpm run dev: set GOTENBERG_URL=http://localhost:3000 in apps/api/.env
+    command:
+      - "gotenberg"
+      - "--api-timeout=180s"
+    restart: unless-stopped
 
   postgres:
     image: postgres:16-alpine

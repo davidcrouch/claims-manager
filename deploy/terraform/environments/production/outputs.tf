@@ -39,6 +39,7 @@ output "cloud_run_uris" {
     provider     = module.cloud_run_provider[0].uri
     claims_mcp   = module.cloud_run_claims_mcp[0].uri
     ms_graph_mcp = module.cloud_run_ms_graph_mcp[0].uri
+    gotenberg    = module.cloud_run_gotenberg[0].uri
   } : {}
 }
 

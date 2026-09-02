@@ -8,30 +8,28 @@
  * §7 scalars / §8 adjustment+allocation / §9 line items / §10 payload fallback).
  */
 
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import Link from 'next/link';
 import {
   ShoppingCart,
   ExternalLink,
   Building2,
   Calendar,
-  Clock,
-  ClipboardList,
   DollarSign,
   FileSignature,
   Hash,
   Layers,
-  ListTodo,
-  MapPin,
-  MessageSquare,
+  Lock,
   Package,
   Paperclip,
   Phone,
   Receipt,
+  Send,
   User,
   Users,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { BackButton } from '@/components/layout/BackButton';
 import {
@@ -41,11 +39,11 @@ import {
 } from '@/components/layout/PageHeaderLayout';
 import { HeaderActionToolbar } from '@/components/layout/HeaderActionToolbar';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
+import { HeaderSaveStatus } from '@/components/shared/HeaderSaveStatus';
 import {
   DefRow,
   SectionCard,
   formatDate,
-  formatDateTime,
   formatCurrency,
   formatAddress,
   pick,
@@ -57,8 +55,22 @@ import { PrintButton } from '@/components/shared/PrintButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { jobDisplayName } from '@/components/shared/job-label';
 import { entityArchiveLabel, entityDetailName, entityDetailHeaderTitles } from '@/components/shared/EntityDetailTitle';
-import { getPurchaseOrderLineItemsAction } from '@/app/(app)/purchase-orders/actions';
-import { PagedLineItemsTable } from '@/components/quotes/PagedLineItemsTable';
+import { isArchivedStatus } from '@/components/shared/archive-list';
+import {
+  AUTOSAVE_DEBOUNCE_MS,
+  MAX_UNDO,
+  SAVE_STATUS_CLEAR_MS,
+  cloneJson,
+  pushUndoEntry,
+} from '@/components/shared/detail-autosave';
+import { DetailUndoButton } from '@/components/shared/DetailAutosaveActions';
+import {
+  PurchaseOrderLineItemsTab,
+  type PurchaseOrderLineItemsTabHandle,
+  type PoLineItemEdits,
+} from '@/components/line-items/PurchaseOrderLineItemsTab';
+import { IssuesTab } from '@/components/purchase-orders/IssuesTab';
+import { IssuePoDrawer } from '@/components/purchase-orders/IssuePoDrawer';
 
 // ---------- helpers ---------------------------------------------------------
 
@@ -72,10 +84,6 @@ function getParty(po: PurchaseOrder, key: 'poTo' | 'poFor' | 'poFrom'): Dict {
 
 function getServiceWindow(po: PurchaseOrder): Dict {
   return (po.serviceWindow as Dict | undefined) ?? {};
-}
-
-function getAdjustmentInfo(po: PurchaseOrder): Dict {
-  return (po.adjustmentInfo as Dict | undefined) ?? {};
 }
 
 function getAllocationContext(po: PurchaseOrder): Dict {
@@ -98,9 +106,19 @@ function lookupName(
   return asString(block?.name) ?? asString(payload[payloadKey]);
 }
 
+export function getPurchaseOrderStatusName(po: PurchaseOrder): string {
+  return lookupName(po, po.status, 'status') ?? 'Unknown';
+}
+
+export function isPurchaseOrderLocked(po: PurchaseOrder): boolean {
+  return isArchivedStatus(getPurchaseOrderStatusName(po));
+}
+
 function partyAddress(party: Dict): string {
   return formatAddress(party);
 }
+
+type LineItemsUndoEntry = { kind: 'line-items'; edits: PoLineItemEdits };
 
 // ---------- header ----------------------------------------------------------
 
@@ -110,7 +128,8 @@ export function PurchaseOrderPageHeader({ po, job }: { po: PurchaseOrder; job?: 
     po.purchaseOrderNumber ?? po.externalId,
     po.id,
   );
-  const status = lookupName(po, po.status, 'status') ?? 'Unknown';
+  const status = getPurchaseOrderStatusName(po);
+  const locked = isPurchaseOrderLocked(po);
   const poType = lookupName(po, po.purchaseOrderType, 'purchaseOrderType');
   const vendor = lookupName(po, po.vendor, 'vendor');
   const total = formatCurrency(po.totalAmount);
@@ -122,83 +141,70 @@ export function PurchaseOrderPageHeader({ po, job }: { po: PurchaseOrder; job?: 
   });
 
   return (
-    <>
-      <SetHeaderActions>
-        <HeaderActionToolbar>
-          <PrintButton documentType="purchase_order" entityId={po.id} jobId={job?.id} />
-          <ArchiveEntityButton
-            entityType="purchase_order"
-            entityId={po.id}
-            statusName={status}
-            entityLabel={entityArchiveLabel(
-              po.internalNumber,
-              po.name,
-              po.purchaseOrderNumber ?? po.externalId,
-              po.id,
-            )}
-            redirectTo={job ? `/purchase-orders?jobId=${job.id}` : '/purchase-orders'}
-          />
-        </HeaderActionToolbar>
-      </SetHeaderActions>
-      <PageHeaderLayout
-        leading={<BackButton href={job ? `/purchase-orders?jobId=${job.id}` : '/purchase-orders'} label="Back to purchase orders" />}
-        icon={
-          <PageHeaderIcon
-            icon={ShoppingCart}
-            className="bg-orange-100"
-            iconClassName="text-orange-600"
-          />
-        }
-        topTitle={titles.topTitle}
-        title={titles.title}
-        titleMono={titles.titleMono}
-        topRow={
-          <>
-            {po.externalId && po.externalId !== displayName && (
-              <span className="font-mono text-xs text-muted-foreground">· {po.externalId}</span>
-            )}
-            <StatusBadge status={status} />
-            {poType && (
-              <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                <Package className="h-3 w-3" />
-                {poType}
-              </span>
-            )}
-            {vendor && (
-              <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                <Building2 className="h-3 w-3" />
-                {vendor}
-              </span>
-            )}
-            {job && (
-              <Link
-                href={`/jobs/${job.id}`}
-                className="inline-flex items-center gap-1 text-xs uppercase text-primary hover:underline"
-              >
-                {jobDisplayName(job)}
-                <ExternalLink className="h-3 w-3" />
-              </Link>
-            )}
-            {po.claimId && (
-              <Link
-                href={`/claims/${po.claimId}`}
-                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-              >
-                View claim
-                <ExternalLink className="h-3 w-3" />
-              </Link>
-            )}
-          </>
-        }
-        bottomRow={
-          <>
-            <PageHeaderField label="Total">{total}</PageHeaderField>
-            <PageHeaderField label="Start">{formatDate(po.startDate)}</PageHeaderField>
-            <PageHeaderField label="End">{formatDate(po.endDate)}</PageHeaderField>
-          </>
-        }
-      />
-    </>
+    <PageHeaderLayout
+      leading={<BackButton href={job ? `/purchase-orders?jobId=${job.id}` : '/purchase-orders'} label="Back to purchase orders" />}
+      icon={
+        <PageHeaderIcon
+          icon={ShoppingCart}
+          className="bg-orange-100"
+          iconClassName="text-orange-600"
+        />
+      }
+      topTitle={titles.topTitle}
+      title={titles.title}
+      titleMono={titles.titleMono}
+      topRow={
+        <>
+          {po.externalId && po.externalId !== displayName && (
+            <span className="font-mono text-xs text-muted-foreground">· {po.externalId}</span>
+          )}
+          <StatusBadge status={status} />
+          {locked && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+              <Lock className="h-3 w-3" />
+              Locked
+            </span>
+          )}
+          {poType && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              <Package className="h-3 w-3" />
+              {poType}
+            </span>
+          )}
+          {vendor && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              <Building2 className="h-3 w-3" />
+              {vendor}
+            </span>
+          )}
+          {job && (
+            <Link
+              href={`/jobs/${job.id}`}
+              className="inline-flex items-center gap-1 text-xs uppercase text-primary hover:underline"
+            >
+              {jobDisplayName(job)}
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
+          {po.claimId && (
+            <Link
+              href={`/claims/${po.claimId}`}
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              View claim
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
+        </>
+      }
+      bottomRow={
+        <>
+          <PageHeaderField label="Total">{total}</PageHeaderField>
+          <PageHeaderField label="Start">{formatDate(po.startDate)}</PageHeaderField>
+          <PageHeaderField label="End">{formatDate(po.endDate)}</PageHeaderField>
+        </>
+      }
+    />
   );
 }
 
@@ -414,66 +420,36 @@ function PartiesTab({ po }: { po: PurchaseOrder }) {
   );
 }
 
-function AllocationTab({ po }: { po: PurchaseOrder }) {
-  const adjustment = getAdjustmentInfo(po);
-  const allocation = getAllocationContext(po);
-
+function LineItemsTab({
+  po,
+  locked,
+  drawerOpen,
+  onDrawerOpenChange,
+  lineItemsRef,
+  onDirtyChange,
+  onUndoCapture,
+  onSaveStateChange,
+}: {
+  po: PurchaseOrder;
+  locked: boolean;
+  drawerOpen: boolean;
+  onDrawerOpenChange: (open: boolean) => void;
+  lineItemsRef: RefObject<PurchaseOrderLineItemsTabHandle | null>;
+  onDirtyChange: (dirty: boolean, save: () => void) => void;
+  onUndoCapture: (restoreEdits: PoLineItemEdits) => void;
+  onSaveStateChange: (state: 'saving' | 'saved' | 'error', error?: string) => void;
+}) {
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <SectionCard
-        title="Adjustment"
-        icon={<DollarSign className="h-4 w-4 text-muted-foreground" />}
-      >
-        <DefRow
-          label="Adjusted total (bucket)"
-          value={formatCurrency(pick(adjustment, 'adjustedTotal'))}
-        />
-        <DefRow
-          label="Adjustment amount (bucket)"
-          value={formatCurrency(pick(adjustment, 'adjustedTotalAdjustmentAmount'))}
-        />
-        <DefRow
-          label="Adjusted total (column)"
-          value={formatCurrency(po.adjustedTotal)}
-        />
-        <DefRow
-          label="Adjustment amount (column)"
-          value={formatCurrency(po.adjustedTotalAdjustmentAmount)}
-        />
-      </SectionCard>
-
-      <SectionCard
-        title="Vendor Allocation"
-        icon={<Layers className="h-4 w-4 text-muted-foreground" />}
-      >
-        <DefRow
-          label="Vendor allocation job type ID"
-          value={asString(pick(allocation, 'vendorAllocationJobTypeId')) ?? '—'}
-        />
-        <DefRow
-          label="Vendor allocation report type ID"
-          value={asString(pick(allocation, 'vendorAllocationReportTypeId')) ?? '—'}
-        />
-        <DefRow
-          label="Estimate revision ID"
-          value={asString(pick(allocation, 'quoteRevisionId')) ?? '—'}
-        />
-        <DefRow
-          label="Expires in (days)"
-          value={asString(pick(allocation, 'expiresInDays')) ?? '—'}
-        />
-      </SectionCard>
-    </div>
-  );
-}
-
-function LineItemsTab({ po }: { po: PurchaseOrder }) {
-  return (
-    <PagedLineItemsTable
-      documentId={po.id}
-      loadAction={getPurchaseOrderLineItemsAction}
-      emptyLabel="No line items found for this purchase order."
-      readOnly
+    <PurchaseOrderLineItemsTab
+      ref={lineItemsRef}
+      purchaseOrder={po}
+      drawerOpen={drawerOpen}
+      onDrawerOpenChange={onDrawerOpenChange}
+      readOnly={locked}
+      onDirtyChange={onDirtyChange}
+      onUndoCapture={onUndoCapture}
+      onSaveStateChange={onSaveStateChange}
+      hideToolbarActions
     />
   );
 }
@@ -494,55 +470,6 @@ function BillsTab() {
   );
 }
 
-function ActivitiesTab() {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Activities</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">
-          Tasks and appointments linked to this purchase order will appear here
-          once the activities API is connected.
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
-
-function CommunicationsTab() {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Communications</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">
-          Emails and messages associated with this purchase order will appear
-          here once the communications API is connected.
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
-
-function TimelineTab({ po }: { po: PurchaseOrder }) {
-  return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <SectionCard
-        title="Local audit"
-        icon={<Clock className="h-4 w-4 text-muted-foreground" />}
-      >
-        <DefRow label="Created" value={formatDateTime(po.createdAt)} />
-        <DefRow label="Updated" value={formatDateTime(po.updatedAt)} />
-        <DefRow label="Deleted" value={po.deletedAt ? formatDateTime(po.deletedAt) : '—'} />
-        <DefRow label="Created by (user id)" value={po.createdByUserId ?? '—'} />
-        <DefRow label="Updated by (user id)" value={po.updatedByUserId ?? '—'} />
-      </SectionCard>
-    </div>
-  );
-}
-
 function AttachmentsTab() {
   return (
     <Card>
@@ -559,77 +486,184 @@ function AttachmentsTab() {
   );
 }
 
-function AuditTab({ po }: { po: PurchaseOrder }) {
-  const payload = getPayload(po);
-  const cwCreatedAt = asString(pick(payload, 'createdAtDate'));
-  const cwUpdatedAt = asString(pick(payload, 'updatedAtDate'));
-  const createdBy = payload.createdBy as Dict | undefined;
-  const updatedBy = payload.updatedBy as Dict | undefined;
-
-  return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <SectionCard
-        title="Local audit"
-        icon={<ClipboardList className="h-4 w-4 text-muted-foreground" />}
-      >
-        <DefRow label="Created" value={formatDateTime(po.createdAt)} />
-        <DefRow label="Updated" value={formatDateTime(po.updatedAt)} />
-        <DefRow label="Deleted" value={po.deletedAt ? formatDateTime(po.deletedAt) : '—'} />
-        <DefRow label="Created by (user id)" value={po.createdByUserId ?? '—'} />
-        <DefRow label="Updated by (user id)" value={po.updatedByUserId ?? '—'} />
-      </SectionCard>
-
-      <SectionCard
-        title="Crunchwork audit"
-        icon={<ClipboardList className="h-4 w-4 text-muted-foreground" />}
-      >
-        <DefRow
-          label="CW created"
-          value={cwCreatedAt ? formatDateTime(cwCreatedAt) : '—'}
-        />
-        <DefRow
-          label="CW updated"
-          value={cwUpdatedAt ? formatDateTime(cwUpdatedAt) : '—'}
-        />
-        <DefRow label="CW created by" value={asString(pick(createdBy ?? {}, 'name')) ?? '—'} />
-        <DefRow label="CW updated by" value={asString(pick(updatedBy ?? {}, 'name')) ?? '—'} />
-      </SectionCard>
-    </div>
-  );
-}
-
 // ---------- container -------------------------------------------------------
 
 type PoTab =
   | 'overview'
   | 'parties'
   | 'line-items'
-  | 'allocation'
+  | 'issues'
   | 'bills'
-  | 'activities'
-  | 'communications'
-  | 'timeline'
-  | 'attachments'
-  | 'audit';
+  | 'attachments';
 
-export function PurchaseOrderDetail({ po }: { po: PurchaseOrder }) {
+export function PurchaseOrderDetail({
+  po,
+  job,
+}: {
+  po: PurchaseOrder;
+  job?: Job | null;
+}) {
   const [tab, setTab] = useState<PoTab>('overview');
+  const [lineItemsMounted, setLineItemsMounted] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [issueDrawerOpen, setIssueDrawerOpen] = useState(false);
+  const [lineItemsDirty, setLineItemsDirty] = useState(false);
+  const [lineItemsSaving, setLineItemsSaving] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [lineItemsEditTick, setLineItemsEditTick] = useState(0);
+  const [undoStack, setUndoStack] = useState<LineItemsUndoEntry[]>([]);
+  const saveLineItemsRef = useRef<(() => void) | null>(null);
+  const lineItemsRef = useRef<PurchaseOrderLineItemsTabHandle>(null);
+
+  const locked = isPurchaseOrderLocked(po);
+  const status = getPurchaseOrderStatusName(po);
+  const showLineItemActions = tab === 'line-items' && !locked;
+  const showIssueAction = !locked;
+  const canUndo = lineItemsDirty || undoStack.length > 0;
+  const poNumber = po.purchaseOrderNumber ?? po.internalNumber ?? po.externalId;
+  const title = entityArchiveLabel(
+    po.internalNumber,
+    po.name,
+    po.purchaseOrderNumber ?? po.externalId,
+    po.id,
+  );
+
+  useEffect(() => {
+    setLineItemsDirty(false);
+    setSaveError(null);
+    setJustSaved(false);
+    setUndoStack([]);
+    setLineItemsMounted(tab === 'line-items');
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- remount take-off for the new PO
+  }, [po.id]);
+
+  useEffect(() => {
+    if (tab === 'line-items') setLineItemsMounted(true);
+  }, [tab]);
+
+  const pushUndo = useCallback((entry: LineItemsUndoEntry) => {
+    setUndoStack((prev) => pushUndoEntry(prev, entry, MAX_UNDO));
+  }, []);
+
+  const handleLineItemsDirtyChange = useCallback((dirty: boolean, save: () => void) => {
+    setLineItemsDirty(dirty);
+    saveLineItemsRef.current = save;
+    setLineItemsEditTick((n) => n + 1);
+  }, []);
+
+  const handleLineItemsUndoCapture = useCallback(
+    (restoreEdits: PoLineItemEdits) => {
+      pushUndo({ kind: 'line-items', edits: cloneJson(restoreEdits) });
+    },
+    [pushUndo],
+  );
+
+  const handleLineItemsSaveState = useCallback(
+    (state: 'saving' | 'saved' | 'error', error?: string) => {
+      if (state === 'saving') {
+        setLineItemsSaving(true);
+        setJustSaved(false);
+        setSaveError(null);
+        return;
+      }
+      setLineItemsSaving(false);
+      if (state === 'error') {
+        setSaveError(error ?? 'Failed to save line items');
+        return;
+      }
+      setJustSaved(true);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (locked || !lineItemsDirty || lineItemsSaving) return;
+    const timer = setTimeout(() => {
+      saveLineItemsRef.current?.();
+    }, AUTOSAVE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [locked, lineItemsDirty, lineItemsSaving, lineItemsEditTick]);
+
+  useEffect(() => {
+    if (!justSaved || lineItemsDirty || lineItemsSaving || saveError) return;
+    const timer = setTimeout(() => setJustSaved(false), SAVE_STATUS_CLEAR_MS);
+    return () => clearTimeout(timer);
+  }, [justSaved, lineItemsDirty, lineItemsSaving, saveError]);
+
+  const handleUndo = useCallback(() => {
+    if (lineItemsSaving) return;
+
+    if (lineItemsDirty) {
+      lineItemsRef.current?.resetEdits();
+      setSaveError(null);
+      return;
+    }
+
+    const entry = undoStack[undoStack.length - 1];
+    if (!entry) return;
+    setUndoStack((prev) => prev.slice(0, -1));
+    lineItemsRef.current?.save(entry.edits);
+  }, [lineItemsSaving, lineItemsDirty, undoStack]);
 
   const tabs: Array<{ id: PoTab; label: string; icon: typeof Calendar }> = [
     { id: 'overview', label: 'Overview', icon: Calendar },
     { id: 'parties', label: 'Parties', icon: Users },
     { id: 'line-items', label: 'Line Items', icon: Package },
-    { id: 'allocation', label: 'Allocation', icon: Layers },
+    { id: 'issues', label: 'Issues', icon: Send },
     { id: 'bills', label: 'Bills', icon: Receipt },
-    { id: 'activities', label: 'Activities', icon: ListTodo },
-    { id: 'communications', label: 'Communications', icon: MessageSquare },
-    { id: 'timeline', label: 'Timeline', icon: Clock },
     { id: 'attachments', label: 'Attachments', icon: Paperclip },
-    { id: 'audit', label: 'Audit', icon: MapPin },
   ];
 
   return (
     <div className="flex flex-col">
+      <HeaderSaveStatus
+        saving={lineItemsSaving}
+        saveError={saveError}
+        justSaved={justSaved}
+        dirty={lineItemsDirty}
+      />
+      <SetHeaderActions>
+        {showIssueAction && (
+          <Button
+            size="default"
+            className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+            onClick={() => {
+              setTab('issues');
+              setIssueDrawerOpen(true);
+            }}
+          >
+            <Send className="h-3.5 w-3.5" />
+            Issue
+          </Button>
+        )}
+        {showLineItemActions && (
+          <Button
+            size="default"
+            variant="outline"
+            className="h-9 gap-1.5 px-4"
+            onClick={() => setDrawerOpen(true)}
+          >
+            <Package className="h-3.5 w-3.5" />
+            Catalogue
+          </Button>
+        )}
+        <HeaderActionToolbar>
+          <DetailUndoButton
+            canUndo={canUndo}
+            undoDisabled={lineItemsSaving}
+            onUndo={handleUndo}
+          />
+          <PrintButton documentType="purchase_order" entityId={po.id} jobId={job?.id} />
+          <ArchiveEntityButton
+            entityType="purchase_order"
+            entityId={po.id}
+            statusName={status}
+            entityLabel={title}
+            redirectTo={job ? `/purchase-orders?jobId=${job.id}` : '/purchase-orders'}
+          />
+        </HeaderActionToolbar>
+      </SetHeaderActions>
       <div className="flex gap-0 border-b border-slate-200">
         {tabs.map((t) => {
           const Icon = t.icon;
@@ -638,7 +672,12 @@ export function PurchaseOrderDetail({ po }: { po: PurchaseOrder }) {
             <button
               key={t.id}
               type="button"
-              onClick={() => setTab(t.id)}
+              onClick={() => {
+                if (t.id !== 'line-items') {
+                  setDrawerOpen(false);
+                }
+                setTab(t.id);
+              }}
               className={`inline-flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px rounded-t-md ${
                 active
                   ? 'border-orange-600 bg-orange-50 text-orange-600'
@@ -654,15 +693,41 @@ export function PurchaseOrderDetail({ po }: { po: PurchaseOrder }) {
       <div className="pt-4">
         {tab === 'overview' && <OverviewTab po={po} />}
         {tab === 'parties' && <PartiesTab po={po} />}
-        {tab === 'line-items' && <LineItemsTab po={po} />}
-        {tab === 'allocation' && <AllocationTab po={po} />}
+        {lineItemsMounted && (
+          <div className={tab === 'line-items' ? undefined : 'hidden'}>
+            <LineItemsTab
+              po={po}
+              locked={locked}
+              drawerOpen={drawerOpen}
+              onDrawerOpenChange={setDrawerOpen}
+              lineItemsRef={lineItemsRef}
+              onDirtyChange={handleLineItemsDirtyChange}
+              onUndoCapture={handleLineItemsUndoCapture}
+              onSaveStateChange={handleLineItemsSaveState}
+            />
+          </div>
+        )}
         {tab === 'bills' && <BillsTab />}
-        {tab === 'activities' && <ActivitiesTab />}
-        {tab === 'communications' && <CommunicationsTab />}
-        {tab === 'timeline' && <TimelineTab po={po} />}
+        {tab === 'issues' && (
+          <IssuesTab
+            purchaseOrderId={po.id}
+            poNumber={poNumber}
+            jobId={po.jobId ?? job?.id}
+            issueDrawerOpen={issueDrawerOpen}
+            onIssueDrawerOpenChange={setIssueDrawerOpen}
+          />
+        )}
         {tab === 'attachments' && <AttachmentsTab />}
-        {tab === 'audit' && <AuditTab po={po} />}
       </div>
+      {tab !== 'issues' && (
+        <IssuePoDrawer
+          open={issueDrawerOpen}
+          onOpenChange={setIssueDrawerOpen}
+          purchaseOrderId={po.id}
+          poNumber={poNumber}
+          jobId={po.jobId ?? job?.id}
+        />
+      )}
     </div>
   );
 }

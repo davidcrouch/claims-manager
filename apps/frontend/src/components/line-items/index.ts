@@ -99,6 +99,7 @@ export type {
   DropIndicator,
   RowEntry,
   LineItemsConfig,
+  PricingDetail,
   SaveState,
   PublishStatus,
   FlatLineItemRow,

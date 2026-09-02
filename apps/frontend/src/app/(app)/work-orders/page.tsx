@@ -1,6 +1,13 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
+import { getSession } from '@/lib/auth';
+import { resolveCurrentOrgUserId } from '@/lib/current-org-user';
 import { WorkOrdersPageClient } from '@/components/work-orders/WorkOrdersPageClient';
+import {
+  isWorkOrdersMineTab,
+  parseWorkOrdersListTab,
+  resolveWorkOrdersListStatusParam,
+} from '@/components/work-orders/work-orders-list-helpers';
 import {buildJobNameById, buildJobTypeById, toJobOptions,
   mergeCurrentJobIntoNameById,
   mergeCurrentJobIntoTypeById,
@@ -8,27 +15,6 @@ import {buildJobNameById, buildJobTypeById, toJobOptions,
 import type { Job, Claim, PaginatedResponse, WorkOrder } from '@/types/api';
 
 export const metadata = { title: 'Work Orders — EnsureOS' };
-
-type ListTab = 'active' | 'archived' | 'all';
-const VALID_TABS = new Set<ListTab>(['active', 'archived', 'all']);
-const ARCHIVED_STATUS_NAMES = new Set(['archived', 'closed']);
-
-/** Server-safe mirror of statusIdsForArchiveListTab (list-filters is a client module). */
-function resolveStatusForTab(
-  tab: ListTab,
-  explicitStatus: string | undefined,
-  statusOptions: { id: string; name: string }[],
-): string | undefined {
-  if (explicitStatus) return explicitStatus;
-  if (tab === 'all') return undefined;
-  const ids = statusOptions
-    .filter((s) => {
-      const archived = ARCHIVED_STATUS_NAMES.has(s.name.trim().toLowerCase());
-      return tab === 'archived' ? archived : !archived;
-    })
-    .map((s) => s.id);
-  return ids.length > 0 ? ids.sort().join(',') : undefined;
-}
 
 export default async function WorkOrdersPage({
   searchParams }: {
@@ -38,22 +24,28 @@ export default async function WorkOrdersPage({
     status?: string;
     workOrderType?: string;
     jobId?: string;
+    jobIds?: string;
     search?: string;
     tab?: string;
+    archiveState?: string;
+    assignedToUserId?: string;
+    assignedToUserIds?: string;
   }>;
 }) {
   const api = await getServerApiClient();
   if (!api) redirect('/api/auth/login');
 
   const params = await searchParams;
-  const tab: ListTab =
-    params.tab && VALID_TABS.has(params.tab as ListTab)
-      ? (params.tab as ListTab)
-      : 'active';
   const empty: PaginatedResponse<WorkOrder> = { data: [], total: 0 };
   const emptyJobs: PaginatedResponse<Job> = { data: [], total: 0 };
+  const tab = parseWorkOrdersListTab(params.tab ?? null);
+  const jobIds = params.jobIds
+    ? params.jobIds.split(',').map((id) => id.trim()).filter(Boolean)
+    : undefined;
 
-  const [statusLookupsRes, typeLookupsRes, jobsRes] = await Promise.all([
+  const [orgUsers, session, statusLookupsRes, typeLookupsRes, jobsRes] = await Promise.all([
+    api.listOrgUsersForSelect().catch(() => [] as { id: string; email?: string }[]),
+    getSession(),
     api.getLookupsByDomain('work_order_status').catch(() => []),
     api.getLookupsByDomain('work_order_type', { providerCode: 'direct' }).catch(() => []),
     api.getJobs({ limit: 100 }).catch((err: unknown) => {
@@ -65,6 +57,13 @@ export default async function WorkOrdersPage({
     }),
   ]);
 
+  const currentUserId = resolveCurrentOrgUserId(orgUsers, session.identity);
+  const effectiveTab =
+    tab === 'active' && params.assignedToUserId && params.assignedToUserId === currentUserId
+      ? 'mine'
+      : tab;
+  const mineTab = isWorkOrdersMineTab(effectiveTab);
+
   const statusOptions = (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map(
     (row) => ({
       id: row.id,
@@ -74,7 +73,14 @@ export default async function WorkOrdersPage({
     id: row.id,
     name: row.name?.trim() ? row.name : 'Unknown' }));
 
-  const resolvedStatus = resolveStatusForTab(tab, params.status, statusOptions);
+  const resolvedStatus = resolveWorkOrdersListStatusParam({
+    tab: effectiveTab,
+    statusOptions,
+    explicitStatus: params.status,
+    archiveState: mineTab ? params.archiveState : undefined,
+  });
+  const initialAssignedToUserId = mineTab && currentUserId ? currentUserId : undefined;
+  const initialAssignedToUserIds = mineTab ? undefined : params.assignedToUserIds;
 
   const initialData = await api
     .getWorkOrders({
@@ -84,7 +90,11 @@ export default async function WorkOrdersPage({
       status: resolvedStatus,
       workOrderType: params.workOrderType,
       jobId: params.jobId,
-      search: params.search })
+      jobIds,
+      search: params.search,
+      assignedToUserId: initialAssignedToUserId,
+      assignedToUserIds: initialAssignedToUserIds,
+    })
     .catch((err: unknown) => {
       console.error(
         'frontend:WorkOrdersPage - getWorkOrders failed:',
@@ -122,6 +132,7 @@ export default async function WorkOrdersPage({
       jobs={mergeCurrentJobIntoOptions(toJobOptions(jobs), job)}
       job={job}
       parentClaim={parentClaim}
+      currentUserId={currentUserId}
     />
   );
 }

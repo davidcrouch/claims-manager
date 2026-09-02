@@ -21,6 +21,7 @@ export interface QuotesPageClientProps {
   filterJobs?: { id: string; label: string }[];
   job?: Job | null;
   parentClaim?: Claim | null;
+  currentUserId?: string | null;
 }
 
 export function QuotesPageClient({
@@ -34,6 +35,7 @@ export function QuotesPageClient({
   filterJobs,
   job,
   parentClaim,
+  currentUserId,
 }: QuotesPageClientProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -59,6 +61,7 @@ export function QuotesPageClient({
         filterJobs={filterJobs}
         job={job}
         parentClaim={parentClaim}
+        currentUserId={currentUserId}
       />
       <QuoteFormDrawer
         open={drawerOpen}

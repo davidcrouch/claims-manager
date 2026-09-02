@@ -90,6 +90,8 @@ export interface Claim {
   updatedAt?: string;
   status?: LookupRef;
   account?: LookupRef;
+  /** Primary Insured-typed claim contact display name (list payload). */
+  insuredName?: string | null;
   jobs?: Job[];
 }
 
@@ -145,6 +147,8 @@ export interface Job {
 
   status?: LookupRef;
   jobType?: LookupRef;
+  /** Primary Insured-typed contact display name (job contact, else claim contact). */
+  insuredName?: string | null;
   claim?: Claim;
   vendor?: VendorRef;
 }
@@ -427,6 +431,8 @@ export interface WorkOrder {
   deletedAt?: string | null;
   status?: LookupRef;
   workOrderType?: LookupRef;
+  assignedToUserId?: string | null;
+  assigneeName?: string | null;
 }
 
 export interface Rfq {
@@ -500,7 +506,6 @@ export interface Proposal {
 export interface Bill {
   id: string;
   tenantId: string;
-  invoiceId: string;
   purchaseOrderId?: string | null;
   jobId?: string | null;
   claimId?: string | null;

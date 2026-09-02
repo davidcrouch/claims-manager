@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -55,6 +55,20 @@ export function JobPageHeader({
   const router = useRouter();
   const [pickerOpen, setPickerOpen] = useState(false);
   const api = getApi(job);
+  const syncStatus = job.syncStatus;
+
+  // Outbound create/update returns before the worker finishes; poll until sync settles.
+  useEffect(() => {
+    if (syncStatus !== 'pending') return;
+    const interval = setInterval(() => {
+      router.refresh();
+    }, 2500);
+    const stop = setTimeout(() => clearInterval(interval), 60_000);
+    return () => {
+      clearInterval(interval);
+      clearTimeout(stop);
+    };
+  }, [syncStatus, router]);
 
   const clearJobSelection = () => {
     router.push('/jobs');
@@ -140,8 +154,8 @@ export function JobPageHeader({
         topRow={
           <>
             <StatusBadge status={statusName} />
-            {job.syncStatus && (
-              <SyncStatusIndicator syncStatus={job.syncStatus} compact />
+            {syncStatus && (
+              <SyncStatusIndicator syncStatus={syncStatus} compact />
             )}
             {jobTypeName && <TypeBadge type={jobTypeName} />}
             {address && (

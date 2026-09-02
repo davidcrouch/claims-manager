@@ -69,7 +69,29 @@ export function extractDocxPlainText(buffer: Buffer): string {
   return lines.join('\n');
 }
 
-/** First-page SVG preview when LibreOffice is unavailable (local Windows). */
+/** Simple SVG placeholder for legacy .doc / PDF when raster thumbs are unavailable. */
+export function renderOfficePlaceholderSvg(fileName: string): Buffer {
+  const lower = fileName.toLowerCase();
+  const label = lower.endsWith('.pdf')
+    ? 'PDF'
+    : lower.endsWith('.doc')
+      ? 'DOC'
+      : 'FILE';
+  const title = escapeXml(fileName);
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${PAGE_WIDTH}" height="${PAGE_HEIGHT}" viewBox="0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}">
+  <rect width="100%" height="100%" fill="#f8fafc"/>
+  <rect x="10" y="10" width="${PAGE_WIDTH - 20}" height="${PAGE_HEIGHT - 20}" rx="6" fill="#ffffff" stroke="#e2e8f0"/>
+  <rect x="10" y="10" width="${PAGE_WIDTH - 20}" height="36" rx="6" fill="#475569"/>
+  <rect x="10" y="28" width="${PAGE_WIDTH - 20}" height="18" fill="#475569"/>
+  <text x="${MARGIN_X}" y="33" fill="#ffffff" font-family="Segoe UI, Arial, sans-serif" font-size="12" font-weight="700">${label}</text>
+  <text x="${MARGIN_X}" y="120" fill="#0f172a" font-family="Segoe UI, Arial, sans-serif" font-size="${TITLE_SIZE}" font-weight="600">${title}</text>
+  <text x="${MARGIN_X}" y="160" fill="#64748b" font-family="Segoe UI, Arial, sans-serif" font-size="12">Preview not available</text>
+</svg>`;
+  return Buffer.from(svg, 'utf8');
+}
+
+/** First-page SVG preview extracted from DOCX XML (no converter required). */
 export function renderDocxPreviewSvg(buffer: Buffer, fileName: string): Buffer {
   const rawText = extractDocxPlainText(buffer);
   const bodyLines: string[] = [];

@@ -126,7 +126,38 @@ export class JobsService {
       assignedToUserIds: params.assignedToUserIds,
       refs: params.refs,
     });
-    return { data: result.data.map(this.shapeJobResponse), total: result.total };
+    const jobIds = result.data.map((row) => row.id);
+    const claimIds = [
+      ...new Set(
+        result.data
+          .map((row) => row.claimId)
+          .filter((id): id is string => !!id),
+      ),
+    ];
+    const [jobInsuredRows, claimInsuredRows] = jobIds.length
+      ? await Promise.all([
+          this.jobsRepo.findInsuredNamesByJobIds({ tenantId, jobIds }),
+          claimIds.length
+            ? this.claimsRepo.findInsuredNamesByClaimIds({ tenantId, claimIds })
+            : Promise.resolve([]),
+        ])
+      : [[], []];
+    const jobInsuredByJobId = new Map(
+      jobInsuredRows.map((row) => [row.jobId, row.insuredName] as const),
+    );
+    const claimInsuredByClaimId = new Map(
+      claimInsuredRows.map((row) => [row.claimId, row.insuredName] as const),
+    );
+    return {
+      data: result.data.map((row) => ({
+        ...this.shapeJobResponse(row),
+        insuredName:
+          jobInsuredByJobId.get(row.id) ??
+          (row.claimId ? claimInsuredByClaimId.get(row.claimId) : null) ??
+          null,
+      })),
+      total: result.total,
+    };
   }
 
   async findFilterOptions() {

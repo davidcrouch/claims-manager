@@ -2,6 +2,7 @@ import { Injectable, Inject } from '@nestjs/common';
 import { and, asc, desc, eq, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { catalogItems } from '../schema';
+import { UNCATEGORIZED_CATEGORY_FILTER } from '../../modules/catalog/catalog.utils';
 
 export type CatalogItemRow = typeof catalogItems.$inferSelect;
 export type CatalogItemInsert = typeof catalogItems.$inferInsert;
@@ -74,8 +75,8 @@ export class CatalogItemsRepository {
       conditions.push(eq(catalogItems.typeId, params.typeId));
     }
     if (params.categoryIds && params.categoryIds.length > 0) {
-      const hasUncategorized = params.categoryIds.includes('__uncategorized__');
-      const realIds = params.categoryIds.filter((id) => id !== '__uncategorized__');
+      const hasUncategorized = params.categoryIds.includes(UNCATEGORIZED_CATEGORY_FILTER);
+      const realIds = params.categoryIds.filter((id) => id !== UNCATEGORIZED_CATEGORY_FILTER);
       if (hasUncategorized && realIds.length > 0) {
         conditions.push(
           or(inArray(catalogItems.categoryId, realIds), isNull(catalogItems.categoryId))!,

@@ -1,6 +1,13 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { QuotesPageClient } from '@/components/quotes/QuotesPageClient';
+import {
+  isQuotesMineTab,
+  parseQuotesListTab,
+  resolveQuotesListStatusParam,
+} from '@/components/quotes/quotes-list-helpers';
+import { getSession } from '@/lib/auth';
+import { resolveCurrentOrgUserId } from '@/lib/current-org-user';
 import {buildJobAssigneeNameById,
   buildJobNameById,
   buildJobTypeById,
@@ -14,7 +21,7 @@ import type { Job, PaginatedResponse, Quote, Claim } from '@/types/api';
 
 export default async function QuotesPage({
   searchParams }: {
-  searchParams: Promise<{ page?: string; search?: string; jobId?: string; jobIds?: string; status?: string; quoteType?: string; sort?: string }>;
+  searchParams: Promise<{ page?: string; search?: string; jobId?: string; jobIds?: string; status?: string; quoteType?: string; sort?: string; tab?: string; archiveState?: string; assignedToUserId?: string; assignedToUserIds?: string }>;
 }) {
   const api = await getServerApiClient();
   if (!api) redirect('/api/auth/login');
@@ -22,19 +29,68 @@ export default async function QuotesPage({
   const params = await searchParams;
   const empty: PaginatedResponse<Quote> = { data: [], total: 0 };
   const emptyJobs: PaginatedResponse<Job> = { data: [], total: 0 };
+  const tab = parseQuotesListTab(params.tab ?? null);
   const jobIds = params.jobIds
     ? params.jobIds.split(',').map((id) => id.trim()).filter(Boolean)
     : undefined;
-  const [initialQuotes, statusLookupsRes, typeLookupsRes, jobsRes, filterJobsRes] = await Promise.all([
+
+  const [orgUsers, session, statusLookupsRes, typeLookupsRes, jobsRes, filterJobsRes] =
+    await Promise.all([
+      api.listOrgUsersForSelect().catch(() => [] as { id: string; email?: string }[]),
+      getSession(),
+      api.getLookupsByDomain('quote_status').catch(() => []),
+      api.getLookupsByDomain('quote_type', { providerCode: 'direct' }).catch(() => []),
+      api.getJobs({ limit: 100 }).catch((err: unknown) => {
+        console.error(
+          'frontend:QuotesPage - getJobs failed:',
+          err instanceof Error ? err.message : err,
+        );
+        return emptyJobs;
+      }),
+      api.getQuoteFilterJobs().catch((err: unknown) => {
+        console.error(
+          'frontend:QuotesPage - getQuoteFilterJobs failed:',
+          err instanceof Error ? err.message : err,
+        );
+        return [];
+      }),
+    ]);
+
+  const currentUserId = resolveCurrentOrgUserId(orgUsers, session.identity);
+  const effectiveTab =
+    tab === 'active' && params.assignedToUserId && params.assignedToUserId === currentUserId
+      ? 'mine'
+      : tab;
+  const mineTab = isQuotesMineTab(effectiveTab);
+
+  const statusOptions = (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map(
+    (row) => ({
+      id: row.id,
+      name: row.name?.trim() ? row.name : 'Unknown',
+    }),
+  );
+  const initialStatus = resolveQuotesListStatusParam({
+    tab: effectiveTab,
+    statusOptions,
+    explicitStatus: params.status,
+    archiveState: mineTab ? params.archiveState : undefined,
+  });
+  const initialAssignedToUserId = mineTab && currentUserId ? currentUserId : undefined;
+  const initialAssignedToUserIds = mineTab ? undefined : params.assignedToUserIds;
+
+  const [initialQuotes] = await Promise.all([
     api
       .getQuotes({
         page: parseInt(params.page ?? '1', 10),
         limit: 20,
         jobId: params.jobId,
         jobIds,
-        status: params.status,
+        status: initialStatus,
         quoteType: params.quoteType,
-        sort: params.sort })
+        sort: params.sort,
+        assignedToUserId: initialAssignedToUserId,
+        assignedToUserIds: initialAssignedToUserIds,
+      })
       .catch((err: unknown) => {
         console.error(
           'frontend:QuotesPage - getQuotes failed:',
@@ -42,22 +98,6 @@ export default async function QuotesPage({
         );
         return empty;
       }),
-    api.getLookupsByDomain('quote_status').catch(() => []),
-    api.getLookupsByDomain('quote_type', { providerCode: 'direct' }).catch(() => []),
-    api.getJobs({ limit: 100 }).catch((err: unknown) => {
-      console.error(
-        'frontend:QuotesPage - getJobs failed:',
-        err instanceof Error ? err.message : err,
-      );
-      return emptyJobs;
-    }),
-    api.getQuoteFilterJobs().catch((err: unknown) => {
-      console.error(
-        'frontend:QuotesPage - getQuoteFilterJobs failed:',
-        err instanceof Error ? err.message : err,
-      );
-      return [];
-    }),
   ]);
 
   let job: Job | null = null;
@@ -75,13 +115,7 @@ export default async function QuotesPage({
     }
   }
 
-  const statusOptions = (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map(
-    (row) => ({
-      id: row.id,
-      name: row.name?.trim() ? row.name : 'Unknown' }),
-  );
-  const quoteTypes = (Array.isArray(typeLookupsRes) ? typeLookupsRes : []).map((row) => ({
-    id: row.id,
+  const quoteTypes = (Array.isArray(typeLookupsRes) ? typeLookupsRes : []).map((row) => ({    id: row.id,
     name: row.name?.trim() ? row.name : 'Unknown' }));
   const jobs = jobsRes?.data ?? [];
   const jobNameById = mergeJobLabelsFromRows(
@@ -110,6 +144,7 @@ export default async function QuotesPage({
       filterJobs={filterJobsRes}
       job={job}
       parentClaim={parentClaim}
+      currentUserId={currentUserId}
     />
   );
 }

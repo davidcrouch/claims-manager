@@ -206,12 +206,14 @@ export class DashboardService {
   async getInbox(params: {
     userId?: string | null;
     email?: string | null;
+    /** When true/false, force scope. When omitted, default to mine if user has assigned work. */
+    mine?: boolean;
   }): Promise<DashboardInboxDto> {
     const tenantId = this.tenantContext.getTenantId();
     const userId = params.userId?.trim() || null;
     const email = params.email?.trim() || null;
     this.logger.log(
-      `dashboard:DashboardService.getInbox - tenantId=${tenantId} userId=${userId ? 'set' : 'none'}`,
+      `dashboard:DashboardService.getInbox - tenantId=${tenantId} userId=${userId ? 'set' : 'none'} mine=${params.mine ?? 'auto'}`,
     );
 
     const [
@@ -242,6 +244,12 @@ export class DashboardService {
         })
       : { data: [], total: 0 };
     const scopedToUser = assignedActiveJobs.total > 0;
+    const mineOnly = params.mine === true ? true : params.mine === false ? false : scopedToUser;
+    const myJobIds = assignedActiveJobs.data.map((job) => job.id);
+    const assigneeFilter = mineOnly && userId ? userId : undefined;
+    /** Job-linked entities (proposals/RFQs) and fallback when user has claim scope but no userId. */
+    const myJobIdsFilter = mineOnly ? myJobIds : undefined;
+    const skipJobLinkedMine = Boolean(mineOnly && myJobIds.length === 0);
 
     const woStatusIds = matchLookupIdsByNames(woLookups, WO_ACCEPT_STATUS_NAMES);
     const proposalStatusIds = matchLookupIdsByNames(
@@ -256,6 +264,8 @@ export class DashboardService {
 
     const day = utcDayBounds();
     const dueSoonUntil = daysFromNow(7);
+
+    const emptyList = { data: [], total: 0 };
 
     const [
       workOrders,
@@ -272,42 +282,52 @@ export class DashboardService {
       todayEvents,
       tenantActiveJobs,
     ] = await Promise.all([
-      woStatusIds.length > 0
+      woStatusIds.length > 0 && !(mineOnly && !assigneeFilter && skipJobLinkedMine)
         ? this.workOrdersRepo.findAll({
             tenantId,
             status: woStatusIds.join(','),
+            assignedToUserId: assigneeFilter,
+            jobIds: !assigneeFilter ? myJobIdsFilter : undefined,
             limit: PREVIEW_LIMIT,
             sort: 'updated_at_desc',
           })
-        : { data: [], total: 0 },
-      proposalStatusIds.length > 0
+        : emptyList,
+      proposalStatusIds.length > 0 && !skipJobLinkedMine
         ? this.proposalsRepo.findAll({
             tenantId,
             status: proposalStatusIds.join(','),
+            jobIds: myJobIdsFilter,
             limit: PREVIEW_LIMIT,
             sort: 'updated_at_desc',
           })
-        : { data: [], total: 0 },
-      rfqStatusIds.length > 0
+        : emptyList,
+      rfqStatusIds.length > 0 && !skipJobLinkedMine
         ? this.rfqsRepo.findAll({
             tenantId,
             status: rfqStatusIds.join(','),
+            jobIds: myJobIdsFilter,
             limit: PREVIEW_LIMIT,
             sort: 'due_date_asc',
           })
-        : { data: [], total: 0 },
-      quoteStatusIds.length > 0
+        : emptyList,
+      quoteStatusIds.length > 0 && !(mineOnly && !assigneeFilter && skipJobLinkedMine)
         ? this.quotesRepo.findAll({
             tenantId,
             status: quoteStatusIds.join(','),
+            assignedToUserId: assigneeFilter,
+            jobIds: !assigneeFilter ? myJobIdsFilter : undefined,
             limit: PREVIEW_LIMIT,
             sort: 'updated_at_desc',
           })
-        : { data: [], total: 0 },
-      this.tasksRepo.findOverdue({ tenantId }),
+        : emptyList,
+      this.tasksRepo.findOverdue({
+        tenantId,
+        assignedToUserId: assigneeFilter,
+      }),
       this.tasksRepo.findAll({
         tenantId,
         status: 'Open',
+        assignedToUserId: assigneeFilter,
         sort: 'due_date_asc',
         limit: 50,
       }),
@@ -321,19 +341,25 @@ export class DashboardService {
           })
         : Promise.resolve({ data: [] as TaskViewRow[], total: 0 }),
       this.financeService.getSummary(),
-      this.notificationsRepo.findUnreadByTenant({ tenantId, limit: UNREAD_LIMIT }),
+      this.notificationsRepo.findUnreadByTenant({
+        tenantId,
+        limit: mineOnly ? UNREAD_LIMIT * 4 : UNREAD_LIMIT,
+      }),
       this.notificationsRepo.countUnreadByTenant({ tenantId }),
       this.notificationsRepo.getUnreadEntityIds({ tenantId, entityType: 'job' }),
       this.scheduleService.findEvents({
         from: day.from,
         to: day.to,
+        assignedToUserId: assigneeFilter,
         limit: TODAY_LIMIT,
       }),
-      this.jobsRepo.findActiveForInbox({
-        tenantId,
-        excludeStatusIds: excludeJobStatusIds,
-        limit: ACTIVE_JOBS_LIMIT,
-      }),
+      mineOnly
+        ? Promise.resolve(assignedActiveJobs)
+        : this.jobsRepo.findActiveForInbox({
+            tenantId,
+            excludeStatusIds: excludeJobStatusIds,
+            limit: ACTIVE_JOBS_LIMIT,
+          }),
     ]);
 
     const activeJobRows = tenantActiveJobs;
@@ -454,7 +480,7 @@ export class DashboardService {
         key: 'myTasks',
         title: 'My tasks',
         count: myTasks.total,
-        href: `/tasks?status=Open&assignedToUserId=${encodeURIComponent(userId)}`,
+        href: '/tasks?tab=mine',
         items: myTasks.data.map((task) => this.taskItem(task, jobById)),
       });
     }
@@ -493,7 +519,15 @@ export class DashboardService {
       jobId: event.jobId,
     }));
 
-    const unread: DashboardInboxItem[] = unreadNotifications.map((n) => ({
+    const myJobIdSet = new Set(myJobIds);
+    const scopedUnread = mineOnly
+      ? unreadNotifications.filter((n) => {
+          if (n.entityType === 'job') return myJobIdSet.has(n.entityId);
+          // Keep notifications for entities already linked to my assigned jobs via inbox items.
+          return false;
+        })
+      : unreadNotifications;
+    const unread: DashboardInboxItem[] = scopedUnread.slice(0, UNREAD_LIMIT).map((n) => ({
       id: n.id,
       entityType: n.entityType,
       title: humanizeTitle('Notification', n.title),
@@ -503,7 +537,9 @@ export class DashboardService {
       jobId: n.entityType === 'job' ? n.entityId : null,
     }));
 
-    const unreadJobSet = new Set(unreadJobIds);
+    const unreadJobSet = new Set(
+      mineOnly ? unreadJobIds.filter((id) => myJobIdSet.has(id)) : unreadJobIds,
+    );
     const toActiveJobItem = (
       job: (typeof activeJobRows.data)[number],
     ): DashboardActiveJobItem => ({
@@ -519,9 +555,8 @@ export class DashboardService {
     });
     const activeJobItems = activeJobRows.data.map(toActiveJobItem);
     const myJobItems = assignedActiveJobs.data.map(toActiveJobItem);
-    const myJobsHref = userId
-      ? `/jobs?assignedToUserId=${encodeURIComponent(userId)}`
-      : '/jobs';
+    const myJobsHref = userId ? `/jobs?tab=mine` : '/jobs';
+    const activeJobsHref = mineOnly ? myJobsHref : '/jobs';
 
     const actionRequired = queues
       .filter((q) =>
@@ -535,8 +570,8 @@ export class DashboardService {
       generatedAt: new Date().toISOString(),
       snapshot: {
         activeJobs: activeJobRows.total,
-        unreadCount,
-        unreadJobCount: unreadJobIds.length,
+        unreadCount: mineOnly ? scopedUnread.length : unreadCount,
+        unreadJobCount: unreadJobSet.size,
         arOverdueCount,
         apOverdueCount,
         arTotalOverdue: finance.ar.totalOverdue,
@@ -549,7 +584,7 @@ export class DashboardService {
       activeJobs: {
         scopedToUser,
         count: activeJobRows.total,
-        href: '/jobs',
+        href: activeJobsHref,
         items: activeJobItems,
         mine: {
           count: assignedActiveJobs.total,

@@ -30,6 +30,7 @@ export async function fetchQuotesAction(params: {
   status?: string;
   statusId?: string;
   quoteType?: string;
+  assignedToUserId?: string;
   assignedToUserIds?: string;
   sort?: string;
 }): Promise<PaginatedResponse<Quote> | null> {
@@ -44,7 +45,8 @@ export async function fetchQuotesAction(params: {
     status: params.status,
     statusId: params.statusId,
     quoteType: params.quoteType,
-    assignedToUserIds: params.assignedToUserIds,
+      assignedToUserId: params.assignedToUserId,
+      assignedToUserIds: params.assignedToUserIds,
     search: params.search,
     sort: params.sort,
   });
@@ -285,6 +287,7 @@ export async function updateQuoteGroupAction(params: {
   groupId: string;
   groupLabelLookupId?: string;
   description?: string;
+  component?: string;
   dimensions?: Record<string, unknown>;
 }): Promise<{ success: boolean; error?: string }> {
   const api = await getApi();
@@ -294,6 +297,7 @@ export async function updateQuoteGroupAction(params: {
     await api.updateQuoteGroup(params.quoteId, params.groupId, {
       groupLabelLookupId: params.groupLabelLookupId,
       description: params.description,
+      component: params.component,
       dimensions: params.dimensions,
     });
     revalidatePath(`/quotes/${params.quoteId}`);
@@ -392,8 +396,8 @@ export async function deleteQuoteComboAction(params: {
 
 export async function saveQuoteLineItemsAction(params: {
   quoteId: string;
-  items: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string; unitCost?: string; markupValue?: string; tax?: string; unitType?: string }>;
-  combos: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string }>;
+  items: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string; unitCost?: string; markupValue?: string; tax?: string; unitType?: string; lineScopeStatus?: string }>;
+  combos: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string; lineScopeStatus?: string }>;
 }): Promise<{ success: boolean; updated?: number; error?: string }> {
   const api = await getApi();
   if (!api) return { success: false, error: 'Not authenticated' };

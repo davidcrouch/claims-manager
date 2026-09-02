@@ -12,10 +12,18 @@ import {
   inArray,
   aliasedTable,
   getTableColumns,
+  exists,
 } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { addressSearchText, parseSearchTokens } from '../../common/address-search';
-import { claims, lookupValues } from '../schema';
+import {
+  claimContacts,
+  claimAssignees,
+  claims,
+  contacts,
+  jobs,
+  lookupValues,
+} from '../schema';
 
 const claimAddressSearchText = addressSearchText({
   address: claims.address,
@@ -24,6 +32,9 @@ const claimAddressSearchText = addressSearchText({
   postcode: claims.addressPostcode,
   country: claims.addressCountry,
 });
+
+/** Matches frontend jobDisplayName: internalNumber ?? name ?? externalJobId ?? externalReference ?? id */
+const claimJobDisplayRef = sql`COALESCE(${jobs.internalNumber}, ${jobs.name}, ${jobs.externalJobId}, ${jobs.externalReference}, ${jobs.id}::text)`;
 
 export type ClaimRow = typeof claims.$inferSelect;
 export type ClaimInsert = typeof claims.$inferInsert;
@@ -34,6 +45,11 @@ export interface ClaimViewRow extends ClaimRow {
   accountName: string | null;
   accountExternalReference: string | null;
 }
+
+export type ClaimInsuredNameRow = {
+  claimId: string;
+  insuredName: string;
+};
 
 function buildOrderBy(sort?: string) {
   switch (sort) {
@@ -67,6 +83,9 @@ export class ClaimsRepository {
     status?: string;
     /** Comma-separated account lookup IDs */
     account?: string;
+    /** Comma-separated job type lookup IDs (matches any job on the claim) */
+    jobType?: string;
+    assignedToUserId?: string;
   }): Promise<{ data: ClaimViewRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
@@ -87,6 +106,12 @@ export class ClaimsRepository {
           .map((s) => s.trim())
           .filter(Boolean)
       : [];
+    const jobTypeIds = params.jobType
+      ? params.jobType
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
 
     const searchTokens = parseSearchTokens(params.search);
     const searchClause =
@@ -94,12 +119,62 @@ export class ClaimsRepository {
         ? and(
             ...searchTokens.map((token) => {
               const pattern = `%${token}%`;
+              const jobMatch = exists(
+                this.db
+                  .select({ one: sql`1` })
+                  .from(jobs)
+                  .where(
+                    and(
+                      eq(jobs.claimId, claims.id),
+                      eq(jobs.tenantId, params.tenantId),
+                      isNull(jobs.deletedAt),
+                      or(
+                        sql`${claimJobDisplayRef} ilike ${pattern}`,
+                        ilike(jobs.internalNumber, pattern),
+                        ilike(jobs.name, pattern),
+                        ilike(jobs.externalJobId, pattern),
+                        ilike(jobs.externalReference, pattern),
+                      ),
+                    ),
+                  ),
+              );
+              const insuredContactMatch = exists(
+                this.db
+                  .select({ one: sql`1` })
+                  .from(claimContacts)
+                  .innerJoin(contacts, eq(claimContacts.contactId, contacts.id))
+                  .innerJoin(
+                    lookupValues,
+                    and(
+                      eq(lookupValues.tenantId, params.tenantId),
+                      eq(lookupValues.domain, 'contact_type'),
+                      sql`lower(coalesce(${lookupValues.name}, '')) = 'insured'`,
+                      or(
+                        eq(contacts.typeLookupId, lookupValues.id),
+                        sql`${contacts.contactPayload}->'typeLookupIds' ? ${lookupValues.id}::text`,
+                      ),
+                    ),
+                  )
+                  .where(
+                    and(
+                      eq(claimContacts.claimId, claims.id),
+                      eq(claimContacts.tenantId, params.tenantId),
+                      or(
+                        ilike(contacts.firstName, pattern),
+                        ilike(contacts.lastName, pattern),
+                        sql`lower(concat_ws(' ', ${contacts.firstName}, ${contacts.lastName})) like ${pattern.toLowerCase()}`,
+                      ),
+                    ),
+                  ),
+              );
               return or(
                 ilike(claims.claimNumber, pattern),
                 ilike(claims.externalReference, pattern),
                 ilike(claims.policyNumber, pattern),
-                ilike(claims.postalAddress, pattern),
                 sql`${claimAddressSearchText} ilike ${pattern}`,
+                ilike(claims.postalAddress, pattern),
+                jobMatch,
+                insuredContactMatch,
               )!;
             }),
           )
@@ -113,6 +188,38 @@ export class ClaimsRepository {
       accountIds.length > 0
         ? inArray(claims.accountLookupId, accountIds)
         : undefined;
+    const jobTypeClause =
+      jobTypeIds.length > 0
+        ? exists(
+            this.db
+              .select({ one: sql`1` })
+              .from(jobs)
+              .where(
+                and(
+                  eq(jobs.claimId, claims.id),
+                  eq(jobs.tenantId, params.tenantId),
+                  isNull(jobs.deletedAt),
+                  inArray(jobs.jobTypeLookupId, jobTypeIds),
+                ),
+              ),
+          )
+        : undefined;
+
+    const assignedToUserId = params.assignedToUserId?.trim() || null;
+    const assigneeClause = assignedToUserId
+      ? exists(
+          this.db
+            .select({ one: sql`1` })
+            .from(claimAssignees)
+            .where(
+              and(
+                eq(claimAssignees.claimId, claims.id),
+                eq(claimAssignees.tenantId, params.tenantId),
+                eq(claimAssignees.userId, assignedToUserId),
+              ),
+            ),
+        )
+      : undefined;
 
     const whereParts = [
       eq(claims.tenantId, params.tenantId),
@@ -120,6 +227,8 @@ export class ClaimsRepository {
       ...(searchClause ? [searchClause] : []),
       ...(statusClause ? [statusClause] : []),
       ...(accountClause ? [accountClause] : []),
+      ...(jobTypeClause ? [jobTypeClause] : []),
+      ...(assigneeClause ? [assigneeClause] : []),
     ];
     const whereClause = and(...whereParts);
 
@@ -262,6 +371,62 @@ export class ClaimsRepository {
       .where(eq(claims.id, params.id))
       .returning();
     return updated ?? null;
+  }
+
+  /**
+   * Primary insured/client display name per claim (first Insured-typed contact by sortIndex).
+   * Matches contact_type lookups named "Insured" via typeLookupId or contactPayload.typeLookupIds.
+   */
+  async findInsuredNamesByClaimIds(params: {
+    tenantId: string;
+    claimIds: string[];
+  }): Promise<ClaimInsuredNameRow[]> {
+    const claimIds = params.claimIds.filter(Boolean);
+    if (claimIds.length === 0) return [];
+
+    const rows = await this.db
+      .select({
+        claimId: claimContacts.claimId,
+        firstName: contacts.firstName,
+        lastName: contacts.lastName,
+        sortIndex: claimContacts.sortIndex,
+      })
+      .from(claimContacts)
+      .innerJoin(contacts, eq(claimContacts.contactId, contacts.id))
+      .innerJoin(
+        lookupValues,
+        and(
+          eq(lookupValues.tenantId, params.tenantId),
+          eq(lookupValues.domain, 'contact_type'),
+          sql`lower(coalesce(${lookupValues.name}, '')) = 'insured'`,
+          or(
+            eq(contacts.typeLookupId, lookupValues.id),
+            sql`${contacts.contactPayload}->'typeLookupIds' ? ${lookupValues.id}::text`,
+          ),
+        ),
+      )
+      .where(
+        and(
+          eq(claimContacts.tenantId, params.tenantId),
+          inArray(claimContacts.claimId, claimIds),
+        ),
+      )
+      .orderBy(asc(claimContacts.sortIndex), asc(contacts.lastName), asc(contacts.firstName));
+
+    const byClaim = new Map<string, string>();
+    for (const row of rows) {
+      if (byClaim.has(row.claimId)) continue;
+      const name = [row.firstName, row.lastName]
+        .map((part) => part?.trim())
+        .filter((part): part is string => !!part)
+        .join(' ');
+      if (name) byClaim.set(row.claimId, name);
+    }
+
+    return [...byClaim.entries()].map(([claimId, insuredName]) => ({
+      claimId,
+      insuredName,
+    }));
   }
 
   async countByTenant(params: { tenantId: string }): Promise<number> {

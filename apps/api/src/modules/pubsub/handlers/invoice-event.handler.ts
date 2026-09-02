@@ -1,7 +1,7 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
-import { eq, sql } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
-import { bills } from '../../../database/schema';
+import { bills, invoices } from '../../../database/schema';
 import type { EventHandler } from '../pubsub-subscriber.service';
 import type { DomainEventEnvelope } from '../envelope';
 
@@ -46,10 +46,29 @@ export class InvoiceEventHandler implements EventHandler {
   ) {
     const logPrefix = 'InvoiceEventHandler.updateLinkedBill';
 
+    const [invoice] = await this.db
+      .select({
+        tenantId: invoices.tenantId,
+        invoiceNumber: invoices.invoiceNumber,
+      })
+      .from(invoices)
+      .where(eq(invoices.id, envelope.entityId))
+      .limit(1);
+
+    if (!invoice?.invoiceNumber) {
+      this.logger.debug(`${logPrefix} — invoice=${envelope.entityId} missing invoiceNumber`);
+      return;
+    }
+
     const [bill] = await this.db
       .select({ id: bills.id })
       .from(bills)
-      .where(eq(bills.invoiceId, envelope.entityId))
+      .where(
+        and(
+          eq(bills.sourceTenantId, invoice.tenantId),
+          eq(bills.sourceExternalReference, invoice.invoiceNumber),
+        ),
+      )
       .limit(1);
 
     if (!bill) {

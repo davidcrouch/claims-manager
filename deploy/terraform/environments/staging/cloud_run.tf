@@ -17,6 +17,8 @@ locals {
   api_run_url          = "https://api-server-${local.run_host}"
   claims_mcp_run_url   = "https://claims-mcp-${local.run_host}"
   ms_graph_mcp_run_url = "https://ms-graph-mcp-${local.run_host}"
+  gotenberg_run_url    = "https://gotenberg-${local.run_host}"
+  gotenberg_image      = "gotenberg/gotenberg:8.36.0-libreoffice-cloudrun"
 
   # Public hostnames (Cloudflare → *.run.app). Used when use_public_hostnames=true.
   cloud_run_domain_suffix = trimsuffix(var.dns_name, ".")
@@ -81,6 +83,7 @@ resource "google_service_account_iam_member" "ci_deployer_actas_run" {
     "provider-server",
     "claims-mcp",
     "ms-graph-mcp",
+    "gotenberg",
   ]) : toset([])
 
   service_account_id = "projects/${var.project_id}/serviceAccounts/${module.iam.service_account_emails[each.key]}"
@@ -184,6 +187,8 @@ module "cloud_run_api" {
     # MCP integrations seeded into new orgs (path must include /mcp)
     CLAIMS_MCP_URL   = "${local.claims_mcp_run_url}/mcp"
     MS_GRAPH_MCP_URL = "${local.ms_graph_mcp_run_url}/mcp"
+    # Word → PDF conversion (private Gotenberg Cloud Run service)
+    GOTENBERG_URL = local.gotenberg_run_url
     MCP_OAUTH_CALLBACK_BASE_URL = (
       var.use_public_hostnames
       ? "https://${local.cloud_run_hosts.app}"
@@ -356,6 +361,42 @@ module "cloud_run_frontend" {
   depends_on = [
     google_project_service.run,
     module.secrets,
+  ]
+}
+
+module "cloud_run_gotenberg" {
+  count  = var.enable_cloud_run ? 1 : 0
+  source = "../../modules/cloud_run_service"
+
+  project_id            = var.project_id
+  region                = var.region
+  name                  = "gotenberg"
+  # Upstream image (LibreOffice-only Cloud Run variant). Not built by CI.
+  image                 = local.gotenberg_image
+  service_account_email = module.iam.service_account_emails["gotenberg"]
+  container_port        = 8080
+  cpu                   = "2"
+  memory                = "2Gi"
+  min_instances         = 0
+  max_instances         = 2
+  container_concurrency = 4
+  timeout               = "300s"
+  health_path           = "/health"
+  enable_probes         = true
+  ingress               = "INGRESS_TRAFFIC_ALL"
+  allow_unauthenticated = false
+  invoker_members = [
+    "serviceAccount:${module.iam.service_account_emails["api-server"]}",
+  ]
+  vpc_network = module.networking.vpc_self_link
+  vpc_subnet  = module.networking.subnet_self_link
+
+  env_vars = {}
+
+  secret_env_vars = []
+
+  depends_on = [
+    google_project_service.run,
   ]
 }
 

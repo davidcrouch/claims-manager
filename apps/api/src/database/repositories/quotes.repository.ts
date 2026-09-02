@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
 import { eq, and, isNull, desc, asc, sql, inArray, or, aliasedTable, getTableColumns, ilike } from 'drizzle-orm';
-import { normalizeListJobIds, parseCsvFilterValues } from '../../common/list-job-filter';
+import { normalizeListJobIds, normalizeListUserIds, parseCsvFilterValues } from '../../common/list-job-filter';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { quotes, lookupValues, users, jobs } from '../schema';
 
@@ -66,6 +66,7 @@ export class QuotesRepository {
     quoteType?: string;
     /** @deprecated Use status. */
     statusId?: string;
+    assignedToUserId?: string;
     assignedToUserIds?: string;
     search?: string;
     sort?: string;
@@ -115,7 +116,10 @@ export class QuotesRepository {
       );
     }
 
-    const assigneeIds = parseCsvFilterValues(params.assignedToUserIds);
+    const assigneeIds = normalizeListUserIds({
+      userId: params.assignedToUserId,
+      userIds: params.assignedToUserIds,
+    });
     if (assigneeIds) {
       if (assigneeIds.length === 0) return { data: [], total: 0 };
       const includeBlank = assigneeIds.includes('__blank__');

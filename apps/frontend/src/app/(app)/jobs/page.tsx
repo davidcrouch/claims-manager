@@ -5,9 +5,10 @@ import { JobsPageClient } from '@/components/jobs/JobsPageClient';
 import { toJobFormClaimOption } from '@/components/forms/job-form-claim';
 import {
   buildJobsListFetchKeyFromPageParams,
+  isJobsMineTab,
   JOBS_PAGE_SIZE,
   parseJobsListTab,
-  statusIdsForJobsListTab,
+  resolveJobsListStatusParam,
 } from '@/components/jobs/jobs-list-helpers';
 import type { Job, PaginatedResponse } from '@/types/api';
 
@@ -22,6 +23,8 @@ export default async function JobsPage({
     jobType?: string;
     tab?: string;
     refs?: string;
+    archiveState?: string;
+    assignedToUserId?: string;
     assignedToUserIds?: string;
   }>;
 }) {
@@ -32,14 +35,34 @@ export default async function JobsPage({
   const emptyJobs: PaginatedResponse<Job> = { data: [], total: 0 };
   const tab = parseJobsListTab(params.tab ?? null);
 
-  const [statusLookupsRes, jobTypesRes, jobTypesAllRes] = await Promise.all([
+  const [statusLookupsRes, jobTypesRes, jobTypesAllRes, orgUsers, session] = await Promise.all([
     api.getLookupsByDomain('job_status').catch(() => []),
     Promise.all([
       api.getLookupsByDomain('job_type', { providerCode: 'direct' }).catch(() => []),
       api.getLookupsByDomain('job_type', { providerCode: 'crunchwork' }).catch(() => []),
     ]).then(([direct, crunchwork]) => [...direct, ...crunchwork]),
     api.getLookupsByDomain('job_type').catch(() => []),
+    api.listOrgUsersForSelect().catch((err: unknown) => {
+      console.error(
+        'frontend:JobsPage - listOrgUsersForSelect failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return [] as { id: string; email?: string }[];
+    }),
+    getSession(),
   ]);
+
+  const email = session.identity?.email?.trim().toLowerCase();
+  const sub = session.identity?.sub;
+  const currentUserId =
+    orgUsers.find((u) => email && u.email?.trim().toLowerCase() === email)?.id ??
+    (sub && orgUsers.some((u) => u.id === sub) ? sub : null);
+
+  const effectiveTab =
+    tab === 'active' && params.assignedToUserId && params.assignedToUserId === currentUserId
+      ? 'mine'
+      : tab;
+  const mineTab = isJobsMineTab(effectiveTab);
 
   const statusOptions = (Array.isArray(statusLookupsRes) ? statusLookupsRes : []).map(
     (row) => ({
@@ -47,27 +70,28 @@ export default async function JobsPage({
       name: row.name?.trim() ? row.name : 'Unknown',
     }),
   );
-  const initialStatus =
-    params.status ?? statusIdsForJobsListTab(tab, statusOptions);
+  const initialStatus = resolveJobsListStatusParam({
+    tab: effectiveTab,
+    statusOptions,
+    explicitStatus: params.status,
+    archiveState: mineTab ? params.archiveState : undefined,
+  });
+  const initialAssignedToUserId = mineTab && currentUserId ? currentUserId : undefined;
+  const initialAssignedToUserIds = mineTab ? undefined : params.assignedToUserIds;
   const initialFetchKey = buildJobsListFetchKeyFromPageParams({
     search: params.search,
     sort: params.sort,
-    tab: params.tab,
+    tab: effectiveTab,
     page: params.page,
     status: initialStatus,
     jobType: params.jobType,
     refs: params.refs,
-    assignedToUserIds: params.assignedToUserIds,
+    assignedToUserId: initialAssignedToUserId,
+    assignedToUserIds: initialAssignedToUserIds,
   });
 
   let jobsSsrOk = false;
-  const [
-    initialJobs,
-    unreadJobIds,
-    orgUsers,
-    session,
-    claimsRes,
-  ] = await Promise.all([
+  const [initialJobs, unreadJobIds, claimsRes] = await Promise.all([
     api
       .getJobs({
         page: parseInt(params.page ?? '1', 10),
@@ -77,7 +101,8 @@ export default async function JobsPage({
         status: initialStatus,
         jobType: params.jobType,
         refs: params.refs,
-        assignedToUserIds: params.assignedToUserIds,
+        assignedToUserId: initialAssignedToUserId,
+        assignedToUserIds: initialAssignedToUserIds,
       })
       .then((data) => {
         jobsSsrOk = true;
@@ -91,14 +116,6 @@ export default async function JobsPage({
         return emptyJobs;
       }),
     api.getUnreadEntityIds('job').catch(() => [] as string[]),
-    api.listOrgUsersForSelect().catch((err: unknown) => {
-      console.error(
-        'frontend:JobsPage - listOrgUsersForSelect failed:',
-        err instanceof Error ? err.message : err,
-      );
-      return [] as { id: string; email?: string }[];
-    }),
-    getSession(),
     api.getClaims({ limit: 100, sort: 'updated_at_desc' }).catch((err: unknown) => {
       console.error(
         'frontend:JobsPage - getClaims failed:',
@@ -107,12 +124,6 @@ export default async function JobsPage({
       return { data: [], total: 0 };
     }),
   ]);
-
-  const email = session.identity?.email?.trim().toLowerCase();
-  const sub = session.identity?.sub;
-  const currentUserId =
-    orgUsers.find((u) => email && u.email?.trim().toLowerCase() === email)?.id ??
-    (sub && orgUsers.some((u) => u.id === sub) ? sub : null);
 
   const jobTypes = (Array.isArray(jobTypesRes) ? jobTypesRes : []).map((row) => ({
     id: row.id,

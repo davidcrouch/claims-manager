@@ -15,8 +15,7 @@ export interface DeleteItemDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   itemName?: string;
-  isAssemblyChild: boolean;
-  onConfirm: (removeFromCatalogAssembly: boolean) => void;
+  onConfirm: () => void;
   pending?: boolean;
 }
 
@@ -24,53 +23,49 @@ export function DeleteItemDialog({
   open,
   onOpenChange,
   itemName,
-  isAssemblyChild,
   onConfirm,
   pending,
 }: DeleteItemDialogProps) {
+  const displayName = itemName?.trim() || 'this item';
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!pending) onOpenChange(next);
+      }}
+    >
+      <DialogContent showCloseButton={false} className="pt-6 sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>Delete line item</DialogTitle>
-          <DialogDescription>
-            Are you sure you want to delete{' '}
-            {itemName ? <>&ldquo;{itemName}&rdquo;</> : 'this item'}?
-          </DialogDescription>
-        </DialogHeader>
-
-        {isAssemblyChild && (
-          <div className="flex items-start gap-2 rounded-md bg-amber-50 p-3 text-sm text-amber-800">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <p>
-              This item belongs to a catalogue assembly. You can also remove it
-              from the catalogue assembly definition so future uses won&rsquo;t
-              include it.
-            </p>
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+            <div>
+              <DialogTitle>Remove from catalogue</DialogTitle>
+              <DialogDescription className="mt-1">
+                Are you sure you want to remove{' '}
+                <span className="font-medium text-foreground">{displayName}</span>{' '}
+                from this catalogue? It will no longer appear under its scope or
+                assembly.
+              </DialogDescription>
+            </div>
           </div>
-        )}
-
-        <DialogFooter className="flex-col gap-2 sm:flex-row">
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={pending}>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            disabled={pending}
+            onClick={() => onOpenChange(false)}
+          >
             Cancel
           </Button>
-          {isAssemblyChild && (
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => onConfirm(true)}
-              disabled={pending}
-            >
-              Delete from estimate &amp; catalogue
-            </Button>
-          )}
           <Button
             variant="destructive"
-            size="sm"
-            onClick={() => onConfirm(false)}
             disabled={pending}
+            onClick={onConfirm}
           >
-            {isAssemblyChild ? 'Delete from estimate only' : 'Delete'}
+            {pending ? 'Removing…' : 'Remove'}
           </Button>
         </DialogFooter>
       </DialogContent>

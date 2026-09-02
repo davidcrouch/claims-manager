@@ -1,5 +1,9 @@
 import type { ApiItem, EditableFieldKey } from './types';
 import {
+  DEFAULT_LINE_SCOPE_STATUS,
+  resolveLineScopeStatusValue,
+} from './line-scope-status';
+import {
   resolveMarkupAmount,
   resolveTaxRate,
   storedMarkupToUi,
@@ -57,11 +61,19 @@ export function initItemInputs(item: ApiItem): Record<EditableFieldKey, string> 
     unitCost: String(item.unitCost ?? 0),
     markupValue: String(storedMarkupToUi(item.markupType, item.markupValue)),
     tax: String(storedTaxToUi(typeof item.tax === 'number' ? item.tax : 0)),
+    lineScopeStatus: resolveLineScopeStatusValue(item.lineScopeStatus),
+    invoiced: String(item.invoiced ?? 0),
   };
 }
 
 /** Initialise edit inputs from an ApiCombo. */
-export function initComboInputs(combo: { name?: string; component?: string; description?: string; quantity?: number }): Record<EditableFieldKey, string> {
+export function initComboInputs(combo: {
+  name?: string;
+  component?: string;
+  description?: string;
+  quantity?: number;
+  lineScopeStatus?: { name?: string; externalReference?: string };
+}): Record<EditableFieldKey, string> {
   return {
     name: combo.name ?? '',
     component: combo.component ?? '',
@@ -71,6 +83,8 @@ export function initComboInputs(combo: { name?: string; component?: string; desc
     unitCost: '0',
     markupValue: '0',
     tax: '0',
+    lineScopeStatus: resolveLineScopeStatusValue(combo.lineScopeStatus),
+    invoiced: '0',
   };
 }
 
@@ -85,6 +99,8 @@ export function initScopeInputs(scope: { name?: string; component?: string; desc
     unitCost: '0',
     markupValue: '0',
     tax: '0',
+    lineScopeStatus: DEFAULT_LINE_SCOPE_STATUS,
+    invoiced: '0',
   };
 }
 
@@ -95,7 +111,9 @@ export function getEditableFields(
   showQuantities = true,
   showPricing = true,
   hideComponent = false,
+  invoiceProgressEditable = false,
 ): EditableFieldKey[] {
+  if (invoiceProgressEditable) return ['invoiced'];
   const fields: EditableFieldKey[] = hideComponent ? ['name', 'description'] : ['name', 'component', 'description'];
   if (showQuantities) fields.push('quantity', 'unitType');
   if (showPricing) {
@@ -134,9 +152,18 @@ export function nearestEditableField(
   showQuantities = true,
   showPricing = true,
   hideComponent = false,
+  invoiceProgressEditable = false,
 ): EditableFieldKey {
-  const editableFields = getEditableFields(showMarkup, showGst, showQuantities, showPricing, hideComponent);
+  const editableFields = getEditableFields(
+    showMarkup,
+    showGst,
+    showQuantities,
+    showPricing,
+    hideComponent,
+    invoiceProgressEditable,
+  );
   if ((editableFields as string[]).includes(clicked)) return clicked as EditableFieldKey;
+  if (invoiceProgressEditable) return 'invoiced';
 
   const allCols: string[] = ['name', 'type', 'category'];
   if (showQuantities) allCols.push('quantity', 'unitType');

@@ -66,7 +66,7 @@ export const LineItemsToolbar = memo(function LineItemsToolbar({ hideActions = f
     isReadOnly,
   } = useLineItems();
 
-  const { showPricing, showMarkup, showGst, showQuantities, mode, showColumnVisibilityToggles, labels } = config;
+  const { showPricing, showMarkup, showGst, showQuantities, mode, showColumnVisibilityToggles, labels, pricingDetail } = config;
   const showSelect = !!selection;
   const allCollapsed = groups.length > 0 && groups.every((g, i) => collapsed.has(g.id ?? `group-${i}`));
   const groupFilterActive = hiddenGroupIds.size > 0;
@@ -281,23 +281,27 @@ export const LineItemsToolbar = memo(function LineItemsToolbar({ hideActions = f
               </span>
             </div>
 
-            <MarkupToggle
-              label="Markup"
-              value={grandTotals.markup}
-              isVisible={showMarkup}
-              suppressIcon={suppressMarkupIcon}
-              setSuppressIcon={setSuppressMarkupIcon}
-              onToggle={() => { setShowMarkup(!showMarkup); setSuppressMarkupIcon(true); }}
-            />
+            {pricingDetail !== 'total-only' && (
+              <>
+                <MarkupToggle
+                  label="Markup"
+                  value={grandTotals.markup}
+                  isVisible={showMarkup}
+                  suppressIcon={suppressMarkupIcon}
+                  setSuppressIcon={setSuppressMarkupIcon}
+                  onToggle={() => { setShowMarkup(!showMarkup); setSuppressMarkupIcon(true); }}
+                />
 
-            <MarkupToggle
-              label="GST"
-              value={grandTotals.totalTax}
-              isVisible={showGst}
-              suppressIcon={suppressGstIcon}
-              setSuppressIcon={setSuppressGstIcon}
-              onToggle={() => { setShowGst(!showGst); setSuppressGstIcon(true); }}
-            />
+                <MarkupToggle
+                  label="GST"
+                  value={grandTotals.totalTax}
+                  isVisible={showGst}
+                  suppressIcon={suppressGstIcon}
+                  setSuppressIcon={setSuppressGstIcon}
+                  onToggle={() => { setShowGst(!showGst); setSuppressGstIcon(true); }}
+                />
+              </>
+            )}
 
             <div className="text-sm text-slate-600">
               Total{' '}

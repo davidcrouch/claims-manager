@@ -384,9 +384,12 @@ export const ScopeCard = memo(function ScopeCard({
                   showCategory={showCategory}
                   showQuantities={showQuantities}
                   showPricing={showPricing}
+                  pricingDetail={config.pricingDetail}
                   showMarkup={showMarkup}
                   showGst={showGst}
+                  showInvoiceProgress={config.showInvoiceProgress}
                   showNotesColumn={showScopeNotesColumn}
+                  showLineScopeStatusColumn={config.showLineScopeStatusColumn}
                 />
                 <LineItemsThead
                   showDragHandle={showDragHandle}
@@ -395,9 +398,12 @@ export const ScopeCard = memo(function ScopeCard({
                   showCategory={showCategory}
                   showQuantities={showQuantities}
                   showPricing={showPricing}
+                  pricingDetail={config.pricingDetail}
                   showMarkup={showMarkup}
                   showGst={showGst}
+                  showInvoiceProgress={config.showInvoiceProgress}
                   showNotesColumn={showScopeNotesColumn}
+                  showLineScopeStatusColumn={config.showLineScopeStatusColumn}
                 />
                 <tbody className="divide-y divide-slate-50">
                   {visibleScopeItems.map((item, idx) => (

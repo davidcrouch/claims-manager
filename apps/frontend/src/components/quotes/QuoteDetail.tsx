@@ -104,6 +104,7 @@ import {
 } from '@/components/shared/detail-autosave';
 import { DetailUndoButton } from '@/components/shared/DetailAutosaveActions';
 import { SyncStatusIndicator } from '@/components/shared/SyncStatusIndicator';
+import { quoteInsurerRef } from '@/components/quotes/quote-label';
 
 type UndoEntry =
   | { kind: 'fields'; snapshot: QuoteFieldsSnapshot }
@@ -192,15 +193,30 @@ export function QuotePageHeader({
   job?: Job | null;
   claim?: Claim | null;
 }) {
+  const router = useRouter();
   const approval = getApprovalInfo(quote);
   const statusName = getEstimateStatusName(quote);
   const quoteTypeName = quote.quoteType?.name ?? approval.quoteTypeName;
   const locked = isEstimateLocked(quote);
+  const syncStatus = quote.syncStatus;
+
+  // Outbound publish returns before the worker finishes; poll until sync settles.
+  useEffect(() => {
+    if (syncStatus !== 'pending') return;
+    const interval = setInterval(() => {
+      router.refresh();
+    }, 2500);
+    const stop = setTimeout(() => clearInterval(interval), 60_000);
+    return () => {
+      clearInterval(interval);
+      clearTimeout(stop);
+    };
+  }, [syncStatus, router]);
 
   const titles = entityDetailHeaderTitles({
     internalNumber: quote.internalNumber,
     name: quote.name,
-    secondaryLabel: quote.quoteNumber ?? quote.externalReference,
+    secondaryLabel: quoteInsurerRef(quote),
     fallbackId: quote.id,
   });
 
@@ -220,8 +236,8 @@ export function QuotePageHeader({
       topRow={
         <>
           <StatusBadge status={statusName} />
-          {(quote as any).syncStatus && (
-            <SyncStatusIndicator syncStatus={(quote as any).syncStatus} compact />
+          {syncStatus && (
+            <SyncStatusIndicator syncStatus={syncStatus} compact />
           )}
           {locked && (
             <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
@@ -416,7 +432,7 @@ export function QuoteDetail({
   const title = entityArchiveLabel(
     quote.internalNumber,
     quote.name,
-    quote.quoteNumber ?? quote.externalReference,
+    quoteInsurerRef(quote),
     quote.id,
   );
   const statusName = getEstimateStatusName(quote);
@@ -596,7 +612,7 @@ export function QuoteDetail({
 
   const tabs: Array<{ id: QuoteTab; label: string; icon: typeof Calendar }> = [
     { id: 'overview', label: 'Overview', icon: FileSignature },
-    { id: 'line-items', label: 'Take Off', icon: Layers },
+    { id: 'line-items', label: 'Line Items', icon: Layers },
     { id: 'parties', label: 'Parties', icon: Users },
     { id: 'activities', label: 'Activities', icon: ClipboardList },
     { id: 'journals', label: 'Journals', icon: BookOpen },

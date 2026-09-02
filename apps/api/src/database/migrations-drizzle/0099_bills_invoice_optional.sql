@@ -1,0 +1,1 @@
+ALTER TABLE "bills" ALTER COLUMN "invoice_id" DROP NOT NULL;

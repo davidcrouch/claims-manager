@@ -1,6 +1,12 @@
+'use client';
+
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import type { DashboardInbox, DashboardInboxItem, DashboardInboxQueue, InboxQueueKey } from '@/types/api';
+import { Switch } from '@/components/ui/switch';
+import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
+import { fetchDashboardInboxAction } from '@/app/(app)/dashboard/actions';
 import { DashboardSnapshotBar } from './DashboardSnapshotBar';
 import { DashboardActiveJobs } from './DashboardActiveJobs';
 import { InboxRow } from './InboxRow';
@@ -59,11 +65,76 @@ function RailPanel({
   );
 }
 
+function MyWorkSwitch({
+  mineOnly,
+  onChange,
+  loading,
+}: {
+  mineOnly: boolean;
+  onChange: (next: boolean) => void;
+  loading: boolean;
+}) {
+  return (
+    <div className="mr-2 flex items-center gap-2 self-center">
+      <button
+        type="button"
+        onClick={() => onChange(false)}
+        className={`text-xs font-medium transition-colors ${
+          mineOnly ? 'text-white/50 hover:text-white/80' : 'text-white'
+        }`}
+      >
+        All
+      </button>
+      <Switch
+        id="dashboard-work-scope"
+        checked={mineOnly}
+        onCheckedChange={onChange}
+        disabled={loading}
+        aria-label="Show only my work"
+        className="border-white/20 bg-white/25 data-checked:bg-blue-500"
+      />
+      <button
+        type="button"
+        onClick={() => onChange(true)}
+        className={`text-xs font-medium transition-colors ${
+          mineOnly ? 'text-white' : 'text-white/50 hover:text-white/80'
+        }`}
+      >
+        My Work
+      </button>
+    </div>
+  );
+}
+
 export function DashboardInboxClient({
-  inbox,
+  inbox: initialInbox,
 }: {
   inbox: DashboardInbox;
 }) {
+  const defaultMine = Boolean(initialInbox.activeJobs?.scopedToUser);
+  const [mineOnly, setMineOnly] = useState(defaultMine);
+  const [inbox, setInbox] = useState(initialInbox);
+  const [isPending, startTransition] = useTransition();
+  const skipNextFetch = useRef(true);
+
+  const loadInbox = useCallback((mine: boolean) => {
+    startTransition(async () => {
+      const next = await fetchDashboardInboxAction({ mine });
+      if (next) setInbox(next);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (skipNextFetch.current) {
+      skipNextFetch.current = false;
+      // SSR used auto-scope (mine when user has assigned work). If that already
+      // matches the toggle, keep the server payload; otherwise refetch.
+      const ssrWasMine = Boolean(initialInbox.activeJobs?.scopedToUser);
+      if (mineOnly === ssrWasMine) return;
+    }
+    loadInbox(mineOnly);
+  }, [mineOnly, loadInbox, initialInbox.activeJobs?.scopedToUser]);
+
   const decisionQueues = queuesByKey(inbox.queues, DECISION_KEYS);
   const overdueTasks = findQueue(inbox.queues, 'overdueTasks');
   const myTasks = findQueue(inbox.queues, 'myTasks');
@@ -95,19 +166,20 @@ export function DashboardInboxClient({
 
   return (
     <div className="-mx-1 space-y-6">
+      <SetHeaderActions>
+        <MyWorkSwitch mineOnly={mineOnly} onChange={setMineOnly} loading={isPending} />
+      </SetHeaderActions>
+
       <DashboardSnapshotBar snapshot={inbox.snapshot} />
 
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)_minmax(18rem,22rem)]">
         {todayPanel}
 
         <DashboardActiveJobs
-          allCount={inbox.activeJobs?.count ?? inbox.snapshot.activeJobs}
-          allHref={inbox.activeJobs?.href ?? '/jobs'}
-          allItems={inbox.activeJobs?.items ?? []}
-          mineCount={inbox.activeJobs?.mine?.count ?? 0}
-          mineHref={inbox.activeJobs?.mine?.href ?? '/jobs'}
-          mineItems={inbox.activeJobs?.mine?.items ?? []}
-          defaultMine={Boolean(inbox.activeJobs?.scopedToUser)}
+          count={inbox.activeJobs?.count ?? inbox.snapshot.activeJobs}
+          href={inbox.activeJobs?.href ?? (mineOnly ? '/jobs?tab=mine' : '/jobs')}
+          items={inbox.activeJobs?.items ?? []}
+          mineOnly={mineOnly}
         />
 
         <div className="space-y-4">
@@ -140,7 +212,7 @@ export function DashboardInboxClient({
           </RailPanel>
 
           {myTasks && (
-            <RailPanel title="My tasks" href={myTasks.href}>
+            <RailPanel title="My tasks" href={myTasks.href ?? '/tasks?tab=mine'}>
               <ul>
                 {myTasks.items.map((item) => (
                   <li key={item.id}>

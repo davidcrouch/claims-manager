@@ -12,6 +12,8 @@ export async function fetchClaimsAction(params: {
   sort?: string;
   status?: string;
   account?: string;
+  jobType?: string;
+  assignedToUserId?: string;
 }): Promise<PaginatedResponse<Claim> | null> {
   const session = await getSession();
   if (!session.authenticated) return null;
@@ -27,5 +29,7 @@ export async function fetchClaimsAction(params: {
     sort: params.sort,
     status: params.status,
     account: params.account,
+    jobType: params.jobType,
+    assignedToUserId: params.assignedToUserId,
   });
 }

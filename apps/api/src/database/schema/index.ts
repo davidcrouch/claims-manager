@@ -375,6 +375,7 @@ export const quoteGroups = pgTable(
     externalReference: text('external_reference'),
     groupLabelLookupId: uuid('group_label_lookup_id').references(() => lookupValues.id),
     description: text('description'),
+    component: text('component'),
     dimensions: jsonb('dimensions').notNull().default({}),
     sortIndex: integer('sort_index').notNull().default(0),
     totals: jsonb('totals').notNull().default({}),
@@ -565,6 +566,7 @@ export const purchaseOrderGroups = pgTable(
       .references(() => purchaseOrders.id, { onDelete: 'cascade' }),
     groupLabelLookupId: uuid('group_label_lookup_id'),
     description: text('description'),
+    component: text('component'),
     dimensions: jsonb('dimensions').notNull().default({}),
     sortIndex: integer('sort_index').notNull().default(0),
     totals: jsonb('totals').notNull().default({}),
@@ -1340,6 +1342,7 @@ export const workOrders = pgTable(
     adjustmentInfo: jsonb('adjustment_info').notNull().default({}),
     allocationContext: jsonb('allocation_context').notNull().default({}),
     workOrderPayload: jsonb('work_order_payload').notNull().default({}),
+    assignedToUserId: text('assigned_to_user_id'),
     sourceVersionNumber: integer('source_version_number').notNull().default(1),
     latestAvailableVersion: integer('latest_available_version').notNull().default(1),
     versionAcknowledged: boolean('version_acknowledged').notNull().default(true),
@@ -1355,6 +1358,7 @@ export const workOrders = pgTable(
     index('idx_wo_job').on(t.tenantId, t.jobId),
     index('idx_wo_claim').on(t.tenantId, t.claimId),
     index('idx_wo_number').on(t.tenantId, t.workOrderNumber),
+    index('idx_wo_assigned').on(t.tenantId, t.assignedToUserId),
     uniqueIndex('UQ_work_orders_tenant_number')
       .on(t.tenantId, t.workOrderNumber)
       .where(sql`work_order_number ~* '^wo-[0-9]+$' AND deleted_at IS NULL`),
@@ -1377,6 +1381,7 @@ export const workOrderGroups = pgTable(
       .references(() => workOrders.id, { onDelete: 'cascade' }),
     groupLabelLookupId: uuid('group_label_lookup_id'),
     description: text('description'),
+    component: text('component'),
     dimensions: jsonb('dimensions').notNull().default({}),
     sortIndex: integer('sort_index').notNull().default(0),
     totals: jsonb('totals').notNull().default({}),
@@ -1548,6 +1553,7 @@ export const rfqGroups = pgTable(
     sourceQuoteGroupId: uuid('source_quote_group_id').references(() => quoteGroups.id),
     groupLabelLookupId: uuid('group_label_lookup_id').references(() => lookupValues.id),
     description: text('description'),
+    component: text('component'),
     note: text('note'),
     dimensions: jsonb('dimensions').notNull().default({}),
     sortIndex: integer('sort_index').notNull().default(0),
@@ -1696,6 +1702,7 @@ export const proposalGroups = pgTable(
     sourceRfqGroupId: uuid('source_rfq_group_id').references(() => rfqGroups.id),
     groupLabelLookupId: uuid('group_label_lookup_id').references(() => lookupValues.id),
     description: text('description'),
+    component: text('component'),
     dimensions: jsonb('dimensions').notNull().default({}),
     sortIndex: integer('sort_index').notNull().default(0),
     totals: jsonb('totals').notNull().default({}),
@@ -1784,9 +1791,6 @@ export const bills = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
-    invoiceId: uuid('invoice_id')
-      .notNull()
-      .references(() => invoices.id),
     purchaseOrderId: uuid('purchase_order_id').references(() => purchaseOrders.id),
     claimId: uuid('claim_id').references(() => claims.id, { onDelete: 'set null' }),
     jobId: uuid('job_id').references(() => jobs.id, { onDelete: 'set null' }),
@@ -1819,7 +1823,6 @@ export const bills = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    index('idx_bills_invoice').on(t.tenantId, t.invoiceId),
     index('idx_bills_po').on(t.tenantId, t.purchaseOrderId),
     index('idx_bills_job').on(t.tenantId, t.jobId),
     index('idx_bills_claim').on(t.tenantId, t.claimId),
@@ -3518,6 +3521,58 @@ export const rfqSendRecipients = pgTable(
   (t) => [
     index('idx_rfq_send_recipients_request').on(t.sendRequestId),
   ],
+);
+
+// ---------------------------------------------------------------------------
+// Purchase Order Issue Requests (batch records for emailing POs to vendors)
+// ---------------------------------------------------------------------------
+export const poSendRequests = pgTable(
+  'po_send_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    purchaseOrderId: uuid('purchase_order_id')
+      .notNull()
+      .references(() => purchaseOrders.id, { onDelete: 'cascade' }),
+    status: text('status').notNull().default('pending'),
+    initiatedBy: text('initiated_by'),
+    generatedDocId: uuid('generated_doc_id'),
+    emailSubject: text('email_subject').notNull(),
+    emailBodyHtml: text('email_body_html').notNull(),
+    emailBodyText: text('email_body_text'),
+    replyTo: text('reply_to'),
+    metadata: jsonb('metadata').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_po_send_requests_po').on(t.tenantId, t.purchaseOrderId),
+    index('idx_po_send_requests_status').on(t.status),
+  ],
+);
+
+export const poSendRecipients = pgTable(
+  'po_send_recipients',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sendRequestId: uuid('send_request_id')
+      .notNull()
+      .references(() => poSendRequests.id, { onDelete: 'cascade' }),
+    contactId: uuid('contact_id').references(() => contacts.id, { onDelete: 'set null' }),
+    recipientName: text('recipient_name').notNull(),
+    recipientEmail: text('recipient_email').notNull(),
+    status: text('status').notNull().default('pending'),
+    errorMessage: text('error_message'),
+    resendMessageId: text('resend_message_id'),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    retryCount: integer('retry_count').notNull().default(0),
+    metadata: jsonb('metadata').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('idx_po_send_recipients_request').on(t.sendRequestId)],
 );
 
 // ---------------------------------------------------------------------------

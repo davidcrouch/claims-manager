@@ -12,8 +12,10 @@ import { DocumentsRepository } from '../../database/repositories/documents.repos
 import { FilesystemsRepository } from '../../database/repositories/filesystems.repository';
 import { TenantContext } from '../../tenant/tenant-context';
 import { GcsStorageService } from '../../common/gcs/gcs-storage.service';
-import { OfficeConverterService } from '../../common/office/office-converter.service';
-import { renderDocxPreviewSvg } from '../../common/office/docx-preview-svg';
+import {
+  renderDocxPreviewSvg,
+  renderOfficePlaceholderSvg,
+} from '../../common/office/docx-preview-svg';
 import { CreateDocumentUploadUrlDto } from './dto/create-document-upload-url.dto';
 import { BatchUploadUrlsDto } from './dto/batch-upload-urls.dto';
 import { PipelineService } from '../pipelines/pipeline.service';
@@ -68,7 +70,6 @@ export class DocumentsService {
     private readonly documentsRepo: DocumentsRepository,
     private readonly filesystemsRepo: FilesystemsRepository,
     private readonly gcsStorage: GcsStorageService,
-    private readonly officeConverter: OfficeConverterService,
     private readonly tenantContext: TenantContext,
     @Inject(forwardRef(() => FilesystemService))
     private readonly filesystemService: FilesystemService,
@@ -248,8 +249,8 @@ export class DocumentsService {
       completeData.fileSizeBytes = metadata.size;
     }
 
-    // Persist complete before Word thumbnail work. LibreOffice conversion can
-    // exceed the 15s client timeout; aborting must not leave the row pending or
+    // Persist complete before Word thumbnail work. Background preview generation
+    // can exceed the 15s client timeout; aborting must not leave the row pending or
     // the document-templates admin page hides the file.
     const updated = await this.documentsRepo.update(documentId, tenantId, completeData);
     this.logger.debug(
@@ -304,16 +305,6 @@ export class DocumentsService {
     return fileName.toLowerCase().endsWith('.pdf');
   }
 
-  private officeThumbnailSourceName(
-    fileName: string,
-    mimeType?: string | null,
-  ): string {
-    if (this.isPdfDocument(mimeType, fileName)) return 'source.pdf';
-    const lower = fileName.toLowerCase();
-    if (lower.endsWith('.doc') && !lower.endsWith('.docx')) return 'source.doc';
-    return 'source.docx';
-  }
-
   private async generateOfficeThumbnailFromBuffer(params: {
     tenantId: string;
     documentId: string;
@@ -328,32 +319,17 @@ export class DocumentsService {
       (params.fileName.toLowerCase().endsWith('.docx') ||
         (params.buffer.length >= 2 && params.buffer[0] === 0x50 && params.buffer[1] === 0x4b));
 
-    if (isDocx) {
-      const svgBuffer = renderDocxPreviewSvg(params.buffer, params.fileName);
-      const thumbnailObjectPath = `tenants/${params.tenantId}/documents/${params.documentId}/thumbnail.svg`;
-      await this.gcsStorage.uploadBuffer({
-        objectPath: thumbnailObjectPath,
-        buffer: svgBuffer,
-        contentType: 'image/svg+xml',
-      });
-      this.logger.debug(
-        `${logPrefix} — docId=${params.documentId} uploaded svg ${svgBuffer.length} bytes (skip LibreOffice png)`,
-      );
-      return thumbnailObjectPath;
-    }
-
-    const pngBuffer = await this.officeConverter.convertToPng({
-      buffer: params.buffer,
-      sourceFileName: this.officeThumbnailSourceName(params.fileName, params.mimeType),
-    });
-    const thumbnailObjectPath = `tenants/${params.tenantId}/documents/${params.documentId}/thumbnail.png`;
+    const svgBuffer = isDocx
+      ? renderDocxPreviewSvg(params.buffer, params.fileName)
+      : renderOfficePlaceholderSvg(params.fileName);
+    const thumbnailObjectPath = `tenants/${params.tenantId}/documents/${params.documentId}/thumbnail.svg`;
     await this.gcsStorage.uploadBuffer({
       objectPath: thumbnailObjectPath,
-      buffer: pngBuffer,
-      contentType: 'image/png',
+      buffer: svgBuffer,
+      contentType: 'image/svg+xml',
     });
     this.logger.debug(
-      `${logPrefix} — docId=${params.documentId} uploaded png ${pngBuffer.length} bytes to ${thumbnailObjectPath}`,
+      `${logPrefix} — docId=${params.documentId} uploaded svg ${svgBuffer.length} bytes kind=${isDocx ? 'docx' : 'placeholder'}`,
     );
     return thumbnailObjectPath;
   }

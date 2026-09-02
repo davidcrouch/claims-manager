@@ -1,10 +1,8 @@
 'use client';
 
-import { useState } from 'react';
 import Link from 'next/link';
 import { Briefcase, ChevronRight } from 'lucide-react';
 import type { DashboardActiveJobItem } from '@/types/api';
-import { Switch } from '@/components/ui/switch';
 import { DASHBOARD_EMPTY_COPY, formatShortDate } from './dashboard-inbox.copy';
 
 function StatusPill({ status }: { status: string }) {
@@ -23,26 +21,16 @@ function StatusPill({ status }: { status: string }) {
 }
 
 export function DashboardActiveJobs({
-  allCount,
-  allHref,
-  allItems,
-  mineCount,
-  mineHref,
-  mineItems,
-  defaultMine,
+  count,
+  href,
+  items,
+  mineOnly,
 }: {
-  allCount: number;
-  allHref: string;
-  allItems: DashboardActiveJobItem[];
-  mineCount: number;
-  mineHref: string;
-  mineItems: DashboardActiveJobItem[];
-  defaultMine: boolean;
+  count: number;
+  href: string;
+  items: DashboardActiveJobItem[];
+  mineOnly: boolean;
 }) {
-  const [mineOnly, setMineOnly] = useState(defaultMine);
-  const count = mineOnly ? mineCount : allCount;
-  const href = mineOnly ? mineHref : allHref;
-  const items = mineOnly ? mineItems : allItems;
   const title = mineOnly ? 'My jobs' : 'Active jobs';
 
   return (
@@ -54,37 +42,13 @@ export function DashboardActiveJobs({
             {count === 0 ? 'Nothing currently in progress' : `${count} open ${count === 1 ? 'job' : 'jobs'}`}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-4">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setMineOnly(false)}
-              className={`text-xs font-medium transition-colors ${mineOnly ? 'text-slate-400 hover:text-slate-600' : 'text-slate-700'}`}
-            >
-              All
-            </button>
-            <Switch
-              id="dashboard-jobs-scope"
-              checked={mineOnly}
-              onCheckedChange={setMineOnly}
-              aria-label="Show only my jobs"
-            />
-            <button
-              type="button"
-              onClick={() => setMineOnly(true)}
-              className={`text-xs font-medium transition-colors ${mineOnly ? 'text-slate-700' : 'text-slate-400 hover:text-slate-600'}`}
-            >
-              My jobs
-            </button>
-          </div>
-          <Link
-            href={href}
-            className="inline-flex items-center gap-1 text-sm font-medium text-slate-700 hover:text-slate-900"
-          >
-            View all
-            <ChevronRight className="h-4 w-4" />
-          </Link>
-        </div>
+        <Link
+          href={href}
+          className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-slate-700 hover:text-slate-900"
+        >
+          View all
+          <ChevronRight className="h-4 w-4" />
+        </Link>
       </div>
 
       {items.length === 0 ? (

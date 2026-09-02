@@ -1,17 +1,27 @@
 import { COLUMN_FILTER_BLANK } from '@/components/shared/list-filters';
-import type { ArchiveListTab } from '@/components/shared/archive-list';
+import {
+  isArchivedStatus,
+  mergeStatusParamWithTab,
+  statusIdsForArchiveListTab,
+  type ArchiveListTab,
+} from '@/components/shared/archive-list';
 
 const ARCHIVED_STATUS_NAMES = new Set(['archived', 'closed']);
 
 export const JOBS_PAGE_SIZE = 20;
 export const DEFAULT_JOBS_SORT = 'updated_at_desc';
 
-export type JobsListTab = ArchiveListTab;
+export const JOB_ARCHIVE_STATE_OPTIONS = ['Active', 'Archived'] as const;
+export type JobArchiveState = (typeof JOB_ARCHIVE_STATE_OPTIONS)[number];
+
+export type JobsListTab = ArchiveListTab | 'mine';
 
 export type JobSortField =
   | 'external_reference'
   | 'external_job_id'
+  | 'insured'
   | 'status'
+  | 'archive_state'
   | 'job_type'
   | 'assignee'
   | 'address'
@@ -29,11 +39,72 @@ const JOB_SORT_FIELDS = new Set<JobSortField>([
   'updated_at',
 ]);
 
-const VALID_TABS = new Set<JobsListTab>(['active', 'archived', 'all']);
+const VALID_TABS = new Set<JobsListTab>(['mine', 'active', 'archived', 'all']);
 
-export function parseJobsListTab(param: string | null): JobsListTab {
+export function parseJobsListTab(param: string | null | undefined): JobsListTab {
   if (param && VALID_TABS.has(param as JobsListTab)) return param as JobsListTab;
   return 'active';
+}
+
+/** True when the list should scope to the logged-in user's assigned jobs. */
+export function isJobsMineTab(tab: JobsListTab): boolean {
+  return tab === 'mine';
+}
+
+export function jobArchiveStateLabel(
+  statusName: string | null | undefined,
+): JobArchiveState {
+  return isArchivedStatus(statusName) ? 'Archived' : 'Active';
+}
+
+/** Map Active / Archived column filter values to status lookup IDs. */
+export function statusIdsForArchiveStateFilter(
+  selected: Set<string>,
+  statusOptions: { id: string; name: string }[],
+): string | undefined | null {
+  if (selected.size === 0) return null;
+  if (selected.has('Active') && selected.has('Archived')) return undefined;
+  if (statusOptions.length === 0) return undefined;
+  const wantArchived = selected.has('Archived');
+  const ids = statusOptions
+    .filter((status) =>
+      wantArchived ? isArchivedStatus(status.name) : !isArchivedStatus(status.name),
+    )
+    .map((status) => status.id);
+  return ids.length > 0 ? ids.sort().join(',') : null;
+}
+
+export function columnFilterToArchiveStateStatusIds(
+  active: boolean,
+  selected: Set<string>,
+  statusOptions: { id: string; name: string }[],
+): string | undefined | null {
+  if (!active) return undefined;
+  return statusIdsForArchiveStateFilter(selected, statusOptions);
+}
+
+export function resolveJobsListStatusParam(params: {
+  tab: JobsListTab;
+  statusOptions: { id: string; name: string }[];
+  explicitStatus?: string;
+  archiveState?: string;
+}): string | undefined {
+  const tabStatusIds = isJobsMineTab(params.tab)
+    ? undefined
+    : statusIdsForArchiveListTab(params.tab, params.statusOptions);
+
+  const archiveHydrated = columnFilterFromValuesParam(params.archiveState ?? null);
+  const archiveStateStatus = columnFilterToArchiveStateStatusIds(
+    archiveHydrated.active,
+    archiveHydrated.selected,
+    params.statusOptions,
+  );
+
+  const merged = mergeStatusParamWithTab(
+    mergeStatusParamWithTab(params.explicitStatus, archiveStateStatus),
+    tabStatusIds ?? undefined,
+  );
+  return merged ?? undefined;
 }
 
 export function parseJobsColumnSort(
@@ -57,7 +128,7 @@ export function statusIdsForJobsListTab(
   tab: JobsListTab,
   statusOptions: { id: string; name: string }[],
 ): string | undefined {
-  if (tab === 'all') return undefined;
+  if (tab === 'all' || tab === 'mine') return undefined;
   if (statusOptions.length === 0) return undefined;
   const ids = statusOptions
     .filter((status) => {
@@ -76,19 +147,22 @@ export function buildJobsListFetchKey(params: {
   status?: string | null;
   jobType?: string | null;
   refs?: string | null;
+  assignedToUserId?: string | null;
   assignedToUserIds?: string | null;
   refreshNonce?: number;
 }): string {
   const statusKey = params.status === null ? '__none__' : (params.status ?? '');
   const typeKey = params.jobType === null ? '__none__' : (params.jobType ?? '');
   const refsKey = params.refs === null ? '__none__' : (params.refs ?? '');
+  const assigneeKey =
+    params.assignedToUserId === null ? '__none__' : (params.assignedToUserId ?? '');
   const assigneesKey =
     params.assignedToUserIds === null ? '__none__' : (params.assignedToUserIds ?? '');
   const page = String(params.page ?? 1);
   const sort = params.sort ?? DEFAULT_JOBS_SORT;
   const tab = params.tab ?? 'active';
   const refreshNonce = params.refreshNonce ?? 0;
-  return `${params.search ?? ''}|${sort}|${tab}|${page}|${statusKey}|${typeKey}|${refsKey}|${assigneesKey}|${refreshNonce}`;
+  return `${params.search ?? ''}|${sort}|${tab}|${page}|${statusKey}|${typeKey}|${refsKey}|${assigneeKey}|${assigneesKey}|${refreshNonce}`;
 }
 
 export function buildJobsListFetchKeyFromPageParams(params: {
@@ -99,6 +173,7 @@ export function buildJobsListFetchKeyFromPageParams(params: {
   status?: string;
   jobType?: string;
   refs?: string;
+  assignedToUserId?: string;
   assignedToUserIds?: string;
 }): string {
   return buildJobsListFetchKey({
@@ -111,6 +186,7 @@ export function buildJobsListFetchKeyFromPageParams(params: {
     status: params.status,
     jobType: params.jobType,
     refs: params.refs,
+    assignedToUserId: params.assignedToUserId,
     assignedToUserIds: params.assignedToUserIds,
   });
 }

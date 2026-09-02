@@ -23,7 +23,7 @@ PrintButton / workflow hook
     → DataMapper.aggregate()          ← hard-coded per-type, each mapper does its own joins
     → TransformService.applyTransform()  ← JSONata (custom row or code default, else pass-through)
     → TemplateEngineService.populate()   ← Docxtemplater merge into .docx
-    → PdfConverterService               ← LibreOffice conversion
+    → PdfConverterService               ← Gotenberg (LibreOffice) conversion
     → GCS upload
 ```
 

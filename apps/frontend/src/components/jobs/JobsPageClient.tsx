@@ -55,6 +55,7 @@ export function JobsPageClient({
         jobTypes={jobTypeFilterOptions ?? jobTypes}
         unreadJobIds={unreadJobIds}
         refreshNonce={refreshNonce}
+        currentUserId={currentUserId}
       />
       <JobFormDrawer
         open={drawerOpen}

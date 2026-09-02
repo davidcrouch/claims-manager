@@ -349,6 +349,8 @@ export function createApiClient(options?: ApiClientOptions) {
       sort?: string;
       status?: string;
       account?: string;
+      jobType?: string;
+      assignedToUserId?: string;
     }): Promise<PaginatedResponse<Claim>> {
       const sp = new URLSearchParams();
       if (params.page != null) sp.set('page', String(params.page));
@@ -357,6 +359,8 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params.sort) sp.set('sort', params.sort);
       if (params.status) sp.set('status', params.status);
       if (params.account) sp.set('account', params.account);
+      if (params.jobType) sp.set('jobType', params.jobType);
+      if (params.assignedToUserId) sp.set('assignedToUserId', params.assignedToUserId);
       return fetchApi<PaginatedResponse<Claim>>(`/claims?${sp}`);
     },
 
@@ -613,6 +617,7 @@ export function createApiClient(options?: ApiClientOptions) {
       status?: string;
       statusId?: string;
       quoteType?: string;
+      assignedToUserId?: string;
       assignedToUserIds?: string;
       search?: string;
       sort?: string;
@@ -625,6 +630,7 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params.status) sp.set('status', params.status);
       if (params.statusId) sp.set('statusId', params.statusId);
       if (params.quoteType) sp.set('quoteType', params.quoteType);
+      if (params.assignedToUserId) sp.set('assignedToUserId', params.assignedToUserId);
       if (params.assignedToUserIds) sp.set('assignedToUserIds', params.assignedToUserIds);
       if (params.search) sp.set('search', params.search);
       if (params.sort) sp.set('sort', params.sort);
@@ -729,6 +735,172 @@ export function createApiClient(options?: ApiClientOptions) {
       );
     },
 
+    ensurePurchaseOrderGroup(poId: string): Promise<{ id: string; description: string | null }> {
+      return fetchApi(`/purchase-orders/${poId}/groups`, { method: 'POST' });
+    },
+
+    createPurchaseOrderGroup(
+      poId: string,
+      body: { groupLabelLookupId?: string; description?: string },
+    ): Promise<{ id: string; description: string | null }> {
+      return fetchApi(`/purchase-orders/${poId}/groups`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+
+    updatePurchaseOrderGroup(
+      poId: string,
+      groupId: string,
+      body: {
+        groupLabelLookupId?: string;
+        description?: string;
+        component?: string;
+        dimensions?: Record<string, unknown>;
+      },
+    ): Promise<{ id: string; description: string | null }> {
+      return fetchApi(`/purchase-orders/${poId}/groups/${groupId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      });
+    },
+
+    deletePurchaseOrderGroup(poId: string, groupId: string): Promise<{ deleted: boolean }> {
+      return fetchApi(`/purchase-orders/${poId}/groups/${groupId}`, { method: 'DELETE' });
+    },
+
+    deletePurchaseOrderItem(
+      poId: string,
+      itemId: string,
+      options?: { removeFromCatalogAssembly?: boolean },
+    ): Promise<{ deleted: boolean; removedFromCatalog?: boolean }> {
+      const qs = options?.removeFromCatalogAssembly ? '?removeFromCatalogAssembly=true' : '';
+      return fetchApi(`/purchase-orders/${poId}/items/${itemId}${qs}`, { method: 'DELETE' });
+    },
+
+    deletePurchaseOrderCombo(poId: string, comboId: string): Promise<{ deleted: boolean }> {
+      return fetchApi(`/purchase-orders/${poId}/combos/${comboId}`, { method: 'DELETE' });
+    },
+
+    reorderPurchaseOrderGroups(poId: string, groupIds: string[]): Promise<unknown> {
+      return fetchApi(`/purchase-orders/${poId}/groups/reorder`, {
+        method: 'PATCH',
+        body: JSON.stringify({ groupIds }),
+      });
+    },
+
+    reorderPurchaseOrderLineItems(
+      poId: string,
+      payload: {
+        items?: Array<{ id: string; sortIndex: number }>;
+        combos?: Array<{ id: string; sortIndex: number }>;
+      },
+    ): Promise<{ success: boolean }> {
+      return fetchApi(`/purchase-orders/${poId}/line-items/reorder`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+    },
+
+    movePurchaseOrderLineItem(
+      poId: string,
+      payload: {
+        itemId?: string;
+        comboId?: string;
+        targetGroupId: string;
+        targetComboId?: string;
+        insertAtIndex?: number;
+      },
+    ): Promise<{ success: boolean }> {
+      return fetchApi(`/purchase-orders/${poId}/line-items/move`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+    },
+
+    duplicatePurchaseOrderLineItem(
+      poId: string,
+      payload: {
+        itemId?: string;
+        comboId?: string;
+        targetGroupId: string;
+        targetComboId?: string;
+        insertAtIndex?: number;
+      },
+    ): Promise<{ success: boolean; newId?: string }> {
+      return fetchApi(`/purchase-orders/${poId}/line-items/duplicate`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    },
+
+    addCatalogItemToPurchaseOrder(params: {
+      purchaseOrderId: string;
+      groupId: string;
+      catalogItemId: string;
+      quantity: string;
+      purchaseOrderComboId?: string;
+    }): Promise<unknown> {
+      return fetchApi(
+        `/purchase-orders/${params.purchaseOrderId}/groups/${params.groupId}/catalog-items`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            catalogItemId: params.catalogItemId,
+            quantity: params.quantity,
+            purchaseOrderComboId: params.purchaseOrderComboId,
+          }),
+        },
+      );
+    },
+
+    addCatalogAssemblyToPurchaseOrder(params: {
+      purchaseOrderId: string;
+      groupId: string;
+      catalogAssemblyId: string;
+      quantity: string;
+    }): Promise<unknown> {
+      return fetchApi(
+        `/purchase-orders/${params.purchaseOrderId}/groups/${params.groupId}/catalog-assemblies`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            catalogAssemblyId: params.catalogAssemblyId,
+            quantity: params.quantity,
+          }),
+        },
+      );
+    },
+
+    updatePurchaseOrderLineItems(
+      poId: string,
+      body: {
+        items: Array<{
+          id: string;
+          name?: string;
+          component?: string;
+          description?: string;
+          quantity?: string;
+          unitCost?: string;
+          markupValue?: string;
+          tax?: string;
+          unitType?: string;
+        }>;
+        combos: Array<{
+          id: string;
+          name?: string;
+          component?: string;
+          description?: string;
+          quantity?: string;
+        }>;
+      },
+    ): Promise<{ updated: number }> {
+      return fetchApi(`/purchase-orders/${poId}/line-items`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      });
+    },
+
     getWorkOrderLineItems(
       woId: string,
       query?: LineItemsPageQuery,
@@ -799,8 +971,12 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<Report | null>(`/reports/${id}`);
     },
 
-    getDashboardInbox(): Promise<DashboardInbox> {
-      return fetchApi<DashboardInbox>('/dashboard/inbox');
+    getDashboardInbox(params?: { mine?: boolean }): Promise<DashboardInbox> {
+      const sp = new URLSearchParams();
+      if (params?.mine === true) sp.set('mine', 'true');
+      if (params?.mine === false) sp.set('mine', 'false');
+      const qs = sp.toString();
+      return fetchApi<DashboardInbox>(`/dashboard/inbox${qs ? `?${qs}` : ''}`);
     },
 
     getDashboardStats(): Promise<DashboardStats> {
@@ -1085,6 +1261,8 @@ export function createApiClient(options?: ApiClientOptions) {
       purchaseOrderId?: string;
       status?: string;
       workOrderType?: string;
+      assignedToUserId?: string;
+      assignedToUserIds?: string;
       search?: string;
       sort?: string;
     }): Promise<PaginatedResponse<WorkOrder>> {
@@ -1096,9 +1274,15 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params?.purchaseOrderId) sp.set('purchaseOrderId', params.purchaseOrderId);
       if (params?.status) sp.set('status', params.status);
       if (params?.workOrderType) sp.set('workOrderType', params.workOrderType);
+      if (params?.assignedToUserId) sp.set('assignedToUserId', params.assignedToUserId);
+      if (params?.assignedToUserIds) sp.set('assignedToUserIds', params.assignedToUserIds);
       if (params?.search) sp.set('search', params.search);
       if (params?.sort) sp.set('sort', params.sort);
       return fetchApi<PaginatedResponse<WorkOrder>>(`/work-orders?${sp}`);
+    },
+
+    getWorkOrderFilterAssignees(): Promise<{ id: string; name: string }[]> {
+      return fetchApi('/work-orders/filter-assignees');
     },
 
     getWorkOrder(id: string): Promise<WorkOrder | null> {
@@ -1269,7 +1453,6 @@ export function createApiClient(options?: ApiClientOptions) {
       purchaseOrderId?: string;
       status?: string;
       vendorId?: string;
-      invoiceId?: string;
       search?: string;
       sort?: string;
     }): Promise<PaginatedResponse<Bill>> {
@@ -1281,7 +1464,6 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params?.purchaseOrderId) sp.set('purchaseOrderId', params.purchaseOrderId);
       if (params?.status) sp.set('status', params.status);
       if (params?.vendorId) sp.set('vendorId', params.vendorId);
-      if (params?.invoiceId) sp.set('invoiceId', params.invoiceId);
       if (params?.search) sp.set('search', params.search);
       if (params?.sort) sp.set('sort', params.sort);
       return fetchApi<PaginatedResponse<Bill>>(`/bills?${sp}`);
@@ -1561,6 +1743,12 @@ export function createApiClient(options?: ApiClientOptions) {
       });
     },
 
+    deleteCatalogComponent(assemblyId: string, lineId: string): Promise<void> {
+      return fetchApi<void>(`/catalog/items/${assemblyId}/components/${lineId}`, {
+        method: 'DELETE',
+      });
+    },
+
     replaceCatalogBom(id: string, lines: Record<string, unknown>[]): Promise<unknown> {
       return fetchApi(`/catalog/items/${id}/components`, {
         method: 'PUT',
@@ -1700,7 +1888,7 @@ export function createApiClient(options?: ApiClientOptions) {
     updateQuoteGroup(
       quoteId: string,
       groupId: string,
-      body: { groupLabelLookupId?: string; description?: string; dimensions?: Record<string, unknown> },
+      body: { groupLabelLookupId?: string; description?: string; component?: string; dimensions?: Record<string, unknown> },
     ): Promise<{ id: string; description: string | null }> {
       return fetchApi(`/quotes/${quoteId}/groups/${groupId}`, {
         method: 'PATCH',
@@ -1805,8 +1993,8 @@ export function createApiClient(options?: ApiClientOptions) {
     updateQuoteLineItems(
       quoteId: string,
       body: {
-        items: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string; unitCost?: string; markupValue?: string; tax?: string; unitType?: string }>;
-        combos: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string }>;
+        items: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string; unitCost?: string; markupValue?: string; tax?: string; unitType?: string; lineScopeStatus?: string }>;
+        combos: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string; lineScopeStatus?: string }>;
       },
     ): Promise<{ updated: number }> {
       return fetchApi(`/quotes/${quoteId}/line-items`, {
@@ -2983,6 +3171,46 @@ export function createApiClient(options?: ApiClientOptions) {
         body: JSON.stringify(body),
       });
     },
+
+    // -- Purchase Order Issue Requests --
+
+    listPoIssueRequests(poId: string): Promise<PoIssueRequestListItem[]> {
+      return fetchApi<PoIssueRequestListItem[]>(`/purchase-orders/${poId}/issue-requests`);
+    },
+
+    getPoIssueRequest(poId: string, requestId: string): Promise<PoIssueRequestDetail> {
+      return fetchApi<PoIssueRequestDetail>(`/purchase-orders/${poId}/issue-requests/${requestId}`);
+    },
+
+    createPoIssueRequest(
+      poId: string,
+      body: {
+        recipients: Array<{ contactId?: string; name: string; email: string }>;
+        generatedDocumentId: string;
+        emailSubject?: string;
+        emailBodyHtml?: string;
+        emailBodyText?: string;
+      },
+    ): Promise<PoIssueRequestDetail> {
+      return fetchApi<PoIssueRequestDetail>(`/purchase-orders/${poId}/issue-requests`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+
+    retryPoIssueRequest(
+      poId: string,
+      requestId: string,
+      body: { recipients: Array<{ recipientId: string; email?: string }> },
+    ): Promise<PoIssueRequestDetail> {
+      return fetchApi<PoIssueRequestDetail>(
+        `/purchase-orders/${poId}/issue-requests/${requestId}/retry`,
+        {
+          method: 'POST',
+          body: JSON.stringify(body),
+        },
+      );
+    },
   };
 }
 
@@ -3424,6 +3652,52 @@ export interface RfqSendRequestDetail {
   emailBodyHtml: string;
   replyTo: string | null;
   recipients: RfqSendRequestRecipientDetail[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// -- Purchase Order Issue Request types --
+
+export interface PoIssueRequestRecipientSummary {
+  id: string;
+  recipientName: string;
+  recipientEmail: string;
+  status: string;
+}
+
+export interface PoIssueRequestListItem {
+  id: string;
+  purchaseOrderId: string;
+  status: string;
+  initiatedBy: string | null;
+  emailSubject: string;
+  replyTo: string | null;
+  recipientCount: number;
+  recipients: PoIssueRequestRecipientSummary[];
+  createdAt: string;
+}
+
+export interface PoIssueRequestRecipientDetail {
+  id: string;
+  contactId: string | null;
+  recipientName: string;
+  recipientEmail: string;
+  status: string;
+  errorMessage: string | null;
+  sentAt: string | null;
+  retryCount: number;
+}
+
+export interface PoIssueRequestDetail {
+  id: string;
+  purchaseOrderId: string;
+  status: string;
+  initiatedBy: string | null;
+  generatedDocId: string | null;
+  emailSubject: string;
+  emailBodyHtml: string;
+  replyTo: string | null;
+  recipients: PoIssueRequestRecipientDetail[];
   createdAt: string;
   updatedAt: string;
 }

@@ -259,6 +259,7 @@ export class QuotesService {
     status?: string;
     statusId?: string;
     quoteType?: string;
+    assignedToUserId?: string;
     assignedToUserIds?: string;
     search?: string;
     sort?: string;
@@ -273,6 +274,7 @@ export class QuotesService {
       status: params.status,
       statusId: params.statusId,
       quoteType: params.quoteType,
+      assignedToUserId: params.assignedToUserId,
       assignedToUserIds: params.assignedToUserIds,
       search: params.search,
       sort: params.sort,
@@ -1606,6 +1608,7 @@ export class QuotesService {
           workOrderId,
           groupLabelLookupId: g.groupLabelLookupId,
           description: g.description,
+          component: g.component,
           dimensions: g.dimensions,
           sortIndex: g.sortIndex,
           totals: g.totals,

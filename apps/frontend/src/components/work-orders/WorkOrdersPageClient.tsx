@@ -19,6 +19,7 @@ export interface WorkOrdersPageClientProps {
   jobs: JobOption[];
   job?: Job | null;
   parentClaim?: Claim | null;
+  currentUserId?: string | null;
 }
 
 export function WorkOrdersPageClient({
@@ -30,6 +31,7 @@ export function WorkOrdersPageClient({
   jobs,
   job,
   parentClaim,
+  currentUserId,
 }: WorkOrdersPageClientProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -53,6 +55,7 @@ export function WorkOrdersPageClient({
         jobTypeById={jobTypeById}
         job={job}
         parentClaim={parentClaim}
+        currentUserId={currentUserId}
       />
       <WorkOrderFormDrawer
         open={drawerOpen}

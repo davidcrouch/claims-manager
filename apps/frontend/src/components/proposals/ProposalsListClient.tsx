@@ -31,6 +31,7 @@ import {
   createListFetchSession,
   replaceListQueryIfNeeded,
   useListPageData } from '@/components/shared/use-list-page-data';
+import { usePersistedListTab } from '@/components/shared/list-tab-storage';
 import { TablePagination } from '@/components/shared/table-pagination';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import {
@@ -50,7 +51,7 @@ const PAGE_SIZE = 20;
 
 type ListTab = 'active' | 'archived' | 'all';
 const VALID_TABS = new Set<ListTab>(['active', 'archived', 'all']);
-function parseTab(param: string | null): ListTab {
+function parseTab(param: string | null | undefined): ListTab {
   if (param && VALID_TABS.has(param as ListTab)) return param as ListTab;
   return 'active';
 }
@@ -103,7 +104,11 @@ export function ProposalsListClient({
   const { data, setData, beginFetch, abortFetch } = useListPageData(initialData);
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [debouncedSearch, setDebouncedSearch] = useState(search);
-  const [tab, setTab] = useState<ListTab>(() => parseTab(searchParams.get('tab')));
+  const [tab, setTab] = usePersistedListTab<ListTab>({
+    storageKey: 'proposals',
+    urlTab: searchParams.get('tab'),
+    parse: parseTab,
+  });
   const [page, setPage] = useState(() => {
     const p = parseInt(searchParams.get('page') ?? '1', 10);
     return Number.isFinite(p) && p > 0 ? p : 1;

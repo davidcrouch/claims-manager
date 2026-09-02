@@ -331,4 +331,5 @@ describe('catalog.utils', () => {
       ).toEqual(['crunchwork']);
     });
   });
+
 });

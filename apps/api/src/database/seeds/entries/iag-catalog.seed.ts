@@ -226,16 +226,30 @@ async function ensureCategory(
   const hit = cache.get(key);
   if (hit) return hit;
   const [existing] = await db
-    .select({ id: schema.catalogCategories.id })
+    .select({
+      id: schema.catalogCategories.id,
+      code: schema.catalogCategories.code,
+    })
     .from(schema.catalogCategories)
     .where(
       and(
         eq(schema.catalogCategories.tenantId, tenantId),
-        eq(schema.catalogCategories.code, trimmed),
+        sql`lower(${schema.catalogCategories.code}) = ${key}`,
       ),
     )
     .limit(1);
   if (existing) {
+    // Prefer canonical lowercase code when a title-case import match is found.
+    if (existing.code !== key && /^[a-z0-9_-]+$/.test(key)) {
+      try {
+        await db
+          .update(schema.catalogCategories)
+          .set({ code: key, updatedAt: new Date() })
+          .where(eq(schema.catalogCategories.id, existing.id));
+      } catch {
+        // Unique conflict with an inactive sibling — leave code as-is.
+      }
+    }
     cache.set(key, existing.id);
     return existing.id;
   }
@@ -243,7 +257,7 @@ async function ensureCategory(
     .insert(schema.catalogCategories)
     .values({
       tenantId,
-      code: trimmed,
+      code: key,
       name: trimmed,
       parentCategoryId: tradesRootId,
       sortIndex: cache.size,

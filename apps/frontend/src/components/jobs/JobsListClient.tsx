@@ -22,7 +22,7 @@ import { type StatusOption,
   ValueFilterMenu,
   SortableColumnHeader,
   TableEmptyRow, withUniqueNamedFilterOptions } from '@/components/shared/list-filters';
-import { statusIdsForArchiveListTab, mergeStatusParamWithTab } from '@/components/shared/archive-list';
+import { statusIdsForArchiveListTab, isArchivedStatus, mergeStatusParamWithTab } from '@/components/shared/archive-list';
 import { TablePagination } from '@/components/shared/table-pagination';
 import {
   ColumnSettingsHeaderCell,
@@ -39,8 +39,11 @@ import {
   columnFilterFromValuesParam,
   DEFAULT_JOBS_SORT,
   JOBS_PAGE_SIZE,
+  isJobsMineTab,
+  jobArchiveStateLabel,
   parseJobsColumnSort,
   parseJobsListTab,
+  columnFilterToArchiveStateStatusIds,
   type JobSortField,
   type JobsListTab,
 } from '@/components/jobs/jobs-list-helpers';
@@ -49,6 +52,7 @@ import {
   replaceListQueryIfNeeded,
   useListPageData,
 } from '@/components/shared/use-list-page-data';
+import { usePersistedListTab } from '@/components/shared/list-tab-storage';
 import type { Job, PaginatedResponse } from '@/types/api';
 
 function jobListAddress(job: Job): string {
@@ -67,14 +71,17 @@ interface ColDef {
   filterable?: boolean;
   locked?: boolean;
   defaultHidden?: boolean;
+  sortable?: boolean;
 }
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'external_reference', label: 'Job #', locked: true, filterable: true },
-  { key: 'external_job_id', label: 'Insurer Ref' },
+  { key: 'external_job_id', label: 'Insurer Ref', defaultHidden: true },
   { key: 'job_type', label: 'Type', filterable: true },
   { key: 'status', label: 'Status', filterable: true },
+  { key: 'archive_state', label: 'State', filterable: true, sortable: false },
   { key: 'assignee', label: 'Assigned', filterable: true },
+  { key: 'insured', label: 'Client / Insured', sortable: false },
   { key: 'address', label: 'Address' },
   { key: 'request_date', label: 'Requested' },
   { key: 'updated_at', label: 'Updated' },
@@ -101,6 +108,8 @@ export interface JobsListClientProps {
   onJobSelect?: (job: Job) => void;
   /** Extra class on the outer wrapper (e.g. drawer padding). */
   className?: string;
+  /** Logged-in org user id — required for the My Jobs tab filter. */
+  currentUserId?: string | null;
 }
 
 export function JobsListClient({
@@ -115,6 +124,7 @@ export function JobsListClient({
   selectedJobId,
   onJobSelect,
   className,
+  currentUserId,
 }: JobsListClientProps) {
   const isPicker = variant === 'picker';
   const router = useRouter();
@@ -123,6 +133,13 @@ export function JobsListClient({
     initialFetchKey,
   });
   const unreadSet = useMemo(() => new Set(unreadJobIds ?? []), [unreadJobIds]);
+  const initialArchiveStateFilter = useMemo(
+    () =>
+      isPicker
+        ? { selected: new Set<string>(), active: false }
+        : columnFilterFromValuesParam(searchParams.get('archiveState')),
+    [isPicker, searchParams],
+  );
   const initialRefFilter = useMemo(
     () =>
       isPicker
@@ -134,9 +151,19 @@ export function JobsListClient({
     isPicker ? '' : (searchParams.get('search') ?? ''),
   );
   const [debouncedSearch, setDebouncedSearch] = useState(search);
-  const [tab, setTab] = useState<JobsListTab>(() =>
-    isPicker ? 'active' : parseJobsListTab(searchParams.get('tab')),
-  );
+  const assignedToUserId = searchParams.get('assignedToUserId');
+  const legacyMineTab =
+    !isPicker &&
+    !!assignedToUserId &&
+    !!currentUserId &&
+    assignedToUserId === currentUserId;
+  const [tab, setTab] = usePersistedListTab<JobsListTab>({
+    storageKey: 'jobs',
+    urlTab: isPicker ? null : searchParams.get('tab'),
+    parse: parseJobsListTab,
+    fallbackTab: legacyMineTab ? 'mine' : undefined,
+    disabled: isPicker,
+  });
   const [page, setPage] = useState(() => {
     if (isPicker) return 1;
     const p = parseInt(searchParams.get('page') ?? '1', 10);
@@ -151,6 +178,10 @@ export function JobsListClient({
   const [typeFilterActive, setTypeFilterActive] = useState(false);
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [statusFilterActive, setStatusFilterActive] = useState(false);
+  const [archiveStateFilter, setArchiveStateFilter] = useState(initialArchiveStateFilter.selected);
+  const [archiveStateFilterActive, setArchiveStateFilterActive] = useState(
+    initialArchiveStateFilter.active,
+  );
   const [refFilter, setRefFilter] = useState(initialRefFilter.selected);
   const [refFilterActive, setRefFilterActive] = useState(initialRefFilter.active);
   const [assigneeFilter, setAssigneeFilter] = useState<Set<string>>(new Set());
@@ -160,10 +191,6 @@ export function JobsListClient({
     refs: string[];
     assignees: { id: string; name: string }[];
   }>({ refs: [], assignees: [] });
-  const { isVisible, toggle, visibleCount } = useColumnVisibility(
-    'jobs',
-    TABLE_COLUMNS,
-  );
 
   const typeOptions = useMemo(
     () =>
@@ -189,19 +216,58 @@ export function JobsListClient({
     [typeOptions],
   );
 
-  const tabStatusIds = useMemo(
-    () => statusIdsForArchiveListTab(tab, statusOptions),
-    [tab, statusOptions],
+  const tabStatusIds = useMemo(() => {
+    if (isJobsMineTab(tab)) return undefined;
+    return statusIdsForArchiveListTab(tab, statusOptions);
+  }, [tab, statusOptions]);
+
+  const isMineTab = isJobsMineTab(tab);
+  const showAssigneeColumn = !isMineTab;
+  const showArchiveStateColumn = isMineTab;
+
+  const listColumns = useMemo(
+    () =>
+      TABLE_COLUMNS.filter(
+        (col) => col.key !== 'archive_state' || showArchiveStateColumn,
+      ),
+    [showArchiveStateColumn],
+  );
+
+  const { isVisible, toggle } = useColumnVisibility(
+    'jobs-v2',
+    listColumns,
+  );
+
+  const assignedToUserIdParam = useMemo(
+    () => (isMineTab && currentUserId ? currentUserId : undefined),
+    [isMineTab, currentUserId],
+  );
+
+  const statusColumnParam = useMemo(
+    () => columnFilterToIdsParam(statusFilterActive, statusFilter, statusOptions),
+    [statusFilterActive, statusFilter, statusOptions],
+  );
+
+  const archiveStateStatusParam = useMemo(
+    () =>
+      isMineTab
+        ? columnFilterToArchiveStateStatusIds(
+            archiveStateFilterActive,
+            archiveStateFilter,
+            statusOptions,
+          )
+        : undefined,
+    [isMineTab, archiveStateFilterActive, archiveStateFilter, statusOptions],
   );
 
   const statusParam = useMemo(
     () =>
       mergeStatusParamWithTab(
-        columnFilterToIdsParam(statusFilterActive, statusFilter, statusOptions),
+        mergeStatusParamWithTab(statusColumnParam, archiveStateStatusParam),
         tabStatusIds,
       ),
-    [statusFilterActive, statusFilter, statusOptions, tabStatusIds],
-  )
+    [statusColumnParam, archiveStateStatusParam, tabStatusIds],
+  );
 
   const jobTypeParam = useMemo(
     () => columnFilterToIdsParam(typeFilterActive, typeFilter, typeOptions),
@@ -217,12 +283,14 @@ export function JobsListClient({
   );
   const assignedToUserIdsParam = useMemo(
     () =>
-      columnFilterToAssigneeIdsParam(
-        assigneeFilterActive,
-        assigneeFilter,
-        assigneeFilterOptions,
-      ),
-    [assigneeFilterActive, assigneeFilter, assigneeFilterOptions],
+      isMineTab
+        ? undefined
+        : columnFilterToAssigneeIdsParam(
+            assigneeFilterActive,
+            assigneeFilter,
+            assigneeFilterOptions,
+          ),
+    [isMineTab, assigneeFilterActive, assigneeFilter, assigneeFilterOptions],
   );
 
   useEffect(() => {
@@ -288,7 +356,8 @@ export function JobsListClient({
       statusParam === null ||
       jobTypeParam === null ||
       refsParam === null ||
-      assignedToUserIdsParam === null
+      assignedToUserIdsParam === null ||
+      (isMineTab && !currentUserId)
     ) {
       setData({ data: [], total: 0 });
       return session.cleanup;
@@ -302,6 +371,7 @@ export function JobsListClient({
       status: statusParam,
       jobType: jobTypeParam,
       refs: refsParam,
+      assignedToUserId: assignedToUserIdParam,
       assignedToUserIds: assignedToUserIdsParam,
     }).then((res) => {
       if (!session.cancelled && res) setData(res);
@@ -318,9 +388,12 @@ export function JobsListClient({
     statusParam,
     jobTypeParam,
     refsParam,
+    assignedToUserIdParam,
     assignedToUserIdsParam,
     refreshNonce,
     filtersHydrated,
+    isMineTab,
+    currentUserId,
     beginFetch,
     abortFetch,
     setData,
@@ -334,6 +407,7 @@ export function JobsListClient({
     status: statusParam,
     jobType: jobTypeParam,
     refs: refsParam,
+    assignedToUserId: assignedToUserIdParam,
     assignedToUserIds: assignedToUserIdsParam,
     refreshNonce,
   });
@@ -347,6 +421,7 @@ export function JobsListClient({
     else params.delete('search');
     if (tab !== 'active') params.set('tab', tab);
     else params.delete('tab');
+    params.delete('assignedToUserId');
     if (page > 1) params.set('page', String(page));
     else params.delete('page');
     if (sortParam !== DEFAULT_JOBS_SORT) params.set('sort', sortParam);
@@ -357,6 +432,12 @@ export function JobsListClient({
     else params.delete('jobType');
     if (refsParam) params.set('refs', refsParam);
     else params.delete('refs');
+    const archiveStateValuesParam = isMineTab
+      ? columnFilterToValuesParam(archiveStateFilterActive, archiveStateFilter)
+      : null;
+    if (archiveStateValuesParam) params.set('archiveState', archiveStateValuesParam);
+    else params.delete('archiveState');
+    params.delete('assignedToUserId');
     if (assignedToUserIdsParam) params.set('assignedToUserIds', assignedToUserIdsParam);
     else params.delete('assignedToUserIds');
     const next = params.toString();
@@ -380,7 +461,57 @@ export function JobsListClient({
     return runJobsFetch(fetchKey);
   }, [...fetchDeps, isPicker, fetchKey]);
 
+  // Outbound create/update returns before the worker finishes; poll until sync settles.
+  const hasPendingSync = data.data.some((j) => j.syncStatus === 'pending');
+  useEffect(() => {
+    if (!hasPendingSync || !filtersHydrated) return;
+    if (
+      statusParam === null ||
+      jobTypeParam === null ||
+      refsParam === null ||
+      assignedToUserIdsParam === null ||
+      (isMineTab && !currentUserId)
+    ) {
+      return;
+    }
+    const interval = setInterval(() => {
+      void fetchJobsAction({
+        search: debouncedSearch || undefined,
+        page,
+        limit: JOBS_PAGE_SIZE,
+        sort: sortParam,
+        status: statusParam,
+        jobType: jobTypeParam,
+        refs: refsParam,
+        assignedToUserId: assignedToUserIdParam,
+        assignedToUserIds: assignedToUserIdsParam,
+      }).then((res) => {
+        if (res) setData(res);
+      });
+    }, 2500);
+    const stop = setTimeout(() => clearInterval(interval), 60_000);
+    return () => {
+      clearInterval(interval);
+      clearTimeout(stop);
+    };
+  }, [
+    hasPendingSync,
+    filtersHydrated,
+    debouncedSearch,
+    page,
+    sortParam,
+    statusParam,
+    jobTypeParam,
+    refsParam,
+    assignedToUserIdParam,
+    assignedToUserIdsParam,
+    isMineTab,
+    currentUserId,
+    setData,
+  ]);
+
   const handleColumnSort = (field: JobSortField) => {
+    if (field === 'archive_state') return;
     setColumnSort((prev) => {
       if (prev.field === field) {
         return { field, order: prev.order === 'asc' ? 'desc' : 'asc' };
@@ -407,8 +538,23 @@ export function JobsListClient({
 
   const handleTabChange = (val: string) => {
     setTab(val as JobsListTab);
+    if (val === 'mine') {
+      setAssigneeFilter(new Set());
+      setAssigneeFilterActive(false);
+    } else {
+      setArchiveStateFilter(new Set());
+      setArchiveStateFilterActive(false);
+    }
     setPage(1);
   };
+
+  const visibleTableColumns = useMemo(
+    () =>
+      listColumns.filter(
+        (col) => isVisible(col.key) && (col.key !== 'assignee' || showAssigneeColumn),
+      ),
+    [listColumns, isVisible, showAssigneeColumn],
+  );
 
   const toggleType = (name: string) => {
     const working = typeFilterActive ? new Set(typeFilter) : new Set(typeNames);
@@ -508,6 +654,27 @@ export function JobsListClient({
     itemNoun: { singular: 'type', plural: 'types' },
   };
 
+  const archiveStateNames = useMemo(() => ['Active', 'Archived'], []);
+
+  const applyArchiveStateFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: archiveStateNames.length,
+    });
+    setArchiveStateFilter(committed.selected);
+    setArchiveStateFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const archiveStateFilterProps = {
+    options: archiveStateNames,
+    selected: archiveStateFilter,
+    active: archiveStateFilterActive,
+    onApply: applyArchiveStateFilter,
+    menuTitle: 'Filter by state',
+    itemNoun: { singular: 'state', plural: 'states' },
+  };
+
   const assigneeFilterProps = {
     options: uniqueAssignees,
     selected: assigneeFilter,
@@ -564,6 +731,7 @@ export function JobsListClient({
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
           <Tabs value={tab} onValueChange={handleTabChange}>
             <TabsList>
+              {!isPicker && <TabsTrigger value="mine">My Jobs</TabsTrigger>}
               <TabsTrigger value="active">Active</TabsTrigger>
               <TabsTrigger value="archived">Archived</TabsTrigger>
               <TabsTrigger value="all">All</TabsTrigger>
@@ -576,7 +744,7 @@ export function JobsListClient({
               size={16}
             />
             <Input
-              placeholder="Search jobs by job ref, insurer reference, or address..."
+              placeholder="Search by job #, insurer ref, client/insured, or address..."
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
               className="h-10 w-full pl-9 pr-9"
@@ -623,34 +791,57 @@ export function JobsListClient({
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50">
                 <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                  {TABLE_COLUMNS.filter((col) => isVisible(col.key)).map((col) => (
-                    <SortableColumnHeader
-                      key={col.key}
-                      columnKey={col.key}
-                      label={col.label}
-                      activeField={columnSort.field}
-                      sortOrder={columnSort.order}
-                      onSort={handleColumnSort}
-                      filter={
-                        col.key === 'external_reference'
-                          ? refFilterProps
-                          : col.key === 'status'
-                            ? statusFilterProps
-                            : col.key === 'job_type'
-                              ? typeFilterProps
-                              : col.key === 'assignee'
-                                ? assigneeFilterProps
-                                : undefined
-                      }
-                    />
-                  ))}
+                  {visibleTableColumns.map((col) => {
+                    if (col.key === 'archive_state') {
+                      return (
+                        <SortableColumnHeader
+                          key={col.key}
+                          columnKey={col.key}
+                          label={col.label}
+                          activeField={null}
+                          sortOrder="asc"
+                          onSort={() => {}}
+                          filter={archiveStateFilterProps}
+                          className="cursor-default hover:text-slate-500 [&_span>svg:last-child]:hidden"
+                        />
+                      );
+                    }
+                    if (col.sortable === false) {
+                      return (
+                        <th key={col.key} scope="col" className="px-4 py-3">
+                          {col.label}
+                        </th>
+                      );
+                    }
+                    return (
+                      <SortableColumnHeader
+                        key={col.key}
+                        columnKey={col.key}
+                        label={col.label}
+                        activeField={columnSort.field}
+                        sortOrder={columnSort.order}
+                        onSort={handleColumnSort}
+                        filter={
+                          col.key === 'external_reference'
+                            ? refFilterProps
+                            : col.key === 'status'
+                              ? statusFilterProps
+                              : col.key === 'job_type'
+                                ? typeFilterProps
+                                : col.key === 'assignee'
+                                  ? assigneeFilterProps
+                                  : undefined
+                        }
+                      />
+                    );
+                  })}
                   {!isPicker && (
                     <th scope="col" className={LIST_ARCHIVE_TH_CLASS}>
                       <span className="sr-only">Actions</span>
                     </th>
                   )}
                   <ColumnSettingsHeaderCell
-                    columns={TABLE_COLUMNS}
+                    columns={listColumns}
                     isVisible={isVisible}
                     onToggle={toggle}
                   />
@@ -658,7 +849,10 @@ export function JobsListClient({
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {visibleRows.length === 0 ? (
-                  <TableEmptyRow colSpan={visibleCount + (isPicker ? 1 : 2)} label="No jobs found." />
+                  <TableEmptyRow
+                    colSpan={visibleTableColumns.length + (isPicker ? 1 : 2)}
+                    label="No jobs found."
+                  />
                 ) : (
                   visibleRows.map((job) => {
                   const ref = jobListRef(job);
@@ -704,9 +898,22 @@ export function JobsListClient({
                           <StatusBadge status={statusName} />
                         </td>
                       )}
-                      {isVisible('assignee') && (
+                      {showArchiveStateColumn && isVisible('archive_state') && (
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <StatusBadge
+                            status={jobArchiveStateLabel(job.status?.name)}
+                            variant={isArchivedStatus(job.status?.name) ? 'inactive' : 'active'}
+                          />
+                        </td>
+                      )}
+                      {showAssigneeColumn && isVisible('assignee') && (
                         <td className="px-4 py-3 text-slate-600">
                           {job.assigneeName ?? '—'}
+                        </td>
+                      )}
+                      {isVisible('insured') && (
+                        <td className="px-4 py-3 text-slate-600">
+                          {job.insuredName?.trim() || '—'}
                         </td>
                       )}
                       {isVisible('address') && (

@@ -175,10 +175,14 @@ export class EnvironmentVariables {
   @IsOptional()
   AUTH_AUDIENCE?: string;
 
-  /** Absolute path to soffice / soffice.exe for DOCX → PDF conversion. */
+  /** Base URL for Gotenberg (DOCX → PDF). e.g. http://localhost:3000 */
   @IsString()
   @IsOptional()
-  LIBREOFFICE_PATH?: string;
+  GOTENBERG_URL?: string;
+
+  /** Timeout for Gotenberg conversion requests (ms). Default 180000. */
+  @IsOptional()
+  GOTENBERG_TIMEOUT_MS?: string;
 
   @IsString()
   @IsOptional()

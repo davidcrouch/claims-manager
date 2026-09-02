@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, isNull, desc, asc, sql, gte, ilike, or, inArray, notInArray, ne, aliasedTable, getTableColumns } from 'drizzle-orm';
+import { eq, and, isNull, desc, asc, sql, gte, ilike, or, inArray, notInArray, ne, aliasedTable, getTableColumns, exists } from 'drizzle-orm';
 import { normalizeListUserIds, parseCsvFilterValues } from '../../common/list-job-filter';
 import { addressSearchText, parseSearchTokens } from '../../common/address-search';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import {
+  claimContacts,
   jobs,
   lookupValues,
   vendors,
@@ -112,6 +113,11 @@ export type ClaimJobSummary = {
   jobTypeName: string | null;
 };
 
+export type JobInsuredNameRow = {
+  jobId: string;
+  insuredName: string;
+};
+
 @Injectable()
 export class JobsRepository {
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
@@ -168,6 +174,66 @@ export class JobsRepository {
           and(
             ...tokens.map((token) => {
               const pattern = `%${token}%`;
+              const jobInsuredMatch = or(
+                exists(
+                  this.db
+                    .select({ one: sql`1` })
+                    .from(jobContacts)
+                    .innerJoin(contacts, eq(jobContacts.contactId, contacts.id))
+                    .innerJoin(
+                      lookupValues,
+                      and(
+                        eq(lookupValues.tenantId, params.tenantId),
+                        eq(lookupValues.domain, 'contact_type'),
+                        sql`lower(coalesce(${lookupValues.name}, '')) = 'insured'`,
+                        or(
+                          eq(contacts.typeLookupId, lookupValues.id),
+                          sql`${contacts.contactPayload}->'typeLookupIds' ? ${lookupValues.id}::text`,
+                        ),
+                      ),
+                    )
+                    .where(
+                      and(
+                        eq(jobContacts.jobId, jobs.id),
+                        eq(jobContacts.tenantId, params.tenantId),
+                        or(
+                          ilike(contacts.firstName, pattern),
+                          ilike(contacts.lastName, pattern),
+                          sql`lower(concat_ws(' ', ${contacts.firstName}, ${contacts.lastName})) like ${pattern.toLowerCase()}`,
+                        ),
+                      ),
+                    ),
+                ),
+                exists(
+                  this.db
+                    .select({ one: sql`1` })
+                    .from(claimContacts)
+                    .innerJoin(contacts, eq(claimContacts.contactId, contacts.id))
+                    .innerJoin(
+                      lookupValues,
+                      and(
+                        eq(lookupValues.tenantId, params.tenantId),
+                        eq(lookupValues.domain, 'contact_type'),
+                        sql`lower(coalesce(${lookupValues.name}, '')) = 'insured'`,
+                        or(
+                          eq(contacts.typeLookupId, lookupValues.id),
+                          sql`${contacts.contactPayload}->'typeLookupIds' ? ${lookupValues.id}::text`,
+                        ),
+                      ),
+                    )
+                    .where(
+                      and(
+                        eq(claimContacts.claimId, jobs.claimId),
+                        eq(claimContacts.tenantId, params.tenantId),
+                        or(
+                          ilike(contacts.firstName, pattern),
+                          ilike(contacts.lastName, pattern),
+                          sql`lower(concat_ws(' ', ${contacts.firstName}, ${contacts.lastName})) like ${pattern.toLowerCase()}`,
+                        ),
+                      ),
+                    ),
+                ),
+              );
               return or(
                 sql`${jobDisplayRef} ilike ${pattern}`,
                 ilike(jobs.internalNumber, pattern),
@@ -176,6 +242,7 @@ export class JobsRepository {
                 ilike(jobs.externalReference, pattern),
                 sql`${jobInsurerRef} ilike ${pattern}`,
                 sql`${jobAddressSearchText} ilike ${pattern}`,
+                jobInsuredMatch,
               )!;
             }),
           )!,
@@ -607,6 +674,61 @@ export class JobsRepository {
       .orderBy(desc(jobs.createdAt), asc(jobTypeLookup.name));
 
     return rows;
+  }
+
+  /**
+   * Primary insured/client display name per job (first Insured-typed job contact by sortIndex).
+   */
+  async findInsuredNamesByJobIds(params: {
+    tenantId: string;
+    jobIds: string[];
+  }): Promise<JobInsuredNameRow[]> {
+    const jobIds = params.jobIds.filter(Boolean);
+    if (jobIds.length === 0) return [];
+
+    const rows = await this.db
+      .select({
+        jobId: jobContacts.jobId,
+        firstName: contacts.firstName,
+        lastName: contacts.lastName,
+        sortIndex: jobContacts.sortIndex,
+      })
+      .from(jobContacts)
+      .innerJoin(contacts, eq(jobContacts.contactId, contacts.id))
+      .innerJoin(
+        lookupValues,
+        and(
+          eq(lookupValues.tenantId, params.tenantId),
+          eq(lookupValues.domain, 'contact_type'),
+          sql`lower(coalesce(${lookupValues.name}, '')) = 'insured'`,
+          or(
+            eq(contacts.typeLookupId, lookupValues.id),
+            sql`${contacts.contactPayload}->'typeLookupIds' ? ${lookupValues.id}::text`,
+          ),
+        ),
+      )
+      .where(
+        and(
+          eq(jobContacts.tenantId, params.tenantId),
+          inArray(jobContacts.jobId, jobIds),
+        ),
+      )
+      .orderBy(asc(jobContacts.sortIndex), asc(contacts.lastName), asc(contacts.firstName));
+
+    const byJob = new Map<string, string>();
+    for (const row of rows) {
+      if (byJob.has(row.jobId)) continue;
+      const name = [row.firstName, row.lastName]
+        .map((part) => part?.trim())
+        .filter((part): part is string => !!part)
+        .join(' ');
+      if (name) byJob.set(row.jobId, name);
+    }
+
+    return [...byJob.entries()].map(([jobId, insuredName]) => ({
+      jobId,
+      insuredName,
+    }));
   }
 
   async countByTenant(params: { tenantId: string }): Promise<number> {

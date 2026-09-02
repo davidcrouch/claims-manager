@@ -29,11 +29,13 @@ export class WorkOrdersService {
     purchaseOrderId?: string;
     status?: string;
     workOrderType?: string;
+    assignedToUserId?: string;
+    assignedToUserIds?: string;
     search?: string;
     sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
-    return this.workOrdersRepo.findAll({
+    const result = await this.workOrdersRepo.findAll({
       tenantId,
       page: params.page,
       limit: params.limit,
@@ -42,14 +44,26 @@ export class WorkOrdersService {
       purchaseOrderId: params.purchaseOrderId,
       status: params.status,
       workOrderType: params.workOrderType,
+      assignedToUserId: params.assignedToUserId,
+      assignedToUserIds: params.assignedToUserIds,
       search: params.search,
       sort: params.sort,
     });
+    return {
+      data: result.data.map((row) => this.shapeWorkOrderListItem(row)),
+      total: result.total,
+    };
+  }
+
+  async findFilterAssignees() {
+    const tenantId = this.tenantContext.getTenantId();
+    return this.workOrdersRepo.findFilterAssignees({ tenantId });
   }
 
   async findOne(params: { id: string }) {
     const tenantId = this.tenantContext.getTenantId();
-    return this.workOrdersRepo.findOne({ id: params.id, tenantId });
+    const row = await this.workOrdersRepo.findOne({ id: params.id, tenantId });
+    return row ? this.shapeWorkOrderListItem(row) : null;
   }
 
   async findByJob(params: { jobId: string }) {
@@ -70,11 +84,13 @@ export class WorkOrdersService {
       statusExternalReference,
       workOrderTypeName,
       workOrderTypeExternalReference,
+      assigneeName,
       workOrderPayload: _payload,
       ...rest
     } = row;
     return {
       ...rest,
+      assigneeName: assigneeName ?? null,
       status: row.statusLookupId
         ? {
             id: row.statusLookupId,

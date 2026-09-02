@@ -620,12 +620,12 @@ export class ManualCaptureService {
 
       const billData = {
         tenantId,
-        invoiceId: invoice.id,
         purchaseOrderId: dto.purchaseOrderId,
         claimId: dto.claimId ?? null,
         jobId: dto.jobId ?? null,
         sourceTenantId: null as string | null,
         sourceOrganisationId: issuerOrgId,
+        sourceExternalReference: invoiceNumber,
         originType: 'capture' as const,
         billNumber: invoiceNumber,
         issueDate: dto.issueDate ? new Date(dto.issueDate) : null,

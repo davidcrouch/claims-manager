@@ -35,6 +35,7 @@ export async function fetchJobsAction(params: {
   sort?: string;
   status?: string;
   jobType?: string;
+  assignedToUserId?: string;
   assignedToUserIds?: string;
   refs?: string;
 }): Promise<PaginatedResponse<Job> | null> {
@@ -58,6 +59,7 @@ export async function fetchJobsAction(params: {
       sort: params.sort,
       status: params.status,
       jobType: params.jobType,
+      assignedToUserId: params.assignedToUserId,
       assignedToUserIds: params.assignedToUserIds,
       refs: params.refs,
     });

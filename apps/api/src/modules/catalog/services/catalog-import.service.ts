@@ -1251,7 +1251,7 @@ export class CatalogImportService {
     const created = await this.categoriesRepo.create({
       tenantId: params.tenantId,
       data: {
-        code: trimmed,
+        code: key,
         name: meta?.name ?? humanizeCategoryCode(trimmed),
         parentCategoryId,
         sortIndex: meta?.sortIndex ?? params.categoryByCode.size,

@@ -61,7 +61,7 @@ variable "cloud_run_use_bootstrap_image" {
 variable "cloud_run_api_min_instances" {
   type        = number
   default     = 0
-  description = "min-instances for api-server (set 1 if LibreOffice cold starts hurt)"
+  description = "min-instances for api-server"
 }
 
 variable "more0_gateway_url" {

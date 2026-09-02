@@ -46,7 +46,7 @@ export default async function PurchaseOrderDetailPage({
       <SetPageHeader>
         <PurchaseOrderPageHeader po={po} job={job} />
       </SetPageHeader>
-      <PurchaseOrderDetail po={po} />
+      <PurchaseOrderDetail po={po} job={job} />
     </>
   );
 }

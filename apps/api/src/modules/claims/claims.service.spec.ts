@@ -16,6 +16,7 @@ describe('ClaimsService', () => {
   const mockClaimsRepo = {
     findAll: jest.fn().mockResolvedValue({ data: [], total: 0 }),
     findOne: jest.fn().mockResolvedValue(null),
+    findInsuredNamesByClaimIds: jest.fn().mockResolvedValue([]),
     create: jest.fn().mockImplementation(({ data }) =>
       Promise.resolve({ ...data, id: 'claim-1' }),
     ),
@@ -67,8 +68,10 @@ describe('ClaimsService', () => {
         sort: undefined,
         status: undefined,
         account: undefined,
+        jobType: undefined,
       });
       expect(mockJobsRepo.findSummariesByClaimIds).not.toHaveBeenCalled();
+      expect(mockClaimsRepo.findInsuredNamesByClaimIds).not.toHaveBeenCalled();
     });
 
     it('should attach job type summaries for listed claims', async () => {
@@ -109,12 +112,20 @@ describe('ClaimsService', () => {
           jobTypeName: 'Repair',
         },
       ]);
+      mockClaimsRepo.findInsuredNamesByClaimIds.mockResolvedValueOnce([
+        { claimId: 'claim-1', insuredName: 'Jane Doe' },
+      ]);
 
       const result = await service.findAll({ page: 1, limit: 20 });
       expect(mockJobsRepo.findSummariesByClaimIds).toHaveBeenCalledWith({
         tenantId: 'tenant-1',
         claimIds: ['claim-1'],
       });
+      expect(mockClaimsRepo.findInsuredNamesByClaimIds).toHaveBeenCalledWith({
+        tenantId: 'tenant-1',
+        claimIds: ['claim-1'],
+      });
+      expect(result.data[0].insuredName).toBe('Jane Doe');
       expect(result.data[0].jobs).toEqual([
         {
           id: 'job-1',

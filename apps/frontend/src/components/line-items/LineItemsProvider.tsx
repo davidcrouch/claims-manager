@@ -22,6 +22,7 @@ import type {
   LineItemsPaging,
   LineItemSelection,
   LineNoteEditRequest,
+  PricingDetail,
   SaveState,
 } from './lib/types';
 import { DEFAULT_LINE_ITEM_LABELS } from './lib/types';
@@ -47,6 +48,7 @@ export interface LineItemsActions {
   onEditGroup?: (groupId: string) => void;
   onDeleteGroup?: (groupId: string) => void;
   onUpdateGroupDimensions?: (groupId: string, dimensions: GroupDimensions) => void;
+  onUpdateGroupComponent?: (groupId: string, component: string) => void;
   onDeleteItem?: (request: DeleteItemRequest) => void;
   onDeleteCombo?: (comboId: string) => void;
   onDeleteScope?: (scopeId: string) => void;
@@ -179,8 +181,12 @@ export interface LineItemsProviderProps {
   structurallyDirty?: boolean;
   quantitiesVisible?: boolean;
   pricingVisible?: boolean;
+  pricingDetail?: PricingDetail;
+  showInvoiceProgress?: boolean;
+  invoiceProgressEditable?: boolean;
   labels?: Partial<LineItemLabels>;
   hideComponent?: boolean;
+  showLineScopeStatusColumn?: boolean;
   catalogUpdateMode?: CatalogUpdateMode;
   onCatalogUpdateModeChange?: (mode: CatalogUpdateMode) => void;
   canSetCatalogUpdateMode?: boolean;
@@ -201,14 +207,19 @@ export function LineItemsProvider({
   structurallyDirty: externalStructurallyDirty = false,
   quantitiesVisible,
   pricingVisible,
+  pricingDetail = 'full',
+  showInvoiceProgress = false,
+  invoiceProgressEditable = false,
   labels: labelOverrides,
   hideComponent = false,
+  showLineScopeStatusColumn = false,
   catalogUpdateMode = 'none',
   onCatalogUpdateModeChange,
   canSetCatalogUpdateMode = false,
 }: LineItemsProviderProps) {
   const groups = useMemo(() => normalizeLineItemGroups(rawGroups), [rawGroups]);
-  const isReadOnly = mode === 'readonly' || mode === 'selection';
+  const isReadOnly =
+    mode === 'readonly' || mode === 'selection' || invoiceProgressEditable;
 
   // --- Config ---
   const [showMarkup, setShowMarkup] = useState(true);
@@ -228,18 +239,22 @@ export function LineItemsProvider({
   const config: LineItemsConfig = useMemo(
     () => ({
       mode,
-      showMarkup,
-      showGst,
+      showMarkup: pricingDetail === 'total-only' ? false : showMarkup,
+      showGst: pricingDetail === 'total-only' ? false : showGst,
       showQuantities,
       showPricing,
+      pricingDetail,
+      showInvoiceProgress,
+      invoiceProgressEditable,
       showCategory,
       hideComponent,
       enableLineNotes,
+      showLineScopeStatusColumn,
       compact,
       labels,
       showColumnVisibilityToggles: showColumnToggles,
     }),
-    [mode, showMarkup, showGst, showQuantities, showPricing, showCategory, hideComponent, enableLineNotes, compact, labels, showColumnToggles],
+    [mode, showMarkup, showGst, showQuantities, showPricing, pricingDetail, showInvoiceProgress, invoiceProgressEditable, showCategory, hideComponent, enableLineNotes, showLineScopeStatusColumn, compact, labels, showColumnToggles],
   );
 
   // --- Structural dirty ---
@@ -370,6 +385,7 @@ export function LineItemsProvider({
     showQuantities,
     showPricing,
     hideComponent,
+    invoiceProgressEditable,
     selectedRows,
     setSelectedRows,
     initRow: edit.initRow,

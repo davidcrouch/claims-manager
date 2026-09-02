@@ -26,6 +26,12 @@ import { formatDate,
   parseTaskListTab,
   type TaskListTab, withUniqueNamedFilterOptions } from '@/components/shared/list-filters';
 import { mergeStatusParamWithTab } from '@/components/shared/archive-list';
+import {
+  columnFilterToTaskArchiveStateStatus,
+  isMineListTab,
+  taskArchiveStateLabel,
+} from '@/components/shared/list-mine-tab';
+import { columnFilterFromValuesParam } from '@/components/jobs/jobs-list-helpers';
 import { TaskFormDrawer } from '@/components/forms/TaskFormDrawer';
 import { TablePagination } from '@/components/shared/table-pagination';
 import {
@@ -42,6 +48,7 @@ import {
   replaceListQueryIfNeeded,
   useListFetchGate,
 } from '@/components/shared/use-list-page-data';
+import { usePersistedListTab } from '@/components/shared/list-tab-storage';
 import {
   buildServerJobFilterOptions,
   resolveServerJobFilterSelection,
@@ -69,18 +76,26 @@ type TaskSortField =
   | 'name'
   | 'job'
   | 'status'
+  | 'archive_state'
   | 'priority'
   | 'task_type'
   | 'assignee'
   | 'due_date'
   | 'updated_at';
 
-interface ColDef { key: TaskSortField; label: string; filterable?: boolean; locked?: boolean }
+interface ColDef {
+  key: TaskSortField;
+  label: string;
+  filterable?: boolean;
+  locked?: boolean;
+  sortable?: boolean;
+}
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'name', label: 'Task', locked: true, filterable: true },
   { key: 'job', label: 'Job', filterable: true },
   { key: 'status', label: 'Status', filterable: true },
+  { key: 'archive_state', label: 'State', filterable: true, sortable: false },
   { key: 'priority', label: 'Priority', filterable: true },
   { key: 'task_type', label: 'Type', filterable: true },
   { key: 'assignee', label: 'Assigned', filterable: true },
@@ -132,28 +147,42 @@ export function TasksListClient({
   jobNameById,
   jobTypeById,
   jobs,
+  currentUserId,
 }: {
   job?: Job | null;
   parentClaim?: Claim | null;
   jobNameById?: Record<string, string>;
   jobTypeById?: Record<string, string>;
   jobs?: JobOption[];
+  /** Logged-in org user id — required for the My Tasks tab filter. */
+  currentUserId?: string | null;
 } = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const jobId = searchParams.get('jobId') ?? undefined;
   const jobIdsParam = searchParams.get('jobIds') ?? undefined;
   const overdue = searchParams.get('overdue') === 'true';
-  const assignedToUserId = searchParams.get('assignedToUserId');
+  const legacyAssignedToUserId = searchParams.get('assignedToUserId');
   const openTaskId = searchParams.get('open');
+  const initialArchiveStateFilter = useMemo(
+    () => columnFilterFromValuesParam(searchParams.get('archiveState')),
+    [searchParams],
+  );
   const [tasks, setTasks] = useState<Task[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [tab, setTab] = useState<TaskListTab>(() =>
-    parseTaskListTab(searchParams.get('tab')),
-  );
+  const legacyMineTab =
+    !!legacyAssignedToUserId &&
+    !!currentUserId &&
+    legacyAssignedToUserId === currentUserId;
+  const [tab, setTab] = usePersistedListTab<TaskListTab>({
+    storageKey: 'tasks',
+    urlTab: searchParams.get('tab'),
+    parse: parseTaskListTab,
+    fallbackTab: legacyMineTab ? 'mine' : undefined,
+  });
   const [page, setPage] = useState(() => {
     const p = parseInt(searchParams.get('page') ?? '1', 10);
     return Number.isFinite(p) && p > 0 ? p : 1;
@@ -172,6 +201,12 @@ export function TasksListClient({
   const [nameFilterActive, setNameFilterActive] = useState(false);
   const [assigneeFilter, setAssigneeFilter] = useState<Set<string>>(new Set());
   const [assigneeFilterActive, setAssigneeFilterActive] = useState(false);
+  const [archiveStateFilter, setArchiveStateFilter] = useState(
+    initialArchiveStateFilter.selected,
+  );
+  const [archiveStateFilterActive, setArchiveStateFilterActive] = useState(
+    initialArchiveStateFilter.active,
+  );
   const [filterOptions, setFilterOptions] = useState<{
     names: string[];
     taskTypes: string[];
@@ -180,9 +215,19 @@ export function TasksListClient({
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [openTaskIdFromUrl, setOpenTaskIdFromUrl] = useState<string | null>(null);
-  const { isVisible, toggle, visibleCount } = useColumnVisibility(
+  const isMineTab = isMineListTab(tab);
+  const showAssigneeColumn = !isMineTab;
+  const showArchiveStateColumn = isMineTab;
+  const listColumns = useMemo(
+    () =>
+      TABLE_COLUMNS.filter(
+        (col) => col.key !== 'archive_state' || showArchiveStateColumn,
+      ),
+    [showArchiveStateColumn],
+  );
+  const { isVisible, toggle } = useColumnVisibility(
     'tasks',
-    TABLE_COLUMNS,
+    listColumns,
   );
   const { beginFetch, abortFetch } = useListFetchGate();
   const selectedJobIds = useMemo(
@@ -228,9 +273,27 @@ export function TasksListClient({
     () => columnFilterToValuesParam(statusFilterActive, statusFilter),
     [statusFilterActive, statusFilter],
   );
+  const archiveStateStatusParam = useMemo(
+    () =>
+      isMineTab
+        ? columnFilterToTaskArchiveStateStatus(
+            archiveStateFilterActive,
+            archiveStateFilter,
+          )
+        : undefined,
+    [isMineTab, archiveStateFilterActive, archiveStateFilter],
+  );
   const statusParam = useMemo(
-    () => mergeStatusParamWithTab(columnStatusParam, tabStatusValues),
-    [columnStatusParam, tabStatusValues],
+    () =>
+      mergeStatusParamWithTab(
+        mergeStatusParamWithTab(columnStatusParam, archiveStateStatusParam),
+        tabStatusValues,
+      ),
+    [columnStatusParam, archiveStateStatusParam, tabStatusValues],
+  );
+  const assignedToUserIdParam = useMemo(
+    () => (isMineTab && currentUserId ? currentUserId : undefined),
+    [isMineTab, currentUserId],
   );
   const priorityParam = useMemo(
     () => columnFilterToValuesParam(priorityFilterActive, priorityFilter),
@@ -250,12 +313,20 @@ export function TasksListClient({
   );
   const assignedToUserIdsParam = useMemo(
     () =>
-      columnFilterToAssigneeIdsParam(
-        assigneeFilterActive,
-        assigneeFilter,
-        assigneeFilterOptions,
-      ),
-    [assigneeFilterActive, assigneeFilter, assigneeFilterOptions],
+      isMineTab
+        ? undefined
+        : columnFilterToAssigneeIdsParam(
+            assigneeFilterActive,
+            assigneeFilter,
+            assigneeFilterOptions,
+          ),
+    [isMineTab, assigneeFilterActive, assigneeFilter, assigneeFilterOptions],
+  );
+  const effectiveAssignedToUserId = useMemo(
+    () =>
+      assignedToUserIdParam ??
+      (isMineTab ? undefined : (legacyAssignedToUserId ?? undefined)),
+    [assignedToUserIdParam, isMineTab, legacyAssignedToUserId],
   );
 
   const sortParam = `${columnSort.field}_${columnSort.order}`;
@@ -281,7 +352,8 @@ export function TasksListClient({
       priorityParam === null ||
       namesParam === null ||
       taskTypesParam === null ||
-      assignedToUserIdsParam === null
+      assignedToUserIdsParam === null ||
+      (isMineTab && !currentUserId)
     ) {
       setTasks([]);
       setTotal(0);
@@ -302,7 +374,7 @@ export function TasksListClient({
         sort: sortParam,
         jobId: fetchJobId,
         jobIds: fetchJobIds,
-        assignedToUserId: assignedToUserId ?? undefined,
+        assignedToUserId: effectiveAssignedToUserId,
         overdue: overdue || undefined,
       });
       setTasks(res.data);
@@ -322,7 +394,9 @@ export function TasksListClient({
     fetchJobId,
     fetchJobIds,
     overdue,
-    assignedToUserId,
+    effectiveAssignedToUserId,
+    isMineTab,
+    currentUserId,
   ]);
 
   const hasPendingSync = tasks.some((t) => t.syncStatus === 'pending');
@@ -358,11 +432,15 @@ export function TasksListClient({
     else params.delete('taskTypes');
     if (assignedToUserIdsParam) params.set('assignedToUserIds', assignedToUserIdsParam);
     else params.delete('assignedToUserIds');
+    const archiveStateValuesParam = isMineTab
+      ? columnFilterToValuesParam(archiveStateFilterActive, archiveStateFilter)
+      : null;
+    if (archiveStateValuesParam) params.set('archiveState', archiveStateValuesParam);
+    else params.delete('archiveState');
+    params.delete('assignedToUserId');
     syncServerJobFilterParams(params, jobId, jobIdsParam);
     if (overdue) params.set('overdue', 'true');
     else params.delete('overdue');
-    if (assignedToUserId) params.set('assignedToUserId', assignedToUserId);
-    else params.delete('assignedToUserId');
     const next = params.toString();
     // router.replace aborts in-flight server actions — wait for the URL to
     // settle before fetching, same as the other entity list pages.
@@ -383,7 +461,10 @@ export function TasksListClient({
     const typesKey = taskTypesParam === null ? '__none__' : (taskTypesParam ?? '');
     const assigneesKey =
       assignedToUserIdsParam === null ? '__none__' : (assignedToUserIdsParam ?? '');
-    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${priorityKey}|${namesKey}|${typesKey}|${assigneesKey}|${fetchJobId ?? ''}|${(fetchJobIds ?? []).join(',')}|${overdue}|${assignedToUserId ?? ''}`;
+    const archiveStateKey = isMineTab
+      ? columnFilterToValuesParam(archiveStateFilterActive, archiveStateFilter) ?? ''
+      : '';
+    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${priorityKey}|${namesKey}|${typesKey}|${assigneesKey}|${archiveStateKey}|${fetchJobId ?? ''}|${(fetchJobIds ?? []).join(',')}|${overdue}|${effectiveAssignedToUserId ?? ''}`;
 
     const session = createListFetchSession({ fetchKey, beginFetch, abortFetch });
     if (!session) return;
@@ -393,7 +474,8 @@ export function TasksListClient({
       priorityParam === null ||
       namesParam === null ||
       taskTypesParam === null ||
-      assignedToUserIdsParam === null
+      assignedToUserIdsParam === null ||
+      (isMineTab && !currentUserId)
     ) {
       setTasks([]);
       setTotal(0);
@@ -414,7 +496,7 @@ export function TasksListClient({
       sort: sortParam,
       jobId: fetchJobId,
       jobIds: fetchJobIds,
-      assignedToUserId: assignedToUserId ?? undefined,
+      assignedToUserId: effectiveAssignedToUserId,
       overdue: overdue || undefined,
     }).then((res) => {
       if (session.cancelled) return;
@@ -445,7 +527,11 @@ export function TasksListClient({
     fetchJobId,
     fetchJobIds,
     overdue,
-    assignedToUserId,
+    effectiveAssignedToUserId,
+    isMineTab,
+    currentUserId,
+    archiveStateFilterActive,
+    archiveStateFilter,
     searchParams,
     router,
     beginFetch,
@@ -464,6 +550,7 @@ export function TasksListClient({
   }, [openTaskId]);
 
   const handleColumnSort = (field: TaskSortField) => {
+    if (field === 'archive_state') return;
     setColumnSort((prev) => {
       if (prev.field === field) {
         return { field, order: prev.order === 'asc' ? 'desc' : 'asc' };
@@ -475,7 +562,17 @@ export function TasksListClient({
 
   const handlePageChange = (newPage: number) => setPage(newPage);
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => { setSearch(e.target.value); setPage(1); };
-  const handleTabChange = (val: string) => { setTab(val as TaskListTab); setPage(1); };
+  const handleTabChange = (val: string) => {
+    setTab(val as TaskListTab);
+    if (val === 'mine') {
+      setAssigneeFilter(new Set());
+      setAssigneeFilterActive(false);
+    } else {
+      setArchiveStateFilter(new Set());
+      setArchiveStateFilterActive(false);
+    }
+    setPage(1);
+  };
 
   const uniquePriorities = useMemo(
     () => ['Low', 'Medium', 'High', 'Critical'],
@@ -584,6 +681,35 @@ export function TasksListClient({
     setPage(1);
   };
 
+  const archiveStateNames = useMemo(() => ['Active', 'Archived'], []);
+
+  const applyArchiveStateFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: archiveStateNames.length,
+    });
+    setArchiveStateFilter(committed.selected);
+    setArchiveStateFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const archiveStateFilterProps = {
+    options: archiveStateNames,
+    selected: archiveStateFilter,
+    active: archiveStateFilterActive,
+    onApply: applyArchiveStateFilter,
+    menuTitle: 'Filter by state',
+    itemNoun: { singular: 'state', plural: 'states' },
+  };
+
+  const visibleTableColumns = useMemo(
+    () =>
+      listColumns.filter(
+        (col) => isVisible(col.key) && (col.key !== 'assignee' || showAssigneeColumn),
+      ),
+    [listColumns, isVisible, showAssigneeColumn],
+  );
+
   const visibleRows = tasks;
 
   const breakdown = computeStatusBreakdown(visibleRows, (t) => refName(t.status));
@@ -635,15 +761,18 @@ export function TasksListClient({
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
           <Tabs value={tab} onValueChange={handleTabChange}>
             <TabsList>
+              <TabsTrigger value="mine">My Tasks</TabsTrigger>
               <TabsTrigger value="open">Open</TabsTrigger>
               <TabsTrigger value="completed">Completed</TabsTrigger>
               <TabsTrigger value="all">All</TabsTrigger>
             </TabsList>
           </Tabs>
-          {(overdue || assignedToUserId) && (
+          {isMineTab && (
+            <p className="text-sm text-muted-foreground">Showing your tasks.</p>
+          )}
+          {(overdue || (legacyAssignedToUserId && !isMineTab)) && (
             <p className="text-sm text-muted-foreground">
-              {overdue ? 'Showing overdue open tasks' : 'Showing assigned tasks'}
-              {overdue && assignedToUserId ? ' assigned to you' : ''}.
+              {overdue ? 'Showing overdue open tasks' : 'Showing assigned tasks'}.
             </p>
           )}
 
@@ -698,7 +827,22 @@ export function TasksListClient({
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50">
                 <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                  {TABLE_COLUMNS.filter((col) => isVisible(col.key)).map((col) => (
+                  {visibleTableColumns.map((col) => {
+                    if (col.key === 'archive_state') {
+                      return (
+                        <SortableColumnHeader
+                          key={col.key}
+                          columnKey={col.key}
+                          label={col.label}
+                          activeField={null}
+                          sortOrder="asc"
+                          onSort={() => {}}
+                          filter={archiveStateFilterProps}
+                          className="cursor-default hover:text-slate-500 [&_span>svg:last-child]:hidden"
+                        />
+                      );
+                    }
+                    return (
                     <SortableColumnHeader
                       key={col.key}
                       columnKey={col.key}
@@ -774,9 +918,10 @@ export function TasksListClient({
                                     : undefined
                       }
                     />
-                  ))}
+                    );
+                  })}
                   <ColumnSettingsHeaderCell
-                    columns={TABLE_COLUMNS}
+                    columns={listColumns}
                     isVisible={isVisible}
                     onToggle={toggle}
                   />
@@ -784,7 +929,7 @@ export function TasksListClient({
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {visibleRows.length === 0 ? (
-                  <TableEmptyRow colSpan={visibleCount + 1} label="No tasks found." />
+                  <TableEmptyRow colSpan={visibleTableColumns.length + 1} label="No tasks found." />
                 ) : (
                   visibleRows.map((task) => {
                   const statusName = refName(task.status);
@@ -820,6 +965,18 @@ export function TasksListClient({
                           <StatusBadge status={statusName} />
                         </td>
                       )}
+                      {showArchiveStateColumn && isVisible('archive_state') && (
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <StatusBadge
+                            status={taskArchiveStateLabel(statusName)}
+                            variant={
+                              taskArchiveStateLabel(statusName) === 'Archived'
+                                ? 'inactive'
+                                : 'active'
+                            }
+                          />
+                        </td>
+                      )}
                       {isVisible('priority') && (
                         <td className="whitespace-nowrap px-4 py-3">
                           <PriorityBadge priority={refName(task.priority)} />
@@ -830,7 +987,7 @@ export function TasksListClient({
                           <TypeBadge type={taskTypeName} />
                         </td>
                       )}
-                      {isVisible('assignee') && (
+                      {showAssigneeColumn && isVisible('assignee') && (
                         <td className="px-4 py-3 text-slate-600">
                           {task.assigneeName ?? '—'}
                         </td>

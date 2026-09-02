@@ -18,7 +18,8 @@ import { DropIndicatorLine, useDropIndicatorBorder } from './DropIndicatorLine';
 import { useDropTargetHighlight } from './lib/drop-highlight';
 import { useCatalogDrop } from './hooks/use-catalog-drop';
 import { computeItemMoney, initComboInputs } from './lib/money';
-import { LineScopeStatusBadge, PublishStatusBadge } from './lib/badges';
+import { PublishStatusBadge } from './lib/badges';
+import { LineScopeStatusAssemblyField } from './LineScopeStatusField';
 import { displayLabelText } from './lib/display';
 import { RowLeadCheckbox, RowLeadDrag, RowLeadExpand, ROW_LEAD_ROW_CLS } from './lib/row-lead';
 import { LI_HEADER_COUNT, LI_HEADER_TOTAL, LineItemsColGroup, LineItemsThead, LineItemsTableShell } from './lib/table-parts';
@@ -257,10 +258,11 @@ export const AssemblyRow = memo(function AssemblyRow({
               {comboName}
               {!hideComponent && comboComponent && <span className="font-normal text-slate-500"> — {comboComponent}</span>}
             </span>
-            <LineScopeStatusBadge status={combo.lineScopeStatus} />
             <PublishStatusBadge status={combo.publishStatus} />
           </div>
         )}
+
+        <LineScopeStatusAssemblyField rowKey={comboKey} status={combo.lineScopeStatus} />
 
         {showQuantities && (
           <span className="flex shrink-0 items-baseline justify-end gap-1 pl-3 text-slate-600" title="Assembly quantity">
@@ -351,9 +353,12 @@ export const AssemblyRow = memo(function AssemblyRow({
               showCategory={showCategory}
               showQuantities={showQuantities}
               showPricing={showPricing}
+              pricingDetail={config.pricingDetail}
               showMarkup={showMarkup}
               showGst={showGst}
+              showInvoiceProgress={config.showInvoiceProgress}
               showNotesColumn={showAssemblyNotesColumn}
+              showLineScopeStatusColumn={config.showLineScopeStatusColumn}
             />
             <LineItemsThead
               showDragHandle={showDragHandle}
@@ -362,9 +367,12 @@ export const AssemblyRow = memo(function AssemblyRow({
               showCategory={showCategory}
               showQuantities={showQuantities}
               showPricing={showPricing}
+              pricingDetail={config.pricingDetail}
               showMarkup={showMarkup}
               showGst={showGst}
+              showInvoiceProgress={config.showInvoiceProgress}
               showNotesColumn={showAssemblyNotesColumn}
+              showLineScopeStatusColumn={config.showLineScopeStatusColumn}
             />
             <tbody className="divide-y divide-slate-50">
               {visibleComboItems.map((item, idx) => (

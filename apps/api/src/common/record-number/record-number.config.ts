@@ -4,7 +4,8 @@ export type RecordNumberEntity =
   | 'estimate'
   | 'work_order'
   | 'invoice'
-  | 'purchase_order';
+  | 'purchase_order'
+  | 'bill';
 
 export interface RecordNumberEntityConfig {
   /** Prefix used in generated numbers, e.g. "RFQ" → RFQ-200001 */
@@ -20,6 +21,7 @@ export const RECORD_NUMBER_CONFIG: Record<RecordNumberEntity, RecordNumberEntity
   work_order: { prefix: 'WO', startValue: 200_001 },
   invoice: { prefix: 'INV', startValue: 200_001 },
   purchase_order: { prefix: 'PO', startValue: 200_001 },
+  bill: { prefix: 'BILL', startValue: 200_001 },
 };
 
 export function formatRecordNumber(prefix: string, value: number): string {

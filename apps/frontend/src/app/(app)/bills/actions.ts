@@ -12,7 +12,6 @@ export async function fetchBillsAction(params?: {
   purchaseOrderId?: string;
   status?: string;
   vendorId?: string;
-  invoiceId?: string;
   search?: string;
   sort?: string;
 }): Promise<PaginatedResponse<Bill>> {
@@ -32,12 +31,27 @@ export async function fetchBillsAction(params?: {
       purchaseOrderId: params?.purchaseOrderId,
       status: params?.status,
       vendorId: params?.vendorId,
-      invoiceId: params?.invoiceId,
       search: params?.search,
       sort: params?.sort,
     });
   } catch (err) {
     console.error('[bills/actions.fetchBillsAction]', err);
     return { data: [], total: 0 };
+  }
+}
+
+export async function fetchPurchaseOrderBillsAction(purchaseOrderId: string): Promise<Bill[]> {
+  const session = await getSession();
+  if (!session.authenticated) return [];
+
+  const token = await getAccessToken();
+  if (!token) return [];
+
+  const api = createApiClient({ token });
+  try {
+    return await api.getPurchaseOrderBills(purchaseOrderId);
+  } catch (err) {
+    console.error('[bills/actions.fetchPurchaseOrderBillsAction]', err);
+    return [];
   }
 }

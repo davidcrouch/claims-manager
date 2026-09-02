@@ -14,6 +14,7 @@ import {
   isCatalogBomParentKind,
   normalizeProviderCodes,
   resolveCatalogItemProviderCodes,
+  UNCATEGORIZED_CATEGORY_FILTER,
   type CatalogItemKind,
   type CatalogPricingMode,
 } from '../catalog.utils';
@@ -48,13 +49,27 @@ export class CatalogItemService {
     sort?: string;
   }) {
     const tenantId = this.getTenantId();
-    let categoryIds: string[] | undefined = params.categoryIds;
-    if (params.categoryId) {
-      const descendants = await this.categoriesRepo.findDescendantIds({
-        tenantId,
-        categoryId: params.categoryId,
-      });
-      categoryIds = [...new Set([...(categoryIds ?? []), ...descendants])];
+
+    const seedIds = [
+      ...(params.categoryIds ?? []),
+      ...(params.categoryId ? [params.categoryId] : []),
+    ];
+
+    let categoryIds: string[] | undefined;
+    if (seedIds.length > 0) {
+      const expanded: string[] = [];
+      for (const id of seedIds) {
+        if (id === UNCATEGORIZED_CATEGORY_FILTER) {
+          expanded.push(id);
+          continue;
+        }
+        const descendants = await this.categoriesRepo.findDescendantIds({
+          tenantId,
+          categoryId: id,
+        });
+        expanded.push(...descendants);
+      }
+      categoryIds = [...new Set(expanded)];
     }
 
     return this.itemsRepo.findMany({
@@ -62,7 +77,7 @@ export class CatalogItemService {
       catalogId: params.catalogId,
       kind: params.kind,
       typeId: params.typeId,
-      categoryIds: params.categoryIds ?? (params.categoryId ? [params.categoryId] : undefined),
+      categoryIds,
       search: params.search,
       page: params.page,
       limit: params.limit,

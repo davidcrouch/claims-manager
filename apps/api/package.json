@@ -62,7 +62,6 @@
     "jsonata": "^2.2.2",
     "jszip": "^3.10.1",
     "jwks-rsa": "^4.0.1",
-    "libreoffice-convert": "^1.8.2",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "pg": "^8.20.0",

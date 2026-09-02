@@ -18,7 +18,6 @@ export class BillsController {
     @Query('purchaseOrderId') purchaseOrderId?: string,
     @Query('status') status?: string,
     @Query('vendorId') vendorId?: string,
-    @Query('invoiceId') invoiceId?: string,
     @Query('search') search?: string,
     @Query('sort') sort?: string,
   ) {
@@ -33,7 +32,6 @@ export class BillsController {
       purchaseOrderId,
       status,
       vendorId,
-      invoiceId,
       search,
       sort,
     });
@@ -55,12 +53,6 @@ export class BillsController {
   @RequirePermission(P.procurement.read)
   async findByVendor(@Param('vendorId') vendorId: string) {
     return this.billsService.findByVendor({ vendorId });
-  }
-
-  @Get('invoice/:invoiceId')
-  @RequirePermission(P.procurement.read)
-  async findByInvoice(@Param('invoiceId') invoiceId: string) {
-    return this.billsService.findByInvoice({ invoiceId });
   }
 
   @Get(':id')

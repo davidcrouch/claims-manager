@@ -1,7 +1,16 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { CatalogSelectionService } from '../catalog/services/catalog-selection.service';
 import { parseLineItemsPageQuery } from '../catalog/line-items-page';
 import { AddCatalogAssemblyDto, AddCatalogPrimitiveDto } from '../catalog/dto/catalog.dto';
+import {
+  CreateQuoteGroupDto,
+  UpdateQuoteGroupDto,
+  ReorderQuoteGroupsDto,
+  UpdateQuoteLineItemsDto,
+  ReorderLineItemsDto,
+  MoveLineItemDto,
+  DuplicateLineItemDto,
+} from '../quotes/dto/quote-group.dto';
 import { PurchaseOrdersService } from './purchase-orders.service';
 import { ManualCaptureService, type CapturePurchaseOrderDto } from '../domain/services/manual-capture.service';
 import { TenantContext } from '../../tenant/tenant-context';
@@ -101,6 +110,150 @@ export class PurchaseOrdersController {
     });
   }
 
+  @Patch(':id/line-items')
+  @RequirePermission(P.procurement.manage)
+  async updateLineItems(@Param('id') id: string, @Body() body: UpdateQuoteLineItemsDto) {
+    await this.purchaseOrdersService.assertPurchaseOrderEditable({ id });
+    return this.catalogSelectionService.updatePurchaseOrderLineItems({
+      purchaseOrderId: id,
+      items: body.items,
+      combos: body.combos,
+    });
+  }
+
+  @Post(':id/groups')
+  @RequirePermission(P.procurement.manage)
+  async createOrEnsureGroup(@Param('id') id: string, @Body() body: CreateQuoteGroupDto) {
+    await this.purchaseOrdersService.assertPurchaseOrderEditable({ id });
+    if (body.groupLabelLookupId || body.description) {
+      return this.catalogSelectionService.createPurchaseOrderGroup({
+        purchaseOrderId: id,
+        groupLabelLookupId: body.groupLabelLookupId,
+        description: body.description,
+      });
+    }
+    return this.catalogSelectionService.ensureDefaultPurchaseOrderGroup({
+      purchaseOrderId: id,
+    });
+  }
+
+  @Patch(':id/groups/reorder')
+  @RequirePermission(P.procurement.manage)
+  async reorderGroups(@Param('id') id: string, @Body() body: ReorderQuoteGroupsDto) {
+    await this.purchaseOrdersService.assertPurchaseOrderEditable({ id });
+    return this.catalogSelectionService.reorderPurchaseOrderGroups({
+      purchaseOrderId: id,
+      groupIds: body.groupIds,
+    });
+  }
+
+  @Patch(':poId/groups/:groupId')
+  @RequirePermission(P.procurement.manage)
+  async updateGroup(
+    @Param('poId') poId: string,
+    @Param('groupId') groupId: string,
+    @Body() body: UpdateQuoteGroupDto,
+  ) {
+    await this.purchaseOrdersService.assertPurchaseOrderEditable({ id: poId });
+    return this.catalogSelectionService.updatePurchaseOrderGroup({
+      purchaseOrderId: poId,
+      groupId,
+      groupLabelLookupId: body.groupLabelLookupId,
+      description: body.description,
+      component: body.component,
+      dimensions: body.dimensions,
+    });
+  }
+
+  @Delete(':poId/groups/:groupId')
+  @RequirePermission(P.procurement.manage)
+  async deleteGroup(
+    @Param('poId') poId: string,
+    @Param('groupId') groupId: string,
+  ) {
+    await this.purchaseOrdersService.assertPurchaseOrderEditable({ id: poId });
+    return this.catalogSelectionService.deletePurchaseOrderGroup({
+      purchaseOrderId: poId,
+      groupId,
+    });
+  }
+
+  @Delete(':poId/items/:itemId')
+  @RequirePermission(P.procurement.manage)
+  async deleteItem(
+    @Param('poId') poId: string,
+    @Param('itemId') itemId: string,
+    @Query('removeFromCatalogAssembly') removeFromCatalogAssembly?: string,
+  ) {
+    await this.purchaseOrdersService.assertPurchaseOrderEditable({ id: poId });
+    return this.catalogSelectionService.deletePurchaseOrderItem({
+      purchaseOrderId: poId,
+      itemId,
+      removeFromCatalogAssembly: removeFromCatalogAssembly === 'true',
+    });
+  }
+
+  @Delete(':poId/combos/:comboId')
+  @RequirePermission(P.procurement.manage)
+  async deleteCombo(
+    @Param('poId') poId: string,
+    @Param('comboId') comboId: string,
+  ) {
+    await this.purchaseOrdersService.assertPurchaseOrderEditable({ id: poId });
+    return this.catalogSelectionService.deletePurchaseOrderCombo({
+      purchaseOrderId: poId,
+      comboId,
+    });
+  }
+
+  @Patch(':poId/line-items/reorder')
+  @RequirePermission(P.procurement.manage)
+  async reorderLineItems(
+    @Param('poId') poId: string,
+    @Body() body: ReorderLineItemsDto,
+  ) {
+    await this.purchaseOrdersService.assertPurchaseOrderEditable({ id: poId });
+    return this.catalogSelectionService.reorderPurchaseOrderLineItems({
+      purchaseOrderId: poId,
+      items: body.items,
+      combos: body.combos,
+    });
+  }
+
+  @Patch(':poId/line-items/move')
+  @RequirePermission(P.procurement.manage)
+  async moveLineItem(
+    @Param('poId') poId: string,
+    @Body() body: MoveLineItemDto,
+  ) {
+    await this.purchaseOrdersService.assertPurchaseOrderEditable({ id: poId });
+    return this.catalogSelectionService.movePurchaseOrderLineItem({
+      purchaseOrderId: poId,
+      itemId: body.itemId,
+      comboId: body.comboId,
+      targetGroupId: body.targetGroupId,
+      targetComboId: body.targetComboId,
+      insertAtIndex: body.insertAtIndex,
+    });
+  }
+
+  @Post(':poId/line-items/duplicate')
+  @RequirePermission(P.procurement.manage)
+  async duplicateLineItem(
+    @Param('poId') poId: string,
+    @Body() body: DuplicateLineItemDto,
+  ) {
+    await this.purchaseOrdersService.assertPurchaseOrderEditable({ id: poId });
+    return this.catalogSelectionService.duplicatePurchaseOrderLineItem({
+      purchaseOrderId: poId,
+      itemId: body.itemId,
+      comboId: body.comboId,
+      targetGroupId: body.targetGroupId,
+      targetComboId: body.targetComboId,
+      insertAtIndex: body.insertAtIndex,
+    });
+  }
+
   @Post(':id')
   @RequirePermission(P.procurement.manage)
   async update(
@@ -113,10 +266,12 @@ export class PurchaseOrdersController {
 
   @Post(':poId/groups/:groupId/catalog-items')
   @RequirePermission(P.procurement.manage)
-  addCatalogItem(
+  async addCatalogItem(
+    @Param('poId') poId: string,
     @Param('groupId') groupId: string,
     @Body() body: AddCatalogPrimitiveDto,
   ) {
+    await this.purchaseOrdersService.assertPurchaseOrderEditable({ id: poId });
     return this.catalogSelectionService.addPrimitiveToPurchaseOrder({
       purchaseOrderGroupId: body.purchaseOrderComboId ? undefined : groupId,
       purchaseOrderComboId: body.purchaseOrderComboId,
@@ -127,10 +282,12 @@ export class PurchaseOrdersController {
 
   @Post(':poId/groups/:groupId/catalog-assemblies')
   @RequirePermission(P.procurement.manage)
-  addCatalogAssembly(
+  async addCatalogAssembly(
+    @Param('poId') poId: string,
     @Param('groupId') groupId: string,
     @Body() body: AddCatalogAssemblyDto,
   ) {
+    await this.purchaseOrdersService.assertPurchaseOrderEditable({ id: poId });
     return this.catalogSelectionService.addAssemblyToPurchaseOrder({
       purchaseOrderGroupId: groupId,
       catalogAssemblyId: body.catalogAssemblyId,

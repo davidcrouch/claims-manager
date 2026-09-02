@@ -357,6 +357,19 @@ export const QuoteLineItemsTabV2 = forwardRef(function QuoteLineItemsTabV2(
     });
   }, [quote.id, loadLineItems]);
 
+  const handleUpdateGroupComponent = useCallback((groupId: string, component: string) => {
+    setDbGroups((prev) =>
+      prev.map((g) => (g.id === groupId ? { ...g, component } : g)),
+    );
+    startTransition(async () => {
+      const result = await updateQuoteGroupAction({ quoteId: quote.id, groupId, component });
+      if (!result.success) {
+        toast.error(result.error ?? 'Failed to update component');
+        await loadLineItems();
+      }
+    });
+  }, [quote.id, loadLineItems]);
+
   // --- Save ---
 
   function findItemMarkupType(groups: ApiGroup[], itemId: string): string | undefined {
@@ -385,8 +398,8 @@ export const QuoteLineItemsTabV2 = forwardRef(function QuoteLineItemsTabV2(
 
   const handleSave = useCallback((edits: Record<string, Record<EditableFieldKey, string>>) => {
     startTransition(async () => {
-      const items: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string; unitCost?: string; markupValue?: string; tax?: string; unitType?: string }> = [];
-      const combos: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string }> = [];
+      const items: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string; unitCost?: string; markupValue?: string; tax?: string; unitType?: string; lineScopeStatus?: string }> = [];
+      const combos: Array<{ id: string; name?: string; component?: string; description?: string; quantity?: string; lineScopeStatus?: string }> = [];
 
       for (const [rowKey, fields] of Object.entries(edits)) {
         const parsed = parseRowKey(rowKey);
@@ -395,13 +408,25 @@ export const QuoteLineItemsTabV2 = forwardRef(function QuoteLineItemsTabV2(
           continue;
         }
 
-        if (parsed.type === 'scope' || parsed.type === 'assembly') {
+        if (parsed.type === 'scope') {
           combos.push({
             id: parsed.id,
             name: fields.name,
             component: fields.component,
             description: fields.description,
             quantity: fields.quantity,
+          });
+          continue;
+        }
+
+        if (parsed.type === 'assembly') {
+          combos.push({
+            id: parsed.id,
+            name: fields.name,
+            component: fields.component,
+            description: fields.description,
+            quantity: fields.quantity,
+            lineScopeStatus: fields.lineScopeStatus,
           });
           continue;
         }
@@ -417,6 +442,7 @@ export const QuoteLineItemsTabV2 = forwardRef(function QuoteLineItemsTabV2(
           markupValue: fields.markupValue !== undefined ? uiMarkupToStored(markupType, fields.markupValue) : undefined,
           tax: fields.tax !== undefined ? uiTaxToStored(fields.tax) : undefined,
           unitType: fields.unitType,
+          lineScopeStatus: fields.lineScopeStatus,
         });
       }
 
@@ -499,6 +525,7 @@ export const QuoteLineItemsTabV2 = forwardRef(function QuoteLineItemsTabV2(
     onGroupLabelDrop: readOnly ? undefined : handleGroupLabelDrop,
     onDeleteGroup: readOnly ? undefined : handleDeleteGroup,
     onUpdateGroupDimensions: readOnly ? undefined : handleUpdateGroupDimensions,
+    onUpdateGroupComponent: readOnly ? undefined : handleUpdateGroupComponent,
     onDeleteItem: readOnly ? undefined : handleDeleteItem,
     onDeleteCombo: readOnly ? undefined : handleDeleteCombo,
     onDeleteScope: readOnly ? undefined : handleDeleteScope,
@@ -516,6 +543,7 @@ export const QuoteLineItemsTabV2 = forwardRef(function QuoteLineItemsTabV2(
     handleGroupLabelDrop,
     handleDeleteGroup,
     handleUpdateGroupDimensions,
+    handleUpdateGroupComponent,
     handleDeleteItem,
     handleDeleteCombo,
     handleDeleteScope,
@@ -537,6 +565,7 @@ export const QuoteLineItemsTabV2 = forwardRef(function QuoteLineItemsTabV2(
       <LineItemsProvider
         groups={dbGroups}
         mode={readOnly ? 'readonly' : 'edit'}
+        showLineScopeStatusColumn
         paging={{
           page,
           pageSize: LINE_ITEMS_PAGE_SIZE,

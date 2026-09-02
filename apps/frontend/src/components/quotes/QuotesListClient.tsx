@@ -4,12 +4,20 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { FileSpreadsheet, Search, X } from 'lucide-react';
 import { fetchQuotesAction, fetchQuoteFilterAssigneesAction, fetchQuoteFilterJobsAction } from '@/app/(app)/quotes/actions';
+import {
+  isQuotesMineTab,
+  parseQuotesListTab,
+  type QuotesListTab,
+} from '@/components/quotes/quotes-list-helpers';
+import { columnFilterFromValuesParam } from '@/components/jobs/jobs-list-helpers';
+import { columnFilterToArchiveStateStatusIds } from '@/components/shared/list-mine-tab';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { type StatusOption,
   commitColumnFilterSelection,
   columnFilterToIdsParam,
   columnFilterToAssigneeIdsParam,
+  columnFilterToValuesParam,
   buildColumnFilterOptions,
   ValueFilterMenu, withUniqueNamedFilterOptions } from '@/components/shared/list-filters';
 import { statusIdsForArchiveListTab, mergeStatusParamWithTab } from '@/components/shared/archive-list';
@@ -25,6 +33,10 @@ import {
   createListFetchSession,
   replaceListQueryIfNeeded,
   useListPageData } from '@/components/shared/use-list-page-data';
+import {
+  ARCHIVE_ONLY_LIST_TABS,
+  usePersistedListTab,
+} from '@/components/shared/list-tab-storage';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import {
   EntityPageHeader } from '@/components/shared/EntityPageHeader';
@@ -34,12 +46,7 @@ import { QuotesTable, type QuoteSortField } from './QuotesTable';
 import { jobDisplayName, mergeJobLabelsFromRows, mergeJobTypesFromRows } from '@/components/shared/job-label';
 import type { Quote, PaginatedResponse, Job, Claim } from '@/types/api';
 
-type ListTab = 'active' | 'archived' | 'all';
-const VALID_TABS = new Set<ListTab>(['active', 'archived', 'all']);
-function parseTab(param: string | null): ListTab {
-  if (param && VALID_TABS.has(param as ListTab)) return param as ListTab;
-  return 'active';
-}
+type ListTab = QuotesListTab;
 
 export interface QuotesListClientProps {
   initialData: PaginatedResponse<Quote>;
@@ -52,6 +59,7 @@ export interface QuotesListClientProps {
   /** When provided, the page header shows job details and data is scoped to this job. */
   job?: Job | null;
   parentClaim?: Claim | null;
+  currentUserId?: string | null;
 }
 
 const PAGE_SIZE = 20;
@@ -65,7 +73,9 @@ export function QuotesListClient({
   jobAssigneeNameById,
   filterJobs: initialFilterJobs,
   job,
-  parentClaim }: QuotesListClientProps) {
+  parentClaim,
+  currentUserId,
+}: QuotesListClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const jobId = searchParams.get('jobId') ?? undefined;
@@ -74,7 +84,19 @@ export function QuotesListClient({
 
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [debouncedSearch, setDebouncedSearch] = useState(search);
-  const [tab, setTab] = useState<ListTab>(() => parseTab(searchParams.get('tab')));
+  const assignedToUserId = searchParams.get('assignedToUserId');
+  const legacyMineTab =
+    !job &&
+    !!assignedToUserId &&
+    !!currentUserId &&
+    assignedToUserId === currentUserId;
+  const [tab, setTab] = usePersistedListTab<ListTab>({
+    storageKey: 'quotes',
+    urlTab: searchParams.get('tab'),
+    parse: parseQuotesListTab,
+    fallbackTab: legacyMineTab ? 'mine' : undefined,
+    allowedTabs: job ? ARCHIVE_ONLY_LIST_TABS : undefined,
+  });
   const [page, setPage] = useState(() => {
     const p = parseInt(searchParams.get('page') ?? '1', 10);
     return Number.isFinite(p) && p > 0 ? p : 1;
@@ -88,6 +110,12 @@ export function QuotesListClient({
   const [statusFilterActive, setStatusFilterActive] = useState(false);
   const [assigneeFilter, setAssigneeFilter] = useState<Set<string>>(new Set());
   const [assigneeFilterActive, setAssigneeFilterActive] = useState(false);
+  const [archiveStateFilter, setArchiveStateFilter] = useState<Set<string>>(() =>
+    columnFilterFromValuesParam(searchParams.get('archiveState')).selected,
+  );
+  const [archiveStateFilterActive, setArchiveStateFilterActive] = useState(
+    () => columnFilterFromValuesParam(searchParams.get('archiveState')).active,
+  );
   const [assigneeOptions, setAssigneeOptions] = useState<
     { id: string; name: string }[]
   >([]);
@@ -136,17 +164,37 @@ export function QuotesListClient({
     () => toServerJobFetchParams(selectedJobIds),
     [selectedJobIds],
   );
-  const tabStatusIds = useMemo(
-    () => statusIdsForArchiveListTab(tab, statusOptions),
-    [tab, statusOptions],
+  const tabStatusIds = useMemo(() => {
+    if (isQuotesMineTab(tab)) return undefined;
+    return statusIdsForArchiveListTab(tab, statusOptions);
+  }, [tab, statusOptions]);
+
+  const isMineTab = isQuotesMineTab(tab);
+
+  const statusColumnParam = useMemo(
+    () => columnFilterToIdsParam(statusFilterActive, statusFilter, statusOptions),
+    [statusFilterActive, statusFilter, statusOptions],
   );
+
+  const archiveStateStatusParam = useMemo(
+    () =>
+      isMineTab
+        ? columnFilterToArchiveStateStatusIds(
+            archiveStateFilterActive,
+            archiveStateFilter,
+            statusOptions,
+          )
+        : undefined,
+    [isMineTab, archiveStateFilterActive, archiveStateFilter, statusOptions],
+  );
+
   const statusParam = useMemo(
     () =>
       mergeStatusParamWithTab(
-        columnFilterToIdsParam(statusFilterActive, statusFilter, statusOptions),
+        mergeStatusParamWithTab(statusColumnParam, archiveStateStatusParam),
         tabStatusIds,
       ),
-    [statusFilterActive, statusFilter, statusOptions, tabStatusIds],
+    [statusColumnParam, archiveStateStatusParam, tabStatusIds],
   );
   const quoteTypeParam = useMemo(
     () => columnFilterToIdsParam(typeFilterActive, typeFilter, quoteTypes),
@@ -156,14 +204,20 @@ export function QuotesListClient({
     () => withUniqueNamedFilterOptions(assigneeOptions),
     [assigneeOptions],
   );
+  const assignedToUserIdParam = useMemo(
+    () => (isMineTab && currentUserId ? currentUserId : undefined),
+    [isMineTab, currentUserId],
+  );
   const assignedToUserIdsParam = useMemo(
     () =>
-      columnFilterToAssigneeIdsParam(
-        assigneeFilterActive,
-        assigneeFilter,
-        assigneeFilterOptions,
-      ),
-    [assigneeFilterActive, assigneeFilter, assigneeFilterOptions],
+      isMineTab
+        ? undefined
+        : columnFilterToAssigneeIdsParam(
+            assigneeFilterActive,
+            assigneeFilter,
+            assigneeFilterOptions,
+          ),
+    [isMineTab, assigneeFilterActive, assigneeFilter, assigneeFilterOptions],
   );
 
   const sortParam = `${columnSort.field}_${columnSort.order}`;
@@ -196,6 +250,12 @@ export function QuotesListClient({
     else params.delete('quoteType');
     if (assignedToUserIdsParam) params.set('assignedToUserIds', assignedToUserIdsParam);
     else params.delete('assignedToUserIds');
+    params.delete('assignedToUserId');
+    const archiveStateValuesParam = isMineTab
+      ? columnFilterToValuesParam(archiveStateFilterActive, archiveStateFilter)
+      : null;
+    if (archiveStateValuesParam) params.set('archiveState', archiveStateValuesParam);
+    else params.delete('archiveState');
     syncServerJobFilterParams(params, jobId, jobIdsParam);
     const next = params.toString();
     replaceListQueryIfNeeded({
@@ -212,7 +272,11 @@ export function QuotesListClient({
     page,
     statusParam,
     quoteTypeParam,
+    assignedToUserIdParam,
     assignedToUserIdsParam,
+    isMineTab,
+    archiveStateFilterActive,
+    archiveStateFilter,
     jobId,
     jobIdsParam,
     searchParams,
@@ -224,13 +288,15 @@ export function QuotesListClient({
     const typeKey = quoteTypeParam === null ? '__none__' : (quoteTypeParam ?? '');
     const assigneesKey =
       assignedToUserIdsParam === null ? '__none__' : (assignedToUserIdsParam ?? '');
-    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${typeKey}|${assigneesKey}|${jobId ?? ''}|${jobIdsParam ?? ''}`;
+    const assigneeKey = assignedToUserIdParam ?? '';
+    const fetchKey = `${debouncedSearch}|${sortParam}|${tab}|${page}|${statusKey}|${typeKey}|${assigneeKey}|${assigneesKey}|${jobId ?? ''}|${jobIdsParam ?? ''}`;
     const session = createListFetchSession({ fetchKey, beginFetch, abortFetch });
     if (!session) return;
     if (
       statusParam === null ||
       quoteTypeParam === null ||
-      assignedToUserIdsParam === null
+      assignedToUserIdsParam === null ||
+      (isMineTab && !currentUserId)
     ) {
       setData({ data: [], total: 0 });
       return session.cleanup;
@@ -241,6 +307,7 @@ export function QuotesListClient({
       sort: sortParam,
       status: statusParam,
       quoteType: quoteTypeParam,
+      assignedToUserId: assignedToUserIdParam,
       assignedToUserIds: assignedToUserIdsParam,
       jobId: fetchJobId,
       jobIds: fetchJobIds,
@@ -255,7 +322,12 @@ export function QuotesListClient({
     page,
     statusParam,
     quoteTypeParam,
+    assignedToUserIdParam,
     assignedToUserIdsParam,
+    isMineTab,
+    currentUserId,
+    archiveStateFilterActive,
+    archiveStateFilter,
     jobId,
     jobIdsParam,
     fetchJobId,
@@ -278,7 +350,17 @@ export function QuotesListClient({
 
   const handlePageChange = (newPage: number) => setPage(newPage);
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => { setSearch(e.target.value); setPage(1); };
-  const handleTabChange = (val: string) => { setTab(val as ListTab); setPage(1); };
+  const handleTabChange = (val: string) => {
+    setTab(val as ListTab);
+    if (val === 'mine') {
+      setAssigneeFilter(new Set());
+      setAssigneeFilterActive(false);
+    } else {
+      setArchiveStateFilter(new Set());
+      setArchiveStateFilterActive(false);
+    }
+    setPage(1);
+  };
 
   const uniqueTypes = useMemo(
     () => [...new Set(quoteTypes.map((type) => type.name.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
@@ -360,6 +442,16 @@ export function QuotesListClient({
     setPage(1);
   };
 
+  const applyArchiveStateFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: 2,
+    });
+    setArchiveStateFilter(committed.selected);
+    setArchiveStateFilterActive(committed.active);
+    setPage(1);
+  };
+
   const visibleRows = data.data;
 
   const breakdown = computeStatusBreakdown(visibleRows, (q) => q.status?.name);
@@ -395,6 +487,7 @@ export function QuotesListClient({
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
           <Tabs value={tab} onValueChange={handleTabChange}>
             <TabsList>
+              {!job && <TabsTrigger value="mine">My Estimates</TabsTrigger>}
               <TabsTrigger value="active">Active</TabsTrigger>
               <TabsTrigger value="archived">Archived</TabsTrigger>
               <TabsTrigger value="all">All</TabsTrigger>
@@ -482,13 +575,32 @@ export function QuotesListClient({
               onApply: applyJobFilter,
               menuTitle: 'Filter by job',
               itemNoun: { singular: 'job', plural: 'jobs' } }}
-            assigneeColumnFilter={{
-              options: uniqueAssignees,
-              selected: assigneeFilter,
-              active: assigneeFilterActive,
-              onApply: applyAssigneeFilter,
-              menuTitle: 'Filter by assignee',
-              itemNoun: { singular: 'assignee', plural: 'assignees' } }}
+            assigneeColumnFilter={
+              isMineTab
+                ? undefined
+                : {
+                    options: uniqueAssignees,
+                    selected: assigneeFilter,
+                    active: assigneeFilterActive,
+                    onApply: applyAssigneeFilter,
+                    menuTitle: 'Filter by assignee',
+                    itemNoun: { singular: 'assignee', plural: 'assignees' },
+                  }
+            }
+            archiveStateColumnFilter={
+              isMineTab
+                ? {
+                    options: ['Active', 'Archived'],
+                    selected: archiveStateFilter,
+                    active: archiveStateFilterActive,
+                    onApply: applyArchiveStateFilter,
+                    menuTitle: 'Filter by state',
+                    itemNoun: { singular: 'state', plural: 'states' },
+                  }
+                : undefined
+            }
+            showAssigneeColumn={!isMineTab}
+            showArchiveStateColumn={isMineTab}
             estimateTypeColumnFilter={{
               options: uniqueTypes,
               selected: typeFilter,

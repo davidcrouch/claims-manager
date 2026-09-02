@@ -11,8 +11,17 @@ export class DashboardController {
 
   @Get('inbox')
   @RequirePermission(P.reports.read)
-  async getInbox(@CurrentUser() user: AuthenticatedUser) {
-    return this.dashboardService.getInbox({ userId: user?.sub, email: user?.email });
+  async getInbox(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('mine') mine?: string,
+  ) {
+    const mineOnly =
+      mine === '1' || mine === 'true' ? true : mine === '0' || mine === 'false' ? false : undefined;
+    return this.dashboardService.getInbox({
+      userId: user?.sub,
+      email: user?.email,
+      mine: mineOnly,
+    });
   }
 
   @Get('stats')

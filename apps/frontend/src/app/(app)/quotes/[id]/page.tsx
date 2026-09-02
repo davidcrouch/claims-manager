@@ -13,7 +13,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const quote = await loadQuote(id);
-  const title = quote?.internalNumber ?? quote?.name ?? quote?.quoteNumber ?? quote?.externalReference ?? id;
+  const title = quote?.internalNumber ?? quote?.name ?? quote?.quoteNumber ?? id;
   return { title: `${title} | EnsureOS` };
 }
 

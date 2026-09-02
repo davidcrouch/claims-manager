@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -10,7 +10,6 @@ import {
   Calendar,
   DollarSign,
   FileSignature,
-  Layers,
   Package,
   ClipboardList,
   MessageSquare,
@@ -33,145 +32,83 @@ import {
   formatDate,
   formatDateTime,
   formatCurrency,
-  pick,
-  asString,
-  type Dict,
 } from '@/components/shared/detail';
 import { updateBillStatusAction } from '@/app/(app)/mutations-status';
 import type { Bill, Job } from '@/types/api';
 import { PrintButton } from '@/components/shared/PrintButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { jobDisplayName } from '@/components/shared/job-label';
-import { LineItemsProvider, LineItemsTable } from '@/components/line-items';
-import { PagedLineItemsTable } from '@/components/quotes/PagedLineItemsTable';
-import { groupsFromDocumentPayload } from '@/components/line-items';
-import { getPurchaseOrderLineItemsAction } from '@/app/(app)/purchase-orders/actions';
-// ---------- helpers ---------------------------------------------------------
-
-function getPayload(bill: Bill): Dict {
-  return (bill.billPayload as Dict | undefined) ?? {};
-}
-
-function vendorName(bill: Bill): string | undefined {
-  const payload = getPayload(bill);
-  return (
-    asString((payload.vendor as Dict | undefined)?.name) ??
-    asString(pick(payload, 'vendorName'))
-  );
-}
+import {
+  BillLineItemsTab,
+  type BillLineItemEdits,
+  type BillLineItemsTabHandle,
+} from '@/components/bills/BillLineItemsTab';
+import {
+  AUTOSAVE_DEBOUNCE_MS,
+  MAX_UNDO,
+  SAVE_STATUS_CLEAR_MS,
+  cloneJson,
+  pushUndoEntry,
+} from '@/components/shared/detail-autosave';
+import { DetailUndoButton } from '@/components/shared/DetailAutosaveActions';
+import { HeaderSaveStatus } from '@/components/shared/HeaderSaveStatus';
+import { billDisplayTitle, billVendorName } from '@/components/bills/bill-label';
 
 // ---------- header ----------------------------------------------------------
 
 export function BillPageHeader({ bill, job }: { bill: Bill; job?: Job | null }) {
-  const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const title = bill.billNumber ?? bill.externalReference ?? bill.id;
+  const title = billDisplayTitle(bill);
   const status = bill.status?.name ?? 'Unknown';
-  const vendor = vendorName(bill);
-
-  async function handleStatusChange(newStatus: string) {
-    setLoading(true);
-    const result = await updateBillStatusAction(bill.id, newStatus);
-    if (!result.success) {
-      console.error('[frontend:BillPageHeader.handleStatusChange]', result.error);
-    }
-    router.refresh();
-    setLoading(false);
-  }
+  const vendor = billVendorName(bill);
 
   return (
-    <>
-      <SetHeaderActions>
-        {status === 'Received' && (
-          <>
-            <Button
-              size="default"
-              disabled={loading}
-              className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
-              onClick={() => handleStatusChange('Approved')}
+    <PageHeaderLayout
+      leading={<BackButton href={job ? `/bills?jobId=${job.id}` : '/bills'} label="Back to bills" />}
+      icon={
+        <PageHeaderIcon
+          icon={ReceiptText}
+          className="bg-rose-100"
+          iconClassName="text-rose-600"
+        />
+      }
+      title={title}
+      topRow={
+        <>
+          <StatusBadge status={status} />
+          {vendor && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              <Building2 className="h-3 w-3" />
+              {vendor}
+            </span>
+          )}
+          {bill.purchaseOrderId && (
+            <Link
+              href={`/purchase-orders/${bill.purchaseOrderId}`}
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
             >
-              Approve
-            </Button>
-            <Button
-              size="default"
-              variant="destructive"
-              disabled={loading}
-              className="h-9 gap-1.5 px-4"
-              onClick={() => handleStatusChange('Rejected')}
+              View PO
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
+          {job && (
+            <Link
+              href={`/jobs/${job.id}`}
+              className="inline-flex items-center gap-1 text-xs uppercase text-primary hover:underline"
             >
-              Reject
-            </Button>
-          </>
-        )}
-        {status === 'Approved' && (
-          <Button
-            size="default"
-            disabled={loading}
-            className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
-            onClick={() => handleStatusChange('Paid')}
-          >
-            Mark Paid
-          </Button>
-        )}
-        <HeaderActionToolbar>
-          <PrintButton documentType="bill" entityId={bill.id} jobId={job?.id} />
-          <ArchiveEntityButton
-            entityType="bill"
-            entityId={bill.id}
-            statusName={status}
-            entityLabel={title}
-            redirectTo={job ? `/bills?jobId=${job.id}` : '/bills'}
-          />
-        </HeaderActionToolbar>
-      </SetHeaderActions>
-      <PageHeaderLayout
-        leading={<BackButton href={job ? `/bills?jobId=${job.id}` : '/bills'} label="Back to bills" />}
-        icon={
-          <PageHeaderIcon
-            icon={ReceiptText}
-            className="bg-rose-100"
-            iconClassName="text-rose-600"
-          />
-        }
-        title={title}
-        topRow={
-          <>
-            <StatusBadge status={status} />
-            {vendor && (
-              <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                <Building2 className="h-3 w-3" />
-                {vendor}
-              </span>
-            )}
-            {bill.purchaseOrderId && (
-              <Link
-                href={`/purchase-orders/${bill.purchaseOrderId}`}
-                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-              >
-                View PO
-                <ExternalLink className="h-3 w-3" />
-              </Link>
-            )}
-            {job && (
-              <Link
-                href={`/jobs/${job.id}`}
-                className="inline-flex items-center gap-1 text-xs uppercase text-primary hover:underline"
-              >
-                {jobDisplayName(job)}
-                <ExternalLink className="h-3 w-3" />
-              </Link>
-            )}
-          </>
-        }
-        bottomRow={
-          <>
-            <PageHeaderField label="Amount">{formatCurrency(bill.totalAmount)}</PageHeaderField>
-            <PageHeaderField label="Received">{formatDate(bill.receivedDate)}</PageHeaderField>
-            <PageHeaderField label="Due">{formatDate(bill.dueDate)}</PageHeaderField>
-          </>
-        }
-      />
-    </>
+              {jobDisplayName(job)}
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
+        </>
+      }
+      bottomRow={
+        <>
+          <PageHeaderField label="Amount">{formatCurrency(bill.totalAmount)}</PageHeaderField>
+          <PageHeaderField label="Received">{formatDate(bill.receivedDate)}</PageHeaderField>
+          <PageHeaderField label="Due">{formatDate(bill.dueDate)}</PageHeaderField>
+        </>
+      }
+    />
   );
 }
 
@@ -180,7 +117,7 @@ export function BillPageHeader({ bill, job }: { bill: Bill; job?: Job | null }) 
 function OverviewTab({ bill }: { bill: Bill }) {
   const status = bill.status?.name ?? 'Unknown';
   const paymentStatus = bill.paymentStatus?.name;
-  const vendor = vendorName(bill);
+  const vendor = billVendorName(bill);
 
   return (
     <div className="space-y-4">
@@ -330,79 +267,6 @@ function OverviewTab({ bill }: { bill: Bill }) {
   );
 }
 
-function LineItemsTab({ bill }: { bill: Bill }) {
-  const payload = (bill.billPayload ?? {}) as Record<string, unknown>;
-  const payloadGroups = groupsFromDocumentPayload(payload);
-  const lineItems = (payload.lineItems ?? payload.items ?? []) as Array<Record<string, unknown>>;
-
-  if (bill.purchaseOrderId) {
-    return (
-      <PagedLineItemsTable
-        documentId={bill.purchaseOrderId}
-        loadAction={getPurchaseOrderLineItemsAction}
-        fallbackGroups={payloadGroups}
-        emptyLabel="No line items found for this bill."
-        readOnly
-      />
-    );
-  }
-
-  if (payloadGroups.length > 0) {
-    return (
-      <LineItemsProvider groups={payloadGroups} mode="readonly">
-        <LineItemsTable />
-      </LineItemsProvider>
-    );
-  }
-
-  if (lineItems.length === 0) {
-    return (
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Line Items</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            No line items found for this bill.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Line Items</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-left text-muted-foreground">
-                <th className="pb-2 pr-4 font-medium">Item Name</th>
-                <th className="pb-2 pr-4 text-right font-medium">Quantity</th>
-                <th className="pb-2 pr-4 text-right font-medium">Unit Cost</th>
-                <th className="pb-2 text-right font-medium">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lineItems.map((item, idx) => (
-                <tr key={idx} className="border-b last:border-0">
-                  <td className="py-2 pr-4">{String(item.name ?? item.itemName ?? '—')}</td>
-                  <td className="py-2 pr-4 text-right">{item.quantity != null ? String(item.quantity) : '—'}</td>
-                  <td className="py-2 pr-4 text-right">{formatCurrency(item.unitCost ?? item.unitPrice ?? item.rate)}</td>
-                  <td className="py-2 text-right">{formatCurrency(item.total ?? item.amount ?? item.lineTotal)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 function ActivitiesTab() {
   return (
     <Card>
@@ -477,8 +341,112 @@ type BillTab =
   | 'timeline'
   | 'attachments';
 
-export function BillDetail({ bill }: { bill: Bill }) {
+type LineItemsUndoEntry = { kind: 'line-items'; edits: BillLineItemEdits };
+
+export function BillDetail({ bill, job }: { bill: Bill; job?: Job | null }) {
+  const router = useRouter();
   const [tab, setTab] = useState<BillTab>('overview');
+  const [lineItemsMounted, setLineItemsMounted] = useState(false);
+  const [lineItemsDirty, setLineItemsDirty] = useState(false);
+  const [lineItemsSaving, setLineItemsSaving] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [lineItemsEditTick, setLineItemsEditTick] = useState(0);
+  const [undoStack, setUndoStack] = useState<LineItemsUndoEntry[]>([]);
+  const [statusLoading, setStatusLoading] = useState(false);
+  const saveLineItemsRef = useRef<(() => void) | null>(null);
+  const lineItemsRef = useRef<BillLineItemsTabHandle | null>(null);
+
+  const title = billDisplayTitle(bill);
+  const status = bill.status?.name ?? 'Unknown';
+  const canUndo = lineItemsDirty || undoStack.length > 0;
+
+  useEffect(() => {
+    setLineItemsDirty(false);
+    setSaveError(null);
+    setJustSaved(false);
+    setUndoStack([]);
+    setLineItemsMounted(tab === 'line-items');
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- remount take-off for the new bill
+  }, [bill.id]);
+
+  useEffect(() => {
+    if (tab === 'line-items') setLineItemsMounted(true);
+  }, [tab]);
+
+  const pushUndo = useCallback((entry: LineItemsUndoEntry) => {
+    setUndoStack((prev) => pushUndoEntry(prev, entry, MAX_UNDO));
+  }, []);
+
+  const handleLineItemsDirtyChange = useCallback((dirty: boolean, save: () => void) => {
+    setLineItemsDirty(dirty);
+    saveLineItemsRef.current = save;
+    setLineItemsEditTick((n) => n + 1);
+  }, []);
+
+  const handleLineItemsUndoCapture = useCallback(
+    (restoreEdits: BillLineItemEdits) => {
+      pushUndo({ kind: 'line-items', edits: cloneJson(restoreEdits) });
+    },
+    [pushUndo],
+  );
+
+  const handleLineItemsSaveState = useCallback(
+    (state: 'saving' | 'saved' | 'error', error?: string) => {
+      if (state === 'saving') {
+        setLineItemsSaving(true);
+        setJustSaved(false);
+        setSaveError(null);
+        return;
+      }
+      setLineItemsSaving(false);
+      if (state === 'error') {
+        setSaveError(error ?? 'Failed to save line items');
+        return;
+      }
+      setJustSaved(true);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!lineItemsDirty || lineItemsSaving) return;
+    const timer = setTimeout(() => {
+      saveLineItemsRef.current?.();
+    }, AUTOSAVE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [lineItemsDirty, lineItemsSaving, lineItemsEditTick]);
+
+  useEffect(() => {
+    if (!justSaved || lineItemsDirty || lineItemsSaving || saveError) return;
+    const timer = setTimeout(() => setJustSaved(false), SAVE_STATUS_CLEAR_MS);
+    return () => clearTimeout(timer);
+  }, [justSaved, lineItemsDirty, lineItemsSaving, saveError]);
+
+  const handleUndo = useCallback(() => {
+    if (lineItemsSaving) return;
+
+    if (lineItemsDirty) {
+      lineItemsRef.current?.resetEdits();
+      setSaveError(null);
+      return;
+    }
+
+    const entry = undoStack[undoStack.length - 1];
+    if (!entry) return;
+    setUndoStack((prev) => prev.slice(0, -1));
+    lineItemsRef.current?.save(entry.edits);
+  }, [lineItemsSaving, lineItemsDirty, undoStack]);
+
+  async function handleStatusChange(newStatus: string) {
+    setStatusLoading(true);
+    const result = await updateBillStatusAction(bill.id, newStatus);
+    if (!result.success) {
+      console.error('[frontend:BillDetail.handleStatusChange]', result.error);
+    }
+    router.refresh();
+    setStatusLoading(false);
+  }
 
   const tabs: Array<{ id: BillTab; label: string; icon: typeof Calendar }> = [
     { id: 'overview', label: 'Overview', icon: FileSignature },
@@ -491,6 +459,60 @@ export function BillDetail({ bill }: { bill: Bill }) {
 
   return (
     <div className="flex flex-col">
+      <HeaderSaveStatus
+        saving={lineItemsSaving}
+        saveError={saveError}
+        justSaved={justSaved}
+        dirty={lineItemsDirty}
+      />
+      <SetHeaderActions>
+        {status === 'Received' && (
+          <>
+            <Button
+              size="default"
+              disabled={statusLoading}
+              className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+              onClick={() => handleStatusChange('Approved')}
+            >
+              Approve
+            </Button>
+            <Button
+              size="default"
+              variant="destructive"
+              disabled={statusLoading}
+              className="h-9 gap-1.5 px-4"
+              onClick={() => handleStatusChange('Rejected')}
+            >
+              Reject
+            </Button>
+          </>
+        )}
+        {status === 'Approved' && (
+          <Button
+            size="default"
+            disabled={statusLoading}
+            className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+            onClick={() => handleStatusChange('Paid')}
+          >
+            Mark Paid
+          </Button>
+        )}
+        <HeaderActionToolbar>
+          <DetailUndoButton
+            canUndo={canUndo}
+            undoDisabled={lineItemsSaving}
+            onUndo={handleUndo}
+          />
+          <PrintButton documentType="bill" entityId={bill.id} jobId={job?.id} />
+          <ArchiveEntityButton
+            entityType="bill"
+            entityId={bill.id}
+            statusName={status}
+            entityLabel={title}
+            redirectTo={job ? `/bills?jobId=${job.id}` : '/bills'}
+          />
+        </HeaderActionToolbar>
+      </SetHeaderActions>
       <div className="flex flex-wrap gap-0 border-b border-slate-200">
         {tabs.map((t) => {
           const Icon = t.icon;
@@ -513,8 +535,24 @@ export function BillDetail({ bill }: { bill: Bill }) {
         })}
       </div>
       <div className="pt-4">
+        {saveError && (
+          <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {saveError}
+          </div>
+        )}
         {tab === 'overview' && <OverviewTab bill={bill} />}
-        {tab === 'line-items' && <LineItemsTab bill={bill} />}
+        {lineItemsMounted && (
+          <div className={tab === 'line-items' ? undefined : 'hidden'}>
+            <BillLineItemsTab
+              ref={lineItemsRef}
+              bill={bill}
+              onDirtyChange={handleLineItemsDirtyChange}
+              onUndoCapture={handleLineItemsUndoCapture}
+              onSaveStateChange={handleLineItemsSaveState}
+              hideToolbarActions
+            />
+          </div>
+        )}
         {tab === 'activities' && <ActivitiesTab />}
         {tab === 'communications' && <CommunicationsTab />}
         {tab === 'timeline' && <TimelineTab bill={bill} />}

@@ -6,6 +6,6 @@ import { RecordNumberModule } from './record-number/record-number.module';
 @Module({
   imports: [RecordNumberModule],
   providers: [CredentialsCipher],
-  exports: [CredentialsCipher],
+  exports: [CredentialsCipher, RecordNumberModule],
 })
 export class CommonModule {}
