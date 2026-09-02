@@ -1,10 +1,10 @@
-﻿ï»¿# Work hours tracking
+﻿# Work hours tracking
 
 ## Entries
 
 - `2026-04-03` `eaea05a` **48 h**
-  `440 files | +130 398 ï¿½??0 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
-  Lay summary: First delivery of the claims management platformï¿½??sign-in, shared building blocks, quality checks before release, and repeatable environments so the team can keep building.
+  `440 files | +130 398 �??0 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
+  Lay summary: First delivery of the claims management platform�??sign-in, shared building blocks, quality checks before release, and repeatable environments so the team can keep building.
   **Initial commit: claims-manager monorepo.** Delivered the first integrated **claims-manager** codebase: a structured foundation for insurance claims operations in one place.
   Set up the **authentication service** and **application API** so sign-in and business logic can evolve together.
   Added **shared components** reusable across the product build future features faster and keep a consistent experience.
@@ -14,16 +14,16 @@
   This engagement represents a full **platform bootstrap** suitable for ongoing claims-management development.
 
 - `2026-04-03` `0185049` **0.5 h**
-  `34 files | +3 ï¿½??587 | Tier 1 mechanical | Light orchestration`
-  Lay summary: Housekeeping onlyï¿½??auto-generated build folders are no longer kept in the change history, so records stay clean and easier to review.
+  `34 files | +3 �??587 | Tier 1 mechanical | Light orchestration`
+  Lay summary: Housekeeping only�??auto-generated build folders are no longer kept in the change history, so records stay clean and easier to review.
   **Remove build artifacts from tracking and update .gitignore.** Cleaned the repository so **generated build output** is no longer stored in version control.
   Updated ignore rules so routine compiles and cache folders stay out of commits going forward.
   Removed previously tracked **compiled artifacts** so the history reflects **source and configuration** only.
-  **No change** to product features or end-user behaviorï¿½??this is housekeeping that keeps reviews and clones professional.
+  **No change** to product features or end-user behavior�??this is housekeeping that keeps reviews and clones professional.
   Reduces noise for anyone auditing what actually shipped in a given change.
 
 - `2026-04-03` `bf394b2` **3 h**
-  `1 file | +27 ï¿½??289 | Tier 3 complex | Moderate orchestration`
+  `1 file | +27 �??289 | Tier 3 complex | Moderate orchestration`
   Lay summary: Local developer setup now follows the same standard hosting model as the rest of the company, so there is one source of truth instead of duplicate instructions.
   **refactor(infra): replace duplicate infra with pointer to shared capabilities stack.** Aligned **local development infrastructure** with the organization's **shared hosting stack** instead of maintaining a separate copy.
   Simplifies what the team must install and update when the standard environment changes.
@@ -32,8 +32,8 @@
   Delivers **maintainable, standards-based** infrastructure setup for day-to-day work.
 
 - `2026-04-03` `ebf600e` **10.5 h**
-  `19 files | +1 867 ï¿½??11 290 | Tier 3 complex / Tier 4 deep integration | Heavy orchestration`
-  Lay summary: Sign-in and ï¿½??which customer is this?ï¿½?ï¿½ now line up across the website, services, and stored data, with a smoother path for people already on the product.
+  `19 files | +1 867 �??11 290 | Tier 3 complex / Tier 4 deep integration | Heavy orchestration`
+  Lay summary: Sign-in and �??which customer is this?�?� now line up across the website, services, and stored data, with a smoother path for people already on the product.
   **feat(auth): organization resolution, JWT organization_id, squashed Drizzle baseline.** Improved **sign-in and tenant handling** so each **organization** is recognized reliably in the system.
   Supported a **smooth transition** from older organization identifiers so existing customers are not forced to cut over overnight.
   Updated the **login and consent experience** and related safeguards to match the new organization model.
@@ -43,8 +43,8 @@
   Outcome: **organization-aware authentication** and data setup ready for multi-tenant claims operations.
 
 - `2026-04-07` `fa8b5f6` **38.5 h**
-  `131 files | +7 685 ï¿½??1 | Tier 2 standard | Heavy orchestration`
-  Lay summary: Delivered the main claims management websiteï¿½??screens for day-to-day work, login and logout, layout and navigation, and a live link to the supporting service behind it.
+  `131 files | +7 685 �??1 | Tier 2 standard | Heavy orchestration`
+  Lay summary: Delivered the main claims management website�??screens for day-to-day work, login and logout, layout and navigation, and a live link to the supporting service behind it.
   **feat(frontend): full Next.js frontend for claims management.** Built the complete **user-facing application** with placeholder pages for claims, jobs, invoices, quotes, reports, vendors, and purchase orders.
   Delivered **form-based workflow templates** for creating appointments, messages, invoices, quotes, and reports from within each entity.
   Implemented **initial authentication flows** including login, logout, session management, and token callback so users sign in through the existing auth service.
@@ -53,8 +53,8 @@
   Connected the frontend to the **backend API** with a typed client so data flows end-to-end for all entity types.
 
 - `2026-04-07` `927ed6b` **4 h** (NOT-BILLABLE)
-  `5 files | +404 ï¿½??0 | Tier 3 complex | Moderate orchestration`
-  Lay summary: Internal time-tracking and ledger lines tied to commits, including backfilled historyï¿½??work kept in-house for process, not billed to the client.
+  `5 files | +404 �??0 | Tier 3 complex | Moderate orchestration`
+  Lay summary: Internal time-tracking and ledger lines tied to commits, including backfilled history�??work kept in-house for process, not billed to the client.
   **chore: add work-hours tracking for commit-level time logging.** Set up **automated time tracking** that records estimated hours and a summary of work with each commit.
   Delivered a **post-commit hook** and supporting script so entries are appended to a tracking ledger after qualifying commits.
   **Backfilled the full commit history** with estimated hours and invoice-style descriptions for all prior work.
@@ -62,7 +62,7 @@
   Updated **repository ignore rules** to keep local editor configuration out of version control.
 
 - `2026-04-10` `29ea32a` **10 h**
-  `59 files | +7 723 ï¿½??976 | Tier 3 complex | Heavy orchestration`
+  `59 files | +7 723 �??976 | Tier 3 complex | Heavy orchestration`
   Lay summary: Tightened how sign-in, stored customer data, and partner-system handoffs line up so the website, login service, and back office behave consistently and are safer to run.
   **Integration schema hardening and auth alignment across API, sign-in service, and web app.**
   Tightened integration-related data shapes so provider and connection relationships are clearer and webhook and external-object handling match the updated model.
@@ -73,7 +73,7 @@
   Documented the integration hardening plan and webhook operator notes in implementation docs and updated the delivery overview.
 
 - `2026-04-13` `f12daa7` **5.5 h**
-  `30 files | +5 592 ï¿½??2 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  `30 files | +5 592 �??2 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Staff can add and oversee outside service providers and review their automated traffic and errors from dedicated screens in the product.
   Delivered a complete **providers management interface** for creating, editing, and monitoring integration providers and their connections.
   Built backend API endpoints for provider and connection CRUD with webhook event statistics and paginated event history.
@@ -83,8 +83,8 @@
   Documented the providers management UI design specification for team reference.
 
 - `2026-04-14` `f27ea49` **10 h**
-  `65 files | +3 249 ï¿½??56 | Tier 3 complex | Heavy orchestration`
-  Lay summary: Repeatable path from automated checks through staging to live hosting, with packaged releases, staff runbooks, and each customerï¿½??s partner activity kept apart from othersï¿½??.
+  `65 files | +3 249 �??56 | Tier 3 complex | Heavy orchestration`
+  Lay summary: Repeatable path from automated checks through staging to live hosting, with packaged releases, staff runbooks, and each customer�??s partner activity kept apart from others�??.
   Delivered **repeatable hosted delivery** with automated build, test, and promotion paths for staging and production.
   Added **infrastructure-as-code** and **Kubernetes manifests** so networking, data stores, secrets, and workloads can be provisioned and updated in a controlled way.
   Shipped **operator scripts** for applying Terraform, rolling out releases, and rolling back when needed.
@@ -94,9 +94,9 @@
   Retired the older single-purpose workflow in favor of the new pipeline layout aligned with the monorepo.
 
 - `2026-04-17` `fc9153a` **18 h**
-  `98 files | +12 755 ï¿½??823 | Tier 3 complex / Tier 4 deep integration | Heavy orchestration`
+  `98 files | +12 755 �??823 | Tier 3 complex / Tier 4 deep integration | Heavy orchestration`
   Lay summary: Major back-office upgrade so partner activity flows in through one controlled path, with stronger tracking of who is on each claim, encrypted stored credentials, and refreshed claims screens for staff.
-  **Delivered webhook pipeline v2** ï¿½?? a coordinated path for bringing in partner-system activity so events are processed reliably end-to-end.
+  **Delivered webhook pipeline v2** �?? a coordinated path for bringing in partner-system activity so events are processed reliably end-to-end.
   Added retries, recovery for out-of-order updates, and in-memory projection so late or related events are still captured correctly.
   Extended **claim data modelling** to track assignees and contact relationships directly on each claim, with the supporting database migration.
   Encrypted stored partner credentials at rest and refreshed the configuration layout to match the updated integration arrangement.
@@ -105,7 +105,7 @@
   Authored mapping and orchestration **documentation** for the team plus an internal time-tracking invoice tool.
 
 - `2026-04-18` `a1f5a74` **6 h**
-  `47 files | +8 775 ï¿½??2 374 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
+  `47 files | +8 775 �??2 374 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
   Lay summary: Replaced the old "add your own partner" screens with a built-in list of supported partner systems and tailored connection forms, so staff configure partner links instead of defining the partners themselves.
   **Hardcoded provider catalogue and connection-focused management UI.** Replaced the previous generic partner management screens with a **built-in catalogue** of supported partner systems so staff no longer maintain partner records by hand.
   Introduced **partner-specific connection forms** so each partner link is configured using the exact fields that partner actually needs.
@@ -115,7 +115,7 @@
   Added **automated tests** covering the updated partner service to guard the refactor going forward.
 
 - `2026-04-18` `1d41703` **4 h**
-  `17 files | +7 242 ï¿½??36 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  `17 files | +7 242 �??36 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Tightened how customer identity is stored and linked across claims records so partner updates always land against the correct customer, with safeguards against accidentally pointing services at the wrong database.
   **Schema tenant-id hardening, webhook tenant wiring, and seed framework.** Converted the stored **customer identifier** on every claims table into a strongly-typed reference back to the **organizations** table so bad or mismatched values are rejected at the database level.
   Shipped the supporting **database migration** that safely converts existing records and adds the new constraints.
@@ -125,21 +125,21 @@
   Delivered an initial **integration providers seed** so new environments come up with the expected partner catalog out of the box.
 
 - `2026-04-20` `9ba736d` **14 h**
-  `52 files | +2 617 ï¿½??243 | Tier 3 complex / Tier 4 deep integration | Heavy orchestration`
+  `52 files | +2 617 �??243 | Tier 3 complex / Tier 4 deep integration | Heavy orchestration`
   Spans commits `46f2b24..9ba736d` (14 commits) covering the initial staging pipeline build-out and subsequent live-deployment hardening.
   Lay summary: Set up the full automated delivery pipeline to the staging website and worked through many rounds of fixes so the website, sign-in service, and application all build, deploy, and start cleanly against live hosted infrastructure.
   **Automated delivery pipeline to branlamie.com staging, plus live pipeline hardening.** Delivered an **end-to-end automated hosted delivery pipeline** so every change flows from automated checks through build, packaging, and rollout to the live staging site.
-  Provisioned the staging environment as **infrastructure-as-code** ï¿½?? databases, in-memory cache, private network, container registry, a hosted virtual machine, custom domains, and HTTPS ï¿½?? with repeatable apply and rollback.
+  Provisioned the staging environment as **infrastructure-as-code** �?? databases, in-memory cache, private network, container registry, a hosted virtual machine, custom domains, and HTTPS �?? with repeatable apply and rollback.
   Added **operator seeding and bootstrap scripts** so environment secrets, database connection strings, and encryption keys are populated into the managed secret store in one idempotent run.
   Hardened the **container images** for the application, the sign-in service, and the public website so each starts cleanly in the hosted environment and follows the expected workspace layout.
   Reworked the **sign-in service configuration** so registered redirect addresses and client credentials come from environment configuration, making the service safe to deploy across environments.
-  Walked the pipeline through successive staging runs, **diagnosing and fixing each failure** surfaced by the live environment ï¿½?? package manager pinning, first-time image bootstrap, migration networking, database name alignment, and standards-compliant token exchange.
+  Walked the pipeline through successive staging runs, **diagnosing and fixing each failure** surfaced by the live environment �?? package manager pinning, first-time image bootstrap, migration networking, database name alignment, and standards-compliant token exchange.
   Registered the **staging domains** (web app, sign-in, and application interface) with HTTPS so the product is reachable at its friendly URLs, ready for end-to-end user flow testing.
 
 - `2026-04-22` `45d0d54` **3 h**
-  `17 files | +245 ï¿½??195 | Tier 2 standard / Tier 4 deep integration | Heavy orchestration`
+  `17 files | +245 �??195 | Tier 2 standard / Tier 4 deep integration | Heavy orchestration`
   Lay summary: Diagnosed and fixed a production error blocking every signed-in page on the staging website, and made the site gracefully degrade instead of showing a blank error if a backend hiccup happens.
-  **Staging authentication fix and Server Components resilience.** Diagnosed the root cause of the generic error message users were seeing on the staging site ï¿½?? the **signing-key lookup address** was wrong, so every signed-in request was being rejected.
+  **Staging authentication fix and Server Components resilience.** Diagnosed the root cause of the generic error message users were seeing on the staging site �?? the **signing-key lookup address** was wrong, so every signed-in request was being rejected.
   Corrected the staging configuration to point at the **correct signing-key endpoint** so tokens validate cleanly end-to-end.
   Hardened **every signed-in page** (claims, jobs, quotes, invoices, reports, vendors, purchase orders, and related detail screens) so future backend hiccups surface as empty states or clean not-found pages instead of the generic error message.
   Aligned every server-rendered page on the **shared tenant-aware request helper** so the customer identifier is always forwarded to the backend consistently.
@@ -147,7 +147,7 @@
   Verified the staging database shape (tables, applied migrations, row counts) against the expected model while investigating.
 
 - `2026-04-22` `2f01230` **4.5 h**
-  `2 files | +1 107 ï¿½??33 | Tier 2 standard | Heavy orchestration`
+  `2 files | +1 107 �??33 | Tier 2 standard | Heavy orchestration`
   Lay summary: Redesigned the public marketing home page so it looks like a modern, professional product site with a custom hero illustration and a consistent style across every section.
   **Redesign marketing landing page with bespoke hero illustration.** Rebuilt the public **home page** as a proper marketing site with a clean, alternating-section layout, consistent typography, and a cohesive colour palette drawn from the company's other product sites.
   Delivered a distinctive **hero section** with a custom-generated product illustration, headline and subtitle, primary and secondary calls-to-action, customer rating, and high-level trust indicators.
@@ -157,7 +157,7 @@
   Made the whole page **responsive** so it reads cleanly on phones, tablets, and desktops.
 
 - `2026-04-22` `b093287` **6 h**
-  `75 files | +12 247 ï¿½??671 | Tier 3 complex / Tier 4 deep integration | Heavy orchestration`
+  `75 files | +12 247 �??671 | Tier 3 complex / Tier 4 deep integration | Heavy orchestration`
   Lay summary: Rebuilt the partner-webhook processing pipeline so each incoming event is handed to a managed workflow that runs a short, auditable sequence of steps, with the raw payload archived to object storage and a clean fallback to the existing in-process path.
   **More0 webhook-workflow app with S3 archive, webhook tools, and event orchestration.** Packaged the webhook pipeline as a self-contained **More0 workflow app** (`process-inbound-event`) that takes an event identifier and drives the end-to-end flow: read the event, archive the raw payload, upsert mapped records, and update the processing log.
   Defined six **HTTP tool endpoints** (webhook-event-read, payload-archive, crunchwork-fetch, external-object-upsert, entity-mapper, processing-log-update) behind a shared **tool-auth guard**, each with its own tool descriptor and typed handler, so the workflow can call well-scoped API capabilities.
@@ -165,13 +165,13 @@
   Shipped a **database migration and seed-framework entry** (`sample-data.seed.ts`) to support the new archive / processing flow and populate reference data consistently across environments.
   Extended the **webhook orchestrator** and event-type resolver to dispatch to the workflow when enabled, while keeping the legacy in-process path as an environment-switchable fallback.
   Updated the **external-object service, entity mapper registry, and partner mappers** (appointment, attachment, claim, invoice, job, message, purchase order, quote, report, task) to plug into the new pipeline cleanly.
-  Wired the **deployment layer** ï¿½?? Docker Compose for local, Kubernetes external-secrets and api-server manifests, and the Terraform secrets module ï¿½?? so the new bucket, More0 config, and environment toggles are available in every environment.
+  Wired the **deployment layer** �?? Docker Compose for local, Kubernetes external-secrets and api-server manifests, and the Terraform secrets module �?? so the new bucket, More0 config, and environment toggles are available in every environment.
   Retired the previous `external/tools` module in favour of the new **webhook-tools module** and documented the whole pipeline in an implementation note.
   Added unit specs for the **orchestrator and More0 service** plus a client-test script for the workflow so the integration can be exercised end-to-end without the partner.
 
 - `2026-04-22` `ff299f5` **4 h**
-  `25 files | +2 599 ï¿½??557 | Tier 2 standard | Moderate orchestration`
-  Lay summary: Rebuilt every list screen ï¿½?? claims, jobs, invoices, quotes, purchase orders, reports, and vendors ï¿½?? around a shared, consistent layout with the same filters, search, and table behaviour so the application feels like one coherent product.
+  `25 files | +2 599 �??557 | Tier 2 standard | Moderate orchestration`
+  Lay summary: Rebuilt every list screen �?? claims, jobs, invoices, quotes, purchase orders, reports, and vendors �?? around a shared, consistent layout with the same filters, search, and table behaviour so the application feels like one coherent product.
   **Unified list pages with shared filters and cleaner detail view.** Introduced a **shared list-filters component** used by every list screen so search, status, date, and other filter controls look and behave identically everywhere.
   Rebuilt the **list clients** for claims, jobs, invoices, quotes, purchase orders, reports, and vendors around a single consistent table-based layout, replacing the older mixed card-and-table approach.
   Retired the legacy **per-entity card components** (ClaimCard, InvoiceCard, JobCard, PurchaseOrderCard, QuoteCard, ReportCard) so there is one canonical presentation for list items, reducing visual drift and maintenance cost.
@@ -180,7 +180,7 @@
   Updated shared **API types** to support the unified filter surface across list screens.
 
 - `2026-04-23` `96dbedc` **2 h**
-  `45 files | +3 887 ï¿½??960 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  `45 files | +3 887 �??960 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Staff see a clearer job screen with organized tabs and sign-in pages that match the rest of the product.
   **Job detail workspace and refreshed sign-in experience.** Delivered a clearer job workspace with dedicated tabs for appointments, documents, messages, finances, parties, tasks, and job-type specifics so everything related to a job is easy to find.
   Modernized the sign-in, registration, and sign-out screens to match the product's visual standards and keep the first impression consistent with the main application.
@@ -190,7 +190,7 @@
   Captured the design approach in an implementation note for future maintenance and onboarding.
 
 - `2026-04-23` `762bed1` **5.5 h**
-  `39 files | +574 ï¿½??689 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  `39 files | +574 �??689 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: The product now appears under the new EnsureOS name and logo everywhere customers sign in and use the site, with a cleaner two-column sign-in layout.
   **Rebrand to EnsureOS with logos and unified auth layout.** Rolled out the **EnsureOS** name and **new brand artwork** across the public website, in-app navigation, and browser title areas so the experience reads as one product.
   Restyled **sign-in, registration, and sign-out** into a single card with **branding on the left** and the form on a clear white panel, matching the intended first-impression layout.
@@ -200,17 +200,17 @@
   Confirmed **type checks** on the touched applications after the layout and copy changes.
 
 - `2026-04-23` `d38ac0e` **5 h**
-  `62 files | +998 ï¿½??620 | Tier 2 standard | Moderate orchestration`
+  `62 files | +998 �??620 | Tier 2 standard | Moderate orchestration`
   Lay summary: Every list and detail screen now shares the same page header, the side navigation and shell were refreshed, and the request-routing piece was renamed in line with the framework update.
   **List/detail page header unification and request-routing rename.** Introduced a shared **list page header** and **set-page-header** building blocks and applied them consistently across claims, jobs, invoices, quotes, purchase orders, reports, vendors, and connections so every screen opens with the same title, breadcrumb, and action layout.
-  Refreshed the **application shell** ï¿½?? side navigation, top bar, layout wrapper, and breadcrumb provider ï¿½?? so navigation feels cohesive across the product.
+  Refreshed the **application shell** �?? side navigation, top bar, layout wrapper, and breadcrumb provider �?? so navigation feels cohesive across the product.
   Renamed the Next.js **middleware module to proxy** to match the current framework convention, keeping existing request-rewriting behaviour.
   Swapped in the new **EnsureOS logos and favicons** on both the public sign-in host and the main application for a consistent brand across tabs, headers, and sign-in panels.
   Tightened shared UI primitives (tabs and related components) used by the updated pages so the refreshed screens render cleanly.
   Aligned marketing and app layout entry points with the new shell so the site loads under the updated branding end to end.
 
 - `2026-04-23` `597f91a` **1 h**
-  `21 files | +496 ï¿½??270 | Tier 2 standard | Moderate orchestration`
+  `21 files | +496 �??270 | Tier 2 standard | Moderate orchestration`
   Lay summary: Staff can return to lists with one tap and see more consistent headers while browsing connections and other business records.
   **List and detail navigation polish across modules.** Extended shared list and detail headers so titles, breadcrumbs, and primary actions read the same way across claims, jobs, invoices, quotes, purchase orders, reports, vendors, and connections.
   Added a compact back control on detail screens so returning to the parent list is one clear step.
@@ -219,7 +219,7 @@
   Adjusted shared filters and vendor listing behaviour so screens stay predictable as users move between records.
 
 - `2026-04-24` `dd3cb04` **4.5 h**
-  `13 files | +1 719 ï¿½??419 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  `13 files | +1 719 �??419 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Expanded the internal reference that explains how each partner-system field lines up with our records for claims, jobs, quotes, and service orders, and adjusted the claim and job screens so those references are labelled correctly.
   **Extended Crunchwork field-mapping documentation and aligned claim/job detail labels.** Grew the internal mapping reference for **claims, jobs, quotes, and purchase orders** so every partner-system field has a clear home in our records, giving the team a single source of truth for integration work.
   Added dedicated mapping guides for **jobs, quotes, and purchase orders** alongside the existing claim mapping so the whole catalogue of tracked records is covered end-to-end.
@@ -229,18 +229,18 @@
   Tightened the shared **claim data shape** so downstream screens can read the newly-mapped fields without manual casting.
 
 - `2026-04-24` `ebbb86c` **6.5 h**
-  `15 files | +15 373 ï¿½??147 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  `15 files | +15 373 �??147 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   (Drizzle snapshot JSON accounts for ~13 700 of the insertions; hand-written delta is ~1 700 lines.)
   Lay summary: Aligned the stored data for quotes and service orders with the partner-system contract and expanded the on-screen detail pages so every field now has a named home, plus a small backend lookup for invoices tied to a job.
   **Schema alignment for quotes and purchase orders; quote / PO detail screens expanded; invoices-by-job lookup.** Added the missing structural pieces (external-reference keys, parent-cascade deletes, lookup links, child indexes) so quote groups, combos, items and purchase-order groups, combos, items match the partner-system contract end-to-end.
   Tightened duplicate-prevention on the core **quotes** and **purchase-orders** records so the same partner record cannot be ingested twice.
-  Reworked the **quote detail** and **purchase-order detail** screens to present every contract field ï¿½?? identity, parties, parent job and claim, service window, totals, adjustments, and payload fallback ï¿½?? in clearly labelled sections.
+  Reworked the **quote detail** and **purchase-order detail** screens to present every contract field �?? identity, parties, parent job and claim, service window, totals, adjustments, and payload fallback �?? in clearly labelled sections.
   Extended the shared frontend data shapes so the new screens read the enriched fields without manual casting.
   Added a backend endpoint for **invoices associated with a given job** so that view can surface them directly.
   Updated the internal mapping reference for quotes and purchase orders to show which parts are now schema-backed and which remain on the mapper backlog.
 
 - `2026-04-25` `99af045` **5.5 h**
-  `24 files | +1 292 ï¿½??719 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  `24 files | +1 292 �??719 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Refreshed the create-record pop-up used across the product and switched the connections list to a cleaner table view with consistent filtering and navigation.
   **Unified bottom form drawer across create flows, table-based connections, and detail polish.** Delivered a **new shared create-record pop-up** used everywhere in the product (appointments, jobs, messages, invoices, quotes, and reports) so every creation flow looks and behaves the same way.
   Rebuilt the **connections list** as a clean table with sort, search, and status-filter controls matching the rest of the product, replacing the older card-grid layout.
@@ -737,7 +737,7 @@
 
 
 - `2026-08-15` `bd5634d` **5 h**
-  `22 files | +1747 −379 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  `22 files | +1747 -379 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Quotes can be assigned to a person, and staff can add notes on RFQ line items while reviewing scope.
   Added assignee support on quotes so ownership is clear on the quote itself.
   Quote detail shows who is assigned and can fall back to the job assignee when needed.
@@ -747,8 +747,8 @@
   Outcome: clearer ownership on quotes and better context on RFQ line items.
 
 - `2026-08-16` `5813ec6` **78.5 h**
-  `224 files | +18269 −2990 | Tier 1 mechanical / Tier 2 standard / Tier 3 complex | Heavy orchestration`
-  Lay summary: Staff can install capability packs, reshape document templates with live transforms, and use a broader assistant toolkit—including field assessment skills—across the product.
+  `224 files | +18269 -2990 | Tier 1 mechanical / Tier 2 standard / Tier 3 complex | Heavy orchestration`
+  Lay summary: Staff can install capability packs, reshape document templates with live transforms, and use a broader assistant toolkit�including field assessment skills�across the product.
   Delivered installable capability packs so organisations can turn on agents and skills as packaged features.
   Added an admin screen to browse, inspect, and install packs without engineering changes.
   Built document-template transforms with preview, versioning, and merge-tag support so output can be shaped per document type.
@@ -758,7 +758,7 @@
   Outcome: packs, document transforms, and a wider assistant toolkit ready for day-to-day claims operations.
 
 - `2026-08-16` `a0b3619` **7.5 h**
-  `51 files | +4504 −192 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  `51 files | +4504 -192 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Staff can email RFQ packs to suppliers and review what was sent, including generated documents and delivery status.
   **Send RFQ requests to suppliers by email with a clear request history.** Staff can select recipients, customise the message, and send quotation requests from an RFQ.
   Each send is recorded as a request batch so the team can see who was contacted and when.
@@ -768,7 +768,7 @@
   Outcome: RFQ outreach is tracked end-to-end instead of living only in inboxes.
 
 - `2026-08-17` `0f43afb` **4.5 h**
-  `53 files | +2450 −400 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  `53 files | +2450 -400 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Staff can open tasks and appointments from the schedule and lists without leaving the page, and an admin account can be seeded for Ensure Construction.
   Added a shared side panel so tasks and appointments open in place from schedule, lists, and assistant actions.
   Schedule and dashboard links now open the matching task or appointment directly.
@@ -778,7 +778,7 @@
   Outcome: faster day-to-day navigation from calendar and lists, with cleaner admin bootstrap.
 
 - `2026-08-17` `659bb61` **0.5 h**
-  `3 files | +42 −7 | Tier 2 standard / Tier 3 complex | Light orchestration`
+  `3 files | +42 -7 | Tier 2 standard / Tier 3 complex | Light orchestration`
   Lay summary: Fixed a failed staging release by correcting task sync typing and recognising an email secret that was already in place.
   Corrected task sync typing so the API build and checks pass again.
   Told staging infrastructure to adopt the existing email API key secret instead of trying to create a duplicate.
@@ -787,7 +787,7 @@
   Outcome: staging pipeline can proceed again.
 
 - `2026-08-17` `3683461` **0.5 h**
-  `2 files | +19 −24 | Tier 2 standard | Light orchestration`
+  `2 files | +19 -24 | Tier 2 standard | Light orchestration`
   Lay summary: Fixed the sign-in service build so staging packaging succeeds after the admin seed script failed type checks.
   Updated the Ensure Construction admin seed to use the shared organisation helpers.
   Corrected password-identity updates so they match the database schema types.
@@ -795,7 +795,7 @@
   Outcome: auth service build unblocked for staging deploy.
 
 - `2026-08-17` `9369b43` **0 h**
-  `9 files | +227 −13 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  `9 files | +227 -13 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: After the first organisation exists, people can no longer create new organisations from public sign-up; they need an invitation.
   Closed public new-organisation signup once at least one organisation is on the system.
   Left an optional setting to force open or closed signup for testing or recovery.
@@ -804,7 +804,7 @@
   Invite-based joins to existing organisations remain available.
 
 - `2026-08-17` `e66ca52` **0 h**
-  `8 files | +486 −172 | Tier 2 standard | Light orchestration`
+  `8 files | +486 -172 | Tier 2 standard | Light orchestration`
   Lay summary: Password reset now returns people to sign-in correctly, and the app layout chrome was tightened.
   Fixed password-reset success and sign-in links so users are not sent to a broken login page.
   Kept the reset flow tied to the active sign-in session when one exists.
@@ -812,7 +812,7 @@
   Outcome: smoother password reset and cleaner app chrome (no charge).
 
 - `2026-08-17` `7ef3ece` **7.5 h**
-  `72 files | +4302 −3412 | Tier 2 standard / Tier 3 complex / Tier 4 deep | Heavy orchestration`
+  `72 files | +4302 -3412 | Tier 2 standard / Tier 3 complex / Tier 4 deep | Heavy orchestration`
   Lay summary: Unified how external updates land in the app, improved messages and schedule, and made connection health easier to see.
   Replaced the old per-entity external mappers with a single projection path for inbound updates.
   Added connection identifiers and webhook admin/sweep tooling so sync issues are easier to find and clear.
@@ -822,13 +822,13 @@
   Documented webhook projection unification and event-type coverage for operators and future work.
 
 - `2026-08-17` `2693c29` **0 h**
-  `1 files | +1 −1 | Tier 2 standard | Light orchestration`
+  `1 files | +1 -1 | Tier 2 standard | Light orchestration`
   Lay summary: Fixed a type error that was blocking the staging release build.
   Added the missing entity id on a skipped message projection result so typecheck passes.
   Outcome: CI can proceed to build and deploy again (no charge).
 
 - `2026-08-18` `3fdb697` **2 h**
-  `7 files | +384 −228 | Tier 2 standard | Moderate orchestration`
+  `7 files | +384 -228 | Tier 2 standard | Moderate orchestration`
   Lay summary: Journal pages are easier to scan and edit, with a clearer header, sticky tabs, and a simpler address form.
   Added a compact journal header with status, address, visit date, and linked job.
   Overview and entries tabs now keep their place in the URL so refresh and sharing stay on the same view.
@@ -837,13 +837,13 @@
   Outcome: smoother day-to-day journal review and data entry.
 
 - `2026-08-18` `0c1e76a` **0 h**
-  `1 files | +8 −1 | Tier 1 mechanical | Light orchestration`
+  `1 files | +8 -1 | Tier 1 mechanical | Light orchestration`
   Lay summary: Registered a missed database migration so staging can load connection identifiers for messages.
   Added the connection identifiers migration to the Drizzle journal so deploy migrators apply it.
   Outcome: staging can create the identifiers table and unblock message sync (no charge).
 
 - `2026-08-18` `cbf1941` **1 h**
-  `2 files | +68 −44 | Tier 3 complex / Tier 4 deep | Moderate orchestration`
+  `2 files | +68 -44 | Tier 3 complex / Tier 4 deep | Moderate orchestration`
   Lay summary: Webhook catch-up no longer gets stuck behind old unmatched events, so new messages and updates keep flowing.
   Processes ready webhook events before trying to match unmatched ones.
   Counts failed connection matches and parks events after a retry limit.
@@ -852,7 +852,7 @@
   Outcome: staging-style backlog starvation is much less likely to repeat.
 
 - `2026-08-19` `1da6d45` **8.5 h**
-  `72 files | +1921 −814 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
+  `72 files | +1921 -814 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
   Lay summary: Production can now be released the same way as staging, and staff get clearer messages, assessments, and side-by-side forms.
   **Brought production hosting in line with staging and improved day-to-day screens.**
   Release tags now build, check, and deploy the live environment with the same steps staging already uses.
@@ -863,7 +863,7 @@
   Updated the public hero image to match the current brand presentation.
 
 - `2026-08-19` `67dc756` **1 h**
-  `6 files | +95 −7 | Tier 3 complex | Moderate orchestration`
+  `6 files | +95 -7 | Tier 3 complex | Moderate orchestration`
   Lay summary: The live hosting pipeline can now manage production as well as staging, after the deployer account was given the right access.
   **Granted the automated deployer access to the production project.**
   The same trusted GitHub identity that already updates staging can now apply production infrastructure.
@@ -872,7 +872,7 @@
   Outcome: production Terraform apply can proceed instead of failing with permission errors.
 
 - `2026-08-19` `f068e34` **1 h**
-  `16 files | +469 −112 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  `16 files | +469 -112 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: The catalogue side panel is back to its original width, and room groups now appear for existing customers on staging and production.
   **Restored the catalogue panel and filled in missing room groups for hosted environments.**
   The catalogue drawer is back to its original compact width so the quote stays visible beside it.
@@ -881,7 +881,7 @@
   Outcome: staff can drag room groups onto quotes in both hosted environments.
 
 - `2026-08-19` `2a4f0de` **0.5 h**
-  `91 files | +3936 −89 | Tier 2 standard | Light orchestration`
+  `91 files | +3936 -89 | Tier 2 standard | Light orchestration`
   Lay summary: Partner systems now hear about job changes, quote lines can be reordered, and builder workflow guides are filed in one place.
   **Sent job updates to partner systems, tidied job and quote screens, and filed builder workflow guides.**
   Jobs, quotes, tasks, appointments, and purchase orders now notify the partner workflow when they change.
@@ -890,7 +890,7 @@
   Sample flood, fire, and roof-leak job photos and notes were added for training and walkthroughs.
 
 - `2026-08-22` `e380aed` **48 h**
-  `430 files | +32892 −4797 | Tier 2 standard / Tier 3 complex / Tier 4 deep integration | Heavy orchestration`
+  `430 files | +32892 -4797 | Tier 2 standard / Tier 3 complex / Tier 4 deep integration | Heavy orchestration`
   Lay summary: Staff can build reports from live job data, manage the product catalogue in chat, see a history of changes on each record, and run builder assessment, make-safe, and repair jobs with less manual follow-up.
   **Catalogue, reports, activity history, and builder job workflows in one delivery.**
   Staff can import and edit catalogue items, assemblies, and bills of materials, and ask the in-product assistant for help with those tasks.
@@ -901,7 +901,7 @@
   Task types, work-order details, and stronger sign-in complete the day-to-day operating set.
 
 - `2026-08-23` `eb768f2` **12 h**
-  `168 files | +6662 −3232 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  `168 files | +6662 -3232 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Every entity now has its own reference number, contacts have a dedicated detail screen, quote lines can be grouped and edited in place, and document output includes richer project and financial data.
   **Record numbers, contact management, document transforms, and quote line-items.**
   Every job, quote, task, and purchase order now receives a sequential reference number automatically.
@@ -918,7 +918,7 @@
   **test(api): expect three providers in registry summary.** Update providers findAll spec for the more0-ensure registry entry introduced alongside the direct provider.
 
 - `2026-08-24` `d63704b` **12 h**
-  `93 files | +8465 −5927 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
+  `93 files | +8465 -5927 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
   Lay summary: Quote and related line lists are easier to group and edit, invoices print from a proper template, and the people on a job go through to the partner system.
   **Rebuilt line-item editing and invoice documents, and sent job contacts to the partner system.**
   Staff can group, search, reorder, and edit quote and catalogue lines in place, with totals, notes, and drag-and-drop from the catalogue.
@@ -929,7 +929,7 @@
   Document output and partner updates stay in step with the latest line groups, parties, and job dates.
 
 - `2026-08-24` `ae090b1` **1 h**
-  `9 files | +116 −49 | Tier 2 standard | Moderate orchestration`
+  `9 files | +116 -49 | Tier 2 standard | Moderate orchestration`
   Lay summary: Quote and catalogue line edits now stay on screen and save correctly, including when several lines are changed together.
   **Fixed quote and catalogue line editing so typed changes stay visible and actually save.**
   Staff can edit names, quantities, costs, and related fields on quote and catalogue lines and see those values on screen immediately.
@@ -938,7 +938,7 @@
   The same behaviour applies on the catalogue line list as on quotes.
 
 - `2026-08-25` `1021abc` **4.5 h**
-  `16 files | +550 −55 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  `16 files | +550 -55 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Jobs from the partner system that share the same insurer reference now use one internal job number, and the claims list shows linked jobs more clearly.
   **Aligned internal job numbers and improved claims list job visibility.**
   Partner jobs that share an insurer reference (e.g. Make Safe and Builder Works under the same cc: number) now receive the same internal job number instead of each getting a new one.
@@ -949,7 +949,7 @@
   Job overview and shared label helpers surface the insurer reference consistently, separate from the partner system's own job identifier.
 
 - `2026-08-26` `0e70cad` **10 h**
-  `111 files | +4101 −3266 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  `111 files | +4101 -3266 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Record pages now share a consistent header and action bar, task types are built in instead of configured separately, and jobs and line-item editing work more smoothly.
   **Unified detail-page headers and simplified task types across the product.**
   Quotes, invoices, jobs, claims, and other record screens now use the same header layout with consistent save, print, publish, and archive actions.
@@ -960,7 +960,7 @@
   Automated tests cover task types, line-item sync, purchase-order transforms, and invoice publish helpers.
 
 - `2026-08-26` `c865a25` **6 h**
-  `19 files | +897 −17 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  `19 files | +897 -17 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Incoming partner claims now show the right type and status, and hosted environments use the same item catalogue so product codes match.
   **Partner claims show real types and statuses, and hosted sites load the current item catalogue.**
   Incoming claims recognise partner statuses and loss types instead of appearing as Unknown.
@@ -970,7 +970,7 @@
   Each release applies the catalogue and claim-label updates automatically after deploy.
 
 - `2026-08-26` `fcff4e5` **0.5 h**
-  `3 files | +37 −28 | Tier 3 complex | Light orchestration`
+  `3 files | +37 -28 | Tier 3 complex | Light orchestration`
   Lay summary: A failed hosted release is corrected so claim labels and the product catalogue still update automatically after deploy.
   **Fixed the post-deploy update so hosted environments finish loading claim labels and the item catalogue.**
   The automatic update after a release no longer stops with an error before it finishes.
@@ -979,7 +979,7 @@
   Staff keep seeing the right claim list and matching product codes after the next release.
 
 - `2026-08-26` `3cec069` **0.5 h**
-  `6 files | +115 −8 | Tier 3 complex | Light orchestration`
+  `6 files | +115 -8 | Tier 3 complex | Light orchestration`
   Lay summary: Ensure catalogue product lines can be sent to the insurer again on the hosted site.
   **Tagged Ensure catalogue product lines so they can be sent to the insurer.**
   Hosted releases apply that tagging automatically after each deploy.
@@ -988,7 +988,7 @@
   Grouping lines stay internal-only, as intended.
 
 - `2026-08-26` `3b01a08` **0.5 h**
-  `4 files | +141 −116 | Tier 2 standard | Light orchestration`
+  `4 files | +141 -116 | Tier 2 standard | Light orchestration`
   Lay summary: Fixed the hosted claims list so it opens reliably instead of showing an error on first load.
   **Restored the hosted claims list after a server-side rendering failure.**
   Diagnosed the staging error blocking the claims list on first load.
@@ -997,7 +997,7 @@
   Staging can load the full claims list on refresh and direct navigation again.
 
 - `2026-08-26` `456d168` **4 h**
-  `62 files | +749 −111 | Tier 2 standard | Moderate orchestration`
+  `62 files | +749 -111 | Tier 2 standard | Moderate orchestration`
   Lay summary: Job lists now show the job type next to the job number, screens prefer the internal job number, and save status no longer crowds the header.
   **Clearer job labels on lists, and a save status that no longer crowds the header.**
   Record lists now show the job type next to the internal job number in the same link to the job.
@@ -1007,7 +1007,7 @@
   Catalogue drag-and-drop onto line items is more reliable.
 
 - `2026-08-26` `4737f13` **2 h**
-  `15 files | +699 −50 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  `15 files | +699 -50 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Opening a job now shows how many related records sit behind each menu item, the schedule labels jobs more clearly, and the tasks list stays reliable when filters change.
   **Job-aware navigation counts, clearer schedule job labels, and a more reliable tasks list.**
   While a job is open, the side menu shows a count next to each related area that already has records.
@@ -1017,7 +1017,7 @@
   These updates apply on the website after the next release.
 
 - `2026-08-27` `3a58387` **8 h**
-  `60 files | +3071 −327 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  `60 files | +3071 -327 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Staff can update the catalogue from an estimate, invoices send more reliably to the insurer, and lists show clearer record numbers.
   **Catalogue updates from estimates, more reliable insurer invoicing, and clearer record labels.**
   Organisation admins can choose whether saving an estimate also updates matching catalogue items, either after a prompt or automatically.
@@ -1027,7 +1027,7 @@
   The same insurer record can no longer create two work orders from one purchase order.
 
 - `2026-08-30` `08515fe` **16 h**
-  `151 files | +5 029 −1 989 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
+  `151 files | +5 029 -1 989 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
   Lay summary: Jobs, tasks, and appointments now show whether they have reached the insurer, the in-app assistant follows the page and assessment section you are on, and printing and sign-in are more reliable.
   **Insurer sync status across jobs, tasks, and appointments, plus a page-aware in-app assistant.**
   Staff can see when a job, task, or appointment is still sending, has arrived, or failed to reach the insurer, and failed sends retry automatically.
@@ -1038,7 +1038,7 @@
   Unused hosting access was removed so insurer webhook and cloud services use a simpler, tighter setup.
 
 - `2026-08-30` `ebdb1f1` **0.5 h**
-  `3 files | +25 −13 | Tier 2 standard | Light orchestration`
+  `3 files | +25 -13 | Tier 2 standard | Light orchestration`
   Lay summary: Fixed a release check so the latest updates can go live on the hosted site.
   **Unblocked the hosted release after a type-check failure.**
   Corrected how existing tasks are passed when records sync from the insurer.
@@ -1047,7 +1047,7 @@
   The hosted site can pick up the latest job, task, appointment, and assistant updates.
 
 - `2026-08-31` `a63652b` **9 h**
-  `144 files | +16 996 −293 | Tier 1 mechanical / Tier 2 standard / Tier 3 complex | Heavy orchestration`
+  `144 files | +16 996 -293 | Tier 1 mechanical / Tier 2 standard / Tier 3 complex | Heavy orchestration`
   Lay summary: Staff can open in-product help for the page they are on, manage catalogues more easily, and see clearer details on estimate line items.
   **In-product help, catalogue management, and clearer line-item details.**
   Staff can press help on a page or ask in chat and open a matching guide beside the conversation, with search across the full help set.
@@ -1058,7 +1058,7 @@
   Help documents are stored so they can be searched and opened the same way for every organisation.
 
 - `2026-08-31` `ab6616b` **3 h**
-  `55 files | +2891 −465 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
+  `55 files | +2891 -465 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
   Lay summary: Catalogues can now be exported and re-imported without losing structure, and staging receives the same agents, skills, and help content as new sign-ups.
   **Lossless catalogue round-trip and staging seed parity.**
   Catalogue export now captures item IDs, hierarchy, source references, quantities, and metadata so they survive a re-import into the same or a different environment.
@@ -1068,7 +1068,7 @@
   The help-guide ingestion job is created in staging infrastructure and deployment fails clearly if it is missing.
 
 - `2026-08-31` `a01f553` **0.5 h**
-  `2 files | +12 −12 | Tier 2 standard | Light orchestration`
+  `2 files | +12 -12 | Tier 2 standard | Light orchestration`
   Lay summary: Fixed a release check so the latest updates can go live on the hosted site.
   **Unblocked the hosted release after a type-check failure.**
   Corrected how journal image generation reads AI configuration so the release checks pass.
@@ -1076,7 +1076,7 @@
   The hosted site can pick up catalogue round-trip, seed parity, and journal updates.
 
 - `2026-08-31` `26884bf` **4.5 h**
-  `29 files | +746 −129 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  `29 files | +746 -129 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Printed reports can be downloaded on the hosted site, insurer updates process more reliably, and site-walk notes and photos stay on one cause of damage.
   **Printed reports, insurer update processing, and site-walk photos.**
   Printed reports download even when a direct file link cannot be created, and larger reports have more time to turn into PDFs.
@@ -1086,7 +1086,7 @@
   The assessment helper is set to the current hosted model.
 
 - `2026-09-01` `9e86be7` **4 h**
-  `38 files | +1 767 −259 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  `38 files | +1 767 -259 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Staff can capture a real site inspection in chat, upload photos into the right project folder, and review those images while writing journal notes.
   **Site-inspection journals with photo upload and project folder mapping.**
   Staff can run a site inspection in chat: the assistant interviews them, stores photos in the chosen project folder, and records each topic as a journal entry.
@@ -1097,7 +1097,7 @@
 
 
 - `2026-09-03` `PENDING` **18 h**
-  `168 files | +11 322 −1 955 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
+  `168 files | +11 322 -1 955 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
   Lay summary: Staff can issue purchase orders in batches, focus lists on their own work, track bill lines against the job, and assign work orders to people.
   **Purchase-order issue batches, personal list views, and bill line progress.**
   Purchase orders can be prepared and sent in batches, with email wording and a clear record of what was issued.
