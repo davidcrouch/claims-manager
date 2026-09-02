@@ -1115,7 +1115,7 @@
   Confirmed the application type-check succeeds locally.
   The hosted site can pick up purchase-order issue batches, personal list views, and related updates.
 
-- `2026-09-03` `TBDSHA0` **0.5 h**
+- `2026-09-03` `13556fa` **0.5 h**
   `9 files | +323 −73 | Tier 2 standard / Tier 3 complex | Light orchestration`
   Lay summary: The dashboard All and My Work switch now correctly shows only work assigned to the person signed in.
   **Fixed dashboard My Work filtering for the signed-in user.**
