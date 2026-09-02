@@ -10,7 +10,7 @@ export function parseWorkOrdersListTab(param: string | null | undefined): WorkOr
   return parseMineArchiveListTab(param);
 }
 
-export function isWorkOrdersMineTab(tab: WorkOrdersListTab): boolean {
+export function isWorkOrdersMineTab(tab: WorkOrdersListTab): tab is 'mine' {
   return tab === 'mine';
 }
 

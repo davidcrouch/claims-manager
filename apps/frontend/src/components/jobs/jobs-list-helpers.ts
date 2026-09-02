@@ -47,7 +47,7 @@ export function parseJobsListTab(param: string | null | undefined): JobsListTab 
 }
 
 /** True when the list should scope to the logged-in user's assigned jobs. */
-export function isJobsMineTab(tab: JobsListTab): boolean {
+export function isJobsMineTab(tab: JobsListTab): tab is 'mine' {
   return tab === 'mine';
 }
 

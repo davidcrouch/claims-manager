@@ -10,7 +10,7 @@ export function parseQuotesListTab(param: string | null | undefined): QuotesList
   return parseMineArchiveListTab(param);
 }
 
-export function isQuotesMineTab(tab: QuotesListTab): boolean {
+export function isQuotesMineTab(tab: QuotesListTab): tab is 'mine' {
   return tab === 'mine';
 }
 

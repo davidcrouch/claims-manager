@@ -12,7 +12,7 @@ export function parseClaimsListTab(param: string | null | undefined): ClaimsList
   return parseMineArchiveListTab(param, 'active');
 }
 
-export function isClaimsMineTab(tab: ClaimsListTab): boolean {
+export function isClaimsMineTab(tab: ClaimsListTab): tab is 'mine' {
   return isMineListTab(tab);
 }
 

@@ -1106,3 +1106,11 @@
   Work orders can be assigned to a team member, and estimate groups can record which building component they cover.
   Catalogue selection and line-item editing are clearer, including scope status on lines.
   Hosting is updated so related services can call each other securely in staging and production.
+
+- `2026-09-03` `PENDING` **0.5 h**
+  `4 files | +4 −4 | Tier 2 standard | Light orchestration`
+  Lay summary: Fixed a release check so the latest list and purchase-order updates can go live on the hosted site.
+  **Unblocked the hosted release after a type-check failure.**
+  Corrected how "my items" list tabs are recognised so the release build passes.
+  Confirmed the application type-check succeeds locally.
+  The hosted site can pick up purchase-order issue batches, personal list views, and related updates.
