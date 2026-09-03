@@ -1,4 +1,4 @@
-﻿ï»¿# Work hours tracking
+ï»¿# Work hours tracking
 
 ## Entries
 
@@ -1125,7 +1125,7 @@
   Claims Mine also recognises assignees by email when a user link was missing.
   Staging will pick up the fix after this release.
 
-- `2026-09-03` `pending` **8 h**
+- `2026-09-03` `15671f4` **8 h**
   `65 files | +4 886 −845 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
   Lay summary: Job screens follow clear rules by job type and provider, so forms show the right fields, and invoices and catalogue picks work more smoothly.
   **Job-kind capabilities, form improvements, and catalogue alignment.**
