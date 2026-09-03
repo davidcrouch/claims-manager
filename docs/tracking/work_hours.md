@@ -1135,7 +1135,7 @@
   Catalogue bill-of-materials adds confirm what will be included before lines are created.
   Estimate publish and outbound sync follow the same rules; the capabilities framework is documented for future job kinds.
 
-- `2026-09-03` `pending` **0.5 h**
+- `2026-09-03` `fb8df93` **0.5 h**
   `1 file | +6 −1 | Tier 2 standard | Light orchestration`
   Lay summary: Fixed a release check so the latest job and form updates can go live on the hosted site.
   **Unblocked the hosted release after a type-check failure.**
