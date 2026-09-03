@@ -1134,3 +1134,12 @@
   Creating and editing jobs, invoices, and contacts is clearer, including claim picking and invoice line progress.
   Catalogue bill-of-materials adds confirm what will be included before lines are created.
   Estimate publish and outbound sync follow the same rules; the capabilities framework is documented for future job kinds.
+
+- `2026-09-03` `pending` **0.5 h**
+  `1 file | +6 −1 | Tier 2 standard | Light orchestration`
+  Lay summary: Fixed a release check so the latest job and form updates can go live on the hosted site.
+  **Unblocked the hosted release after a type-check failure.**
+  Imported the missing chat message part type used when saving assistant replies.
+  Confirmed the application type-check succeeds locally.
+  The hosted site can pick up job-kind capabilities and related form updates.
+  No change to end-user behaviour beyond enabling the release.

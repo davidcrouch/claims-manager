@@ -47,7 +47,12 @@ import {
   createActivateSkillTool,
 } from './stream/skill-activation';
 import type { SSEEvent } from './stream/types';
-import type { ChatMessage, PageContext, StreamChatParams } from './ai-chat.types';
+import type {
+  ChatMessage,
+  ChatMessagePart,
+  PageContext,
+  StreamChatParams,
+} from './ai-chat.types';
 import { resolvePageContextBlock, type PageDataFetcher } from './page-context';
 import { DocumentGenerationService } from '../document-generation/document-generation.service';
 import { GuideService } from '../guides/guide.service';
