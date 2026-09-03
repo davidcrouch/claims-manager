@@ -210,7 +210,31 @@ export class OutboundWorkerService implements OnModuleInit, OnModuleDestroy {
       case 'invoice': {
         const patch: Record<string, unknown> = { syncStatus: 'synced', updatedAt: now };
         if (result.externalReference) patch.sourceExternalReference = result.externalReference;
-        if (result.responsePayload) patch.invoicePayload = result.responsePayload;
+        if (result.responsePayload) {
+          const [existing] = await this.db
+            .select({ invoicePayload: invoices.invoicePayload })
+            .from(invoices)
+            .where(eq(invoices.id, record.entityId))
+            .limit(1);
+          const prior =
+            existing?.invoicePayload &&
+            typeof existing.invoicePayload === 'object' &&
+            !Array.isArray(existing.invoicePayload)
+              ? (existing.invoicePayload as Record<string, unknown>)
+              : {};
+          const response = result.responsePayload as Record<string, unknown>;
+          patch.invoicePayload = {
+            ...response,
+            ...(prior.workOrderId != null ? { workOrderId: prior.workOrderId } : {}),
+            ...(prior.purchaseOrderId != null
+              ? { purchaseOrderId: prior.purchaseOrderId }
+              : {}),
+            ...(prior.dueDate != null ? { dueDate: prior.dueDate } : {}),
+            ...(prior.invoicedAmounts != null
+              ? { invoicedAmounts: prior.invoicedAmounts }
+              : {}),
+          };
+        }
         await this.db.update(invoices).set(patch).where(eq(invoices.id, record.entityId));
         break;
       }

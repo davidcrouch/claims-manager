@@ -43,6 +43,7 @@ import {
   type InvoicePublishMode,
 } from '@/components/invoices/InvoicePublishWizard';
 import { SyncStatusIndicator } from '@/components/shared/SyncStatusIndicator';
+import { useJobCaps } from '@/hooks/useJobCaps';
 
 // ---------- header ----------------------------------------------------------
 
@@ -59,11 +60,11 @@ export function InvoicePageHeader({
   workOrder?: WorkOrder | null;
   purchaseOrder?: PurchaseOrder | null;
 }) {
+  const caps = useJobCaps(job);
   const [publishWizardOpen, setPublishWizardOpen] = useState(false);
   const statusName = invoice.status?.name ?? 'Unknown';
   const canPublish = !invoice.sourceExternalReference;
-  const publishMode: InvoicePublishMode =
-    job?.provider === 'crunchwork' ? 'external' : 'internal';
+  const publishMode: InvoicePublishMode = caps.publishMode === 'external' ? 'external' : 'internal';
   const titles = entityDetailHeaderTitles({
     internalNumber: invoice.internalNumber,
     secondaryLabel: invoice.invoiceNumber,

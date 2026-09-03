@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { getSession, getAccessToken } from '@/lib/auth';
 import { createApiClient, ApiError } from '@/lib/api-client';
+import { canUpdateCatalogFromEstimate } from '@/lib/permissions';
 import type { PaginatedResponse, Quote, Attachment, QuotePartyPayload, LineItemsPageQuery } from '@/types/api';
 
 async function getApi() {
@@ -204,21 +205,26 @@ export async function addCatalogItemToQuoteAction(params: {
   quantity: string;
   groupId?: string;
   quoteComboId?: string;
-}): Promise<{ success: boolean; error?: string }> {
+  addToCatalogAssembly?: boolean;
+}): Promise<{ success: boolean; addedToCatalog?: boolean; error?: string }> {
   const api = await getApi();
   if (!api) return { success: false, error: 'Not authenticated' };
 
   try {
     const groupId = await resolveQuoteGroupId(api, params.quoteId, params.groupId);
-    await api.addCatalogItemToQuote({
+    const result = (await api.addCatalogItemToQuote({
       quoteId: params.quoteId,
       groupId,
       catalogItemId: params.catalogItemId,
       quantity: params.quantity,
       quoteComboId: params.quoteComboId,
-    });
+      addToCatalogAssembly: params.addToCatalogAssembly,
+    })) as { addedToCatalog?: boolean } | null;
     revalidatePath(`/quotes/${params.quoteId}`);
-    return { success: true };
+    if (params.addToCatalogAssembly) {
+      revalidatePath('/admin/catalog');
+    }
+    return { success: true, addedToCatalog: result?.addedToCatalog === true };
   } catch (err) {
     console.error('[quotes/actions.addCatalogItemToQuoteAction]', err);
     return {
@@ -234,26 +240,62 @@ export async function addCatalogAssemblyToQuoteAction(params: {
   quantity: string;
   groupId?: string;
   quoteComboId?: string;
-}): Promise<{ success: boolean; error?: string }> {
+  addToCatalogAssembly?: boolean;
+}): Promise<{ success: boolean; addedToCatalog?: boolean; error?: string }> {
   const api = await getApi();
   if (!api) return { success: false, error: 'Not authenticated' };
 
   try {
     const groupId = await resolveQuoteGroupId(api, params.quoteId, params.groupId);
-    await api.addCatalogAssemblyToQuote({
+    const result = (await api.addCatalogAssemblyToQuote({
       quoteId: params.quoteId,
       groupId,
       catalogAssemblyId: params.catalogAssemblyId,
       quantity: params.quantity,
       quoteComboId: params.quoteComboId,
-    });
+      addToCatalogAssembly: params.addToCatalogAssembly,
+    })) as { addedToCatalog?: boolean } | null;
     revalidatePath(`/quotes/${params.quoteId}`);
-    return { success: true };
+    if (params.addToCatalogAssembly) {
+      revalidatePath('/admin/catalog');
+    }
+    return { success: true, addedToCatalog: result?.addedToCatalog === true };
   } catch (err) {
     console.error('[quotes/actions.addCatalogAssemblyToQuoteAction]', err);
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to add assembly',
+    };
+  }
+}
+
+export async function addCatalogBomFromEstimateAction(params: {
+  quoteId: string;
+  parentQuoteComboId: string;
+  catalogComponentId: string;
+  quantity: string;
+}): Promise<{ success: boolean; added?: boolean; error?: string }> {
+  const PREFIX = 'quotes/actions.addCatalogBomFromEstimateAction';
+  const session = await getSession();
+  if (!session.authenticated) return { success: false, error: 'Not authenticated' };
+  if (!canUpdateCatalogFromEstimate(session.identity?.permissions)) {
+    console.warn(`${PREFIX} — missing catalogue-from-estimate permission`);
+    return { success: false, error: 'You do not have permission to update catalogue items from an estimate' };
+  }
+
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+
+  try {
+    const result = await api.addCatalogBomFromEstimate(params);
+    revalidatePath(`/quotes/${params.quoteId}`);
+    revalidatePath('/admin/catalog');
+    return { success: true, added: result.added };
+  } catch (err) {
+    console.error(`[${PREFIX}]`, err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to update catalogue BOM',
     };
   }
 }

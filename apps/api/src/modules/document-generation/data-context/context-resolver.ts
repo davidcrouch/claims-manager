@@ -391,7 +391,9 @@ export class ContextResolver {
         .map((id) => lookupNames.get(id) ?? '')
         .filter((name) => name.length > 0);
       const normalized = typeNames.map((name) => name.toLowerCase());
-      const isInsured = normalized.includes('insured');
+      const isInsured = normalized.some(
+        (name) => name === 'insured' || name === 'customer',
+      );
       const isTenant = normalized.some(
         (name) => name === 'tenant' || name === 'occupant',
       );

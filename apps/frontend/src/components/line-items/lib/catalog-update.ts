@@ -114,3 +114,28 @@ export function collectCatalogSourceUpdates(
 
   return [...byCatalogId.values()];
 }
+
+/**
+ * Resolve the catalogue source id for an estimate combo/scope used as a drop
+ * parent. Returns undefined when the parent is estimate-only (no catalogue link).
+ */
+export function resolveParentCatalogLink(
+  groups: ApiGroup[],
+  quoteComboId: string,
+): { catalogId: string; label: string } | undefined {
+  const asCombo = findCombo(groups, quoteComboId);
+  if (asCombo?.catalogComboId) {
+    return {
+      catalogId: asCombo.catalogComboId,
+      label: asCombo.name ?? 'Assembly',
+    };
+  }
+  const asScope = findScope(groups, quoteComboId);
+  if (asScope?.catalogScopeId) {
+    return {
+      catalogId: asScope.catalogScopeId,
+      label: asScope.name ?? 'Scope',
+    };
+  }
+  return undefined;
+}

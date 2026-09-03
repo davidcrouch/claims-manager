@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestj
 import { CatalogSelectionService } from '../catalog/services/catalog-selection.service';
 import { parseLineItemsPageQuery } from '../catalog/line-items-page';
 import { CatalogMismatchService } from '../catalog/services/catalog-mismatch.service';
-import { AddCatalogAssemblyDto, AddCatalogPrimitiveDto } from '../catalog/dto/catalog.dto';
+import { AddCatalogAssemblyDto, AddCatalogBomFromEstimateDto, AddCatalogPrimitiveDto } from '../catalog/dto/catalog.dto';
 import { CreateQuoteGroupDto, UpdateQuoteGroupDto, ReorderQuoteGroupsDto, UpdateQuoteLineItemsDto, ReorderLineItemsDto, MoveLineItemDto, DuplicateLineItemDto } from './dto/quote-group.dto';
 import { QuotesService } from './quotes.service';
 import { ManualCaptureService, type CaptureEstimateDto } from '../domain/services/manual-capture.service';
@@ -327,6 +327,7 @@ export class QuotesController {
       quoteComboId: body.quoteComboId,
       catalogItemId: body.catalogItemId,
       quantity: body.quantity,
+      addToCatalogAssembly: body.addToCatalogAssembly === true,
     });
   }
 
@@ -343,6 +344,21 @@ export class QuotesController {
       catalogAssemblyId: body.catalogAssemblyId,
       quantity: body.quantity,
       parentComboId: body.quoteComboId,
+      addToCatalogAssembly: body.addToCatalogAssembly === true,
+    });
+  }
+
+  @Post(':quoteId/catalog-bom')
+  @RequirePermission(P.procurement.manage)
+  async addCatalogBomFromEstimate(
+    @Param('quoteId') quoteId: string,
+    @Body() body: AddCatalogBomFromEstimateDto,
+  ) {
+    await this.quotesService.assertQuoteEditable({ id: quoteId });
+    return this.catalogSelectionService.addCatalogBomFromEstimateParent({
+      parentQuoteComboId: body.parentQuoteComboId,
+      catalogComponentId: body.catalogComponentId,
+      quantity: body.quantity,
     });
   }
 

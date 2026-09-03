@@ -23,6 +23,7 @@ export class ContactsController {
       notes?: string;
       typeLookupId?: string;
       typeLookupIds?: string[];
+      address?: Record<string, unknown> | null;
     },
   ) {
     return this.contactsService.create(body);
@@ -161,6 +162,7 @@ export class ContactsController {
       notes?: string;
       typeLookupId?: string;
       typeLookupIds?: string[];
+      address?: Record<string, unknown> | null;
     },
   ) {
     return this.contactsService.update({ id, ...body });

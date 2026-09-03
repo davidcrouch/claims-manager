@@ -28,6 +28,7 @@ import {
 } from '../../../database/schema';
 import { TenantContext } from '../../../tenant/tenant-context';
 import {
+  bomComponentRuleMessage,
   buildComboPayload,
   buildItemSnapshotFields,
   catalogItemAllowsProvider,
@@ -35,6 +36,7 @@ import {
   copyUnitCostToBuyCostForCrunchwork,
   formatDecimal,
   hoistProviderCombos,
+  isAllowedBomComponent,
   isCatalogBomParentKind,
   isPercentMarkupType,
   isScopeComboPayload,
@@ -105,11 +107,135 @@ export class CatalogSelectionService {
     return this.tenantContext.getTenantId();
   }
 
+  /**
+   * When estimate Update Mode write-back is requested, add the dropped catalogue
+   * item under the parent combo/scope's linked catalogue BOM (if any).
+   * Best-effort: skips when already present or parent has no catalogue link.
+   */
+  private async tryAddToParentCatalogBom(params: {
+    parentQuoteComboId: string;
+    catalogComponentId: string;
+    quantity: string;
+  }): Promise<boolean> {
+    const logPrefix = 'CatalogSelectionService.tryAddToParentCatalogBom';
+    const tenantId = this.getTenantId();
+
+    const [parent] = await this.db
+      .select({ catalogComboId: quoteCombos.catalogComboId })
+      .from(quoteCombos)
+      .where(
+        and(
+          eq(quoteCombos.id, params.parentQuoteComboId),
+          eq(quoteCombos.tenantId, tenantId),
+          isNull(quoteCombos.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    const assemblyId = parent?.catalogComboId;
+    if (!assemblyId) {
+      this.logger.debug(`${logPrefix} — parent ${params.parentQuoteComboId} has no catalogue link`);
+      return false;
+    }
+
+    return this.addCatalogBomComponent({
+      assemblyId,
+      catalogComponentId: params.catalogComponentId,
+      quantity: params.quantity,
+    });
+  }
+
+  /**
+   * Add a catalogue BOM component under a linked parent. Idempotent when the
+   * component is already present. Throws on invalid hierarchy / cycles.
+   */
+  async addCatalogBomComponent(params: {
+    assemblyId: string;
+    catalogComponentId: string;
+    quantity: string;
+  }): Promise<boolean> {
+    const logPrefix = 'CatalogSelectionService.addCatalogBomComponent';
+    const tenantId = this.getTenantId();
+
+    const assembly = await this.itemsRepo.findById({
+      tenantId,
+      id: params.assemblyId,
+    });
+    if (!assembly || !isCatalogBomParentKind(assembly.kind)) {
+      throw new BadRequestException('Target must be an assembly or scope');
+    }
+
+    const component = await this.itemsRepo.findById({
+      tenantId,
+      id: params.catalogComponentId,
+    });
+    if (!component) throw new NotFoundException('Catalogue component not found');
+    if (!isAllowedBomComponent(assembly.kind, component.kind)) {
+      throw new BadRequestException(
+        bomComponentRuleMessage(assembly.kind, component.kind),
+      );
+    }
+
+    const existing = await this.bomRepo.findByAssemblyId({
+      tenantId,
+      assemblyId: params.assemblyId,
+    });
+    if (existing.some((line) => line.componentId === params.catalogComponentId)) {
+      this.logger.debug(
+        `${logPrefix} — ${params.catalogComponentId} already under ${params.assemblyId}`,
+      );
+      return false;
+    }
+
+    const cycle = await this.bomRepo.wouldCreateCycle({
+      tenantId,
+      assemblyId: params.assemblyId,
+      componentId: params.catalogComponentId,
+    });
+    if (cycle) {
+      throw new BadRequestException('BOM change would create a circular reference');
+    }
+
+    await this.bomRepo.create({
+      tenantId,
+      data: {
+        assemblyId: params.assemblyId,
+        componentId: params.catalogComponentId,
+        quantity: params.quantity,
+        wasteFactor: '1',
+        sortIndex: existing.length,
+        isOptional: false,
+      },
+    });
+    await this.pricingService.refreshComputedCost({
+      tenantId,
+      assemblyId: params.assemblyId,
+    });
+    this.logger.log(
+      `${logPrefix} — nested ${params.catalogComponentId} under ${params.assemblyId}`,
+    );
+    return true;
+  }
+
+  /**
+   * Prompt-mode write-back: add a catalogue BOM line using the estimate parent
+   * combo/scope as the link to the source catalogue item.
+   */
+  async addCatalogBomFromEstimateParent(params: {
+    parentQuoteComboId: string;
+    catalogComponentId: string;
+    quantity: string;
+  }): Promise<{ added: boolean }> {
+    const added = await this.tryAddToParentCatalogBom(params);
+    return { added };
+  }
+
   async addPrimitiveToQuote(params: {
     quoteGroupId?: string;
     quoteComboId?: string;
     catalogItemId: string;
     quantity: string;
+    addToCatalogAssembly?: boolean;
   }) {
     if (!params.quoteGroupId && !params.quoteComboId) {
       throw new BadRequestException('quoteGroupId or quoteComboId is required');
@@ -155,6 +281,7 @@ export class CatalogSelectionService {
         catalogAssemblyId: catalogItem.id,
         quantity: params.quantity,
         parentComboId: params.quoteComboId,
+        addToCatalogAssembly: params.addToCatalogAssembly,
       });
     }
 
@@ -182,7 +309,23 @@ export class CatalogSelectionService {
       })
       .returning();
 
-    return row;
+    let addedToCatalog = false;
+    if (params.addToCatalogAssembly && params.quoteComboId) {
+      try {
+        addedToCatalog = await this.tryAddToParentCatalogBom({
+          parentQuoteComboId: params.quoteComboId,
+          catalogComponentId: params.catalogItemId,
+          quantity: params.quantity,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `CatalogSelectionService.addPrimitiveToQuote — catalogue BOM write-back failed`,
+          err,
+        );
+      }
+    }
+
+    return { ...row, addedToCatalog };
   }
 
   async addAssemblyToQuote(params: {
@@ -190,6 +333,7 @@ export class CatalogSelectionService {
     catalogAssemblyId: string;
     quantity: string;
     parentComboId?: string;
+    addToCatalogAssembly?: boolean;
   }) {
     const tenantId = this.getTenantId();
     if (params.parentComboId) {
@@ -216,8 +360,8 @@ export class CatalogSelectionService {
         throw new BadRequestException('Parent scope does not belong to this group');
       }
     }
-    return this.db.transaction(async (tx) => {
-      const result = await this.explodeAssembly({
+    const result = await this.db.transaction(async (tx) => {
+      return this.explodeAssembly({
         tenantId,
         documentKind: 'quote',
         groupId: params.quoteGroupId,
@@ -226,8 +370,25 @@ export class CatalogSelectionService {
         parentComboId: params.parentComboId,
         tx,
       });
-      return result;
     });
+
+    let addedToCatalog = false;
+    if (params.addToCatalogAssembly && params.parentComboId) {
+      try {
+        addedToCatalog = await this.tryAddToParentCatalogBom({
+          parentQuoteComboId: params.parentComboId,
+          catalogComponentId: params.catalogAssemblyId,
+          quantity: params.quantity,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `CatalogSelectionService.addAssemblyToQuote — catalogue BOM write-back failed`,
+          err,
+        );
+      }
+    }
+
+    return { ...result, addedToCatalog };
   }
 
   async addPrimitiveToPurchaseOrder(params: {

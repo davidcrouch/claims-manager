@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { CheckCircle2, FileText, Loader2, Send, Shield, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import {
   BottomFormDrawer,
   BottomFormDrawerBody,
@@ -21,6 +23,7 @@ import { publishQuoteAction } from '@/app/(app)/mutations';
 import { generateAndDownloadDocument } from '@/lib/generate-document';
 import type { PublishQuoteResult } from '@/lib/api-client';
 import type { Claim, Job, Quote } from '@/types/api';
+import { useJobCaps } from '@/hooks/useJobCaps';
 
 export type EstimatePublishMode = 'internal' | 'external';
 
@@ -42,15 +45,20 @@ export function EstimatePublishWizard({
   mode,
 }: EstimatePublishWizardProps) {
   const router = useRouter();
+  const caps = useJobCaps(job);
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [publishResult, setPublishResult] = useState<PublishQuoteResult | null>(null);
+  const [createPdf, setCreatePdf] = useState(false);
+  const [documentFormat, setDocumentFormat] = useState<'pdf' | 'docx' | null>(null);
   const isInternal = mode === 'internal';
 
   const reset = useCallback(() => {
     setPublishing(false);
     setError(null);
     setPublishResult(null);
+    setCreatePdf(false);
+    setDocumentFormat(null);
   }, []);
 
   useEffect(() => {
@@ -86,27 +94,46 @@ export function EstimatePublishWizard({
 
       setPublishResult(result.publishResult ?? null);
 
-      if (isInternal) {
-        try {
-          await generateAndDownloadDocument({
-            documentType: 'quote',
-            entityId: quote.id,
+      const formatLabel = createPdf ? 'PDF' : 'Word document';
+      try {
+        const docResult = await generateAndDownloadDocument({
+          documentType: 'quote',
+          entityId: quote.id,
+          createPdf,
+        });
+        setDocumentFormat(docResult.format);
+        if (isInternal) {
+          toast.success(`Estimate published and ${formatLabel} downloaded`);
+        } else {
+          const prov = result.publishResult?.provider;
+          const excludedItems = prov?.excludedItems ?? 0;
+          toast.success(
+            prov
+              ? `Estimate sent to Insurer (${prov.sentItems} items in ${prov.sentGroups} groups` +
+                (excludedItems > 0 ? `, ${excludedItems} item${excludedItems > 1 ? 's' : ''} excluded` : '') +
+                `) — ${formatLabel} downloaded`
+              : `Estimate sent to Insurer — ${formatLabel} downloaded`,
+          );
+        }
+      } catch (err) {
+        if (isInternal) {
+          toast.warning(`Estimate published, but ${formatLabel} generation failed`, {
+            description: err instanceof Error ? err.message : 'Unknown error',
           });
-          toast.success('Estimate published and PDF downloaded');
-        } catch (err) {
-          toast.warning('Estimate published, but PDF generation failed', {
+        } else {
+          const prov = result.publishResult?.provider;
+          const excludedItems = prov?.excludedItems ?? 0;
+          toast.success(
+            prov
+              ? `Estimate sent to Insurer (${prov.sentItems} items in ${prov.sentGroups} groups` +
+                (excludedItems > 0 ? `, ${excludedItems} item${excludedItems > 1 ? 's' : ''} excluded` : '') +
+                ')'
+              : 'Estimate sent to Insurer',
+          );
+          toast.warning(`${formatLabel} generation failed`, {
             description: err instanceof Error ? err.message : 'Unknown error',
           });
         }
-      } else {
-        const prov = result.publishResult?.provider;
-        const excludedItems = prov?.excludedItems ?? 0;
-        toast.success(
-          prov
-            ? `Estimate sent to Insurer (${prov.sentItems} items in ${prov.sentGroups} groups` +
-              (excludedItems > 0 ? `, ${excludedItems} item${excludedItems > 1 ? 's' : ''} excluded` : '') + ')'
-            : 'Estimate sent to Insurer',
-        );
       }
     } finally {
       setPublishing(false);
@@ -123,6 +150,12 @@ export function EstimatePublishWizard({
   if (publishResult) {
     const prov = publishResult.provider;
     const hasWarnings = prov?.warnings && prov.warnings.length > 0;
+    const docLabel =
+      documentFormat === 'pdf'
+        ? 'PDF'
+        : documentFormat === 'docx'
+          ? 'Word document'
+          : null;
     return (
       <BottomFormDrawer
         open={open}
@@ -171,6 +204,12 @@ export function EstimatePublishWizard({
                     )}
                     <dt className="text-muted-foreground">Status</dt>
                     <dd>Pending (awaiting Insurer review)</dd>
+                    {docLabel && (
+                      <>
+                        <dt className="text-muted-foreground">Document</dt>
+                        <dd>{docLabel} downloaded</dd>
+                      </>
+                    )}
                   </dl>
                 </>
               ) : (
@@ -182,8 +221,8 @@ export function EstimatePublishWizard({
                   <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
                     <dt className="text-muted-foreground">Status</dt>
                     <dd>Pending</dd>
-                    <dt className="text-muted-foreground">PDF generated</dt>
-                    <dd>Yes</dd>
+                    <dt className="text-muted-foreground">Document</dt>
+                    <dd>{docLabel ? `${docLabel} downloaded` : 'Not generated'}</dd>
                   </dl>
                 </>
               )}
@@ -222,7 +261,7 @@ export function EstimatePublishWizard({
       title={isInternal ? 'Publish estimate' : 'Publish estimate to Insurer'}
       description={
         isInternal
-          ? 'Review the claim, job, and estimate summary, then publish. It will be locked afterwards.'
+          ? 'Review the job and estimate summary, then publish. It will be locked afterwards.'
           : 'Review the claim, job, and estimate summary, then send this estimate to the Insurer.'
       }
       icon={
@@ -240,18 +279,19 @@ export function EstimatePublishWizard({
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-950">
               <p className="font-medium">This estimate will be locked after publish</p>
               <p className="mt-2 text-amber-900/80">
-                A PDF will be created from the assigned estimate template and downloaded.
-                Status will change to Pending. Line items and estimate details cannot be
-                edited afterwards.
+                A Word document will be created from the assigned estimate template and
+                downloaded (turn on Create PDF below if you need a PDF). Status will change
+                to Pending. Line items and estimate details cannot be edited afterwards.
               </p>
             </div>
           ) : (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-950">
               <p className="font-medium">This will be pushed to the Insurer</p>
               <p className="mt-2 text-amber-900/80">
-                Submitting creates the estimate in Crunchwork for the Insurer. Status will change
-                to Pending and the estimate will be locked. This cannot be undone from this
-                screen.
+                Submitting creates the estimate in Crunchwork for the Insurer. A Word
+                document is also downloaded from the assigned template (turn on Create PDF
+                below if you need a PDF). Status will change to Pending and the estimate
+                will be locked. This cannot be undone from this screen.
               </p>
             </div>
           )}
@@ -260,7 +300,9 @@ export function EstimatePublishWizard({
             <PublishSummaryRow label="Name" value={title} />
             <PublishSummaryRow label="Status" value={statusName} />
             <PublishSummaryRow label="Estimate number" value={quote.quoteNumber ?? '—'} />
-            <PublishSummaryRow label="Reference" value={quote.reference ?? '—'} />
+            {caps.estimate.reference.visible && (
+              <PublishSummaryRow label="Reference" value={quote.reference ?? '—'} />
+            )}
             <PublishSummaryRow label="Total" value={formatCurrency(quote.totalAmount)} />
             <PublishSummaryRow
               label="Estimate date"
@@ -268,7 +310,32 @@ export function EstimatePublishWizard({
             />
           </PublishSummaryCard>
 
-          <PublishEntityContext job={job} claim={claim} />
+          <PublishEntityContext
+            job={job}
+            claim={claim}
+            showClaim={!isInternal}
+            showInsurerJobRef={!isInternal}
+            showMakeSafeRequired={!isInternal}
+          />
+
+          <div className="rounded-lg border border-slate-200 bg-white px-4 py-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0 space-y-1">
+                <Label htmlFor="estimate-publish-create-pdf" className="text-sm font-medium text-slate-900">
+                  Create PDF
+                </Label>
+                <p className="text-xs text-slate-500">
+                  Off by default — downloads a Word document. Turn on to convert to PDF.
+                </p>
+              </div>
+              <Switch
+                id="estimate-publish-create-pdf"
+                checked={createPdf}
+                disabled={publishing}
+                onCheckedChange={(checked) => setCreatePdf(!!checked)}
+              />
+            </div>
+          </div>
         </div>
 
         <BottomFormDrawerError error={error} />

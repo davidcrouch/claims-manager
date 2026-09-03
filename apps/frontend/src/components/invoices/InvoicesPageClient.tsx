@@ -13,6 +13,7 @@ export interface InvoicesPageClientProps {
   workOrders: WorkOrder[];
   jobNameById: Record<string, string>;
   jobTypeById?: Record<string, string>;
+  jobById?: Record<string, Job>;
   statusOptions: { id: string; name: string }[];
   job?: Job | null;
   parentClaim?: Claim | null;
@@ -23,6 +24,7 @@ export function InvoicesPageClient({
   workOrders,
   jobNameById,
   jobTypeById,
+  jobById,
   statusOptions,
   job,
   parentClaim,
@@ -56,6 +58,8 @@ export function InvoicesPageClient({
           job ? workOrders.filter((wo) => wo.jobId === job.id) : workOrders
         }
         jobNameById={jobNameById}
+        jobById={jobById}
+        job={job}
       />
     </>
   );

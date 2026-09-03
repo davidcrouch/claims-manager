@@ -33,6 +33,76 @@ function splitPersonName(params: {
   return { firstName: parts[0]!, lastName: parts.slice(1).join(' ') };
 }
 
+type ContactAddress = {
+  unitNumber?: string;
+  streetNumber?: string;
+  streetName?: string;
+  suburb?: string;
+  state?: string;
+  postcode?: string;
+  country?: string;
+};
+
+function readContactAddress(payload: unknown): ContactAddress | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return null;
+  }
+  const raw = (payload as Record<string, unknown>).address;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const a = raw as Record<string, unknown>;
+  const address: ContactAddress = {
+    unitNumber: typeof a.unitNumber === 'string' ? a.unitNumber : undefined,
+    streetNumber: typeof a.streetNumber === 'string' ? a.streetNumber : undefined,
+    streetName: typeof a.streetName === 'string' ? a.streetName : undefined,
+    suburb: typeof a.suburb === 'string' ? a.suburb : undefined,
+    state: typeof a.state === 'string' ? a.state : undefined,
+    postcode: typeof a.postcode === 'string' ? a.postcode : undefined,
+    country: typeof a.country === 'string' ? a.country : undefined,
+  };
+  return Object.values(address).some(Boolean) ? address : null;
+}
+
+function normalizeContactAddress(
+  value: Record<string, unknown> | null | undefined,
+): ContactAddress | null {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  const address: ContactAddress = {
+    unitNumber:
+      typeof value.unitNumber === 'string' ? value.unitNumber.trim() || undefined : undefined,
+    streetNumber:
+      typeof value.streetNumber === 'string'
+        ? value.streetNumber.trim() || undefined
+        : undefined,
+    streetName:
+      typeof value.streetName === 'string' ? value.streetName.trim() || undefined : undefined,
+    suburb: typeof value.suburb === 'string' ? value.suburb.trim() || undefined : undefined,
+    state: typeof value.state === 'string' ? value.state.trim() || undefined : undefined,
+    postcode:
+      typeof value.postcode === 'string' ? value.postcode.trim() || undefined : undefined,
+    country:
+      typeof value.country === 'string' ? value.country.trim() || undefined : undefined,
+  };
+  return Object.values(address).some(Boolean) ? address : null;
+}
+
+function mergeContactPayloadAddress(params: {
+  payload: Record<string, unknown>;
+  address?: Record<string, unknown> | null;
+  addressProvided: boolean;
+}): Record<string, unknown> {
+  if (!params.addressProvided) return params.payload;
+  const next = { ...params.payload };
+  const normalized = normalizeContactAddress(params.address);
+  if (normalized) {
+    next.address = normalized;
+  } else {
+    delete next.address;
+  }
+  return next;
+}
+
 @Injectable()
 export class ContactsService {
   private readonly logger = new Logger('ContactsService');
@@ -186,6 +256,7 @@ export class ContactsService {
     notes?: string;
     typeLookupId?: string;
     typeLookupIds?: string[];
+    address?: Record<string, unknown> | null;
   }) {
     const tenantId = this.tenantContext.getTenantId();
     const typeLookupIds = resolveContactTypeLookupIds(params);
@@ -208,6 +279,11 @@ export class ContactsService {
     }
 
     const typeFields = buildContactTypeFields({ typeLookupIds });
+    const contactPayload = mergeContactPayloadAddress({
+      payload: typeFields.contactPayload,
+      address: params.address,
+      addressProvided: 'address' in params,
+    });
 
     const created = await this.contactsRepo.create({
       data: {
@@ -220,7 +296,7 @@ export class ContactsService {
         workPhone: params.workPhone ?? null,
         notes: params.notes ?? null,
         typeLookupId: typeFields.typeLookupId,
-        contactPayload: typeFields.contactPayload,
+        contactPayload,
       },
     });
     const [enriched] = await this.enrichContacts([created]);
@@ -238,6 +314,7 @@ export class ContactsService {
     notes?: string;
     typeLookupId?: string;
     typeLookupIds?: string[];
+    address?: Record<string, unknown> | null;
   }) {
     const tenantId = this.tenantContext.getTenantId();
     const existing = await this.contactsRepo.findOne({
@@ -271,6 +348,11 @@ export class ContactsService {
       existingPayload: existing.contactPayload,
       typeLookupIds,
     });
+    const contactPayload = mergeContactPayloadAddress({
+      payload: typeFields.contactPayload,
+      address: params.address,
+      addressProvided: 'address' in params,
+    });
 
     const updated = await this.contactsRepo.update({
       id: params.id,
@@ -284,7 +366,7 @@ export class ContactsService {
         workPhone: params.workPhone ?? null,
         notes: params.notes ?? null,
         typeLookupId: typeFields.typeLookupId,
-        contactPayload: typeFields.contactPayload,
+        contactPayload,
       },
     });
     const [enriched] = await this.enrichContacts([updated]);
@@ -464,6 +546,7 @@ export class ContactsService {
         typeLookupIds,
         contactTypes,
         typeLookupId: typeLookupIds[0] ?? contact.typeLookupId ?? null,
+        address: readContactAddress(contact.contactPayload),
       };
     });
   }

@@ -185,7 +185,7 @@ export class JobsRepository {
                       and(
                         eq(lookupValues.tenantId, params.tenantId),
                         eq(lookupValues.domain, 'contact_type'),
-                        sql`lower(coalesce(${lookupValues.name}, '')) = 'insured'`,
+                        sql`lower(coalesce(${lookupValues.name}, '')) IN ('insured', 'customer')`,
                         or(
                           eq(contacts.typeLookupId, lookupValues.id),
                           sql`${contacts.contactPayload}->'typeLookupIds' ? ${lookupValues.id}::text`,
@@ -214,7 +214,7 @@ export class JobsRepository {
                       and(
                         eq(lookupValues.tenantId, params.tenantId),
                         eq(lookupValues.domain, 'contact_type'),
-                        sql`lower(coalesce(${lookupValues.name}, '')) = 'insured'`,
+                        sql`lower(coalesce(${lookupValues.name}, '')) IN ('insured', 'customer')`,
                         or(
                           eq(contacts.typeLookupId, lookupValues.id),
                           sql`${contacts.contactPayload}->'typeLookupIds' ? ${lookupValues.id}::text`,
@@ -690,7 +690,7 @@ export class JobsRepository {
   }
 
   /**
-   * Primary insured/client display name per job (first Insured-typed job contact by sortIndex).
+   * Primary insured/client display name per job (first Customer/Insured-typed job contact by sortIndex).
    */
   async findInsuredNamesByJobIds(params: {
     tenantId: string;
@@ -713,7 +713,7 @@ export class JobsRepository {
         and(
           eq(lookupValues.tenantId, params.tenantId),
           eq(lookupValues.domain, 'contact_type'),
-          sql`lower(coalesce(${lookupValues.name}, '')) = 'insured'`,
+          sql`lower(coalesce(${lookupValues.name}, '')) IN ('insured', 'customer')`,
           or(
             eq(contacts.typeLookupId, lookupValues.id),
             sql`${contacts.contactPayload}->'typeLookupIds' ? ${lookupValues.id}::text`,

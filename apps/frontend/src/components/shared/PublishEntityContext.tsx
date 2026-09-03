@@ -68,9 +68,18 @@ export function PublishSummaryCard({
 export function PublishEntityContext({
   job,
   claim,
+  showClaim = true,
+  showInsurerJobRef = true,
+  showMakeSafeRequired = true,
 }: {
   job?: Job | null;
   claim?: Claim | null;
+  /** When false, omit the Claim summary card (e.g. internal estimate publish). */
+  showClaim?: boolean;
+  /** When false, omit Insurer / CW job ID (e.g. internal estimate publish). */
+  showInsurerJobRef?: boolean;
+  /** When false, omit Make-safe required (e.g. internal estimate publish). */
+  showMakeSafeRequired?: boolean;
 }) {
   const jobAddr = jobAddress(job);
   const claimAddr = claimAddress(claim);
@@ -81,23 +90,29 @@ export function PublishEntityContext({
         <PublishSummaryRow label="Job" value={job ? jobDisplayName(job) : 'Not linked'} />
         <PublishSummaryRow label="Status" value={dash(job?.status?.name)} />
         <PublishSummaryRow label="Job type" value={dash(job?.jobType?.name)} />
-        <PublishSummaryRow label="Insurer / CW job ID" value={dash(job?.externalJobId ?? job?.externalReference)} />
+        {showInsurerJobRef && (
+          <PublishSummaryRow label="Insurer / CW job ID" value={dash(job?.externalJobId ?? job?.externalReference)} />
+        )}
         <PublishSummaryRow label="Request date" value={job?.requestDate ? formatDate(job.requestDate) : '—'} />
         <PublishSummaryRow label="Assignee" value={dash(job?.assigneeName)} />
-        <PublishSummaryRow label="Make-safe required" value={yesNo(job?.makeSafeRequired)} />
+        {showMakeSafeRequired && (
+          <PublishSummaryRow label="Make-safe required" value={yesNo(job?.makeSafeRequired)} />
+        )}
         <PublishSummaryRow label="Site address" value={dash(jobAddr)} />
       </PublishSummaryCard>
 
-      <PublishSummaryCard title="Claim">
-        <PublishSummaryRow label="Claim number" value={dash(claim?.claimNumber ?? claim?.externalReference)} />
-        <PublishSummaryRow label="Insurer reference" value={dash(claim?.externalClaimId)} />
-        <PublishSummaryRow label="Status" value={dash(claim?.status?.name)} />
-        <PublishSummaryRow label="Policy name" value={dash(claim?.policyName)} />
-        <PublishSummaryRow label="Policy number" value={dash(claim?.policyNumber)} />
-        <PublishSummaryRow label="Date of loss" value={claim?.dateOfLoss ? formatDate(claim.dateOfLoss) : '—'} />
-        <PublishSummaryRow label="Loss description" value={dash(claim?.incidentDescription)} />
-        <PublishSummaryRow label="Risk address" value={dash(claimAddr || jobAddr)} />
-      </PublishSummaryCard>
+      {showClaim && (
+        <PublishSummaryCard title="Claim">
+          <PublishSummaryRow label="Claim number" value={dash(claim?.claimNumber ?? claim?.externalReference)} />
+          <PublishSummaryRow label="Insurer reference" value={dash(claim?.externalClaimId)} />
+          <PublishSummaryRow label="Status" value={dash(claim?.status?.name)} />
+          <PublishSummaryRow label="Policy name" value={dash(claim?.policyName)} />
+          <PublishSummaryRow label="Policy number" value={dash(claim?.policyNumber)} />
+          <PublishSummaryRow label="Date of loss" value={claim?.dateOfLoss ? formatDate(claim.dateOfLoss) : '—'} />
+          <PublishSummaryRow label="Loss description" value={dash(claim?.incidentDescription)} />
+          <PublishSummaryRow label="Risk address" value={dash(claimAddr || jobAddr)} />
+        </PublishSummaryCard>
+      )}
     </>
   );
 }

@@ -196,7 +196,7 @@ const CONTACT_FIELDS: EntityFieldDef[] = [
   f('typeLookupId', 'Type lookup ID'),
   f('typeName', 'Primary contact type name'),
   f('typeNames', 'All contact type names', 'array'),
-  f('isInsured', 'Contact is typed as Insured', 'boolean'),
+  f('isInsured', 'Contact is typed as Customer (legacy Insured)', 'boolean'),
   f('isTenant', 'Contact is typed as Tenant/Occupant', 'boolean'),
   f('preferredContactMethodLookupId', 'Preferred contact method'),
   f('notes', 'Notes'),

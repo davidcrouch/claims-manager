@@ -125,10 +125,12 @@ function convertToolPart(part: ChatMessagePart, role: string): ProviderContent |
 
   const isResult =
     isExplicitToolResult ||
-    part.state === 'output-available' ||
-    part.state === 'result' ||
-    part.state === 'complete' ||
-    part.state === 'error' ||
+    (!isExplicitToolCall && (
+      part.state === 'output-available' ||
+      part.state === 'result' ||
+      part.state === 'complete' ||
+      part.state === 'error'
+    )) ||
     (role === 'user' && !isExplicitToolCall);
 
   if (!isResult && (role === 'assistant' || isExplicitToolCall)) {

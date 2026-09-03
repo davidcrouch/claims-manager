@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { FileInput, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,7 @@ import {
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
 import { captureEstimateAction } from '@/app/(app)/quotes/capture-actions';
+import { resolveJobKindCaps } from '@/lib/job-kind-registry';
 
 export interface CaptureEstimateDrawerProps {
   open: boolean;
@@ -21,6 +22,8 @@ export interface CaptureEstimateDrawerProps {
   jobId?: string;
   claimId?: string;
   rfqId?: string;
+  /** Parent job provider — CW quotes show Reference. */
+  jobProvider?: string | null;
 }
 
 export function CaptureEstimateDrawer({
@@ -29,8 +32,13 @@ export function CaptureEstimateDrawer({
   jobId,
   claimId,
   rfqId,
+  jobProvider,
 }: CaptureEstimateDrawerProps) {
   const router = useRouter();
+  const showReference = useMemo(
+    () => resolveJobKindCaps({ provider: jobProvider }).estimate.reference.visible,
+    [jobProvider],
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -95,7 +103,7 @@ export function CaptureEstimateDrawer({
         },
         quoteNumber: quoteNumber.trim() || undefined,
         name: name.trim(),
-        reference: reference || undefined,
+        reference: showReference && reference ? reference : undefined,
         quoteDate: quoteDate || undefined,
         expiresInDays: expiresInDays ? parseInt(expiresInDays, 10) : undefined,
         totalAmount: totalAmount ? parseFloat(totalAmount) : undefined,
@@ -235,15 +243,17 @@ export function CaptureEstimateDrawer({
                   placeholder="0.00"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="est-reference">Reference</Label>
-                <Input
-                  id="est-reference"
-                  value={reference}
-                  onChange={(e) => setReference(e.target.value)}
-                  placeholder="Optional reference"
-                />
-              </div>
+              {showReference && (
+                <div className="space-y-2">
+                  <Label htmlFor="est-reference">Reference</Label>
+                  <Input
+                    id="est-reference"
+                    value={reference}
+                    onChange={(e) => setReference(e.target.value)}
+                    placeholder="Optional reference"
+                  />
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">

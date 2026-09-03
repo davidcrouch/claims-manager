@@ -35,6 +35,7 @@ import { JobTimelineTab } from './tabs/JobTimelineTab';
 import { JobCreateMakeSafeDrawer } from './JobCreateMakeSafeDrawer';
 import { EntityAttachmentsTab } from '@/components/shared/EntityAttachmentsTab';
 import { hasTypeDetails } from './util/jobType';
+import { useJobCaps } from '@/hooks/useJobCaps';
 import { updateJobFieldsAction } from '@/app/(app)/jobs/[id]/actions';
 import { formatAddress, asString, pick } from '@/components/shared/detail';
 import {
@@ -245,8 +246,8 @@ export function JobDetail({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const showTypeDetails = hasTypeDetails(job);
-  const isCrunchwork = job.provider === 'crunchwork';
+  const caps = useJobCaps(job);
+  const showTypeDetails = hasTypeDetails(job) || caps.job.typeDetailsTab.visible;
   const activeTab = normaliseTab(searchParams.get('tab'), showTypeDetails);
   const overviewRef = useRef<JobOverviewTabHandle>(null);
   const typeDetailsRef = useRef<JobTypeDetailsTabHandle>(null);
@@ -287,11 +288,11 @@ export function JobDetail({
       assignedToUserId: committedAssignee,
       overview: overviewRef.current?.getBaseline() ?? EMPTY_OVERVIEW,
       typeDetails:
-        isCrunchwork && showTypeDetails
+        caps.job.typeDetailsEditable.editable && showTypeDetails
           ? typeDetailsRef.current?.getBaseline() ?? null
           : null,
     });
-  }, [committedAssignee, isCrunchwork, showTypeDetails]);
+  }, [committedAssignee, caps.job.typeDetailsEditable.editable, showTypeDetails]);
 
   const handleOverviewDirty = useCallback((dirty: boolean) => {
     setOverviewDirty(dirty);
@@ -346,7 +347,7 @@ export function JobDetail({
 
     const overviewPending = overviewRef.current?.getPendingUpdate() ?? null;
     const typePending =
-      isCrunchwork && showTypeDetails
+      caps.job.typeDetailsEditable.editable && showTypeDetails
         ? typeDetailsRef.current?.getPendingUpdate() ?? null
         : null;
     const assigneeSnapshot = assignedToUserIdRef.current;
@@ -391,7 +392,7 @@ export function JobDetail({
         overviewRef.current?.markClean(overviewPayload);
       }
       const typeNow = JSON.stringify(
-        isCrunchwork && showTypeDetails
+        caps.job.typeDetailsEditable.editable && showTypeDetails
           ? typeDetailsRef.current?.getPendingUpdate() ?? null
           : null,
       );
@@ -414,7 +415,7 @@ export function JobDetail({
   }, [
     job.id,
     router,
-    isCrunchwork,
+    caps.job.typeDetailsEditable.editable,
     showTypeDetails,
     committedAssignee,
     captureFieldSnapshot,
@@ -533,7 +534,7 @@ export function JobDetail({
   );
 
   const showEditActions =
-    activeTab === 'overview' || (isCrunchwork && activeTab === 'type-details');
+    activeTab === 'overview' || (caps.job.typeDetailsEditable.editable && activeTab === 'type-details');
 
   let tabActions: ReactNode = null;
   if (activeTab === 'parties') {
@@ -660,6 +661,7 @@ export function JobDetail({
               saving={false}
               editing
               statusOptions={statusOptions}
+              caps={caps}
               onDirtyChange={handleOverviewDirty}
               onAddAppointment={openAppointmentDrawer}
             />
@@ -670,7 +672,7 @@ export function JobDetail({
             <JobTypeDetailsTab
               ref={typeDetailsRef}
               job={job}
-              editing={isCrunchwork}
+              editing={caps.job.typeDetailsEditable.editable}
               saving={false}
               jobTypeOptions={jobTypeOptions}
               onDirtyChange={handleTypeDetailsDirty}
@@ -712,6 +714,7 @@ export function JobDetail({
         onOpenChange={setEstimateDrawerOpen}
         jobId={job.id}
         claimId={claimId ?? parentClaim?.id}
+        jobProvider={job.provider}
       />
       <AppointmentFormDrawer
         open={appointmentDrawerOpen}

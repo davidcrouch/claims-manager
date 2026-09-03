@@ -9,6 +9,7 @@ export async function fetchInvoicesAction(params: {
   page?: number;
   limit?: number;
   purchaseOrderId?: string;
+  workOrderId?: string;
   status?: string;
   sort?: string;
   search?: string;
@@ -26,6 +27,7 @@ export async function fetchInvoicesAction(params: {
     page: params.page ?? 1,
     limit: params.limit ?? 20,
     purchaseOrderId: params.purchaseOrderId,
+    workOrderId: params.workOrderId,
     status: params.status,
     sort: params.sort,
     search: params.search,

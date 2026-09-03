@@ -27,6 +27,7 @@ import {
   isClaimsMineTab,
   archiveStateLabel,
   buildClaimsListFetchKey,
+  DEFAULT_CLAIMS_SORT,
   type ClaimsListTab,
 } from './claims-list-helpers';
 import {
@@ -147,6 +148,17 @@ export interface ClaimsListClientProps {
   jobTypes?: { id: string; name?: string }[];
   /** Logged-in org user id — required for the My Claims tab filter. */
   currentUserId?: string | null;
+  /**
+   * `page` (default): full claims list with URL sync + page header.
+   * `picker`: embedded list for drawers; no URL sync / page header.
+   */
+  variant?: 'page' | 'picker';
+  /** Highlight the current claim in picker mode. */
+  selectedClaimId?: string;
+  /** When set (picker), called instead of navigating to `/claims/:id`. */
+  onClaimSelect?: (claim: Claim) => void;
+  /** Extra class on the outer wrapper (e.g. drawer padding). */
+  className?: string;
 }
 
 export function ClaimsListClient({
@@ -156,33 +168,48 @@ export function ClaimsListClient({
   accountOptions,
   jobTypes = [],
   currentUserId,
+  variant = 'page',
+  selectedClaimId,
+  onClaimSelect,
+  className,
 }: ClaimsListClientProps) {
+  const isPicker = variant === 'picker';
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data, setData, beginFetch, abortFetch } = useListPageData(initialData, {
     initialFetchKey,
   });
   const initialArchiveStateFilter = useMemo(
-    () => columnFilterFromValuesParam(searchParams.get('archiveState')),
-    [searchParams],
+    () =>
+      isPicker
+        ? { selected: new Set<string>(), active: false }
+        : columnFilterFromValuesParam(searchParams.get('archiveState')),
+    [isPicker, searchParams],
   );
-  const [search, setSearch] = useState(searchParams.get('search') ?? '');
+  const [search, setSearch] = useState(() =>
+    isPicker ? '' : (searchParams.get('search') ?? ''),
+  );
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [sort, setSort] = useState(() =>
-    normalizeSortParam(searchParams.get('sort'))
+    isPicker
+      ? DEFAULT_CLAIMS_SORT
+      : normalizeSortParam(searchParams.get('sort')),
   );
   const assignedToUserId = searchParams.get('assignedToUserId');
   const legacyMineTab =
+    !isPicker &&
     !!assignedToUserId &&
     !!currentUserId &&
     assignedToUserId === currentUserId;
   const [tab, setTab] = usePersistedListTab<ClaimTab>({
     storageKey: 'claims',
-    urlTab: searchParams.get('tab'),
+    urlTab: isPicker ? null : searchParams.get('tab'),
     parse: parseClaimsListTab,
     fallbackTab: legacyMineTab ? 'mine' : undefined,
+    disabled: isPicker,
   });
   const [page, setPage] = useState(() => {
+    if (isPicker) return 1;
     const p = parseInt(searchParams.get('page') ?? '1', 10);
     return Number.isFinite(p) && p > 0 ? p : 1;
   });
@@ -200,7 +227,7 @@ export function ClaimsListClient({
   const [archiveStateFilterActive, setArchiveStateFilterActive] = useState(
     initialArchiveStateFilter.active,
   );
-  const [filtersHydrated, setFiltersHydrated] = useState(false);
+  const [filtersHydrated, setFiltersHydrated] = useState(isPicker);
 
   const isMineTab = isClaimsMineTab(tab);
   const showArchiveStateColumn = isMineTab;
@@ -250,7 +277,7 @@ export function ClaimsListClient({
   }, [search]);
 
   useEffect(() => {
-    if (filtersHydrated) return;
+    if (isPicker || filtersHydrated) return;
     if (searchParams.get('jobType') && typeOptions.length === 0) return;
 
     const hydrated = columnFilterFromIdsParam(
@@ -260,7 +287,7 @@ export function ClaimsListClient({
     setTypeFilter(hydrated.selected);
     setTypeFilterActive(hydrated.active);
     setFiltersHydrated(true);
-  }, [filtersHydrated, searchParams, typeOptions]);
+  }, [isPicker, filtersHydrated, searchParams, typeOptions]);
 
   const statusColumnParam = useMemo(
     () => columnFilterToIdsParam(statusFilterActive, statusFilter, statusOptions),
@@ -298,22 +325,74 @@ export function ClaimsListClient({
     [typeFilterActive, typeFilter, typeOptions],
   );
 
-  useEffect(() => {
-    if (!filtersHydrated) return;
+  const runClaimsFetch = (fetchKey: string) => {
+    const session = createListFetchSession({ fetchKey, beginFetch, abortFetch });
+    if (!session) return undefined;
 
-    const fetchKey = buildClaimsListFetchKey({
-      search: debouncedSearch,
+    setColumnSort(null);
+
+    if (
+      statusParam === null ||
+      accountParam === null ||
+      jobTypeParam === null ||
+      (isMineTab && !currentUserId)
+    ) {
+      setData({ data: [], total: 0 });
+      return session.cleanup;
+    }
+
+    fetchClaimsAction({
+      search: debouncedSearch || undefined,
       sort,
-      tab,
-      page,
       status: statusParam,
       account: accountParam,
       jobType: jobTypeParam,
+      page,
+      limit: PAGE_SIZE,
       assignedToUserId: assignedToUserIdParam,
-      archiveState: isMineTab
-        ? columnFilterToValuesParam(archiveStateFilterActive, archiveStateFilter)
-        : undefined,
+    }).then((res) => {
+      if (!session.cancelled && res) setData(res);
     });
+
+    return session.cleanup;
+  };
+
+  const fetchDeps = [
+    filtersHydrated,
+    debouncedSearch,
+    sort,
+    tab,
+    statusParam,
+    accountParam,
+    jobTypeParam,
+    assignedToUserIdParam,
+    archiveStateFilterActive,
+    archiveStateFilter,
+    isMineTab,
+    currentUserId,
+    page,
+    beginFetch,
+    abortFetch,
+    setData,
+  ] as const;
+
+  const fetchKey = buildClaimsListFetchKey({
+    search: debouncedSearch,
+    sort,
+    tab,
+    page,
+    status: statusParam,
+    account: accountParam,
+    jobType: jobTypeParam,
+    assignedToUserId: assignedToUserIdParam,
+    archiveState: isMineTab
+      ? columnFilterToValuesParam(archiveStateFilterActive, archiveStateFilter)
+      : undefined,
+  });
+
+  // Page list: sync URL first, then fetch once the query string has settled.
+  useEffect(() => {
+    if (isPicker || !filtersHydrated) return;
 
     const params = new URLSearchParams(searchParams.toString());
     if (debouncedSearch) params.set('search', debouncedSearch);
@@ -357,55 +436,14 @@ export function ClaimsListClient({
       return;
     }
 
-    const session = createListFetchSession({ fetchKey, beginFetch, abortFetch });
-    if (!session) return;
+    return runClaimsFetch(fetchKey);
+  }, [...fetchDeps, isPicker, searchParams, router, fetchKey]);
 
-    setColumnSort(null);
-
-    if (
-      statusParam === null ||
-      accountParam === null ||
-      jobTypeParam === null ||
-      (isMineTab && !currentUserId)
-    ) {
-      setData({ data: [], total: 0 });
-      return session.cleanup;
-    }
-
-    fetchClaimsAction({
-      search: debouncedSearch || undefined,
-      sort,
-      status: statusParam,
-      account: accountParam,
-      jobType: jobTypeParam,
-      page,
-      limit: PAGE_SIZE,
-      assignedToUserId: assignedToUserIdParam,
-    }).then((res) => {
-      if (!session.cancelled && res) setData(res);
-    });
-
-    return session.cleanup;
-  }, [
-    filtersHydrated,
-    debouncedSearch,
-    sort,
-    tab,
-    statusParam,
-    accountParam,
-    jobTypeParam,
-    assignedToUserIdParam,
-    archiveStateFilterActive,
-    archiveStateFilter,
-    isMineTab,
-    currentUserId,
-    page,
-    searchParams,
-    router,
-    beginFetch,
-    abortFetch,
-    setData,
-  ]);
+  // Picker: isolated from parent-page URL churn.
+  useEffect(() => {
+    if (!isPicker || !filtersHydrated) return;
+    return runClaimsFetch(fetchKey);
+  }, [...fetchDeps, isPicker, fetchKey]);
 
   const SERVER_SORT_FIELDS = new Set(['claim_number', 'updated_at', 'created_at']);
 
@@ -601,27 +639,58 @@ export function ClaimsListClient({
     [listColumns, isVisible],
   );
 
+  const handleRowClick = (claim: Claim) => {
+    if (onClaimSelect) {
+      onClaimSelect(claim);
+      return;
+    }
+    router.push(`/claims/${claim.id}`);
+  };
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
-      <SetPageHeader>
-        <ListPageHeader
-          icon={FileText}
-          title="Claims"
-          total={data.total}
-          showing={data.data.length}
-          search={debouncedSearch}
-          breakdown={breakdown}
-          accent="blue"
-        />
-      </SetPageHeader>
-      <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
+    <div
+      className={`flex min-h-0 flex-1 flex-col${className ? ` ${className}` : ''}`}
+      style={{ height: '100%' }}
+    >
+      {!isPicker && (
+        <SetPageHeader>
+          <ListPageHeader
+            icon={FileText}
+            title="Claims"
+            total={data.total}
+            showing={data.data.length}
+            search={debouncedSearch}
+            breakdown={breakdown}
+            accent="blue"
+          />
+        </SetPageHeader>
+      )}
+      <div
+        className={`flex flex-col gap-4 pb-4 pt-1 ${
+          isPicker
+            ? 'sticky top-0 z-10 border-b border-slate-200 bg-background px-4'
+            : 'px-6'
+        }`}
+      >
+        {isPicker && (
+          <p className="text-sm text-slate-500">
+            Showing {filteredAndSortedData.length.toLocaleString()} of{' '}
+            {data.total.toLocaleString()} claims
+            {debouncedSearch ? (
+              <>
+                {' '}
+                matching &ldquo;{debouncedSearch}&rdquo;
+              </>
+            ) : null}
+          </p>
+        )}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
           <Tabs
             value={tab}
             onValueChange={handleTabChange}
           >
             <TabsList>
-              <TabsTrigger value="mine">My Claims</TabsTrigger>
+              {!isPicker && <TabsTrigger value="mine">My Claims</TabsTrigger>}
               <TabsTrigger value="active">Active</TabsTrigger>
               <TabsTrigger value="archived">Archived</TabsTrigger>
               <TabsTrigger value="all">All</TabsTrigger>
@@ -672,7 +741,7 @@ export function ClaimsListClient({
       </div>
 
       <div
-        className="flex-1 px-6 pb-6"
+        className={`flex-1 pb-6 ${isPicker ? 'px-4' : 'px-6'}`}
         style={{ minHeight: 0, overflow: 'auto' }}
       >
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -721,9 +790,11 @@ export function ClaimsListClient({
                       />
                     );
                   })}
-                  <th scope="col" className={LIST_ARCHIVE_TH_CLASS}>
-                    <span className="sr-only">Actions</span>
-                  </th>
+                  {!isPicker && (
+                    <th scope="col" className={LIST_ARCHIVE_TH_CLASS}>
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  )}
                   <ColumnSettingsHeaderCell
                     columns={listColumns}
                     isVisible={isVisible}
@@ -733,7 +804,10 @@ export function ClaimsListClient({
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredAndSortedData.length === 0 ? (
-                  <TableEmptyRow colSpan={visibleCount + 2} label="No claims found." />
+                  <TableEmptyRow
+                    colSpan={visibleCount + (isPicker ? 1 : 2)}
+                    label="No claims found."
+                  />
                 ) : (
                   filteredAndSortedData.map((claim) => {
                   const claimNo =
@@ -744,12 +818,17 @@ export function ClaimsListClient({
                     (claim.account as { name?: string })?.name ?? '';
                   const policy =
                     claim.policyNumber ?? claim.policyName ?? '';
+                  const isSelected = selectedClaimId === claim.id;
 
                   return (
                     <tr
                       key={claim.id}
-                      onClick={() => router.push(`/claims/${claim.id}`)}
-                      className="cursor-pointer transition-colors hover:bg-slate-50"
+                      onClick={() => handleRowClick(claim)}
+                      className={`cursor-pointer transition-colors hover:bg-slate-50 ${
+                        isSelected
+                          ? 'bg-emerald-50 ring-1 ring-inset ring-emerald-200'
+                          : ''
+                      }`}
                     >
                       {isVisible('claim_number') && (
                         <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
@@ -807,24 +886,26 @@ export function ClaimsListClient({
                           {formatDate(claim.updatedAt)}
                         </td>
                       )}
-                      <td
-                        className={LIST_ARCHIVE_TD_CLASS}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <ListArchiveButton
-                          entityType="claim"
-                          entityId={claim.id}
-                          statusName={statusName}
-                          entityLabel={claimNo}
-                          onArchived={(id) => {
-                            setData((prev) => ({
-                              ...prev,
-                              data: prev.data.filter((row) => row.id !== id),
-                              total: Math.max(0, prev.total - 1),
-                            }));
-                          }}
-                        />
-                      </td>
+                      {!isPicker && (
+                        <td
+                          className={LIST_ARCHIVE_TD_CLASS}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <ListArchiveButton
+                            entityType="claim"
+                            entityId={claim.id}
+                            statusName={statusName}
+                            entityLabel={claimNo}
+                            onArchived={(id) => {
+                              setData((prev) => ({
+                                ...prev,
+                                data: prev.data.filter((row) => row.id !== id),
+                                total: Math.max(0, prev.total - 1),
+                              }));
+                            }}
+                          />
+                        </td>
+                      )}
                       <td className={LIST_ARCHIVE_SPACER_TD_CLASS} aria-hidden />
                     </tr>
                   );

@@ -1124,3 +1124,13 @@
   Failed refreshes no longer leave the switch out of sync with what is on screen.
   Claims Mine also recognises assignees by email when a user link was missing.
   Staging will pick up the fix after this release.
+
+- `2026-09-03` `pending` **8 h**
+  `65 files | +4 886 −845 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
+  Lay summary: Job screens follow clear rules by job type and provider, so forms show the right fields, and invoices and catalogue picks work more smoothly.
+  **Job-kind capabilities, form improvements, and catalogue alignment.**
+  Job and related screens use a shared capabilities model so fields and actions match the job provider and type.
+  Job type catalogues were aligned so internal and partner types stay distinct and consistent.
+  Creating and editing jobs, invoices, and contacts is clearer, including claim picking and invoice line progress.
+  Catalogue bill-of-materials adds confirm what will be included before lines are created.
+  Estimate publish and outbound sync follow the same rules; the capabilities framework is documented for future job kinds.

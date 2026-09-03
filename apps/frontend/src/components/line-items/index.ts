@@ -76,6 +76,7 @@ export {
   CATALOG_UPDATE_MODE_STORAGE_KEY,
   parseCatalogUpdateMode,
   collectCatalogSourceUpdates,
+  resolveParentCatalogLink,
 } from './lib/catalog-update';
 export type { CatalogSourcePushItem } from './lib/catalog-update';
 

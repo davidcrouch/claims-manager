@@ -143,40 +143,40 @@ function dueDateClassName(dueDate?: string | null): string {
 const PAGE_SIZE = 20;
 
 const SKELETON_ROW_WIDTHS = [
-  ['w-40', 'w-28', 'w-16', 'w-14', 'w-20', 'w-24', 'w-20', 'w-16'],
-  ['w-48', 'w-32', 'w-20', 'w-16', 'w-24', 'w-20', 'w-24', 'w-14'],
-  ['w-36', 'w-24', 'w-16', 'w-12', 'w-28', 'w-28', 'w-16', 'w-16'],
-  ['w-44', 'w-36', 'w-20', 'w-14', 'w-20', 'w-24', 'w-20', 'w-12'],
-  ['w-52', 'w-28', 'w-16', 'w-16', 'w-24', 'w-24', 'w-24', 'w-16'],
-  ['w-32', 'w-40', 'w-20', 'w-12', 'w-16', 'w-20', 'w-16', 'w-14'],
-  ['w-44', 'w-24', 'w-16', 'w-14', 'w-20', 'w-28', 'w-20', 'w-16'],
-  ['w-36', 'w-32', 'w-20', 'w-16', 'w-20', 'w-24', 'w-16', 'w-12'],
+  ['w-48', 'w-36', 'w-24', 'w-20', 'w-28', 'w-32', 'w-28', 'w-24'],
+  ['w-56', 'w-40', 'w-28', 'w-24', 'w-32', 'w-28', 'w-32', 'w-20'],
+  ['w-44', 'w-32', 'w-24', 'w-16', 'w-36', 'w-36', 'w-24', 'w-24'],
+  ['w-52', 'w-44', 'w-28', 'w-20', 'w-28', 'w-32', 'w-28', 'w-16'],
+  ['w-60', 'w-36', 'w-24', 'w-24', 'w-32', 'w-32', 'w-32', 'w-24'],
+  ['w-40', 'w-48', 'w-28', 'w-16', 'w-24', 'w-28', 'w-24', 'w-20'],
+  ['w-52', 'w-32', 'w-24', 'w-20', 'w-28', 'w-36', 'w-28', 'w-24'],
+  ['w-44', 'w-40', 'w-28', 'w-24', 'w-28', 'w-32', 'w-24', 'w-16'],
 ] as const;
 
 function TasksListLoadingPanel({ columnCount }: { columnCount: number }) {
   const cells = Math.max(columnCount, 1);
   return (
     <div
-      className="relative overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
+      className="relative min-h-[75vh] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
       role="status"
       aria-live="polite"
       aria-busy="true"
     >
-      <div className="pointer-events-none select-none" aria-hidden>
-        <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+      <div className="pointer-events-none min-h-[75vh] select-none" aria-hidden>
+        <div className="border-b border-slate-200 bg-slate-50 px-4 py-4">
           <div className="flex gap-6">
             {Array.from({ length: cells }).map((_, i) => (
-              <Skeleton key={`h-${i}`} className="h-3 w-16" />
+              <Skeleton key={`h-${i}`} className="h-4 w-24 bg-slate-300/80" />
             ))}
           </div>
         </div>
         <div className="divide-y divide-slate-100">
           {SKELETON_ROW_WIDTHS.map((widths, row) => (
-            <div key={row} className="flex items-center gap-6 px-4 py-3.5">
+            <div key={row} className="flex items-center gap-6 px-4 py-5">
               {Array.from({ length: cells }).map((_, col) => (
                 <Skeleton
                   key={`r-${row}-${col}`}
-                  className={`h-4 ${widths[col % widths.length]}`}
+                  className={`h-5 ${widths[col % widths.length]} bg-slate-300/80`}
                 />
               ))}
             </div>

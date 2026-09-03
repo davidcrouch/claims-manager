@@ -701,6 +701,20 @@
       "when": 1793000000000,
       "tag": "0100_drop_bills_invoice_id",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1793100000000,
+      "tag": "0101_job_type_null_provider_crunchwork",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1793200000000,
+      "tag": "0102_job_type_catalog_align",
+      "breakpoints": true
     }
   ]
 }

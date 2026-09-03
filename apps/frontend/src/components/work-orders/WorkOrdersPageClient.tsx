@@ -6,6 +6,7 @@ import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { PrintButton } from '@/components/shared/PrintButton';
 import { WorkOrderFormDrawer } from '@/components/forms/WorkOrderFormDrawer';
 import type { JobOption } from '@/components/shared/job-label';
+import { useJobCaps } from '@/hooks/useJobCaps';
 import { WorkOrdersListClient } from './WorkOrdersListClient';
 import type { PaginatedResponse, WorkOrder, Job, Claim } from '@/types/api';
 import type { StatusOption } from '@/components/shared/list-filters';
@@ -34,17 +35,21 @@ export function WorkOrdersPageClient({
   currentUserId,
 }: WorkOrdersPageClientProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const caps = useJobCaps(job);
+  const canCreateWorkOrder = caps.workOrder.createButton.visible;
 
   return (
     <>
       <SetHeaderActions>
-        <Button
-          size="default"
-          onClick={() => setDrawerOpen(true)}
-          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
-        >
-          Create Work Order
-        </Button>
+        {canCreateWorkOrder && (
+          <Button
+            size="default"
+            onClick={() => setDrawerOpen(true)}
+            className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+          >
+            Create Work Order
+          </Button>
+        )}
         <PrintButton documentType="work_orders_list" entityId="list" />
       </SetHeaderActions>
       <WorkOrdersListClient

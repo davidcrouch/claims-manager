@@ -301,6 +301,14 @@ export class AddCatalogPrimitiveDto {
 
   @IsString()
   quantity!: string;
+
+  /**
+   * When true and nested under a quote combo/scope linked to a catalogue parent,
+   * also add this catalogue item as a BOM component on that source.
+   */
+  @IsOptional()
+  @IsBoolean()
+  addToCatalogAssembly?: boolean;
 }
 
 export class AddCatalogAssemblyDto {
@@ -314,6 +322,26 @@ export class AddCatalogAssemblyDto {
   @IsOptional()
   @IsUUID()
   quoteComboId?: string;
+
+  /**
+   * When true and nested under a quote scope linked to a catalogue parent,
+   * also add this catalogue assembly as a BOM component on that source.
+   */
+  @IsOptional()
+  @IsBoolean()
+  addToCatalogAssembly?: boolean;
+}
+
+/** Add a catalogue BOM line under the source linked from an estimate combo/scope. */
+export class AddCatalogBomFromEstimateDto {
+  @IsUUID()
+  parentQuoteComboId!: string;
+
+  @IsUUID()
+  catalogComponentId!: string;
+
+  @IsString()
+  quantity!: string;
 }
 
 export class CopyCatalogItemDto {

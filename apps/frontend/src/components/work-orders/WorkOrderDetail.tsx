@@ -205,6 +205,7 @@ export function WorkOrderPageHeader({ wo, job }: { wo: WorkOrder; job?: Job | nu
         onOpenChange={setShowInvoiceForm}
         workOrders={[wo]}
         jobNameById={jobNameById}
+        job={job}
         defaultWorkOrderId={wo.id}
       />
       <PageHeaderLayout

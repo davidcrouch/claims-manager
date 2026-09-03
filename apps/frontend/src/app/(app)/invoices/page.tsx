@@ -61,13 +61,17 @@ export default async function InvoicesPage({
     ]);
 
   const workOrders = workOrdersRes?.data ?? [];
+  const jobsList = jobsRes?.data ?? [];
   const jobNameById = job
     ? { [job.id]: jobDisplayName(job) }
-    : buildJobNameById(jobsRes?.data ?? []);
+    : buildJobNameById(jobsList);
   const scopedType = job ? jobTypeDisplayName(job) : undefined;
   const jobTypeById = job
     ? (scopedType ? { [job.id]: scopedType } : {})
-    : buildJobTypeById(jobsRes?.data ?? []);
+    : buildJobTypeById(jobsList);
+  const jobById: Record<string, Job> = job
+    ? { [job.id]: job }
+    : Object.fromEntries(jobsList.map((j) => [j.id, j]));
 
   let parentClaim: Claim | null = null;
   if (job?.claimId) {
@@ -86,6 +90,7 @@ export default async function InvoicesPage({
       workOrders={workOrders}
       jobNameById={jobNameById}
       jobTypeById={jobTypeById}
+      jobById={jobById}
       statusOptions={statusOptions}
       job={job}
       parentClaim={parentClaim}

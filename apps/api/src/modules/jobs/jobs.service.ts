@@ -26,6 +26,7 @@ import {
   type CwContactOutbound,
 } from './job-outbound.utils';
 import { RecordNumberService } from '../../common/record-number/record-number.service';
+import { resolveWorkflowCapability } from '../../common/job-kind-caps';
 
 type ContactInput = {
   contactId?: string;
@@ -444,11 +445,8 @@ export class JobsService {
     return this.findOne({ id: job.id });
   }
 
-  private static readonly WORKFLOW_CAP_MAP: Record<string, string> = {
-    'Builder Assessment': 'workflow.job.assessment',
-    'Builder Make Safe': 'workflow.job.make-safe',
-    'Builder - Scope of Works': 'workflow.job.works',
-  };
+  /** @deprecated Replaced by resolveWorkflowCapability() from common/job-kind-caps.ts */
+  private static readonly WORKFLOW_CAP_MAP: Record<string, string> = {};
 
   private static readonly WORKFLOW_PHASE_STATUS_MAP: Record<string, string> = {
     'allocated': 'Allocated',
@@ -485,7 +483,7 @@ export class JobsService {
       const lookup = lookupMap.get(jobTypeLookupId);
       if (!lookup || !lookup.name) return;
 
-      const cap = JobsService.WORKFLOW_CAP_MAP[lookup.name];
+      const cap = resolveWorkflowCapability(lookup.name);
       if (!cap) return;
 
       const job = await this.jobsRepo.findOne({ id: jobId, tenantId });

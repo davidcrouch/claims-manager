@@ -54,6 +54,7 @@ export class InvoicesRepository {
     page?: number;
     limit?: number;
     purchaseOrderId?: string;
+    workOrderId?: string;
     jobId?: string;
     jobIds?: string[];
     /** Comma-separated status lookup IDs. */
@@ -74,6 +75,9 @@ export class InvoicesRepository {
     let whereClause = eq(invoices.tenantId, params.tenantId);
     if (params.purchaseOrderId) {
       whereClause = and(whereClause, eq(invoices.purchaseOrderId, params.purchaseOrderId))!;
+    }
+    if (params.workOrderId) {
+      whereClause = and(whereClause, eq(invoices.workOrderId, params.workOrderId))!;
     }
     const jobIds = normalizeListJobIds({ jobId: params.jobId, jobIds: params.jobIds });
     if (jobIds) {

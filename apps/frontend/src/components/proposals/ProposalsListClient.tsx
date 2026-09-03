@@ -560,6 +560,7 @@ export function ProposalsListClient({
         onOpenChange={setCaptureDrawerOpen}
         jobId={jobId ?? job?.id ?? undefined}
         claimId={parentClaim?.id ?? job?.claimId ?? undefined}
+        jobProvider={job?.provider}
       />
     </div>
   );

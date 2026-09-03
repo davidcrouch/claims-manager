@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
@@ -32,10 +32,8 @@ import {
   navigateToCreated,
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
-import {
-  QUOTE_TYPES,
-} from '@/components/quotes/quote-edit.types';
 import type { JobOption } from '@/components/shared/job-label';
+import { resolveJobKindCaps } from '@/lib/job-kind-registry';
 
 function todayISO(): string {
   const d = new Date();
@@ -63,6 +61,8 @@ export interface QuoteFormDrawerProps {
   /** When omitted, a job picker is shown (requires `jobs`). */
   jobId?: string;
   claimId?: string | null;
+  /** Parent job provider (`crunchwork` | `internal`) — drives CW-only fields. */
+  jobProvider?: string | null;
   /** Job options for list-page create flow. */
   jobs?: JobOption[];
   renderMode?: 'drawer' | 'canvas';
@@ -76,6 +76,7 @@ export function QuoteFormDrawer({
   onOpenChange,
   jobId,
   claimId,
+  jobProvider,
   jobs,
   renderMode = 'drawer',
   aiAssistEnabled = false,
@@ -88,6 +89,13 @@ export function QuoteFormDrawer({
   const [chatOpen, setChatOpen] = useState(false);
   const [aiContext, setAiContext] = useState<AIContextPayload | undefined>();
   const needsJobPicker = (jobs?.length ?? 0) > 0;
+
+  const estimateCaps = useMemo(
+    () => resolveJobKindCaps({ provider: jobProvider }),
+    [jobProvider],
+  );
+  const showReference = estimateCaps.estimate.reference.visible;
+  const quoteTypes = estimateCaps.estimateQuoteTypes;
 
   useEffect(() => {
     if (!open) setChatOpen(false);
@@ -110,12 +118,16 @@ export function QuoteFormDrawer({
   });
 
   useEffect(() => {
+    const currentType = form.getValues('quoteType');
+    const typeStillValid =
+      !currentType || quoteTypes.includes(currentType);
     form.reset({
       ...form.getValues(),
       jobId: jobId ?? '',
       claimId: claimId ?? undefined,
+      ...(typeStillValid ? {} : { quoteType: '' }),
     });
-  }, [jobId, claimId, form]);
+  }, [jobId, claimId, quoteTypes, form]);
 
   const watchedJobId = form.watch('jobId');
 
@@ -128,7 +140,9 @@ export function QuoteFormDrawer({
         ...(values.claimId ? { claimId: values.claimId } : {}),
         quoteType: values.quoteType || undefined,
         name: values.name || undefined,
-        reference: values.reference || undefined,
+        ...(showReference && values.reference?.trim()
+          ? { reference: values.reference.trim() }
+          : {}),
         note: values.note || undefined,
         estimateDate: values.estimateDate || undefined,
         expiresInDays: values.expiresInDays ? Number(values.expiresInDays) : undefined,
@@ -154,7 +168,7 @@ export function QuoteFormDrawer({
     }
   }
 
-  const quoteTypeItems = Object.fromEntries(QUOTE_TYPES.map((t) => [t, t]));
+  const quoteTypeItems = Object.fromEntries(quoteTypes.map((t) => [t, t]));
   const quoteType = form.watch('quoteType');
 
   function handleAIAssist() {
@@ -225,14 +239,16 @@ export function QuoteFormDrawer({
               )}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="reference">Reference</Label>
-              <Input
-                id="reference"
-                {...form.register('reference')}
-                placeholder="Optional reference"
-              />
-            </div>
+            {showReference && (
+              <div className="space-y-2">
+                <Label htmlFor="reference">Reference</Label>
+                <Input
+                  id="reference"
+                  {...form.register('reference')}
+                  placeholder="Optional reference"
+                />
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="quoteType">
@@ -249,7 +265,7 @@ export function QuoteFormDrawer({
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
                 <SelectContent>
-                  {QUOTE_TYPES.map((t) => (
+                  {quoteTypes.map((t) => (
                     <SelectItem key={t} value={t}>
                       {t}
                     </SelectItem>

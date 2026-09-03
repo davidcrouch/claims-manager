@@ -923,6 +923,7 @@ export function createApiClient(options?: ApiClientOptions) {
       page?: number;
       limit?: number;
       purchaseOrderId?: string;
+      workOrderId?: string;
       status?: string;
       sort?: string;
       search?: string;
@@ -933,6 +934,7 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params.page != null) sp.set('page', String(params.page));
       if (params.limit != null) sp.set('limit', String(params.limit));
       if (params.purchaseOrderId) sp.set('purchaseOrderId', params.purchaseOrderId);
+      if (params.workOrderId) sp.set('workOrderId', params.workOrderId);
       if (params.status) sp.set('status', params.status);
       if (params.sort) sp.set('sort', params.sort);
       if (params.search) sp.set('search', params.search);
@@ -1962,6 +1964,7 @@ export function createApiClient(options?: ApiClientOptions) {
       catalogItemId: string;
       quantity: string;
       quoteComboId?: string;
+      addToCatalogAssembly?: boolean;
     }): Promise<unknown> {
       return fetchApi(`/quotes/${params.quoteId}/groups/${params.groupId}/catalog-items`, {
         method: 'POST',
@@ -1969,6 +1972,7 @@ export function createApiClient(options?: ApiClientOptions) {
           catalogItemId: params.catalogItemId,
           quantity: params.quantity,
           quoteComboId: params.quoteComboId,
+          addToCatalogAssembly: params.addToCatalogAssembly === true ? true : undefined,
         }),
       });
     },
@@ -1979,6 +1983,7 @@ export function createApiClient(options?: ApiClientOptions) {
       catalogAssemblyId: string;
       quantity: string;
       quoteComboId?: string;
+      addToCatalogAssembly?: boolean;
     }): Promise<unknown> {
       return fetchApi(`/quotes/${params.quoteId}/groups/${params.groupId}/catalog-assemblies`, {
         method: 'POST',
@@ -1986,6 +1991,23 @@ export function createApiClient(options?: ApiClientOptions) {
           catalogAssemblyId: params.catalogAssemblyId,
           quantity: params.quantity,
           quoteComboId: params.quoteComboId,
+          addToCatalogAssembly: params.addToCatalogAssembly === true ? true : undefined,
+        }),
+      });
+    },
+
+    addCatalogBomFromEstimate(params: {
+      quoteId: string;
+      parentQuoteComboId: string;
+      catalogComponentId: string;
+      quantity: string;
+    }): Promise<{ added: boolean }> {
+      return fetchApi(`/quotes/${params.quoteId}/catalog-bom`, {
+        method: 'POST',
+        body: JSON.stringify({
+          parentQuoteComboId: params.parentQuoteComboId,
+          catalogComponentId: params.catalogComponentId,
+          quantity: params.quantity,
         }),
       });
     },

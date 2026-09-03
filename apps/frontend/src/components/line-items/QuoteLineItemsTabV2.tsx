@@ -19,6 +19,7 @@ import type { CatalogDragPayload, GroupLabelDragPayload } from '@/components/cat
 import { uiMarkupToStored, uiTaxToStored } from '@/lib/rates';
 import {
   addCatalogAssemblyToQuoteAction,
+  addCatalogBomFromEstimateAction,
   addCatalogItemToQuoteAction,
   createQuoteGroupAction,
   updateQuoteGroupAction,
@@ -50,9 +51,14 @@ import { swapGroups, applyReorderParams } from './lib/reorder';
 import { parseRowKey } from './lib/row-keys';
 import { CatalogUpdateConfirmDialog } from './CatalogUpdateConfirmDialog';
 import {
+  CatalogBomAddConfirmDialog,
+  type CatalogBomAddPrompt,
+} from './CatalogBomAddConfirmDialog';
+import {
   CATALOG_UPDATE_MODE_STORAGE_KEY,
   collectCatalogSourceUpdates,
   parseCatalogUpdateMode,
+  resolveParentCatalogLink,
   type CatalogSourcePushItem,
   type CatalogUpdateMode,
 } from './lib/catalog-update';
@@ -94,6 +100,7 @@ export const QuoteLineItemsTabV2 = forwardRef(function QuoteLineItemsTabV2(
   const [dbGroups, setDbGroups] = useState<ApiGroup[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [lineItemsReady, setLineItemsReady] = useState(false);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [groupSummaries, setGroupSummaries] = useState<Array<{ id: string; label: string }>>([]);
@@ -131,6 +138,10 @@ export const QuoteLineItemsTabV2 = forwardRef(function QuoteLineItemsTabV2(
   catalogUpdateModeRef.current = canSetCatalogUpdateMode ? catalogUpdateMode : 'none';
   const [catalogPromptItems, setCatalogPromptItems] = useState<CatalogSourcePushItem[] | null>(null);
   const [catalogPromptPending, setCatalogPromptPending] = useState(false);
+  const [catalogBomPrompt, setCatalogBomPrompt] = useState<CatalogBomAddPrompt | null>(null);
+  const [catalogBomPromptPending, setCatalogBomPromptPending] = useState(false);
+  const dbGroupsRef = useRef(dbGroups);
+  dbGroupsRef.current = dbGroups;
 
   const applyCatalogUpdates = useCallback(async (catalogItems: CatalogSourcePushItem[]) => {
     const catalogResult = await updateCatalogFromEstimateAction({
@@ -164,6 +175,7 @@ export const QuoteLineItemsTabV2 = forwardRef(function QuoteLineItemsTabV2(
     if (visibleGroupIds && visibleGroupIds.length === 0) {
       setDbGroups([]);
       setTotal(0);
+      setLineItemsReady(true);
       return;
     }
     const result = await getQuoteLineItemsAction(quote.id, {
@@ -180,9 +192,17 @@ export const QuoteLineItemsTabV2 = forwardRef(function QuoteLineItemsTabV2(
       console.error(`${PREFIX}.loadLineItems — ${result.error}`);
       toast.error(result.error ?? 'Failed to load line items');
     }
+    setLineItemsReady(true);
   }, [quote.id, debouncedSearch, visibleGroupIds, page]);
 
   useEffect(() => { void loadLineItems(); }, [loadLineItems]);
+
+  useEffect(() => {
+    setLineItemsReady(false);
+    setTotal(0);
+    setDbGroups([]);
+    setGroupSummaries([]);
+  }, [quote.id]);
 
   // --- Actions wired to backend ---
 
@@ -190,15 +210,49 @@ export const QuoteLineItemsTabV2 = forwardRef(function QuoteLineItemsTabV2(
     startTransition(async () => {
       const qty = quantity.trim() || '1';
       const nestUnderComboId = payload.kind === 'scope' ? undefined : quoteComboId;
+      const catalogMode = catalogUpdateModeRef.current;
+      const parentLink =
+        nestUnderComboId && catalogMode !== 'none'
+          ? resolveParentCatalogLink(dbGroupsRef.current, nestUnderComboId)
+          : undefined;
+      const addToCatalogAssembly = catalogMode === 'auto' && !!parentLink;
+
       const result =
         payload.kind === 'assembly' || payload.kind === 'scope'
-          ? await addCatalogAssemblyToQuoteAction({ quoteId: quote.id, catalogAssemblyId: payload.id, quantity: qty, groupId, quoteComboId: nestUnderComboId })
-          : await addCatalogItemToQuoteAction({ quoteId: quote.id, catalogItemId: payload.id, quantity: qty, groupId, quoteComboId: nestUnderComboId });
+          ? await addCatalogAssemblyToQuoteAction({
+              quoteId: quote.id,
+              catalogAssemblyId: payload.id,
+              quantity: qty,
+              groupId,
+              quoteComboId: nestUnderComboId,
+              addToCatalogAssembly,
+            })
+          : await addCatalogItemToQuoteAction({
+              quoteId: quote.id,
+              catalogItemId: payload.id,
+              quantity: qty,
+              groupId,
+              quoteComboId: nestUnderComboId,
+              addToCatalogAssembly,
+            });
       if (!result.success) {
         toast.error(result.error ?? 'Failed to add catalogue item');
         return;
       }
       toast.success(`Added ${payload.code} to estimate`);
+      if (addToCatalogAssembly) {
+        if (result.addedToCatalog) {
+          toast.success('Catalogue parent updated');
+        }
+      } else if (catalogMode === 'prompt' && parentLink && nestUnderComboId) {
+        setCatalogBomPrompt({
+          parentQuoteComboId: nestUnderComboId,
+          catalogComponentId: payload.id,
+          quantity: qty,
+          itemLabel: payload.name ?? payload.code,
+          parentLabel: parentLink.label,
+        });
+      }
       setStructurallyDirty(true);
       await loadLineItems();
       router.refresh();
@@ -559,7 +613,12 @@ export const QuoteLineItemsTabV2 = forwardRef(function QuoteLineItemsTabV2(
   return (
     <div className="space-y-4">
       {!readOnly && (
-        <CatalogPickerDrawer open={drawerOpen} onOpenChange={onDrawerOpenChange} catalogType={catalogType} />
+        <CatalogPickerDrawer
+          open={drawerOpen}
+          onOpenChange={onDrawerOpenChange}
+          catalogType={catalogType}
+          defaultTab={lineItemsReady && total === 0 ? 'groups' : 'items'}
+        />
       )}
 
       <LineItemsProvider
@@ -602,6 +661,41 @@ export const QuoteLineItemsTabV2 = forwardRef(function QuoteLineItemsTabV2(
           void applyCatalogUpdates(catalogPromptItems).finally(() => {
             setCatalogPromptPending(false);
             setCatalogPromptItems(null);
+          });
+        }}
+      />
+
+      <CatalogBomAddConfirmDialog
+        open={catalogBomPrompt !== null}
+        prompt={catalogBomPrompt}
+        pending={catalogBomPromptPending}
+        onCancel={() => {
+          if (catalogBomPromptPending) return;
+          setCatalogBomPrompt(null);
+        }}
+        onConfirm={() => {
+          if (!catalogBomPrompt || catalogBomPromptPending) return;
+          setCatalogBomPromptPending(true);
+          void (async () => {
+            const bomResult = await addCatalogBomFromEstimateAction({
+              quoteId: quote.id,
+              parentQuoteComboId: catalogBomPrompt.parentQuoteComboId,
+              catalogComponentId: catalogBomPrompt.catalogComponentId,
+              quantity: catalogBomPrompt.quantity,
+            });
+            if (!bomResult.success) {
+              console.error(`${PREFIX}.catalogBomPrompt — ${bomResult.error}`);
+              toast.error(bomResult.error ?? 'Failed to update catalogue');
+              return;
+            }
+            toast.success(
+              bomResult.added === false
+                ? 'Catalogue already includes this item'
+                : 'Catalogue parent updated',
+            );
+          })().finally(() => {
+            setCatalogBomPromptPending(false);
+            setCatalogBomPrompt(null);
           });
         }}
       />

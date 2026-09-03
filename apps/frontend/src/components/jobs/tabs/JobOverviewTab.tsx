@@ -25,6 +25,7 @@ import {
 import type { JobEditPending, JobOverviewDraft, LookupOption } from '@/components/jobs/job-edit.types';
 import { jobInsurerReference } from '@/components/shared/job-label';
 import type { Job, Claim } from '@/types/api';
+import type { JobKindCapabilities } from '@/lib/job-kind-registry';
 
 type Dict = Record<string, unknown>;
 
@@ -96,6 +97,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     saving,
     editing = false,
     statusOptions = [],
+    caps,
     onDirtyChange,
     onAddAppointment,
   }: {
@@ -104,13 +106,15 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     saving?: boolean;
     editing?: boolean;
     statusOptions?: LookupOption[];
+    caps: JobKindCapabilities;
     onDirtyChange?: (dirty: boolean) => void;
     onAddAppointment?: () => void;
   },
   ref: Ref<JobOverviewTabHandle>,
 ) {
-  const isCrunchwork = job.provider === 'crunchwork';
-  const cwEditing = editing && isCrunchwork;
+  const statusEditable = editing && caps.job.statusEditable.editable;
+  const vendorExtRefEditable = editing && caps.job.vendorExtRefEditable.editable;
+  const instructionsEditable = editing && caps.job.instructionsEditable.editable;
   const api = getApi(job);
   const address = jobAddress(job);
   const mapAddress = jobAddress(job, true).trim() || null;
@@ -210,11 +214,9 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
   const isDirty =
     bookedDate !== savedBookedDate ||
     attendanceDate !== savedAttendanceDate ||
-    (isCrunchwork && (
-      statusLookupId !== savedStatusLookupId ||
-      jobInstructions !== savedJobInstructions ||
-      vendorExtRef !== savedVendorExtRef
-    ));
+    (caps.job.statusEditable.editable && statusLookupId !== savedStatusLookupId) ||
+    (caps.job.instructionsEditable.editable && jobInstructions !== savedJobInstructions) ||
+    (caps.job.vendorExtRefEditable.editable && vendorExtRef !== savedVendorExtRef);
 
   useEffect(() => {
     onDirtyChange?.(isDirty);
@@ -234,10 +236,14 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
       bookedDate: bookedDate || null,
       attendanceDate: attendanceDate || null,
     };
-    if (isCrunchwork) {
+    if (caps.job.statusEditable.editable) {
       pending.statusLookupId = statusLookupId || null;
       pending.statusExternalReference = statusExternalReference || null;
+    }
+    if (caps.job.instructionsEditable.editable) {
       pending.jobInstructions = jobInstructions;
+    }
+    if (caps.job.vendorExtRefEditable.editable) {
       pending.vendorExternalReference = vendorExtRef || null;
     }
     return pending;
@@ -317,7 +323,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     savedStatusExternalReference,
     savedJobInstructions,
     savedVendorExtRef,
-    isCrunchwork,
+    caps,
   ]);
 
   const claimFields = (
@@ -382,7 +388,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
           <DefRow
             label="Status"
             value={
-              cwEditing ? (
+              statusEditable ? (
                 <EditLookupSelect
                   valueId={statusLookupId}
                   options={statusSelectOptions}
@@ -400,21 +406,29 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
           {insurerRef && (
             <DefRow label="Insurer reference" value={insurerRef} />
           )}
-          <DefRow label="Parent claim" value={job.claimId ? (<Link href={`/claims/${job.claimId}`} className="inline-flex items-center gap-1 text-primary hover:underline">{parentClaimNumber ?? job.claimId}<ExternalLink className="h-3 w-3" /></Link>) : '—'} />
+          {caps.job.parentClaim.visible && (
+            <DefRow label="Parent claim" value={job.claimId ? (<Link href={`/claims/${job.claimId}`} className="inline-flex items-center gap-1 text-primary hover:underline">{parentClaimNumber ?? job.claimId}<ExternalLink className="h-3 w-3" /></Link>) : '—'} />
+          )}
           {parentJobId && <DefRow label="Parent job" value={<Link href={`/jobs/${parentJobId}`} className="inline-flex items-center gap-1 text-primary hover:underline">Open master job<ExternalLink className="h-3 w-3" /></Link>} />}
           <DefRow label="Request date" value={formatDate(job.requestDate)} />
-          <DefRow
-            label="Make-safe required"
-            value={<BoolPill value={makeSafeFlag} />}
-          />
-          <DefRow
-            label="Collect excess"
-            value={<BoolPill value={collectExcessFlag} />}
-          />
-          <DefRow
-            label="Excess"
-            value={formatCurrency(excessAmount)}
-          />
+          {caps.job.makeSafeRequired.visible && (
+            <DefRow
+              label="Make-safe required"
+              value={<BoolPill value={makeSafeFlag} />}
+            />
+          )}
+          {caps.job.collectExcess.visible && (
+            <DefRow
+              label="Collect excess"
+              value={<BoolPill value={collectExcessFlag} />}
+            />
+          )}
+          {caps.job.excess.visible && (
+            <DefRow
+              label="Excess"
+              value={formatCurrency(excessAmount)}
+            />
+          )}
           <AnimatePresence initial={false}>
             {showAdvanced && (
               <motion.div
@@ -428,19 +442,19 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
                 <DefRow label="External reference" value={job.externalReference ?? '—'} />
                 <DefRow label="Provider" value={
                   <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                    job.provider === 'crunchwork'
+                    caps.job.providerBadge.visible
                       ? 'bg-blue-100 text-blue-700'
                       : 'bg-slate-100 text-slate-700'
                   }`}>
-                    {job.provider === 'crunchwork' ? 'Crunchwork' : 'Internal'}
+                    {caps.providerLabel}
                   </span>
                 } />
-                {parentClaimCw && parentClaimCw !== job.claimId && (
+                {caps.job.parentClaim.visible && parentClaimCw && parentClaimCw !== job.claimId && (
                   <DefRow label="Parent claim (Crunchwork)" value={<span className="font-mono text-xs">{parentClaimCw}</span>} />
                 )}
                 <DefRow label="Created" value={formatDateTime(job.createdAt)} />
                 <DefRow label="Updated" value={formatDateTime(job.updatedAt)} />
-                {cwUpdatedAt && <DefRow label="Crunchwork updated" value={formatDateTime(cwUpdatedAt)} />}
+                {caps.job.cwUpdatedAt.visible && cwUpdatedAt && <DefRow label={`${caps.providerLabel} updated`} value={formatDateTime(cwUpdatedAt)} />}
               </motion.div>
             )}
           </AnimatePresence>
@@ -495,13 +509,13 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
           } />
           <DefRow label="Completed date" value={formatDate(completedDate)} />
         </SectionCard>
-        {(vendorName || vendorExtRefInitial || vendorPhone || vendorEmail || cwEditing) && (
+        {(vendorName || vendorExtRefInitial || vendorPhone || vendorEmail || caps.job.vendorSection.visible) && (
           <SectionCard title="Vendor" icon={<Building2 className="h-4 w-4 text-muted-foreground" />}>
             <DefRow label="Name" value={vendorName ?? '—'} />
             <DefRow
               label="External reference"
               value={
-                cwEditing ? (
+                vendorExtRefEditable ? (
                   <EditText
                     value={vendorExtRef}
                     onChange={setVendorExtRef}
@@ -576,7 +590,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
               <CardTitle className="flex items-center gap-2 text-sm"><ScrollText className="h-4 w-4 text-muted-foreground" />Instructions</CardTitle>
             </CardHeader>
             <CardContent>
-              {cwEditing ? (
+              {instructionsEditable ? (
                 <EditTextarea
                   value={jobInstructions}
                   onChange={setJobInstructions}
@@ -590,6 +604,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
               )}
             </CardContent>
           </Card>
+          {caps.job.parentClaim.visible && (
           <SectionCard title="Parent Claim" icon={<Briefcase className="h-4 w-4 text-muted-foreground" />} action={parentClaimAction}>
             <DefRow label="Claim number" value={parentClaim?.claimNumber ?? parentClaimNumber ?? '—'} />
             <DefRow label="External reference" value={parentClaim?.externalReference ?? '—'} />
@@ -599,6 +614,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
             <DefRow label="Date of loss" value={formatDate(parentClaim?.dateOfLoss)} />
             {claimFields}
           </SectionCard>
+          )}
         </div>
       </div>
 

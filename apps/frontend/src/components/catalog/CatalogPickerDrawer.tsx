@@ -32,6 +32,11 @@ export interface CatalogPickerDrawerProps {
   excludeCatalogId?: string;
   /** Controls subtitle text and tab visibility. Defaults to 'estimate'. */
   context?: 'estimate' | 'catalog';
+  /**
+   * Tab selected when the drawer opens. Defaults to `items`.
+   * Use `groups` when the estimate has no line items yet.
+   */
+  defaultTab?: 'items' | 'groups';
 }
 
 const DRAWER_WIDTH = '32rem';
@@ -475,17 +480,35 @@ function GroupLabelsTab({ open }: { open: boolean }) {
 
 /* ---- Main Drawer ---- */
 
-export function CatalogPickerDrawer({ open, onOpenChange, catalogType, excludeCatalogId, context = 'estimate' }: CatalogPickerDrawerProps) {
+export function CatalogPickerDrawer({
+  open,
+  onOpenChange,
+  catalogType,
+  excludeCatalogId,
+  context = 'estimate',
+  defaultTab = 'items',
+}: CatalogPickerDrawerProps) {
   const [mounted, setMounted] = useState(false);
-  const [activeTab, setActiveTab] = useState<string>('items');
+  const [activeTab, setActiveTab] = useState<string>(defaultTab);
   const [pinned, setPinned] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const { open: sidebarOpen, setOpen: setSidebarOpen } = useSidebar();
   const sidebarStateBeforePin = useRef<boolean | null>(null);
+  const wasOpenRef = useRef(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Apply default tab each time the drawer opens (not while already open).
+  useEffect(() => {
+    if (open && !wasOpenRef.current) {
+      const next =
+        context === 'catalog' && defaultTab === 'groups' ? 'items' : defaultTab;
+      setActiveTab(next);
+    }
+    wasOpenRef.current = open;
+  }, [open, defaultTab, context]);
 
   useEffect(() => {
     if (!open) {

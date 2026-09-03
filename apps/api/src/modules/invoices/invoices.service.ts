@@ -17,6 +17,7 @@ import { CatalogSelectionService } from '../catalog/services/catalog-selection.s
 import { CatalogOutboundService } from '../catalog/services/catalog-outbound.service';
 import { OutboundSyncService } from '../domain/outbound/outbound-sync.service';
 import {
+  applyInvoicedAmountOverridesToGroups,
   applyLocalPricingToCrunchworkInvoiceGroups,
   buildCrunchworkVendorTaxInvoiceCreateBody,
   crunchworkInvoiceGroupsFromPayload,
@@ -104,6 +105,7 @@ export class InvoicesService {
     page?: number;
     limit?: number;
     purchaseOrderId?: string;
+    workOrderId?: string;
     jobId?: string;
     jobIds?: string[];
     status?: string;
@@ -117,6 +119,7 @@ export class InvoicesService {
       page: params.page,
       limit: params.limit,
       purchaseOrderId: params.purchaseOrderId,
+      workOrderId: params.workOrderId,
       jobId: params.jobId,
       jobIds: params.jobIds,
       status: params.status,
@@ -215,6 +218,27 @@ export class InvoicesService {
         ? null
         : String(bodyInvoiceNumber).trim();
 
+      const invoicedAmountsRaw = body.invoicedAmounts;
+      const invoicedAmounts =
+        invoicedAmountsRaw &&
+        typeof invoicedAmountsRaw === 'object' &&
+        !Array.isArray(invoicedAmountsRaw)
+          ? (invoicedAmountsRaw as Record<string, number>)
+          : undefined;
+
+      if (invoicedAmounts && totalAmount != null) {
+        const sum = Object.values(invoicedAmounts).reduce((acc, v) => {
+          const n = typeof v === 'number' ? v : Number(v);
+          return Number.isFinite(n) ? acc + n : acc;
+        }, 0);
+        const header = Number(totalAmount);
+        if (Number.isFinite(header) && Math.abs(sum - header) > 0.05) {
+          this.logger.warn(
+            `${logPrefix} — invoicedAmounts sum=${sum} differs from totalAmount=${header}`,
+          );
+        }
+      }
+
       const insertData: InvoiceInsert = {
         tenantId,
         workOrderId: workOrderId ?? null,
@@ -231,6 +255,7 @@ export class InvoicesService {
           workOrderId,
           purchaseOrderId,
           dueDate: body.dueDate ?? null,
+          ...(invoicedAmounts ? { invoicedAmounts } : {}),
         },
         originType: 'user',
         issuerOrganisationId: tenantId,
@@ -299,6 +324,29 @@ export class InvoicesService {
       name: 'Submitted',
     });
 
+    let localGroups = await this.catalogSelectionService.buildOutboundInvoiceGroups({
+      purchaseOrderId: existing.purchaseOrderId,
+      workOrderId: existing.workOrderId,
+    });
+    if (this.catalogOutbound && localGroups.length > 0) {
+      const enriched = await this.catalogOutbound.enrichPayload({
+        tenantId,
+        body: { groups: localGroups },
+      });
+      localGroups = Array.isArray(enriched.groups)
+        ? (enriched.groups as Record<string, unknown>[])
+        : localGroups;
+    }
+
+    const payloadInvoiced = (existing.invoicePayload as Record<string, unknown> | null)
+      ?.invoicedAmounts;
+    const invoicedAmounts =
+      payloadInvoiced &&
+      typeof payloadInvoiced === 'object' &&
+      !Array.isArray(payloadInvoiced)
+        ? (payloadInvoiced as Record<string, number>)
+        : undefined;
+
     await this.invoicesRepo.update({
       id: params.id,
       data: {
@@ -319,6 +367,13 @@ export class InvoicesService {
           purchaseOrderId: providerPurchaseOrderId,
           reusedCwInvoiceId,
           invoiceId: params.id,
+          localGroups,
+          ...(invoicedAmounts ? { invoicedAmounts } : {}),
+          vendorInvoiceNumber: existing.invoiceNumber ?? existing.internalNumber ?? null,
+          issueDate: existing.issueDate
+            ? new Date(existing.issueDate as string | Date).toISOString()
+            : undefined,
+          note: existing.comments ?? null,
         },
         sourceEvent: 'api:publish',
         idempotencyKey: `invoice:${params.id}:publish`,
@@ -376,6 +431,8 @@ export class InvoicesService {
     createResponse: Record<string, unknown>;
     purchaseOrderId?: string | null;
     workOrderId?: string | null;
+    localGroups?: Record<string, unknown>[];
+    invoicedAmounts?: Record<string, number>;
     vendorInvoiceNumber?: string | null;
     issueDate?: string;
     note?: string | null;
@@ -395,12 +452,19 @@ export class InvoicesService {
       return params.createResponse;
     }
 
-    let localGroups = await this.catalogSelectionService.buildOutboundInvoiceGroups({
-      purchaseOrderId: params.purchaseOrderId,
-      workOrderId: params.workOrderId,
-    });
+    let localGroups =
+      params.localGroups && params.localGroups.length > 0
+        ? params.localGroups
+        : await this.catalogSelectionService.buildOutboundInvoiceGroups({
+            purchaseOrderId: params.purchaseOrderId,
+            workOrderId: params.workOrderId,
+          });
     const tenantId = this.tenantContext.getTenantId();
-    if (this.catalogOutbound && localGroups.length > 0) {
+    if (
+      this.catalogOutbound &&
+      localGroups.length > 0 &&
+      !(params.localGroups && params.localGroups.length > 0)
+    ) {
       const enriched = await this.catalogOutbound.enrichPayload({
         tenantId,
         body: { groups: localGroups },
@@ -414,7 +478,11 @@ export class InvoicesService {
       cwGroups,
       localGroups,
     });
-    const updateGroups = toInvoiceUpdateGroups(priced);
+    const allocated = applyInvoicedAmountOverridesToGroups({
+      groups: priced,
+      invoicedAmounts: params.invoicedAmounts,
+    });
+    const updateGroups = toInvoiceUpdateGroups(allocated);
     if (updateGroups.length === 0) {
       this.logger.warn(
         `${params.logPrefix} — no Crunchwork group ids to update on invoice ${params.cwInvoiceId}`,

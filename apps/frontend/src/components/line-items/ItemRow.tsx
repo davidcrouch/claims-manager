@@ -580,7 +580,10 @@ export const ItemRow = memo(function ItemRow({
                   handleInputChange(rowKey, 'invoiced', raw);
                   return;
                 }
-                const maxTotal = Math.max(0, money.total);
+                const maxTotal = Math.max(
+                  0,
+                  money.total - (item.previouslyInvoiced ?? 0),
+                );
                 const clamped = Math.min(Math.max(0, parsed), maxTotal);
                 // Preserve typed decimals when under the cap; rewrite when clamped.
                 handleInputChange(
@@ -591,7 +594,10 @@ export const ItemRow = memo(function ItemRow({
               }}
               onBlur={() => {
                 const parsed = Number(inputs.invoiced);
-                const maxTotal = Math.max(0, money.total);
+                const maxTotal = Math.max(
+                  0,
+                  money.total - (item.previouslyInvoiced ?? 0),
+                );
                 if (!Number.isFinite(parsed) || inputs.invoiced.trim() === '') {
                   handleInputChange(rowKey, 'invoiced', '0');
                   return;
@@ -604,8 +610,8 @@ export const ItemRow = memo(function ItemRow({
               onKeyDown={handleCellKeyDown}
               onFocus={() => setEditState({ rowKey, field: 'invoiced' })}
               inputMode="decimal"
-              aria-label={`Invoiced amount (max ${formatCurrency(money.total)})`}
-              title={`Maximum ${formatCurrency(money.total)}`}
+              aria-label={`Invoiced amount (max ${formatCurrency(Math.max(0, money.total - (item.previouslyInvoiced ?? 0)))})`}
+              title={`Maximum ${formatCurrency(Math.max(0, money.total - (item.previouslyInvoiced ?? 0)))}`}
             />
           ) : (
             <span className="block text-right font-mono text-sm text-slate-700">

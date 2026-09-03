@@ -149,7 +149,7 @@ export class ClaimsRepository {
                     and(
                       eq(lookupValues.tenantId, params.tenantId),
                       eq(lookupValues.domain, 'contact_type'),
-                      sql`lower(coalesce(${lookupValues.name}, '')) = 'insured'`,
+                      sql`lower(coalesce(${lookupValues.name}, '')) IN ('insured', 'customer')`,
                       or(
                         eq(contacts.typeLookupId, lookupValues.id),
                         sql`${contacts.contactPayload}->'typeLookupIds' ? ${lookupValues.id}::text`,
@@ -390,8 +390,8 @@ export class ClaimsRepository {
   }
 
   /**
-   * Primary insured/client display name per claim (first Insured-typed contact by sortIndex).
-   * Matches contact_type lookups named "Insured" via typeLookupId or contactPayload.typeLookupIds.
+   * Primary insured/client display name per claim (first Customer/Insured-typed contact by sortIndex).
+   * Matches contact_type lookups named "Customer" or "Insured" via typeLookupId or contactPayload.typeLookupIds.
    */
   async findInsuredNamesByClaimIds(params: {
     tenantId: string;
@@ -414,7 +414,7 @@ export class ClaimsRepository {
         and(
           eq(lookupValues.tenantId, params.tenantId),
           eq(lookupValues.domain, 'contact_type'),
-          sql`lower(coalesce(${lookupValues.name}, '')) = 'insured'`,
+          sql`lower(coalesce(${lookupValues.name}, '')) IN ('insured', 'customer')`,
           or(
             eq(contacts.typeLookupId, lookupValues.id),
             sql`${contacts.contactPayload}->'typeLookupIds' ? ${lookupValues.id}::text`,

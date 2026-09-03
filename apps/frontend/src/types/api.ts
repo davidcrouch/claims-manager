@@ -625,6 +625,8 @@ export interface Contact {
   }>;
   preferredContactMethodLookupId?: string | null;
   notes?: string | null;
+  /** Postal / site address when stored on the contact. */
+  address?: AddressPayload | null;
   /** Present when API/payload marks the contact archived or removed. */
   status?: string | null;
   contactPayload?: Record<string, unknown> | null;

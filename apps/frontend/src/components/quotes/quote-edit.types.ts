@@ -1,15 +1,14 @@
 import type { QuotePartyPayload } from '@/types/api';
+import {
+  CW_ESTIMATE_QUOTE_TYPES,
+  INTERNAL_ESTIMATE_QUOTE_TYPES,
+} from '@/lib/job-kind-registry';
 
-/** Quote types accepted on create/update (CW quoteType.externalReference / name). */
-export const QUOTE_TYPES = [
-  'Validation',
-  'Variation',
-  'Tender Quote',
-  'Variation - PC/PS',
-  'Liability Quote',
-  'Scope Of Work',
-  'Quote',
-] as const;
+/** Crunchwork estimate quote types (fallback when caps unavailable). */
+export const QUOTE_TYPES = CW_ESTIMATE_QUOTE_TYPES;
+
+/** Internal estimate types: Quote | Variation. */
+export const INTERNAL_QUOTE_TYPES = INTERNAL_ESTIMATE_QUOTE_TYPES;
 
 export type QuoteTypeOption = (typeof QUOTE_TYPES)[number];
 

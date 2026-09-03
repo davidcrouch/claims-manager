@@ -127,6 +127,87 @@ export function applyLocalPricingToCrunchworkInvoiceGroups(params: {
 }
 
 /**
+ * Apply draft `invoicePayload.invoicedAmounts` onto priced CW groups before
+ * update. When the map is present:
+ * - amount <= 0 or missing → completed: false
+ * - amount > 0 → completed: true; quantity = amount/unitCost (or qty=1, unitCost=amount)
+ * When the map is absent, groups are returned unchanged (full-line publish).
+ */
+export function applyInvoicedAmountOverridesToGroups(params: {
+  groups: JsonObject[];
+  invoicedAmounts: Record<string, number> | null | undefined;
+}): JsonObject[] {
+  const amounts = params.invoicedAmounts;
+  if (!amounts || typeof amounts !== 'object' || Array.isArray(amounts)) {
+    return params.groups;
+  }
+  if (Object.keys(amounts).length === 0) return params.groups;
+
+  const groups = structuredClone(params.groups);
+
+  const visitItem = (item: JsonObject) => {
+    const allocated = lookupInvoicedAmount(amounts, item);
+    if (allocated == null || allocated <= 0) {
+      item.completed = false;
+      return;
+    }
+    item.completed = true;
+    const unitCost = Number(item.unitCost);
+    if (Number.isFinite(unitCost) && unitCost > 0) {
+      item.quantity = roundMoney(allocated / unitCost);
+    } else {
+      item.quantity = 1;
+      item.unitCost = allocated;
+      copyUnitCostToBuyCostForCrunchwork(item);
+    }
+  };
+
+  for (const group of groups) {
+    for (const item of asObjectArray(group.items)) visitItem(item);
+    for (const combo of asObjectArray(group.combos)) {
+      for (const item of asObjectArray(combo.items)) visitItem(item);
+    }
+  }
+
+  return groups;
+}
+
+function roundMoney(n: number): number {
+  return Math.round(n * 10000) / 10000;
+}
+
+function lookupInvoicedAmount(
+  amounts: Record<string, number>,
+  item: JsonObject,
+): number | null {
+  for (const key of invoiceItemMatchKeys(item)) {
+    const raw = amounts[key];
+    const n = typeof raw === 'number' ? raw : Number(raw);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+/** Match keys aligned with frontend bill/invoice line progress. */
+export function invoiceItemMatchKeys(item: JsonObject): string[] {
+  const keys: string[] = [];
+  if (typeof item.id === 'string' && item.id) keys.push(`id:${item.id}`);
+  if (typeof item.catalogItemId === 'string' && item.catalogItemId) {
+    keys.push(`catalog:${item.catalogItemId}`);
+  }
+  const name =
+    typeof item.name === 'string' ? item.name.trim().toLowerCase() : '';
+  if (name) {
+    const index =
+      item.index != null && Number.isFinite(Number(item.index))
+        ? Number(item.index)
+        : 0;
+    keys.push(`name:${name}:${index}`);
+  }
+  return keys;
+}
+
+/**
  * InvoiceUpdateGroupInput / InvoiceUpdateItemInput — ids from create, plus
  * completed and pricing. Drop response-only totals and nested id objects.
  */
@@ -165,6 +246,9 @@ function toInvoiceUpdateCombo(combo: JsonObject): JsonObject | null {
 
 function toInvoiceUpdateItem(item: JsonObject): JsonObject | null {
   if (typeof item.id !== 'string' || !item.id) return null;
+  if (item.completed === false) {
+    return { id: item.id, completed: false };
+  }
   const out: JsonObject = { id: item.id, completed: true };
   copyNumberIfPresent(item, out, 'quantity');
   copyNumberIfPresent(item, out, 'unitCost');

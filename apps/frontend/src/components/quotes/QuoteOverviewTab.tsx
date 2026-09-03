@@ -43,8 +43,8 @@ import {
 } from '@/components/ui/select';
 import { OrgUserLabel } from '@/components/shared/DetailAssignee';
 import type { Quote } from '@/types/api';
+import type { JobKindCapabilities } from '@/lib/job-kind-registry';
 import {
-  QUOTE_TYPES,
   applyPendingToOverviewDraft,
   toInputDate,
   type QuoteEditPending,
@@ -155,11 +155,13 @@ export const QuoteOverviewTab = forwardRef(function QuoteOverviewTab(
     quote,
     editing = false,
     saving = false,
+    caps,
     onDirtyChange,
   }: {
     quote: Quote;
     editing?: boolean;
     saving?: boolean;
+    caps: JobKindCapabilities;
     onDirtyChange?: (dirty: boolean) => void;
   },
   ref: Ref<QuoteOverviewTabHandle>,
@@ -186,9 +188,12 @@ export const QuoteOverviewTab = forwardRef(function QuoteOverviewTab(
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keep drafts across same-quote payload refreshes
   }, [quote.id]);
 
+  const showReference = caps.estimate.reference.visible;
+  const referenceEditable = editing && caps.estimate.reference.editable;
+
   const isDirty =
     draft.name !== baseline.name ||
-    draft.reference !== baseline.reference ||
+    (showReference && draft.reference !== baseline.reference) ||
     draft.note !== baseline.note ||
     draft.quoteType !== baseline.quoteType ||
     draft.estimateDate !== baseline.estimateDate ||
@@ -212,7 +217,7 @@ export const QuoteOverviewTab = forwardRef(function QuoteOverviewTab(
     if (!isDirty) return null;
     const pending: QuoteEditPending = {};
     if (draft.name !== baseline.name) pending.name = draft.name || null;
-    if (draft.reference !== baseline.reference) {
+    if (showReference && draft.reference !== baseline.reference) {
       pending.reference = draft.reference || null;
     }
     if (draft.note !== baseline.note) pending.note = draft.note || null;
@@ -268,7 +273,9 @@ export const QuoteOverviewTab = forwardRef(function QuoteOverviewTab(
     [isDirty, draft, baseline],
   );
 
-  const quoteTypeItems = Object.fromEntries(QUOTE_TYPES.map((t) => [t, t]));
+  const quoteTypeItems = Object.fromEntries(
+    caps.estimateQuoteTypes.map((t) => [t, t]),
+  );
 
   return (
     <div className="space-y-4">
@@ -281,7 +288,9 @@ export const QuoteOverviewTab = forwardRef(function QuoteOverviewTab(
             label="Estimate number"
             value={quote.internalNumber ?? quote.quoteNumber ?? '—'}
           />
-          <DefRow label="Insurer Ref" value={quoteInsurerRef(quote) ?? '—'} />
+          {caps.estimate.insurerRef.visible && (
+            <DefRow label="Insurer Ref" value={quoteInsurerRef(quote) ?? '—'} />
+          )}
           <DefRow
             label="Name"
             value={
@@ -296,21 +305,25 @@ export const QuoteOverviewTab = forwardRef(function QuoteOverviewTab(
               )
             }
           />
-          <DefRow
-            label="Reference"
-            value={
-              editing ? (
-                <EditText
-                  value={draft.reference}
-                  onChange={(v) => patch('reference', v)}
-                  disabled={saving}
-                />
-              ) : (
-                (quote.reference ?? '—')
-              )
-            }
-          />
-          {insurerRef && <DefRow label="Insurer reference" value={insurerRef} />}
+          {showReference && (
+            <DefRow
+              label="Reference"
+              value={
+                referenceEditable ? (
+                  <EditText
+                    value={draft.reference}
+                    onChange={(v) => patch('reference', v)}
+                    disabled={saving}
+                  />
+                ) : (
+                  (quote.reference ?? '—')
+                )
+              }
+            />
+          )}
+          {caps.estimate.insurerRef.visible && insurerRef && (
+            <DefRow label="Insurer reference" value={insurerRef} />
+          )}
           <DefRow label="Status type" value={approval.statusType ?? '—'} />
           <DefRow label="Created" value={formatDateTime(quote.createdAt)} />
           <DefRow label="Updated" value={formatDateTime(quote.updatedAt)} />
@@ -457,7 +470,7 @@ export const QuoteOverviewTab = forwardRef(function QuoteOverviewTab(
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent>
-                    {QUOTE_TYPES.map((t) => (
+                    {caps.estimateQuoteTypes.map((t) => (
                       <SelectItem key={t} value={t}>
                         {t}
                       </SelectItem>

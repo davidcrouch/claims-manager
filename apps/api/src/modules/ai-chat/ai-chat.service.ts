@@ -292,6 +292,7 @@ export class AiChatService {
     >();
     const toolNamesInvoked = new Set<string>();
     let assistantText = '';
+    const assistantParts: ChatMessagePart[] = [];
     let totalUsage: TokenUsage = { inputTokens: 0, outputTokens: 0 };
     let streamError: string | undefined;
     let streamStatus: 'success' | 'error' = 'success';
@@ -340,9 +341,30 @@ export class AiChatService {
             args: (event.args ?? {}) as Record<string, unknown>,
             originalName,
           });
+          assistantParts.push({
+            type: 'tool-call',
+            toolCallId: event.toolCallId,
+            toolName: event.toolName,
+            args: event.args,
+            state: 'pending',
+            thoughtSignature: event.thoughtSignature,
+          });
         }
 
         if (event.type === 'tool-result') {
+          const callPart = assistantParts.find(
+            (p) => p.type === 'tool-call' && p.toolCallId === event.toolCallId,
+          );
+          if (callPart) {
+            callPart.state = event.isError ? 'error' : 'complete';
+          }
+          assistantParts.push({
+            type: 'tool-result',
+            toolCallId: event.toolCallId,
+            toolName: event.toolName,
+            result: event.result,
+            isError: event.isError,
+          });
           const canvasEvent = this.buildCanvasComponentEvent(
             event.toolCallId,
             event.toolName,
@@ -388,6 +410,7 @@ export class AiChatService {
           params.dto.conversationId,
           rawMessages,
           assistantText,
+          assistantParts,
           messageId,
           agent.id,
         );
@@ -622,16 +645,23 @@ export class AiChatService {
     conversationId: string,
     incomingMessages: ChatMessage[],
     assistantText: string,
+    assistantToolParts: ChatMessagePart[],
     messageId: string,
     agentId: string,
   ): Promise<void> {
     const messages = [...incomingMessages];
 
-    if (assistantText.trim()) {
+    const hasContent = assistantText.trim() || assistantToolParts.length > 0;
+    if (hasContent) {
+      const parts: ChatMessagePart[] = [];
+      if (assistantText.trim()) {
+        parts.push({ type: 'text', text: assistantText });
+      }
+      parts.push(...assistantToolParts);
       messages.push({
         id: messageId,
         role: 'assistant',
-        parts: [{ type: 'text', text: assistantText }],
+        parts,
       });
     }
 

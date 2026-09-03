@@ -105,6 +105,7 @@ import {
 import { DetailUndoButton } from '@/components/shared/DetailAutosaveActions';
 import { SyncStatusIndicator } from '@/components/shared/SyncStatusIndicator';
 import { quoteInsurerRef } from '@/components/quotes/quote-label';
+import { useJobCaps } from '@/hooks/useJobCaps';
 
 type UndoEntry =
   | { kind: 'fields'; snapshot: QuoteFieldsSnapshot }
@@ -352,6 +353,7 @@ export function QuoteDetail({
   jobProvider?: CatalogType;
 }) {
   const router = useRouter();
+  const caps = useJobCaps(job);
   const [tab, setTab] = useState<QuoteTab>('overview');
   const [lineItemsMounted, setLineItemsMounted] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -437,10 +439,9 @@ export function QuoteDetail({
   );
   const statusName = getEstimateStatusName(quote);
   const canPublish = !locked;
-  const publishMode: EstimatePublishMode =
-    job?.provider === 'crunchwork' ? 'external' : 'internal';
-  const isInternal = publishMode === 'internal';
-  const canApprove = statusName === 'Pending' && isInternal;
+  const publishMode: EstimatePublishMode = caps.publishMode === 'external' ? 'external' : 'internal';
+  const canApprove = statusName === 'Pending' && caps.estimate.approveButton.visible;
+  const canCreateWorkOrder = locked && caps.workOrder.createButton.visible;
   const showTakeOffActions = tab === 'line-items' && !locked;
   /** Assignment is always editable, including published / locked estimates. */
   const canEditAssignee = true;
@@ -649,7 +650,7 @@ export function QuoteDetail({
             Received Approval
           </Button>
         )}
-        {locked && (
+        {canCreateWorkOrder && (
           <Button
             size="default"
             onClick={() => setWorkOrderDrawerOpen(true)}
@@ -761,6 +762,7 @@ export function QuoteDetail({
             quote={quote}
             editing={!locked}
             saving={false}
+            caps={caps}
             onDirtyChange={handleOverviewDirty}
           />
         </div>

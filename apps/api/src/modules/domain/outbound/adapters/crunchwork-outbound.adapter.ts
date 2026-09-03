@@ -1,6 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CrunchworkService } from '../../../../crunchwork/crunchwork.service';
 import { applyCrunchworkJobDates } from '../../../jobs/job-outbound.utils';
+import {
+  applyInvoicedAmountOverridesToGroups,
+  applyLocalPricingToCrunchworkInvoiceGroups,
+  crunchworkInvoiceGroupsFromPayload,
+  toInvoiceUpdateGroups,
+} from '../../../invoices/invoice-publish.utils';
 import type { OutboundAdapter, OutboundAdapterPushParams, OutboundPushResult } from '../outbound-adapter.interface';
 
 const UUID_RE =
@@ -104,6 +110,59 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
           throw new Error('Crunchwork did not return an invoice id after create');
         }
         apiObj = createObj;
+      }
+
+      const localGroups = Array.isArray(payload.localGroups)
+        ? (payload.localGroups as Record<string, unknown>[])
+        : [];
+      const invoicedAmounts =
+        payload.invoicedAmounts &&
+        typeof payload.invoicedAmounts === 'object' &&
+        !Array.isArray(payload.invoicedAmounts)
+          ? (payload.invoicedAmounts as Record<string, number>)
+          : undefined;
+
+      if (localGroups.length > 0) {
+        let cwGroups = crunchworkInvoiceGroupsFromPayload(apiObj);
+        if (cwGroups.length === 0) {
+          const fetched = await this.crunchwork.getInvoice({
+            connectionId,
+            invoiceId: cwInvoiceId,
+          });
+          cwGroups = crunchworkInvoiceGroupsFromPayload(fetched);
+          apiObj = fetched;
+        }
+        if (cwGroups.length > 0) {
+          const priced = applyLocalPricingToCrunchworkInvoiceGroups({
+            cwGroups,
+            localGroups,
+          });
+          const allocated = applyInvoicedAmountOverridesToGroups({
+            groups: priced,
+            invoicedAmounts,
+          });
+          const updateGroups = toInvoiceUpdateGroups(allocated);
+          if (updateGroups.length > 0) {
+            const updateBody: Record<string, unknown> = { groups: updateGroups };
+            if (typeof payload.vendorInvoiceNumber === 'string' && payload.vendorInvoiceNumber) {
+              updateBody.vendorInvoiceNumber = payload.vendorInvoiceNumber;
+            }
+            if (typeof payload.issueDate === 'string' && payload.issueDate) {
+              updateBody.issueDate = payload.issueDate;
+            }
+            if (typeof payload.note === 'string' && payload.note) {
+              updateBody.note = payload.note;
+            }
+            this.logger.log(
+              `CrunchworkOutboundAdapter.pushInvoice — updating ${cwInvoiceId} groups=${updateGroups.length}`,
+            );
+            apiObj = (await this.crunchwork.updateInvoice({
+              connectionId,
+              invoiceId: cwInvoiceId,
+              body: updateBody,
+            })) as Record<string, unknown>;
+          }
+        }
       }
 
       return {

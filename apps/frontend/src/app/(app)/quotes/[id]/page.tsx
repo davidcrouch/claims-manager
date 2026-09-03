@@ -5,6 +5,7 @@ import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { QuoteDetail, QuotePageHeader } from '@/components/quotes/QuoteDetail';
 import type { Metadata } from 'next';
 import type { CatalogType, Claim, Job } from '@/types/api';
+import { resolveJobKindCaps } from '@/lib/job-kind-registry';
 
 export async function generateMetadata({
   params,
@@ -33,11 +34,8 @@ export default async function QuoteDetailPage({
   let job: Job | null = null;
   if (quote.jobId) {
     job = await loadJob(quote.jobId);
-    if (job?.provider === 'crunchwork') {
-      jobProvider = 'crunchwork';
-    } else {
-      jobProvider = 'internal';
-    }
+    const caps = resolveJobKindCaps({ provider: job?.provider, jobType: job?.jobType });
+    jobProvider = caps.catalogScope === 'crunchwork' ? 'crunchwork' : 'internal';
   }
 
   let claim: Claim | null = job?.claim ?? null;

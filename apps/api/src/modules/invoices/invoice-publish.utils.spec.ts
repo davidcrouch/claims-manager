@@ -1,4 +1,5 @@
 import {
+  applyInvoicedAmountOverridesToGroups,
   applyLocalPricingToCrunchworkInvoiceGroups,
   buildCrunchworkVendorTaxInvoiceCreateBody,
   crunchworkInvoiceGroupsFromPayload,
@@ -254,5 +255,103 @@ describe('pickCrunchworkInvoiceIdForPurchaseOrder', () => {
         invoices: [{ id: 'inv-only', total: 0 }],
       }),
     ).toBe('inv-only');
+  });
+});
+
+describe('applyInvoicedAmountOverridesToGroups', () => {
+  it('leaves groups unchanged when no map is provided', () => {
+    const groups = [
+      {
+        id: 'g1',
+        items: [{ id: 'i1', unitCost: 10, quantity: 2, completed: true }],
+      },
+    ];
+    expect(
+      applyInvoicedAmountOverridesToGroups({
+        groups,
+        invoicedAmounts: undefined,
+      }),
+    ).toEqual(groups);
+  });
+
+  it('marks unmatched or zero amounts incomplete and scales quantity for allocated lines', () => {
+    const result = applyInvoicedAmountOverridesToGroups({
+      groups: [
+        {
+          id: 'g1',
+          items: [
+            {
+              id: 'i1',
+              catalogItemId: 'cat-1',
+              name: 'Plasterboard',
+              unitCost: 50,
+              quantity: 10,
+              completed: true,
+            },
+            {
+              id: 'i2',
+              name: 'Skip me',
+              unitCost: 20,
+              quantity: 1,
+              completed: true,
+            },
+          ],
+        },
+      ],
+      invoicedAmounts: {
+        'catalog:cat-1': 100,
+      },
+    });
+
+    const items = result[0].items as Record<string, unknown>[];
+    expect(items[0]).toMatchObject({
+      id: 'i1',
+      completed: true,
+      unitCost: 50,
+      quantity: 2,
+    });
+    expect(items[1]).toMatchObject({
+      id: 'i2',
+      completed: false,
+    });
+  });
+
+  it('sets unitCost when allocated without a usable unit cost', () => {
+    const result = applyInvoicedAmountOverridesToGroups({
+      groups: [
+        {
+          id: 'g1',
+          items: [{ id: 'i1', name: 'Labour', unitCost: 0, quantity: 1 }],
+        },
+      ],
+      invoicedAmounts: { 'id:i1': 250 },
+    });
+    const item = (result[0].items as Record<string, unknown>[])[0];
+    expect(item).toMatchObject({
+      completed: true,
+      quantity: 1,
+      unitCost: 250,
+      buyCost: 250,
+    });
+  });
+
+  it('emits completed false in toInvoiceUpdateGroups for skipped lines', () => {
+    const groups = applyInvoicedAmountOverridesToGroups({
+      groups: [
+        {
+          id: 'g1',
+          items: [
+            { id: 'i1', unitCost: 10, quantity: 1, completed: true },
+            { id: 'i2', unitCost: 10, quantity: 1, completed: true },
+          ],
+        },
+      ],
+      invoicedAmounts: { 'id:i1': 10 },
+    });
+    const update = toInvoiceUpdateGroups(groups);
+    expect(update[0].items).toEqual([
+      expect.objectContaining({ id: 'i1', completed: true, quantity: 1, unitCost: 10 }),
+      { id: 'i2', completed: false },
+    ]);
   });
 });
