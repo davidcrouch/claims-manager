@@ -61,7 +61,13 @@ export default async function InvoiceDetailPage({
           purchaseOrder={purchaseOrder}
         />
       </SetPageHeader>
-      <InvoiceDetail invoice={invoice} />
+      <InvoiceDetail
+        invoice={invoice}
+        job={job}
+        claim={claim}
+        workOrder={workOrder}
+        purchaseOrder={purchaseOrder}
+      />
     </>
   );
 }

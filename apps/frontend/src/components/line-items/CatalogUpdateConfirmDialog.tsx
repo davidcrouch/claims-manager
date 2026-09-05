@@ -16,6 +16,8 @@ export interface CatalogUpdateConfirmDialogProps {
   open: boolean;
   items: CatalogSourcePushItem[];
   pending?: boolean;
+  /** Plain label for the document type, e.g. "estimate" or "purchase order". */
+  documentLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -24,6 +26,7 @@ export function CatalogUpdateConfirmDialog({
   open,
   items,
   pending = false,
+  documentLabel = 'estimate',
   onConfirm,
   onCancel,
 }: CatalogUpdateConfirmDialogProps) {
@@ -49,8 +52,8 @@ export function CatalogUpdateConfirmDialog({
                 Update {count === 1 ? 'catalogue item' : 'catalogue items'}?
               </DialogTitle>
               <DialogDescription className="text-sm leading-relaxed">
-                The estimate has been saved. Apply the same changes to the linked
-                catalogue {count === 1 ? 'item' : 'items'} so future estimates use
+                The {documentLabel} has been saved. Apply the same changes to the linked
+                catalogue {count === 1 ? 'item' : 'items'} so future documents use
                 these values?
               </DialogDescription>
             </div>
@@ -74,8 +77,8 @@ export function CatalogUpdateConfirmDialog({
         </div>
 
         <p className="text-xs leading-relaxed text-slate-500">
-          Quantity on this estimate is not copied to the catalogue. Name, description,
-          unit, cost, markup, and tax will be updated where they changed.
+          Quantity on this {documentLabel} is not copied to the catalogue. Name, description,
+          unit, buy cost, sell price, markup, and tax will be updated where they changed.
         </p>
 
         <DialogFooter className="mt-2 gap-2 sm:gap-2">
@@ -85,7 +88,7 @@ export function CatalogUpdateConfirmDialog({
             onClick={onCancel}
             className="h-9 px-4"
           >
-            Keep estimate only
+            Keep {documentLabel} only
           </Button>
           <Button
             disabled={pending}

@@ -5,6 +5,24 @@ import { getSession, getAccessToken } from '@/lib/auth';
 import { createApiClient } from '@/lib/api-client';
 import type { PaginatedResponse, WorkOrder, LineItemsPageQuery } from '@/types/api';
 
+export async function fetchWorkOrderByIdAction(
+  workOrderId: string,
+): Promise<WorkOrder | null> {
+  const session = await getSession();
+  if (!session.authenticated) return null;
+
+  const token = await getAccessToken();
+  if (!token) return null;
+
+  const api = createApiClient({ token });
+  try {
+    return await api.getWorkOrder(workOrderId);
+  } catch (err) {
+    console.error('[work-orders/actions.fetchWorkOrderByIdAction]', err);
+    return null;
+  }
+}
+
 export async function fetchWorkOrdersAction(params?: {
   page?: number;
   limit?: number;

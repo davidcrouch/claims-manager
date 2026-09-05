@@ -15,6 +15,7 @@ export interface CatalogSourcePushItem {
   name?: string;
   description?: string;
   unitType?: string;
+  buyCost?: string;
   unitCost?: string;
   markupValue?: string;
   tax?: string;
@@ -54,8 +55,9 @@ function findScope(groups: ApiGroup[], scopeId: string): ApiScope | undefined {
 }
 
 /**
- * Map estimate edits to catalogue source updates.
+ * Map document line edits to catalogue source updates.
  * Quantity is instance-specific and is not pushed back to the catalogue.
+ * PO cost-mode edits use buyCost; estimate edits typically use unitCost.
  */
 export function collectCatalogSourceUpdates(
   groups: ApiGroup[],
@@ -65,6 +67,7 @@ export function collectCatalogSourceUpdates(
       name?: string;
       description?: string;
       unitType?: string;
+      buyCost?: string;
       unitCost?: string;
       markupValue?: string;
       tax?: string;
@@ -82,6 +85,7 @@ export function collectCatalogSourceUpdates(
       item.name !== undefined ||
       item.description !== undefined ||
       item.unitType !== undefined ||
+      item.buyCost !== undefined ||
       item.unitCost !== undefined ||
       item.markupValue !== undefined ||
       item.tax !== undefined;
@@ -92,6 +96,7 @@ export function collectCatalogSourceUpdates(
       name: item.name,
       description: item.description,
       unitType: item.unitType,
+      buyCost: item.buyCost,
       unitCost: item.unitCost,
       markupValue: item.markupValue,
       tax: item.tax,

@@ -9,7 +9,7 @@ import {
 } from '@/app/(app)/jobs/actions';
 import { usePageContext } from '@/lib/ai/use-page-context';
 import { toJobOptions, type JobOption } from '@/components/shared/job-label';
-import type { Assessment } from '@/types/api';
+import type { Assessment, Job } from '@/types/api';
 
 export interface AssessmentCreateDrawerProps {
   open: boolean;
@@ -45,23 +45,25 @@ export function AssessmentCreateDrawer({
   const pageContext = usePageContext();
   const resolvedJobId = jobIdProp?.trim() || pageContext.jobId || undefined;
   const [jobs, setJobs] = useState<JobOption[]>([]);
+  const [focusedJob, setFocusedJob] = useState<Job | null>(null);
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
 
     void (async () => {
-      const [jobsRes, focusedJob] = await Promise.all([
+      const [jobsRes, fetchedJob] = await Promise.all([
         fetchJobsAction({ limit: 100 }),
         resolvedJobId ? fetchJobByIdAction(resolvedJobId) : Promise.resolve(null),
       ]);
       if (cancelled) return;
 
       const options = toJobOptions(jobsRes?.data ?? []);
-      if (focusedJob && !options.some((j) => j.id === focusedJob.id)) {
-        options.unshift(...toJobOptions([focusedJob]));
+      if (fetchedJob && !options.some((j) => j.id === fetchedJob.id)) {
+        options.unshift(...toJobOptions([fetchedJob]));
       }
       setJobs(options);
+      setFocusedJob(fetchedJob ?? null);
     })();
 
     return () => {
@@ -90,6 +92,7 @@ export function AssessmentCreateDrawer({
       onOpenChange={onOpenChange}
       createAssessment={handleCreate}
       jobId={resolvedJobId}
+      job={focusedJob}
       jobs={jobs}
       name={name}
       claimRecommendation={claimRecommendation}

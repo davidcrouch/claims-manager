@@ -33,6 +33,8 @@ export interface UseKeyboardNavOptions {
   showGst: boolean;
   showQuantities: boolean;
   showPricing: boolean;
+  showBuyCost?: boolean;
+  showUnitCost?: boolean;
   hideComponent: boolean;
   invoiceProgressEditable?: boolean;
   selectedRows: Set<string>;
@@ -52,6 +54,8 @@ export function useKeyboardNav({
   showGst,
   showQuantities,
   showPricing,
+  showBuyCost = false,
+  showUnitCost = true,
   hideComponent,
   invoiceProgressEditable = false,
   selectedRows,
@@ -111,6 +115,8 @@ export function useKeyboardNav({
                 showPricing,
                 hideComponent,
                 invoiceProgressEditable,
+                showBuyCost,
+                showUnitCost,
               );
 
       const colIdx = fields.indexOf(editState.field);
@@ -262,7 +268,7 @@ export function useKeyboardNav({
           break;
       }
     },
-    [editState, setEditState, visibleRowIndex, showMarkup, showGst, showQuantities, showPricing, hideComponent, invoiceProgressEditable, selectedRows, setSelectedRows, navigateToRow],
+    [editState, setEditState, visibleRowIndex, showMarkup, showGst, showQuantities, showPricing, showBuyCost, showUnitCost, hideComponent, invoiceProgressEditable, selectedRows, setSelectedRows, navigateToRow],
   );
 
   return { handleCellKeyDown, navigateToRow };

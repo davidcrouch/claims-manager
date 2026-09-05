@@ -246,7 +246,7 @@ export const QuoteLineItemsTabV2 = forwardRef(function QuoteLineItemsTabV2(
         }
       } else if (catalogMode === 'prompt' && parentLink && nestUnderComboId) {
         setCatalogBomPrompt({
-          parentQuoteComboId: nestUnderComboId,
+          parentComboId: nestUnderComboId,
           catalogComponentId: payload.id,
           quantity: qty,
           itemLabel: payload.name ?? payload.code,
@@ -651,6 +651,7 @@ export const QuoteLineItemsTabV2 = forwardRef(function QuoteLineItemsTabV2(
         open={catalogPromptItems !== null && catalogPromptItems.length > 0}
         items={catalogPromptItems ?? []}
         pending={catalogPromptPending}
+        documentLabel="estimate"
         onCancel={() => {
           if (catalogPromptPending) return;
           setCatalogPromptItems(null);
@@ -669,6 +670,7 @@ export const QuoteLineItemsTabV2 = forwardRef(function QuoteLineItemsTabV2(
         open={catalogBomPrompt !== null}
         prompt={catalogBomPrompt}
         pending={catalogBomPromptPending}
+        documentLabel="estimate"
         onCancel={() => {
           if (catalogBomPromptPending) return;
           setCatalogBomPrompt(null);
@@ -679,7 +681,7 @@ export const QuoteLineItemsTabV2 = forwardRef(function QuoteLineItemsTabV2(
           void (async () => {
             const bomResult = await addCatalogBomFromEstimateAction({
               quoteId: quote.id,
-              parentQuoteComboId: catalogBomPrompt.parentQuoteComboId,
+              parentQuoteComboId: catalogBomPrompt.parentComboId,
               catalogComponentId: catalogBomPrompt.catalogComponentId,
               quantity: catalogBomPrompt.quantity,
             });

@@ -17,7 +17,7 @@ import { useLineItems } from './LineItemsProvider';
 import { DropIndicatorLine, useDropIndicatorBorder } from './DropIndicatorLine';
 import { useDropTargetHighlight } from './lib/drop-highlight';
 import { useCatalogDrop } from './hooks/use-catalog-drop';
-import { computeItemMoney, initScopeInputs } from './lib/money';
+import { computeItemMoney, initScopeInputs, resolveInvoicedAmount, resolvePreviouslyInvoicedAmount } from './lib/money';
 import { LineScopeStatusBadge } from './lib/badges';
 import { displayLabelText } from './lib/display';
 import { RowLeadCheckbox, RowLeadDrag, RowLeadExpand, ROW_LEAD_ROW_CLS } from './lib/row-lead';
@@ -80,6 +80,8 @@ export const ScopeCard = memo(function ScopeCard({
     showPricing: globalPricing,
     showColumnVisibilityToggles,
     hideComponent,
+    showInvoiceProgress,
+    showPreviouslyInvoiced,
   } = config;
   const parentQty = parentShowQuantities ?? globalQuantities;
   const parentPrice = parentShowPricing ?? globalPricing;
@@ -147,7 +149,16 @@ export const ScopeCard = memo(function ScopeCard({
     let sum = 0;
     function addItem(item: ApiItem, itemKey: string) {
       if (hideUnselected && !isSelectablePicked(item.id, selection?.selectedIds)) return;
-      sum += computeItemMoney(item, editInputs[itemKey], showMarkup, showGst).total;
+      if (showInvoiceProgress) {
+        sum += resolveInvoicedAmount(item, editInputs[itemKey]);
+        return;
+      }
+      sum += computeItemMoney(
+        item,
+        editInputs[itemKey],
+        config.pricingDetail === 'cost' ? true : showMarkup,
+        config.pricingDetail === 'cost' ? true : showGst,
+      ).total;
     }
     for (let idx = 0; idx < scopeItems.length; idx++) {
       addItem(scopeItems[idx], `${scopeKey}-item-${scopeItems[idx].id ?? idx}`);
@@ -161,7 +172,39 @@ export const ScopeCard = memo(function ScopeCard({
       }
     }
     return sum;
-  }, [scopeItems, scopeCombos, scopeKey, showMarkup, showGst, editInputs, hideUnselected, selection?.selectedIds]);
+  }, [
+    scopeItems,
+    scopeCombos,
+    scopeKey,
+    showMarkup,
+    showGst,
+    showInvoiceProgress,
+    editInputs,
+    hideUnselected,
+    selection?.selectedIds,
+    config.pricingDetail,
+  ]);
+
+  const scopePriorTotal = useMemo(() => {
+    if (!showInvoiceProgress || !showPreviouslyInvoiced) return 0;
+    let sum = 0;
+    function addItem(item: ApiItem) {
+      if (hideUnselected && !isSelectablePicked(item.id, selection?.selectedIds)) return;
+      sum += resolvePreviouslyInvoicedAmount(item);
+    }
+    for (const item of scopeItems) addItem(item);
+    for (const combo of scopeCombos) {
+      for (const item of combo.items ?? []) addItem(item);
+    }
+    return sum;
+  }, [
+    scopeItems,
+    scopeCombos,
+    showInvoiceProgress,
+    showPreviouslyInvoiced,
+    hideUnselected,
+    selection?.selectedIds,
+  ]);
 
   const showScopeNotesColumn = enableLineNotes && !showPricing;
 
@@ -317,8 +360,11 @@ export const ScopeCard = memo(function ScopeCard({
         </span>
 
         {showPricing && (
-          <span className={cn(LI_HEADER_TOTAL, 'text-violet-900')}>
-            {formatCurrency(scopeTotal)}
+          <span className={cn(LI_HEADER_TOTAL, 'flex items-center gap-4 text-violet-900')}>
+            <span>{formatCurrency(scopeTotal)}</span>
+            {showInvoiceProgress && showPreviouslyInvoiced && (
+              <span className="text-slate-600">{formatCurrency(scopePriorTotal)}</span>
+            )}
           </span>
         )}
 
@@ -385,9 +431,12 @@ export const ScopeCard = memo(function ScopeCard({
                   showQuantities={showQuantities}
                   showPricing={showPricing}
                   pricingDetail={config.pricingDetail}
+                  showBuyCost={config.showBuyCost}
                   showMarkup={showMarkup}
                   showGst={showGst}
                   showInvoiceProgress={config.showInvoiceProgress}
+                  showPreviouslyInvoiced={config.showPreviouslyInvoiced}
+                  showItemTypeColumn={config.showItemTypeColumn}
                   showNotesColumn={showScopeNotesColumn}
                   showLineScopeStatusColumn={config.showLineScopeStatusColumn}
                 />
@@ -399,9 +448,12 @@ export const ScopeCard = memo(function ScopeCard({
                   showQuantities={showQuantities}
                   showPricing={showPricing}
                   pricingDetail={config.pricingDetail}
+                  showBuyCost={config.showBuyCost}
                   showMarkup={showMarkup}
                   showGst={showGst}
                   showInvoiceProgress={config.showInvoiceProgress}
+                  showPreviouslyInvoiced={config.showPreviouslyInvoiced}
+                  showItemTypeColumn={config.showItemTypeColumn}
                   showNotesColumn={showScopeNotesColumn}
                   showLineScopeStatusColumn={config.showLineScopeStatusColumn}
                 />

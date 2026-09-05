@@ -37,10 +37,10 @@ import {
 } from '@/components/forms/CreateSubmitOverlay';
 import { createAppointmentAction, updateAppointmentAction, searchContactsAction, getMeContactAction } from '@/app/(app)/mutations';
 import { fetchAppointmentAction } from '@/app/(app)/appointments/actions';
-import { JobSelectField } from '@/components/forms/JobSelectField';
+import { FormJobPickerField } from '@/components/forms/FormJobPickerField';
 import type { JobOption } from '@/components/shared/job-label';
 import { SyncStatusIndicator } from '@/components/shared/SyncStatusIndicator';
-import type { Appointment } from '@/types/api';
+import type { Appointment, Job } from '@/types/api';
 
 const APPOINTMENT_TYPES = [
   { value: 'Inspection', label: 'Inspection' },
@@ -138,9 +138,11 @@ export type AppointmentCreateDefaults = Partial<{
 export interface AppointmentFormDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** When omitted, a job picker is shown (requires `jobs`). */
+  /** When omitted on create, the job picker starts empty. */
   jobId?: string;
-  /** Job options for list-page create flow. */
+  /** Full job for richer initial display when creating from a filtered job context. */
+  job?: Job | null;
+  /** Optional fallback labels when full job is not yet loaded. */
   jobs?: JobOption[];
   jobParties?: JobParty[];
   /** Prefill Contacts when opening create from job detail. */
@@ -331,6 +333,7 @@ export function AppointmentFormDrawer({
   open,
   onOpenChange,
   jobId,
+  job,
   jobs,
   jobParties = [],
   defaultSelectedParties,
@@ -352,7 +355,7 @@ export function AppointmentFormDrawer({
   const [assignees, setAssignees] = useState<PersonRef[]>([]);
   const [selectedParties, setSelectedParties] = useState<JobParty[]>([]);
   const [addressParts, setAddressParts] = useState<AddressParts | undefined>(defaultAddressParts);
-  const needsJobPicker = !isEdit && (jobs?.length ?? 0) > 0;
+  const [pickedJob, setPickedJob] = useState<Job | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -404,8 +407,16 @@ export function AppointmentFormDrawer({
 
   const watchedJobId = form.watch('jobId');
 
+  function handleJobPicked(next: Job) {
+    setPickedJob(next);
+    form.setValue('jobId', next.id, { shouldValidate: true });
+  }
+
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setPickedJob(null);
+      return;
+    }
     if (loadingAppointment) return;
     // Wait for fetch-by-id before deciding create vs edit defaults
     if (appointmentId?.trim() && !appointment) return;
@@ -413,8 +424,10 @@ export function AppointmentFormDrawer({
     if (appointment) {
       const start = extractDateParts(appointment.startDate);
       const end = extractDateParts(appointment.endDate);
+      const initialJobId = appointment.jobId ?? '';
+      setPickedJob(job?.id && job.id === initialJobId ? job : null);
       form.reset({
-        jobId: appointment.jobId,
+        jobId: initialJobId,
         name: appointment.name ?? '',
         appointmentType: resolveAppointmentType(appointment),
         location: appointment.location ?? 'ONSITE',
@@ -438,8 +451,10 @@ export function AppointmentFormDrawer({
     const startTime = createDefaults?.startTime ?? '19:15';
     const endDate = createDefaults?.endDate ?? startDate;
     const endTime = createDefaults?.endTime ?? oneHourLater(startTime);
+    const initialJobId = jobId ?? job?.id ?? '';
+    setPickedJob(job?.id && job.id === initialJobId ? job : null);
     form.reset({
-      jobId: jobId ?? '',
+      jobId: initialJobId,
       name: createDefaults?.name ?? '',
       appointmentType: createDefaults?.appointmentType ?? 'Inspection',
       location: createDefaults?.location ?? 'ONSITE',
@@ -475,6 +490,7 @@ export function AppointmentFormDrawer({
   }, [
     open,
     jobId,
+    job,
     defaultAddress,
     defaultAddressParts,
     createDefaults,
@@ -570,14 +586,17 @@ export function AppointmentFormDrawer({
         className="flex min-h-0 flex-1 flex-col"
       >
         <BottomFormDrawerBody>
-          <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
-            {needsJobPicker && jobs && (
-              <JobSelectField
-                jobs={jobs}
-                value={watchedJobId}
-                onValueChange={(id) => form.setValue('jobId', id, { shouldValidate: true })}
-              />
-            )}
+          <div className="space-y-6">
+            <FormJobPickerField
+              value={watchedJobId}
+              selectedJob={pickedJob}
+              jobs={jobs}
+              onJobSelect={handleJobPicked}
+              allowChange={!isEdit}
+              error={form.formState.errors.jobId?.message}
+            />
+
+            <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
             {/* Title */}
             <div className="space-y-2 md:col-span-2">
               <Label htmlFor="appt-name">
@@ -875,6 +894,7 @@ export function AppointmentFormDrawer({
                 placeholder="Optional description or notes..."
                 rows={3}
               />
+            </div>
             </div>
           </div>
 

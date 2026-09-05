@@ -145,6 +145,7 @@ export function BottomFormDrawer({
                     type="button"
                     onClick={onAIAssist}
                     aria-label="AI Assist"
+                    title="AI Assist"
                     className="mt-0.5 rounded-md p-1.5 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
                   >
                     <Sparkles className="h-5 w-5" />

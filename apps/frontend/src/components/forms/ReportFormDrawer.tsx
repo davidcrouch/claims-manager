@@ -19,7 +19,6 @@ import {
 import { createReportAction } from '@/app/(app)/mutations';
 import {
   CreateSubmitOverlay,
-  navigateToCreated,
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
 
@@ -46,7 +45,7 @@ export function ReportFormDrawer({
   claimId,
 }: ReportFormDrawerProps) {
   const router = useRouter();
-  const { phase, busy, startCreating, startOpening, resetPhase } =
+  const { phase, busy, startCreating, resetPhase } =
     useCreateSubmitPhase();
   const [error, setError] = useState<string | null>(null);
 
@@ -87,8 +86,10 @@ export function ReportFormDrawer({
       });
       if (result.success) {
         if (result.report?.id) {
-          startOpening();
-          navigateToCreated(router, `/reports/${result.report.id}`);
+          resetPhase();
+          onOpenChange(false);
+          router.push(`/reports/${result.report.id}`);
+          router.refresh();
           return;
         }
         resetPhase();

@@ -1,13 +1,19 @@
 import { useMemo } from 'react';
 import type { ApiGroup, ApiItem } from '../lib/types';
-import { computeItemMoney } from '../lib/money';
+import { computeItemMoney, lineTotalFromItem, resolveInvoicedAmount, resolvePreviouslyInvoicedAmount } from '../lib/money';
 import type { EditInputs } from './use-line-item-edit';
 
 export interface GrandTotals {
   subTotal: number;
+  /** Sum of qty × buyCost across lines. */
+  extendedCost: number;
   markup: number;
   totalTax: number;
   total: number;
+  /** Sum of per-line invoiced amounts (bill/invoice progress). */
+  invoiced: number;
+  /** Sum of per-line previously invoiced amounts. */
+  previouslyInvoiced: number;
 }
 
 /**
@@ -24,15 +30,26 @@ export function useGrandTotals(
 ): GrandTotals {
   return useMemo(() => {
     let extended = 0;
+    let extendedCost = 0;
     let markup = 0;
     let totalTax = 0;
+    let total = 0;
+    let invoiced = 0;
+    let previouslyInvoiced = 0;
 
     function addItem(item: ApiItem, rowKey: string) {
       if (hideUnselected && item.id && selectedIds && !selectedIds.has(item.id)) return;
       const money = computeItemMoney(item, editInputs[rowKey], true, true);
       extended += money.extended;
+      extendedCost += money.buyExtended;
       markup += money.markupAmt;
       totalTax += money.gstAmt;
+      // Prefer full commercial total (incl. markup + GST) so invoice/WO headers match.
+      total += editInputs[rowKey]
+        ? money.total
+        : lineTotalFromItem(item);
+      invoiced += resolveInvoicedAmount(item, editInputs[rowKey]);
+      previouslyInvoiced += resolvePreviouslyInvoicedAmount(item);
     }
 
     for (let gi = 0; gi < groups.length; gi++) {
@@ -69,7 +86,6 @@ export function useGrandTotals(
     }
 
     const subTotal = extended + (showMarkup ? markup : 0) + (showGst ? totalTax : 0);
-    const total = extended + markup + totalTax;
-    return { subTotal, markup, totalTax, total };
+    return { subTotal, extendedCost, markup, totalTax, total, invoiced, previouslyInvoiced };
   }, [groups, editInputs, showMarkup, showGst, selectedIds, hideUnselected]);
 }

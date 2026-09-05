@@ -11,7 +11,10 @@ import {
 } from '@/lib/rates';
 
 export interface ItemMoney {
+  /** qty × unitCost (sell extended). */
   extended: number;
+  /** qty × buyCost (purchase extended cost). */
+  buyExtended: number;
   markupAmt: number;
   gstAmt: number;
   total: number;
@@ -29,7 +32,9 @@ export function computeItemMoney(
 ): ItemMoney {
   const qty = inputs ? parseFloat(inputs.quantity) || 0 : (item.quantity ?? 0);
   const uc = inputs ? parseFloat(inputs.unitCost) || 0 : (item.unitCost ?? 0);
+  const bc = inputs ? parseFloat(inputs.buyCost) || 0 : (item.buyCost ?? 0);
   const extended = qty * uc;
+  const buyExtended = qty * bc;
 
   const markupAmt = resolveMarkupAmount({
     markupType: item.markupType,
@@ -47,7 +52,58 @@ export function computeItemMoney(
   const gstAmt = (extended + markupAmt) * taxRate;
   const total = extended + (showMarkup ? markupAmt : 0) + (showGst ? gstAmt : 0);
 
-  return { extended, markupAmt, gstAmt, total };
+  return { extended, buyExtended, markupAmt, gstAmt, total };
+}
+
+/**
+ * Full commercial line total (extended + markup + GST), matching the work order
+ * Total column. Prefer client-side rates over stored `totals.total`, which is
+ * currently qty×unitCost+tax and omits markup.
+ */
+export function lineTotalFromItem(
+  item: ApiItem & { totals?: Record<string, unknown> },
+): number {
+  const computed = computeItemMoney(item, undefined, true, true).total;
+  if (computed > 0) return computed;
+
+  if (typeof item.total === 'number' && Number.isFinite(item.total) && item.total > 0) {
+    return item.total;
+  }
+  const nestedTotal = item.totals?.total;
+  if (typeof nestedTotal === 'number' && Number.isFinite(nestedTotal) && nestedTotal > 0) {
+    return nestedTotal;
+  }
+  if (
+    typeof item.subTotal === 'number' &&
+    Number.isFinite(item.subTotal) &&
+    typeof item.totalTax === 'number' &&
+    Number.isFinite(item.totalTax)
+  ) {
+    return item.subTotal + item.totalTax;
+  }
+  return computed;
+}
+
+/** Current invoiced amount for a line (edit input wins over stamped value). */
+export function resolveInvoicedAmount(
+  item: ApiItem,
+  inputs?: Record<string, string> | null,
+): number {
+  if (inputs?.invoiced != null && inputs.invoiced !== '') {
+    const parsed = Number(inputs.invoiced);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return typeof item.invoiced === 'number' && Number.isFinite(item.invoiced)
+    ? item.invoiced
+    : 0;
+}
+
+/** Prior invoices amount stamped on a line item. */
+export function resolvePreviouslyInvoicedAmount(item: ApiItem): number {
+  return typeof item.previouslyInvoiced === 'number' &&
+    Number.isFinite(item.previouslyInvoiced)
+    ? item.previouslyInvoiced
+    : 0;
 }
 
 /** Initialise edit inputs from an ApiItem for the inline edit form. */
@@ -58,6 +114,7 @@ export function initItemInputs(item: ApiItem): Record<EditableFieldKey, string> 
     description: item.description ?? '',
     quantity: String(item.quantity ?? 0),
     unitType: item.unitType?.externalReference ?? '',
+    buyCost: String(item.buyCost ?? 0),
     unitCost: String(item.unitCost ?? 0),
     markupValue: String(storedMarkupToUi(item.markupType, item.markupValue)),
     tax: String(storedTaxToUi(typeof item.tax === 'number' ? item.tax : 0)),
@@ -80,6 +137,7 @@ export function initComboInputs(combo: {
     description: combo.description ?? '',
     quantity: String(combo.quantity ?? 0),
     unitType: '',
+    buyCost: '0',
     unitCost: '0',
     markupValue: '0',
     tax: '0',
@@ -96,6 +154,7 @@ export function initScopeInputs(scope: { name?: string; component?: string; desc
     description: scope.description ?? '',
     quantity: String(scope.quantity ?? 0),
     unitType: '',
+    buyCost: '0',
     unitCost: '0',
     markupValue: '0',
     tax: '0',
@@ -112,12 +171,15 @@ export function getEditableFields(
   showPricing = true,
   hideComponent = false,
   invoiceProgressEditable = false,
+  showBuyCost = false,
+  showUnitCost = true,
 ): EditableFieldKey[] {
   if (invoiceProgressEditable) return ['invoiced'];
   const fields: EditableFieldKey[] = hideComponent ? ['name', 'description'] : ['name', 'component', 'description'];
   if (showQuantities) fields.push('quantity', 'unitType');
   if (showPricing) {
-    fields.push('unitCost');
+    if (showBuyCost) fields.push('buyCost');
+    if (showUnitCost) fields.push('unitCost');
     if (showMarkup) fields.push('markupValue');
     if (showGst) fields.push('tax');
   }
@@ -153,6 +215,8 @@ export function nearestEditableField(
   showPricing = true,
   hideComponent = false,
   invoiceProgressEditable = false,
+  showBuyCost = false,
+  showUnitCost = true,
 ): EditableFieldKey {
   const editableFields = getEditableFields(
     showMarkup,
@@ -161,6 +225,8 @@ export function nearestEditableField(
     showPricing,
     hideComponent,
     invoiceProgressEditable,
+    showBuyCost,
+    showUnitCost,
   );
   if ((editableFields as string[]).includes(clicked)) return clicked as EditableFieldKey;
   if (invoiceProgressEditable) return 'invoiced';
@@ -168,7 +234,9 @@ export function nearestEditableField(
   const allCols: string[] = ['name', 'type', 'category'];
   if (showQuantities) allCols.push('quantity', 'unitType');
   if (showPricing) {
-    allCols.push('unitCost', 'extended');
+    if (showBuyCost) allCols.push('buyCost');
+    if (showUnitCost) allCols.push('unitCost');
+    allCols.push('extended');
     if (showMarkup) allCols.push('markupValue');
     if (showGst) allCols.push('tax');
     allCols.push('total');

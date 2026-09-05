@@ -108,33 +108,57 @@ export class CatalogSelectionService {
   }
 
   /**
-   * When estimate Update Mode write-back is requested, add the dropped catalogue
-   * item under the parent combo/scope's linked catalogue BOM (if any).
+   * When Update Mode write-back is requested, add the dropped catalogue item
+   * under the parent combo/scope's linked catalogue BOM (if any).
    * Best-effort: skips when already present or parent has no catalogue link.
    */
   private async tryAddToParentCatalogBom(params: {
-    parentQuoteComboId: string;
+    parentQuoteComboId?: string;
+    parentPurchaseOrderComboId?: string;
     catalogComponentId: string;
     quantity: string;
   }): Promise<boolean> {
     const logPrefix = 'CatalogSelectionService.tryAddToParentCatalogBom';
     const tenantId = this.getTenantId();
 
-    const [parent] = await this.db
-      .select({ catalogComboId: quoteCombos.catalogComboId })
-      .from(quoteCombos)
-      .where(
-        and(
-          eq(quoteCombos.id, params.parentQuoteComboId),
-          eq(quoteCombos.tenantId, tenantId),
-          isNull(quoteCombos.deletedAt),
-        ),
-      )
-      .limit(1);
+    let assemblyId: string | null | undefined;
+    let parentLabel: string;
 
-    const assemblyId = parent?.catalogComboId;
+    if (params.parentQuoteComboId) {
+      parentLabel = params.parentQuoteComboId;
+      const [parent] = await this.db
+        .select({ catalogComboId: quoteCombos.catalogComboId })
+        .from(quoteCombos)
+        .where(
+          and(
+            eq(quoteCombos.id, params.parentQuoteComboId),
+            eq(quoteCombos.tenantId, tenantId),
+            isNull(quoteCombos.deletedAt),
+          ),
+        )
+        .limit(1);
+      assemblyId = parent?.catalogComboId;
+    } else if (params.parentPurchaseOrderComboId) {
+      parentLabel = params.parentPurchaseOrderComboId;
+      const [parent] = await this.db
+        .select({ catalogComboId: purchaseOrderCombos.catalogComboId })
+        .from(purchaseOrderCombos)
+        .where(
+          and(
+            eq(purchaseOrderCombos.id, params.parentPurchaseOrderComboId),
+            eq(purchaseOrderCombos.tenantId, tenantId),
+            isNull(purchaseOrderCombos.deletedAt),
+          ),
+        )
+        .limit(1);
+      assemblyId = parent?.catalogComboId;
+    } else {
+      this.logger.debug(`${logPrefix} — no parent combo id provided`);
+      return false;
+    }
+
     if (!assemblyId) {
-      this.logger.debug(`${logPrefix} — parent ${params.parentQuoteComboId} has no catalogue link`);
+      this.logger.debug(`${logPrefix} — parent ${parentLabel} has no catalogue link`);
       return false;
     }
 
@@ -223,6 +247,19 @@ export class CatalogSelectionService {
    */
   async addCatalogBomFromEstimateParent(params: {
     parentQuoteComboId: string;
+    catalogComponentId: string;
+    quantity: string;
+  }): Promise<{ added: boolean }> {
+    const added = await this.tryAddToParentCatalogBom(params);
+    return { added };
+  }
+
+  /**
+   * Prompt-mode write-back: add a catalogue BOM line using the purchase-order
+   * parent combo/scope as the link to the source catalogue item.
+   */
+  async addCatalogBomFromPurchaseOrderParent(params: {
+    parentPurchaseOrderComboId: string;
     catalogComponentId: string;
     quantity: string;
   }): Promise<{ added: boolean }> {
@@ -396,12 +433,58 @@ export class CatalogSelectionService {
     purchaseOrderComboId?: string;
     catalogItemId: string;
     quantity: string;
+    addToCatalogAssembly?: boolean;
   }) {
     if (!params.purchaseOrderGroupId && !params.purchaseOrderComboId) {
       throw new BadRequestException('purchaseOrderGroupId or purchaseOrderComboId is required');
     }
+    if (params.purchaseOrderGroupId && params.purchaseOrderComboId) {
+      throw new BadRequestException('Provide only one of purchaseOrderGroupId or purchaseOrderComboId');
+    }
 
     const tenantId = this.getTenantId();
+    const catalogItem = await this.itemsRepo.findById({
+      tenantId,
+      id: params.catalogItemId,
+    });
+    if (catalogItem && isCatalogBomParentKind(catalogItem.kind)) {
+      let purchaseOrderGroupId = params.purchaseOrderGroupId;
+      if (params.purchaseOrderComboId) {
+        const [parent] = await this.db
+          .select({
+            id: purchaseOrderCombos.id,
+            purchaseOrderGroupId: purchaseOrderCombos.purchaseOrderGroupId,
+            comboPayload: purchaseOrderCombos.comboPayload,
+          })
+          .from(purchaseOrderCombos)
+          .where(
+            and(
+              eq(purchaseOrderCombos.id, params.purchaseOrderComboId),
+              eq(purchaseOrderCombos.tenantId, tenantId),
+              isNull(purchaseOrderCombos.deletedAt),
+            ),
+          )
+          .limit(1);
+        if (!parent) throw new NotFoundException('Parent scope not found');
+        if (!isScopeComboPayload(parent.comboPayload)) {
+          throw new BadRequestException('Assemblies can only be nested under a scope');
+        }
+        purchaseOrderGroupId = parent.purchaseOrderGroupId;
+      }
+      if (!purchaseOrderGroupId) {
+        throw new BadRequestException(
+          'purchaseOrderGroupId is required when adding an assembly or scope',
+        );
+      }
+      return this.addAssemblyToPurchaseOrder({
+        purchaseOrderGroupId,
+        catalogAssemblyId: catalogItem.id,
+        quantity: params.quantity,
+        parentComboId: params.purchaseOrderComboId,
+        addToCatalogAssembly: params.addToCatalogAssembly,
+      });
+    }
+
     const snapshot = await this.buildSnapshot({ tenantId, catalogItemId: params.catalogItemId });
     const totals = computeLineTotals({
       quantity: params.quantity,
@@ -421,25 +504,86 @@ export class CatalogSelectionService {
       })
       .returning();
 
-    return row;
+    let addedToCatalog = false;
+    if (params.addToCatalogAssembly && params.purchaseOrderComboId) {
+      try {
+        addedToCatalog = await this.tryAddToParentCatalogBom({
+          parentPurchaseOrderComboId: params.purchaseOrderComboId,
+          catalogComponentId: params.catalogItemId,
+          quantity: params.quantity,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `CatalogSelectionService.addPrimitiveToPurchaseOrder — catalogue BOM write-back failed`,
+          err,
+        );
+      }
+    }
+
+    return { ...row, addedToCatalog };
   }
 
   async addAssemblyToPurchaseOrder(params: {
     purchaseOrderGroupId: string;
     catalogAssemblyId: string;
     quantity: string;
+    parentComboId?: string;
+    addToCatalogAssembly?: boolean;
   }) {
     const tenantId = this.getTenantId();
-    return this.db.transaction(async (tx) =>
+    if (params.parentComboId) {
+      const [parent] = await this.db
+        .select({
+          id: purchaseOrderCombos.id,
+          purchaseOrderGroupId: purchaseOrderCombos.purchaseOrderGroupId,
+          comboPayload: purchaseOrderCombos.comboPayload,
+        })
+        .from(purchaseOrderCombos)
+        .where(
+          and(
+            eq(purchaseOrderCombos.id, params.parentComboId),
+            eq(purchaseOrderCombos.tenantId, tenantId),
+            isNull(purchaseOrderCombos.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (!parent) throw new NotFoundException('Parent scope not found');
+      if (!isScopeComboPayload(parent.comboPayload)) {
+        throw new BadRequestException('Assemblies can only be nested under a scope');
+      }
+      if (parent.purchaseOrderGroupId !== params.purchaseOrderGroupId) {
+        throw new BadRequestException('Parent scope does not belong to this group');
+      }
+    }
+    const result = await this.db.transaction(async (tx) =>
       this.explodeAssembly({
         tenantId,
         documentKind: 'purchase_order',
         groupId: params.purchaseOrderGroupId,
         assemblyId: params.catalogAssemblyId,
         quantity: params.quantity,
+        parentComboId: params.parentComboId,
         tx,
       }),
     );
+
+    let addedToCatalog = false;
+    if (params.addToCatalogAssembly && params.parentComboId) {
+      try {
+        addedToCatalog = await this.tryAddToParentCatalogBom({
+          parentPurchaseOrderComboId: params.parentComboId,
+          catalogComponentId: params.catalogAssemblyId,
+          quantity: params.quantity,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `CatalogSelectionService.addAssemblyToPurchaseOrder — catalogue BOM write-back failed`,
+          err,
+        );
+      }
+    }
+
+    return { ...result, addedToCatalog };
   }
 
   async listPurchaseOrderGroups(params: { purchaseOrderId: string }) {
@@ -1178,6 +1322,7 @@ export class CatalogSelectionService {
       component?: string;
       description?: string;
       quantity?: string;
+      buyCost?: string;
       unitCost?: string;
       markupValue?: string;
       tax?: string;
@@ -1211,6 +1356,7 @@ export class CatalogSelectionService {
         if (item.component !== undefined) updates.component = item.component;
         if (item.description !== undefined) updates.description = item.description;
         if (item.quantity !== undefined) updates.quantity = item.quantity;
+        if (item.buyCost !== undefined) updates.buyCost = item.buyCost;
         if (item.unitCost !== undefined) updates.unitCost = item.unitCost;
         if (item.markupValue !== undefined) updates.markupValue = item.markupValue;
         if (item.tax !== undefined) updates.tax = coerceToRateString(item.tax);
@@ -2274,7 +2420,21 @@ export class CatalogSelectionService {
 
       const mapCombo = (combo: (typeof groupCombos)[number]) => {
         const comboTotals = (combo.totals as Record<string, unknown>) ?? {};
+        const payload =
+          combo.comboPayload && typeof combo.comboPayload === 'object'
+            ? (combo.comboPayload as Record<string, unknown>)
+            : {};
         const kind = isScopeComboPayload(combo.comboPayload) ? 'scope' : 'assembly';
+        const sourceWorkOrderComboId =
+          typeof payload.sourceWorkOrderComboId === 'string'
+            ? payload.sourceWorkOrderComboId
+            : undefined;
+        const sourceProposalComboId =
+          typeof payload.sourceProposalComboId === 'string'
+            ? payload.sourceProposalComboId
+            : undefined;
+        const parentComboId =
+          typeof payload.parentComboId === 'string' ? payload.parentComboId : undefined;
         return {
           id: combo.id,
           kind,
@@ -2287,6 +2447,10 @@ export class CatalogSelectionService {
           quantity: combo.quantity ? parseDecimal(combo.quantity) : undefined,
           catalogComboId: combo.catalogComboId,
           catalogScopeId: combo.catalogComboId,
+          parentComboId,
+          comboPayload: payload,
+          sourceWorkOrderComboId,
+          sourceProposalComboId,
           subTotal: asNumber(comboTotals.subTotal),
           totalTax: asNumber(comboTotals.totalTax),
           total: asNumber(comboTotals.total),
@@ -2297,9 +2461,21 @@ export class CatalogSelectionService {
       };
 
       const nested = nestCombosUnderScopes(groupCombos, mapCombo);
+      const groupPayload =
+        group.groupPayload && typeof group.groupPayload === 'object'
+          ? (group.groupPayload as Record<string, unknown>)
+          : {};
 
       return {
         id: group.id,
+        sourceWorkOrderGroupId:
+          typeof groupPayload.sourceWorkOrderGroupId === 'string'
+            ? groupPayload.sourceWorkOrderGroupId
+            : undefined,
+        sourceProposalGroupId:
+          typeof groupPayload.sourceProposalGroupId === 'string'
+            ? groupPayload.sourceProposalGroupId
+            : undefined,
         groupLabel: groupLabelObj,
         description: group.description,
         component: group.component ?? undefined,
@@ -2528,6 +2704,19 @@ export class CatalogSelectionService {
       ? lookupMap.get(row.unitTypeLookupId)
       : undefined;
 
+    const payload =
+      row.itemPayload && typeof row.itemPayload === 'object'
+        ? (row.itemPayload as Record<string, unknown>)
+        : {};
+    const sourceWorkOrderItemId =
+      typeof payload.sourceWorkOrderItemId === 'string'
+        ? payload.sourceWorkOrderItemId
+        : undefined;
+    const sourceProposalItemId =
+      typeof payload.sourceProposalItemId === 'string'
+        ? payload.sourceProposalItemId
+        : undefined;
+
     return {
       id: row.id,
       name: row.name,
@@ -2552,6 +2741,8 @@ export class CatalogSelectionService {
       manualAllocation: row.manualAllocation ?? undefined,
       tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
       note: row.note,
+      sourceWorkOrderItemId,
+      sourceProposalItemId,
       subTotal: asNumber(totals.subTotal),
       totalTax: asNumber(totals.totalTax),
       total: asNumber(totals.total),

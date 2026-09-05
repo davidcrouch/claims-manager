@@ -14,6 +14,8 @@ import {
   updateConversationAction,
 } from '@/app/(app)/chat/actions';
 import type { ChatMessage, CanvasArtifact } from '@/lib/ai/chat-types';
+import type { ChatDisplayMode } from '@/lib/ai/chat-display-mode';
+import { isShiftHeld } from '@/lib/ai/chat-display-mode';
 import type { Agent } from '@/lib/ai/types';
 import { DEFAULT_AGENT } from '@/lib/ai/types';
 import {
@@ -29,6 +31,7 @@ import { cn } from '@/lib/utils';
 import { CHAT_BESIDE_FORM_WIDTH_CLASS, CHAT_DRAWER_WIDTH_CLASS } from '@/components/forms/form-drawer-layout';
 import { useEntityDrawer } from '@/components/layout/EntityDrawerHost';
 import { ChatInterface } from './ChatInterface';
+import { ChatDisplayModeProvider } from './ChatDisplayModeContext';
 import { ChatHistoryPanel, type ConversationItem } from './ChatHistoryPanel';
 import { ChatArtifactDrawer } from './ChatArtifactDrawer';
 
@@ -84,6 +87,7 @@ export function ChatDrawer({
     hasOpenFormDrawer,
   } = useEntityDrawer();
   const [mounted, setMounted] = useState(false);
+  const [displayMode, setDisplayMode] = useState<ChatDisplayMode>('normal');
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentsLoaded, setAgentsLoaded] = useState(false);
   const [sessionKey, setSessionKey] = useState(0);
@@ -158,6 +162,7 @@ export function ChatDrawer({
       return;
     }
 
+    setDisplayMode(isShiftHeld() ? 'verbose' : 'normal');
     const id = newConversationId();
     setConversationId(id);
     setSessionKey((current) => current + 1);
@@ -479,6 +484,7 @@ export function ChatDrawer({
                 <div className="flex min-h-0 flex-1 overflow-hidden">
                   <div className="min-h-0 min-w-0 flex-1">
                     {(agentsLoaded || !helpMode) && (
+                    <ChatDisplayModeProvider mode={displayMode}>
                     <ChatInterface
                       key={`${conversationId}-${sessionKey}`}
                       conversationId={conversationId}
@@ -495,6 +501,7 @@ export function ChatDrawer({
                       relatedRecordType={relatedEntityType}
                       relatedRecordId={relatedEntityId}
                     />
+                    </ChatDisplayModeProvider>
                     )}
                   </div>
 

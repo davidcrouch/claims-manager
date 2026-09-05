@@ -457,6 +457,7 @@ export function AppointmentsListClient({
         open={drawerOpen}
         onOpenChange={handleDrawerClose}
         jobId={editingAppointment?.jobId ?? job?.id}
+        job={job}
         jobs={jobs}
         appointment={editingAppointment ?? undefined}
         onSuccess={() => {

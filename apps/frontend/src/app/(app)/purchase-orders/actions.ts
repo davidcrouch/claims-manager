@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { getSession, getAccessToken } from '@/lib/auth';
 import { createApiClient } from '@/lib/api-client';
+import { canUpdateCatalogFromEstimate } from '@/lib/permissions';
 import type { PaginatedResponse, PurchaseOrder, LineItemsPageQuery } from '@/types/api';
 import type { PoIssueRequestListItem, PoIssueRequestDetail } from '@/lib/api-client';
 
@@ -76,6 +77,31 @@ export async function getPurchaseOrderLineItemsAction(
   }
 }
 
+export async function replacePurchaseOrderLineItemsAction(
+  poId: string,
+  selectedItemIds: string[],
+): Promise<{
+  success: boolean;
+  groups?: Array<Record<string, unknown>>;
+  error?: string;
+}> {
+  const PREFIX = 'purchase-orders/actions.replacePurchaseOrderLineItemsAction';
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+
+  try {
+    const page = await api.replacePurchaseOrderLineItems(poId, { selectedItemIds });
+    revalidatePath(`/purchase-orders/${poId}`);
+    return { success: true, groups: page.groups };
+  } catch (err) {
+    console.error(`[${PREFIX}]`, err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to update purchase order line items',
+    };
+  }
+}
+
 async function resolvePurchaseOrderGroupId(
   api: NonNullable<Awaited<ReturnType<typeof getApi>>>,
   purchaseOrderId: string,
@@ -96,7 +122,8 @@ export async function addCatalogItemToPurchaseOrderAction(params: {
   quantity: string;
   groupId?: string;
   purchaseOrderComboId?: string;
-}): Promise<{ success: boolean; error?: string }> {
+  addToCatalogAssembly?: boolean;
+}): Promise<{ success: boolean; addedToCatalog?: boolean; error?: string }> {
   const api = await getApi();
   if (!api) return { success: false, error: 'Not authenticated' };
 
@@ -106,15 +133,19 @@ export async function addCatalogItemToPurchaseOrderAction(params: {
       params.purchaseOrderId,
       params.groupId,
     );
-    await api.addCatalogItemToPurchaseOrder({
+    const result = (await api.addCatalogItemToPurchaseOrder({
       purchaseOrderId: params.purchaseOrderId,
       groupId,
       catalogItemId: params.catalogItemId,
       quantity: params.quantity,
       purchaseOrderComboId: params.purchaseOrderComboId,
-    });
+      addToCatalogAssembly: params.addToCatalogAssembly,
+    })) as { addedToCatalog?: boolean } | null;
     revalidatePath(`/purchase-orders/${params.purchaseOrderId}`);
-    return { success: true };
+    if (params.addToCatalogAssembly) {
+      revalidatePath('/admin/catalog');
+    }
+    return { success: true, addedToCatalog: result?.addedToCatalog === true };
   } catch (err) {
     console.error('[purchase-orders/actions.addCatalogItemToPurchaseOrderAction]', err);
     return {
@@ -129,7 +160,9 @@ export async function addCatalogAssemblyToPurchaseOrderAction(params: {
   catalogAssemblyId: string;
   quantity: string;
   groupId?: string;
-}): Promise<{ success: boolean; error?: string }> {
+  purchaseOrderComboId?: string;
+  addToCatalogAssembly?: boolean;
+}): Promise<{ success: boolean; addedToCatalog?: boolean; error?: string }> {
   const api = await getApi();
   if (!api) return { success: false, error: 'Not authenticated' };
 
@@ -139,19 +172,58 @@ export async function addCatalogAssemblyToPurchaseOrderAction(params: {
       params.purchaseOrderId,
       params.groupId,
     );
-    await api.addCatalogAssemblyToPurchaseOrder({
+    const result = (await api.addCatalogAssemblyToPurchaseOrder({
       purchaseOrderId: params.purchaseOrderId,
       groupId,
       catalogAssemblyId: params.catalogAssemblyId,
       quantity: params.quantity,
-    });
+      purchaseOrderComboId: params.purchaseOrderComboId,
+      addToCatalogAssembly: params.addToCatalogAssembly,
+    })) as { addedToCatalog?: boolean } | null;
     revalidatePath(`/purchase-orders/${params.purchaseOrderId}`);
-    return { success: true };
+    if (params.addToCatalogAssembly) {
+      revalidatePath('/admin/catalog');
+    }
+    return { success: true, addedToCatalog: result?.addedToCatalog === true };
   } catch (err) {
     console.error('[purchase-orders/actions.addCatalogAssemblyToPurchaseOrderAction]', err);
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to add assembly',
+    };
+  }
+}
+
+export async function addCatalogBomFromPurchaseOrderAction(params: {
+  purchaseOrderId: string;
+  parentPurchaseOrderComboId: string;
+  catalogComponentId: string;
+  quantity: string;
+}): Promise<{ success: boolean; added?: boolean; error?: string }> {
+  const PREFIX = 'purchase-orders/actions.addCatalogBomFromPurchaseOrderAction';
+  const session = await getSession();
+  if (!session.authenticated) return { success: false, error: 'Not authenticated' };
+  if (!canUpdateCatalogFromEstimate(session.identity?.permissions)) {
+    console.warn(`${PREFIX} — missing catalogue-from-estimate permission`);
+    return {
+      success: false,
+      error: 'You do not have permission to update catalogue items from a purchase order',
+    };
+  }
+
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+
+  try {
+    const result = await api.addCatalogBomFromPurchaseOrder(params);
+    revalidatePath(`/purchase-orders/${params.purchaseOrderId}`);
+    revalidatePath('/admin/catalog');
+    return { success: true, added: result.added };
+  } catch (err) {
+    console.error(`[${PREFIX}]`, err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to update catalogue BOM',
     };
   }
 }
@@ -304,6 +376,7 @@ export async function savePurchaseOrderLineItemsAction(params: {
     component?: string;
     description?: string;
     quantity?: string;
+    buyCost?: string;
     unitCost?: string;
     markupValue?: string;
     tax?: string;

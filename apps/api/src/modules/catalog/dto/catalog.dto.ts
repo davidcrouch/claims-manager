@@ -303,7 +303,7 @@ export class AddCatalogPrimitiveDto {
   quantity!: string;
 
   /**
-   * When true and nested under a quote combo/scope linked to a catalogue parent,
+   * When true and nested under a document combo/scope linked to a catalogue parent,
    * also add this catalogue item as a BOM component on that source.
    */
   @IsOptional()
@@ -323,8 +323,13 @@ export class AddCatalogAssemblyDto {
   @IsUUID()
   quoteComboId?: string;
 
+  /** When set, nest the assembly under this purchase-order scope (combo id). */
+  @IsOptional()
+  @IsUUID()
+  purchaseOrderComboId?: string;
+
   /**
-   * When true and nested under a quote scope linked to a catalogue parent,
+   * When true and nested under a document scope linked to a catalogue parent,
    * also add this catalogue assembly as a BOM component on that source.
    */
   @IsOptional()
@@ -336,6 +341,18 @@ export class AddCatalogAssemblyDto {
 export class AddCatalogBomFromEstimateDto {
   @IsUUID()
   parentQuoteComboId!: string;
+
+  @IsUUID()
+  catalogComponentId!: string;
+
+  @IsString()
+  quantity!: string;
+}
+
+/** Add a catalogue BOM line under the source linked from a purchase-order combo/scope. */
+export class AddCatalogBomFromPurchaseOrderDto {
+  @IsUUID()
+  parentPurchaseOrderComboId!: string;
 
   @IsUUID()
   catalogComponentId!: string;

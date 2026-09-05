@@ -735,6 +735,16 @@ export function createApiClient(options?: ApiClientOptions) {
       );
     },
 
+    replacePurchaseOrderLineItems(
+      poId: string,
+      body: { selectedItemIds: string[] },
+    ): Promise<LineItemsPageResponse> {
+      return fetchApi<LineItemsPageResponse>(`/purchase-orders/${poId}/line-items/selection`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+
     ensurePurchaseOrderGroup(poId: string): Promise<{ id: string; description: string | null }> {
       return fetchApi(`/purchase-orders/${poId}/groups`, { method: 'POST' });
     },
@@ -840,6 +850,7 @@ export function createApiClient(options?: ApiClientOptions) {
       catalogItemId: string;
       quantity: string;
       purchaseOrderComboId?: string;
+      addToCatalogAssembly?: boolean;
     }): Promise<unknown> {
       return fetchApi(
         `/purchase-orders/${params.purchaseOrderId}/groups/${params.groupId}/catalog-items`,
@@ -849,6 +860,7 @@ export function createApiClient(options?: ApiClientOptions) {
             catalogItemId: params.catalogItemId,
             quantity: params.quantity,
             purchaseOrderComboId: params.purchaseOrderComboId,
+            addToCatalogAssembly: params.addToCatalogAssembly === true ? true : undefined,
           }),
         },
       );
@@ -859,6 +871,8 @@ export function createApiClient(options?: ApiClientOptions) {
       groupId: string;
       catalogAssemblyId: string;
       quantity: string;
+      purchaseOrderComboId?: string;
+      addToCatalogAssembly?: boolean;
     }): Promise<unknown> {
       return fetchApi(
         `/purchase-orders/${params.purchaseOrderId}/groups/${params.groupId}/catalog-assemblies`,
@@ -867,9 +881,27 @@ export function createApiClient(options?: ApiClientOptions) {
           body: JSON.stringify({
             catalogAssemblyId: params.catalogAssemblyId,
             quantity: params.quantity,
+            purchaseOrderComboId: params.purchaseOrderComboId,
+            addToCatalogAssembly: params.addToCatalogAssembly === true ? true : undefined,
           }),
         },
       );
+    },
+
+    addCatalogBomFromPurchaseOrder(params: {
+      purchaseOrderId: string;
+      parentPurchaseOrderComboId: string;
+      catalogComponentId: string;
+      quantity: string;
+    }): Promise<{ added: boolean }> {
+      return fetchApi(`/purchase-orders/${params.purchaseOrderId}/catalog-bom`, {
+        method: 'POST',
+        body: JSON.stringify({
+          parentPurchaseOrderComboId: params.parentPurchaseOrderComboId,
+          catalogComponentId: params.catalogComponentId,
+          quantity: params.quantity,
+        }),
+      });
     },
 
     updatePurchaseOrderLineItems(
@@ -881,6 +913,7 @@ export function createApiClient(options?: ApiClientOptions) {
           component?: string;
           description?: string;
           quantity?: string;
+          buyCost?: string;
           unitCost?: string;
           markupValue?: string;
           tax?: string;
@@ -1732,7 +1765,7 @@ export function createApiClient(options?: ApiClientOptions) {
       componentId: string;
       quantity: string;
       wasteFactor: string;
-      component?: { id?: string; code?: string; name?: string; description?: string | null; unitCost?: string | null; kind?: string; categoryId?: string | null; typeId?: string; unitTypeLookupId?: string | null; markupType?: string | null; markupValue?: string | null; taxRate?: string | null };
+      component?: { id?: string; code?: string; name?: string; description?: string | null; unitCost?: string | null; buyCost?: string | null; kind?: string; categoryId?: string | null; typeId?: string; unitTypeLookupId?: string | null; markupType?: string | null; markupValue?: string | null; taxRate?: string | null };
       resolvedUnitCost?: string | null;
     }>> {
       return fetchApi(`/catalog/items/${id}/components`);

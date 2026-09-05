@@ -23,7 +23,7 @@ import {
 import { useLineItems } from './LineItemsProvider';
 import { useCatalogDrop } from './hooks/use-catalog-drop';
 import { useDropTargetHighlight } from './lib/drop-highlight';
-import { computeItemMoney, groupLabel } from './lib/money';
+import { computeItemMoney, groupLabel, resolveInvoicedAmount, resolvePreviouslyInvoicedAmount } from './lib/money';
 import { groupDropKey } from './lib/row-keys';
 import { RowLeadCheckbox, RowLeadDrag, RowLeadExpand, ROW_LEAD_ROW_CLS } from './lib/row-lead';
 import { GroupDimensionFields } from './GroupDimensionFields';
@@ -76,6 +76,8 @@ export const GroupCard = memo(function GroupCard({ group, groupIndex, totalGroup
     labels,
     showColumnVisibilityToggles,
     hideComponent,
+    showInvoiceProgress,
+    showPreviouslyInvoiced,
   } = config;
   const gId = group.id ?? `group-${groupIndex}`;
   const isCollapsed = collapsed.has(gId);
@@ -145,18 +147,29 @@ export const GroupCard = memo(function GroupCard({ group, groupIndex, totalGroup
 
   const groupTotal = useMemo(() => {
     let sum = 0;
+    const add = (item: (typeof items)[number], rowKey: string) => {
+      if (hideUnselected && !isSelectablePicked(item.id, selection?.selectedIds)) return;
+      if (showInvoiceProgress) {
+        sum += resolveInvoicedAmount(item, editInputs[rowKey]);
+        return;
+      }
+      sum += computeItemMoney(
+        item,
+        editInputs[rowKey],
+        config.pricingDetail === 'cost' ? true : showMarkup,
+        config.pricingDetail === 'cost' ? true : showGst,
+      ).total;
+    };
     for (let ii = 0; ii < items.length; ii++) {
       const item = items[ii];
-      if (hideUnselected && !isSelectablePicked(item.id, selection?.selectedIds)) continue;
-      sum += computeItemMoney(item, editInputs[`${gId}-item-${item.id ?? ii}`], showMarkup, showGst).total;
+      add(item, `${gId}-item-${item.id ?? ii}`);
     }
     for (let ci = 0; ci < combos.length; ci++) {
       const combo = combos[ci];
       const comboKey = `${gId}-combo-${combo.id ?? ci}`;
       for (let ii = 0; ii < (combo.items ?? []).length; ii++) {
         const item = combo.items![ii];
-        if (hideUnselected && !isSelectablePicked(item.id, selection?.selectedIds)) continue;
-        sum += computeItemMoney(item, editInputs[`${comboKey}-item-${item.id ?? ii}`], showMarkup, showGst).total;
+        add(item, `${comboKey}-item-${item.id ?? ii}`);
       }
     }
     for (let si = 0; si < scopes.length; si++) {
@@ -164,21 +177,59 @@ export const GroupCard = memo(function GroupCard({ group, groupIndex, totalGroup
       const scopeKey = `${gId}-scope-${scope.id ?? si}`;
       for (let ii = 0; ii < (scope.items ?? []).length; ii++) {
         const item = scope.items![ii];
-        if (hideUnselected && !isSelectablePicked(item.id, selection?.selectedIds)) continue;
-        sum += computeItemMoney(item, editInputs[`${scopeKey}-item-${item.id ?? ii}`], showMarkup, showGst).total;
+        add(item, `${scopeKey}-item-${item.id ?? ii}`);
       }
       for (let ci = 0; ci < (scope.combos ?? []).length; ci++) {
         const combo = scope.combos![ci];
         const comboKey = `${scopeKey}-combo-${combo.id ?? ci}`;
         for (let ii = 0; ii < (combo.items ?? []).length; ii++) {
           const item = combo.items![ii];
-          if (hideUnselected && !isSelectablePicked(item.id, selection?.selectedIds)) continue;
-          sum += computeItemMoney(item, editInputs[`${comboKey}-item-${item.id ?? ii}`], showMarkup, showGst).total;
+          add(item, `${comboKey}-item-${item.id ?? ii}`);
         }
       }
     }
     return sum;
-  }, [items, combos, scopes, gId, showMarkup, showGst, editInputs, hideUnselected, selection?.selectedIds]);
+  }, [
+    items,
+    combos,
+    scopes,
+    gId,
+    showMarkup,
+    showGst,
+    showInvoiceProgress,
+    editInputs,
+    hideUnselected,
+    selection?.selectedIds,
+    config.pricingDetail,
+  ]);
+
+  const groupPriorTotal = useMemo(() => {
+    if (!showInvoiceProgress || !showPreviouslyInvoiced) return 0;
+    let sum = 0;
+    const add = (item: (typeof items)[number]) => {
+      if (hideUnselected && !isSelectablePicked(item.id, selection?.selectedIds)) return;
+      sum += resolvePreviouslyInvoicedAmount(item);
+    };
+    for (const item of items) add(item);
+    for (const combo of combos) {
+      for (const item of combo.items ?? []) add(item);
+    }
+    for (const scope of scopes) {
+      for (const item of scope.items ?? []) add(item);
+      for (const combo of scope.combos ?? []) {
+        for (const item of combo.items ?? []) add(item);
+      }
+    }
+    return sum;
+  }, [
+    items,
+    combos,
+    scopes,
+    showInvoiceProgress,
+    showPreviouslyInvoiced,
+    hideUnselected,
+    selection?.selectedIds,
+  ]);
 
   const showGroupPricing = showColumnVisibilityToggles ? resolvedGroup.showPricing : showPricing;
   const showGroupNotesColumn = enableLineNotes && !showGroupPricing;
@@ -297,8 +348,11 @@ export const GroupCard = memo(function GroupCard({ group, groupIndex, totalGroup
         </span>
 
         {showGroupPricing && (
-          <span className={cn(LI_HEADER_TOTAL, 'text-blue-900')}>
-            {formatCurrency(groupTotal)}
+          <span className={cn(LI_HEADER_TOTAL, 'flex items-center gap-4 text-blue-900')}>
+            <span>{formatCurrency(groupTotal)}</span>
+            {showInvoiceProgress && showPreviouslyInvoiced && (
+              <span className="text-slate-600">{formatCurrency(groupPriorTotal)}</span>
+            )}
           </span>
         )}
 
@@ -381,9 +435,12 @@ export const GroupCard = memo(function GroupCard({ group, groupIndex, totalGroup
                     showQuantities={resolvedGroup.showQuantities}
                     showPricing={resolvedGroup.showPricing}
                     pricingDetail={config.pricingDetail}
+                    showBuyCost={config.showBuyCost}
                     showMarkup={showMarkup}
                     showGst={showGst}
                     showInvoiceProgress={config.showInvoiceProgress}
+                    showPreviouslyInvoiced={config.showPreviouslyInvoiced}
+                    showItemTypeColumn={config.showItemTypeColumn}
                     showNotesColumn={showGroupNotesColumn}
                     showLineScopeStatusColumn={config.showLineScopeStatusColumn}
                   />
@@ -395,9 +452,12 @@ export const GroupCard = memo(function GroupCard({ group, groupIndex, totalGroup
                     showQuantities={resolvedGroup.showQuantities}
                     showPricing={resolvedGroup.showPricing}
                     pricingDetail={config.pricingDetail}
+                    showBuyCost={config.showBuyCost}
                     showMarkup={showMarkup}
                     showGst={showGst}
                     showInvoiceProgress={config.showInvoiceProgress}
+                    showPreviouslyInvoiced={config.showPreviouslyInvoiced}
+                    showItemTypeColumn={config.showItemTypeColumn}
                     showNotesColumn={showGroupNotesColumn}
                     showLineScopeStatusColumn={config.showLineScopeStatusColumn}
                   />

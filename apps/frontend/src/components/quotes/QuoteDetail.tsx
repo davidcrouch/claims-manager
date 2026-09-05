@@ -687,6 +687,7 @@ export function QuoteDetail({
         open={workOrderDrawerOpen}
         onOpenChange={setWorkOrderDrawerOpen}
         jobId={job?.id ?? quote.jobId ?? undefined}
+        job={job}
       />
       <EstimatePublishWizard
         open={publishWizardOpen}
@@ -804,6 +805,8 @@ export function QuoteDetail({
             createJournal={(data) => createJournalAction(data)}
             linkJournal={(jId) => linkJournalAction(jId, 'Quote', quote.id)}
             unlinkJournal={(jId) => unlinkJournalAction(jId, 'Quote', quote.id)}
+            jobId={job?.id ?? quote.jobId}
+            job={job}
           />
         )}
       </div>

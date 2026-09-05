@@ -13,7 +13,6 @@ import {
 } from '@/components/forms/BottomFormDrawer';
 import {
   CreateSubmitOverlay,
-  navigateToCreated,
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
 import {
@@ -95,7 +94,7 @@ export function JobCreateMakeSafeDrawer({
   makeSafeJobTypeName = BUILDER_MAKE_SAFE_JOB_TYPE,
 }: JobCreateMakeSafeDrawerProps) {
   const router = useRouter();
-  const { phase, busy, startCreating, startOpening, resetPhase } =
+  const { phase, busy, startCreating, resetPhase } =
     useCreateSubmitPhase();
   const [error, setError] = useState<string | null>(null);
   const [outboundPayload, setOutboundPayload] = useState<Record<
@@ -125,8 +124,10 @@ export function JobCreateMakeSafeDrawer({
 
   function handleDone() {
     if (createdJob?.id) {
-      startOpening();
-      navigateToCreated(router, `/jobs/${createdJob.id}`);
+      resetPhase();
+      onOpenChange(false);
+      router.push(`/jobs/${createdJob.id}`);
+      router.refresh();
       return;
     }
     onOpenChange(false);

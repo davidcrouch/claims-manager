@@ -483,6 +483,7 @@ export function AssessmentsPageClient({
         createAssessment={createAssessmentAction}
         onCreated={handleCreated}
         jobId={jobId}
+        job={job}
         jobs={jobs}
       />
     </div>

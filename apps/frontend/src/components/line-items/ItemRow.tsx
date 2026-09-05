@@ -1,19 +1,25 @@
 'use client';
 
 import { memo, useEffect, useMemo, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { AlertTriangle, StickyNote, Trash2 } from 'lucide-react';
+import { AlertTriangle, MoreVertical, Package, StickyNote, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/components/shared/detail';
 import { isFixedMarkupType, storedMarkupToUi, storedTaxToUi } from '@/lib/rates';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useLineItems } from './LineItemsProvider';
 import { useDropIndicatorBorder } from './DropIndicatorLine';
 import { useDropTargetHighlight } from './lib/drop-highlight';
 import { RowLeadCheckbox, RowLeadDrag, ROW_LEAD_TD_CHECK, ROW_LEAD_TD_CHECK_LEAD, ROW_LEAD_TD_DRAG } from './lib/row-lead';
-import { useLineDetailHover } from './lib/line-detail-hover';
 import {
   LI_TD_ACTIONS,
   LI_TD_CELL,
@@ -22,7 +28,7 @@ import {
   LI_TD_MONEY_INPUT,
   LI_TD_NOTES,
 } from './lib/table-parts';
-import { computeItemMoney, initItemInputs, nearestEditableField, UNIT_TYPE_OPTIONS } from './lib/money';
+import { computeItemMoney, initItemInputs, lineTotalFromItem, nearestEditableField, UNIT_TYPE_OPTIONS } from './lib/money';
 import { LineScopeStatusBadge, PublishStatusBadge } from './lib/badges';
 import { LineScopeStatusField } from './LineScopeStatusField';
 import type { ApiItem, ColumnKey, DeleteItemRequest, EditableFieldKey } from './lib/types';
@@ -60,14 +66,20 @@ export const ItemRow = memo(function ItemRow({
     handleCellKeyDown,
     handleBulkToggle,
   } = useLineItems();
+  const router = useRouter();
 
-  const { showMarkup, showGst, enableLineNotes, pricingDetail, showInvoiceProgress, invoiceProgressEditable } = config;
+  const { showMarkup, showGst, enableLineNotes, pricingDetail, showBuyCost, showInvoiceProgress, invoiceProgressEditable, showPreviouslyInvoiced, showItemTypeColumn } = config;
   const hideComponent = config.hideComponent;
   const showQuantities = parentShowQuantities ?? config.showQuantities;
   const showPricing = parentShowPricing ?? config.showPricing;
-  const showPriceBreakdown = showPricing && pricingDetail !== 'total-only';
-  const showMarkupCol = showPriceBreakdown && showMarkup;
-  const showGstCol = showPriceBreakdown && showGst;
+  const isCostPricing = pricingDetail === 'cost';
+  const showFullBreakdown = showPricing && pricingDetail === 'full';
+  const showCostBreakdown = showPricing && isCostPricing;
+  const showUnitPriceCol = showFullBreakdown;
+  const showExtendedCol = showFullBreakdown || showCostBreakdown;
+  const showBuyCostCol = (showFullBreakdown && showBuyCost) || showCostBreakdown;
+  const showMarkupCol = showFullBreakdown && showMarkup;
+  const showGstCol = showFullBreakdown && showGst;
   const showCategory = config.showCategory;
   const showSelect = !!selection;
   const showBulkSelect = !isReadOnly && !showSelect;
@@ -108,10 +120,26 @@ export const ItemRow = memo(function ItemRow({
     ...indicatorBorder,
   };
 
-  // Computed money
+  // Computed money — cost mode Sale Price always includes markup + GST (WO commercial total).
   const money = useMemo(
-    () => computeItemMoney(item, inputs ?? undefined, showMarkup, showGst),
-    [item, inputs, showMarkup, showGst],
+    () =>
+      computeItemMoney(
+        item,
+        inputs ?? undefined,
+        isCostPricing ? true : showMarkup,
+        isCostPricing ? true : showGst,
+      ),
+    [item, inputs, showMarkup, showGst, isCostPricing],
+  );
+
+  const displayExtended = isCostPricing ? money.buyExtended : money.extended;
+
+  const displayLineTotal = useMemo(
+    () =>
+      pricingDetail === 'total-only' || showInvoiceProgress
+        ? lineTotalFromItem(item)
+        : money.total,
+    [item, money.total, pricingDetail, showInvoiceProgress],
   );
 
   // Auto-focus on edit
@@ -146,7 +174,17 @@ export const ItemRow = memo(function ItemRow({
     }
 
     const field = col
-      ? nearestEditableField(col, showMarkup, showGst, showQuantities, showPricing, hideComponent, false)
+      ? nearestEditableField(
+          col,
+          showMarkupCol,
+          showGstCol,
+          showQuantities,
+          showPricing,
+          hideComponent,
+          false,
+          showBuyCostCol,
+          showUnitPriceCol,
+        )
       : 'name';
 
     setEditInputs((prev) => {
@@ -240,6 +278,7 @@ export const ItemRow = memo(function ItemRow({
   const displayDescription = inputs?.description ?? item.description;
   const displayQty = inputs?.quantity ?? String(item.quantity ?? 0);
   const displayUnitType = inputs?.unitType || item.unitType?.externalReference || item.unitType?.name || '—';
+  const displayBuyCost = inputs ? (parseFloat(inputs.buyCost) || 0) : (item.buyCost ?? 0);
   const displayUnitCost = inputs ? (parseFloat(inputs.unitCost) || 0) : (item.unitCost ?? 0);
   const displayMarkup = inputs
     ? (parseFloat(inputs.markupValue) || 0)
@@ -248,23 +287,12 @@ export const ItemRow = memo(function ItemRow({
       : storedMarkupToUi(item.markupType, item.markupValue);
   const displayTax = inputs ? (parseFloat(inputs.tax) || 0) : storedTaxToUi(typeof item.tax === 'number' ? item.tax : 0);
 
-  const detailHover = useLineDetailHover({
-    title: displayName,
-    component: displayComponent,
-    description: displayDescription,
-    note: item.note,
-    hideComponent,
-  });
-
   return (
-    <>
-      {detailHover.popup}
-      <tr
+    <tr
         ref={setNodeRef}
         style={style}
         data-item-row
         data-row-key={rowKey}
-        {...detailHover.handlers}
       className={cn(
         'cursor-pointer transition-colors',
         showSelect && !isPicked && 'opacity-40',
@@ -393,9 +421,11 @@ export const ItemRow = memo(function ItemRow({
       </td>
 
       {/* Type */}
-      <td data-col="type" className={cn('whitespace-nowrap text-xs text-slate-500', LI_TD_CELL)}>
-        {item.type || '—'}
-      </td>
+      {showItemTypeColumn && (
+        <td data-col="type" className={cn('whitespace-nowrap text-xs text-slate-500', LI_TD_CELL)}>
+          {item.type || '—'}
+        </td>
+      )}
 
       {/* Category */}
       {showCategory && (
@@ -454,8 +484,30 @@ export const ItemRow = memo(function ItemRow({
         </td>
       )}
 
+      {/* Buy Cost */}
+      {showBuyCostCol && (
+        <td data-col="buyCost" className={cn(editMoneyCellCls('buyCost'), priceDisabled && 'opacity-30')} onClick={priceDisabled ? undefined : cellClick('buyCost')}>
+          {priceDisabled ? (
+            <span className="block text-right font-mono text-sm text-slate-400">—</span>
+          ) : showNormalInputs ? (
+            <input
+              ref={(el) => { inputRefs.current.buyCost = el; }}
+              className={LI_TD_MONEY_INPUT}
+              value={inputs.buyCost}
+              onChange={(e) => handleInputChange(rowKey, 'buyCost', e.target.value)}
+              onKeyDown={handleCellKeyDown}
+              onFocus={() => setEditState({ rowKey, field: 'buyCost' })}
+            />
+          ) : (
+            <span className="block text-right font-mono text-sm text-slate-700">
+              {formatCurrency(displayBuyCost)}
+            </span>
+          )}
+        </td>
+      )}
+
       {/* Unit Cost */}
-      {showPriceBreakdown && (
+      {showUnitPriceCol && (
         <td data-col="unitCost" className={cn(editMoneyCellCls('unitCost'), priceDisabled && 'opacity-30')} onClick={priceDisabled ? undefined : cellClick('unitCost')}>
           {priceDisabled ? (
             <span className="block text-right font-mono text-sm text-slate-400">—</span>
@@ -476,10 +528,10 @@ export const ItemRow = memo(function ItemRow({
         </td>
       )}
 
-      {/* Extended */}
-      {showPriceBreakdown && (
+      {/* Extended / Extended Cost */}
+      {showExtendedCol && (
         <td data-col="extended" className={cn(LI_TD_MONEY, 'text-slate-600', priceDisabled && 'opacity-30')}>
-          {priceDisabled ? '—' : formatCurrency(money.extended)}
+          {priceDisabled ? '—' : formatCurrency(displayExtended)}
         </td>
       )}
 
@@ -532,7 +584,7 @@ export const ItemRow = memo(function ItemRow({
       {/* Total */}
       {showPricing && (
         <td data-col="total" className={cn(LI_TD_MONEY, 'font-semibold text-slate-900', priceDisabled && 'opacity-30 text-slate-400')}>
-          {priceDisabled ? '—' : formatCurrency(money.total)}
+          {priceDisabled ? '—' : formatCurrency(displayLineTotal)}
         </td>
       )}
 
@@ -582,7 +634,7 @@ export const ItemRow = memo(function ItemRow({
                 }
                 const maxTotal = Math.max(
                   0,
-                  money.total - (item.previouslyInvoiced ?? 0),
+                  displayLineTotal - (item.previouslyInvoiced ?? 0),
                 );
                 const clamped = Math.min(Math.max(0, parsed), maxTotal);
                 // Preserve typed decimals when under the cap; rewrite when clamped.
@@ -596,7 +648,7 @@ export const ItemRow = memo(function ItemRow({
                 const parsed = Number(inputs.invoiced);
                 const maxTotal = Math.max(
                   0,
-                  money.total - (item.previouslyInvoiced ?? 0),
+                  displayLineTotal - (item.previouslyInvoiced ?? 0),
                 );
                 if (!Number.isFinite(parsed) || inputs.invoiced.trim() === '') {
                   handleInputChange(rowKey, 'invoiced', '0');
@@ -610,8 +662,8 @@ export const ItemRow = memo(function ItemRow({
               onKeyDown={handleCellKeyDown}
               onFocus={() => setEditState({ rowKey, field: 'invoiced' })}
               inputMode="decimal"
-              aria-label={`Invoiced amount (max ${formatCurrency(Math.max(0, money.total - (item.previouslyInvoiced ?? 0)))})`}
-              title={`Maximum ${formatCurrency(Math.max(0, money.total - (item.previouslyInvoiced ?? 0)))}`}
+              aria-label={`Invoiced amount (max ${formatCurrency(Math.max(0, displayLineTotal - (item.previouslyInvoiced ?? 0)))})`}
+              title={`Maximum ${formatCurrency(Math.max(0, displayLineTotal - (item.previouslyInvoiced ?? 0)))}`}
             />
           ) : (
             <span className="block text-right font-mono text-sm text-slate-700">
@@ -624,7 +676,7 @@ export const ItemRow = memo(function ItemRow({
           )}
         </td>
       )}
-      {showInvoiceProgress && (
+      {showInvoiceProgress && showPreviouslyInvoiced && (
         <td data-col="previouslyInvoiced" className={cn(LI_TD_MONEY, 'text-slate-700')}>
           {formatCurrency(item.previouslyInvoiced ?? 0)}
         </td>
@@ -653,19 +705,32 @@ export const ItemRow = memo(function ItemRow({
       {/* Actions */}
       {!isReadOnly && actions.onDeleteItem && (
         <td className={LI_TD_ACTIONS} onClick={(e) => e.stopPropagation()}>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 w-7 p-0 text-slate-400 hover:text-red-600"
-            onClick={() => actions.onDeleteItem?.({ itemId: item.id!, itemName: item.name, isAssemblyChild: !!indented })}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              aria-label="Line item actions"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-200/80 hover:text-slate-700"
+            >
+              <MoreVertical className="h-4 w-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {item.catalogItemId && !item.catalogMissing && (
+                <DropdownMenuItem
+                  onClick={() => router.push(`/admin/catalog/items/${item.catalogItemId}`)}
+                >
+                  <Package className="mr-2 h-3.5 w-3.5" /> Go to catalogue item
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem
+                className="text-red-600"
+                onClick={() => actions.onDeleteItem?.({ itemId: item.id!, itemName: item.name, isAssemblyChild: !!indented })}
+              >
+                <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </td>
       )}
     </tr>
-    </>
   );
 });
 

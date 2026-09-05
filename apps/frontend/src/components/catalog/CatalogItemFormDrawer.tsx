@@ -12,7 +12,6 @@ import {
 import { CatalogItemForm } from '@/components/catalog/CatalogItemForm';
 import {
   CreateSubmitOverlay,
-  navigateToCreated,
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
 import {
@@ -81,7 +80,7 @@ export function CatalogItemFormDrawer({
 }: CatalogItemFormDrawerProps) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
-  const { phase, busy, startCreating, startOpening, resetPhase } =
+  const { phase, busy, startCreating, resetPhase } =
     useCreateSubmitPhase();
   const [types, setTypes] = useState<CatalogItemType[]>(typesProp ?? []);
   const [categories, setCategories] = useState<CatalogCategory[]>(categoriesProp ?? []);
@@ -199,8 +198,10 @@ export function CatalogItemFormDrawer({
             onSuccess={(id) => {
               onCreated?.(id);
               if (id) {
-                startOpening();
-                navigateToCreated(router, `/admin/catalog/items/${id}`);
+                resetPhase();
+                handleOpenChange(false);
+                router.push(`/admin/catalog/items/${id}`);
+                router.refresh();
                 return;
               }
               resetPhase();

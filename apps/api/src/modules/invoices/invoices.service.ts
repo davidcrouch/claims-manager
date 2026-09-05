@@ -546,6 +546,13 @@ export class InvoicesService {
     if (typeof params.body.issueDate === 'string' && params.body.issueDate) {
       data.issueDate = new Date(params.body.issueDate);
     }
+    if (
+      params.body.invoicePayload &&
+      typeof params.body.invoicePayload === 'object' &&
+      !Array.isArray(params.body.invoicePayload)
+    ) {
+      data.invoicePayload = params.body.invoicePayload as InvoiceInsert['invoicePayload'];
+    }
 
     const updated = await this.invoicesRepo.update({
       id: params.id,

@@ -6,6 +6,7 @@ import { InvoiceFormDrawer } from '@/components/forms/InvoiceFormDrawer';
 import { Button } from '@/components/ui/button';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { PrintButton } from '@/components/shared/PrintButton';
+import { toJobOptions } from '@/components/shared/job-label';
 import type { Claim, Invoice, Job, PaginatedResponse, WorkOrder } from '@/types/api';
 
 export interface InvoicesPageClientProps {
@@ -30,6 +31,9 @@ export function InvoicesPageClient({
   parentClaim,
 }: InvoicesPageClientProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const jobs = toJobOptions(
+    job ? [job] : Object.values(jobById ?? {}),
+  );
 
   return (
     <>
@@ -57,6 +61,7 @@ export function InvoicesPageClient({
         workOrders={
           job ? workOrders.filter((wo) => wo.jobId === job.id) : workOrders
         }
+        jobs={jobs}
         jobNameById={jobNameById}
         jobById={jobById}
         job={job}

@@ -21,14 +21,13 @@ import {
   BottomFormDrawerError,
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
-import { JobSelectField } from '@/components/forms/JobSelectField';
+import { FormJobPickerField } from '@/components/forms/FormJobPickerField';
 import {
   CreateSubmitOverlay,
-  navigateToCreated,
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
 import type { JobOption } from '@/components/shared/job-label';
-import type { Assessment } from '@/types/api';
+import type { Assessment, Job } from '@/types/api';
 
 export interface AssessmentFormDrawerProps {
   open: boolean;
@@ -36,6 +35,8 @@ export interface AssessmentFormDrawerProps {
   createAssessment: (data: Partial<Assessment> & { name: string }) => Promise<Assessment | null>;
   onCreated?: (assessment: Assessment) => void;
   jobId?: string | null;
+  /** Full job for richer initial display. */
+  job?: Job | null;
   jobs?: JobOption[];
   /** Live values pushed from AI fill_create_assessment tool. */
   name?: string;
@@ -66,6 +67,7 @@ export function AssessmentFormDrawer({
   createAssessment,
   onCreated,
   jobId,
+  job,
   jobs = [],
   name: nameProp,
   claimRecommendation: claimRecommendationProp,
@@ -78,9 +80,10 @@ export function AssessmentFormDrawer({
   comments: commentsProp,
 }: AssessmentFormDrawerProps) {
   const router = useRouter();
-  const { phase, busy, startCreating, startOpening, resetPhase } =
+  const { phase, busy, startCreating, resetPhase } =
     useCreateSubmitPhase();
   const [selectedJobId, setSelectedJobId] = useState(jobId ?? '');
+  const [pickedJob, setPickedJob] = useState<Job | null>(null);
   const [name, setName] = useState(nameProp ?? '');
   const [claimRecommendation, setClaimRecommendation] = useState(
     claimRecommendationProp ?? '',
@@ -95,9 +98,14 @@ export function AssessmentFormDrawer({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open) return;
-    if (jobId) setSelectedJobId(jobId);
-  }, [open, jobId]);
+    if (!open) {
+      setPickedJob(null);
+      return;
+    }
+    const initialId = jobId ?? job?.id ?? '';
+    setSelectedJobId(initialId);
+    setPickedJob(job?.id && job.id === initialId ? job : null);
+  }, [open, jobId, job]);
 
   useEffect(() => {
     if (!open) return;
@@ -125,8 +133,15 @@ export function AssessmentFormDrawer({
     commentsProp,
   ]);
 
+  function handleJobPicked(next: Job) {
+    setPickedJob(next);
+    setSelectedJobId(next.id);
+  }
+
   const resetForm = () => {
-    setSelectedJobId(jobId ?? '');
+    const initialId = jobId ?? job?.id ?? '';
+    setSelectedJobId(initialId);
+    setPickedJob(job?.id && job.id === initialId ? job : null);
     setName('');
     setClaimRecommendation('');
     setMakeSafe(false);
@@ -188,8 +203,10 @@ export function AssessmentFormDrawer({
       }
 
       onCreated?.(assessment);
-      startOpening();
-      navigateToCreated(router, `/assessments/${assessment.id}`);
+      resetPhase();
+      handleOpenChange(false);
+      router.push(`/assessments/${assessment.id}`);
+      router.refresh();
     } catch (err) {
       console.error('AssessmentFormDrawer.handleSubmit:', err);
       setError(err instanceof Error ? err.message : 'Failed to create assessment');
@@ -209,114 +226,119 @@ export function AssessmentFormDrawer({
     >
       <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
         <BottomFormDrawerBody>
-          <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
-            <JobSelectField
-              jobs={jobs}
+          <div className="space-y-6">
+            <FormJobPickerField
               value={selectedJobId}
-              onValueChange={setSelectedJobId}
+              selectedJob={pickedJob}
+              jobs={jobs}
+              onJobSelect={handleJobPicked}
             />
 
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="assessment-name">
-                Assessment Name <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="assessment-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Initial Site Assessment"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Claim Recommendation</Label>
-              <Select value={claimRecommendation} onValueChange={setSelectValue(setClaimRecommendation)}>
-                <SelectTrigger className="w-full"><SelectValue placeholder="Select..." /></SelectTrigger>
-                <SelectContent>
-                  {CLAIM_RECOMMENDATIONS.map((opt) => (
-                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Design Type</Label>
-              <Select value={designType} onValueChange={setSelectValue(setDesignType)}>
-                <SelectTrigger className="w-full"><SelectValue placeholder="Select..." /></SelectTrigger>
-                <SelectContent>
-                  {DESIGN_TYPES.map((opt) => (
-                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Construction</Label>
-              <Select value={construction} onValueChange={setSelectValue(setConstruction)}>
-                <SelectTrigger className="w-full"><SelectValue placeholder="Select..." /></SelectTrigger>
-                <SelectContent>
-                  {CONSTRUCTION_TYPES.map((opt) => (
-                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Roof Type</Label>
-              <Select value={roofType} onValueChange={setSelectValue(setRoofType)}>
-                <SelectTrigger className="w-full"><SelectValue placeholder="Select..." /></SelectTrigger>
-                <SelectContent>
-                  {ROOF_TYPES.map((opt) => (
-                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Building Type</Label>
-              <Select value={buildingType} onValueChange={setSelectValue(setBuildingType)}>
-                <SelectTrigger className="w-full"><SelectValue placeholder="Select..." /></SelectTrigger>
-                <SelectContent>
-                  {BUILDING_TYPES.map((opt) => (
-                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex items-end gap-2 pb-1">
-              <Checkbox id="make-safe" checked={makeSafe} onCheckedChange={(v) => setMakeSafe(!!v)} />
-              <Label htmlFor="make-safe" className="font-normal">Make Safe Required</Label>
-            </div>
-
-            {makeSafe && (
+            <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
               <div className="space-y-2">
-                <Label>Make Safe Type</Label>
-                <Select value={makeSafeType} onValueChange={setSelectValue(setMakeSafeType)}>
+                <Label htmlFor="assessment-name">
+                  Assessment Name <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="assessment-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Initial Site Assessment"
+                  required
+                />
+              </div>
+
+              <div className="flex items-end gap-2 pb-1">
+                <Checkbox id="make-safe" checked={makeSafe} onCheckedChange={(v) => setMakeSafe(!!v)} />
+                <Label htmlFor="make-safe" className="font-normal">Make Safe Required</Label>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Claim Recommendation</Label>
+                <Select value={claimRecommendation} onValueChange={setSelectValue(setClaimRecommendation)}>
                   <SelectTrigger className="w-full"><SelectValue placeholder="Select..." /></SelectTrigger>
                   <SelectContent>
-                    {MAKE_SAFE_TYPES.map((opt) => (
+                    {CLAIM_RECOMMENDATIONS.map((opt) => (
                       <SelectItem key={opt} value={opt}>{opt}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-            )}
 
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="assessment-comments">Comments</Label>
-              <Textarea
-                id="assessment-comments"
-                value={comments}
-                onChange={(e) => setComments(e.target.value)}
-                placeholder="Any initial notes..."
-                rows={3}
-              />
+              <div className="hidden md:block" aria-hidden />
+
+              <div className="space-y-2">
+                <Label>Construction</Label>
+                <Select value={construction} onValueChange={setSelectValue(setConstruction)}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Select..." /></SelectTrigger>
+                  <SelectContent>
+                    {CONSTRUCTION_TYPES.map((opt) => (
+                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Roof Type</Label>
+                <Select value={roofType} onValueChange={setSelectValue(setRoofType)}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Select..." /></SelectTrigger>
+                  <SelectContent>
+                    {ROOF_TYPES.map((opt) => (
+                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Building Type</Label>
+                <Select value={buildingType} onValueChange={setSelectValue(setBuildingType)}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Select..." /></SelectTrigger>
+                  <SelectContent>
+                    {BUILDING_TYPES.map((opt) => (
+                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Design Type</Label>
+                <Select value={designType} onValueChange={setSelectValue(setDesignType)}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Select..." /></SelectTrigger>
+                  <SelectContent>
+                    {DESIGN_TYPES.map((opt) => (
+                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {makeSafe && (
+                <div className="space-y-2">
+                  <Label>Make Safe Type</Label>
+                  <Select value={makeSafeType} onValueChange={setSelectValue(setMakeSafeType)}>
+                    <SelectTrigger className="w-full"><SelectValue placeholder="Select..." /></SelectTrigger>
+                    <SelectContent>
+                      {MAKE_SAFE_TYPES.map((opt) => (
+                        <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="assessment-comments">Comments</Label>
+                <Textarea
+                  id="assessment-comments"
+                  value={comments}
+                  onChange={(e) => setComments(e.target.value)}
+                  placeholder="Any initial notes..."
+                  rows={3}
+                />
+              </div>
             </div>
           </div>
 
@@ -346,7 +368,7 @@ export function AssessmentFormDrawer({
                 {phase === 'opening' ? 'Opening…' : 'Creating…'}
               </>
             ) : (
-              'Submit'
+              'Create Assessment'
             )}
           </Button>
         </BottomFormDrawerFooter>

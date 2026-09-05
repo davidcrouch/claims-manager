@@ -37,22 +37,33 @@ interface TableLayoutProps {
   showQuantities?: boolean;
   showPricing?: boolean;
   pricingDetail?: PricingDetail;
+  showBuyCost?: boolean;
   showMarkup?: boolean;
   showGst?: boolean;
   showInvoiceProgress?: boolean;
+  showPreviouslyInvoiced?: boolean;
+  showItemTypeColumn?: boolean;
   showNotesColumn?: boolean;
   showLineScopeStatusColumn?: boolean;
 }
 
 function resolvePricingFlags(props: TableLayoutProps) {
   const showPricing = !!props.showPricing;
-  const showBreakdown = showPricing && props.pricingDetail !== 'total-only';
+  const isCost = props.pricingDetail === 'cost';
+  const showFullBreakdown = showPricing && props.pricingDetail === 'full';
+  const showCostBreakdown = showPricing && isCost;
   return {
     showPricing,
-    showBreakdown,
-    showMarkup: showBreakdown && !!props.showMarkup,
-    showGst: showBreakdown && !!props.showGst,
+    showUnitPrice: showFullBreakdown,
+    showExtended: showFullBreakdown || showCostBreakdown,
+    showBuyCost: (showFullBreakdown && !!props.showBuyCost) || showCostBreakdown,
+    showMarkup: showFullBreakdown && !!props.showMarkup,
+    showGst: showFullBreakdown && !!props.showGst,
+    isCost,
     showInvoiceProgress: !!props.showInvoiceProgress,
+    showPreviouslyInvoiced:
+      props.showPreviouslyInvoiced ?? !!props.showInvoiceProgress,
+    showItemTypeColumn: props.showItemTypeColumn ?? true,
   };
 }
 
@@ -66,7 +77,17 @@ export function LineItemsColGroup(props: TableLayoutProps) {
     showNotesColumn,
     showLineScopeStatusColumn,
   } = props;
-  const { showPricing, showBreakdown, showMarkup, showGst, showInvoiceProgress } = resolvePricingFlags(props);
+  const {
+    showPricing,
+    showUnitPrice,
+    showExtended,
+    showBuyCost,
+    showMarkup,
+    showGst,
+    showInvoiceProgress,
+    showPreviouslyInvoiced,
+    showItemTypeColumn,
+  } = resolvePricingFlags(props);
 
   // Array children avoid whitespace text nodes inside <colgroup> (invalid HTML / hydration error).
   const cols = [
@@ -74,18 +95,21 @@ export function LineItemsColGroup(props: TableLayoutProps) {
     showBulkSelect ? <col key="bulk" className="w-6" /> : null,
     showSelect ? <col key="select" className="w-6" /> : null,
     <col key="name" className={nameColClass(showCategory)} />,
-    <col key="type" className="w-[70px]" />,
+    showItemTypeColumn ? <col key="type" className="w-[70px]" /> : null,
     showCategory ? <col key="category" className="w-[120px]" /> : null,
     showLineScopeStatusColumn ? <col key="status" className="w-[120px]" /> : null,
     showQuantities ? <col key="qty" className="w-[80px]" /> : null,
     showQuantities ? <col key="unit" className="w-[64px]" /> : null,
-    showBreakdown ? <col key="unit-price" className="w-[110px]" /> : null,
-    showBreakdown ? <col key="extended" className="w-[100px]" /> : null,
+    showBuyCost ? <col key="buy-cost" className="w-[110px]" /> : null,
+    showUnitPrice ? <col key="unit-price" className="w-[110px]" /> : null,
+    showExtended ? <col key="extended" className="w-[100px]" /> : null,
     showMarkup ? <col key="markup" className="w-[90px]" /> : null,
     showGst ? <col key="gst" className="w-[80px]" /> : null,
     showPricing ? <col key="total" className="w-[100px]" /> : null,
     showInvoiceProgress ? <col key="invoiced" className="w-[110px]" /> : null,
-    showInvoiceProgress ? <col key="previously" className="w-[130px]" /> : null,
+    showInvoiceProgress && showPreviouslyInvoiced ? (
+      <col key="previously" className="w-[130px]" />
+    ) : null,
     showNotesColumn ? <col key="notes" className="w-[100px]" /> : null,
     <col key="actions" className="w-10" />,
   ].filter(Boolean);
@@ -103,7 +127,18 @@ export function LineItemsThead(props: TableLayoutProps) {
     showNotesColumn,
     showLineScopeStatusColumn,
   } = props;
-  const { showPricing, showBreakdown, showMarkup, showGst, showInvoiceProgress } = resolvePricingFlags(props);
+  const {
+    showPricing,
+    showUnitPrice,
+    showExtended,
+    showBuyCost,
+    showMarkup,
+    showGst,
+    isCost,
+    showInvoiceProgress,
+    showPreviouslyInvoiced,
+    showItemTypeColumn,
+  } = resolvePricingFlags(props);
   const checkLead = !showDragHandle;
   return (
     <thead className="bg-slate-50/60">
@@ -112,18 +147,33 @@ export function LineItemsThead(props: TableLayoutProps) {
         {showBulkSelect && <th scope="col" className={LI_TH_LEAD_CHECK(checkLead)} />}
         {showSelect && <th scope="col" className={LI_TH_LEAD_CHECK(checkLead)} />}
         <th scope="col" className={LI_TH_CELL}>Name</th>
-        <th scope="col" className={LI_TH_CELL}>Type</th>
+        {showItemTypeColumn && <th scope="col" className={LI_TH_CELL}>Type</th>}
         {showCategory && <th scope="col" className={LI_TH_CELL}>Category</th>}
         {showLineScopeStatusColumn && <th scope="col" className={LI_TH_CELL}>Status</th>}
         {showQuantities && <th scope="col" className={LI_TH_CELL_RIGHT}>Qty</th>}
         {showQuantities && <th scope="col" className={LI_TH_CELL_RIGHT}>Unit</th>}
-        {showBreakdown && <th scope="col" className={LI_TH_MONEY}>Unit Price</th>}
-        {showBreakdown && <th scope="col" className={LI_TH_MONEY}>Extended</th>}
+        {showBuyCost && <th scope="col" className={LI_TH_MONEY}>Buy Cost</th>}
+        {showUnitPrice && <th scope="col" className={LI_TH_MONEY}>Unit Price</th>}
+        {showExtended && (
+          <th scope="col" className={LI_TH_MONEY}>
+            {isCost ? 'Extended Cost' : 'Extended'}
+          </th>
+        )}
         {showMarkup && <th scope="col" className={LI_TH_MONEY}>Markup</th>}
         {showGst && <th scope="col" className={LI_TH_CELL_RIGHT}>GST</th>}
-        {showPricing && <th scope="col" className={LI_TH_MONEY}>Total</th>}
-        {showInvoiceProgress && <th scope="col" className={LI_TH_MONEY}>Invoiced</th>}
-        {showInvoiceProgress && <th scope="col" className={cn(LI_TH_MONEY, 'whitespace-nowrap')}>Previously Invoiced</th>}
+        {showPricing && (
+          <th scope="col" className={LI_TH_MONEY}>
+            {isCost ? 'Sale Price' : 'Total'}
+          </th>
+        )}
+        {showInvoiceProgress && (
+          <th scope="col" className={LI_TH_MONEY}>
+            This Invoice
+          </th>
+        )}
+        {showInvoiceProgress && showPreviouslyInvoiced && (
+          <th scope="col" className={cn(LI_TH_MONEY, 'whitespace-nowrap')}>Prior Invoices</th>
+        )}
         {showNotesColumn && <th scope="col" className={LI_TH_NOTES}>Notes</th>}
         <th scope="col" className={LI_TH_ACTIONS} />
       </tr>

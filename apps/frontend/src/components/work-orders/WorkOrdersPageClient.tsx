@@ -66,6 +66,7 @@ export function WorkOrdersPageClient({
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
         jobId={job?.id}
+        job={job}
         jobs={jobs}
       />
     </>

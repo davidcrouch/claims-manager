@@ -23,10 +23,13 @@ export async function generateMetadata({
 
 export default async function PurchaseOrderDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }) {
   const { id } = await params;
+  const query = await searchParams;
   const api = await getServerApiClient();
   if (!api) redirect('/api/auth/login');
 
@@ -46,7 +49,7 @@ export default async function PurchaseOrderDetailPage({
       <SetPageHeader>
         <PurchaseOrderPageHeader po={po} job={job} />
       </SetPageHeader>
-      <PurchaseOrderDetail po={po} job={job} />
+      <PurchaseOrderDetail po={po} job={job} initialTab={query.tab} />
     </>
   );
 }

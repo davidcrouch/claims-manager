@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   Receipt,
@@ -9,7 +9,6 @@ import {
   FileSignature,
   Package,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { BackButton } from '@/components/layout/BackButton';
 import {
@@ -33,21 +32,148 @@ import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { jobDisplayName } from '@/components/shared/job-label';
 import { entityArchiveLabel, entityDetailHeaderTitles } from '@/components/shared/EntityDetailTitle';
 import { invoiceInsurerRef } from '@/components/invoices/invoice-label';
-import { LineItemsProvider, LineItemsTable } from '@/components/line-items';
-import { PagedLineItemsTable } from '@/components/quotes/PagedLineItemsTable';
-import { groupsFromDocumentPayload } from '@/components/line-items';
-import { getPurchaseOrderLineItemsAction } from '@/app/(app)/purchase-orders/actions';
-import { getWorkOrderLineItemsAction } from '@/app/(app)/work-orders/actions';
 import {
   InvoicePublishWizard,
   type InvoicePublishMode,
 } from '@/components/invoices/InvoicePublishWizard';
 import { SyncStatusIndicator } from '@/components/shared/SyncStatusIndicator';
 import { useJobCaps } from '@/hooks/useJobCaps';
+import {
+  InvoiceLineItemsTab,
+  type InvoiceLineItemEdits,
+  type InvoiceLineItemsTabHandle,
+} from '@/components/invoices/InvoiceLineItemsTab';
+import {
+  AUTOSAVE_DEBOUNCE_MS,
+  MAX_UNDO,
+  SAVE_STATUS_CLEAR_MS,
+  cloneJson,
+  pushUndoEntry,
+} from '@/components/shared/detail-autosave';
+import { DetailUndoButton } from '@/components/shared/DetailAutosaveActions';
+import { HeaderSaveStatus } from '@/components/shared/HeaderSaveStatus';
 
 // ---------- header ----------------------------------------------------------
 
 export function InvoicePageHeader({
+  invoice,
+  job,
+}: {
+  invoice: Invoice;
+  job?: Job | null;
+  claim?: Claim | null;
+  workOrder?: WorkOrder | null;
+  purchaseOrder?: PurchaseOrder | null;
+}) {
+  const statusName = invoice.status?.name ?? 'Unknown';
+  const titles = entityDetailHeaderTitles({
+    internalNumber: invoice.internalNumber,
+    secondaryLabel: invoice.invoiceNumber,
+    fallbackId: invoice.id,
+  });
+
+  return (
+    <PageHeaderLayout
+      leading={<BackButton href={job ? `/invoices?jobId=${job.id}` : '/invoices'} label="Back to invoices" />}
+      icon={
+        <PageHeaderIcon
+          icon={Receipt}
+          className="bg-teal-100"
+          iconClassName="text-teal-600"
+        />
+      }
+      topTitle={titles.topTitle}
+      title={titles.title}
+      titleMono={titles.titleMono}
+      topRow={
+        <>
+          <StatusBadge status={statusName} />
+          {(invoice as any).syncStatus && (
+            <SyncStatusIndicator syncStatus={(invoice as any).syncStatus} compact />
+          )}
+          {invoice.purchaseOrderId && (
+            <Link
+              href={`/purchase-orders/${invoice.purchaseOrderId}`}
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              View PO
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
+          {!invoice.purchaseOrderId && invoice.workOrderId && (
+            <Link
+              href={`/work-orders/${invoice.workOrderId}`}
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              View work order
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
+          {job && (
+            <Link
+              href={`/jobs/${job.id}`}
+              className="inline-flex items-center gap-1 text-xs uppercase text-primary hover:underline"
+            >
+              {jobDisplayName(job)}
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
+        </>
+      }
+      bottomRow={
+        <>
+          <PageHeaderField label="Amount">{formatCurrency(invoice.totalAmount)}</PageHeaderField>
+          <PageHeaderField label="Issue date">{formatDate(invoice.issueDate)}</PageHeaderField>
+          <PageHeaderField label="Updated">{formatDateTime(invoice.updatedAt)}</PageHeaderField>
+        </>
+      }
+    />
+  );
+}
+
+// ---------- tabs ------------------------------------------------------------
+
+function OverviewTab({ invoice }: { invoice: Invoice }) {
+  const status = invoice.status?.name ?? 'Unknown';
+
+  return (
+    <SectionCard
+      title="Invoice Details"
+      icon={<FileSignature className="h-4 w-4 text-muted-foreground" />}
+    >
+      <DefRow label="Invoice number" value={invoice.invoiceNumber ?? '—'} />
+      <DefRow label="Insurer Ref" value={invoiceInsurerRef(invoice) ?? '—'} />
+      <DefRow label="Status" value={<StatusBadge status={status} />} />
+      <DefRow label="Total amount" value={formatCurrency(invoice.totalAmount)} />
+      <DefRow label="Sub-total" value={formatCurrency(invoice.subTotal)} />
+      <DefRow label="Tax" value={formatCurrency(invoice.tax)} />
+      <DefRow label="Excess amount" value={formatCurrency(invoice.excessAmount)} />
+      <DefRow label="Issue date" value={formatDate(invoice.issueDate)} />
+    </SectionCard>
+  );
+}
+
+function TimelineTab({ invoice }: { invoice: Invoice }) {
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      <SectionCard
+        title="Local audit"
+        icon={<Calendar className="h-4 w-4 text-muted-foreground" />}
+      >
+        <DefRow label="Created" value={formatDateTime(invoice.createdAt)} />
+        <DefRow label="Updated" value={formatDateTime(invoice.updatedAt)} />
+      </SectionCard>
+    </div>
+  );
+}
+
+// ---------- container -------------------------------------------------------
+
+type InvTab = 'overview' | 'line-items' | 'timeline';
+
+type LineItemsUndoEntry = { kind: 'line-items'; edits: InvoiceLineItemEdits };
+
+export function InvoiceDetail({
   invoice,
   job,
   claim,
@@ -61,20 +187,128 @@ export function InvoicePageHeader({
   purchaseOrder?: PurchaseOrder | null;
 }) {
   const caps = useJobCaps(job);
+  const [tab, setTab] = useState<InvTab>('overview');
+  const [lineItemsMounted, setLineItemsMounted] = useState(false);
+  const [lineItemsDirty, setLineItemsDirty] = useState(false);
+  const [lineItemsSaving, setLineItemsSaving] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [lineItemsEditTick, setLineItemsEditTick] = useState(0);
+  const [undoStack, setUndoStack] = useState<LineItemsUndoEntry[]>([]);
   const [publishWizardOpen, setPublishWizardOpen] = useState(false);
+  const saveLineItemsRef = useRef<(() => void) | null>(null);
+  const lineItemsRef = useRef<InvoiceLineItemsTabHandle | null>(null);
+
   const statusName = invoice.status?.name ?? 'Unknown';
   const canPublish = !invoice.sourceExternalReference;
-  const publishMode: InvoicePublishMode = caps.publishMode === 'external' ? 'external' : 'internal';
-  const titles = entityDetailHeaderTitles({
-    internalNumber: invoice.internalNumber,
-    secondaryLabel: invoice.invoiceNumber,
-    fallbackId: invoice.id,
-  });
+  const canEditLineItems = !invoice.sourceExternalReference;
+  const publishMode: InvoicePublishMode =
+    caps.publishMode === 'external' ? 'external' : 'internal';
+  const canUndo = canEditLineItems && (lineItemsDirty || undoStack.length > 0);
+
+  useEffect(() => {
+    setLineItemsDirty(false);
+    setSaveError(null);
+    setJustSaved(false);
+    setUndoStack([]);
+    setLineItemsMounted(tab === 'line-items');
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- remount take-off for the new invoice
+  }, [invoice.id]);
+
+  useEffect(() => {
+    if (tab === 'line-items') setLineItemsMounted(true);
+  }, [tab]);
+
+  const pushUndo = useCallback((entry: LineItemsUndoEntry) => {
+    setUndoStack((prev) => pushUndoEntry(prev, entry, MAX_UNDO));
+  }, []);
+
+  const handleLineItemsDirtyChange = useCallback(
+    (dirty: boolean, save: () => void) => {
+      setLineItemsDirty(dirty);
+      saveLineItemsRef.current = save;
+      setLineItemsEditTick((n) => n + 1);
+    },
+    [],
+  );
+
+  const handleLineItemsUndoCapture = useCallback(
+    (restoreEdits: InvoiceLineItemEdits) => {
+      pushUndo({ kind: 'line-items', edits: cloneJson(restoreEdits) });
+    },
+    [pushUndo],
+  );
+
+  const handleLineItemsSaveState = useCallback(
+    (state: 'saving' | 'saved' | 'error', error?: string) => {
+      if (state === 'saving') {
+        setLineItemsSaving(true);
+        setJustSaved(false);
+        setSaveError(null);
+        return;
+      }
+      setLineItemsSaving(false);
+      if (state === 'error') {
+        setSaveError(error ?? 'Failed to save line items');
+        return;
+      }
+      setJustSaved(true);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!canEditLineItems || !lineItemsDirty || lineItemsSaving) return;
+    const timer = setTimeout(() => {
+      saveLineItemsRef.current?.();
+    }, AUTOSAVE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [canEditLineItems, lineItemsDirty, lineItemsSaving, lineItemsEditTick]);
+
+  useEffect(() => {
+    if (!justSaved || lineItemsDirty || lineItemsSaving || saveError) return;
+    const timer = setTimeout(() => setJustSaved(false), SAVE_STATUS_CLEAR_MS);
+    return () => clearTimeout(timer);
+  }, [justSaved, lineItemsDirty, lineItemsSaving, saveError]);
+
+  const handleUndo = useCallback(() => {
+    if (!canEditLineItems || lineItemsSaving) return;
+
+    if (lineItemsDirty) {
+      lineItemsRef.current?.resetEdits();
+      setSaveError(null);
+      return;
+    }
+
+    const entry = undoStack[undoStack.length - 1];
+    if (!entry) return;
+    setUndoStack((prev) => prev.slice(0, -1));
+    lineItemsRef.current?.save(entry.edits);
+  }, [canEditLineItems, lineItemsSaving, lineItemsDirty, undoStack]);
+
+  const tabs: Array<{ id: InvTab; label: string; icon: typeof Calendar }> = [
+    { id: 'overview', label: 'Overview', icon: FileSignature },
+    { id: 'line-items', label: 'Line Items', icon: Package },
+    { id: 'timeline', label: 'Timeline', icon: Calendar },
+  ];
 
   return (
-    <>
+    <div className="flex flex-col">
+      <HeaderSaveStatus
+        saving={lineItemsSaving}
+        saveError={saveError}
+        justSaved={justSaved}
+        dirty={lineItemsDirty}
+      />
       <SetHeaderActions>
         <HeaderActionToolbar>
+          {canEditLineItems && (
+            <DetailUndoButton
+              canUndo={canUndo}
+              undoDisabled={lineItemsSaving}
+              onUndo={handleUndo}
+            />
+          )}
           {canPublish && (
             <PublishButton onClick={() => setPublishWizardOpen(true)} />
           )}
@@ -103,203 +337,6 @@ export function InvoicePageHeader({
         purchaseOrder={purchaseOrder}
         mode={publishMode}
       />
-      <PageHeaderLayout
-        leading={<BackButton href={job ? `/invoices?jobId=${job.id}` : '/invoices'} label="Back to invoices" />}
-        icon={
-          <PageHeaderIcon
-            icon={Receipt}
-            className="bg-teal-100"
-            iconClassName="text-teal-600"
-          />
-        }
-        topTitle={titles.topTitle}
-        title={titles.title}
-        titleMono={titles.titleMono}
-        topRow={
-          <>
-            <StatusBadge status={statusName} />
-            {(invoice as any).syncStatus && (
-              <SyncStatusIndicator syncStatus={(invoice as any).syncStatus} compact />
-            )}
-            {invoice.purchaseOrderId && (
-              <Link
-                href={`/purchase-orders/${invoice.purchaseOrderId}`}
-                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-              >
-                View PO
-                <ExternalLink className="h-3 w-3" />
-              </Link>
-            )}
-            {!invoice.purchaseOrderId && invoice.workOrderId && (
-              <Link
-                href={`/work-orders/${invoice.workOrderId}`}
-                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-              >
-                View work order
-                <ExternalLink className="h-3 w-3" />
-              </Link>
-            )}
-            {job && (
-              <Link
-                href={`/jobs/${job.id}`}
-                className="inline-flex items-center gap-1 text-xs uppercase text-primary hover:underline"
-              >
-                {jobDisplayName(job)}
-                <ExternalLink className="h-3 w-3" />
-              </Link>
-            )}
-          </>
-        }
-        bottomRow={
-          <>
-            <PageHeaderField label="Amount">{formatCurrency(invoice.totalAmount)}</PageHeaderField>
-            <PageHeaderField label="Issue date">{formatDate(invoice.issueDate)}</PageHeaderField>
-            <PageHeaderField label="Updated">{formatDateTime(invoice.updatedAt)}</PageHeaderField>
-          </>
-        }
-      />
-    </>
-  );
-}
-
-// ---------- tabs ------------------------------------------------------------
-
-function OverviewTab({ invoice }: { invoice: Invoice }) {
-  const status = invoice.status?.name ?? 'Unknown';
-
-  return (
-    <SectionCard
-      title="Invoice Details"
-      icon={<FileSignature className="h-4 w-4 text-muted-foreground" />}
-    >
-      <DefRow label="Invoice number" value={invoice.invoiceNumber ?? '—'} />
-      <DefRow label="Insurer Ref" value={invoiceInsurerRef(invoice) ?? '—'} />
-      <DefRow label="Status" value={<StatusBadge status={status} />} />
-      <DefRow label="Total amount" value={formatCurrency(invoice.totalAmount)} />
-      <DefRow label="Sub-total" value={formatCurrency(invoice.subTotal)} />
-      <DefRow label="Tax" value={formatCurrency(invoice.tax)} />
-      <DefRow label="Excess amount" value={formatCurrency(invoice.excessAmount)} />
-      <DefRow label="Issue date" value={formatDate(invoice.issueDate)} />
-    </SectionCard>
-  );
-}
-
-function LineItemsTab({ invoice }: { invoice: Invoice }) {
-  const payload = (invoice.invoicePayload ?? invoice.apiPayload ?? {}) as Record<string, unknown>;
-  const payloadGroups = groupsFromDocumentPayload(payload);
-  const lineItems = (payload.lineItems ?? payload.items ?? []) as Array<Record<string, unknown>>;
-
-  // CW create-invoice responses include groups, but they zero unit costs and send
-  // tax/markup as percentage points. Prefer the linked WO/PO line items.
-  if (invoice.purchaseOrderId) {
-    return (
-      <PagedLineItemsTable
-        documentId={invoice.purchaseOrderId}
-        loadAction={getPurchaseOrderLineItemsAction}
-        fallbackGroups={payloadGroups}
-        emptyLabel="No line items found in this invoice payload."
-        readOnly
-      />
-    );
-  }
-
-  if (invoice.workOrderId) {
-    return (
-      <PagedLineItemsTable
-        documentId={invoice.workOrderId}
-        loadAction={getWorkOrderLineItemsAction}
-        fallbackGroups={payloadGroups}
-        emptyLabel="No line items found in this invoice payload."
-        readOnly
-      />
-    );
-  }
-
-  if (payloadGroups.length > 0) {
-    return (
-      <LineItemsProvider groups={payloadGroups} mode="readonly">
-        <LineItemsTable />
-      </LineItemsProvider>
-    );
-  }
-
-  if (lineItems.length === 0) {
-    return (
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Line Items</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            No line items found in this invoice payload.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Line Items</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-left text-muted-foreground">
-                <th className="pb-2 pr-4 font-medium">Item Name</th>
-                <th className="pb-2 pr-4 text-right font-medium">Quantity</th>
-                <th className="pb-2 pr-4 text-right font-medium">Unit Cost</th>
-                <th className="pb-2 text-right font-medium">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lineItems.map((item, idx) => (
-                <tr key={idx} className="border-b last:border-0">
-                  <td className="py-2 pr-4">{String(item.name ?? item.itemName ?? '—')}</td>
-                  <td className="py-2 pr-4 text-right">{item.quantity != null ? String(item.quantity) : '—'}</td>
-                  <td className="py-2 pr-4 text-right">{formatCurrency(item.unitCost ?? item.unitPrice ?? item.rate)}</td>
-                  <td className="py-2 text-right">{formatCurrency(item.total ?? item.amount ?? item.lineTotal)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function TimelineTab({ invoice }: { invoice: Invoice }) {
-  return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <SectionCard
-        title="Local audit"
-        icon={<Calendar className="h-4 w-4 text-muted-foreground" />}
-      >
-        <DefRow label="Created" value={formatDateTime(invoice.createdAt)} />
-        <DefRow label="Updated" value={formatDateTime(invoice.updatedAt)} />
-      </SectionCard>
-    </div>
-  );
-}
-
-// ---------- container -------------------------------------------------------
-
-type InvTab = 'overview' | 'line-items' | 'timeline';
-
-export function InvoiceDetail({ invoice }: { invoice: Invoice }) {
-  const [tab, setTab] = useState<InvTab>('overview');
-
-  const tabs: Array<{ id: InvTab; label: string; icon: typeof Calendar }> = [
-    { id: 'overview', label: 'Overview', icon: FileSignature },
-    { id: 'line-items', label: 'Line Items', icon: Package },
-    { id: 'timeline', label: 'Timeline', icon: Calendar },
-  ];
-
-  return (
-    <div className="flex flex-col">
       <div className="flex flex-wrap gap-0 border-b border-slate-200">
         {tabs.map((t) => {
           const Icon = t.icon;
@@ -322,8 +359,24 @@ export function InvoiceDetail({ invoice }: { invoice: Invoice }) {
         })}
       </div>
       <div className="pt-4">
+        {saveError && (
+          <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {saveError}
+          </div>
+        )}
         {tab === 'overview' && <OverviewTab invoice={invoice} />}
-        {tab === 'line-items' && <LineItemsTab invoice={invoice} />}
+        {lineItemsMounted && (
+          <div className={tab === 'line-items' ? undefined : 'hidden'}>
+            <InvoiceLineItemsTab
+              ref={lineItemsRef}
+              invoice={invoice}
+              onDirtyChange={handleLineItemsDirtyChange}
+              onUndoCapture={handleLineItemsUndoCapture}
+              onSaveStateChange={handleLineItemsSaveState}
+              hideToolbarActions
+            />
+          </div>
+        )}
         {tab === 'timeline' && <TimelineTab invoice={invoice} />}
       </div>
     </div>

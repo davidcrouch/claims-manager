@@ -33,6 +33,8 @@ import {
   messageHasToolErrors,
   shouldShowToolCallInTimeline,
 } from '@/lib/ai/tool-result-error';
+import { resolveDisplayParts } from '@/lib/ai/chat-display-mode';
+import { useChatDisplayMode } from './ChatDisplayModeContext';
 import { ToolInvocation } from './ToolInvocation';
 import { ImageLightbox } from './ImageLightbox';
 import { ImageAnnotation } from './ImageAnnotation';
@@ -140,6 +142,8 @@ export const MessageRenderer = memo(function MessageRenderer({
   onEdit,
   onBranch,
 }: MessageRendererProps) {
+  const displayMode = useChatDisplayMode();
+  const messageIsLive = !!isStreaming;
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
   const [lightbox, setLightbox] = useState<{ src: string; alt: string; filename?: string } | null>(null);
@@ -171,6 +175,17 @@ export const MessageRenderer = memo(function MessageRenderer({
   );
   const processTerminated = message.metadata?.error === true;
   const hasCapturedIssue = processTerminated || messageHasToolErrors(message.parts);
+  const resolvedDisplay = useMemo(
+    () =>
+      resolveDisplayParts({
+        parts: message.parts,
+        displayMode,
+        isLive: messageIsLive,
+        processTerminated,
+        isAssistant,
+      }),
+    [message.parts, displayMode, messageIsLive, processTerminated, isAssistant],
+  );
 
   return (
     <>
@@ -197,7 +212,7 @@ export const MessageRenderer = memo(function MessageRenderer({
         )}
 
         <div className={cn('max-w-[85%] space-y-1', isUser && 'max-w-[75%]')}>
-          {isAssistant && isStreaming && !hasVisibleText && (
+          {isAssistant && resolvedDisplay.showThinkingPlaceholder && (
             <div className="flex items-center gap-2 rounded-2xl bg-slate-50 px-4 py-3">
               <div className="flex space-x-1">
                 <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400" style={{ animationDelay: '0ms' }} />
@@ -208,7 +223,7 @@ export const MessageRenderer = memo(function MessageRenderer({
             </div>
           )}
 
-          {message.parts.map((part, idx) => {
+          {resolvedDisplay.parts.map(({ part, originalIndex: idx }) => {
             if (part.type === 'text' && part.text) {
               const isErrorMessage = message.metadata?.error === true;
               return (
@@ -332,9 +347,9 @@ export const MessageRenderer = memo(function MessageRenderer({
                           },
                         }}
                       >
-                        {sanitizeStreamingMarkdown(part.text, !!isStreaming)}
+                        {sanitizeStreamingMarkdown(part.text, messageIsLive)}
                       </ReactMarkdown>
-                      {isStreaming && (
+                      {messageIsLive && (
                         <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-slate-600" />
                       )}
                     </div>
@@ -346,7 +361,13 @@ export const MessageRenderer = memo(function MessageRenderer({
             }
 
             if (part.type === 'reasoning') {
-              return <ReasoningBlock key={idx} text={part.text} />;
+              return (
+                <ReasoningBlock
+                  key={idx}
+                  text={part.text}
+                  isStreaming={messageIsLive}
+                />
+              );
             }
 
             if (part.type === 'file') {
@@ -508,7 +529,7 @@ export const MessageRenderer = memo(function MessageRenderer({
             </div>
           )}
 
-          {isAssistant && !isStreaming && (() => {
+          {isAssistant && !messageIsLive && (() => {
             const messageText = message.parts
               .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
               .map((p) => p.text)
@@ -609,8 +630,22 @@ export const MessageRenderer = memo(function MessageRenderer({
   );
 });
 
-function ReasoningBlock({ text }: { text: string }) {
-  const [expanded, setExpanded] = useState(false);
+function ReasoningBlock({
+  text,
+  isStreaming = false,
+}: {
+  text: string;
+  isStreaming?: boolean;
+}) {
+  const displayMode = useChatDisplayMode();
+  const isLiveNormalMode = isStreaming && displayMode === 'normal';
+  const [expanded, setExpanded] = useState(isLiveNormalMode);
+
+  useEffect(() => {
+    if (isLiveNormalMode) setExpanded(true);
+  }, [isLiveNormalMode]);
+
+  const showExpanded = expanded || isLiveNormalMode;
 
   return (
     <div className="rounded-lg border border-purple-200 bg-purple-50">
@@ -618,21 +653,32 @@ function ReasoningBlock({ text }: { text: string }) {
         type="button"
         onClick={() => setExpanded(!expanded)}
         className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-purple-100"
-        aria-expanded={expanded}
+        aria-expanded={showExpanded}
       >
         <p className="flex-1 text-[10px] font-semibold uppercase tracking-wider text-purple-400">
           Thinking
+          {isLiveNormalMode ? (
+            <span className="ml-1.5 inline-flex space-x-0.5 align-middle">
+              <span className="h-1 w-1 animate-bounce rounded-full bg-purple-400" style={{ animationDelay: '0ms' }} />
+              <span className="h-1 w-1 animate-bounce rounded-full bg-purple-400" style={{ animationDelay: '150ms' }} />
+              <span className="h-1 w-1 animate-bounce rounded-full bg-purple-400" style={{ animationDelay: '300ms' }} />
+            </span>
+          ) : null}
         </p>
-        <span className="text-[10px] text-purple-400">
-          {expanded ? 'Collapse' : 'Expand'}
-        </span>
-        {expanded ? (
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-purple-400" />
-        ) : (
-          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-purple-400" />
-        )}
+        {!isLiveNormalMode ? (
+          <>
+            <span className="text-[10px] text-purple-400">
+              {expanded ? 'Collapse' : 'Expand'}
+            </span>
+            {expanded ? (
+              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-purple-400" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-purple-400" />
+            )}
+          </>
+        ) : null}
       </button>
-      {expanded && (
+      {showExpanded && (
         <div className="border-t border-purple-200 px-3 py-2">
           <p className="whitespace-pre-wrap text-xs text-purple-700">{text}</p>
         </div>

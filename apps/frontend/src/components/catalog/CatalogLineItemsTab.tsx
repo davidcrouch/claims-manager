@@ -441,6 +441,7 @@ export const CatalogLineItemsTab = forwardRef(function CatalogLineItemsTab(
         name?: string;
         description?: string;
         unitType?: string;
+        buyCost?: string;
         unitCost?: string;
         markupValue?: string;
         tax?: string;
@@ -511,6 +512,7 @@ export const CatalogLineItemsTab = forwardRef(function CatalogLineItemsTab(
               name: fields.name,
               description: fields.description,
               unitType: fields.unitType,
+              buyCost: fields.buyCost,
               unitCost: fields.unitCost,
               markupValue:
                 fields.markupValue !== undefined
@@ -537,6 +539,7 @@ export const CatalogLineItemsTab = forwardRef(function CatalogLineItemsTab(
               name: fields.name,
               description: fields.description,
               unitType: fields.unitType,
+              buyCost: fields.buyCost,
               unitCost: fields.unitCost,
               markupValue:
                 fields.markupValue !== undefined

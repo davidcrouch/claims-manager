@@ -176,6 +176,8 @@ export interface LineItemsProviderProps {
   compact?: boolean;
   enableLineNotes?: boolean;
   showColumnToggles?: boolean;
+  /** When selection mode is on, whether unchecked rows are visible. Default true (RFQ). */
+  initialShowUnselected?: boolean;
   hideToolbarActions?: boolean;
   resetEditsKey?: number;
   structurallyDirty?: boolean;
@@ -183,6 +185,8 @@ export interface LineItemsProviderProps {
   pricingVisible?: boolean;
   pricingDetail?: PricingDetail;
   showInvoiceProgress?: boolean;
+  showPreviouslyInvoiced?: boolean;
+  showItemTypeColumn?: boolean;
   invoiceProgressEditable?: boolean;
   labels?: Partial<LineItemLabels>;
   hideComponent?: boolean;
@@ -203,12 +207,15 @@ export function LineItemsProvider({
   compact = false,
   enableLineNotes = false,
   showColumnToggles = false,
+  initialShowUnselected = true,
   resetEditsKey = 0,
   structurallyDirty: externalStructurallyDirty = false,
   quantitiesVisible,
   pricingVisible,
   pricingDetail = 'full',
   showInvoiceProgress = false,
+  showPreviouslyInvoiced,
+  showItemTypeColumn,
   invoiceProgressEditable = false,
   labels: labelOverrides,
   hideComponent = false,
@@ -226,7 +233,7 @@ export function LineItemsProvider({
   const [showGst, setShowGst] = useState(true);
   const [showQuantities, setShowQuantities] = useState(quantitiesVisible ?? true);
   const [showPricing, setShowPricing] = useState(pricingVisible ?? true);
-  const [showUnselected, setShowUnselected] = useState(true);
+  const [showUnselected, setShowUnselected] = useState(initialShowUnselected);
   const [headerVisibility, setHeaderVisibility] = useState<Record<string, HeaderVisibilityEntry>>({});
   const showCategory = mode !== 'catalog';
   const hideUnselected = !!selection && !showUnselected;
@@ -236,15 +243,23 @@ export function LineItemsProvider({
     [labelOverrides],
   );
 
+  const effectiveShowPreviouslyInvoiced =
+    showPreviouslyInvoiced ?? showInvoiceProgress;
+  const effectiveShowItemTypeColumn = showItemTypeColumn ?? true;
+
   const config: LineItemsConfig = useMemo(
     () => ({
       mode,
-      showMarkup: pricingDetail === 'total-only' ? false : showMarkup,
-      showGst: pricingDetail === 'total-only' ? false : showGst,
+      showMarkup: pricingDetail === 'total-only' || pricingDetail === 'cost' ? false : showMarkup,
+      showGst: pricingDetail === 'total-only' || pricingDetail === 'cost' ? false : showGst,
       showQuantities,
       showPricing,
       pricingDetail,
+      showBuyCost:
+        (mode === 'catalog' || pricingDetail === 'cost') && pricingDetail !== 'total-only',
       showInvoiceProgress,
+      showPreviouslyInvoiced: effectiveShowPreviouslyInvoiced,
+      showItemTypeColumn: effectiveShowItemTypeColumn,
       invoiceProgressEditable,
       showCategory,
       hideComponent,
@@ -254,7 +269,7 @@ export function LineItemsProvider({
       labels,
       showColumnVisibilityToggles: showColumnToggles,
     }),
-    [mode, showMarkup, showGst, showQuantities, showPricing, pricingDetail, showInvoiceProgress, invoiceProgressEditable, showCategory, hideComponent, enableLineNotes, showLineScopeStatusColumn, compact, labels, showColumnToggles],
+    [mode, showMarkup, showGst, showQuantities, showPricing, pricingDetail, showInvoiceProgress, effectiveShowPreviouslyInvoiced, effectiveShowItemTypeColumn, invoiceProgressEditable, showCategory, hideComponent, enableLineNotes, showLineScopeStatusColumn, compact, labels, showColumnToggles],
   );
 
   // --- Structural dirty ---
@@ -380,10 +395,13 @@ export function LineItemsProvider({
     editState,
     setEditState,
     visibleRowIndex: edit.rowIndex,
-    showMarkup,
-    showGst,
+    showMarkup: pricingDetail === 'cost' ? false : showMarkup,
+    showGst: pricingDetail === 'cost' ? false : showGst,
     showQuantities,
     showPricing,
+    showBuyCost:
+      (mode === 'catalog' || pricingDetail === 'cost') && pricingDetail !== 'total-only',
+    showUnitCost: pricingDetail === 'full',
     hideComponent,
     invoiceProgressEditable,
     selectedRows,

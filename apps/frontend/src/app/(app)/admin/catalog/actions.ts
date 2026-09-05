@@ -515,7 +515,7 @@ export async function getCatalogGroupedItemsAction(params: {
             subCategory: null,
             quantity: parseFloat(c.quantity) || 1,
             unitCost: parseFloat(c.resolvedUnitCost ?? c.component?.unitCost ?? '0') || 0,
-            buyCost: 0,
+            buyCost: parseFloat(c.component?.buyCost ?? '0') || 0,
             markupType: c.component?.markupType ?? 'percentage',
             markupValue: parseFloat(c.component?.markupValue ?? '0') || 0,
             tax: parseFloat(c.component?.taxRate ?? '0') || 0,
@@ -659,6 +659,7 @@ export async function saveCatalogLineItemsAction(params: {
     name?: string;
     description?: string;
     unitType?: string;
+    buyCost?: string;
     unitCost?: string;
     markupValue?: string;
     tax?: string;
@@ -692,6 +693,7 @@ export async function saveCatalogLineItemsAction(params: {
       const body: Record<string, unknown> = {};
       if (item.name !== undefined) body.name = item.name;
       if (item.description !== undefined) body.description = item.description;
+      if (item.buyCost !== undefined) body.buyCost = item.buyCost;
       if (item.unitCost !== undefined) body.unitCost = item.unitCost;
       if (item.markupValue !== undefined) body.markupValue = item.markupValue;
       if (item.tax !== undefined) body.taxRate = item.tax;
@@ -732,6 +734,7 @@ export async function updateCatalogFromEstimateAction(params: {
     name?: string;
     description?: string;
     unitType?: string;
+    buyCost?: string;
     unitCost?: string;
     markupValue?: string;
     tax?: string;

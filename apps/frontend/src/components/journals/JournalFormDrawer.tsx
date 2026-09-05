@@ -21,10 +21,9 @@ import {
   BottomFormDrawerError,
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
-import { JobSelectField } from '@/components/forms/JobSelectField';
+import { FormJobPickerField } from '@/components/forms/FormJobPickerField';
 import {
   CreateSubmitOverlay,
-  navigateToCreated,
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
 import type { JobOption } from '@/components/shared/job-label';
@@ -33,7 +32,7 @@ import {
   type AddressSuggestion,
 } from '@/components/shared/AddressAutocompleteInput';
 import { formatAddress } from '@/components/shared/detail';
-import type { AddressPayload, Journal } from '@/types/api';
+import type { AddressPayload, Job, Journal } from '@/types/api';
 
 const AU_STATES = ['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA'] as const;
 
@@ -65,6 +64,8 @@ export interface JournalFormDrawerProps {
   linkToJob?: (journalId: string, jobId: string) => Promise<boolean>;
   onCreated?: (journal: Journal) => void;
   jobId?: string | null;
+  /** Full job for richer initial display / address prefill. */
+  job?: Job | null;
   jobs?: JobOption[];
 }
 
@@ -88,9 +89,22 @@ const EMPTY_ADDRESS: SiteAddressForm = {
   country: 'Australia',
 };
 
-function addressFromJob(job: JobOption | undefined): SiteAddressForm {
+function addressFromJob(
+  job:
+    | Pick<
+        Job,
+        | 'address'
+        | 'addressSuburb'
+        | 'addressState'
+        | 'addressPostcode'
+        | 'addressCountry'
+      >
+    | JobOption
+    | null
+    | undefined,
+): SiteAddressForm {
   if (!job) return { ...EMPTY_ADDRESS };
-  const a = job.address ?? {};
+  const a = (job.address ?? {}) as Partial<AddressPayload>;
   return {
     unitNumber: a.unitNumber ?? '',
     streetNumber: a.streetNumber ?? '',
@@ -125,10 +139,12 @@ export function JournalFormDrawer({
   linkToJob,
   onCreated,
   jobId,
+  job,
   jobs = [],
 }: JournalFormDrawerProps) {
   const router = useRouter();
   const [selectedJobId, setSelectedJobId] = useState(jobId ?? '');
+  const [pickedJob, setPickedJob] = useState<Job | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [visitDate, setVisitDate] = useState(todayLocalDateInputValue);
@@ -142,11 +158,9 @@ export function JournalFormDrawer({
   } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
-  const { phase: submitPhase, busy, startCreating, startOpening, resetPhase } =
+  const { phase: submitPhase, busy, startCreating, resetPhase } =
     useCreateSubmitPhase();
   const [error, setError] = useState<string | null>(null);
-
-  const jobRequired = jobs.length > 0 || Boolean(jobId);
 
   const stateItems = useMemo(
     () => Object.fromEntries(AU_STATES.map((s) => [s, s])) as Record<string, string>,
@@ -159,28 +173,43 @@ export function JournalFormDrawer({
   );
 
   useEffect(() => {
-    if (!open) return;
-    const initialJobId = jobId ?? '';
-    setSelectedJobId(initialJobId);
-    const job = jobs.find((j) => j.id === initialJobId);
-    setAddress(addressFromJob(job));
-    setVisitDate(todayLocalDateInputValue());
-  }, [open, jobId, jobs]);
-
-  const handleJobChange = (nextJobId: string) => {
-    setSelectedJobId(nextJobId);
-    const job = jobs.find((j) => j.id === nextJobId);
-    if (job?.address || job?.addressSuburb) {
-      setAddress(addressFromJob(job));
+    if (!open) {
+      setPickedJob(null);
+      return;
     }
-  };
+    const initialId = jobId ?? job?.id ?? '';
+    setSelectedJobId(initialId);
+    const initialJob =
+      job?.id && job.id === initialId
+        ? job
+        : jobs.find((j) => j.id === initialId);
+    setPickedJob(job?.id && job.id === initialId ? job : null);
+    setAddress(addressFromJob(initialJob));
+    setVisitDate(todayLocalDateInputValue());
+  }, [open, jobId, job, jobs]);
+
+  function handleJobPicked(next: Job) {
+    setPickedJob(next);
+    setSelectedJobId(next.id);
+    if (next.address || next.addressSuburb) {
+      setAddress(addressFromJob(next));
+    }
+  }
 
   const resetForm = () => {
-    setSelectedJobId(jobId ?? '');
+    const initialId = jobId ?? job?.id ?? '';
+    setSelectedJobId(initialId);
+    setPickedJob(job?.id && job.id === initialId ? job : null);
     setName('');
     setDescription('');
     setVisitDate(todayLocalDateInputValue());
-    setAddress(addressFromJob(jobs.find((j) => j.id === (jobId ?? ''))));
+    setAddress(
+      addressFromJob(
+        job?.id && job.id === initialId
+          ? job
+          : jobs.find((j) => j.id === initialId),
+      ),
+    );
     setAddressSearch('');
     setAddressFieldsOpen(false);
     setLocation(null);
@@ -227,10 +256,7 @@ export function JournalFormDrawer({
     );
   };
 
-  const canSubmit =
-    Boolean(name.trim()) &&
-    (!jobRequired || Boolean(selectedJobId.trim())) &&
-    !busy;
+  const canSubmit = Boolean(name.trim() && selectedJobId.trim()) && !busy;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -238,7 +264,7 @@ export function JournalFormDrawer({
       setError('Name is required');
       return;
     }
-    if (jobRequired && !selectedJobId.trim()) {
+    if (!selectedJobId.trim()) {
       setError('Job is required');
       return;
     }
@@ -277,13 +303,15 @@ export function JournalFormDrawer({
       }
 
       onCreated?.(journal);
-      startOpening();
+      resetPhase();
+      handleOpenChange(false);
       const linkedJobId =
         selectedJobId.trim() || (entityType === 'Job' ? entityId : undefined);
       const href = linkedJobId
         ? `/journals/${journal.id}?jobId=${linkedJobId}`
         : `/journals/${journal.id}`;
-      navigateToCreated(router, href);
+      router.push(href);
+      router.refresh();
     } catch (err) {
       console.error('JournalFormDrawer.handleSubmit:', err);
       setError(err instanceof Error ? err.message : 'Failed to create journal');
@@ -307,26 +335,16 @@ export function JournalFormDrawer({
     >
       <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
         <BottomFormDrawerBody>
-          <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
-            {(jobs.length > 0 || jobId) && (
-              <JobSelectField
-                jobs={jobs}
-                value={selectedJobId}
-                onValueChange={handleJobChange}
-              />
-            )}
+          <div className="space-y-6">
+            <FormJobPickerField
+              value={selectedJobId}
+              selectedJob={pickedJob}
+              jobs={jobs}
+              onJobSelect={handleJobPicked}
+            />
 
+            <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="journal-visit-date">Visit date</Label>
-              <Input
-                id="journal-visit-date"
-                type="date"
-                value={visitDate}
-                onChange={(e) => setVisitDate(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2 md:col-span-2">
               <Label htmlFor="journal-name">
                 Name <span className="text-destructive">*</span>
               </Label>
@@ -336,6 +354,18 @@ export function JournalFormDrawer({
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Initial site inspection"
                 required
+              />
+            </div>
+
+            <div className="hidden md:block" aria-hidden />
+
+            <div className="space-y-2">
+              <Label htmlFor="journal-visit-date">Visit date</Label>
+              <Input
+                id="journal-visit-date"
+                type="date"
+                value={visitDate}
+                onChange={(e) => setVisitDate(e.target.value)}
               />
             </div>
 
@@ -508,6 +538,7 @@ export function JournalFormDrawer({
               {locationError && (
                 <p className="text-sm text-destructive">{locationError}</p>
               )}
+            </div>
             </div>
           </div>
 

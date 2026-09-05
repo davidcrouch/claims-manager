@@ -71,6 +71,8 @@ export {
   uniqueFilterOptions,
 } from './lib/parse';
 
+export { syncLineItemSelectionAncestors } from './lib/selection-filter';
+
 export type { CatalogUpdateMode } from './lib/catalog-update';
 export {
   CATALOG_UPDATE_MODE_STORAGE_KEY,

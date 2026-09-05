@@ -1,7 +1,11 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { CatalogSelectionService } from '../catalog/services/catalog-selection.service';
 import { parseLineItemsPageQuery } from '../catalog/line-items-page';
-import { AddCatalogAssemblyDto, AddCatalogPrimitiveDto } from '../catalog/dto/catalog.dto';
+import {
+  AddCatalogAssemblyDto,
+  AddCatalogBomFromPurchaseOrderDto,
+  AddCatalogPrimitiveDto,
+} from '../catalog/dto/catalog.dto';
 import {
   CreateQuoteGroupDto,
   UpdateQuoteGroupDto,
@@ -118,6 +122,22 @@ export class PurchaseOrdersController {
       purchaseOrderId: id,
       items: body.items,
       combos: body.combos,
+    });
+  }
+
+  @Post(':id/line-items/selection')
+  @RequirePermission(P.procurement.manage)
+  async replaceSelectedLineItems(
+    @Param('id') id: string,
+    @Body() body: { selectedItemIds?: string[] },
+  ) {
+    await this.purchaseOrdersService.replaceSelectedLineItems({
+      id,
+      selectedItemIds: Array.isArray(body?.selectedItemIds) ? body.selectedItemIds : [],
+    });
+    return this.catalogSelectionService.getPurchaseOrderLineItems({
+      purchaseOrderId: id,
+      all: true,
     });
   }
 
@@ -277,6 +297,7 @@ export class PurchaseOrdersController {
       purchaseOrderComboId: body.purchaseOrderComboId,
       catalogItemId: body.catalogItemId,
       quantity: body.quantity,
+      addToCatalogAssembly: body.addToCatalogAssembly === true,
     });
   }
 
@@ -291,6 +312,22 @@ export class PurchaseOrdersController {
     return this.catalogSelectionService.addAssemblyToPurchaseOrder({
       purchaseOrderGroupId: groupId,
       catalogAssemblyId: body.catalogAssemblyId,
+      quantity: body.quantity,
+      parentComboId: body.purchaseOrderComboId,
+      addToCatalogAssembly: body.addToCatalogAssembly === true,
+    });
+  }
+
+  @Post(':poId/catalog-bom')
+  @RequirePermission(P.procurement.manage)
+  async addCatalogBomFromPurchaseOrder(
+    @Param('poId') poId: string,
+    @Body() body: AddCatalogBomFromPurchaseOrderDto,
+  ) {
+    await this.purchaseOrdersService.assertPurchaseOrderEditable({ id: poId });
+    return this.catalogSelectionService.addCatalogBomFromPurchaseOrderParent({
+      parentPurchaseOrderComboId: body.parentPurchaseOrderComboId,
+      catalogComponentId: body.catalogComponentId,
       quantity: body.quantity,
     });
   }

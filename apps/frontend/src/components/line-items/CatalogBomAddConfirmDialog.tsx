@@ -12,7 +12,8 @@ import {
 } from '@/components/ui/dialog';
 
 export interface CatalogBomAddPrompt {
-  parentQuoteComboId: string;
+  /** Document combo/scope id used as the catalogue parent link. */
+  parentComboId: string;
   catalogComponentId: string;
   quantity: string;
   itemLabel: string;
@@ -23,6 +24,8 @@ export interface CatalogBomAddConfirmDialogProps {
   open: boolean;
   prompt: CatalogBomAddPrompt | null;
   pending?: boolean;
+  /** Plain label for the document type, e.g. "estimate" or "purchase order". */
+  documentLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -31,6 +34,7 @@ export function CatalogBomAddConfirmDialog({
   open,
   prompt,
   pending = false,
+  documentLabel = 'estimate',
   onConfirm,
   onCancel,
 }: CatalogBomAddConfirmDialogProps) {
@@ -50,8 +54,8 @@ export function CatalogBomAddConfirmDialog({
             <div className="space-y-2 pt-0.5">
               <DialogTitle className="text-xl">Add to catalogue?</DialogTitle>
               <DialogDescription className="text-sm leading-relaxed">
-                The item was added to this estimate. Also add it under the linked
-                catalogue parent so future estimates include it?
+                The item was added to this {documentLabel}. Also add it under the linked
+                catalogue parent so future documents include it?
               </DialogDescription>
             </div>
           </div>
@@ -71,7 +75,7 @@ export function CatalogBomAddConfirmDialog({
             onClick={onCancel}
             className="h-9 px-4"
           >
-            Keep estimate only
+            Keep {documentLabel} only
           </Button>
           <Button
             disabled={pending}

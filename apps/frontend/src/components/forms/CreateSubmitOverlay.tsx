@@ -27,18 +27,14 @@ function overlayCopy(phase: Exclude<CreateSubmitPhase, 'idle'>, entityLabel: str
 
 /**
  * Navigate to a newly created entity.
- * Prefer a hard navigation after server-action creates: soft push often loses
- * to list-page revalidation and can sit behind a cold route compile for a long time.
+ * Uses soft navigation (router.push) so the drawer can close and the overlay
+ * can clear immediately instead of hanging behind a cold route compile.
  */
 export function navigateToCreated(
-  _router: { push: (href: string) => void },
+  router: { push: (href: string) => void },
   href: string,
 ): void {
-  if (typeof window !== 'undefined') {
-    window.location.assign(href);
-    return;
-  }
-  _router.push(href);
+  router.push(href);
 }
 
 export function useCreateSubmitPhase() {

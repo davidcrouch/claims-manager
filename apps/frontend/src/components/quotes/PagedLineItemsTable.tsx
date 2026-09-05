@@ -37,6 +37,8 @@ export interface PagedLineItemsTableProps {
   pricingVisible?: boolean;
   pricingDetail?: PricingDetail;
   showInvoiceProgress?: boolean;
+  showPreviouslyInvoiced?: boolean;
+  showItemTypeColumn?: boolean;
   invoiceProgressEditable?: boolean;
   resetEditsKey?: number;
   hideToolbarActions?: boolean;
@@ -57,6 +59,8 @@ export function PagedLineItemsTable({
   pricingVisible,
   pricingDetail,
   showInvoiceProgress,
+  showPreviouslyInvoiced,
+  showItemTypeColumn,
   invoiceProgressEditable,
   resetEditsKey,
   hideToolbarActions,
@@ -201,6 +205,8 @@ export function PagedLineItemsTable({
       pricingVisible={pricingVisible}
       pricingDetail={pricingDetail}
       showInvoiceProgress={showInvoiceProgress}
+      showPreviouslyInvoiced={showPreviouslyInvoiced}
+      showItemTypeColumn={showItemTypeColumn}
       invoiceProgressEditable={invoiceProgressEditable}
       resetEditsKey={resetEditsKey}
       paging={

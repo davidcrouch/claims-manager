@@ -1078,6 +1078,13 @@ export function TasksListClient({
         onOpenChange={handleDrawerClose}
         jobId={selectedTask?.jobId ?? job?.id}
         claimId={selectedTask?.claimId ?? job?.claimId ?? parentClaim?.id}
+        job={
+          selectedTask
+            ? job?.id === selectedTask.jobId
+              ? job
+              : null
+            : job
+        }
         jobs={jobs}
         task={selectedTask}
         taskId={openTaskIdFromUrl}

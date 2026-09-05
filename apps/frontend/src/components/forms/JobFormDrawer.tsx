@@ -47,7 +47,6 @@ import { type OrgUserOption } from '@/components/forms/OrgUserSelect';
 import { listOrgUsersForSelectAction } from '@/app/(app)/mutations';
 import {
   CreateSubmitOverlay,
-  navigateToCreated,
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
 import {
@@ -276,7 +275,7 @@ export function JobFormDrawer({
 }: JobFormDrawerProps) {
   const router = useRouter();
   const [step, setStep] = useState<WizardStep>('jobType');
-  const { phase: submitPhase, busy, startCreating, startOpening, resetPhase } =
+  const { phase: submitPhase, busy, startCreating, resetPhase } =
     useCreateSubmitPhase();
   const [error, setError] = useState<string | null>(null);
   const [addressSearch, setAddressSearch] = useState('');
@@ -786,11 +785,11 @@ export function JobFormDrawer({
       );
       if (result.success) {
         if (result.job) onSuccess?.(result.job);
-        // Keep the overlay up and the drawer open until the detail page
-        // mounts — closing here flashes the stale jobs list.
         if (result.job?.id) {
-          startOpening();
-          navigateToCreated(router, `/jobs/${result.job.id}`);
+          resetPhase();
+          handleOpenChange(false);
+          router.push(`/jobs/${result.job.id}`);
+          router.refresh();
           return;
         }
         resetPhase();

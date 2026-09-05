@@ -50,7 +50,7 @@ import { PrintButton } from '@/components/shared/PrintButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { entityArchiveLabel, entityDetailName, entityDetailHeaderTitles } from '@/components/shared/EntityDetailTitle';
 import { workOrderInsurerPo } from '@/components/work-orders/work-order-label';
-import { jobDisplayName } from '@/components/shared/job-label';
+import { jobDisplayName, toJobOptions } from '@/components/shared/job-label';
 import { PagedLineItemsTable } from '@/components/quotes/PagedLineItemsTable';
 import { groupsFromDocumentPayload } from '@/components/line-items';
 import {
@@ -204,6 +204,7 @@ export function WorkOrderPageHeader({ wo, job }: { wo: WorkOrder; job?: Job | nu
         open={showInvoiceForm}
         onOpenChange={setShowInvoiceForm}
         workOrders={[wo]}
+        jobs={job ? toJobOptions([job]) : undefined}
         jobNameById={jobNameById}
         job={job}
         defaultWorkOrderId={wo.id}

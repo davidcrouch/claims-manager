@@ -17,7 +17,7 @@ import { useLineItems } from './LineItemsProvider';
 import { DropIndicatorLine, useDropIndicatorBorder } from './DropIndicatorLine';
 import { useDropTargetHighlight } from './lib/drop-highlight';
 import { useCatalogDrop } from './hooks/use-catalog-drop';
-import { computeItemMoney, initComboInputs } from './lib/money';
+import { computeItemMoney, initComboInputs, resolveInvoicedAmount, resolvePreviouslyInvoicedAmount } from './lib/money';
 import { PublishStatusBadge } from './lib/badges';
 import { LineScopeStatusAssemblyField } from './LineScopeStatusField';
 import { displayLabelText } from './lib/display';
@@ -70,7 +70,7 @@ export const AssemblyRow = memo(function AssemblyRow({
     toggleHeaderField,
   } = useLineItems();
 
-  const { showMarkup, showGst, enableLineNotes, showQuantities: globalQuantities, showPricing: globalPricing, showCategory, showColumnVisibilityToggles, hideComponent } = config;
+  const { showMarkup, showGst, enableLineNotes, showQuantities: globalQuantities, showPricing: globalPricing, showCategory, showColumnVisibilityToggles, hideComponent, showInvoiceProgress, showPreviouslyInvoiced } = config;
   const parentQty = parentShowQuantities ?? globalQuantities;
   const parentPrice = parentShowPricing ?? globalPricing;
   const resolvedAssembly = resolveHeaderVisibility(comboKey, parentQty, parentPrice);
@@ -132,10 +132,45 @@ export const AssemblyRow = memo(function AssemblyRow({
       const item = comboItems[idx];
       if (hideUnselected && !isSelectablePicked(item.id, selection?.selectedIds)) continue;
       const itemKey = `${comboKey}-item-${item.id ?? idx}`;
-      sum += computeItemMoney(item, editInputs[itemKey], showMarkup, showGst).total;
+      if (showInvoiceProgress) {
+        sum += resolveInvoicedAmount(item, editInputs[itemKey]);
+      } else {
+        sum += computeItemMoney(
+          item,
+          editInputs[itemKey],
+          config.pricingDetail === 'cost' ? true : showMarkup,
+          config.pricingDetail === 'cost' ? true : showGst,
+        ).total;
+      }
     }
     return sum;
-  }, [comboItems, comboKey, showMarkup, showGst, editInputs, hideUnselected, selection?.selectedIds]);
+  }, [
+    comboItems,
+    comboKey,
+    showMarkup,
+    showGst,
+    showInvoiceProgress,
+    editInputs,
+    hideUnselected,
+    selection?.selectedIds,
+    config.pricingDetail,
+  ]);
+
+  const comboPriorTotal = useMemo(() => {
+    if (!showInvoiceProgress || !showPreviouslyInvoiced) return 0;
+    let sum = 0;
+    for (const item of comboItems) {
+      if (hideUnselected && !isSelectablePicked(item.id, selection?.selectedIds)) continue;
+      sum += resolvePreviouslyInvoicedAmount(item);
+    }
+    return sum;
+  }, [
+    comboItems,
+    showInvoiceProgress,
+    showPreviouslyInvoiced,
+    hideUnselected,
+    selection?.selectedIds,
+  ]);
 
   const showAssemblyNotesColumn = enableLineNotes && !showPricing;
 
@@ -289,8 +324,13 @@ export const AssemblyRow = memo(function AssemblyRow({
         </span>
 
         {showPricing && (
-          <span className={cn(LI_HEADER_TOTAL, 'text-slate-800', assemblyContentDisabled.pricing && 'opacity-30')}>
-            {assemblyContentDisabled.pricing ? '—' : formatCurrency(comboTotal)}
+          <span className={cn(LI_HEADER_TOTAL, 'flex items-center gap-4 text-slate-800', assemblyContentDisabled.pricing && 'opacity-30')}>
+            <span>{assemblyContentDisabled.pricing ? '—' : formatCurrency(comboTotal)}</span>
+            {showInvoiceProgress && showPreviouslyInvoiced && (
+              <span className="text-slate-600">
+                {assemblyContentDisabled.pricing ? '—' : formatCurrency(comboPriorTotal)}
+              </span>
+            )}
           </span>
         )}
 
@@ -354,9 +394,12 @@ export const AssemblyRow = memo(function AssemblyRow({
               showQuantities={showQuantities}
               showPricing={showPricing}
               pricingDetail={config.pricingDetail}
+              showBuyCost={config.showBuyCost}
               showMarkup={showMarkup}
               showGst={showGst}
               showInvoiceProgress={config.showInvoiceProgress}
+              showPreviouslyInvoiced={config.showPreviouslyInvoiced}
+              showItemTypeColumn={config.showItemTypeColumn}
               showNotesColumn={showAssemblyNotesColumn}
               showLineScopeStatusColumn={config.showLineScopeStatusColumn}
             />
@@ -368,9 +411,12 @@ export const AssemblyRow = memo(function AssemblyRow({
               showQuantities={showQuantities}
               showPricing={showPricing}
               pricingDetail={config.pricingDetail}
+              showBuyCost={config.showBuyCost}
               showMarkup={showMarkup}
               showGst={showGst}
               showInvoiceProgress={config.showInvoiceProgress}
+              showPreviouslyInvoiced={config.showPreviouslyInvoiced}
+              showItemTypeColumn={config.showItemTypeColumn}
               showNotesColumn={showAssemblyNotesColumn}
               showLineScopeStatusColumn={config.showLineScopeStatusColumn}
             />

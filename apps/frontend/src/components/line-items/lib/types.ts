@@ -121,6 +121,7 @@ export type EditableFieldKey =
   | 'description'
   | 'quantity'
   | 'unitType'
+  | 'buyCost'
   | 'unitCost'
   | 'markupValue'
   | 'tax'
@@ -133,6 +134,7 @@ export type ColumnKey =
   | 'category'
   | 'quantity'
   | 'unitType'
+  | 'buyCost'
   | 'unitCost'
   | 'extended'
   | 'markupValue'
@@ -227,7 +229,12 @@ export const DEFAULT_LINE_ITEM_LABELS: LineItemLabels = {
   dragHint: 'Drag catalogue items or line items here to add lines',
 };
 
-export type PricingDetail = 'full' | 'total-only';
+/**
+ * `full` — Unit Price, Extended, Markup, GST, Total (optional Buy Cost in catalogue).
+ * `total-only` — Total only (e.g. invoice progress).
+ * `cost` — Qty/Units + Buy Cost, Extended Cost (qty×buy), Sale Price (WO commercial total).
+ */
+export type PricingDetail = 'full' | 'total-only' | 'cost';
 
 export interface LineItemsConfig {
   mode: LineItemsMode;
@@ -235,10 +242,16 @@ export interface LineItemsConfig {
   showGst: boolean;
   showQuantities: boolean;
   showPricing: boolean;
-  /** When `total-only`, hide Unit Price / Extended / Markup / GST but keep Total. */
+  /** Column layout for money fields — see PricingDetail. */
   pricingDetail: PricingDetail;
+  /** Show wholesale Buy Cost (catalogue master, or PO cost mode). */
+  showBuyCost: boolean;
   /** Show Invoiced + Previously Invoiced columns (bill progress). */
   showInvoiceProgress: boolean;
+  /** Show Previously Invoiced column (default true when invoice progress is on). */
+  showPreviouslyInvoiced: boolean;
+  /** Show the item Type column (catalog line type). */
+  showItemTypeColumn: boolean;
   /** Allow inline edit of Invoiced only (bill progress). */
   invoiceProgressEditable: boolean;
   showCategory: boolean;

@@ -21,6 +21,8 @@ export interface JobsPickerDrawerProps {
   selectedJobId: string;
   /** Custom select handler. When provided, overrides the default navigation to /jobs/[id]. */
   onJobSelect?: (job: Job) => void;
+  title?: string;
+  description?: string;
 }
 
 type Bootstrap = {
@@ -36,6 +38,8 @@ export function JobsPickerDrawer({
   onOpenChange,
   selectedJobId,
   onJobSelect: externalJobSelect,
+  title = 'Switch job',
+  description = 'Select a job to open it in this view.',
 }: JobsPickerDrawerProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -90,8 +94,8 @@ export function JobsPickerDrawer({
     <BottomFormDrawer
       open={open}
       onOpenChange={onOpenChange}
-      title="Switch job"
-      description="Select a job to open it in this view."
+      title={title}
+      description={description}
       icon={<Briefcase className="h-5 w-5" />}
       widthClassName={JOBS_PICKER_DRAWER_WIDTH_CLASS}
     >

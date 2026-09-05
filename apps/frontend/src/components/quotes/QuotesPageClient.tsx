@@ -67,6 +67,7 @@ export function QuotesPageClient({
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
         jobId={job?.id}
+        job={job}
         claimId={job?.claimId ?? parentClaim?.id}
         jobProvider={job?.provider}
         jobs={jobs}

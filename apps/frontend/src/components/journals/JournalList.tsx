@@ -28,7 +28,7 @@ import {
   createListFetchSession,
   useListFetchGate,
 } from '@/components/shared/use-list-page-data';
-import type { AddressPayload, Journal } from '@/types/api';
+import type { AddressPayload, Job, Journal } from '@/types/api';
 
 export interface JournalListProps {
   entityType: string;
@@ -48,6 +48,9 @@ export interface JournalListProps {
   }) => Promise<Journal | null>;
   linkJournal: (journalId: string) => Promise<boolean>;
   unlinkJournal: (journalId: string) => Promise<boolean>;
+  /** Prefill job on create (e.g. quote detail journals tab). */
+  jobId?: string | null;
+  job?: Job | null;
 }
 
 type ListTab = 'active' | 'archived' | 'all';
@@ -90,6 +93,8 @@ export function JournalList({
   createJournal,
   linkJournal,
   unlinkJournal,
+  jobId,
+  job,
 }: JournalListProps) {
   const router = useRouter();
   const [journals, setJournals] = useState<Journal[]>([]);
@@ -387,6 +392,8 @@ export function JournalList({
         createJournal={createJournal}
         linkJournal={linkJournal}
         onCreated={handleCreatedAndLinked}
+        jobId={jobId}
+        job={job}
       />
 
       <JournalLinkDrawer

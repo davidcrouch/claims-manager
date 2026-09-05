@@ -1,6 +1,6 @@
 import type { ApiGroup, ApiItem } from '@/components/line-items/lib/types';
-import { computeItemMoney } from '@/components/line-items/lib/money';
-import type { Invoice } from '@/types/api';
+import { lineTotalFromItem } from '@/components/line-items/lib/money';
+import type { Invoice, WorkOrder } from '@/types/api';
 
 const PREFIX = 'frontend:invoice-line-progress';
 
@@ -31,13 +31,7 @@ function asNumber(value: unknown): number | undefined {
 export function lineAmountFromItem(
   item: ApiItem & { totals?: Record<string, unknown> },
 ): number {
-  const direct = asNumber(item.total);
-  if (direct != null) return direct;
-
-  const nested = asNumber(item.totals?.total);
-  if (nested != null) return nested;
-
-  return computeItemMoney(item, undefined, true, true).total;
+  return lineTotalFromItem(item);
 }
 
 export function isRejectedInvoice(invoice: Invoice): boolean {
@@ -206,6 +200,25 @@ export function remainingAmountsByKey(groups: ApiGroup[]): Map<string, number> {
 }
 
 /**
+ * Flat % that makes each line's share sum to the invoice amount
+ * (percent of each line's remaining balance).
+ */
+export function suggestedFlatPercent(params: {
+  invoiceAmount: number;
+  remaining: number;
+}): number {
+  const { invoiceAmount, remaining } = params;
+  if (remaining <= 0 || invoiceAmount <= 0) return 0;
+  return roundMoney((invoiceAmount / remaining) * 100);
+}
+
+export function formatFlatPercentInput(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return '';
+  const rounded = Math.round(value * 10000) / 10000;
+  return String(rounded);
+}
+
+/**
  * Apply a flat percent of each line's remaining amount.
  * Returns a map keyed by all match keys for each item.
  */
@@ -216,7 +229,7 @@ export function applyFlatPercentToRemaining(params: {
   const pct = Math.max(0, Math.min(100, params.percent)) / 100;
   const map = new Map<string, number>();
   for (const row of flattenAllocatableLines(params.groups)) {
-    const amount = Math.round(row.remaining * pct * 100) / 100;
+    const amount = roundMoney(row.remaining * pct);
     for (const key of itemMatchKeys(row.item)) {
       map.set(key, amount);
     }
@@ -233,6 +246,73 @@ export function invoicedAmountsRecordFromMap(
     out[key] = amount;
   }
   return out;
+}
+
+/** Sum remaining dollars across all line items (after prior invoice amounts). */
+export function sumLineRemaining(groups: ApiGroup[]): number {
+  return roundMoney(
+    flattenAllocatableLines(groups).reduce((sum, row) => sum + row.remaining, 0),
+  );
+}
+
+/**
+ * Billable WO total for invoicing — prefer line-item sum when loaded, else header columns.
+ */
+export function workOrderHeaderTotal(
+  wo: Pick<WorkOrder, 'totalAmount' | 'adjustedTotal'> | null | undefined,
+  groups?: ApiGroup[],
+): number {
+  if (groups?.length) {
+    const fromLines = sumGroupsLineTotal(groups);
+    if (fromLines > 0) return roundMoney(fromLines);
+  }
+
+  const total = asNumber(wo?.totalAmount);
+  if (total != null && total > 0) return roundMoney(total);
+
+  const adjusted = asNumber(wo?.adjustedTotal);
+  if (adjusted != null && adjusted > 0) return roundMoney(adjusted);
+
+  return total ?? adjusted ?? 0;
+}
+
+/**
+ * Scale per-line allocation amounts so their sum matches the invoice header total.
+ */
+export function scaleAllocationMapToTotal(params: {
+  amountsByKey: Map<string, number>;
+  groups: ApiGroup[];
+  targetTotal: number;
+}): Map<string, number> {
+  const target = roundMoney(Math.max(0, params.targetTotal));
+  const current = sumUniqueInvoicedAmounts(params.amountsByKey, params.groups);
+  if (target <= 0 || current <= 0) {
+    return new Map<string, number>();
+  }
+  if (amountsWithinTolerance(current, target)) {
+    return params.amountsByKey;
+  }
+  const scale = target / current;
+  const scaled = new Map<string, number>();
+  for (const row of flattenAllocatableLines(params.groups)) {
+    const amount = roundMoney(lookupAmount(params.amountsByKey, row.item) * scale);
+    for (const key of itemMatchKeys(row.item)) {
+      scaled.set(key, amount);
+    }
+  }
+  return scaled;
+}
+
+function roundMoney(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+/** Sum all line item totals from grouped scope (matches estimate/WO line tables). */
+export function sumGroupsLineTotal(groups: ApiGroup[]): number {
+  return flattenAllocatableLines(groups).reduce(
+    (sum, row) => sum + row.lineTotal,
+    0,
+  );
 }
 
 /** Sum unique primary-key amounts (avoid double-counting multi-key entries). */
@@ -259,6 +339,31 @@ export function amountsWithinTolerance(
   tolerance = 0.02,
 ): boolean {
   return Math.abs(a - b) <= tolerance;
+}
+
+/** Merge edited invoiced amounts into invoicePayload.invoicedAmounts (all match keys). */
+export function mergeInvoicedAmountsIntoInvoicePayload(params: {
+  invoicePayload: Record<string, unknown> | null | undefined;
+  amountsByItem: Array<{ item: ApiItem; amount: number }>;
+}): Record<string, unknown> {
+  const base = { ...(params.invoicePayload ?? {}) };
+  const existing =
+    base.invoicedAmounts &&
+    typeof base.invoicedAmounts === 'object' &&
+    !Array.isArray(base.invoicedAmounts)
+      ? { ...(base.invoicedAmounts as Record<string, number>) }
+      : {};
+
+  for (const { item, amount } of params.amountsByItem) {
+    const keys = itemMatchKeys(item);
+    if (keys.length === 0) continue;
+    for (const key of keys) {
+      existing[key] = amount;
+    }
+  }
+
+  base.invoicedAmounts = existing;
+  return base;
 }
 
 /** Merge edited amounts for items into a key map (all match keys). */

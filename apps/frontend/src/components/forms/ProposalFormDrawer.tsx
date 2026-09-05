@@ -26,11 +26,10 @@ import {
 import { createProposalAction } from '@/app/(app)/mutations';
 import {
   CreateSubmitOverlay,
-  navigateToCreated,
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
 import { fetchRfqsSentToContactAction } from '@/app/(app)/rfqs/actions';
-import { JobSelectField } from '@/components/forms/JobSelectField';
+import { FormJobPickerField } from '@/components/forms/FormJobPickerField';
 import {
   ContactSearchField,
   contactFromCreated,
@@ -38,7 +37,7 @@ import {
 } from '@/components/forms/JobContactsPicker';
 import { ContactFormDrawer } from '@/components/contacts/ContactFormDrawer';
 import type { JobOption } from '@/components/shared/job-label';
-import type { Contact, Rfq } from '@/types/api';
+import type { Contact, Job, Rfq } from '@/types/api';
 
 const schema = z.object({
   contactId: z.string().min(1, 'Received from is required'),
@@ -92,8 +91,10 @@ function receivedFromCreated(contact: Contact): ReceivedFromContact {
 export interface ProposalFormDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** When omitted, a job picker is shown (requires `jobs`). */
+  /** When set, preselects this job (still shown via the job card). */
   jobId?: string;
+  /** Full job for richer initial display when creating from a filtered job context. */
+  job?: Job | null;
   jobs?: JobOption[];
 }
 
@@ -101,21 +102,22 @@ export function ProposalFormDrawer({
   open,
   onOpenChange,
   jobId,
+  job,
   jobs,
 }: ProposalFormDrawerProps) {
   const router = useRouter();
-  const { phase, busy, startCreating, startOpening, resetPhase } =
+  const { phase, busy, startCreating, resetPhase } =
     useCreateSubmitPhase();
   const [error, setError] = useState<string | null>(null);
   const [rfqs, setRfqs] = useState<Rfq[]>([]);
   const [rfqsLoading, setRfqsLoading] = useState(false);
   const [pickedJobId, setPickedJobId] = useState('');
+  const [pickedJob, setPickedJob] = useState<Job | null>(null);
   const [receivedFrom, setReceivedFrom] = useState<ReceivedFromContact | null>(
     null,
   );
   const [contactDrawerOpen, setContactDrawerOpen] = useState(false);
-  const needsJobPicker = (jobs?.length ?? 0) > 0;
-  const effectiveJobId = needsJobPicker ? pickedJobId : (jobId ?? '');
+  const effectiveJobId = pickedJobId || jobId || '';
 
   const form = useForm<FormValues>({
     resolver: standardSchemaResolver(schema),
@@ -131,26 +133,35 @@ export function ProposalFormDrawer({
   });
 
   useEffect(() => {
-    if (open) {
-      setPickedJobId(jobId ?? '');
+    if (!open) {
+      setPickedJobId('');
+      setPickedJob(null);
+      setRfqs([]);
+      setRfqsLoading(false);
+      setReceivedFrom(null);
+      setContactDrawerOpen(false);
+      setError(null);
+      form.reset({
+        contactId: '',
+        rfqId: '',
+        proposalNumber: '',
+        name: '',
+        totalAmount: undefined,
+        receivedDate: todayISO(),
+        note: '',
+      });
       return;
     }
-    setPickedJobId('');
-    setRfqs([]);
-    setRfqsLoading(false);
-    setReceivedFrom(null);
-    setContactDrawerOpen(false);
-    setError(null);
-    form.reset({
-      contactId: '',
-      rfqId: '',
-      proposalNumber: '',
-      name: '',
-      totalAmount: undefined,
-      receivedDate: todayISO(),
-      note: '',
-    });
-  }, [open, jobId, form]);
+    const initialId = jobId ?? job?.id ?? '';
+    setPickedJobId(initialId);
+    setPickedJob(job?.id && job.id === initialId ? job : null);
+  }, [open, jobId, job, form]);
+
+  function handleJobPicked(next: Job) {
+    setPickedJobId(next.id);
+    setPickedJob(next);
+    form.setValue('rfqId', '');
+  }
 
   useEffect(() => {
     const contactId = receivedFrom?.id;
@@ -241,8 +252,10 @@ export function ProposalFormDrawer({
       });
       if (result.success) {
         if (result.proposal?.id) {
-          startOpening();
-          navigateToCreated(router, `/proposals/${result.proposal.id}`);
+          resetPhase();
+          onOpenChange(false);
+          router.push(`/proposals/${result.proposal.id}`);
+          router.refresh();
           return;
         }
         resetPhase();
@@ -270,18 +283,16 @@ export function ProposalFormDrawer({
       >
         <form onSubmit={form.handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col">
           <BottomFormDrawerBody>
-            <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
-              {needsJobPicker && jobs && (
-                <JobSelectField
-                  jobs={jobs}
-                  value={pickedJobId}
-                  onValueChange={(id) => {
-                    setPickedJobId(id);
-                    form.setValue('rfqId', '');
-                  }}
-                />
-              )}
+            <div className="space-y-6">
+              <FormJobPickerField
+                value={effectiveJobId}
+                selectedJob={pickedJob}
+                jobs={jobs}
+                onJobSelect={handleJobPicked}
+                error={!effectiveJobId && error === 'Job is required' ? error : null}
+              />
 
+              <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
               <div className="space-y-2 md:col-span-2">
                 <Label>
                   Received From <span className="text-destructive">*</span>
@@ -426,6 +437,7 @@ export function ProposalFormDrawer({
                   placeholder="Add a note..."
                   rows={3}
                 />
+              </div>
               </div>
             </div>
             <BottomFormDrawerError error={error} />

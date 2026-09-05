@@ -713,6 +713,7 @@ export function JobDetail({
         open={estimateDrawerOpen}
         onOpenChange={setEstimateDrawerOpen}
         jobId={job.id}
+        job={job}
         claimId={claimId ?? parentClaim?.id}
         jobProvider={job.provider}
       />
@@ -720,6 +721,7 @@ export function JobDetail({
         open={appointmentDrawerOpen}
         onOpenChange={setAppointmentDrawerOpen}
         jobId={job.id}
+        job={job}
         jobParties={appointmentJobParties}
         defaultSelectedParties={appointmentJobParties}
         defaultAddress={appointmentDefaultAddress}

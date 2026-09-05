@@ -500,6 +500,7 @@ export function JournalsPageClient({
           linkJournalAction(journalId, 'Job', selectedJobId)
         }
         jobId={jobId}
+        job={job}
         jobs={jobs}
         onCreated={handleCreated}
       />

@@ -66,7 +66,7 @@ export const LineItemsToolbar = memo(function LineItemsToolbar({ hideActions = f
     isReadOnly,
   } = useLineItems();
 
-  const { showPricing, showMarkup, showGst, showQuantities, mode, showColumnVisibilityToggles, labels, pricingDetail } = config;
+  const { showPricing, showMarkup, showGst, showQuantities, mode, showColumnVisibilityToggles, labels, pricingDetail, showInvoiceProgress, showPreviouslyInvoiced } = config;
   const showSelect = !!selection;
   const allCollapsed = groups.length > 0 && groups.every((g, i) => collapsed.has(g.id ?? `group-${i}`));
   const groupFilterActive = hiddenGroupIds.size > 0;
@@ -274,41 +274,93 @@ export const LineItemsToolbar = memo(function LineItemsToolbar({ hideActions = f
       <div className="flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
         {showPricing && (
           <>
-            <div className="text-sm text-slate-600">
-              Subtotal{' '}
-              <span className="text-base font-semibold tabular-nums text-slate-900">
-                {formatCurrency(grandTotals.subTotal)}
-              </span>
-            </div>
-
-            {pricingDetail !== 'total-only' && (
+            {pricingDetail === 'cost' ? (
               <>
-                <MarkupToggle
-                  label="Markup"
-                  value={grandTotals.markup}
-                  isVisible={showMarkup}
-                  suppressIcon={suppressMarkupIcon}
-                  setSuppressIcon={setSuppressMarkupIcon}
-                  onToggle={() => { setShowMarkup(!showMarkup); setSuppressMarkupIcon(true); }}
-                />
+                <div className="text-sm text-slate-600">
+                  Extended Cost{' '}
+                  <span className="text-base font-semibold tabular-nums text-slate-900">
+                    {formatCurrency(grandTotals.extendedCost)}
+                  </span>
+                </div>
+                <div className="text-sm text-slate-600">
+                  Sale Price{' '}
+                  <span className="text-xl font-bold tabular-nums text-slate-950">
+                    {formatCurrency(grandTotals.total)}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <>
+                {!showInvoiceProgress && (
+                  <div className="text-sm text-slate-600">
+                    Subtotal{' '}
+                    <span className="text-base font-semibold tabular-nums text-slate-900">
+                      {formatCurrency(grandTotals.subTotal)}
+                    </span>
+                  </div>
+                )}
 
-                <MarkupToggle
-                  label="GST"
-                  value={grandTotals.totalTax}
-                  isVisible={showGst}
-                  suppressIcon={suppressGstIcon}
-                  setSuppressIcon={setSuppressGstIcon}
-                  onToggle={() => { setShowGst(!showGst); setSuppressGstIcon(true); }}
-                />
+                {pricingDetail !== 'total-only' && (
+                  <>
+                    <MarkupToggle
+                      label="Markup"
+                      value={grandTotals.markup}
+                      isVisible={showMarkup}
+                      suppressIcon={suppressMarkupIcon}
+                      setSuppressIcon={setSuppressMarkupIcon}
+                      onToggle={() => { setShowMarkup(!showMarkup); setSuppressMarkupIcon(true); }}
+                    />
+
+                    <MarkupToggle
+                      label="GST"
+                      value={grandTotals.totalTax}
+                      isVisible={showGst}
+                      suppressIcon={suppressGstIcon}
+                      setSuppressIcon={setSuppressGstIcon}
+                      onToggle={() => { setShowGst(!showGst); setSuppressGstIcon(true); }}
+                    />
+                  </>
+                )}
+
+                <div className="text-sm text-slate-600">
+                  Total{' '}
+                  <span className="text-xl font-bold tabular-nums text-slate-950">
+                    {formatCurrency(grandTotals.total)}
+                  </span>
+                </div>
+
+                {showInvoiceProgress && showPreviouslyInvoiced && (
+                  <div className="text-sm text-slate-600">
+                    Prior Invoices{' '}
+                    <span className="text-xl font-bold tabular-nums text-slate-700">
+                      {formatCurrency(grandTotals.previouslyInvoiced)}
+                    </span>
+                  </div>
+                )}
+
+                {showInvoiceProgress && (
+                  <div className="text-sm text-slate-600">
+                    This Invoice{' '}
+                    <span className="text-xl font-bold tabular-nums text-teal-800">
+                      {formatCurrency(grandTotals.invoiced)}
+                    </span>
+                  </div>
+                )}
+
+                {showInvoiceProgress && (
+                  <div className="text-sm text-slate-600">
+                    Remaining{' '}
+                    <span className="text-xl font-bold tabular-nums text-slate-950">
+                      {formatCurrency(
+                        grandTotals.total -
+                          grandTotals.previouslyInvoiced -
+                          grandTotals.invoiced,
+                      )}
+                    </span>
+                  </div>
+                )}
               </>
             )}
-
-            <div className="text-sm text-slate-600">
-              Total{' '}
-              <span className="text-xl font-bold tabular-nums text-slate-950">
-                {formatCurrency(grandTotals.total)}
-              </span>
-            </div>
           </>
         )}
       </div>

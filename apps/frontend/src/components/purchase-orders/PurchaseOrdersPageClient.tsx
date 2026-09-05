@@ -58,6 +58,7 @@ export function PurchaseOrdersPageClient({
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
         jobId={job?.id}
+        job={job}
         jobs={jobs}
       />
     </>

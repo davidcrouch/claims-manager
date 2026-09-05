@@ -496,15 +496,35 @@ type PoTab =
   | 'bills'
   | 'attachments';
 
+const PO_TABS: PoTab[] = [
+  'overview',
+  'parties',
+  'line-items',
+  'issues',
+  'bills',
+  'attachments',
+];
+
+function poTabFromParam(raw: string | null): PoTab | null {
+  if (raw && (PO_TABS as string[]).includes(raw)) return raw as PoTab;
+  return null;
+}
+
 export function PurchaseOrderDetail({
   po,
   job,
+  initialTab,
 }: {
   po: PurchaseOrder;
   job?: Job | null;
+  initialTab?: string | null;
 }) {
-  const [tab, setTab] = useState<PoTab>('overview');
-  const [lineItemsMounted, setLineItemsMounted] = useState(false);
+  const [tab, setTab] = useState<PoTab>(
+    () => poTabFromParam(initialTab ?? null) ?? 'overview',
+  );
+  const [lineItemsMounted, setLineItemsMounted] = useState(
+    () => poTabFromParam(initialTab ?? null) === 'line-items',
+  );
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [issueDrawerOpen, setIssueDrawerOpen] = useState(false);
   const [lineItemsDirty, setLineItemsDirty] = useState(false);
@@ -518,7 +538,11 @@ export function PurchaseOrderDetail({
 
   const locked = isPurchaseOrderLocked(po);
   const status = getPurchaseOrderStatusName(po);
-  const showLineItemActions = tab === 'line-items' && !locked;
+  const poPayload = (po.purchaseOrderPayload ?? {}) as Record<string, unknown>;
+  const poHasSourceLines =
+    typeof poPayload.sourceWorkOrderId === 'string' ||
+    typeof poPayload.sourceProposalId === 'string';
+  const showLineItemActions = tab === 'line-items' && !locked && !poHasSourceLines;
   const showIssueAction = !locked;
   const canUndo = lineItemsDirty || undoStack.length > 0;
   const poNumber = po.purchaseOrderNumber ?? po.internalNumber ?? po.externalId;

@@ -57,6 +57,10 @@ export class LineItemUpdateDto {
 
   @IsOptional()
   @IsString()
+  buyCost?: string;
+
+  @IsOptional()
+  @IsString()
   unitCost?: string;
 
   @IsOptional()

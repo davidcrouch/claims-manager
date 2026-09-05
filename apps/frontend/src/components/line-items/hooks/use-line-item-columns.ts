@@ -9,9 +9,15 @@ export interface LineItemColumnLayout {
   showQuantities: boolean;
   showPricing: boolean;
   showPriceBreakdown: boolean;
+  showUnitPrice: boolean;
+  showExtended: boolean;
+  showBuyCost: boolean;
   showMarkup: boolean;
   showGst: boolean;
+  isCostPricing: boolean;
   showInvoiceProgress: boolean;
+  showPreviouslyInvoiced: boolean;
+  showItemTypeColumn: boolean;
   showActions: boolean;
   /** Number of trailing empty cells before total column */
   pricingSpacerCount: number;
@@ -23,10 +29,18 @@ export function useLineItemColumns(parentShowQuantities?: boolean, parentShowPri
   return useMemo(() => {
     const showQuantities = parentShowQuantities ?? config.showQuantities;
     const showPricing = parentShowPricing ?? config.showPricing;
-    const showPriceBreakdown = showPricing && config.pricingDetail !== 'total-only';
-    const showMarkup = showPriceBreakdown && config.showMarkup;
-    const showGst = showPriceBreakdown && config.showGst;
+    const isCostPricing = config.pricingDetail === 'cost';
+    const showFullBreakdown = showPricing && config.pricingDetail === 'full';
+    const showCostBreakdown = showPricing && isCostPricing;
+    const showPriceBreakdown = showFullBreakdown || showCostBreakdown;
+    const showUnitPrice = showFullBreakdown;
+    const showExtended = showFullBreakdown || showCostBreakdown;
+    const showBuyCost = (showFullBreakdown && config.showBuyCost) || showCostBreakdown;
+    const showMarkup = showFullBreakdown && config.showMarkup;
+    const showGst = showFullBreakdown && config.showGst;
     const showInvoiceProgress = config.showInvoiceProgress;
+    const showPreviouslyInvoiced = config.showPreviouslyInvoiced;
+    const showItemTypeColumn = config.showItemTypeColumn;
     const showSelect = !!selection;
     const showBulkSelect = !isReadOnly && !showSelect;
     const showDragHandle = !isReadOnly && !!actions.onReorderLineItems;
@@ -34,7 +48,9 @@ export function useLineItemColumns(parentShowQuantities?: boolean, parentShowPri
 
     let pricingSpacerCount = 0;
     if (showPriceBreakdown) {
-      pricingSpacerCount += 2; // unit cost + extended
+      if (showBuyCost) pricingSpacerCount += 1;
+      if (showUnitPrice) pricingSpacerCount += 1;
+      if (showExtended) pricingSpacerCount += 1;
       if (showMarkup) pricingSpacerCount += 1;
       if (showGst) pricingSpacerCount += 1;
     }
@@ -47,9 +63,15 @@ export function useLineItemColumns(parentShowQuantities?: boolean, parentShowPri
       showQuantities,
       showPricing,
       showPriceBreakdown,
+      showUnitPrice,
+      showExtended,
+      showBuyCost,
       showMarkup,
       showGst,
+      isCostPricing,
       showInvoiceProgress,
+      showPreviouslyInvoiced,
+      showItemTypeColumn,
       showActions,
       pricingSpacerCount,
     };

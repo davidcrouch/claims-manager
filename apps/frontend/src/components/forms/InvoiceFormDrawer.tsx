@@ -11,29 +11,26 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
   BottomFormDrawer,
   BottomFormDrawerBody,
   BottomFormDrawerError,
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
+import { FormJobPickerField } from '@/components/forms/FormJobPickerField';
 import { isArchivedStatus } from '@/components/shared/archive-list';
 import { entityDisplayLabel } from '@/components/shared/entity-label';
 import { formatAddress, formatCurrency } from '@/components/shared/detail';
-import { jobDisplayName } from '@/components/shared/job-label';
+import { jobDisplayName, type JobOption } from '@/components/shared/job-label';
 import { createInvoiceAction } from '@/app/(app)/mutations';
 import { fetchInvoicesAction } from '@/app/(app)/invoices/actions';
-import { getWorkOrderLineItemsAction } from '@/app/(app)/work-orders/actions';
+import {
+  fetchWorkOrderByIdAction,
+  getWorkOrderLineItemsAction,
+} from '@/app/(app)/work-orders/actions';
 import { fetchJobByIdAction } from '@/app/(app)/jobs/actions';
+import { fetchJobWorkOrdersAction } from '@/app/(app)/jobs/[id]/actions';
 import {
   CreateSubmitOverlay,
-  navigateToCreated,
   useCreateSubmitPhase,
 } from '@/components/forms/CreateSubmitOverlay';
 import {
@@ -42,12 +39,16 @@ import {
   applyInvoiceProgressToGroups,
   buildPreviouslyInvoicedMap,
   flattenAllocatableLines,
+  formatFlatPercentInput,
   invoicedAmountsRecordFromMap,
   itemMatchKeys,
-  remainingAmountsByKey,
+  scaleAllocationMapToTotal,
   setItemAmountInMap,
+  suggestedFlatPercent,
+  sumLineRemaining,
   sumPriorInvoiceTotals,
   sumUniqueInvoicedAmounts,
+  workOrderHeaderTotal,
 } from '@/components/invoices/invoice-line-progress';
 import type { ApiGroup } from '@/components/line-items';
 import type { Invoice, Job, WorkOrder } from '@/types/api';
@@ -62,12 +63,12 @@ const invoiceFormSchema = z.object({
 
 type InvoiceFormValues = z.infer<typeof invoiceFormSchema>;
 
-type WizardStep = 'details' | 'method' | 'lines' | 'confirm';
-type AllocationMethod = 'flatPercent' | 'individual';
+type WizardStep = 'details' | 'allocation' | 'lines' | 'confirm';
+type AllocationMethod = 'flatAmount' | 'flatPercent' | 'perLine';
 
 const STEP_LABELS: Record<WizardStep, string> = {
   details: 'Details',
-  method: 'Allocation',
+  allocation: 'Amount & allocation',
   lines: 'Line amounts',
   confirm: 'Confirm',
 };
@@ -87,28 +88,13 @@ function addDaysISO(isoDate: string, days: number): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function asMoney(value: unknown): number {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string' && value.trim()) {
-    const n = Number(value);
-    if (Number.isFinite(n)) return n;
-  }
-  return 0;
-}
-
-function workOrderLabel(
-  wo: WorkOrder,
-  jobNameById?: Record<string, string>,
-): string {
-  const woRef = entityDisplayLabel(
+function workOrderCardLabel(wo: WorkOrder): string {
+  return entityDisplayLabel(
     wo.internalNumber,
     wo.name,
     wo.workOrderNumber,
     wo.externalId,
   );
-  const jobName =
-    (wo.jobId ? jobNameById?.[wo.jobId] : undefined)?.trim() || undefined;
-  return jobName ? `${jobName} — ${woRef}` : woRef;
 }
 
 function formatJobAddress(job?: Job | null): string {
@@ -135,6 +121,8 @@ export interface InvoiceFormDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   workOrders: WorkOrder[];
+  /** Job options for the job picker (Create Invoice from list). */
+  jobs?: JobOption[];
   /** Map of job id → display name for dropdown prefixes. */
   jobNameById?: Record<string, string>;
   /** Jobs keyed by id for address / context card. */
@@ -149,31 +137,45 @@ export function InvoiceFormDrawer({
   open,
   onOpenChange,
   workOrders,
+  jobs,
   jobNameById,
   jobById,
   job,
   defaultWorkOrderId,
 }: InvoiceFormDrawerProps) {
   const router = useRouter();
-  const { phase, busy, startCreating, startOpening, resetPhase } =
+  const { phase, busy, startCreating, resetPhase } =
     useCreateSubmitPhase();
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<WizardStep>('details');
   const [allocationMethod, setAllocationMethod] =
-    useState<AllocationMethod>('flatPercent');
-  const [flatPercent, setFlatPercent] = useState('50');
+    useState<AllocationMethod>('flatAmount');
+  const [flatAmountInput, setFlatAmountInput] = useState('');
+  const [flatPercent, setFlatPercent] = useState('');
   const [siblingInvoices, setSiblingInvoices] = useState<Invoice[]>([]);
   const [groups, setGroups] = useState<ApiGroup[]>([]);
   const [contextLoading, setContextLoading] = useState(false);
+  const [loadedWo, setLoadedWo] = useState<WorkOrder | null>(null);
   const [resolvedJob, setResolvedJob] = useState<Job | null>(null);
   const [amountsByKey, setAmountsByKey] = useState<Map<string, number>>(
     () => new Map(),
   );
+  const [pickedJobId, setPickedJobId] = useState('');
+  const [pickedJob, setPickedJob] = useState<Job | null>(null);
+  const [jobWorkOrders, setJobWorkOrders] = useState<WorkOrder[]>([]);
+  const [workOrdersLoading, setWorkOrdersLoading] = useState(false);
 
-  const activeWorkOrders = useMemo(
-    () => workOrders.filter((wo) => !isArchivedStatus(wo.status?.name)),
-    [workOrders],
-  );
+  const effectiveJobId = pickedJobId || job?.id || '';
+
+  const activeWorkOrders = useMemo(() => {
+    const source =
+      jobWorkOrders.length > 0
+        ? jobWorkOrders
+        : workOrders.filter((wo) =>
+            effectiveJobId ? wo.jobId === effectiveJobId : false,
+          );
+    return source.filter((wo) => !isArchivedStatus(wo.status?.name));
+  }, [jobWorkOrders, workOrders, effectiveJobId]);
 
   const form = useForm<InvoiceFormValues>({
     resolver: standardSchemaResolver(invoiceFormSchema),
@@ -195,12 +197,27 @@ export function InvoiceFormDrawer({
     [activeWorkOrders, workOrderId],
   );
 
-  const woTotal = asMoney(selectedWo?.adjustedTotal ?? selectedWo?.totalAmount);
+  const contextWo = loadedWo ?? selectedWo;
+  const woTotal = useMemo(
+    () => workOrderHeaderTotal(contextWo, groups),
+    [contextWo, groups],
+  );
   const priorInvoiced = useMemo(
     () => sumPriorInvoiceTotals(siblingInvoices),
     [siblingInvoices],
   );
-  const remaining = Math.max(0, roundMoney(woTotal - priorInvoiced));
+
+  const baseProgressGroups = useMemo(() => {
+    const previously = buildPreviouslyInvoicedMap(siblingInvoices);
+    return applyInvoiceProgressToGroups(groups, previously);
+  }, [groups, siblingInvoices]);
+
+  const remaining = useMemo(() => {
+    if (baseProgressGroups.length) {
+      return sumLineRemaining(baseProgressGroups);
+    }
+    return Math.max(0, roundMoney(woTotal - priorInvoiced));
+  }, [baseProgressGroups, woTotal, priorInvoiced]);
 
   const progressGroups = useMemo(() => {
     const previously = buildPreviouslyInvoicedMap(siblingInvoices);
@@ -218,39 +235,42 @@ export function InvoiceFormDrawer({
   );
 
   const invoiceAmount = totalAmount ?? 0;
-  const isPartial =
-    remaining > 0 && invoiceAmount > 0 && invoiceAmount < remaining - 0.005;
-  const isFullRemaining =
-    remaining > 0 && amountsWithinTolerance(invoiceAmount, remaining);
 
   const visibleSteps = useMemo((): WizardStep[] => {
-    if (!isPartial) return ['details', 'confirm'];
-    if (allocationMethod === 'flatPercent') {
-      return ['details', 'method', 'confirm'];
+    if (allocationMethod === 'perLine') {
+      return ['details', 'allocation', 'lines', 'confirm'];
     }
-    return ['details', 'method', 'lines', 'confirm'];
-  }, [isPartial, allocationMethod]);
+    return ['details', 'allocation', 'confirm'];
+  }, [allocationMethod]);
 
   const stepIndex = Math.max(0, visibleSteps.indexOf(step));
 
   const contextJob = useMemo(() => {
     if (resolvedJob) return resolvedJob;
+    if (pickedJob && (!selectedWo?.jobId || pickedJob.id === selectedWo.jobId)) {
+      return pickedJob;
+    }
     if (job && selectedWo?.jobId && job.id === selectedWo.jobId) return job;
     if (selectedWo?.jobId && jobById?.[selectedWo.jobId]) {
       return jobById[selectedWo.jobId];
     }
     return job ?? null;
-  }, [resolvedJob, job, jobById, selectedWo]);
+  }, [resolvedJob, pickedJob, job, jobById, selectedWo]);
 
   const resetWizard = useCallback(() => {
     setStep('details');
-    setAllocationMethod('flatPercent');
-    setFlatPercent('50');
+    setAllocationMethod('flatAmount');
+    setFlatAmountInput('');
+    setFlatPercent('');
     setSiblingInvoices([]);
     setGroups([]);
+    setLoadedWo(null);
     setResolvedJob(null);
     setAmountsByKey(new Map());
     setError(null);
+    setPickedJobId('');
+    setPickedJob(null);
+    setJobWorkOrders([]);
     resetPhase();
     form.reset({
       workOrderId: defaultWorkOrderId ?? '',
@@ -266,10 +286,51 @@ export function InvoiceFormDrawer({
       resetWizard();
       return;
     }
+    const initialJobId =
+      job?.id ??
+      workOrders.find((wo) => wo.id === defaultWorkOrderId)?.jobId ??
+      '';
+    setPickedJobId(initialJobId);
+    setPickedJob(
+      job?.id && job.id === initialJobId
+        ? job
+        : (initialJobId && jobById?.[initialJobId]) || null,
+    );
     if (defaultWorkOrderId) {
       form.setValue('workOrderId', defaultWorkOrderId);
     }
-  }, [open, defaultWorkOrderId, form, resetWizard]);
+  }, [open, defaultWorkOrderId, form, resetWizard, job, jobById, workOrders]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (!effectiveJobId) {
+      setJobWorkOrders([]);
+      return;
+    }
+    let cancelled = false;
+    setWorkOrdersLoading(true);
+    fetchJobWorkOrdersAction(effectiveJobId)
+      .then((data) => {
+        if (!cancelled) setJobWorkOrders(data ?? []);
+      })
+      .catch((err) => {
+        console.error('[frontend:InvoiceFormDrawer.fetchJobWorkOrders]', err);
+        if (!cancelled) setJobWorkOrders([]);
+      })
+      .finally(() => {
+        if (!cancelled) setWorkOrdersLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, effectiveJobId]);
+
+  function handleJobPicked(next: Job) {
+    setPickedJobId(next.id);
+    setPickedJob(next);
+    form.setValue('workOrderId', '');
+    setError(null);
+  }
 
   useEffect(() => {
     if (issueDate) {
@@ -281,6 +342,7 @@ export function InvoiceFormDrawer({
     if (!open || !workOrderId) {
       setSiblingInvoices([]);
       setGroups([]);
+      setLoadedWo(null);
       setResolvedJob(null);
       return;
     }
@@ -295,7 +357,7 @@ export function InvoiceFormDrawer({
 
     void (async () => {
       try {
-        const [invRes, linesRes, fetchedJob] = await Promise.all([
+        const [invRes, linesRes, fetchedJob, fetchedWo] = await Promise.all([
           fetchInvoicesAction({ workOrderId, limit: 100 }),
           getWorkOrderLineItemsAction(workOrderId, { limit: 500 }),
           knownJob
@@ -303,23 +365,38 @@ export function InvoiceFormDrawer({
             : wo?.jobId
               ? fetchJobByIdAction(wo.jobId)
               : Promise.resolve(null),
+          fetchWorkOrderByIdAction(workOrderId),
         ]);
         if (cancelled) return;
 
         const siblings = invRes?.data ?? [];
         setSiblingInvoices(siblings);
-        const prior = sumPriorInvoiceTotals(siblings);
-        const total = asMoney(wo?.adjustedTotal ?? wo?.totalAmount);
-        const rem = Math.max(0, roundMoney(total - prior));
-        form.setValue('totalAmount', rem > 0 ? rem : undefined);
+        setLoadedWo(fetchedWo ?? wo ?? null);
 
         const nextGroups = (linesRes.success && linesRes.groups
           ? (linesRes.groups as ApiGroup[])
           : []) as ApiGroup[];
         const previously = buildPreviouslyInvoicedMap(siblings);
         const stamped = applyInvoiceProgressToGroups(nextGroups, previously);
+
+        const rem =
+          stamped.length > 0
+            ? sumLineRemaining(stamped)
+            : Math.max(
+                0,
+                roundMoney(
+                  workOrderHeaderTotal(fetchedWo ?? wo, stamped) -
+                    sumPriorInvoiceTotals(siblings),
+                ),
+              );
         setGroups(stamped);
-        setAmountsByKey(remainingAmountsByKey(stamped));
+        setAmountsByKey(new Map());
+        setFlatAmountInput(rem > 0 ? String(rem) : '');
+        setFlatPercent(
+          rem > 0
+            ? formatFlatPercentInput(suggestedFlatPercent({ invoiceAmount: rem, remaining: rem }))
+            : '',
+        );
         setResolvedJob(fetchedJob);
       } catch (err) {
         console.error('[frontend:InvoiceFormDrawer.loadContext]', err);
@@ -340,99 +417,176 @@ export function InvoiceFormDrawer({
     };
   }, [open, workOrderId, activeWorkOrders, job, jobById, form]);
 
+  const flatAmountPreview = useMemo(() => {
+    if (allocationMethod !== 'flatAmount') return null;
+    const amt = Number(flatAmountInput);
+    if (!Number.isFinite(amt) || amt <= 0 || remaining <= 0) return null;
+    const pct = suggestedFlatPercent({ invoiceAmount: amt, remaining });
+    const map = applyFlatPercentToRemaining({
+      groups: baseProgressGroups,
+      percent: pct,
+    });
+    return {
+      percent: pct,
+      lineTotal: sumUniqueInvoicedAmounts(map, baseProgressGroups),
+    };
+  }, [allocationMethod, flatAmountInput, remaining, baseProgressGroups]);
+
+  const flatPercentPreview = useMemo(() => {
+    if (allocationMethod !== 'flatPercent') return null;
+    const pct = Number(flatPercent);
+    if (!Number.isFinite(pct) || pct <= 0) return null;
+    const map = applyFlatPercentToRemaining({
+      groups: baseProgressGroups,
+      percent: pct,
+    });
+    return sumUniqueInvoicedAmounts(map, baseProgressGroups);
+  }, [allocationMethod, flatPercent, baseProgressGroups]);
+
+  function allocationFromFlatPercent(
+    groupsForAllocation: ApiGroup[] = baseProgressGroups,
+  ): Map<string, number> {
+    const pct = Number(flatPercent);
+    return applyFlatPercentToRemaining({
+      groups: groupsForAllocation,
+      percent: Number.isFinite(pct) ? pct : 0,
+    });
+  }
+
+  function allocationFromFlatAmount(
+    groupsForAllocation: ApiGroup[] = baseProgressGroups,
+  ): Map<string, number> {
+    const amt = Number(flatAmountInput);
+    if (!Number.isFinite(amt) || amt <= 0 || remaining <= 0) {
+      return new Map();
+    }
+    const pct = suggestedFlatPercent({ invoiceAmount: amt, remaining });
+    return applyFlatPercentToRemaining({
+      groups: groupsForAllocation,
+      percent: pct,
+    });
+  }
+
   function buildAllocationMap(): Map<string, number> {
-    if (!isPartial || isFullRemaining) {
-      return remainingAmountsByKey(progressGroups);
+    if (step === 'confirm' && amountsByKey.size > 0) {
+      return amountsByKey;
     }
     if (allocationMethod === 'flatPercent') {
-      const pct = Number(flatPercent);
-      return applyFlatPercentToRemaining({
-        groups: progressGroups,
-        percent: Number.isFinite(pct) ? pct : 0,
-      });
+      return allocationFromFlatPercent();
+    }
+    if (allocationMethod === 'flatAmount') {
+      return allocationFromFlatAmount();
     }
     return amountsByKey;
+  }
+
+  function applyFlatAllocationToState(params: {
+    map: Map<string, number>;
+    headerTotal: number;
+  }) {
+    const sum = sumUniqueInvoicedAmounts(params.map, baseProgressGroups);
+    const finalMap = amountsWithinTolerance(sum, params.headerTotal)
+      ? params.map
+      : scaleAllocationMapToTotal({
+          amountsByKey: params.map,
+          groups: baseProgressGroups,
+          targetTotal: params.headerTotal,
+        });
+    form.setValue('totalAmount', params.headerTotal);
+    setAmountsByKey(finalMap);
   }
 
   function goNext() {
     setError(null);
     if (step === 'details') {
+      if (!effectiveJobId) {
+        setError('Job is required');
+        return;
+      }
       if (!workOrderId) {
         setError('Work order is required');
         return;
       }
-      if (invoiceAmount <= 0) {
-        setError('Enter an invoice amount greater than zero');
+      if (contextLoading) {
+        setError('Work order context is still loading');
         return;
       }
-      if (invoiceAmount > remaining + 0.02) {
-        setError(
-          `Invoice amount cannot exceed the remaining balance (${formatCurrency(remaining)})`,
-        );
+      if (remaining <= 0) {
+        setError('Nothing remaining to invoice on this work order');
         return;
       }
-      if (isPartial) {
-        setStep('method');
-        return;
-      }
-      setAmountsByKey(remainingAmountsByKey(progressGroups));
-      setStep('confirm');
+      setStep('allocation');
       return;
     }
 
-    if (step === 'method') {
+    if (step === 'allocation') {
+      if (allocationMethod === 'flatAmount') {
+        const amt = Number(flatAmountInput);
+        if (!Number.isFinite(amt) || amt <= 0) {
+          setError('Enter an invoice amount greater than zero');
+          return;
+        }
+        if (amt > remaining + 0.02) {
+          setError(
+            `Amount cannot exceed the remaining balance (${formatCurrency(remaining)})`,
+          );
+          return;
+        }
+        const pct = suggestedFlatPercent({ invoiceAmount: amt, remaining });
+        setFlatPercent(formatFlatPercentInput(pct));
+        applyFlatAllocationToState({
+          map: allocationFromFlatAmount(),
+          headerTotal: roundMoney(amt),
+        });
+        setStep('confirm');
+        return;
+      }
+
       if (allocationMethod === 'flatPercent') {
         const pct = Number(flatPercent);
         if (!Number.isFinite(pct) || pct <= 0 || pct > 100) {
           setError('Enter a percentage between 0 and 100');
           return;
         }
-        const next = applyFlatPercentToRemaining({
-          groups: progressGroups,
-          percent: pct,
-        });
-        const sum = sumUniqueInvoicedAmounts(next, progressGroups);
-        if (!amountsWithinTolerance(sum, invoiceAmount)) {
-          // Scale to match header amount when % of remaining doesn't match typed total.
-          const scale = sum > 0 ? invoiceAmount / sum : 0;
-          const scaled = new Map<string, number>();
-          for (const [key, value] of next) {
-            scaled.set(key, roundMoney(value * scale));
-          }
-          setAmountsByKey(scaled);
-        } else {
-          setAmountsByKey(next);
+        const map = allocationFromFlatPercent();
+        const sum = roundMoney(sumUniqueInvoicedAmounts(map, baseProgressGroups));
+        if (sum <= 0) {
+          setError('Percentage must allocate at least one line item');
+          return;
         }
+        if (sum > remaining + 0.02) {
+          setError(
+            `This percentage invoices ${formatCurrency(sum)}, which exceeds the remaining balance (${formatCurrency(remaining)})`,
+          );
+          return;
+        }
+        applyFlatAllocationToState({ map, headerTotal: sum });
         setStep('confirm');
         return;
       }
-      // Seed individual amounts proportionally to remaining so sum ≈ invoice amount.
-      const remMap = remainingAmountsByKey(progressGroups);
-      const remSum = sumUniqueInvoicedAmounts(remMap, progressGroups);
-      if (remSum <= 0) {
-        setAmountsByKey(new Map());
-      } else {
-        const scale = invoiceAmount / remSum;
-        const seeded = new Map<string, number>();
-        for (const [key, value] of remMap) {
-          seeded.set(key, roundMoney(value * scale));
-        }
-        setAmountsByKey(seeded);
-      }
+
+      // perLine
+      setAmountsByKey(new Map());
+      form.setValue('totalAmount', undefined);
       setStep('lines');
       return;
     }
 
     if (step === 'lines') {
+      if (lineRows.length > 0 && allocatedSum <= 0) {
+        setError('Enter an amount for at least one line item');
+        return;
+      }
       if (
         lineRows.length > 0 &&
-        !amountsWithinTolerance(allocatedSum, invoiceAmount)
+        allocatedSum > remaining + 0.02
       ) {
         setError(
-          `Line amounts (${formatCurrency(allocatedSum)}) must equal the invoice total (${formatCurrency(invoiceAmount)})`,
+          `Line amounts (${formatCurrency(allocatedSum)}) cannot exceed the remaining balance (${formatCurrency(remaining)})`,
         );
         return;
       }
+      form.setValue('totalAmount', roundMoney(allocatedSum));
       setStep('confirm');
     }
   }
@@ -440,22 +594,18 @@ export function InvoiceFormDrawer({
   function goBack() {
     setError(null);
     if (step === 'confirm') {
-      if (!isPartial) {
-        setStep('details');
-        return;
-      }
-      if (allocationMethod === 'individual') {
+      if (allocationMethod === 'perLine') {
         setStep('lines');
         return;
       }
-      setStep('method');
+      setStep('allocation');
       return;
     }
     if (step === 'lines') {
-      setStep('method');
+      setStep('allocation');
       return;
     }
-    if (step === 'method') {
+    if (step === 'allocation') {
       setStep('details');
     }
   }
@@ -468,7 +618,16 @@ export function InvoiceFormDrawer({
       return;
     }
 
-    const allocation = buildAllocationMap();
+    const rawAllocation = buildAllocationMap();
+    const headerTotal = values.totalAmount ?? 0;
+    const allocation =
+      baseProgressGroups.length > 0 && headerTotal > 0
+        ? scaleAllocationMapToTotal({
+            amountsByKey: rawAllocation,
+            groups: baseProgressGroups,
+            targetTotal: headerTotal,
+          })
+        : rawAllocation;
     const invoicedAmounts = invoicedAmountsRecordFromMap(allocation);
 
     startCreating();
@@ -490,12 +649,13 @@ export function InvoiceFormDrawer({
         invoicedAmounts,
       });
       if (result.success) {
+        resetPhase();
         if (result.invoice?.id) {
-          startOpening();
-          navigateToCreated(router, `/invoices/${result.invoice.id}`);
+          onOpenChange(false);
+          router.push(`/invoices/${result.invoice.id}`);
+          router.refresh();
           return;
         }
-        resetPhase();
         onOpenChange(false);
         router.refresh();
       } else {
@@ -556,7 +716,93 @@ export function InvoiceFormDrawer({
         <div className="flex min-h-0 flex-1 flex-col">
           <BottomFormDrawerBody>
             {step === 'details' && (
-              <div className="space-y-5">
+              <div className="space-y-6">
+                <FormJobPickerField
+                  value={effectiveJobId}
+                  selectedJob={pickedJob ?? (job?.id === effectiveJobId ? job : null)}
+                  jobs={jobs}
+                  onJobSelect={handleJobPicked}
+                  error={!effectiveJobId && error === 'Job is required' ? error : null}
+                />
+
+                <div className="grid grid-cols-1 gap-x-6 md:grid-cols-2">
+                  <div className="space-y-3">
+                    <Label className="text-sm font-medium">
+                      Select Work Order <span className="text-destructive">*</span>
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Choose which work order to invoice.
+                    </p>
+
+                    {workOrdersLoading ? (
+                      <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Loading work orders...
+                      </div>
+                    ) : !effectiveJobId ? (
+                      <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-muted-foreground">
+                        Select a job to load work orders.
+                      </p>
+                    ) : activeWorkOrders.length === 0 ? (
+                      <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                        No work orders found for this job. Create a work order first.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {activeWorkOrders.map((wo) => (
+                          <label
+                            key={wo.id}
+                            className={`flex cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 transition-colors ${
+                              workOrderId === wo.id
+                                ? 'border-emerald-300 bg-emerald-50 ring-1 ring-emerald-200'
+                                : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="invoice-work-order"
+                              value={wo.id}
+                              checked={workOrderId === wo.id}
+                              onChange={() =>
+                                form.setValue('workOrderId', wo.id, {
+                                  shouldValidate: true,
+                                })
+                              }
+                              className="h-4 w-4 text-emerald-600"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium">
+                                {workOrderCardLabel(wo)}
+                              </p>
+                              <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                                {wo.workOrderType?.name && (
+                                  <span>{wo.workOrderType.name}</span>
+                                )}
+                                {wo.status?.name && (
+                                  <span className="rounded bg-slate-100 px-1.5 py-0.5">
+                                    {wo.status.name}
+                                  </span>
+                                )}
+                                {wo.totalAmount != null && wo.totalAmount !== '' && (
+                                  <span>
+                                    ${Number(wo.totalAmount).toLocaleString()}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                    {form.formState.errors.workOrderId && (
+                      <p className="text-sm text-destructive">
+                        {form.formState.errors.workOrderId.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
                 {selectedWo && (
                   <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
                     {contextLoading ? (
@@ -565,19 +811,7 @@ export function InvoiceFormDrawer({
                         Loading work order context…
                       </div>
                     ) : (
-                      <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
-                        <div>
-                          <dt className="text-xs text-slate-500">Job</dt>
-                          <dd className="font-medium text-slate-900">{jobName}</dd>
-                        </div>
-                        <div className="sm:col-span-2">
-                          <dt className="text-xs text-slate-500">Address</dt>
-                          <dd className="font-medium text-slate-900">{address}</dd>
-                        </div>
-                        <div>
-                          <dt className="text-xs text-slate-500">Work order</dt>
-                          <dd className="font-medium text-slate-900">{woRef}</dd>
-                        </div>
+                      <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3 text-sm">
                         <div>
                           <dt className="text-xs text-slate-500">WO total</dt>
                           <dd className="font-medium text-slate-900">
@@ -604,68 +838,6 @@ export function InvoiceFormDrawer({
                 )}
 
                 <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="workOrderId">
-                      Work Order <span className="text-destructive">*</span>
-                    </Label>
-                    <Select
-                      value={workOrderId}
-                      onValueChange={(v) =>
-                        form.setValue('workOrderId', v ?? '')
-                      }
-                    >
-                      <SelectTrigger id="workOrderId" className="w-full">
-                        <SelectValue placeholder="Select work order">
-                          {(value: string | null) => {
-                            if (!value) return 'Select work order';
-                            const wo = activeWorkOrders.find(
-                              (w) => w.id === value,
-                            );
-                            return wo
-                              ? workOrderLabel(wo, jobNameById)
-                              : value;
-                          }}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {activeWorkOrders.map((wo) => (
-                          <SelectItem key={wo.id} value={wo.id}>
-                            {workOrderLabel(wo, jobNameById)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {form.formState.errors.workOrderId && (
-                      <p className="text-sm text-destructive">
-                        {form.formState.errors.workOrderId.message}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="totalAmount">Total Amount</Label>
-                    <Input
-                      id="totalAmount"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      placeholder="0.00"
-                      {...form.register('totalAmount', {
-                        setValueAs: (v) =>
-                          v === '' || v == null || Number.isNaN(Number(v))
-                            ? undefined
-                            : Number(v),
-                      })}
-                    />
-                    {remaining > 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        Defaults to remaining balance (
-                        {formatCurrency(remaining)}). Enter less for a partial
-                        invoice.
-                      </p>
-                    )}
-                  </div>
-
                   <div className="space-y-2">
                     <Label htmlFor="issueDate">Issue Date</Label>
                     <Input
@@ -697,14 +869,67 @@ export function InvoiceFormDrawer({
               </div>
             )}
 
-            {step === 'method' && (
+            {step === 'allocation' && (
               <div className="space-y-5">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+                  <p className="text-slate-600">
+                    Remaining balance to invoice:{' '}
+                    <span className="font-semibold text-slate-900">
+                      {formatCurrency(remaining)}
+                    </span>
+                  </p>
+                </div>
                 <p className="text-sm text-muted-foreground">
-                  Invoice amount {formatCurrency(invoiceAmount)} is less than
-                  the remaining balance ({formatCurrency(remaining)}). Choose
-                  how to apply it to line items.
+                  Choose how to distribute this invoice across line items.
                 </p>
                 <div className="space-y-3">
+                  <label
+                    className={`flex cursor-pointer flex-col gap-3 rounded-lg border px-4 py-3 ${
+                      allocationMethod === 'flatAmount'
+                        ? 'border-emerald-300 bg-emerald-50 ring-1 ring-emerald-200'
+                        : 'border-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="radio"
+                        name="allocationMethod"
+                        checked={allocationMethod === 'flatAmount'}
+                        onChange={() => setAllocationMethod('flatAmount')}
+                      />
+                      <span className="text-sm font-medium text-slate-900">
+                        Invoice a flat dollar amount
+                      </span>
+                    </div>
+                    {allocationMethod === 'flatAmount' && (
+                      <div className="ml-7 space-y-2">
+                        <div className="flex max-w-xs items-center gap-2">
+                          <span className="text-sm text-slate-600">$</span>
+                          <Input
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            value={flatAmountInput}
+                            onChange={(e) => setFlatAmountInput(e.target.value)}
+                            aria-label="Invoice dollar amount"
+                            placeholder="0.00"
+                          />
+                        </div>
+                        <p className="text-xs text-slate-500">
+                          We calculate the equivalent % and apply it to each line
+                          item.
+                        </p>
+                        {flatAmountPreview && (
+                          <p className="text-xs text-emerald-700">
+                            {formatFlatPercentInput(flatAmountPreview.percent)}%
+                            per line →{' '}
+                            {formatCurrency(flatAmountPreview.lineTotal)} total
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </label>
+
                   <label
                     className={`flex cursor-pointer flex-col gap-3 rounded-lg border px-4 py-3 ${
                       allocationMethod === 'flatPercent'
@@ -720,28 +945,38 @@ export function InvoiceFormDrawer({
                         onChange={() => setAllocationMethod('flatPercent')}
                       />
                       <span className="text-sm font-medium text-slate-900">
-                        Apply flat % to each line’s remaining amount
+                        Invoice a flat percentage
                       </span>
                     </div>
                     {allocationMethod === 'flatPercent' && (
-                      <div className="ml-7 flex max-w-xs items-center gap-2">
-                        <Input
-                          type="number"
-                          min="0.01"
-                          max="100"
-                          step="0.01"
-                          value={flatPercent}
-                          onChange={(e) => setFlatPercent(e.target.value)}
-                          aria-label="Percent of remaining"
-                        />
-                        <span className="text-sm text-slate-600">%</span>
+                      <div className="ml-7 space-y-2">
+                        <div className="flex max-w-xs items-center gap-2">
+                          <Input
+                            type="number"
+                            min="0.01"
+                            max="100"
+                            step="0.01"
+                            value={flatPercent}
+                            onChange={(e) => setFlatPercent(e.target.value)}
+                            aria-label="Percent of each line item"
+                          />
+                          <span className="text-sm text-slate-600">%</span>
+                        </div>
+                        <p className="text-xs text-slate-500">
+                          Applied to each line item&apos;s remaining balance.
+                        </p>
+                        {flatPercentPreview != null && (
+                          <p className="text-xs text-emerald-700">
+                            Line amounts total {formatCurrency(flatPercentPreview)}
+                          </p>
+                        )}
                       </div>
                     )}
                   </label>
 
                   <label
                     className={`flex cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 ${
-                      allocationMethod === 'individual'
+                      allocationMethod === 'perLine'
                         ? 'border-emerald-300 bg-emerald-50 ring-1 ring-emerald-200'
                         : 'border-slate-200'
                     }`}
@@ -749,11 +984,11 @@ export function InvoiceFormDrawer({
                     <input
                       type="radio"
                       name="allocationMethod"
-                      checked={allocationMethod === 'individual'}
-                      onChange={() => setAllocationMethod('individual')}
+                      checked={allocationMethod === 'perLine'}
+                      onChange={() => setAllocationMethod('perLine')}
                     />
                     <span className="text-sm font-medium text-slate-900">
-                      Enter amounts per line item
+                      Enter a dollar amount per line item
                     </span>
                   </label>
                 </div>
@@ -764,18 +999,11 @@ export function InvoiceFormDrawer({
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                   <p className="text-muted-foreground">
-                    Enter an amount for each line (max = remaining). Totals must
-                    match the invoice amount.
+                    Enter an amount for each line (max = remaining). The invoice
+                    total is the sum of these amounts.
                   </p>
-                  <p
-                    className={
-                      amountsWithinTolerance(allocatedSum, invoiceAmount)
-                        ? 'font-medium text-emerald-700'
-                        : 'font-medium text-amber-700'
-                    }
-                  >
-                    Allocated {formatCurrency(allocatedSum)} /{' '}
-                    {formatCurrency(invoiceAmount)}
+                  <p className="font-medium text-slate-900">
+                    Invoice total: {formatCurrency(allocatedSum)}
                   </p>
                 </div>
 
@@ -903,10 +1131,10 @@ export function InvoiceFormDrawer({
                     <div>
                       <dt className="text-xs text-slate-500">Allocation</dt>
                       <dd className="font-medium text-slate-900">
-                        {!isPartial
-                          ? 'Full remaining balance'
+                        {allocationMethod === 'flatAmount'
+                          ? `Flat ${formatCurrency(Number(flatAmountInput) || invoiceAmount)} (${flatPercent}% per line)`
                           : allocationMethod === 'flatPercent'
-                            ? `Flat ${flatPercent}% of remaining (scaled to total)`
+                            ? `Flat ${flatPercent}% per line item`
                             : 'Per-line amounts'}
                       </dd>
                     </div>

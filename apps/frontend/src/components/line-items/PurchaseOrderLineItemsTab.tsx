@@ -19,6 +19,7 @@ import type { CatalogDragPayload, GroupLabelDragPayload } from '@/components/cat
 import { uiMarkupToStored, uiTaxToStored } from '@/lib/rates';
 import {
   addCatalogAssemblyToPurchaseOrderAction,
+  addCatalogBomFromPurchaseOrderAction,
   addCatalogItemToPurchaseOrderAction,
   createPurchaseOrderGroupAction,
   updatePurchaseOrderGroupAction,
@@ -32,6 +33,8 @@ import {
   movePurchaseOrderLineItemAction,
   duplicatePurchaseOrderLineItemAction,
 } from '@/app/(app)/purchase-orders/actions';
+import { updateCatalogFromEstimateAction } from '@/app/(app)/admin/catalog/actions';
+import { useCanUpdateCatalogFromEstimate } from '@/components/providers/PermissionsProvider';
 
 import {
   LineItemsProvider,
@@ -46,6 +49,20 @@ import {
 } from '@/components/line-items';
 import { swapGroups, applyReorderParams } from './lib/reorder';
 import { parseRowKey } from './lib/row-keys';
+import { CatalogUpdateConfirmDialog } from './CatalogUpdateConfirmDialog';
+import {
+  CatalogBomAddConfirmDialog,
+  type CatalogBomAddPrompt,
+} from './CatalogBomAddConfirmDialog';
+import {
+  CATALOG_UPDATE_MODE_STORAGE_KEY,
+  collectCatalogSourceUpdates,
+  parseCatalogUpdateMode,
+  resolveParentCatalogLink,
+  type CatalogSourcePushItem,
+  type CatalogUpdateMode,
+} from './lib/catalog-update';
+import { PurchaseOrderSourceSelection } from './PurchaseOrderSourceSelection';
 
 const PREFIX = 'frontend:PurchaseOrderLineItemsTab';
 
@@ -56,7 +73,52 @@ export interface PurchaseOrderLineItemsTabHandle {
   resetEdits: () => void;
 }
 
+function poSourceFromPayload(po: PurchaseOrder): {
+  workOrderId: string | null;
+  proposalId: string | null;
+} {
+  const payload = (po.purchaseOrderPayload ?? {}) as Record<string, unknown>;
+  return {
+    workOrderId:
+      typeof payload.sourceWorkOrderId === 'string' ? payload.sourceWorkOrderId : null,
+    proposalId:
+      typeof payload.sourceProposalId === 'string' ? payload.sourceProposalId : null,
+  };
+}
+
 export const PurchaseOrderLineItemsTab = forwardRef(function PurchaseOrderLineItemsTab(
+  props: {
+    purchaseOrder: PurchaseOrder;
+    drawerOpen: boolean;
+    onDrawerOpenChange: (open: boolean) => void;
+    catalogType?: CatalogType;
+    readOnly?: boolean;
+    onDirtyChange?: (dirty: boolean, save: () => void) => void;
+    hideToolbarActions?: boolean;
+    onUndoCapture?: (restoreEdits: PoLineItemEdits) => void;
+    onSaveStateChange?: (state: 'saving' | 'saved' | 'error', error?: string) => void;
+  },
+  ref: Ref<PurchaseOrderLineItemsTabHandle>,
+) {
+  const { workOrderId, proposalId } = poSourceFromPayload(props.purchaseOrder);
+  if (workOrderId || proposalId) {
+    return (
+      <PurchaseOrderSourceSelection
+        ref={ref}
+        purchaseOrder={props.purchaseOrder}
+        sourceWorkOrderId={workOrderId}
+        sourceProposalId={proposalId}
+        readOnly={props.readOnly}
+        hideToolbarActions={props.hideToolbarActions}
+        onDirtyChange={props.onDirtyChange}
+        onSaveStateChange={props.onSaveStateChange}
+      />
+    );
+  }
+  return <PurchaseOrderLineItemsEditor ref={ref} {...props} />;
+});
+
+const PurchaseOrderLineItemsEditor = forwardRef(function PurchaseOrderLineItemsEditor(
   {
     purchaseOrder,
     drawerOpen,
@@ -97,6 +159,50 @@ export const PurchaseOrderLineItemsTab = forwardRef(function PurchaseOrderLineIt
   const onSaveStateChangeRef = useRef(onSaveStateChange);
   onUndoCaptureRef.current = onUndoCapture;
   onSaveStateChangeRef.current = onSaveStateChange;
+
+  const canSetCatalogUpdateMode = useCanUpdateCatalogFromEstimate();
+  const [catalogUpdateMode, setCatalogUpdateModeState] = useState<CatalogUpdateMode>('none');
+
+  useEffect(() => {
+    if (!canSetCatalogUpdateMode) return;
+    setCatalogUpdateModeState(
+      parseCatalogUpdateMode(window.localStorage.getItem(CATALOG_UPDATE_MODE_STORAGE_KEY)),
+    );
+  }, [canSetCatalogUpdateMode]);
+
+  const setCatalogUpdateMode = useCallback((mode: CatalogUpdateMode) => {
+    setCatalogUpdateModeState(mode);
+    try {
+      window.localStorage.setItem(CATALOG_UPDATE_MODE_STORAGE_KEY, mode);
+    } catch {
+      /* ignore quota / private mode */
+    }
+  }, []);
+
+  const catalogUpdateModeRef = useRef<CatalogUpdateMode>('none');
+  catalogUpdateModeRef.current = canSetCatalogUpdateMode ? catalogUpdateMode : 'none';
+  const [catalogPromptItems, setCatalogPromptItems] = useState<CatalogSourcePushItem[] | null>(null);
+  const [catalogPromptPending, setCatalogPromptPending] = useState(false);
+  const [catalogBomPrompt, setCatalogBomPrompt] = useState<CatalogBomAddPrompt | null>(null);
+  const [catalogBomPromptPending, setCatalogBomPromptPending] = useState(false);
+  const dbGroupsRef = useRef(dbGroups);
+  dbGroupsRef.current = dbGroups;
+
+  const applyCatalogUpdates = useCallback(async (catalogItems: CatalogSourcePushItem[]) => {
+    const catalogResult = await updateCatalogFromEstimateAction({
+      items: catalogItems.map(({ label: _label, ...rest }) => rest),
+    });
+    if (!catalogResult.success) {
+      console.error(`${PREFIX}.applyCatalogUpdates — catalogue update failed`, catalogResult.error);
+      toast.error(catalogResult.error ?? 'Purchase order saved, but the catalogue could not be updated');
+      return false;
+    }
+    const n = catalogResult.updated ?? catalogItems.length;
+    toast.success(
+      n === 1 ? 'Catalogue item updated' : `${n} catalogue items updated`,
+    );
+    return true;
+  }, []);
 
   const visibleGroupIds = useMemo(() => {
     if (hiddenGroupIds.size === 0 || groupSummaries.length === 0) return undefined;
@@ -143,6 +249,13 @@ export const PurchaseOrderLineItemsTab = forwardRef(function PurchaseOrderLineIt
       startTransition(async () => {
         const qty = quantity.trim() || '1';
         const nestUnderComboId = payload.kind === 'scope' ? undefined : purchaseOrderComboId;
+        const catalogMode = catalogUpdateModeRef.current;
+        const parentLink =
+          nestUnderComboId && catalogMode !== 'none'
+            ? resolveParentCatalogLink(dbGroupsRef.current, nestUnderComboId)
+            : undefined;
+        const addToCatalogAssembly = catalogMode === 'auto' && !!parentLink;
+
         const result =
           payload.kind === 'assembly' || payload.kind === 'scope'
             ? await addCatalogAssemblyToPurchaseOrderAction({
@@ -150,6 +263,8 @@ export const PurchaseOrderLineItemsTab = forwardRef(function PurchaseOrderLineIt
                 catalogAssemblyId: payload.id,
                 quantity: qty,
                 groupId,
+                purchaseOrderComboId: nestUnderComboId,
+                addToCatalogAssembly,
               })
             : await addCatalogItemToPurchaseOrderAction({
                 purchaseOrderId: purchaseOrder.id,
@@ -157,12 +272,26 @@ export const PurchaseOrderLineItemsTab = forwardRef(function PurchaseOrderLineIt
                 quantity: qty,
                 groupId,
                 purchaseOrderComboId: nestUnderComboId,
+                addToCatalogAssembly,
               });
         if (!result.success) {
           toast.error(result.error ?? 'Failed to add catalogue item');
           return;
         }
         toast.success(`Added ${payload.code} to purchase order`);
+        if (addToCatalogAssembly) {
+          if (result.addedToCatalog) {
+            toast.success('Catalogue parent updated');
+          }
+        } else if (catalogMode === 'prompt' && parentLink && nestUnderComboId) {
+          setCatalogBomPrompt({
+            parentComboId: nestUnderComboId,
+            catalogComponentId: payload.id,
+            quantity: qty,
+            itemLabel: payload.name ?? payload.code,
+            parentLabel: parentLink.label,
+          });
+        }
         setStructurallyDirty(true);
         await loadLineItems();
         router.refresh();
@@ -474,6 +603,7 @@ export const PurchaseOrderLineItemsTab = forwardRef(function PurchaseOrderLineIt
           component?: string;
           description?: string;
           quantity?: string;
+          buyCost?: string;
           unitCost?: string;
           markupValue?: string;
           tax?: string;
@@ -512,6 +642,7 @@ export const PurchaseOrderLineItemsTab = forwardRef(function PurchaseOrderLineIt
             component: fields.component,
             description: fields.description,
             quantity: fields.quantity,
+            buyCost: fields.buyCost,
             unitCost: fields.unitCost,
             markupValue:
               fields.markupValue !== undefined
@@ -552,6 +683,19 @@ export const PurchaseOrderLineItemsTab = forwardRef(function PurchaseOrderLineIt
           return;
         }
 
+        const catalogMode = catalogUpdateModeRef.current;
+        if (catalogMode !== 'none') {
+          const catalogItems = collectCatalogSourceUpdates(dbGroups, { items, combos });
+          console.log(`${PREFIX}.handleSave — catalogMode=${catalogMode} catalogItems=${catalogItems.length}`);
+          if (catalogItems.length > 0) {
+            if (catalogMode === 'auto') {
+              await applyCatalogUpdates(catalogItems);
+            } else {
+              setCatalogPromptItems(catalogItems);
+            }
+          }
+        }
+
         if (!skipUndo && Object.keys(originals).length > 0) {
           onUndoCaptureRef.current?.(originals);
         }
@@ -561,7 +705,7 @@ export const PurchaseOrderLineItemsTab = forwardRef(function PurchaseOrderLineIt
         setResetEditsKey((k) => k + 1);
       });
     },
-    [purchaseOrder.id, dbGroups, loadLineItems],
+    [purchaseOrder.id, dbGroups, loadLineItems, applyCatalogUpdates],
   );
 
   const latestEditsRef = useRef<Record<string, Record<EditableFieldKey, string>>>({});
@@ -644,6 +788,7 @@ export const PurchaseOrderLineItemsTab = forwardRef(function PurchaseOrderLineIt
       <LineItemsProvider
         groups={dbGroups}
         mode={readOnly ? 'readonly' : 'edit'}
+        pricingDetail="cost"
         paging={{
           page,
           pageSize: LINE_ITEMS_PAGE_SIZE,
@@ -659,9 +804,67 @@ export const PurchaseOrderLineItemsTab = forwardRef(function PurchaseOrderLineIt
         actions={lineItemsActions}
         resetEditsKey={resetEditsKey}
         structurallyDirty={structurallyDirty}
+        catalogUpdateMode={catalogUpdateMode}
+        onCatalogUpdateModeChange={setCatalogUpdateMode}
+        canSetCatalogUpdateMode={canSetCatalogUpdateMode}
       >
         <LineItemsTable hideToolbarActions={hideToolbarActions} />
       </LineItemsProvider>
+
+      <CatalogUpdateConfirmDialog
+        open={catalogPromptItems !== null && catalogPromptItems.length > 0}
+        items={catalogPromptItems ?? []}
+        pending={catalogPromptPending}
+        documentLabel="purchase order"
+        onCancel={() => {
+          if (catalogPromptPending) return;
+          setCatalogPromptItems(null);
+        }}
+        onConfirm={() => {
+          if (!catalogPromptItems || catalogPromptPending) return;
+          setCatalogPromptPending(true);
+          void applyCatalogUpdates(catalogPromptItems).finally(() => {
+            setCatalogPromptPending(false);
+            setCatalogPromptItems(null);
+          });
+        }}
+      />
+
+      <CatalogBomAddConfirmDialog
+        open={catalogBomPrompt !== null}
+        prompt={catalogBomPrompt}
+        pending={catalogBomPromptPending}
+        documentLabel="purchase order"
+        onCancel={() => {
+          if (catalogBomPromptPending) return;
+          setCatalogBomPrompt(null);
+        }}
+        onConfirm={() => {
+          if (!catalogBomPrompt || catalogBomPromptPending) return;
+          setCatalogBomPromptPending(true);
+          void (async () => {
+            const bomResult = await addCatalogBomFromPurchaseOrderAction({
+              purchaseOrderId: purchaseOrder.id,
+              parentPurchaseOrderComboId: catalogBomPrompt.parentComboId,
+              catalogComponentId: catalogBomPrompt.catalogComponentId,
+              quantity: catalogBomPrompt.quantity,
+            });
+            if (!bomResult.success) {
+              console.error(`${PREFIX}.catalogBomPrompt — ${bomResult.error}`);
+              toast.error(bomResult.error ?? 'Failed to update catalogue');
+              return;
+            }
+            toast.success(
+              bomResult.added === false
+                ? 'Catalogue already includes this item'
+                : 'Catalogue parent updated',
+            );
+          })().finally(() => {
+            setCatalogBomPromptPending(false);
+            setCatalogBomPrompt(null);
+          });
+        }}
+      />
     </div>
   );
 });

@@ -26,10 +26,9 @@ import { ChatDrawer } from '@/components/chat/ChatDrawer';
 import { buildAIContext, type AIContextPayload } from '@/lib/ai/use-ai-context';
 import { createTaskAction, updateTaskAction } from '@/app/(app)/mutations';
 import { fetchTaskAction } from '@/app/(app)/tasks/actions';
-import { fetchJobsAction } from '@/app/(app)/jobs/actions';
 import { OrgUserSelect } from '@/components/forms/OrgUserSelect';
-import { JobSelectField } from '@/components/forms/JobSelectField';
-import { toJobOptions, type JobOption } from '@/components/shared/job-label';
+import { FormJobPickerField } from '@/components/forms/FormJobPickerField';
+import type { JobOption } from '@/components/shared/job-label';
 import { formatDate } from '@/components/shared/list-filters';
 import {
   CreateSubmitOverlay,
@@ -37,7 +36,7 @@ import {
 } from '@/components/forms/CreateSubmitOverlay';
 import { SyncStatusIndicator } from '@/components/shared/SyncStatusIndicator';
 import { CW_TASK_TYPES } from '@/lib/cw-task-types';
-import type { LookupRef, Task } from '@/types/api';
+import type { Job, LookupRef, Task } from '@/types/api';
 
 const TASK_TYPES = CW_TASK_TYPES;
 
@@ -147,6 +146,8 @@ export interface TaskFormDrawerProps {
   onOpenChange: (open: boolean) => void;
   jobId?: string;
   claimId?: string;
+  /** Full job for richer initial display when creating from a filtered job context. */
+  job?: Job | null;
   jobs?: JobOption[];
   task?: Task | null;
   taskId?: string | null;
@@ -161,7 +162,8 @@ export function TaskFormDrawer({
   onOpenChange,
   jobId,
   claimId,
-  jobs: jobsProp,
+  job,
+  jobs,
   task: taskProp,
   taskId,
   onSuccess,
@@ -176,29 +178,14 @@ export function TaskFormDrawer({
   const [error, setError] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [aiContext, setAiContext] = useState<AIContextPayload | undefined>();
-  const [loadedJobs, setLoadedJobs] = useState<JobOption[]>([]);
+  const [pickedJob, setPickedJob] = useState<Job | null>(null);
 
   const isEdit = !!task;
   const locked = submitting || busy || loadingTask;
-  const jobs = jobsProp && jobsProp.length > 0 ? jobsProp : loadedJobs;
-  const needsJobPicker = jobs.length > 0;
 
   useEffect(() => {
     if (!open) setChatOpen(false);
   }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    if (jobsProp && jobsProp.length > 0) return;
-    let cancelled = false;
-    void fetchJobsAction({ limit: 100 }).then((res) => {
-      if (cancelled || !res) return;
-      setLoadedJobs(toJobOptions(res.data ?? []));
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [open, jobsProp]);
 
   useEffect(() => {
     if (!open) {
@@ -243,12 +230,20 @@ export function TaskFormDrawer({
   });
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setPickedJob(null);
+      return;
+    }
     if (loadingTask) return;
     if (taskId?.trim() && !task) return;
-    form.reset(task ? valuesFromTask(task, jobId, claimId) : emptyFormValues(jobId, claimId));
+    const values = task
+      ? valuesFromTask(task, jobId, claimId)
+      : emptyFormValues(jobId ?? job?.id, claimId ?? job?.claimId ?? undefined);
+    const initialJobId = values.jobId ?? '';
+    setPickedJob(job?.id && job.id === initialJobId ? job : null);
+    form.reset(values);
     setError(null);
-  }, [open, jobId, claimId, form, task, loadingTask, taskId]);
+  }, [open, jobId, claimId, job, form, task, loadingTask, taskId]);
 
   const watchedJobId = form.watch('jobId');
   const watchedTaskType = form.watch('taskType');
@@ -267,10 +262,12 @@ export function TaskFormDrawer({
     }
     return [...TASK_STATUSES];
   }, [watchedStatus]);
-  const selectedJob = useMemo(
-    () => jobs.find((j) => j.id === watchedJobId),
-    [jobs, watchedJobId],
-  );
+
+  function handleJobPicked(next: Job) {
+    setPickedJob(next);
+    form.setValue('jobId', next.id, { shouldValidate: true });
+    form.setValue('claimId', next.claimId ?? '', { shouldValidate: false });
+  }
 
   async function onSubmit(values: TaskFormValues) {
     if (isEdit) setSubmitting(true);
@@ -278,7 +275,7 @@ export function TaskFormDrawer({
     setError(null);
     try {
       const resolvedClaimId =
-        values.claimId || selectedJob?.claimId || claimId || undefined;
+        values.claimId || pickedJob?.claimId || claimId || undefined;
       if (!values.jobId && !resolvedClaimId) {
         setError('Select a job for this task');
         if (!isEdit) resetPhase();
@@ -360,29 +357,26 @@ export function TaskFormDrawer({
         )}
         <div className="space-y-5">
           <FormSection title="Assignment">
-            <div className="grid grid-cols-1 gap-x-4 gap-y-3 md:grid-cols-2">
-              {needsJobPicker && (
-                <JobSelectField
-                  jobs={jobs}
-                  value={watchedJobId ?? ''}
-                  className="space-y-1.5"
-                  onValueChange={(id) => {
-                    const next = jobs.find((j) => j.id === id);
-                    form.setValue('jobId', id, { shouldValidate: true });
-                    form.setValue('claimId', next?.claimId ?? '', { shouldValidate: false });
-                  }}
-                />
-              )}
-              <OrgUserSelect
-                id="task-assignedToUserId"
-                className={needsJobPicker ? 'space-y-1.5' : 'space-y-1.5 md:col-span-2'}
-                value={form.watch('assignedToUserId') || null}
-                onChange={(userId) =>
-                  form.setValue('assignedToUserId', userId ?? '', {
-                    shouldValidate: false,
-                  })
-                }
+            <div className="space-y-3">
+              <FormJobPickerField
+                value={watchedJobId ?? ''}
+                selectedJob={pickedJob}
+                jobs={jobs}
+                onJobSelect={handleJobPicked}
+                allowChange={!isEdit}
               />
+              <div className="grid grid-cols-1 gap-x-4 gap-y-3 md:grid-cols-2">
+                <OrgUserSelect
+                  id="task-assignedToUserId"
+                  className="space-y-1.5 md:col-span-2"
+                  value={form.watch('assignedToUserId') || null}
+                  onChange={(userId) =>
+                    form.setValue('assignedToUserId', userId ?? '', {
+                      shouldValidate: false,
+                    })
+                  }
+                />
+              </div>
             </div>
           </FormSection>
 

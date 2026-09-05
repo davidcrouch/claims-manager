@@ -1143,3 +1143,14 @@
   Confirmed the application type-check succeeds locally.
   The hosted site can pick up job-kind capabilities and related form updates.
   No change to end-user behaviour beyond enabling the release.
+
+- `2026-09-06` `PENDING` **10.5 h**
+  `80 files | +6 065 −1 493 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
+  Lay summary: Purchase orders can be built from a work order or proposal with chosen lines, invoices manage their lines more clearly, and create forms share a consistent job picker.
+  **Purchase-order sourcing, invoice lines, and shared form job picking.**
+  Staff can create purchase orders from a work order or proposal and choose which lines to bring across.
+  Invoice screens support a dedicated line-items view with clearer progress against the job.
+  Create and edit forms across jobs, bills, quotes, and related records use a shared job picker.
+  Line-item editing and catalogue updates work more consistently on purchase orders.
+  Chat display options and catalogue selection support the same day-to-day flows.
+  Outcome: smoother ordering and invoicing from existing job scope without re-keying lines.

@@ -1,5 +1,6 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { getSession, getAccessToken } from '@/lib/auth';
 import { createApiClient, ApiError, type PublishQuoteResult } from '@/lib/api-client';
 import type { Quote, Invoice, Report, Task, Contact, WorkOrder, Rfq, Proposal, Bill, PurchaseOrder } from '@/types/api';
@@ -17,6 +18,7 @@ export async function createQuoteAction(body: Record<string, unknown>): Promise<
   if (!api) return { success: false, error: 'Not authenticated' };
   try {
     const quote = await api.createQuote(body);
+    revalidatePath('/quotes');
     return { success: true, quote };
   } catch (err) {
     console.error('[createQuoteAction]', err);
@@ -34,6 +36,8 @@ export async function publishQuoteAction(id: string): Promise<{
   if (!api) return { success: false, error: 'Not authenticated' };
   try {
     const result = await api.publishQuote(id);
+    revalidatePath('/quotes');
+    revalidatePath(`/quotes/${id}`);
     return { success: true, quote: result.quote ?? undefined, publishResult: result };
   } catch (err) {
     console.error('[publishQuoteAction]', err);
@@ -51,6 +55,9 @@ export async function approveQuoteAction(id: string): Promise<{ success: boolean
   if (!api) return { success: false, error: 'Not authenticated' };
   try {
     const result = await api.approveQuote(id);
+    revalidatePath('/quotes');
+    revalidatePath(`/quotes/${id}`);
+    revalidatePath('/work-orders');
     return { success: true, quote: result.quote, workOrderId: result.workOrderId };
   } catch (err) {
     console.error('[approveQuoteAction]', err);
@@ -68,10 +75,28 @@ export async function createInvoiceAction(body: Record<string, unknown>): Promis
   if (!api) return { success: false, error: 'Not authenticated' };
   try {
     const invoice = await api.createInvoice(body);
+    revalidatePath('/invoices');
     return { success: true, invoice };
   } catch (err) {
     console.error('[createInvoiceAction]', err);
     return { success: false, error: err instanceof Error ? err.message : 'Failed to create invoice' };
+  }
+}
+
+export async function updateInvoiceAction(
+  id: string,
+  body: Record<string, unknown>,
+): Promise<{ success: boolean; invoice?: Invoice; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const invoice = await api.updateInvoice(id, body);
+    revalidatePath('/invoices');
+    revalidatePath(`/invoices/${id}`);
+    return { success: true, invoice };
+  } catch (err) {
+    console.error('[updateInvoiceAction]', err);
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to update invoice' };
   }
 }
 
@@ -80,6 +105,8 @@ export async function publishInvoiceAction(id: string): Promise<{ success: boole
   if (!api) return { success: false, error: 'Not authenticated' };
   try {
     const invoice = await api.publishInvoice(id);
+    revalidatePath('/invoices');
+    revalidatePath(`/invoices/${id}`);
     return { success: true, invoice };
   } catch (err) {
     console.error('[publishInvoiceAction]', err);
@@ -97,6 +124,7 @@ export async function createReportAction(body: Record<string, unknown>): Promise
   if (!api) return { success: false, error: 'Not authenticated' };
   try {
     const report = await api.createReport(body);
+    revalidatePath('/reports');
     return { success: true, report };
   } catch (err) {
     console.error('[createReportAction]', err);
@@ -109,6 +137,7 @@ export async function createTaskAction(body: Record<string, unknown>): Promise<{
   if (!api) return { success: false, error: 'Not authenticated' };
   try {
     await api.createTask(body);
+    revalidatePath('/tasks');
     return { success: true };
   } catch (err) {
     console.error('[createTaskAction]', err);
@@ -124,6 +153,7 @@ export async function updateTaskAction(
   if (!api) return { success: false, error: 'Not authenticated' };
   try {
     await api.updateTask(id, body);
+    revalidatePath('/tasks');
     return { success: true };
   } catch (err) {
     console.error('[updateTaskAction]', err);
@@ -136,6 +166,7 @@ export async function createAppointmentAction(body: Record<string, unknown>): Pr
   if (!api) return { success: false, error: 'Not authenticated' };
   try {
     await api.createAppointment(body);
+    revalidatePath('/appointments');
     return { success: true };
   } catch (err) {
     console.error('[createAppointmentAction]', err);
@@ -151,6 +182,7 @@ export async function updateAppointmentAction(
   if (!api) return { success: false, error: 'Not authenticated' };
   try {
     await api.updateAppointment(id, body);
+    revalidatePath('/appointments');
     return { success: true };
   } catch (err) {
     console.error('[updateAppointmentAction]', err);
@@ -195,6 +227,7 @@ export async function createContactAction(body: Record<string, unknown>): Promis
   if (!api) return { success: false, error: 'Not authenticated' };
   try {
     const contact = await api.createContact(body);
+    revalidatePath('/contacts');
     return { success: true, contact };
   } catch (err) {
     console.error('[createContactAction]', err);
@@ -210,6 +243,8 @@ export async function updateContactAction(
   if (!api) return { success: false, error: 'Not authenticated' };
   try {
     const contact = await api.updateContact(id, body);
+    revalidatePath('/contacts');
+    revalidatePath(`/contacts/${id}`);
     return { success: true, contact };
   } catch (err) {
     console.error('[updateContactAction]', err);
@@ -273,6 +308,7 @@ export async function createPurchaseOrderAction(body: Record<string, unknown>): 
   if (!api) return { success: false, error: 'Not authenticated' };
   try {
     const purchaseOrder = await api.createPurchaseOrder(body);
+    revalidatePath('/purchase-orders');
     return { success: true, purchaseOrder };
   } catch (err) {
     console.error('[createPurchaseOrderAction]', err);
@@ -285,6 +321,7 @@ export async function createWorkOrderAction(body: Record<string, unknown>): Prom
   if (!api) return { success: false, error: 'Not authenticated' };
   try {
     const workOrder = await api.createWorkOrder(body);
+    revalidatePath('/work-orders');
     return { success: true, workOrder };
   } catch (err) {
     console.error('[createWorkOrderAction]', err);
@@ -297,6 +334,7 @@ export async function createRfqAction(body: Record<string, unknown>): Promise<{ 
   if (!api) return { success: false, error: 'Not authenticated' };
   try {
     const rfq = await api.createRfq(body);
+    revalidatePath('/rfqs');
     return { success: true, rfq };
   } catch (err) {
     console.error('[createRfqAction]', err);
@@ -309,6 +347,7 @@ export async function createProposalAction(body: Record<string, unknown>): Promi
   if (!api) return { success: false, error: 'Not authenticated' };
   try {
     const proposal = await api.createProposal(body);
+    revalidatePath('/proposals');
     return { success: true, proposal };
   } catch (err) {
     console.error('[createProposalAction]', err);
@@ -321,6 +360,7 @@ export async function createBillAction(body: Record<string, unknown>): Promise<{
   if (!api) return { success: false, error: 'Not authenticated' };
   try {
     const bill = await api.createBill(body);
+    revalidatePath('/bills');
     return { success: true, bill };
   } catch (err) {
     console.error('[createBillAction]', err);
@@ -336,6 +376,8 @@ export async function updateBillAction(
   if (!api) return { success: false, error: 'Not authenticated' };
   try {
     const bill = await api.updateBill(id, body);
+    revalidatePath('/bills');
+    revalidatePath(`/bills/${id}`);
     return { success: true, bill };
   } catch (err) {
     console.error('[updateBillAction]', err);
