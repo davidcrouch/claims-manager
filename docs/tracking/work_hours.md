@@ -1144,7 +1144,7 @@
   The hosted site can pick up job-kind capabilities and related form updates.
   No change to end-user behaviour beyond enabling the release.
 
-- `2026-09-06` `PENDING` **10.5 h**
+- `2026-09-06` `af3cdef` **10.5 h**
   `80 files | +6 065 −1 493 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
   Lay summary: Purchase orders can be built from a work order or proposal with chosen lines, invoices manage their lines more clearly, and create forms share a consistent job picker.
   **Purchase-order sourcing, invoice lines, and shared form job picking.**
