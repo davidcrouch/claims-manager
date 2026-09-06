@@ -1155,7 +1155,7 @@
   Chat display options and catalogue selection support the same day-to-day flows.
   Outcome: smoother ordering and invoicing from existing job scope without re-keying lines.
 
-- `2026-09-07` `PENDING` **9 h**
+- `2026-09-07` `157e82f` **9 h**
   `19 files | +1 113 -590 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: New quotes pick up From, For, and To parties from the organisation and job contacts, RFQ emails can send a Word file when a PDF is not ready, and line tables let staff hide quantity or price columns.
   **Quote party defaults, RFQ document attachments, and line column controls.**
