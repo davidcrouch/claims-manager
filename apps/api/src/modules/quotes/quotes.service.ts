@@ -22,8 +22,11 @@ import {
   workOrderCombos,
   workOrderItems,
   organizations,
+  contacts,
+  jobContacts,
+  lookupValues,
 } from '../../database/schema';
-import { eq, and, isNull, inArray } from 'drizzle-orm';
+import { eq, and, isNull, inArray, asc } from 'drizzle-orm';
 import { TenantContext } from '../../tenant/tenant-context';
 import { CrunchworkService } from '../../crunchwork/crunchwork.service';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
@@ -35,6 +38,10 @@ import { OutboundEventsService } from '../outbound-events/outbound-events.servic
 import { ActivitiesService } from '../activities/activities.service';
 import { RecordNumberService } from '../../common/record-number/record-number.service';
 import { OutboundSyncService } from '../domain/outbound/outbound-sync.service';
+import {
+  hasAnyPartyData,
+  partyBucketsFromCwPayload,
+} from '../domain/transformers/quote-party-buckets';
 
 export interface PublishResult {
   quote: Record<string, unknown> | null;
@@ -353,6 +360,155 @@ export class QuotesService {
     return out;
   }
 
+  private contactToParty(params: {
+    firstName: string | null;
+    lastName: string | null;
+    email: string | null;
+    mobilePhone: string | null;
+    homePhone: string | null;
+    workPhone: string | null;
+  }): Record<string, string> {
+    const name = [params.firstName, params.lastName]
+      .map((p) => p?.trim())
+      .filter((p): p is string => !!p)
+      .join(' ');
+    const phone =
+      params.mobilePhone?.trim() ||
+      params.workPhone?.trim() ||
+      params.homePhone?.trim() ||
+      '';
+    const party: Record<string, string> = {};
+    if (name) {
+      party.name = name;
+      party.contactName = name;
+    }
+    if (params.email?.trim()) party.email = params.email.trim();
+    if (phone) party.phoneNumber = phone;
+    return party;
+  }
+
+  /**
+   * Default From / For / To when create body omits parties.
+   * From = tenant organisation; For = job Customer/Insured; To = job Insurer.
+   */
+  private async resolveDefaultParties(params: {
+    tenantId: string;
+    jobId: string | null | undefined;
+    tx: DrizzleDbOrTx;
+  }): Promise<{
+    quoteTo: Record<string, string>;
+    quoteFor: Record<string, string>;
+    quoteFrom: Record<string, string>;
+  }> {
+    const LOG = 'QuotesService.resolveDefaultParties';
+    const quoteTo: Record<string, string> = {};
+    const quoteFor: Record<string, string> = {};
+    const quoteFrom: Record<string, string> = {};
+
+    const [org] = await params.tx
+      .select({
+        name: organizations.name,
+        legalName: organizations.legalName,
+        tradingName: organizations.tradingName,
+        abn: organizations.abn,
+        primaryEmail: organizations.primaryEmail,
+        phone: organizations.phone,
+      })
+      .from(organizations)
+      .where(eq(organizations.id, params.tenantId))
+      .limit(1);
+
+    if (org) {
+      const fromName =
+        org.legalName?.trim() ||
+        org.tradingName?.trim() ||
+        org.name?.trim() ||
+        '';
+      if (fromName) {
+        quoteFrom.name = fromName;
+        quoteFrom.contactName = fromName;
+      }
+      if (org.abn?.trim()) quoteFrom.companyRegistrationNumber = org.abn.trim();
+      if (org.primaryEmail?.trim()) quoteFrom.email = org.primaryEmail.trim();
+      if (org.phone?.trim()) quoteFrom.phoneNumber = org.phone.trim();
+    }
+
+    if (!params.jobId) {
+      this.logger.debug(`${LOG} — no jobId, seeded From only`);
+      return { quoteTo, quoteFor, quoteFrom };
+    }
+
+    const contactRows = await params.tx
+      .select({
+        firstName: contacts.firstName,
+        lastName: contacts.lastName,
+        email: contacts.email,
+        mobilePhone: contacts.mobilePhone,
+        homePhone: contacts.homePhone,
+        workPhone: contacts.workPhone,
+        typeName: lookupValues.name,
+        typeExternalReference: lookupValues.externalReference,
+        sortIndex: jobContacts.sortIndex,
+      })
+      .from(jobContacts)
+      .innerJoin(contacts, eq(jobContacts.contactId, contacts.id))
+      .leftJoin(
+        lookupValues,
+        and(
+          eq(contacts.typeLookupId, lookupValues.id),
+          eq(lookupValues.tenantId, params.tenantId),
+          eq(lookupValues.domain, 'contact_type'),
+        ),
+      )
+      .where(
+        and(
+          eq(jobContacts.jobId, params.jobId),
+          eq(jobContacts.tenantId, params.tenantId),
+        ),
+      )
+      .orderBy(asc(jobContacts.sortIndex), asc(contacts.lastName), asc(contacts.firstName));
+
+    const typeKey = (row: (typeof contactRows)[number]): string =>
+      `${row.typeName ?? ''} ${row.typeExternalReference ?? ''}`.toLowerCase();
+
+    const isFor = (row: (typeof contactRows)[number]) => {
+      const k = typeKey(row);
+      return k.includes('insured') || k.includes('customer');
+    };
+    const isTo = (row: (typeof contactRows)[number]) => {
+      const k = typeKey(row);
+      return k.includes('insurer') || k.includes('adjuster') || k.includes('broker');
+    };
+
+    const forContact = contactRows.find(isFor);
+    const toContact = contactRows.find(isTo);
+    if (forContact) Object.assign(quoteFor, this.contactToParty(forContact));
+    if (toContact) Object.assign(quoteTo, this.contactToParty(toContact));
+
+    this.logger.debug(
+      `${LOG} — job=${params.jobId} from=${Object.keys(quoteFrom).length} for=${Object.keys(quoteFor).length} to=${Object.keys(quoteTo).length}`,
+    );
+    return { quoteTo, quoteFor, quoteFrom };
+  }
+
+  private applyPromotedPartyScalars(
+    data: Partial<QuoteInsert>,
+    parties: {
+      quoteTo?: Record<string, unknown>;
+      quoteFor?: Record<string, unknown>;
+    },
+  ): void {
+    const to = parties.quoteTo;
+    if (to) {
+      if (typeof to.name === 'string') data.quoteToName = to.name;
+      if (typeof to.email === 'string') data.quoteToEmail = to.email;
+    }
+    const forParty = parties.quoteFor;
+    if (forParty && typeof forParty.name === 'string') {
+      data.quoteForName = forParty.name;
+    }
+  }
+
   async findByJob(params: { jobId: string }) {
     const tenantId = this.tenantContext.getTenantId();
     const rows = await this.quotesRepo.findByJob({ jobId: params.jobId, tenantId });
@@ -452,6 +608,21 @@ export class QuotesService {
         ? null
         : String(bodyQuoteNumber).trim();
 
+      const bodyHasTo =
+        params.body.quoteTo && typeof params.body.quoteTo === 'object';
+      const bodyHasFor =
+        params.body.quoteFor && typeof params.body.quoteFor === 'object';
+      const bodyHasFrom =
+        params.body.quoteFrom && typeof params.body.quoteFrom === 'object';
+      const defaults =
+        bodyHasTo && bodyHasFor && bodyHasFrom
+          ? null
+          : await this.resolveDefaultParties({
+              tenantId,
+              jobId: params.body.jobId as string | undefined,
+              tx,
+            });
+
       const insertData: QuoteInsert = {
         tenantId,
         jobId: params.body.jobId as string,
@@ -479,32 +650,24 @@ export class QuotesService {
           ((params.body.estimatedCompletion ??
             params.body.estimatedCompletionDate) as string) || null,
         scheduleInfo,
-        quoteTo:
-          params.body.quoteTo && typeof params.body.quoteTo === 'object'
-            ? (params.body.quoteTo as Record<string, unknown>)
-            : {},
-        quoteFor:
-          params.body.quoteFor && typeof params.body.quoteFor === 'object'
-            ? (params.body.quoteFor as Record<string, unknown>)
-            : {},
-        quoteFrom:
-          params.body.quoteFrom && typeof params.body.quoteFrom === 'object'
-            ? (params.body.quoteFrom as Record<string, unknown>)
-            : {},
+        quoteTo: bodyHasTo
+          ? (params.body.quoteTo as Record<string, unknown>)
+          : (defaults?.quoteTo ?? {}),
+        quoteFor: bodyHasFor
+          ? (params.body.quoteFor as Record<string, unknown>)
+          : (defaults?.quoteFor ?? {}),
+        quoteFrom: bodyHasFrom
+          ? (params.body.quoteFrom as Record<string, unknown>)
+          : (defaults?.quoteFrom ?? {}),
         customData: { quoteType: params.body.quoteType || null },
         statusLookupId: draftStatusId ?? null,
         createdByUserId: params.userId ?? null,
         updatedByUserId: params.userId ?? null,
       };
-      const to = insertData.quoteTo as Record<string, unknown> | undefined;
-      if (to) {
-        if (typeof to.name === 'string') insertData.quoteToName = to.name;
-        if (typeof to.email === 'string') insertData.quoteToEmail = to.email;
-      }
-      const forParty = insertData.quoteFor as Record<string, unknown> | undefined;
-      if (forParty && typeof forParty.name === 'string') {
-        insertData.quoteForName = forParty.name;
-      }
+      this.applyPromotedPartyScalars(insertData, {
+        quoteTo: insertData.quoteTo as Record<string, unknown>,
+        quoteFor: insertData.quoteFor as Record<string, unknown>,
+      });
       return this.quotesRepo.create({ data: insertData, tx });
     });
   }
@@ -1431,6 +1594,14 @@ export class QuotesService {
     if (respObj.totalTax != null) updData.totalTax = String(respObj.totalTax);
     const updTotal = respObj.total ?? respObj.totalAmount;
     if (updTotal != null) updData.totalAmount = String(updTotal);
+
+    const parties = partyBucketsFromCwPayload(respObj);
+    if (hasAnyPartyData(parties)) {
+      updData.quoteTo = parties.quoteTo;
+      updData.quoteFor = parties.quoteFor;
+      updData.quoteFrom = parties.quoteFrom;
+      this.applyPromotedPartyScalars(updData, parties);
+    }
 
     return this.quotesRepo.update({ id: params.id, data: updData });
   }

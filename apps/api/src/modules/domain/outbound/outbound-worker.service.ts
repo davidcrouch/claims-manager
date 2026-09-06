@@ -3,6 +3,10 @@ import { eq, and, lte, sql, inArray } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
 import { outboundSyncQueue, integrationConnections, jobs, tasks, appointments, quotes, invoices } from '../../../database/schema';
 import type { OutboundAdapter, OutboundPushResult } from './outbound-adapter.interface';
+import {
+  hasAnyPartyData,
+  partyBucketsFromCwPayload,
+} from '../transformers/quote-party-buckets';
 
 interface OutboundQueueRow {
   id: string;
@@ -202,6 +206,16 @@ export class OutboundWorkerService implements OnModuleInit, OnModuleDestroy {
           const cwQuoteNumber = result.responsePayload.quoteNumber;
           if (typeof cwQuoteNumber === 'string' && cwQuoteNumber.trim()) {
             patch.quoteNumber = cwQuoteNumber.trim();
+          }
+          // Promote CW flat to/for/from fields into quote party buckets (same as inbound transformer).
+          const parties = partyBucketsFromCwPayload(result.responsePayload);
+          if (hasAnyPartyData(parties)) {
+            patch.quoteTo = parties.quoteTo;
+            patch.quoteFor = parties.quoteFor;
+            patch.quoteFrom = parties.quoteFrom;
+            if (parties.quoteToName) patch.quoteToName = parties.quoteToName;
+            if (parties.quoteToEmail) patch.quoteToEmail = parties.quoteToEmail;
+            if (parties.quoteForName) patch.quoteForName = parties.quoteForName;
           }
         }
         await this.db.update(quotes).set(patch).where(eq(quotes.id, record.entityId));

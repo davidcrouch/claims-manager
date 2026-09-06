@@ -2,69 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { EntityTransformer, TransformResult, LookupRequest, ParentRef } from './transformer.interface';
 import type { QuoteInsert } from '../../../database/repositories';
 import { asString, asTimestamp, asNumericString, asDateString, asBool, isPlainObject } from './transform-utils';
-
-// ── Party-bucket helpers ────────────────────────────────────────────
-// CW sends party info as flat top-level keys (toName, forEmail, etc.).
-// We collect them into structured JSONB buckets.
-
-const TO_FIELDS: [string, string][] = [
-  ['toName', 'name'],
-  ['toCompanyRegistrationNumber', 'companyRegistrationNumber'],
-  ['toContactName', 'contactName'],
-  ['toClientReference', 'clientReference'],
-  ['toPhoneNumber', 'phoneNumber'],
-  ['toEmail', 'email'],
-  ['toUnitNumber', 'unitNumber'],
-  ['toStreetNumber', 'streetNumber'],
-  ['toStreetName', 'streetName'],
-  ['toSuburb', 'suburb'],
-  ['toPostCode', 'postCode'],
-  ['toState', 'state'],
-  ['toCountry', 'country'],
-];
-
-const FOR_FIELDS: [string, string][] = [
-  ['forName', 'name'],
-  ['forCompanyRegistrationNumber', 'companyRegistrationNumber'],
-  ['forContactName', 'contactName'],
-  ['forClientReference', 'clientReference'],
-  ['forPhoneNumber', 'phoneNumber'],
-  ['forEmail', 'email'],
-  ['forUnitNumber', 'unitNumber'],
-  ['forStreetNumber', 'streetNumber'],
-  ['forStreetName', 'streetName'],
-  ['forSuburb', 'suburb'],
-  ['forPostCode', 'postCode'],
-  ['forState', 'state'],
-  ['forCountry', 'country'],
-];
-
-const FROM_FIELDS: [string, string][] = [
-  ['fromName', 'name'],
-  ['fromCompanyRegistrationNumber', 'companyRegistrationNumber'],
-  ['fromContactName', 'contactName'],
-  ['fromPhoneNumber', 'phoneNumber'],
-  ['fromEmail', 'email'],
-  ['fromUnitNumber', 'unitNumber'],
-  ['fromStreetNumber', 'streetNumber'],
-  ['fromStreetName', 'streetName'],
-  ['fromSuburb', 'suburb'],
-  ['fromPostCode', 'postCode'],
-  ['fromState', 'state'],
-  ['fromCountry', 'country'],
-];
-
-function collectPartyBucket(
-  payload: Record<string, unknown>,
-  mapping: [string, string][],
-): Record<string, string> {
-  const bucket: Record<string, string> = {};
-  for (const [cwKey, jsonbKey] of mapping) {
-    const v = asString(payload[cwKey]);
-    if (v) bucket[jsonbKey] = v;
-  }
-  return bucket;
-}
+import { partyBucketsFromCwPayload } from './quote-party-buckets';
 
 @Injectable()
 export class QuoteTransformer implements EntityTransformer<QuoteInsert> {
@@ -78,9 +16,10 @@ export class QuoteTransformer implements EntityTransformer<QuoteInsert> {
     const parentRefs: ParentRef[] = [];
 
     // §4 — Party buckets
-    const qTo = collectPartyBucket(payload, TO_FIELDS);
-    const qFor = collectPartyBucket(payload, FOR_FIELDS);
-    const qFrom = collectPartyBucket(payload, FROM_FIELDS);
+    const parties = partyBucketsFromCwPayload(payload);
+    const qTo = parties.quoteTo;
+    const qFor = parties.quoteFor;
+    const qFrom = parties.quoteFrom;
 
     // §6.2 — Schedule info bucket
     const scheduleInfo: Record<string, unknown> = {};

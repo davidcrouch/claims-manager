@@ -14,6 +14,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useLineItems } from './LineItemsProvider';
@@ -31,6 +32,7 @@ import {
 import { computeItemMoney, initItemInputs, lineTotalFromItem, nearestEditableField, UNIT_TYPE_OPTIONS } from './lib/money';
 import { LineScopeStatusBadge, PublishStatusBadge } from './lib/badges';
 import { LineScopeStatusField } from './LineScopeStatusField';
+import { HeaderVisibilityMenuItems } from './lib/header-visibility';
 import type { ApiItem, ColumnKey, DeleteItemRequest, EditableFieldKey } from './lib/types';
 
 interface ItemRowProps {
@@ -65,13 +67,32 @@ export const ItemRow = memo(function ItemRow({
     handleInputChange,
     handleCellKeyDown,
     handleBulkToggle,
+    resolveHeaderVisibility,
+    toggleHeaderField,
   } = useLineItems();
   const router = useRouter();
 
-  const { showMarkup, showGst, enableLineNotes, pricingDetail, showBuyCost, showInvoiceProgress, invoiceProgressEditable, showPreviouslyInvoiced, showItemTypeColumn } = config;
+  const {
+    showMarkup,
+    showGst,
+    enableLineNotes,
+    pricingDetail,
+    showBuyCost,
+    showInvoiceProgress,
+    invoiceProgressEditable,
+    showPreviouslyInvoiced,
+    showItemTypeColumn,
+    showColumnVisibilityToggles,
+  } = config;
   const hideComponent = config.hideComponent;
-  const showQuantities = parentShowQuantities ?? config.showQuantities;
-  const showPricing = parentShowPricing ?? config.showPricing;
+  const parentQty = parentShowQuantities ?? config.showQuantities;
+  const parentPrice = parentShowPricing ?? config.showPricing;
+  const resolvedItem = showColumnVisibilityToggles
+    ? resolveHeaderVisibility(rowKey, parentQty, parentPrice)
+    : { showQuantities: parentQty, showPricing: parentPrice };
+  // Columns follow the parent table layout; item overrides mask cell content.
+  const showQuantities = parentQty;
+  const showPricing = parentPrice;
   const isCostPricing = pricingDetail === 'cost';
   const showFullBreakdown = showPricing && pricingDetail === 'full';
   const showCostBreakdown = showPricing && isCostPricing;
@@ -84,11 +105,18 @@ export const ItemRow = memo(function ItemRow({
   const showSelect = !!selection;
   const showBulkSelect = !isReadOnly && !showSelect;
   const showDragHandle = !isReadOnly && !!actions.onReorderLineItems;
-  const qtyDisabled = contentDisabled?.quantities ?? false;
-  const priceDisabled = contentDisabled?.pricing ?? false;
+  const qtyDisabled =
+    (contentDisabled?.quantities ?? false) ||
+    (showColumnVisibilityToggles && parentQty && !resolvedItem.showQuantities);
+  const priceDisabled =
+    (contentDisabled?.pricing ?? false) ||
+    (showColumnVisibilityToggles && parentPrice && !resolvedItem.showPricing);
   /** Invoice-only edit mode: other fields stay display-only even when mode is edit. */
   const invoiceOnlyEdit = invoiceProgressEditable && showInvoiceProgress;
   const canStartEdit = !isReadOnly || invoiceOnlyEdit;
+  const showCatalogLink = !!item.catalogItemId && !item.catalogMissing;
+  const showDeleteAction = !isReadOnly && !!actions.onDeleteItem;
+  const showRowActionsMenu = showColumnVisibilityToggles || showCatalogLink || showDeleteAction;
 
   const isEditing = editState?.rowKey === rowKey || (selectedRows.has(rowKey) && editState !== null);
   const isPrimaryEdit = editState?.rowKey === rowKey;
@@ -703,8 +731,8 @@ export const ItemRow = memo(function ItemRow({
       )}
 
       {/* Actions */}
-      {!isReadOnly && actions.onDeleteItem && (
-        <td className={LI_TD_ACTIONS} onClick={(e) => e.stopPropagation()}>
+      <td className={LI_TD_ACTIONS} onClick={(e) => e.stopPropagation()}>
+        {showRowActionsMenu && (
           <DropdownMenu>
             <DropdownMenuTrigger
               aria-label="Line item actions"
@@ -713,23 +741,46 @@ export const ItemRow = memo(function ItemRow({
               <MoreVertical className="h-4 w-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {item.catalogItemId && !item.catalogMissing && (
+              {showColumnVisibilityToggles && (
+                <HeaderVisibilityMenuItems
+                  showQuantities={resolvedItem.showQuantities}
+                  showPricing={resolvedItem.showPricing}
+                  onToggleQuantities={() =>
+                    toggleHeaderField(rowKey, 'showQuantities', resolvedItem.showQuantities, parentQty, parentPrice)
+                  }
+                  onTogglePricing={() =>
+                    toggleHeaderField(rowKey, 'showPricing', resolvedItem.showPricing, parentQty, parentPrice)
+                  }
+                />
+              )}
+              {showColumnVisibilityToggles && (showCatalogLink || showDeleteAction) && (
+                <DropdownMenuSeparator />
+              )}
+              {showCatalogLink && (
                 <DropdownMenuItem
                   onClick={() => router.push(`/admin/catalog/items/${item.catalogItemId}`)}
                 >
                   <Package className="mr-2 h-3.5 w-3.5" /> Go to catalogue item
                 </DropdownMenuItem>
               )}
-              <DropdownMenuItem
-                className="text-red-600"
-                onClick={() => actions.onDeleteItem?.({ itemId: item.id!, itemName: item.name, isAssemblyChild: !!indented })}
-              >
-                <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
-              </DropdownMenuItem>
+              {showDeleteAction && (
+                <DropdownMenuItem
+                  className="text-red-600"
+                  onClick={() =>
+                    actions.onDeleteItem?.({
+                      itemId: item.id!,
+                      itemName: item.name,
+                      isAssemblyChild: !!indented,
+                    })
+                  }
+                >
+                  <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
-        </td>
-      )}
+        )}
+      </td>
     </tr>
   );
 });

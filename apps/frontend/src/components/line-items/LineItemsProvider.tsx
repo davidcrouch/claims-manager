@@ -150,9 +150,13 @@ export interface LineItemsContextValue {
   setShowUnselected: (v: boolean) => void;
   setCatalogUpdateMode: (mode: CatalogUpdateMode) => void;
   resolveHeaderVisibility: (key: string, parentQty: boolean, parentPrice: boolean) => ResolvedHeaderVisibility;
-  isHeaderOverridden: (key: string) => boolean;
-  toggleHeaderOverride: (key: string, parentQty: boolean, parentPrice: boolean) => void;
-  toggleHeaderField: (key: string, field: 'showQuantities' | 'showPricing', current: boolean) => void;
+  toggleHeaderField: (
+    key: string,
+    field: 'showQuantities' | 'showPricing',
+    current: boolean,
+    parentQty: boolean,
+    parentPrice: boolean,
+  ) => void;
 }
 
 const LineItemsContext = createContext<LineItemsContextValue | null>(null);
@@ -335,37 +339,26 @@ export function LineItemsProvider({
     [headerVisibility, showColumnToggles],
   );
 
-  const isHeaderOverridden = useCallback(
-    (key: string) => !!headerVisibility[key]?.override,
-    [headerVisibility],
-  );
-
-  const toggleHeaderOverride = useCallback(
-    (key: string, parentQty: boolean, parentPrice: boolean) => {
+  const toggleHeaderField = useCallback(
+    (
+      key: string,
+      field: 'showQuantities' | 'showPricing',
+      current: boolean,
+      parentQty: boolean,
+      parentPrice: boolean,
+    ) => {
       setHeaderVisibility((prev) => {
         const cur = prev[key];
-        if (cur?.override) {
-          return { ...prev, [key]: { override: false } };
-        }
         return {
           ...prev,
           [key]: {
             override: true,
             showQuantities: cur?.showQuantities ?? parentQty,
             showPricing: cur?.showPricing ?? parentPrice,
+            [field]: !current,
           },
         };
       });
-    },
-    [],
-  );
-
-  const toggleHeaderField = useCallback(
-    (key: string, field: 'showQuantities' | 'showPricing', current: boolean) => {
-      setHeaderVisibility((prev) => ({
-        ...prev,
-        [key]: { ...prev[key], [field]: !current },
-      }));
     },
     [],
   );
@@ -506,8 +499,6 @@ export function LineItemsProvider({
       setShowUnselected,
       setCatalogUpdateMode,
       resolveHeaderVisibility: resolveVisibility,
-      isHeaderOverridden,
-      toggleHeaderOverride,
       toggleHeaderField,
     }),
     [
@@ -547,8 +538,6 @@ export function LineItemsProvider({
       handleBulkToggle,
       setCatalogUpdateMode,
       resolveVisibility,
-      isHeaderOverridden,
-      toggleHeaderOverride,
       toggleHeaderField,
     ],
   );

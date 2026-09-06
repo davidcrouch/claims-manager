@@ -7,7 +7,6 @@ import {
   useState,
 } from 'react';
 import {
-  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   Check,
@@ -20,6 +19,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -37,15 +37,16 @@ import { ContactFormDrawer } from '@/components/contacts/ContactFormDrawer';
 import { createRfqSendRequestAction } from '@/app/(app)/rfqs/[id]/actions';
 import type { Contact } from '@/types/api';
 
-type WizardStep = 'recipients' | 'preview-pdf' | 'email';
+type WizardStep = 'recipients' | 'create-report' | 'email';
 
 const STEPS: { key: WizardStep; label: string }[] = [
   { key: 'recipients', label: 'Recipients' },
-  { key: 'preview-pdf', label: 'Preview PDF' },
+  { key: 'create-report', label: 'Create Report' },
   { key: 'email', label: 'Send Email' },
 ];
 
-type PdfStatus = 'idle' | 'generating' | 'completed' | 'failed';
+type DocStatus = 'idle' | 'generating' | 'completed' | 'failed';
+type DocFormat = 'pdf' | 'docx';
 
 const LOG = 'frontend:SendRfqRequestDrawer';
 
@@ -113,10 +114,12 @@ export function SendRfqRequestDrawer({
   const [step, setStep] = useState<WizardStep>('recipients');
   const [contacts, setContacts] = useState<JobContactRef[]>([]);
   const [contactDrawerOpen, setContactDrawerOpen] = useState(false);
+  const [createPdf, setCreatePdf] = useState(false);
   const [generatedDocId, setGeneratedDocId] = useState<string | null>(null);
-  const [pdfStatus, setPdfStatus] = useState<PdfStatus>('idle');
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
-  const [pdfError, setPdfError] = useState<string | null>(null);
+  const [docStatus, setDocStatus] = useState<DocStatus>('idle');
+  const [docFormat, setDocFormat] = useState<DocFormat>('docx');
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [docError, setDocError] = useState<string | null>(null);
   const [subject, setSubject] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -124,13 +127,23 @@ export function SendRfqRequestDrawer({
   const openRef = useRef(open);
   openRef.current = open;
   const pollRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const pdfObjectUrlRef = useRef<string | null>(null);
+  const previewObjectUrlRef = useRef<string | null>(null);
 
-  function revokePdfObjectUrl() {
-    if (pdfObjectUrlRef.current) {
-      URL.revokeObjectURL(pdfObjectUrlRef.current);
-      pdfObjectUrlRef.current = null;
+  function revokePreviewObjectUrl() {
+    if (previewObjectUrlRef.current) {
+      URL.revokeObjectURL(previewObjectUrlRef.current);
+      previewObjectUrlRef.current = null;
     }
+  }
+
+  function resetDocumentState() {
+    setGeneratedDocId(null);
+    setDocStatus('idle');
+    setDocFormat('docx');
+    setPreviewUrl(null);
+    setDocError(null);
+    if (pollRef.current) clearTimeout(pollRef.current);
+    revokePreviewObjectUrl();
   }
 
   // Reset state when the drawer opens
@@ -139,39 +152,39 @@ export function SendRfqRequestDrawer({
       setStep('recipients');
       setContacts([]);
       setContactDrawerOpen(false);
-      setGeneratedDocId(null);
-      setPdfStatus('idle');
-      setPdfUrl(null);
-      setPdfError(null);
+      setCreatePdf(false);
       setSubject('');
       setSubmitting(false);
       setError(null);
-      if (pollRef.current) clearTimeout(pollRef.current);
-      revokePdfObjectUrl();
+      resetDocumentState();
       return;
     }
 
     setSubject(rfqNumber ? `Request for Quotation: ${rfqNumber}` : 'Request for Quotation');
-    triggerPdfGeneration();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fire once on open
   }, [open]);
 
-  const triggerPdfGeneration = useCallback(async () => {
-    setPdfStatus('generating');
-    setPdfError(null);
-    setPdfUrl(null);
+  const triggerDocumentGeneration = useCallback(async () => {
+    setDocStatus('generating');
+    setDocError(null);
+    setPreviewUrl(null);
     setGeneratedDocId(null);
-    revokePdfObjectUrl();
+    setDocFormat(createPdf ? 'pdf' : 'docx');
+    revokePreviewObjectUrl();
     try {
       const res = await fetch('/api/generated-documents/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // Intentionally omit destinationCategoryId — PDF is for preview/email only
+        // Intentionally omit destinationCategoryId — file is for preview/email only
         // until Send, when the API best-effort files it into the job folder.
-        body: JSON.stringify({ documentType: 'rfq', entityId: rfqId }),
+        body: JSON.stringify({
+          documentType: 'rfq',
+          entityId: rfqId,
+          createPdf,
+        }),
       });
       if (!res.ok) {
-        throw new Error(await readErrorMessage(res, 'Failed to start PDF generation'));
+        throw new Error(await readErrorMessage(res, 'Failed to start document generation'));
       }
       const data = await res.json();
       if (!openRef.current) return;
@@ -179,22 +192,21 @@ export function SendRfqRequestDrawer({
     } catch (err) {
       if (!openRef.current) return;
       const message =
-        err instanceof Error ? err.message : 'Failed to start PDF generation';
-      console.error(`${LOG}.triggerPdfGeneration — ${message}`);
-      setPdfStatus('failed');
-      setPdfError(message);
+        err instanceof Error ? err.message : 'Failed to start document generation';
+      console.error(`${LOG}.triggerDocumentGeneration — ${message}`);
+      setDocStatus('failed');
+      setDocError(message);
     }
-  }, [rfqId]);
+  }, [rfqId, createPdf]);
 
-  // Poll for PDF generation status once we have a generatedDocId
+  // Poll for generation status once we have a generatedDocId
   useEffect(() => {
     if (!generatedDocId || !open) return;
     let cancelled = false;
 
-    async function resolvePreviewUrl(docId: string): Promise<string> {
-      const dlRes = await fetch(
-        `/api/generated-documents/${docId}/download?disposition=inline`,
-      );
+    async function resolvePreviewUrl(docId: string, format: DocFormat): Promise<string> {
+      const qs = new URLSearchParams({ disposition: 'inline', format });
+      const dlRes = await fetch(`/api/generated-documents/${docId}/download?${qs.toString()}`);
       if (!dlRes.ok) throw new Error('Download URL fetch failed');
 
       const contentType = dlRes.headers.get('content-type') ?? '';
@@ -204,11 +216,10 @@ export function SendRfqRequestDrawer({
         return dlData.url;
       }
 
-      // Stream fallback: binary PDF — build a blob URL for iframe preview
       const blob = await dlRes.blob();
       const objectUrl = URL.createObjectURL(blob);
-      revokePdfObjectUrl();
-      pdfObjectUrlRef.current = objectUrl;
+      revokePreviewObjectUrl();
+      previewObjectUrlRef.current = objectUrl;
       return objectUrl;
     }
 
@@ -220,18 +231,27 @@ export function SendRfqRequestDrawer({
         if (cancelled) return;
 
         if (data.status === 'completed') {
+          const format: DocFormat = data.s3KeyPdf?.trim() ? 'pdf' : 'docx';
           try {
-            const previewUrl = await resolvePreviewUrl(generatedDocId!);
+            const url = await resolvePreviewUrl(generatedDocId!, format);
             if (!cancelled) {
-              setPdfUrl(previewUrl);
-              setPdfStatus('completed');
+              setDocFormat(format);
+              setPreviewUrl(url);
+              setDocStatus('completed');
             }
           } catch (err) {
             if (!cancelled) {
-              setPdfStatus('failed');
-              setPdfError(
-                err instanceof Error ? err.message : 'Failed to load PDF preview',
-              );
+              // Word docs may still be usable as attachments even if preview URL fails.
+              if (format === 'docx') {
+                setDocFormat(format);
+                setPreviewUrl(null);
+                setDocStatus('completed');
+              } else {
+                setDocStatus('failed');
+                setDocError(
+                  err instanceof Error ? err.message : 'Failed to load document preview',
+                );
+              }
             }
           }
           return;
@@ -240,30 +260,29 @@ export function SendRfqRequestDrawer({
         if (data.status === 'failed') {
           if (!cancelled) {
             const message =
-              data.errorMessage ?? data.error ?? 'PDF generation failed';
+              data.errorMessage ?? data.error ?? 'Document generation failed';
             console.error(`${LOG}.poll — generation failed: ${message}`);
-            setPdfStatus('failed');
-            setPdfError(message);
+            setDocStatus('failed');
+            setDocError(message);
           }
           return;
         }
 
-        // Still processing — poll again
         if (!cancelled) {
           pollRef.current = setTimeout(poll, 2000);
         }
       } catch (err) {
         if (!cancelled) {
           const message =
-            err instanceof Error ? err.message : 'Failed to check PDF status';
+            err instanceof Error ? err.message : 'Failed to check document status';
           console.error(`${LOG}.poll — ${message}`);
-          setPdfStatus('failed');
-          setPdfError(message);
+          setDocStatus('failed');
+          setDocError(message);
         }
       }
     }
 
-    setPdfStatus('generating');
+    setDocStatus('generating');
     poll();
 
     return () => {
@@ -295,22 +314,29 @@ export function SendRfqRequestDrawer({
     setContacts((prev) => prev.filter((c) => c.key !== key));
   }
 
+  function handleCreatePdfChange(checked: boolean) {
+    setCreatePdf(checked);
+    if (docStatus !== 'idle') {
+      resetDocumentState();
+    }
+  }
+
   const recipientsWithEmail = contacts.filter((c) => c.email);
   const recipientsWithoutEmail = contacts.filter((c) => !c.email);
   const canAdvanceFromRecipients = recipientsWithEmail.length > 0;
-  const canAdvanceFromPreview = pdfStatus === 'completed';
+  const canAdvanceFromReport = docStatus === 'completed';
 
   function handleNext() {
     if (step === 'recipients' && canAdvanceFromRecipients) {
-      setStep('preview-pdf');
-    } else if (step === 'preview-pdf' && canAdvanceFromPreview) {
+      setStep('create-report');
+    } else if (step === 'create-report' && canAdvanceFromReport) {
       setStep('email');
     }
   }
 
   function handleBack() {
-    if (step === 'email') setStep('preview-pdf');
-    else if (step === 'preview-pdf') setStep('recipients');
+    if (step === 'email') setStep('create-report');
+    else if (step === 'create-report') setStep('recipients');
   }
 
   async function handleSend() {
@@ -404,18 +430,17 @@ export function SendRfqRequestDrawer({
                 onNewContact={() => setContactDrawerOpen(true)}
                 recipientsWithoutEmail={recipientsWithoutEmail}
                 jobId={jobId}
-                pdfStatus={pdfStatus}
-                pdfError={pdfError}
-                onRetryPdf={triggerPdfGeneration}
-                onViewPdfError={() => setStep('preview-pdf')}
               />
             )}
-            {step === 'preview-pdf' && (
-              <StepPreviewPdf
-                pdfStatus={pdfStatus}
-                pdfUrl={pdfUrl}
-                pdfError={pdfError}
-                onRetry={triggerPdfGeneration}
+            {step === 'create-report' && (
+              <StepCreateReport
+                createPdf={createPdf}
+                onCreatePdfChange={handleCreatePdfChange}
+                docStatus={docStatus}
+                docFormat={docFormat}
+                previewUrl={previewUrl}
+                docError={docError}
+                onGenerate={() => void triggerDocumentGeneration()}
               />
             )}
             {step === 'email' && (
@@ -424,6 +449,7 @@ export function SendRfqRequestDrawer({
                 onSubjectChange={setSubject}
                 recipients={recipientsWithEmail}
                 rfqNumber={rfqNumber}
+                docFormat={docFormat}
               />
             )}
             <BottomFormDrawerError error={error} />
@@ -436,7 +462,7 @@ export function SendRfqRequestDrawer({
                 type="button"
                 variant="outline"
                 onClick={handleBack}
-                disabled={submitting}
+                disabled={submitting || docStatus === 'generating'}
                 className="mr-auto gap-1.5"
               >
                 <ArrowLeft className="h-4 w-4" />
@@ -465,11 +491,11 @@ export function SendRfqRequestDrawer({
                 <ArrowRight className="h-4 w-4" />
               </Button>
             )}
-            {step === 'preview-pdf' && (
+            {step === 'create-report' && (
               <Button
                 type="button"
                 onClick={handleNext}
-                disabled={!canAdvanceFromPreview}
+                disabled={!canAdvanceFromReport}
                 className="gap-1.5"
               >
                 Next
@@ -521,10 +547,6 @@ function StepRecipients({
   onNewContact,
   recipientsWithoutEmail,
   jobId,
-  pdfStatus,
-  pdfError,
-  onRetryPdf,
-  onViewPdfError,
 }: {
   contacts: JobContactRef[];
   onAdd: (c: JobContactRef) => void;
@@ -532,27 +554,9 @@ function StepRecipients({
   onNewContact: () => void;
   recipientsWithoutEmail: JobContactRef[];
   jobId?: string | null;
-  pdfStatus: PdfStatus;
-  pdfError: string | null;
-  onRetryPdf: () => void;
-  onViewPdfError: () => void;
 }) {
   return (
     <div className="space-y-4">
-      {pdfStatus === 'failed' && (
-        <PdfGenerationErrorPanel
-          compact
-          pdfError={pdfError}
-          onRetry={onRetryPdf}
-          secondaryAction={{ label: 'View details', onClick: onViewPdfError }}
-        />
-      )}
-      {pdfStatus === 'generating' || pdfStatus === 'idle' ? (
-        <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-          <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
-          Preparing RFQ PDF in the background…
-        </div>
-      ) : null}
       <JobContactsPicker
         contacts={contacts}
         onAdd={onAdd}
@@ -576,73 +580,43 @@ function StepRecipients({
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Step 2 — Preview PDF                                                      */
+/*  Step 2 — Create Report                                                    */
 /* -------------------------------------------------------------------------- */
 
-function PdfGenerationErrorPanel({
-  pdfError,
+function DocumentGenerationErrorPanel({
+  docError,
   onRetry,
-  compact = false,
-  secondaryAction,
 }: {
-  pdfError: string | null;
+  docError: string | null;
   onRetry: () => void;
-  compact?: boolean;
-  secondaryAction?: { label: string; onClick: () => void };
 }) {
-  const hint = pdfErrorHint(pdfError);
-  const detailLines = (pdfError ?? 'An unexpected error occurred while generating the PDF.')
+  const hint = pdfErrorHint(docError);
+  const detailLines = (docError ?? 'An unexpected error occurred while generating the document.')
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean);
 
   return (
-    <div
-      className={`rounded-md border border-red-200 bg-red-50 ${
-        compact ? 'px-3 py-3' : 'px-4 py-5'
-      }`}
-      role="alert"
-    >
-      <div className={`flex ${compact ? 'items-start gap-3' : 'flex-col items-center gap-4 text-center'}`}>
-        <div
-          className={`flex shrink-0 items-center justify-center rounded-full bg-red-100 ${
-            compact ? 'h-9 w-9' : 'h-14 w-14'
-          }`}
-        >
-          {compact ? (
-            <AlertTriangle className="h-4 w-4 text-red-600" />
-          ) : (
-            <FileText className="h-7 w-7 text-red-600" />
-          )}
+    <div className="rounded-md border border-red-200 bg-red-50 px-4 py-5" role="alert">
+      <div className="flex flex-col items-center gap-4 text-center">
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-red-100">
+          <FileText className="h-7 w-7 text-red-600" />
         </div>
-        <div className={compact ? 'min-w-0 flex-1' : 'max-w-xl'}>
-          <p className="font-medium text-red-800">PDF generation failed</p>
-          <div className={`mt-1 space-y-1 text-sm text-red-700 ${compact ? 'text-left' : ''}`}>
+        <div className="max-w-xl">
+          <p className="font-medium text-red-800">Document generation failed</p>
+          <div className="mt-1 space-y-1 text-sm text-red-700">
             {detailLines.map((line, index) => (
               <p key={`${index}-${line.slice(0, 24)}`} className="whitespace-pre-wrap wrap-break-word">
                 {line}
               </p>
             ))}
           </div>
-          {hint && (
-            <p className="mt-2 text-sm text-red-600/90">{hint}</p>
-          )}
-          <div className={`mt-3 flex flex-wrap gap-2 ${compact ? '' : 'justify-center'}`}>
+          {hint && <p className="mt-2 text-sm text-red-600/90">{hint}</p>}
+          <div className="mt-3 flex flex-wrap justify-center gap-2">
             <Button type="button" variant="outline" size="sm" onClick={onRetry} className="gap-1.5">
               <RefreshCw className="h-3.5 w-3.5" />
               Retry
             </Button>
-            {secondaryAction && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={secondaryAction.onClick}
-                className="text-red-800 hover:bg-red-100 hover:text-red-900"
-              >
-                {secondaryAction.label}
-              </Button>
-            )}
           </div>
         </div>
       </div>
@@ -650,53 +624,123 @@ function PdfGenerationErrorPanel({
   );
 }
 
-function StepPreviewPdf({
-  pdfStatus,
-  pdfUrl,
-  pdfError,
-  onRetry,
+function StepCreateReport({
+  createPdf,
+  onCreatePdfChange,
+  docStatus,
+  docFormat,
+  previewUrl,
+  docError,
+  onGenerate,
 }: {
-  pdfStatus: PdfStatus;
-  pdfUrl: string | null;
-  pdfError: string | null;
-  onRetry: () => void;
+  createPdf: boolean;
+  onCreatePdfChange: (checked: boolean) => void;
+  docStatus: DocStatus;
+  docFormat: DocFormat;
+  previewUrl: string | null;
+  docError: string | null;
+  onGenerate: () => void;
 }) {
-  if (pdfStatus === 'generating' || pdfStatus === 'idle') {
-    return (
-      <div className="flex flex-col items-center justify-center gap-4 py-20">
-        <Loader2 className="h-10 w-10 animate-spin text-emerald-600" />
-        <div className="text-center">
-          <p className="font-medium text-slate-700">Generating PDF…</p>
-          <p className="mt-1 text-sm text-slate-500">This may take a few moments.</p>
+  const generating = docStatus === 'generating';
+  const formatLabel = createPdf ? 'PDF' : 'Word document';
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-lg border border-slate-200 bg-white px-4 py-4">
+        <div className="flex items-start gap-2">
+          <Checkbox
+            id="rfq-send-create-pdf"
+            checked={createPdf}
+            disabled={generating}
+            onCheckedChange={(checked) => onCreatePdfChange(!!checked)}
+            className="mt-0.5"
+          />
+          <div className="min-w-0">
+            <Label htmlFor="rfq-send-create-pdf" className="font-normal">
+              Generate PDF
+            </Label>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Off by default — generates a Word document. Turn on to convert to PDF.
+            </p>
+          </div>
         </div>
       </div>
-    );
-  }
 
-  if (pdfStatus === 'failed') {
-    return (
-      <div className="flex flex-col items-center justify-center gap-4 py-12">
-        <PdfGenerationErrorPanel pdfError={pdfError} onRetry={onRetry} />
-      </div>
-    );
-  }
+      {docStatus === 'idle' && (
+        <div className="flex flex-col items-center gap-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-12">
+          <FileText className="h-10 w-10 text-slate-400" />
+          <div className="text-center">
+            <p className="font-medium text-slate-700">Ready to create report</p>
+            <p className="mt-1 text-sm text-slate-500">
+              Generate a {formatLabel.toLowerCase()} to attach to the RFQ email.
+            </p>
+          </div>
+          <Button type="button" onClick={onGenerate} className="gap-1.5">
+            <FileText className="h-4 w-4" />
+            Generate {formatLabel}
+          </Button>
+        </div>
+      )}
 
-  // completed
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2 text-sm text-emerald-700">
-        <Check className="h-4 w-4" />
-        <span className="font-medium">PDF generated successfully</span>
-      </div>
-      {pdfUrl ? (
-        <iframe
-          src={pdfUrl}
-          className="h-[60vh] w-full rounded-md border border-slate-200"
-          title="RFQ PDF Preview"
-        />
-      ) : (
-        <div className="flex h-[60vh] items-center justify-center rounded-md border border-slate-200 bg-slate-50">
-          <p className="text-sm text-slate-500">Loading preview…</p>
+      {docStatus === 'generating' && (
+        <div className="flex flex-col items-center justify-center gap-4 py-16">
+          <Loader2 className="h-10 w-10 animate-spin text-emerald-600" />
+          <div className="text-center">
+            <p className="font-medium text-slate-700">Generating {formatLabel}…</p>
+            <p className="mt-1 text-sm text-slate-500">This may take a few moments.</p>
+          </div>
+        </div>
+      )}
+
+      {docStatus === 'failed' && (
+        <DocumentGenerationErrorPanel docError={docError} onRetry={onGenerate} />
+      )}
+
+      {docStatus === 'completed' && (
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-sm text-emerald-700">
+              <Check className="h-4 w-4" />
+              <span className="font-medium">
+                {docFormat === 'pdf' ? 'PDF' : 'Word document'} generated successfully
+              </span>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onGenerate}
+              className="gap-1.5"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Regenerate
+            </Button>
+          </div>
+
+          {docFormat === 'pdf' && previewUrl ? (
+            <iframe
+              src={previewUrl}
+              className="h-[55vh] w-full rounded-md border border-slate-200"
+              title="RFQ PDF Preview"
+            />
+          ) : (
+            <div className="flex flex-col items-center justify-center gap-3 rounded-md border border-slate-200 bg-slate-50 px-4 py-10">
+              <FileText className="h-8 w-8 text-slate-400" />
+              <p className="text-sm text-slate-600">
+                Word document ready to attach. Preview is available for PDF only.
+              </p>
+              {previewUrl && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.open(previewUrl, '_blank', 'noopener,noreferrer')}
+                >
+                  Download Word document
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -712,12 +756,16 @@ function StepEmailPreview({
   onSubjectChange,
   recipients,
   rfqNumber,
+  docFormat,
 }: {
   subject: string;
   onSubjectChange: (s: string) => void;
   recipients: JobContactRef[];
   rfqNumber?: string | null;
+  docFormat: DocFormat;
 }) {
+  const attachmentName = `RFQ${rfqNumber ? `-${rfqNumber}` : ''}.${docFormat === 'pdf' ? 'pdf' : 'docx'}`;
+
   return (
     <div className="space-y-6">
       {/* Subject */}
@@ -781,9 +829,7 @@ function StepEmailPreview({
         <Label>Attachment</Label>
         <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
           <Paperclip className="h-4 w-4 text-slate-400" />
-          <span className="text-slate-700">
-            RFQ{rfqNumber ? `-${rfqNumber}` : ''}.pdf
-          </span>
+          <span className="text-slate-700">{attachmentName}</span>
         </div>
       </div>
     </div>

@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatDateTime } from '@/components/shared/detail';
 import { fetchRfqSendRequestsAction } from '@/app/(app)/rfqs/[id]/actions';
 import { RequestBatchDetail } from './RequestBatchDetail';
-import { SendRfqRequestDrawer } from './SendRfqRequestDrawer';
 import type { RfqSendRequestListItem } from '@/lib/api-client';
 
 function StatusIcon({ status }: { status: string }) {
@@ -52,16 +51,10 @@ function statusBgClass(status: string): string {
 
 export function RequestsTab({
   rfqId,
-  rfqNumber,
-  jobId,
-  sendDrawerOpen,
-  onSendDrawerOpenChange,
+  refreshToken = 0,
 }: {
   rfqId: string;
-  rfqNumber?: string | null;
-  jobId?: string | null;
-  sendDrawerOpen: boolean;
-  onSendDrawerOpenChange: (open: boolean) => void;
+  refreshToken?: number;
 }) {
   const [requests, setRequests] = useState<RfqSendRequestListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,32 +80,18 @@ export function RequestsTab({
 
   useEffect(() => {
     void load();
-  }, [load]);
-
-  const handleSendSuccess = useCallback(() => {
-    void load();
-  }, [load]);
+  }, [load, refreshToken]);
 
   if (selectedRequestId) {
     return (
-      <>
-        <RequestBatchDetail
-          rfqId={rfqId}
-          requestId={selectedRequestId}
-          onBack={() => {
-            setSelectedRequestId(null);
-            void load();
-          }}
-        />
-        <SendRfqRequestDrawer
-          open={sendDrawerOpen}
-          onOpenChange={onSendDrawerOpenChange}
-          rfqId={rfqId}
-          rfqNumber={rfqNumber}
-          jobId={jobId}
-          onSuccess={handleSendSuccess}
-        />
-      </>
+      <RequestBatchDetail
+        rfqId={rfqId}
+        requestId={selectedRequestId}
+        onBack={() => {
+          setSelectedRequestId(null);
+          void load();
+        }}
+      />
     );
   }
 
@@ -189,15 +168,6 @@ export function RequestsTab({
           ))}
         </div>
       )}
-
-      <SendRfqRequestDrawer
-        open={sendDrawerOpen}
-        onOpenChange={onSendDrawerOpenChange}
-        rfqId={rfqId}
-        rfqNumber={rfqNumber}
-        jobId={jobId}
-        onSuccess={handleSendSuccess}
-      />
     </div>
   );
 }

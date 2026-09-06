@@ -18,6 +18,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useLineItems } from './LineItemsProvider';
@@ -33,7 +34,7 @@ import { ItemRow } from './ItemRow';
 import { AssemblyRow } from './AssemblyRow';
 import { ScopeCard } from './ScopeCard';
 import { LI_HEADER_COUNT, LI_HEADER_TOTAL, LineItemsColGroup, LineItemsThead, LineItemsTableShell } from './lib/table-parts';
-import { HeaderVisibilityToggles } from './lib/header-visibility';
+import { HeaderVisibilityMenuItems } from './lib/header-visibility';
 import { LineDetailHoverWrap } from './lib/line-detail-hover';
 import { filterVisibleItems, isSelectablePicked } from './lib/selection-filter';
 
@@ -60,8 +61,6 @@ export const GroupCard = memo(function GroupCard({ group, groupIndex, totalGroup
     handleBulkToggle,
     hideUnselected,
     resolveHeaderVisibility,
-    isHeaderOverridden,
-    toggleHeaderOverride,
     toggleHeaderField,
   } = useLineItems();
 
@@ -371,29 +370,51 @@ export const GroupCard = memo(function GroupCard({ group, groupIndex, totalGroup
           </span>
         )}
 
-        {!isReadOnly && (actions.onEditGroup || actions.onDeleteGroup || actions.onMoveGroupUp || actions.onMoveGroupDown) && (
+        {(showColumnVisibilityToggles ||
+          (!isReadOnly &&
+            (actions.onEditGroup || actions.onDeleteGroup || actions.onMoveGroupUp || actions.onMoveGroupDown))) && (
           <div onClick={(e) => e.stopPropagation()}>
             <DropdownMenu>
-              <DropdownMenuTrigger className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-blue-200/80">
+              <DropdownMenuTrigger
+                aria-label={`${label} actions`}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-blue-200/80"
+              >
                 <MoreVertical className="h-4 w-4 text-blue-800" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {actions.onMoveGroupUp && groupIndex > 0 && (
+                {showColumnVisibilityToggles && (
+                  <HeaderVisibilityMenuItems
+                    showQuantities={resolvedGroup.showQuantities}
+                    showPricing={resolvedGroup.showPricing}
+                    onToggleQuantities={() =>
+                      toggleHeaderField(gId, 'showQuantities', resolvedGroup.showQuantities, showQuantities, showPricing)
+                    }
+                    onTogglePricing={() =>
+                      toggleHeaderField(gId, 'showPricing', resolvedGroup.showPricing, showQuantities, showPricing)
+                    }
+                  />
+                )}
+                {showColumnVisibilityToggles &&
+                  !isReadOnly &&
+                  (actions.onEditGroup || actions.onDeleteGroup || actions.onMoveGroupUp || actions.onMoveGroupDown) && (
+                    <DropdownMenuSeparator />
+                  )}
+                {!isReadOnly && actions.onMoveGroupUp && groupIndex > 0 && (
                   <DropdownMenuItem onClick={() => actions.onMoveGroupUp?.(gId)}>
                     <ArrowUp className="mr-2 h-4 w-4" /> Move up
                   </DropdownMenuItem>
                 )}
-                {actions.onMoveGroupDown && groupIndex < totalGroups - 1 && (
+                {!isReadOnly && actions.onMoveGroupDown && groupIndex < totalGroups - 1 && (
                   <DropdownMenuItem onClick={() => actions.onMoveGroupDown?.(gId)}>
                     <ArrowDown className="mr-2 h-4 w-4" /> Move down
                   </DropdownMenuItem>
                 )}
-                {actions.onEditGroup && (
+                {!isReadOnly && actions.onEditGroup && (
                   <DropdownMenuItem onClick={() => actions.onEditGroup?.(gId)}>
                     <Pencil className="mr-2 h-4 w-4" /> {labels.editGroup}
                   </DropdownMenuItem>
                 )}
-                {actions.onDeleteGroup && (
+                {!isReadOnly && actions.onDeleteGroup && (
                   <DropdownMenuItem className="text-red-600" onClick={() => actions.onDeleteGroup?.(gId)}>
                     <Trash2 className="mr-2 h-4 w-4" /> {labels.deleteGroup}
                   </DropdownMenuItem>
@@ -412,20 +433,7 @@ export const GroupCard = memo(function GroupCard({ group, groupIndex, totalGroup
             {/* Group-level items */}
             {visibleItems.length > 0 && (
               <div className="overflow-x-auto">
-                <LineItemsTableShell
-                  showOverrides={showColumnVisibilityToggles}
-                  overrides={
-                    <HeaderVisibilityToggles
-                      isOverridden={isHeaderOverridden(gId)}
-                      onToggleOverride={() => toggleHeaderOverride(gId, showQuantities, showPricing)}
-                      showQuantities={resolvedGroup.showQuantities}
-                      showPricing={resolvedGroup.showPricing}
-                      onToggleQuantities={() => toggleHeaderField(gId, 'showQuantities', resolvedGroup.showQuantities)}
-                      onTogglePricing={() => toggleHeaderField(gId, 'showPricing', resolvedGroup.showPricing)}
-                      colorScheme="blue"
-                    />
-                  }
-                >
+                <LineItemsTableShell>
                 <table className="w-full table-fixed divide-y divide-slate-100 text-sm">
                   <LineItemsColGroup
                     showDragHandle={showDragHandle}

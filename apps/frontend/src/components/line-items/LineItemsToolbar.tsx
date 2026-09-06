@@ -56,8 +56,6 @@ export const LineItemsToolbar = memo(function LineItemsToolbar({ hideActions = f
     setHiddenGroupIds,
     setShowMarkup,
     setShowGst,
-    setShowQuantities,
-    setShowPricing,
     setShowUnselected,
     toggleAll,
     catalogUpdateMode,
@@ -66,7 +64,7 @@ export const LineItemsToolbar = memo(function LineItemsToolbar({ hideActions = f
     isReadOnly,
   } = useLineItems();
 
-  const { showPricing, showMarkup, showGst, showQuantities, mode, showColumnVisibilityToggles, labels, pricingDetail, showInvoiceProgress, showPreviouslyInvoiced } = config;
+  const { showPricing, showMarkup, showGst, mode, labels, pricingDetail, showInvoiceProgress, showPreviouslyInvoiced } = config;
   const showSelect = !!selection;
   const allCollapsed = groups.length > 0 && groups.every((g, i) => collapsed.has(g.id ?? `group-${i}`));
   const groupFilterActive = hiddenGroupIds.size > 0;
@@ -78,12 +76,12 @@ export const LineItemsToolbar = memo(function LineItemsToolbar({ hideActions = f
     <div
       data-slot="line-items-toolbar"
       className={cn(
-        'sticky top-0 z-[9] flex flex-wrap cursor-pointer items-center justify-between gap-3 rounded-lg border-2 border-slate-400 bg-slate-100 px-5 py-4 shadow-md transition-colors hover:bg-slate-200',
+        'sticky top-0 z-[9] flex cursor-pointer items-center gap-3 rounded-lg border-2 border-slate-400 bg-slate-100 px-5 py-4 shadow-md transition-colors hover:bg-slate-200',
       )}
       onClick={toggleAll}
     >
-      {/* Left: collapse toggle + line count */}
-      <div className="flex items-center gap-2">
+      {/* Left: collapse toggle + line count + search + actions */}
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
         <span className="flex items-center text-slate-600">
           {allCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </span>
@@ -199,12 +197,9 @@ export const LineItemsToolbar = memo(function LineItemsToolbar({ hideActions = f
             </DropdownMenu>
           </span>
         )}
-      </div>
 
-      {/* Center: search + toggles + buttons */}
-      <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
         {mode !== 'catalog' && (
-          <div className="relative w-56">
+          <div className="relative w-56" onClick={(e) => e.stopPropagation()}>
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
             <Input
               type="text"
@@ -225,31 +220,8 @@ export const LineItemsToolbar = memo(function LineItemsToolbar({ hideActions = f
           </div>
         )}
 
-        {mode !== 'catalog' && (showColumnVisibilityToggles || showSelect) && (
-          <div className="flex items-center gap-3 border-l border-slate-300 pl-3">
-            {showColumnVisibilityToggles && (
-              <>
-                <div className="flex items-center gap-1.5">
-                  <Switch id="li-show-qty" checked={showQuantities} onCheckedChange={setShowQuantities} aria-label="Show quantities" />
-                  <Label htmlFor="li-show-qty" className="cursor-pointer text-xs font-medium text-slate-700">Qty</Label>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <Switch id="li-show-pricing" checked={showPricing} onCheckedChange={setShowPricing} aria-label="Show pricing" />
-                  <Label htmlFor="li-show-pricing" className="cursor-pointer text-xs font-medium text-slate-700">Pricing</Label>
-                </div>
-              </>
-            )}
-            {showSelect && (
-              <div className="flex items-center gap-1.5">
-                <Switch id="li-show-unselected" checked={showUnselected} onCheckedChange={setShowUnselected} aria-label="Show unselected" />
-                <Label htmlFor="li-show-unselected" className="cursor-pointer text-xs font-medium text-slate-700">Unselected</Label>
-              </div>
-            )}
-          </div>
-        )}
-
         {!hideActions && (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
             {actions.onOpenCatalogDrawer && (
               <Button size="sm" variant="outline" onClick={actions.onOpenCatalogDrawer} title="Open catalogue">
                 <Package className="h-4 w-4" />
@@ -270,8 +242,16 @@ export const LineItemsToolbar = memo(function LineItemsToolbar({ hideActions = f
         )}
       </div>
 
+      {/* Center: Unselected toggle */}
+      {mode !== 'catalog' && showSelect && (
+        <div className="flex shrink-0 items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+          <Switch id="li-show-unselected" checked={showUnselected} onCheckedChange={setShowUnselected} aria-label="Show unselected" />
+          <Label htmlFor="li-show-unselected" className="cursor-pointer text-xs font-medium text-slate-700">Unselected</Label>
+        </div>
+      )}
+
       {/* Right: totals with toggle UX */}
-      <div className="flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
+      <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-4" onClick={(e) => e.stopPropagation()}>
         {showPricing && (
           <>
             {pricingDetail === 'cost' ? (

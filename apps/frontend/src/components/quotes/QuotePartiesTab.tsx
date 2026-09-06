@@ -51,8 +51,16 @@ function getParty(
     api[`${prefix}${key[0].toUpperCase()}${key.slice(1)}`];
   const fromApi = (k: string): string | undefined => asString(prefixed(k));
   const fromBucket = (k: string): string | undefined => asString(base[k]);
+  const promotedName =
+    bucket === 'quoteTo'
+      ? asString(quote.quoteToName)
+      : bucket === 'quoteFor'
+        ? asString(quote.quoteForName)
+        : undefined;
+  const promotedEmail =
+    bucket === 'quoteTo' ? asString(quote.quoteToEmail) : undefined;
   return {
-    name: fromBucket('name') ?? fromApi('name'),
+    name: fromBucket('name') ?? fromApi('name') ?? promotedName,
     companyRegistrationNumber:
       fromBucket('companyRegistrationNumber') ??
       fromApi('companyRegistrationNumber'),
@@ -60,7 +68,7 @@ function getParty(
     clientReference:
       fromBucket('clientReference') ?? fromApi('clientReference'),
     phoneNumber: fromBucket('phoneNumber') ?? fromApi('phoneNumber'),
-    email: fromBucket('email') ?? fromApi('email'),
+    email: fromBucket('email') ?? fromApi('email') ?? promotedEmail,
     unitNumber: fromBucket('unitNumber') ?? fromApi('unitNumber'),
     streetNumber: fromBucket('streetNumber') ?? fromApi('streetNumber'),
     streetName: fromBucket('streetName') ?? fromApi('streetName'),

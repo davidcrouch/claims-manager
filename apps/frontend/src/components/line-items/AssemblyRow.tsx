@@ -11,6 +11,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useLineItems } from './LineItemsProvider';
@@ -23,7 +24,7 @@ import { LineScopeStatusAssemblyField } from './LineScopeStatusField';
 import { displayLabelText } from './lib/display';
 import { RowLeadCheckbox, RowLeadDrag, RowLeadExpand, ROW_LEAD_ROW_CLS } from './lib/row-lead';
 import { LI_HEADER_COUNT, LI_HEADER_TOTAL, LineItemsColGroup, LineItemsThead, LineItemsTableShell } from './lib/table-parts';
-import { HeaderVisibilityToggles } from './lib/header-visibility';
+import { HeaderVisibilityMenuItems } from './lib/header-visibility';
 import { LineDetailHoverWrap } from './lib/line-detail-hover';
 import { filterVisibleItems, isSelectablePicked } from './lib/selection-filter';
 import type { ApiCombo } from './lib/types';
@@ -65,8 +66,6 @@ export const AssemblyRow = memo(function AssemblyRow({
     handleBulkToggle,
     hideUnselected,
     resolveHeaderVisibility,
-    isHeaderOverridden,
-    toggleHeaderOverride,
     toggleHeaderField,
   } = useLineItems();
 
@@ -349,42 +348,49 @@ export const AssemblyRow = memo(function AssemblyRow({
           </span>
         )}
 
-        <div onClick={(e) => e.stopPropagation()}>
-          {!isReadOnly && actions.onDeleteCombo && (
+        {(showColumnVisibilityToggles || (!isReadOnly && actions.onDeleteCombo)) && (
+          <div onClick={(e) => e.stopPropagation()}>
             <DropdownMenu>
-              <DropdownMenuTrigger className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-slate-200/80">
+              <DropdownMenuTrigger
+                aria-label={`${comboName} actions`}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-slate-200/80"
+              >
                 <MoreVertical className="h-4 w-4 text-slate-500" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  className="text-red-600"
-                  onClick={() => combo.id && actions.onDeleteCombo?.(combo.id)}
-                >
-                  <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete assembly
-                </DropdownMenuItem>
+                {showColumnVisibilityToggles && (
+                  <HeaderVisibilityMenuItems
+                    showQuantities={resolvedAssembly.showQuantities}
+                    showPricing={resolvedAssembly.showPricing}
+                    onToggleQuantities={() =>
+                      toggleHeaderField(comboKey, 'showQuantities', resolvedAssembly.showQuantities, parentQty, parentPrice)
+                    }
+                    onTogglePricing={() =>
+                      toggleHeaderField(comboKey, 'showPricing', resolvedAssembly.showPricing, parentQty, parentPrice)
+                    }
+                  />
+                )}
+                {showColumnVisibilityToggles && !isReadOnly && actions.onDeleteCombo && (
+                  <DropdownMenuSeparator />
+                )}
+                {!isReadOnly && actions.onDeleteCombo && (
+                  <DropdownMenuItem
+                    className="text-red-600"
+                    onClick={() => combo.id && actions.onDeleteCombo?.(combo.id)}
+                  >
+                    <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete assembly
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
-          )}
-        </div>
+          </div>
+        )}
       </LineDetailHoverWrap>
 
       {/* Assembly child items */}
       {!isCollapsed && visibleComboItems.length > 0 && (
         <div className="mx-3 overflow-x-auto border-t border-slate-100">
-          <LineItemsTableShell
-            showOverrides={showColumnVisibilityToggles}
-            overrides={
-              <HeaderVisibilityToggles
-                isOverridden={isHeaderOverridden(comboKey)}
-                onToggleOverride={() => toggleHeaderOverride(comboKey, parentQty, parentPrice)}
-                showQuantities={resolvedAssembly.showQuantities}
-                showPricing={resolvedAssembly.showPricing}
-                onToggleQuantities={() => toggleHeaderField(comboKey, 'showQuantities', resolvedAssembly.showQuantities)}
-                onTogglePricing={() => toggleHeaderField(comboKey, 'showPricing', resolvedAssembly.showPricing)}
-                colorScheme="slate"
-              />
-            }
-          >
+          <LineItemsTableShell>
           <table className="w-full table-fixed divide-y divide-slate-50 text-sm">
             <LineItemsColGroup
               showDragHandle={showDragHandle}

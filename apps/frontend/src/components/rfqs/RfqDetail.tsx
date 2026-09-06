@@ -66,6 +66,7 @@ import {
   type LineNoteTarget,
 } from '@/components/rfqs/LineItemNoteDrawer';
 import { RequestsTab } from '@/components/rfqs/RequestsTab';
+import { SendRfqRequestDrawer } from '@/components/rfqs/SendRfqRequestDrawer';
 
 // ---------- helpers ---------------------------------------------------------
 
@@ -950,6 +951,7 @@ export function RfqDetail({
   const [tab, setTab] = useState<RfqTab>('overview');
   const [scopeSave, setScopeSave] = useState<ScopeSaveControls | null>(null);
   const [sendDrawerOpen, setSendDrawerOpen] = useState(false);
+  const [requestsRefreshToken, setRequestsRefreshToken] = useState(0);
 
   const handleScopeSaveControls = useCallback((controls: ScopeSaveControls | null) => {
     setScopeSave((prev) => {
@@ -968,10 +970,6 @@ export function RfqDetail({
     });
   }, []);
 
-  useEffect(() => {
-    if (tab !== 'requests') setSendDrawerOpen(false);
-  }, [tab]);
-
   const tabs: Array<{ id: RfqTab; label: string; icon: typeof Calendar }> = [
     { id: 'overview', label: 'Overview', icon: FileSignature },
     { id: 'scope-items', label: 'Scope Items', icon: Layers },
@@ -984,7 +982,6 @@ export function RfqDetail({
 
   const scopeDirty = scopeSave?.pageDirty ?? false;
   const scopeSaving = scopeSave?.saving ?? false;
-  const showSendRequest = tab === 'requests';
 
   return (
     <div className="flex flex-col">
@@ -995,16 +992,14 @@ export function RfqDetail({
         dirty={scopeDirty}
       />
       <SetHeaderActions>
-        {showSendRequest && (
-          <Button
-            size="default"
-            onClick={() => setSendDrawerOpen(true)}
-            className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
-          >
-            <Send className="h-3.5 w-3.5" />
-            Send Request
-          </Button>
-        )}
+        <Button
+          size="default"
+          onClick={() => setSendDrawerOpen(true)}
+          className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+        >
+          <Send className="h-3.5 w-3.5" />
+          Send Request
+        </Button>
         <HeaderActionToolbar>
           <PrintButton documentType="rfq" entityId={rfq.id} jobId={job?.id} />
           <ArchiveEntityButton
@@ -1053,18 +1048,20 @@ export function RfqDetail({
           <ProposalsTab rfqId={rfq.id} fetchProposals={fetchProposals} />
         )}
         {tab === 'requests' && (
-          <RequestsTab
-            rfqId={rfq.id}
-            rfqNumber={rfq.rfqNumber}
-            jobId={rfq.jobId}
-            sendDrawerOpen={sendDrawerOpen}
-            onSendDrawerOpenChange={setSendDrawerOpen}
-          />
+          <RequestsTab rfqId={rfq.id} refreshToken={requestsRefreshToken} />
         )}
         {tab === 'activities' && <ActivitiesTab />}
         {tab === 'communications' && <CommunicationsTab />}
         {tab === 'timeline' && <TimelineTab rfq={rfq} />}
       </div>
+      <SendRfqRequestDrawer
+        open={sendDrawerOpen}
+        onOpenChange={setSendDrawerOpen}
+        rfqId={rfq.id}
+        rfqNumber={rfq.rfqNumber}
+        jobId={rfq.jobId}
+        onSuccess={() => setRequestsRefreshToken((n) => n + 1)}
+      />
     </div>
   );
 }

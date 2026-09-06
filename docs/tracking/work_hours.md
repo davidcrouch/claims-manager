@@ -585,7 +585,7 @@
   Improved **estimate capture, approval, and publish** flows plus job contact linking so quoting and party management stay in one workspace.
   Outcome: operations, commercial handoffs, documentation, and record lifecycle controls land as one coherent product update.
 
-- `2026-08-08` `f8692c3` **38 h**
+- `2026-08-08` `f8692c3` **16 h**
   `104 files | +10 013 -1 005 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
   Lay summary: Staff can keep company documents separate from each job?s files, choose filing templates when setting up the organisation and creating jobs, and keep clearer site journals.
   **Company and project document libraries, richer site journals, and smoother first-time setup.** Organisations now have a company filing area plus a separate project filing area for each job, chosen from templates during setup and when a job is created.
@@ -606,7 +606,7 @@
   Work orders, proposals, RFQs, invoices, and bills show clearer status and next-step actions from their detail screens.
   Outcome: daily work, ownership, catalogue structure, and quoting sit together in one operational update.
 
-- `2026-08-09` `69aa3c3` **48 h**
+- `2026-08-09` `69aa3c3` **20 h**
   `145 files | +19 536 -920 | Tier 2 standard / Tier 3 complex / Tier 4 deep integration | Heavy orchestration`
   Lay summary: Partner organisations can now pass work requests, jobs, invoices and bills between each other, with clearer printing, templates, and site journals for everyday staff.
   **Completed partner-to-partner supply chain handoffs plus clearer document printing and filing.** Requests for quote now become jobs at the receiving organisation, and invoices become bills, so work and payment requests move between companies without re-keying.
@@ -637,7 +637,7 @@
   The change is limited to how the web app decides which paths need middleware.
   Outcome: staff can complete login and use the workspace without the previous API failure.
 
-- `2026-08-13` `5326be7` **40 h**
+- `2026-08-13` `5326be7` **27 h**
   `133 files | +4 230 -3 261 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
   Lay summary: Staff only see and change what their role allows, can switch organisation without signing in again, and the product now deploys to the hosted cloud environments.
   **Role-based access, safer sign-in, organisation switching, and hosted deploy updates.** Staff permissions now control who can view and change each area of the product, with an administration screen to manage roles.
@@ -648,7 +648,7 @@
   Hosting now deploys the services to Google Cloud on staging and production, and the old Fly.io configuration was removed.
   Outcome: access control, invitations, and hosted releases work together as one security and operations update.
 
-- `2026-08-13` `caefdc7` **0.5 h**
+- `2026-08-13` `caefdc7` **0 h**
   `2 files | +13 -3 | Tier 2 standard | Light orchestration`
   Lay summary: The automated product build succeeds again so the latest updates can be released.
   **Fixed the failed website build so the latest update can ship.** Role management responses are read safely when creating a role.
@@ -667,7 +667,7 @@
   The old relay route on the previous domain was removed.
   Outcome: Crunchwork staging webhooks are received and processed on both staging and local development environments via the updated relay.
 
-- `2026-08-14` `3c32b8e` **0.5 h**
+- `2026-08-14` `3c32b8e` **0 h**
   `5 files | +20 -2 | Tier 3 complex | Light orchestration`
   Lay summary: Staging sign-in service can start again after a missing encryption setting was added to hosting.
   **Fixed staging auth deploy by wiring the required Redis encryption secret.** Auth was failing Cloud Run startup checks because a required production encryption key was never mounted.
@@ -685,7 +685,7 @@
   Application authentication still protects normal API routes; only marked public routes stay open.
   Outcome: staging API can be reached at the public staging API hostname.
 
-- `2026-08-14` `f10adfa` **0.5 h**
+- `2026-08-14` `f10adfa` **0 h**
   `5 files | +40 -15 | Tier 3 complex | Moderate orchestration`
   Lay summary: Staging hosting was fixed so the public API hostname can finish provisioning without breaking certificates or permissions.
   **Fixed staging load-balancer certificate rotation and deploy permissions.** Adding the public API hostname required a new TLS certificate without taking down existing ones.
@@ -726,7 +726,7 @@
   Improved catalogue selection and outbound sync for more accurate item handling.
   Speeding up claim, job, quote, and invoice page loads with shared cached data loading.
 
-- `2026-08-15` `d3da0f8` **0.5 h**
+- `2026-08-15` `d3da0f8` **0 h**
   `1 files | +1 -1 | Tier 2 standard | Light orchestration`
   Lay summary: Fixed a build error that blocked deploying the latest invoice page updates.
   Corrected invoice detail claim lookup to use the related job instead of a missing invoice field.
@@ -746,7 +746,7 @@
   Database updates back the new assignee and note fields.
   Outcome: clearer ownership on quotes and better context on RFQ line items.
 
-- `2026-08-16` `5813ec6` **78.5 h**
+- `2026-08-16` `5813ec6` **29 h**
   `224 files | +18269 −2990 | Tier 1 mechanical / Tier 2 standard / Tier 3 complex | Heavy orchestration`
   Lay summary: Staff can install capability packs, reshape document templates with live transforms, and use a broader assistant toolkit—including field assessment skills—across the product.
   Delivered installable capability packs so organisations can turn on agents and skills as packaged features.
@@ -777,7 +777,7 @@
   Added an Ensure Construction admin seed and wiring for transactional email secrets in hosted environments.
   Outcome: faster day-to-day navigation from calendar and lists, with cleaner admin bootstrap.
 
-- `2026-08-17` `659bb61` **0.5 h**
+- `2026-08-17` `659bb61` **0 h**
   `3 files | +42 −7 | Tier 2 standard / Tier 3 complex | Light orchestration`
   Lay summary: Fixed a failed staging release by correcting task sync typing and recognising an email secret that was already in place.
   Corrected task sync typing so the API build and checks pass again.
@@ -786,7 +786,7 @@
   No change to day-to-day product behaviour beyond unblocking the release.
   Outcome: staging pipeline can proceed again.
 
-- `2026-08-17` `3683461` **0.5 h**
+- `2026-08-17` `3683461` **0 h**
   `2 files | +19 −24 | Tier 2 standard | Light orchestration`
   Lay summary: Fixed the sign-in service build so staging packaging succeeds after the admin seed script failed type checks.
   Updated the Ensure Construction admin seed to use the shared organisation helpers.
@@ -911,13 +911,13 @@
   List screens across the application use consistent server-side filtering and loading states.
   Outbound webhooks and projection events carry entity numbers and updated party information.
 
-- `2026-08-24` `c3f12a2` **0.5 h**
+- `2026-08-24` `c3f12a2` **0 h**
   **fix(api): resolve CI typecheck failures.** Remove unsupported tx argument from quotesRepo.findOne and use filesystem category displayName instead of the removed name field.
 
-- `2026-08-24` `53d51e0` **0.5 h**
+- `2026-08-24` `53d51e0` **0 h**
   **test(api): expect three providers in registry summary.** Update providers findAll spec for the more0-ensure registry entry introduced alongside the direct provider.
 
-- `2026-08-24` `d63704b` **12 h**
+- `2026-08-24` `d63704b` **14 h**
   `93 files | +8465 −5927 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
   Lay summary: Quote and related line lists are easier to group and edit, invoices print from a proper template, and the people on a job go through to the partner system.
   **Rebuilt line-item editing and invoice documents, and sent job contacts to the partner system.**
@@ -937,7 +937,7 @@
   Editing several selected lines at once fills in the full set of fields so nothing is left blank.
   The same behaviour applies on the catalogue line list as on quotes.
 
-- `2026-08-25` `1021abc` **4.5 h**
+- `2026-08-25` `1021abc` **6.5 h**
   `16 files | +550 −55 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Jobs from the partner system that share the same insurer reference now use one internal job number, and the claims list shows linked jobs more clearly.
   **Aligned internal job numbers and improved claims list job visibility.**
@@ -948,7 +948,7 @@
   Claims list job column shows the primary job with a hover menu listing every related job and its type badge when multiple jobs exist on one claim.
   Job overview and shared label helpers surface the insurer reference consistently, separate from the partner system's own job identifier.
 
-- `2026-08-26` `0e70cad` **10 h**
+- `2026-08-26` `0e70cad` **7 h**
   `111 files | +4101 −3266 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Record pages now share a consistent header and action bar, task types are built in instead of configured separately, and jobs and line-item editing work more smoothly.
   **Unified detail-page headers and simplified task types across the product.**
@@ -969,7 +969,7 @@
   Completed and cancelled claims appear under archive instead of dropping off the active list.
   Each release applies the catalogue and claim-label updates automatically after deploy.
 
-- `2026-08-26` `fcff4e5` **0.5 h**
+- `2026-08-26` `fcff4e5` **0 h**
   `3 files | +37 −28 | Tier 3 complex | Light orchestration`
   Lay summary: A failed hosted release is corrected so claim labels and the product catalogue still update automatically after deploy.
   **Fixed the post-deploy update so hosted environments finish loading claim labels and the item catalogue.**
@@ -1016,7 +1016,7 @@
   Staff can see at a glance what is already on a job before opening each list.
   These updates apply on the website after the next release.
 
-- `2026-08-27` `3a58387` **8 h**
+- `2026-08-27` `3a58387` **10 h**
   `60 files | +3071 −327 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Staff can update the catalogue from an estimate, invoices send more reliably to the insurer, and lists show clearer record numbers.
   **Catalogue updates from estimates, more reliable insurer invoicing, and clearer record labels.**
@@ -1026,7 +1026,7 @@
   Sign-in recovers more cleanly from an old session, and password reset is more reliable.
   The same insurer record can no longer create two work orders from one purchase order.
 
-- `2026-08-30` `08515fe` **16 h**
+- `2026-08-30` `08515fe` **26 h**
   `151 files | +5 029 −1 989 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
   Lay summary: Jobs, tasks, and appointments now show whether they have reached the insurer, the in-app assistant follows the page and assessment section you are on, and printing and sign-in are more reliable.
   **Insurer sync status across jobs, tasks, and appointments, plus a page-aware in-app assistant.**
@@ -1037,7 +1037,7 @@
   Sign-in and organisation setup handle hosted database connections more reliably, and the assistant tools connection follows standard sign-in discovery.
   Unused hosting access was removed so insurer webhook and cloud services use a simpler, tighter setup.
 
-- `2026-08-30` `ebdb1f1` **0.5 h**
+- `2026-08-30` `ebdb1f1` **0 h**
   `3 files | +25 −13 | Tier 2 standard | Light orchestration`
   Lay summary: Fixed a release check so the latest updates can go live on the hosted site.
   **Unblocked the hosted release after a type-check failure.**
@@ -1046,7 +1046,7 @@
   Confirmed the application type-check and package build succeed locally.
   The hosted site can pick up the latest job, task, appointment, and assistant updates.
 
-- `2026-08-31` `a63652b` **9 h**
+- `2026-08-31` `a63652b` **10 h**
   `144 files | +16 996 −293 | Tier 1 mechanical / Tier 2 standard / Tier 3 complex | Heavy orchestration`
   Lay summary: Staff can open in-product help for the page they are on, manage catalogues more easily, and see clearer details on estimate line items.
   **In-product help, catalogue management, and clearer line-item details.**
@@ -1067,7 +1067,7 @@
   Journal site entries and walk-through image generation are available from the API and assistant tools.
   The help-guide ingestion job is created in staging infrastructure and deployment fails clearly if it is missing.
 
-- `2026-08-31` `a01f553` **0.5 h**
+- `2026-08-31` `a01f553` **0 h**
   `2 files | +12 −12 | Tier 2 standard | Light orchestration`
   Lay summary: Fixed a release check so the latest updates can go live on the hosted site.
   **Unblocked the hosted release after a type-check failure.**
@@ -1107,7 +1107,7 @@
   Catalogue selection and line-item editing are clearer, including scope status on lines.
   Hosting is updated so related services can call each other securely in staging and production.
 
-- `2026-09-03` `9627b72` **0.5 h**
+- `2026-09-03` `9627b72` **0 h**
   `4 files | +4 −4 | Tier 2 standard | Light orchestration`
   Lay summary: Fixed a release check so the latest list and purchase-order updates can go live on the hosted site.
   **Unblocked the hosted release after a type-check failure.**
@@ -1135,7 +1135,7 @@
   Catalogue bill-of-materials adds confirm what will be included before lines are created.
   Estimate publish and outbound sync follow the same rules; the capabilities framework is documented for future job kinds.
 
-- `2026-09-03` `fb8df93` **0.5 h**
+- `2026-09-03` `fb8df93` **0 h**
   `1 file | +6 −1 | Tier 2 standard | Light orchestration`
   Lay summary: Fixed a release check so the latest job and form updates can go live on the hosted site.
   **Unblocked the hosted release after a type-check failure.**
@@ -1144,7 +1144,7 @@
   The hosted site can pick up job-kind capabilities and related form updates.
   No change to end-user behaviour beyond enabling the release.
 
-- `2026-09-06` `af3cdef` **10.5 h**
+- `2026-09-06` `af3cdef` **20.5 h**
   `80 files | +6 065 −1 493 | Tier 2 standard / Tier 3 complex | Heavy orchestration`
   Lay summary: Purchase orders can be built from a work order or proposal with chosen lines, invoices manage their lines more clearly, and create forms share a consistent job picker.
   **Purchase-order sourcing, invoice lines, and shared form job picking.**
@@ -1154,3 +1154,14 @@
   Line-item editing and catalogue updates work more consistently on purchase orders.
   Chat display options and catalogue selection support the same day-to-day flows.
   Outcome: smoother ordering and invoicing from existing job scope without re-keying lines.
+
+- `2026-09-07` `PENDING` **9 h**
+  `19 files | +1 113 -590 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  Lay summary: New quotes pick up From, For, and To parties from the organisation and job contacts, RFQ emails can send a Word file when a PDF is not ready, and line tables let staff hide quantity or price columns.
+  **Quote party defaults, RFQ document attachments, and line column controls.**
+  New quotes fill From, For, and To from the organisation and the job customer and insurer contacts when those fields are left blank.
+  Quote party details stay aligned when quotes sync with the external quoting system.
+  RFQ send and filing use a Word document when a PDF is not available yet.
+  The RFQ request send screen is clearer for choosing recipients and attachments.
+  Line-item tables support hiding quantity or price columns per section while editing.
+  Outcome: fewer blank party fields on quotes and smoother RFQ and estimate editing day to day.

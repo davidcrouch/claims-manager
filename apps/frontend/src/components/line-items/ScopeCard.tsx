@@ -11,6 +11,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useLineItems } from './LineItemsProvider';
@@ -22,7 +23,7 @@ import { LineScopeStatusBadge } from './lib/badges';
 import { displayLabelText } from './lib/display';
 import { RowLeadCheckbox, RowLeadDrag, RowLeadExpand, ROW_LEAD_ROW_CLS } from './lib/row-lead';
 import { LI_HEADER_COUNT, LI_HEADER_TOTAL, LineItemsColGroup, LineItemsThead, LineItemsTableShell } from './lib/table-parts';
-import { HeaderVisibilityToggles } from './lib/header-visibility';
+import { HeaderVisibilityMenuItems } from './lib/header-visibility';
 import { LineDetailHoverWrap } from './lib/line-detail-hover';
 import { filterVisibleCombos, filterVisibleItems, isSelectablePicked } from './lib/selection-filter';
 import type { ApiItem, ApiScope } from './lib/types';
@@ -66,8 +67,6 @@ export const ScopeCard = memo(function ScopeCard({
     toggleCombo,
     hideUnselected,
     resolveHeaderVisibility,
-    isHeaderOverridden,
-    toggleHeaderOverride,
     toggleHeaderField,
   } = useLineItems();
 
@@ -383,23 +382,43 @@ export const ScopeCard = memo(function ScopeCard({
           </span>
         )}
 
-        <div onClick={(e) => e.stopPropagation()}>
-          {!isReadOnly && actions.onDeleteScope && (
+        {(showColumnVisibilityToggles || (!isReadOnly && actions.onDeleteScope)) && (
+          <div onClick={(e) => e.stopPropagation()}>
             <DropdownMenu>
-              <DropdownMenuTrigger className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-violet-200/80">
+              <DropdownMenuTrigger
+                aria-label={`${scopeName} actions`}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-violet-200/80"
+              >
                 <MoreVertical className="h-4 w-4 text-violet-700" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  className="text-red-600"
-                  onClick={() => scope.id && actions.onDeleteScope?.(scope.id)}
-                >
-                  <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete scope
-                </DropdownMenuItem>
+                {showColumnVisibilityToggles && (
+                  <HeaderVisibilityMenuItems
+                    showQuantities={resolvedScope.showQuantities}
+                    showPricing={resolvedScope.showPricing}
+                    onToggleQuantities={() =>
+                      toggleHeaderField(scopeKey, 'showQuantities', resolvedScope.showQuantities, parentQty, parentPrice)
+                    }
+                    onTogglePricing={() =>
+                      toggleHeaderField(scopeKey, 'showPricing', resolvedScope.showPricing, parentQty, parentPrice)
+                    }
+                  />
+                )}
+                {showColumnVisibilityToggles && !isReadOnly && actions.onDeleteScope && (
+                  <DropdownMenuSeparator />
+                )}
+                {!isReadOnly && actions.onDeleteScope && (
+                  <DropdownMenuItem
+                    className="text-red-600"
+                    onClick={() => scope.id && actions.onDeleteScope?.(scope.id)}
+                  >
+                    <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete scope
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
-          )}
-        </div>
+          </div>
+        )}
       </LineDetailHoverWrap>
 
       {/* Scope content */}
@@ -408,20 +427,7 @@ export const ScopeCard = memo(function ScopeCard({
           {/* Scope-level items */}
           {visibleScopeItems.length > 0 && (
             <div className="overflow-x-auto">
-              <LineItemsTableShell
-                showOverrides={showColumnVisibilityToggles}
-                overrides={
-                  <HeaderVisibilityToggles
-                    isOverridden={isHeaderOverridden(scopeKey)}
-                    onToggleOverride={() => toggleHeaderOverride(scopeKey, parentQty, parentPrice)}
-                    showQuantities={resolvedScope.showQuantities}
-                    showPricing={resolvedScope.showPricing}
-                    onToggleQuantities={() => toggleHeaderField(scopeKey, 'showQuantities', resolvedScope.showQuantities)}
-                    onTogglePricing={() => toggleHeaderField(scopeKey, 'showPricing', resolvedScope.showPricing)}
-                    colorScheme="violet"
-                  />
-                }
-              >
+              <LineItemsTableShell>
               <table className="w-full table-fixed divide-y divide-slate-50 text-sm">
                 <LineItemsColGroup
                   showDragHandle={showDragHandle}

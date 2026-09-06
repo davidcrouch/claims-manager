@@ -181,24 +181,7 @@ export function LineItemsThead(props: TableLayoutProps) {
   );
 }
 
-/** Wraps the full table so header override toggles do not break thead/table structure. */
-export function LineItemsTableShell({
-  children,
-  showOverrides,
-  overrides,
-}: {
-  children: ReactNode;
-  showOverrides?: boolean;
-  overrides?: ReactNode;
-}) {
-  return (
-    <div className="relative">
-      {children}
-      {showOverrides && overrides && (
-        <div className="pointer-events-none absolute left-3/4 top-0 z-10 -translate-x-1/2">
-          <div className="pointer-events-auto py-1.5">{overrides}</div>
-        </div>
-      )}
-    </div>
-  );
+/** Wraps the full table for consistent layout around line-item sections. */
+export function LineItemsTableShell({ children }: { children: ReactNode }) {
+  return <div className="relative">{children}</div>;
 }

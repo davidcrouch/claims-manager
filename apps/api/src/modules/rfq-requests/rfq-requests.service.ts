@@ -290,10 +290,19 @@ export class RfqRequestsService {
     }
 
     const pdfKey = generatedDoc.s3KeyPdf?.trim();
-    if (!pdfKey) {
-      this.logger.warn(`${logPrefix} - No PDF key on generated doc ${generatedDoc.id}; skipping`);
+    const docxKey = generatedDoc.s3KeyDocx?.trim();
+    const objectKey = pdfKey || docxKey;
+    if (!objectKey) {
+      this.logger.warn(
+        `${logPrefix} - No PDF/DOCX key on generated doc ${generatedDoc.id}; skipping`,
+      );
       return;
     }
+    const isPdf = !!pdfKey;
+    const ext = isPdf ? 'pdf' : 'docx';
+    const mimeType = isPdf
+      ? 'application/pdf'
+      : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
     try {
       const filesystem = await this.filesystemsRepo.findByJob(tenantId, rfq.jobId);
@@ -327,15 +336,15 @@ export class RfqRequestsService {
         return;
       }
 
-      const pdfBuffer = await this.gcsStorage.downloadBuffer(pdfKey);
+      const fileBuffer = await this.gcsStorage.downloadBuffer(objectKey);
       const dateStamp = new Date().toISOString().slice(0, 10);
       const safeNumber = (rfq.rfqNumber ?? rfq.name ?? rfq.id).replace(/[^a-zA-Z0-9._-]+/g, '-');
-      const fileName = `Request-for-Quotation-${safeNumber}-${dateStamp}.pdf`;
+      const fileName = `Request-for-Quotation-${safeNumber}-${dateStamp}.${ext}`;
 
       await this.documentsService.createFromBuffer({
         fileName,
-        mimeType: 'application/pdf',
-        buffer: pdfBuffer,
+        mimeType,
+        buffer: fileBuffer,
         categoryId: category.id,
         relatedRecordType: 'RFQ',
         relatedRecordId: rfq.id,
@@ -344,7 +353,7 @@ export class RfqRequestsService {
       });
 
       this.logger.log(
-        `${logPrefix} - Saved PDF to category ${category.slug} (${category.id}) on job ${rfq.jobId}`,
+        `${logPrefix} - Saved ${ext.toUpperCase()} to category ${category.slug} (${category.id}) on job ${rfq.jobId}`,
       );
     } catch (err: unknown) {
       // Soft-fail: email dispatch must still proceed even if folder filing is incomplete.
@@ -392,14 +401,37 @@ export class RfqRequestsService {
   ): Promise<void> {
     const logPrefix = 'api:RfqRequestsService.executeDispatch';
 
-    let pdfBuffer: Buffer | null = null;
-    const pdfKey = generatedDoc.s3KeyPdf;
+    let attachment:
+      | { filename: string; content: Buffer; contentType: string }
+      | undefined;
+
+    const pdfKey = generatedDoc.s3KeyPdf?.trim();
+    const docxKey = generatedDoc.s3KeyDocx?.trim();
     if (pdfKey) {
       try {
-        pdfBuffer = await this.gcsStorage.downloadBuffer(pdfKey);
+        const pdfBuffer = await this.gcsStorage.downloadBuffer(pdfKey);
+        attachment = {
+          filename: `${rfq.rfqNumber ?? 'RFQ'}.pdf`,
+          content: pdfBuffer,
+          contentType: 'application/pdf',
+        };
       } catch (err: unknown) {
         this.logger.error(
           `${logPrefix} - Failed to download PDF: ${err instanceof Error ? err.message : err}`,
+        );
+      }
+    } else if (docxKey) {
+      try {
+        const docxBuffer = await this.gcsStorage.downloadBuffer(docxKey);
+        attachment = {
+          filename: `${rfq.rfqNumber ?? 'RFQ'}.docx`,
+          content: docxBuffer,
+          contentType:
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        };
+      } catch (err: unknown) {
+        this.logger.error(
+          `${logPrefix} - Failed to download DOCX: ${err instanceof Error ? err.message : err}`,
         );
       }
     }
@@ -450,15 +482,7 @@ export class RfqRequestsService {
           html: renderedTemplate.bodyHtml,
           text: renderedTemplate.bodyText,
           replyTo,
-          attachments: pdfBuffer
-            ? [
-                {
-                  filename: `${rfq.rfqNumber ?? 'RFQ'}.pdf`,
-                  content: pdfBuffer,
-                  contentType: 'application/pdf',
-                },
-              ]
-            : undefined,
+          attachments: attachment ? [attachment] : undefined,
           tags: [
             { name: 'category', value: 'rfq-send' },
             ...(rfq.rfqNumber

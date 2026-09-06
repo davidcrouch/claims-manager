@@ -1,7 +1,8 @@
 'use client';
 
-import { cn } from '@/lib/utils';
-import { Switch } from '@/components/ui/switch';
+import {
+  DropdownMenuCheckboxItem,
+} from '@/components/ui/dropdown-menu';
 
 export interface HeaderVisibilityEntry {
   override?: boolean;
@@ -30,47 +31,31 @@ export function resolveHeaderVisibility(
   };
 }
 
-export function HeaderVisibilityToggles({
-  isOverridden,
-  onToggleOverride,
+export function HeaderVisibilityMenuItems({
   showQuantities,
   showPricing,
   onToggleQuantities,
   onTogglePricing,
-  colorScheme = 'slate',
 }: {
-  isOverridden: boolean;
-  onToggleOverride: () => void;
   showQuantities: boolean;
   showPricing: boolean;
   onToggleQuantities: () => void;
   onTogglePricing: () => void;
-  colorScheme?: 'slate' | 'blue' | 'violet';
 }) {
-  const labelCls = {
-    slate: 'text-slate-600',
-    blue: 'text-blue-700',
-    violet: 'text-violet-700',
-  }[colorScheme];
-
   return (
-    <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
-      <label className={cn('flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide', labelCls)}>
-        <Switch checked={isOverridden} onCheckedChange={onToggleOverride} />
-        Override
-      </label>
-      {isOverridden && (
-        <>
-          <label className={cn('flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide', labelCls)}>
-            <Switch checked={showQuantities} onCheckedChange={onToggleQuantities} />
-            Qty
-          </label>
-          <label className={cn('flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide', labelCls)}>
-            <Switch checked={showPricing} onCheckedChange={onTogglePricing} />
-            Price
-          </label>
-        </>
-      )}
-    </div>
+    <>
+      <DropdownMenuCheckboxItem
+        checked={showQuantities}
+        onCheckedChange={() => onToggleQuantities()}
+      >
+        Show Quantity
+      </DropdownMenuCheckboxItem>
+      <DropdownMenuCheckboxItem
+        checked={showPricing}
+        onCheckedChange={() => onTogglePricing()}
+      >
+        Show Price
+      </DropdownMenuCheckboxItem>
+    </>
   );
 }
