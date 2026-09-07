@@ -7,7 +7,7 @@ WORKDIR /app
 # Install pnpm and system dependencies
 RUN apk add --no-cache libc6-compat python3 make g++ \
  && corepack enable \
- && corepack prepare pnpm@latest --activate
+ && corepack prepare pnpm@10.8.0 --activate
 
 #########################################################
 # Dependencies build stage
@@ -64,8 +64,8 @@ COPY --from=build --chown=authserver:nodejs /app ./
 # Copy specific runtime files to the working directory
 COPY --from=build --chown=authserver:nodejs /app/apps/auth-server/package.json ./package.json
 
-# Fix pnpm symlinks by running pnpm rebuild
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Fix pnpm symlinks by running pnpm rebuild (pin to workspace packageManager)
+RUN corepack enable && corepack prepare pnpm@10.8.0 --activate
 RUN pnpm rebuild
 
 # Switch to non-root user
