@@ -1166,7 +1166,7 @@
   Line-item tables support hiding quantity or price columns per section while editing.
   Outcome: fewer blank party fields on quotes and smoother RFQ and estimate editing day to day.
 
-- `2026-09-07` `PENDING` **3 h**
+- `2026-09-07` `ed6a13f` **3 h**
   `41 files | +3 148 −172 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Staff can log and manage product feedback in admin, and catalogue scopes and assemblies load nested parts more reliably with updated IAG ensure-scope data.
   **Admin feedback tracking and catalogue scope assembly improvements.**
