@@ -1176,3 +1176,12 @@
   Import data and a backfill script keep IAG ensure-scope catalogue rows aligned.
   Help assistant and AI tooling references were updated for the new feedback and catalogue behaviour.
   Outcome: easier feedback triage plus more trustworthy scope and assembly catalogues day to day.
+- `2026-09-07` `PENDING` **2 h**
+  `3 files | +17 −2 | Tier 2 standard | Moderate orchestration`
+  Lay summary: Staff can submit product feedback through Help chat without special permissions, and admins can turn feedback access on or off per role.
+  **Feedback permissions and Help chat submit access.**
+  Anyone who can use Help chat can log bugs, questions, and feature ideas without a separate feedback permission.
+  Read and manage feedback permissions appear in Roles & Permissions under a dedicated Feedback section.
+  Admin and manager roles include those permissions by default after RBAC seed.
+  Role settings keep unknown permission groups visible so new catalogue entries are not hidden.
+  Outcome: Help-based feedback works for day-to-day users while admins still control who can review and update items.

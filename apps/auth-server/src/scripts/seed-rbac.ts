@@ -191,6 +191,10 @@ const PERMISSIONS: PermissionDef[] = [
   { permissionName: 'ai.manage', label: 'Manage AI', description: 'Use AI chat and configure personal agents', category: 'ai', scope: 'org' },
   { permissionName: 'ai.admin', label: 'Administer AI', description: 'Manage org-wide AI settings and agents', category: 'ai', scope: 'org' },
 
+  // Feedback tracker (bugs / features / questions logged via Help)
+  { permissionName: 'feedback.read', label: 'Read Feedback', description: 'View feedback items (bugs, feature requests, questions)', category: 'feedback', scope: 'org' },
+  { permissionName: 'feedback.manage', label: 'Manage Feedback', description: 'Update feedback status, priority, and resolution', category: 'feedback', scope: 'org' },
+
   // Integration permissions
   { permissionName: 'integrations.read', label: 'Read Integrations', description: 'View MCP integrations and connections', category: 'integrations', scope: 'org' },
   { permissionName: 'integrations.manage', label: 'Manage Integrations', description: 'Configure MCP integrations and connections', category: 'integrations', scope: 'org' },
@@ -239,6 +243,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'workflows.read', 'workflows.manage',
     'lookups.read', 'lookups.manage',
     'ai.read', 'ai.manage', 'ai.admin',
+    'feedback.read', 'feedback.manage',
     'integrations.read', 'integrations.manage',
   ],
   manager: [
@@ -259,6 +264,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'workflows.read', 'workflows.manage',
     'lookups.read', 'lookups.manage',
     'ai.read', 'ai.manage',
+    'feedback.read', 'feedback.manage',
     'integrations.read', 'integrations.manage',
   ],
   senior_estimator: [

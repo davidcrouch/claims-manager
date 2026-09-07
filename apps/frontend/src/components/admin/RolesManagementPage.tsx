@@ -31,6 +31,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   admin: 'Administration',
   domain: 'Domain',
   ai: 'AI',
+  feedback: 'Feedback',
   integrations: 'Integrations',
 };
 
@@ -378,7 +379,15 @@ export function RolesManagementPage() {
               </div>
 
               <div className="min-h-0 flex-1 space-y-6 overflow-y-auto pr-2">
-                {Object.entries(CATEGORY_LABELS).map(([cat, catLabel]) => {
+                {Object.entries({
+                  ...CATEGORY_LABELS,
+                  // Ensure unknown categories from the catalogue still render
+                  ...Object.fromEntries(
+                    Object.keys(groupedPermissions)
+                      .filter((cat) => !(cat in CATEGORY_LABELS))
+                      .map((cat) => [cat, cat]),
+                  ),
+                }).map(([cat, catLabel]) => {
                   const groups = groupedPermissions[cat];
                   if (!groups) return null;
                   return (

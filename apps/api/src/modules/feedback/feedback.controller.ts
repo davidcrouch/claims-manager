@@ -53,7 +53,7 @@ export class FeedbackController {
   }
 
   @Post()
-  @RequirePermission(P.feedback.manage)
+  @RequirePermission(P.ai.manage)
   async create(
     @Body() dto: CreateFeedbackDto,
     @CurrentUser() user: AuthenticatedUser,
