@@ -1330,3 +1330,56 @@ export interface Assessment {
   updatedAt: string;
   deletedAt: string | null;
 }
+
+// ---------------------------------------------------------------------------
+// Feedback
+// ---------------------------------------------------------------------------
+
+export type FeedbackType =
+  | 'bug'
+  | 'feature_request'
+  | 'enhancement'
+  | 'question'
+  | 'comment';
+
+export type FeedbackPriority = 'low' | 'medium' | 'high' | 'critical';
+
+export type FeedbackStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
+
+export interface FeedbackPageContext {
+  pathname?: string;
+  section?: string;
+  entityType?: string;
+  entityId?: string;
+  jobId?: string;
+  pageLabel?: string;
+  adminArea?: string;
+  activeTab?: string;
+}
+
+export interface FeedbackItem {
+  id: string;
+  tenantId: string;
+  type: FeedbackType;
+  title: string;
+  description: string;
+  priority: FeedbackPriority;
+  status: FeedbackStatus;
+  reportedByUserId: string;
+  reportedByName: string | null;
+  pageContext: FeedbackPageContext;
+  relatedEntityType: string | null;
+  relatedEntityId: string | null;
+  conversationId: string | null;
+  tags: string[];
+  resolution: string | null;
+  payload: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FeedbackStats {
+  byStatus: Record<string, number>;
+  byType: Record<string, number>;
+  total: number;
+}

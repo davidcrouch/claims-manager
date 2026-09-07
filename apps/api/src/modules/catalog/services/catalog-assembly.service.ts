@@ -8,6 +8,7 @@ import { eq, sql } from 'drizzle-orm';
 import {
   CatalogAssemblyComponentsRepository,
   CatalogItemsRepository,
+  type CatalogItemRow,
 } from '../../../database/repositories';
 import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
 import { TenantContext } from '../../../tenant/tenant-context';
@@ -17,6 +18,22 @@ import {
   isAllowedBomComponent,
   isCatalogBomParentKind,
 } from '../catalog.utils';
+
+type EnrichedBomLine = {
+  id: string;
+  tenantId: string;
+  assemblyId: string;
+  componentId: string;
+  quantity: string;
+  wasteFactor: string;
+  sortIndex: number;
+  isOptional: boolean;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  component: CatalogItemRow | null;
+  resolvedUnitCost: string | null;
+};
 
 @Injectable()
 export class CatalogAssemblyService {
@@ -39,28 +56,94 @@ export class CatalogAssemblyService {
       throw new NotFoundException('Assembly or scope not found');
     }
 
-    const lines = await this.bomRepo.findByAssemblyId({
-      tenantId,
-      assemblyId: params.assemblyId,
+    const byAssembly = await this.findComponentsBatch({
+      assemblyIds: [params.assemblyId],
+      includeNestedParents: false,
     });
+    return byAssembly[params.assemblyId] ?? [];
+  }
 
-    const enriched = await Promise.all(
-      lines.map(async (line) => {
-        const component = await this.itemsRepo.findById({
-          tenantId,
-          id: line.componentId,
+  /**
+   * Batch-load BOM lines for many assemblies/scopes with stored costs (no recursive pricing).
+   * When includeNestedParents is true, also loads BOMs for nested assembly/scope components
+   * so catalogue list views can render scope → assembly → items without N round-trips.
+   */
+  async findComponentsBatch(params: {
+    assemblyIds: string[];
+    includeNestedParents?: boolean;
+  }): Promise<Record<string, EnrichedBomLine[]>> {
+    const tenantId = this.getTenantId();
+    const uniqueIds = [...new Set(params.assemblyIds.filter(Boolean))];
+    const result: Record<string, EnrichedBomLine[]> = {};
+
+    for (const id of uniqueIds) {
+      result[id] = [];
+    }
+    if (uniqueIds.length === 0) return result;
+
+    const enrichForParents = async (parentIds: string[]) => {
+      if (parentIds.length === 0) return;
+
+      const lines = await this.bomRepo.findByAssemblyIds({
+        tenantId,
+        assemblyIds: parentIds,
+      });
+      const componentIds = [...new Set(lines.map((l) => l.componentId))];
+      const components = await this.itemsRepo.findByIds({
+        tenantId,
+        ids: componentIds,
+      });
+      const componentMap = new Map(components.map((c) => [c.id, c]));
+
+      for (const parentId of parentIds) {
+        if (!result[parentId]) result[parentId] = [];
+      }
+
+      for (const line of lines) {
+        const component = componentMap.get(line.componentId) ?? null;
+        result[line.assemblyId] = result[line.assemblyId] ?? [];
+        result[line.assemblyId].push({
+          ...line,
+          component,
+          resolvedUnitCost: component ? this.storedUnitCost(component) : null,
         });
-        const price = component
-          ? await this.pricingService.resolveUnitCost({
-              tenantId,
-              itemId: component.id,
-            })
-          : null;
-        return { ...line, component, resolvedUnitCost: price?.unitCost ?? null };
-      }),
-    );
+      }
+    };
 
-    return enriched;
+    await enrichForParents(uniqueIds);
+
+    if (params.includeNestedParents !== false) {
+      const nestedParentIds = new Set<string>();
+      for (const parentId of uniqueIds) {
+        for (const line of result[parentId] ?? []) {
+          const kind = line.component?.kind;
+          if (
+            kind &&
+            isCatalogBomParentKind(kind) &&
+            result[line.componentId] === undefined
+          ) {
+            nestedParentIds.add(line.componentId);
+          }
+        }
+      }
+      if (nestedParentIds.size > 0) {
+        await enrichForParents([...nestedParentIds]);
+      }
+    }
+
+    return result;
+  }
+
+  private storedUnitCost(item: {
+    kind: string;
+    unitCost: string | null;
+    computedUnitCost: string | null;
+    fixedUnitCost: string | null;
+  }): string {
+    if (item.kind === 'primitive') {
+      return item.unitCost ?? '0';
+    }
+    return item.computedUnitCost ?? item.fixedUnitCost ?? item.unitCost ?? '0';
   }
 
   async replaceBom(params: {

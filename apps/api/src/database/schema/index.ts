@@ -3675,6 +3675,62 @@ export const guideDocument = pgTable(
   ],
 );
 
+// ---------------------------------------------------------------------------
+// Feedback items (in-app bug / feature / question tracker)
+// ---------------------------------------------------------------------------
+export const feedbackItems = pgTable(
+  'feedback_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    type: text('type').notNull(),
+    title: text('title').notNull(),
+    description: text('description').notNull(),
+    priority: text('priority').notNull().default('medium'),
+    status: text('status').notNull().default('open'),
+    reportedByUserId: text('reported_by_user_id').notNull(),
+    reportedByName: text('reported_by_name'),
+    pageContext: jsonb('page_context')
+      .$type<{
+        pathname?: string;
+        section?: string;
+        entityType?: string;
+        entityId?: string;
+        jobId?: string;
+        pageLabel?: string;
+        adminArea?: string;
+        activeTab?: string;
+      }>()
+      .default({}),
+    relatedEntityType: text('related_entity_type'),
+    relatedEntityId: uuid('related_entity_id'),
+    conversationId: uuid('conversation_id'),
+    tags: jsonb('tags').$type<string[]>().notNull().default([]),
+    resolution: text('resolution'),
+    payload: jsonb('payload').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_feedback_items_tenant_status').on(t.tenantId, t.status),
+    index('idx_feedback_items_tenant_type').on(t.tenantId, t.type),
+    check(
+      'feedback_items_type_check',
+      sql`${t.type} IN ('bug', 'feature_request', 'enhancement', 'question', 'comment')`,
+    ),
+    check(
+      'feedback_items_priority_check',
+      sql`${t.priority} IN ('low', 'medium', 'high', 'critical')`,
+    ),
+    check(
+      'feedback_items_status_check',
+      sql`${t.status} IN ('open', 'in_progress', 'resolved', 'closed')`,
+    ),
+  ],
+);
+
 export const guideChunk = pgTable(
   'guide_chunk',
   {

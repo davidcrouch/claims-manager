@@ -120,4 +120,8 @@ export const P = {
     read: 'integrations.read',
     manage: 'integrations.manage',
   },
+  feedback: {
+    read: 'feedback.read',
+    manage: 'feedback.manage',
+  },
 } as const;

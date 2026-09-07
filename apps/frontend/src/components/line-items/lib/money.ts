@@ -231,7 +231,7 @@ export function nearestEditableField(
   if ((editableFields as string[]).includes(clicked)) return clicked as EditableFieldKey;
   if (invoiceProgressEditable) return 'invoiced';
 
-  const allCols: string[] = ['name', 'type', 'category'];
+  const allCols: string[] = ['name', 'category', 'type'];
   if (showQuantities) allCols.push('quantity', 'unitType');
   if (showPricing) {
     if (showBuyCost) allCols.push('buyCost');

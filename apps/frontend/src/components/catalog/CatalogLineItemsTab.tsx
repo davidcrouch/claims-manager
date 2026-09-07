@@ -229,6 +229,9 @@ export const CatalogLineItemsTab = forwardRef(function CatalogLineItemsTab(
     onDrawerOpenChange,
     onUndoCapture,
     onSaveStateChange,
+    categories = [],
+    types = [],
+    unitTypes = [],
   }: {
     catalogId: string;
     catalogType?: CatalogType;
@@ -239,6 +242,9 @@ export const CatalogLineItemsTab = forwardRef(function CatalogLineItemsTab(
     onDrawerOpenChange?: (open: boolean) => void;
     onUndoCapture?: (restoreEdits: CatalogLineItemEdits) => void;
     onSaveStateChange?: (state: 'saving' | 'saved' | 'error', error?: string) => void;
+    categories?: Array<{ id: string; name: string; code: string; children?: unknown[] }>;
+    types?: Array<{ id: string; name: string }>;
+    unitTypes?: Array<{ id: string; name?: string; externalReference?: string }>;
   },
   ref: Ref<CatalogLineItemsTabHandle>,
 ) {
@@ -278,6 +284,11 @@ export const CatalogLineItemsTab = forwardRef(function CatalogLineItemsTab(
         categoryIds: visibleCategoryIds,
         page,
         limit: LINE_ITEMS_PAGE_SIZE,
+        lookups: {
+          categories,
+          unitTypes,
+          itemTypes: types,
+        },
       });
       if (result.success && result.groups) {
         setGroups(mapCatalogGroupsToApiGroups(result.groups));
@@ -292,7 +303,7 @@ export const CatalogLineItemsTab = forwardRef(function CatalogLineItemsTab(
     } finally {
       setInitialLoad(false);
     }
-  }, [catalogId, search, visibleCategoryIds, page]);
+  }, [catalogId, search, visibleCategoryIds, page, categories, unitTypes, types]);
 
   useEffect(() => {
     setPage(1);

@@ -316,3 +316,8 @@ export {
   type EntityActivityRow,
   type EntityActivityInsert,
 } from './entity-activities.repository';
+export {
+  FeedbackItemsRepository,
+  type FeedbackItemRow,
+  type FeedbackItemInsert,
+} from './feedback-items.repository';

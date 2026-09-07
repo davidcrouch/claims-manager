@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ClaimsApiClient } from '../server.js';
+import { toolError, toolResult } from '../server.js';
+import { categoryDesc } from '../categories.js';
 import { proxyTool, pageLimit, dataBody } from './_proxy.js';
 
 const CAT = 'ai' as const;
@@ -176,5 +178,124 @@ export function registerAiTools(server: McpServer, api: ClaimsApiClient): void {
     description: 'List canvas artifacts for a conversation.',
     path: '/ai-chat/canvas/conversation/{conversationId}',
     input: { conversationId: z.string().describe('Conversation UUID') },
+  });
+
+  // ---- Feedback tracker ----
+
+  server.tool(
+    'log_feedback',
+    categoryDesc(
+      CAT,
+      'Log a bug report, feature request, enhancement, question, or comment from the user. ' +
+        'Always pass the current page context so the team can trace the source.',
+    ),
+    {
+      type: z
+        .enum(['bug', 'feature_request', 'enhancement', 'question', 'comment'])
+        .describe('Category of the feedback item'),
+      title: z.string().describe('Short summary of the feedback'),
+      description: z.string().describe('Detailed description from the user'),
+      priority: z
+        .enum(['low', 'medium', 'high', 'critical'])
+        .optional()
+        .describe('Priority level (defaults to medium)'),
+      relatedEntityType: z
+        .string()
+        .optional()
+        .describe('Entity type the feedback relates to, e.g. job, claim, quote'),
+      relatedEntityId: z
+        .string()
+        .optional()
+        .describe('UUID of the related entity'),
+      conversationId: z
+        .string()
+        .optional()
+        .describe('UUID of the chat conversation where the feedback was raised'),
+      tags: z.array(z.string()).optional().describe('Free-form tags'),
+      pageContext: z
+        .object({
+          pathname: z.string().optional(),
+          section: z.string().optional(),
+          entityType: z.string().optional(),
+          entityId: z.string().optional(),
+          jobId: z.string().optional(),
+          pageLabel: z.string().optional(),
+          adminArea: z.string().optional(),
+          activeTab: z.string().optional(),
+        })
+        .optional()
+        .describe('Page context from the current user session — pass this from the conversation context'),
+    },
+    async (args) => {
+      try {
+        const body = {
+          type: args.type,
+          title: args.title,
+          description: args.description,
+          priority: args.priority,
+          relatedEntityType: args.relatedEntityType,
+          relatedEntityId: args.relatedEntityId,
+          conversationId: args.conversationId,
+          tags: args.tags,
+          pageContext: args.pageContext,
+        };
+        return toolResult(
+          await api.request('/feedback', { method: 'POST', body }),
+        );
+      } catch (err) {
+        return toolError(err);
+      }
+    },
+  );
+
+  proxyTool(server, api, {
+    category: CAT,
+    name: 'list_feedback',
+    description: 'List feedback items (bugs, features, questions, etc.).',
+    path: '/feedback',
+    input: {
+      ...pageLimit,
+      type: z
+        .string()
+        .optional()
+        .describe('Filter by type: bug, feature_request, enhancement, question, comment'),
+      status: z
+        .string()
+        .optional()
+        .describe('Filter by status: open, in_progress, resolved, closed'),
+      priority: z
+        .string()
+        .optional()
+        .describe('Filter by priority: low, medium, high, critical'),
+      search: z.string().optional().describe('Search title and description'),
+    },
+    query: (args) => ({
+      type: args.type as string | undefined,
+      status: args.status as string | undefined,
+      priority: args.priority as string | undefined,
+      search: args.search as string | undefined,
+      page: args.page as number | undefined,
+      limit: args.limit as number | undefined,
+    }),
+  });
+
+  proxyTool(server, api, {
+    category: CAT,
+    name: 'get_feedback',
+    description: 'Get a single feedback item by ID.',
+    path: '/feedback/{id}',
+    input: { id: z.string().describe('Feedback item UUID') },
+  });
+
+  proxyTool(server, api, {
+    category: CAT,
+    name: 'update_feedback',
+    description: 'Update a feedback item (status, priority, resolution, tags).',
+    method: 'PATCH',
+    path: '/feedback/{id}',
+    input: {
+      id: z.string().describe('Feedback item UUID'),
+      data: dataBody,
+    },
   });
 }

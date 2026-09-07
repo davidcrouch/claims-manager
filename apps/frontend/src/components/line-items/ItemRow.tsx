@@ -30,7 +30,7 @@ import {
   LI_TD_NOTES,
 } from './lib/table-parts';
 import { computeItemMoney, initItemInputs, lineTotalFromItem, nearestEditableField, UNIT_TYPE_OPTIONS } from './lib/money';
-import { LineScopeStatusBadge, PublishStatusBadge } from './lib/badges';
+import { LineItemMetaBadge, LineScopeStatusBadge, PublishStatusBadge } from './lib/badges';
 import { LineScopeStatusField } from './LineScopeStatusField';
 import { HeaderVisibilityMenuItems } from './lib/header-visibility';
 import type { ApiItem, ColumnKey, DeleteItemRequest, EditableFieldKey } from './lib/types';
@@ -448,17 +448,17 @@ export const ItemRow = memo(function ItemRow({
         )}
       </td>
 
-      {/* Type */}
-      {showItemTypeColumn && (
-        <td data-col="type" className={cn('whitespace-nowrap text-xs text-slate-500', LI_TD_CELL)}>
-          {item.type || '—'}
+      {/* Category */}
+      {showCategory && (
+        <td data-col="category" className={cn('whitespace-nowrap', LI_TD_CELL)}>
+          <LineItemMetaBadge label={category === '—' ? null : category} tone="slate" />
         </td>
       )}
 
-      {/* Category */}
-      {showCategory && (
-        <td data-col="category" className={cn('whitespace-nowrap text-xs text-slate-500', LI_TD_CELL)}>
-          {category}
+      {/* Type */}
+      {showItemTypeColumn && (
+        <td data-col="type" className={cn('whitespace-nowrap', LI_TD_CELL)}>
+          <LineItemMetaBadge label={item.type} tone="blue" />
         </td>
       )}
 

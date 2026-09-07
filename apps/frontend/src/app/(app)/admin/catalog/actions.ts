@@ -15,6 +15,43 @@ async function getApi() {
   return createApiClient({ token, tenantId });
 }
 
+export async function fetchCatalogImportTemplateAction(catalogType?: string) {
+  const api = await getApi();
+  if (!api) return { csv: '', columns: [] as string[], catalogType: catalogType ?? 'internal' };
+  try {
+    return await api.getCatalogImportTemplate(catalogType);
+  } catch (err) {
+    console.error('[catalog/actions.fetchCatalogImportTemplateAction]', err);
+    return { csv: '', columns: [] as string[], catalogType: catalogType ?? 'internal' };
+  }
+}
+
+export async function fetchCatalogUnresolvedReferencesAction(): Promise<
+  Array<{
+    id: string;
+    externalReference: string;
+    sourceEntity: string | null;
+    sourceEntityId: string | null;
+    createdAt: string;
+  }>
+> {
+  const api = await getApi();
+  if (!api) return [];
+  try {
+    const unresolved = await api.getCatalogUnresolvedReferences();
+    return (unresolved as Array<Record<string, unknown>>).map((row) => ({
+      id: String(row.id),
+      externalReference: String(row.externalReference ?? ''),
+      sourceEntity: row.sourceEntity != null ? String(row.sourceEntity) : null,
+      sourceEntityId: row.sourceEntityId != null ? String(row.sourceEntityId) : null,
+      createdAt: String(row.createdAt ?? ''),
+    }));
+  } catch (err) {
+    console.error('[catalog/actions.fetchCatalogUnresolvedReferencesAction]', err);
+    return [];
+  }
+}
+
 // ── Catalogue CRUD ───────────────────────────────────────────
 
 export async function fetchCatalogsAction(params?: { type?: string }) {
@@ -427,6 +464,12 @@ export async function getCatalogGroupedItemsAction(params: {
   categoryIds?: string[];
   page?: number;
   limit?: number;
+  /** SSR-loaded lookups so the action does not re-fetch categories/types/units. */
+  lookups?: {
+    categories?: Array<{ id: string; name: string; code: string; children?: unknown[] }>;
+    unitTypes?: Array<{ id: string; name?: string; externalReference?: string }>;
+    itemTypes?: Array<{ id: string; name: string }>;
+  };
 }): Promise<{
   success: boolean;
   groups?: CatalogGroupedCategory[];
@@ -445,6 +488,11 @@ export async function getCatalogGroupedItemsAction(params: {
 
   try {
     const noCategories = Array.isArray(params.categoryIds) && params.categoryIds.length === 0;
+    const hasLookups =
+      params.lookups?.categories &&
+      params.lookups?.unitTypes &&
+      params.lookups?.itemTypes;
+
     const [pageItems, categories, unitTypes, itemTypes, categoryCounts] = await Promise.all([
       noCategories
         ? Promise.resolve({ data: [], total: 0 })
@@ -456,9 +504,15 @@ export async function getCatalogGroupedItemsAction(params: {
             limit,
             sort: 'category_asc',
           }),
-      api.getCatalogCategoriesTree(),
-      api.getLookupsByDomain('unit_type'),
-      api.getCatalogTypes(),
+      hasLookups
+        ? Promise.resolve(params.lookups!.categories!)
+        : api.getCatalogCategoriesTree(),
+      hasLookups
+        ? Promise.resolve(params.lookups!.unitTypes!)
+        : api.getLookupsByDomain('unit_type'),
+      hasLookups
+        ? Promise.resolve(params.lookups!.itemTypes!)
+        : api.getCatalogTypes(),
       api.getCatalogCategoryCounts(catalogId, { q: params.search || undefined }),
     ]);
 
@@ -479,54 +533,66 @@ export async function getCatalogGroupedItemsAction(params: {
         if (Array.isArray(node.children)) walkCategories(node.children as typeof nodes);
       }
     };
-    walkCategories(categories);
+    walkCategories(categories as Array<{ id: string; name: string; code: string; children?: unknown[] }>);
 
-    const assemblies = allItems.data.filter((i) => i.kind === 'assembly');
-    const scopes = allItems.data.filter((i) => i.kind === 'scope');
+    const parentIds = allItems.data
+      .filter((i) => i.kind === 'assembly' || i.kind === 'scope')
+      .map((i) => i.id);
+
+    const componentsByParent =
+      parentIds.length > 0
+        ? await api.getCatalogItemComponentsBatch(parentIds).catch(() => ({} as Record<string, never>))
+        : {};
+
     const assemblyComponents = new Map<string, CatalogGroupedItem[]>();
-
-    const componentResults = await Promise.all(
-      [...assemblies, ...scopes].map(async (asm) => {
-        try {
-          const components = await api.getCatalogItemComponents(asm.id);
-          return { assemblyId: asm.id, components };
-        } catch {
-          return { assemblyId: asm.id, components: [] };
-        }
-      }),
-    );
-
     /** Items that appear under a scope/assembly BOM must not also list at category root. */
     const nestedComponentIds = new Set<string>();
 
-    for (const { assemblyId, components } of componentResults) {
-      assemblyComponents.set(
-        assemblyId,
-        components.map((c) => {
-          if (c.componentId) nestedComponentIds.add(c.componentId);
-          return {
-            id: c.id,
-            name: c.component?.name ?? '',
-            component: '',
-            description: c.component?.description ?? '',
-            kind: (c.component?.kind ?? 'primitive') as 'primitive' | 'assembly' | 'scope',
-            type: (c.component?.typeId ? itemTypeMap.get(c.component.typeId) : undefined) ?? '',
-            category: '',
-            subCategory: null,
-            quantity: parseFloat(c.quantity) || 1,
-            unitCost: parseFloat(c.resolvedUnitCost ?? c.component?.unitCost ?? '0') || 0,
-            buyCost: parseFloat(c.component?.buyCost ?? '0') || 0,
-            markupType: c.component?.markupType ?? 'percentage',
-            markupValue: parseFloat(c.component?.markupValue ?? '0') || 0,
-            tax: parseFloat(c.component?.taxRate ?? '0') || 0,
-            unitType: c.component?.unitTypeLookupId
-              ? unitTypeMap.get(c.component.unitTypeLookupId) ?? null
-              : null,
-            catalogItemId: c.componentId,
-            code: c.component?.code ?? '',
-          };
-        }),
-      );
+    const mapComponentLine = (c: {
+      id: string;
+      componentId: string;
+      quantity: string;
+      component?: {
+        name?: string;
+        description?: string | null;
+        kind?: string;
+        typeId?: string;
+        unitCost?: string | null;
+        buyCost?: string | null;
+        markupType?: string | null;
+        markupValue?: string | null;
+        taxRate?: string | null;
+        unitTypeLookupId?: string | null;
+        code?: string;
+      };
+      resolvedUnitCost?: string | null;
+    }): CatalogGroupedItem => {
+      if (c.componentId) nestedComponentIds.add(c.componentId);
+      return {
+        id: c.id,
+        name: c.component?.name ?? '',
+        component: '',
+        description: c.component?.description ?? '',
+        kind: (c.component?.kind ?? 'primitive') as 'primitive' | 'assembly' | 'scope',
+        type: (c.component?.typeId ? itemTypeMap.get(c.component.typeId) : undefined) ?? '',
+        category: '',
+        subCategory: null,
+        quantity: parseFloat(c.quantity) || 1,
+        unitCost: parseFloat(c.resolvedUnitCost ?? c.component?.unitCost ?? '0') || 0,
+        buyCost: parseFloat(c.component?.buyCost ?? '0') || 0,
+        markupType: c.component?.markupType ?? 'percentage',
+        markupValue: parseFloat(c.component?.markupValue ?? '0') || 0,
+        tax: parseFloat(c.component?.taxRate ?? '0') || 0,
+        unitType: c.component?.unitTypeLookupId
+          ? unitTypeMap.get(c.component.unitTypeLookupId) ?? null
+          : null,
+        catalogItemId: c.componentId,
+        code: c.component?.code ?? '',
+      };
+    };
+
+    for (const [assemblyId, components] of Object.entries(componentsByParent)) {
+      assemblyComponents.set(assemblyId, (components ?? []).map(mapComponentLine));
     }
 
     const grouped = new Map<string, { items: typeof allItems.data; assemblies: typeof allItems.data; scopes: typeof allItems.data }>();
@@ -586,7 +652,10 @@ export async function getCatalogGroupedItemsAction(params: {
         subCategory: null,
         quantity: 1,
         catalogComboId: asm.id,
-        items: assemblyComponents.get(asm.id) ?? [],
+        items: (assemblyComponents.get(asm.id) ?? []).map((child) => ({
+          ...child,
+          category: catInfo.name,
+        })),
       }));
 
       const scopeEntries: CatalogGroupedScope[] = bucket.scopes.map((scopeItem) => {
@@ -602,7 +671,10 @@ export async function getCatalogGroupedItemsAction(params: {
           subCategory: null,
           quantity: 1,
           catalogScopeId: scopeItem.id,
-          items: scopeChildItems,
+          items: scopeChildItems.map((child) => ({
+            ...child,
+            category: catInfo.name,
+          })),
           combos: scopeChildAssemblies.map((asm) => ({
             id: asm.catalogItemId,
             name: asm.name,
@@ -612,7 +684,10 @@ export async function getCatalogGroupedItemsAction(params: {
             subCategory: null,
             quantity: asm.quantity,
             catalogComboId: asm.catalogItemId,
-            items: assemblyComponents.get(asm.catalogItemId) ?? [],
+            items: (assemblyComponents.get(asm.catalogItemId) ?? []).map((child) => ({
+              ...child,
+              category: catInfo.name,
+            })),
           })),
         };
       });

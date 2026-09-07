@@ -58,6 +58,7 @@ import {
   PoSendRequestsRepository,
   EmailTemplatesRepository,
   EntityActivitiesRepository,
+  FeedbackItemsRepository,
 } from './repositories';
 
 const repositories = [
@@ -118,6 +119,7 @@ const repositories = [
   PoSendRequestsRepository,
   EmailTemplatesRepository,
   EntityActivitiesRepository,
+  FeedbackItemsRepository,
 ];
 
 @Global()

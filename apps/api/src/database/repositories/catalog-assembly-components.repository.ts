@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import { catalogAssemblyComponents, catalogItems } from '../schema';
 
@@ -59,6 +59,28 @@ export class CatalogAssemblyComponentsRepository {
         ),
       )
       .orderBy(asc(catalogAssemblyComponents.sortIndex));
+  }
+
+  async findByAssemblyIds(params: {
+    tenantId: string;
+    assemblyIds: string[];
+    tx?: DrizzleDbOrTx;
+  }): Promise<CatalogAssemblyComponentRow[]> {
+    if (params.assemblyIds.length === 0) return [];
+    const db = params.tx ?? this.db;
+    return db
+      .select()
+      .from(catalogAssemblyComponents)
+      .where(
+        and(
+          eq(catalogAssemblyComponents.tenantId, params.tenantId),
+          inArray(catalogAssemblyComponents.assemblyId, params.assemblyIds),
+        ),
+      )
+      .orderBy(
+        asc(catalogAssemblyComponents.assemblyId),
+        asc(catalogAssemblyComponents.sortIndex),
+      );
   }
 
   async replaceBom(params: {

@@ -49,7 +49,10 @@ function flattenCategories(
   depth = 0,
 ): Array<CatalogCategory & { depth: number }> {
   const out: Array<CatalogCategory & { depth: number }> = [];
-  for (const node of nodes) {
+  const sorted = [...nodes].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+  );
+  for (const node of sorted) {
     out.push({ ...node, depth });
     if (node.children?.length) out.push(...flattenCategories(node.children, depth + 1));
   }

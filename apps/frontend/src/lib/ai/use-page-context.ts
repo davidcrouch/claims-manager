@@ -51,6 +51,7 @@ const ADMIN_ROUTE_MAP: Record<string, RouteEntityEntry> = {
   settings: { entityType: 'settings', label: 'Settings' },
   roles: { entityType: 'role', label: 'Roles & Permissions' },
   users: { entityType: 'user', label: 'Users' },
+  feedback: { entityType: 'feedback', label: 'Feedback' },
 };
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

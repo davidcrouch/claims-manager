@@ -1165,3 +1165,14 @@
   The RFQ request send screen is clearer for choosing recipients and attachments.
   Line-item tables support hiding quantity or price columns per section while editing.
   Outcome: fewer blank party fields on quotes and smoother RFQ and estimate editing day to day.
+
+- `2026-09-07` `PENDING` **3 h**
+  `41 files | +3 148 −172 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  Lay summary: Staff can log and manage product feedback in admin, and catalogue scopes and assemblies load nested parts more reliably with updated IAG ensure-scope data.
+  **Admin feedback tracking and catalogue scope assembly improvements.**
+  Administrators can capture, review, and update feedback items from a dedicated admin screen.
+  Catalogue scopes and assemblies load nested bill-of-materials lines in fewer steps for list and edit views.
+  Line-item badges and catalogue admin actions support clearer ensure-scope handling.
+  Import data and a backfill script keep IAG ensure-scope catalogue rows aligned.
+  Help assistant and AI tooling references were updated for the new feedback and catalogue behaviour.
+  Outcome: easier feedback triage plus more trustworthy scope and assembly catalogues day to day.

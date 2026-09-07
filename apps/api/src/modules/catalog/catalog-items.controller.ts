@@ -14,6 +14,7 @@ import { RequirePermission } from '../../auth/decorators/require-permission.deco
 import { P } from '../../auth/permission-constants';
 import {
   BomLineDto,
+  BatchBomComponentsDto,
   CreateCatalogItemDto,
   ReplaceBomDto,
   UpdateCatalogItemDto,
@@ -51,6 +52,15 @@ export class CatalogItemsController {
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
       sort,
+    });
+  }
+
+  @Post('components/batch')
+  @RequirePermission(P.catalogs.read)
+  listComponentsBatch(@Body() body: BatchBomComponentsDto) {
+    return this.assemblyService.findComponentsBatch({
+      assemblyIds: body.assemblyIds,
+      includeNestedParents: true,
     });
   }
 

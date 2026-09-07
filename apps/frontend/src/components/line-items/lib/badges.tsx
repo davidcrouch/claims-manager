@@ -53,3 +53,30 @@ export function PublishStatusBadge({ status }: { status?: PublishStatus }) {
   }
   return <span className={cls}>{label}</span>;
 }
+
+/** Compact metadata chip for Type / Category columns. */
+export function LineItemMetaBadge({
+  label,
+  tone = 'slate',
+}: {
+  label?: string | null;
+  tone?: 'slate' | 'blue';
+}) {
+  const text = label?.trim();
+  if (!text) {
+    return <span className="text-xs text-slate-400">—</span>;
+  }
+  return (
+    <span
+      className={cn(
+        'inline-flex max-w-full items-center truncate rounded-md border px-1.5 py-0.5 text-[11px] font-medium',
+        tone === 'blue'
+          ? 'border-blue-200 bg-blue-50 text-blue-700'
+          : 'border-slate-200 bg-slate-100 text-slate-700',
+      )}
+      title={text}
+    >
+      {text}
+    </span>
+  );
+}

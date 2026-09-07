@@ -58,6 +58,8 @@ import type {
   JournalPage,
   Assessment,
   OrganisationProfile,
+  FeedbackItem,
+  FeedbackStats,
 } from '@/types/api';
 
 function lineItemsPageQueryString(query?: LineItemsPageQuery): string {
@@ -1771,6 +1773,21 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi(`/catalog/items/${id}/components`);
     },
 
+    getCatalogItemComponentsBatch(assemblyIds: string[]): Promise<Record<string, Array<{
+      id: string;
+      componentId: string;
+      quantity: string;
+      wasteFactor: string;
+      component?: { id?: string; code?: string; name?: string; description?: string | null; unitCost?: string | null; buyCost?: string | null; kind?: string; categoryId?: string | null; typeId?: string; unitTypeLookupId?: string | null; markupType?: string | null; markupValue?: string | null; taxRate?: string | null };
+      resolvedUnitCost?: string | null;
+    }>>> {
+      if (assemblyIds.length === 0) return Promise.resolve({});
+      return fetchApi('/catalog/items/components/batch', {
+        method: 'POST',
+        body: JSON.stringify({ assemblyIds }),
+      });
+    },
+
     updateCatalogComponent(assemblyId: string, lineId: string, body: Record<string, unknown>): Promise<unknown> {
       return fetchApi(`/catalog/items/${assemblyId}/components/${lineId}`, {
         method: 'POST',
@@ -3265,6 +3282,49 @@ export function createApiClient(options?: ApiClientOptions) {
           body: JSON.stringify(body),
         },
       );
+    },
+
+    // -- Feedback --
+
+    getFeedback(params: {
+      page?: number;
+      limit?: number;
+      type?: string;
+      status?: string;
+      priority?: string;
+      search?: string;
+    }): Promise<{ data: FeedbackItem[]; total: number }> {
+      const sp = new URLSearchParams();
+      if (params.page != null) sp.set('page', String(params.page));
+      if (params.limit != null) sp.set('limit', String(params.limit));
+      if (params.type) sp.set('type', params.type);
+      if (params.status) sp.set('status', params.status);
+      if (params.priority) sp.set('priority', params.priority);
+      if (params.search) sp.set('search', params.search);
+      const qs = sp.toString();
+      return fetchApi<{ data: FeedbackItem[]; total: number }>(
+        `/feedback${qs ? `?${qs}` : ''}`,
+      );
+    },
+
+    getFeedbackStats(): Promise<FeedbackStats> {
+      return fetchApi<FeedbackStats>('/feedback/stats');
+    },
+
+    getFeedbackById(id: string): Promise<FeedbackItem> {
+      return fetchApi<FeedbackItem>(`/feedback/${id}`);
+    },
+
+    updateFeedback(
+      id: string,
+      body: Partial<
+        Pick<FeedbackItem, 'status' | 'priority' | 'resolution' | 'tags' | 'title' | 'description'>
+      >,
+    ): Promise<FeedbackItem> {
+      return fetchApi<FeedbackItem>(`/feedback/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      });
     },
   };
 }

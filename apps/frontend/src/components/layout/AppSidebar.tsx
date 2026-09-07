@@ -44,6 +44,7 @@ import {
   Bell,
   ToggleLeft,
   PackageOpen,
+  MessageSquareWarning,
 } from 'lucide-react';
 import { Collapsible } from '@base-ui/react/collapsible';
 import {
@@ -193,6 +194,7 @@ const adminNavGroups: NavGroup[] = [
     items: [
       { title: 'Features', href: '/admin/features', icon: ToggleLeft, permission: 'features.read' },
       { title: 'Notifications', href: '/admin/notifications', icon: Bell },
+      { title: 'Feedback', href: '/admin/feedback', icon: MessageSquareWarning, permission: 'feedback.read' },
     ],
   },
 ];

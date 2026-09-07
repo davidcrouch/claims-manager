@@ -95,8 +95,8 @@ export function LineItemsColGroup(props: TableLayoutProps) {
     showBulkSelect ? <col key="bulk" className="w-6" /> : null,
     showSelect ? <col key="select" className="w-6" /> : null,
     <col key="name" className={nameColClass(showCategory)} />,
-    showItemTypeColumn ? <col key="type" className="w-[70px]" /> : null,
     showCategory ? <col key="category" className="w-[120px]" /> : null,
+    showItemTypeColumn ? <col key="type" className="w-[70px]" /> : null,
     showLineScopeStatusColumn ? <col key="status" className="w-[120px]" /> : null,
     showQuantities ? <col key="qty" className="w-[80px]" /> : null,
     showQuantities ? <col key="unit" className="w-[64px]" /> : null,
@@ -147,8 +147,8 @@ export function LineItemsThead(props: TableLayoutProps) {
         {showBulkSelect && <th scope="col" className={LI_TH_LEAD_CHECK(checkLead)} />}
         {showSelect && <th scope="col" className={LI_TH_LEAD_CHECK(checkLead)} />}
         <th scope="col" className={LI_TH_CELL}>Name</th>
-        {showItemTypeColumn && <th scope="col" className={LI_TH_CELL}>Type</th>}
         {showCategory && <th scope="col" className={LI_TH_CELL}>Category</th>}
+        {showItemTypeColumn && <th scope="col" className={LI_TH_CELL}>Type</th>}
         {showLineScopeStatusColumn && <th scope="col" className={LI_TH_CELL}>Status</th>}
         {showQuantities && <th scope="col" className={LI_TH_CELL_RIGHT}>Qty</th>}
         {showQuantities && <th scope="col" className={LI_TH_CELL_RIGHT}>Unit</th>}

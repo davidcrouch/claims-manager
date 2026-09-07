@@ -1,4 +1,5 @@
 import {
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
   IsIn,
@@ -269,6 +270,13 @@ export class ReplaceBomDto {
   @ValidateNested({ each: true })
   @Type(() => BomLineDto)
   lines!: BomLineDto[];
+}
+
+export class BatchBomComponentsDto {
+  @IsArray()
+  @ArrayMaxSize(100)
+  @IsUUID('all', { each: true })
+  assemblyIds!: string[];
 }
 
 export class AddCatalogPrimitiveDto {

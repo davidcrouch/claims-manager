@@ -239,7 +239,7 @@ export function LineItemsProvider({
   const [showPricing, setShowPricing] = useState(pricingVisible ?? true);
   const [showUnselected, setShowUnselected] = useState(initialShowUnselected);
   const [headerVisibility, setHeaderVisibility] = useState<Record<string, HeaderVisibilityEntry>>({});
-  const showCategory = mode !== 'catalog';
+  const showCategory = true;
   const hideUnselected = !!selection && !showUnselected;
 
   const labels: LineItemLabels = useMemo(

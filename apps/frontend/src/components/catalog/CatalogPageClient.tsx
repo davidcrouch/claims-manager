@@ -31,7 +31,11 @@ import {
   MAX_UNDO,
 } from '@/components/shared/detail-autosave';
 import type { CatalogCategory, CatalogItemType, CatalogType } from '@/types/api';
-import { exportCatalogCsvAction } from '@/app/(app)/admin/catalog/actions';
+import {
+  exportCatalogCsvAction,
+  fetchCatalogImportTemplateAction,
+  fetchCatalogUnresolvedReferencesAction,
+} from '@/app/(app)/admin/catalog/actions';
 
 export interface CatalogPageClientProps {
   catalogId: string;
@@ -40,14 +44,6 @@ export interface CatalogPageClientProps {
   categories: CatalogCategory[];
   types: CatalogItemType[];
   unitTypes: Array<{ id: string; name?: string; externalReference?: string }>;
-  templateCsv: string;
-  unresolvedReferences: Array<{
-    id: string;
-    externalReference: string;
-    sourceEntity: string | null;
-    sourceEntityId: string | null;
-    createdAt: string;
-  }>;
 }
 
 export function CatalogPageClient({
@@ -57,8 +53,6 @@ export function CatalogPageClient({
   categories,
   types,
   unitTypes,
-  templateCsv,
-  unresolvedReferences,
 }: CatalogPageClientProps) {
   const router = useRouter();
   const [categoriesOpen, setCategoriesOpen] = useState(false);
@@ -77,6 +71,16 @@ export function CatalogPageClient({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [justSaved, setJustSaved] = useState(false);
   const [editTick, setEditTick] = useState(0);
+  const [templateCsv, setTemplateCsv] = useState('');
+  const [unresolvedReferences, setUnresolvedReferences] = useState<
+    Array<{
+      id: string;
+      externalReference: string;
+      sourceEntity: string | null;
+      sourceEntityId: string | null;
+      createdAt: string;
+    }>
+  >([]);
 
   type UndoEntry = { kind: 'line-items'; edits: CatalogLineItemEdits };
   const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
@@ -100,6 +104,32 @@ export function CatalogPageClient({
     const next = `${url.pathname}${url.search}${url.hash}`;
     window.history.replaceState(window.history.state, '', next);
   }, []);
+
+  // Defer non-critical support data off the SSR critical path
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const [template, unresolved] = await Promise.all([
+        fetchCatalogImportTemplateAction(catalogType),
+        fetchCatalogUnresolvedReferencesAction(),
+      ]);
+      if (cancelled) return;
+      setTemplateCsv(template.csv);
+      setUnresolvedReferences(unresolved);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [catalogType]);
+
+  const handleOpenImport = useCallback(() => {
+    setImportOpen(true);
+    if (!templateCsv) {
+      void fetchCatalogImportTemplateAction(catalogType).then((template) => {
+        setTemplateCsv(template.csv);
+      });
+    }
+  }, [catalogType, templateCsv]);
 
   const handleExportCsv = useCallback(async () => {
     setExporting(true);
@@ -256,7 +286,7 @@ export function CatalogPageClient({
             <Button
               size="icon-lg"
               variant="outline"
-              onClick={() => setImportOpen(true)}
+              onClick={handleOpenImport}
               title="Import CSV"
               aria-label="Import CSV"
             >
@@ -316,6 +346,9 @@ export function CatalogPageClient({
             onDrawerOpenChange={setDrawerOpen}
             onUndoCapture={handleUndoCapture}
             onSaveStateChange={handleSaveStateChange}
+            categories={categories}
+            types={types}
+            unitTypes={unitTypes}
           />
         </div>
       </div>

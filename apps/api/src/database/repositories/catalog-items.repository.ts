@@ -176,6 +176,25 @@ export class CatalogItemsRepository {
     return row ?? null;
   }
 
+  async findByIds(params: {
+    tenantId: string;
+    ids: string[];
+    includeDeleted?: boolean;
+  }): Promise<CatalogItemRow[]> {
+    if (params.ids.length === 0) return [];
+    const conditions = [
+      eq(catalogItems.tenantId, params.tenantId),
+      inArray(catalogItems.id, params.ids),
+    ];
+    if (!params.includeDeleted) {
+      conditions.push(isNull(catalogItems.deletedAt));
+    }
+    return this.db
+      .select()
+      .from(catalogItems)
+      .where(and(...conditions));
+  }
+
   async findByCode(params: {
     tenantId: string;
     code: string;

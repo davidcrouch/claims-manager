@@ -73,6 +73,7 @@ import { RbacModule } from './modules/rbac/rbac.module';
 import { OutboundEventsModule } from './modules/outbound-events/outbound-events.module';
 import { WorkflowSchedulerModule } from './modules/workflow-scheduler/workflow-scheduler.module';
 import { ActivitiesModule } from './modules/activities/activities.module';
+import { FeedbackModule } from './modules/feedback/feedback.module';
 import { TenantInterceptor } from './tenant/tenant.interceptor';
 import { AllExceptionsFilter, HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -171,6 +172,7 @@ import { OfficeModule } from './common/office/office.module';
     RbacModule,
     WorkflowSchedulerModule,
     ActivitiesModule,
+    FeedbackModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
