@@ -1,4 +1,4 @@
-﻿Ã¯Â»Â¿# Work hours tracking
+Ã¯Â»Â¿# Work hours tracking
 
 ## Entries
 
@@ -1186,7 +1186,7 @@
   Role settings keep unknown permission groups visible so new catalogue entries are not hidden.
   Outcome: Help-based feedback works for day-to-day users while admins still control who can review and update items.
 
-- `2026-09-08` `PENDING` **2 h**
+- `2026-09-08` `405b985` **2 h**
   `17 files | +369 −35 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Jobs can store a customer contact date on the list and overview, Crunchwork job types use the right codes so Make Safe publish works, Help chat no longer fails after tool replies, and catalogue drag-and-drop highlighting is steadier.
   **Customer contact date, Crunchwork job-type codes, chat and catalogue fixes.**
