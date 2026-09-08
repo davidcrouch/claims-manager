@@ -116,6 +116,7 @@ export interface Job {
   jobTypeLookupId: string;
   statusLookupId?: string | null;
   requestDate?: string | null;
+  customerContactDate?: string | null;
   collectExcess?: boolean | null;
   excess?: string | null;
   makeSafeRequired?: boolean | null;

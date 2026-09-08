@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CatalogDropTarget } from '@/components/catalog/catalog-drag';
 import {
   getCatalogDragData,
@@ -28,6 +28,14 @@ export interface UseCatalogDropReturn {
   };
 }
 
+/**
+ * Catalogue HTML5 drop-zone highlight.
+ *
+ * Nested zones (group → scope → assembly) stopPropagation on highlight so the
+ * deepest valid target wins. Highlight is re-asserted on dragover; dragleave
+ * only clears on the next animation frame so crossing children / bubbled leaves
+ * do not permanently clear a parent that is still the active drop target.
+ */
 export function useCatalogDrop({
   target,
   groupId,
@@ -37,7 +45,29 @@ export function useCatalogDrop({
   disabled = false,
 }: UseCatalogDropOptions): UseCatalogDropReturn {
   const [isOver, setIsOver] = useState(false);
-  const enterCountRef = useRef(0);
+  const clearRafRef = useRef<number | null>(null);
+
+  const cancelScheduledClear = useCallback(() => {
+    if (clearRafRef.current != null) {
+      cancelAnimationFrame(clearRafRef.current);
+      clearRafRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => cancelScheduledClear(), [cancelScheduledClear]);
+
+  const assertOver = useCallback(() => {
+    cancelScheduledClear();
+    setIsOver(true);
+  }, [cancelScheduledClear]);
+
+  const scheduleClear = useCallback(() => {
+    cancelScheduledClear();
+    clearRafRef.current = requestAnimationFrame(() => {
+      clearRafRef.current = null;
+      setIsOver(false);
+    });
+  }, [cancelScheduledClear]);
 
   const onDragOver = useCallback(
     (e: React.DragEvent) => {
@@ -46,9 +76,12 @@ export function useCatalogDrop({
       if (!decision.allowDrop) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
-      if (decision.highlight) e.stopPropagation();
+      if (decision.highlight) {
+        e.stopPropagation();
+        assertOver();
+      }
     },
-    [target, disabled],
+    [target, disabled, assertOver],
   );
 
   const onDragEnter = useCallback(
@@ -59,28 +92,26 @@ export function useCatalogDrop({
       e.preventDefault();
       if (!decision.highlight) return;
       e.stopPropagation();
-      enterCountRef.current += 1;
-      setIsOver(true);
+      assertOver();
     },
-    [target, disabled],
+    [target, disabled, assertOver],
   );
 
   const onDragLeave = useCallback(
-    (e: React.DragEvent) => {
+    (_e: React.DragEvent) => {
       if (disabled) return;
-      enterCountRef.current -= 1;
-      if (enterCountRef.current <= 0) {
-        enterCountRef.current = 0;
-        setIsOver(false);
-      }
+      // Defer clear so a following dragover on this same zone can cancel it
+      // (crossing non-droppable children). Nested highlight zones stopPropagation
+      // on dragover, so parents that lost the pointer clear on the next frame.
+      scheduleClear();
     },
-    [disabled],
+    [disabled, scheduleClear],
   );
 
   const onDrop = useCallback(
     (e: React.DragEvent) => {
       if (disabled) return;
-      enterCountRef.current = 0;
+      cancelScheduledClear();
       setIsOver(false);
 
       const groupLabel = getGroupLabelDragData(e.dataTransfer);
@@ -103,7 +134,7 @@ export function useCatalogDrop({
         onCatalogDrop?.(catalogPayload, groupId, nestUnderComboId);
       }
     },
-    [disabled, target, groupId, quoteComboId, onCatalogDrop, onGroupLabelDrop],
+    [disabled, target, groupId, quoteComboId, onCatalogDrop, onGroupLabelDrop, cancelScheduledClear],
   );
 
   return {

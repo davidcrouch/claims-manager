@@ -251,6 +251,7 @@ export const jobs = pgTable(
     jobTypeLookupId: uuid('job_type_lookup_id').notNull().references(() => lookupValues.id),
     statusLookupId: uuid('status_lookup_id').references(() => lookupValues.id),
     requestDate: date('request_date'),
+    customerContactDate: date('customer_contact_date'),
     collectExcess: boolean('collect_excess'),
     excess: numeric('excess', { precision: 14, scale: 2 }),
     makeSafeRequired: boolean('make_safe_required'),

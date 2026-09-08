@@ -218,21 +218,43 @@ function extractThoughtSignature(part: Part): string | undefined {
   return undefined;
 }
 
+/**
+ * Convert provider messages to Gemini Content[], enforcing the Gemini API
+ * constraint that functionCall and functionResponse parts must NEVER appear
+ * in the same Content.
+ *
+ * DB-persisted assistant messages store both tool-call and tool-result parts
+ * on a single message.  When that message is reloaded, a naïve 1-to-1
+ * mapping would produce a model Content with mixed parts and trigger a
+ * 400 INVALID_ARGUMENT.  This function splits such messages into the
+ * correct model (functionCall) and user (functionResponse) turns, then
+ * merges any adjacent same-role Contents so Gemini's alternating-turn
+ * requirement is satisfied.
+ */
 function toGeminiContents(logger: Logger, messages: ProviderMessage[]): Content[] {
   const sanitized = summarizeUnsignedToolTurns(logger, messages);
-  const contents: Content[] = [];
+  const raw: Content[] = [];
+  let mixedSplits = 0;
 
   for (const msg of sanitized) {
     if (msg.role === 'system') continue;
 
-    const parts: Part[] = [];
+    const geminiRole: 'model' | 'user' = msg.role === 'assistant' ? 'model' : 'user';
+
+    // Classify parts into groups that Gemini keeps in separate Content
+    // entries: functionCall parts (model-side) vs functionResponse parts
+    // (user-side) vs everything else (text, file, etc.).
+    const callParts: Part[] = [];
+    const responseParts: Part[] = [];
+    const otherParts: Part[] = [];
+
     for (const content of msg.content) {
       switch (content.type) {
         case 'text':
-          parts.push({ text: content.text });
+          otherParts.push({ text: content.text });
           break;
         case 'tool-call':
-          parts.push({
+          callParts.push({
             functionCall: {
               id: content.id,
               name: content.name,
@@ -244,7 +266,7 @@ function toGeminiContents(logger: Logger, messages: ProviderMessage[]): Content[
           });
           break;
         case 'tool-result':
-          parts.push({
+          responseParts.push({
             functionResponse: {
               id: content.toolCallId,
               name: content.name,
@@ -253,7 +275,7 @@ function toGeminiContents(logger: Logger, messages: ProviderMessage[]): Content[
           });
           break;
         case 'file':
-          parts.push({
+          otherParts.push({
             inlineData: {
               mimeType: content.mimeType,
               data: content.data,
@@ -265,15 +287,76 @@ function toGeminiContents(logger: Logger, messages: ProviderMessage[]): Content[
       }
     }
 
-    if (parts.length > 0) {
-      contents.push({
-        role: msg.role === 'assistant' ? 'model' : 'user',
-        parts,
-      });
+    const hasCalls = callParts.length > 0;
+    const hasResponses = responseParts.length > 0;
+
+    if (hasCalls && hasResponses) {
+      // Mixed functionCall + functionResponse on one message — typically a
+      // DB-stored assistant turn that inlined both.  Gemini rejects this,
+      // so split into a model turn (text + calls) followed by a user turn
+      // (responses).
+      mixedSplits++;
+      raw.push({ role: 'model', parts: [...otherParts, ...callParts] });
+      raw.push({ role: 'user', parts: responseParts });
+    } else if (hasCalls) {
+      // functionCall parts must live in a model Content.
+      raw.push({ role: 'model', parts: [...otherParts, ...callParts] });
+    } else if (hasResponses) {
+      // functionResponse parts must live in a user Content.
+      if (geminiRole === 'model' && otherParts.length > 0) {
+        // Preserve model text separately so it is not misattributed.
+        raw.push({ role: 'model', parts: otherParts });
+        raw.push({ role: 'user', parts: responseParts });
+      } else {
+        raw.push({ role: 'user', parts: [...otherParts, ...responseParts] });
+      }
+    } else if (otherParts.length > 0) {
+      raw.push({ role: geminiRole, parts: otherParts });
     }
   }
 
-  return contents;
+  if (mixedSplits > 0) {
+    logger.log(
+      `[VertexGeminiProvider.toGeminiContents] split ${mixedSplits} mixed functionCall/functionResponse turn(s)`,
+    );
+  }
+
+  return mergeAdjacentRoles(raw);
+}
+
+/**
+ * Merge consecutive Contents that share the same role to satisfy Gemini's
+ * alternating-turn requirement, without re-introducing the
+ * functionCall + functionResponse mixing constraint.
+ */
+function mergeAdjacentRoles(contents: Content[]): Content[] {
+  if (contents.length <= 1) return contents;
+  const merged: Content[] = [contents[0]];
+
+  for (let i = 1; i < contents.length; i++) {
+    const prev = merged[merged.length - 1];
+    const curr = contents[i];
+    if (prev.role === curr.role && canMergeParts(prev.parts, curr.parts)) {
+      merged[merged.length - 1] = {
+        role: prev.role,
+        parts: [...(prev.parts ?? []), ...(curr.parts ?? [])],
+      };
+    } else {
+      merged.push(curr);
+    }
+  }
+
+  return merged;
+}
+
+/** Returns false when merging would mix functionCall + functionResponse parts. */
+function canMergeParts(a: Part[] | undefined, b: Part[] | undefined): boolean {
+  const aHasCalls = a?.some((p) => p.functionCall) ?? false;
+  const aHasResponses = a?.some((p) => p.functionResponse) ?? false;
+  const bHasCalls = b?.some((p) => p.functionCall) ?? false;
+  const bHasResponses = b?.some((p) => p.functionResponse) ?? false;
+
+  return !((aHasCalls && bHasResponses) || (aHasResponses && bHasCalls));
 }
 
 function normalizeFunctionResponse(

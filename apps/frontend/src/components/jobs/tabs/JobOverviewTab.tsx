@@ -33,7 +33,11 @@ export interface JobOverviewTabHandle {
   getPendingUpdate: () => JobEditPending | null;
   /** @deprecated use getPendingUpdate */
   getPendingDates: () => JobEditPending | null;
-  getCurrentDates: () => { bookedDate: string | null; attendanceDate: string | null };
+  getCurrentDates: () => {
+    customerContactDate: string | null;
+    bookedDate: string | null;
+    attendanceDate: string | null;
+  };
   getBaseline: () => JobOverviewDraft;
   applyDraft: (draft: JobOverviewDraft) => void;
   reset: () => void;
@@ -159,11 +163,13 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
   const excessAmount = job.excess ?? pick(api, 'excess');
   const vendorJobNumber = asString(pick(api, 'vendorJobNumber'));
   const contactDate = asString(pick(custom, 'contactDate') ?? pick(api, 'contactDate'));
+  const customerContactDateRaw = job.customerContactDate ?? null;
   const bookedDateRaw = asString(pick(custom, 'bookedDate') ?? pick(api, 'bookedDate'));
   const attendanceDueDate = asString(pick(custom, 'attendanceDueDate') ?? pick(api, 'attendanceDueDate'));
   const attendanceDateRaw = asString(pick(custom, 'attendanceDate') ?? pick(api, 'attendanceDate'));
   const completedDate = asString(pick(custom, 'completedDate') ?? pick(api, 'completedDate'));
 
+  const [customerContactDate, setCustomerContactDate] = useState(customerContactDateRaw ?? '');
   const [bookedDate, setBookedDate] = useState(bookedDateRaw ?? '');
   const [attendanceDate, setAttendanceDate] = useState(attendanceDateRaw ?? '');
 
@@ -177,6 +183,9 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
 
   // Baselines for dirty detection — updated on markClean so autosave clears dirty
   // before router.refresh() brings matching props.
+  const [savedCustomerContactDate, setSavedCustomerContactDate] = useState(
+    customerContactDateRaw ?? '',
+  );
   const [savedBookedDate, setSavedBookedDate] = useState(bookedDateRaw ?? '');
   const [savedAttendanceDate, setSavedAttendanceDate] = useState(attendanceDateRaw ?? '');
   const [savedStatusLookupId, setSavedStatusLookupId] = useState(
@@ -190,18 +199,21 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
 
   // Re-seed only when navigating to a different job so in-progress edits survive refresh/tab switches.
   useEffect(() => {
+    const nextCustomerContact = customerContactDateRaw ?? '';
     const nextBooked = bookedDateRaw ?? '';
     const nextAttendance = attendanceDateRaw ?? '';
     const nextStatusId = job.statusLookupId ?? job.status?.id ?? '';
     const nextStatusExt = job.status?.externalReference ?? '';
     const nextInstructions = job.jobInstructions ?? '';
     const nextVendorExt = vendorExtRefInitial ?? '';
+    setCustomerContactDate(nextCustomerContact);
     setBookedDate(nextBooked);
     setAttendanceDate(nextAttendance);
     setStatusLookupId(nextStatusId);
     setStatusExternalReference(nextStatusExt);
     setJobInstructions(nextInstructions);
     setVendorExtRef(nextVendorExt);
+    setSavedCustomerContactDate(nextCustomerContact);
     setSavedBookedDate(nextBooked);
     setSavedAttendanceDate(nextAttendance);
     setSavedStatusLookupId(nextStatusId);
@@ -212,6 +224,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
   }, [job.id]);
 
   const isDirty =
+    customerContactDate !== savedCustomerContactDate ||
     bookedDate !== savedBookedDate ||
     attendanceDate !== savedAttendanceDate ||
     (caps.job.statusEditable.editable && statusLookupId !== savedStatusLookupId) ||
@@ -223,6 +236,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
   }, [
     isDirty,
     onDirtyChange,
+    customerContactDate,
     bookedDate,
     attendanceDate,
     statusLookupId,
@@ -233,6 +247,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
   const buildPending = (): JobEditPending | null => {
     if (!isDirty) return null;
     const pending: JobEditPending = {
+      customerContactDate: customerContactDate || null,
       bookedDate: bookedDate || null,
       attendanceDate: attendanceDate || null,
     };
@@ -250,6 +265,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
   };
 
   const reset = () => {
+    setCustomerContactDate(savedCustomerContactDate);
     setBookedDate(savedBookedDate);
     setAttendanceDate(savedAttendanceDate);
     setStatusLookupId(savedStatusLookupId);
@@ -259,6 +275,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
   };
 
   const applyDraft = (next: JobOverviewDraft) => {
+    setCustomerContactDate(next.customerContactDate);
     setBookedDate(next.bookedDate);
     setAttendanceDate(next.attendanceDate);
     setStatusLookupId(next.statusLookupId);
@@ -269,6 +286,9 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
 
   const markClean = (saved?: JobEditPending | null) => {
     if (saved) {
+      if (saved.customerContactDate !== undefined) {
+        setSavedCustomerContactDate(saved.customerContactDate ?? '');
+      }
       if (saved.bookedDate !== undefined) setSavedBookedDate(saved.bookedDate ?? '');
       if (saved.attendanceDate !== undefined) setSavedAttendanceDate(saved.attendanceDate ?? '');
       if (saved.statusLookupId !== undefined) setSavedStatusLookupId(saved.statusLookupId ?? '');
@@ -281,6 +301,7 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
       }
       return;
     }
+    setSavedCustomerContactDate(customerContactDate);
     setSavedBookedDate(bookedDate);
     setSavedAttendanceDate(attendanceDate);
     setSavedStatusLookupId(statusLookupId);
@@ -293,10 +314,12 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     getPendingUpdate: buildPending,
     getPendingDates: buildPending,
     getCurrentDates: () => ({
+      customerContactDate: customerContactDate || null,
       bookedDate: bookedDate || null,
       attendanceDate: attendanceDate || null,
     }),
     getBaseline: () => ({
+      customerContactDate: savedCustomerContactDate,
       bookedDate: savedBookedDate,
       attendanceDate: savedAttendanceDate,
       statusLookupId: savedStatusLookupId,
@@ -311,12 +334,14 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
     isDirty: () => isDirty,
   }), [
     isDirty,
+    customerContactDate,
     bookedDate,
     attendanceDate,
     statusLookupId,
     statusExternalReference,
     jobInstructions,
     vendorExtRef,
+    savedCustomerContactDate,
     savedBookedDate,
     savedAttendanceDate,
     savedStatusLookupId,
@@ -463,6 +488,22 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
           <DefRow label="Auto approval applies" value={<BoolPill value={autoApproval} />} />
           {vendorJobNumber && <DefRow label="Vendor job number" value={vendorJobNumber} />}
           <DefRow label="Contact date" value={formatDate(contactDate)} />
+          <DefRow
+            label="Customer Contact Date"
+            value={
+              editing ? (
+                <Input
+                  type="date"
+                  value={toInputDate(customerContactDate)}
+                  onChange={(e) => setCustomerContactDate(e.target.value)}
+                  disabled={saving}
+                  className="h-7 w-40 text-sm"
+                />
+              ) : (
+                formatDate(customerContactDate || customerContactDateRaw)
+              )
+            }
+          />
           <DefRow
             label="Booked date"
             value={

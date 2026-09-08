@@ -10,6 +10,7 @@ export type MobilityOption = {
 };
 
 export type JobOverviewDraft = {
+  customerContactDate: string;
   bookedDate: string;
   attendanceDate: string;
   statusLookupId: string;
@@ -20,6 +21,7 @@ export type JobOverviewDraft = {
 
 /** Draft fields collected from Overview + Type Details before save. */
 export type JobEditPending = {
+  customerContactDate?: string | null;
   bookedDate?: string | null;
   attendanceDate?: string | null;
   assignedToUserId?: string | null;

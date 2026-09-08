@@ -1287,6 +1287,12 @@ export class JobsService {
       data.addressCountry = asText(address.country);
     }
     if (body.requestDate !== undefined) data.requestDate = body.requestDate as string;
+    if (body.customerContactDate !== undefined) {
+      data.customerContactDate =
+        typeof body.customerContactDate === 'string' && body.customerContactDate.trim()
+          ? body.customerContactDate.trim()
+          : null;
+    }
     if (body.collectExcess !== undefined) data.collectExcess = body.collectExcess as boolean;
     if (body.excess !== undefined) data.excess = body.excess != null ? String(body.excess) : undefined;
     if (body.makeSafeRequired !== undefined) data.makeSafeRequired = body.makeSafeRequired as boolean;

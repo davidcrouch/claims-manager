@@ -206,6 +206,7 @@ export async function fetchJobContactsAction(
 export async function updateJobDatesAction(
   jobId: string,
   dates: {
+    customerContactDate?: string | null;
     bookedDate?: string | null;
     attendanceDate?: string | null;
     assignedToUserId?: string | null;
@@ -215,6 +216,7 @@ export async function updateJobDatesAction(
 }
 
 export type UpdateJobFieldsInput = {
+  customerContactDate?: string | null;
   bookedDate?: string | null;
   attendanceDate?: string | null;
   assignedToUserId?: string | null;
@@ -257,6 +259,10 @@ export async function updateJobFieldsAction(
       console.info(
         '[jobs/[id]/actions updateJobFieldsAction] including bookedDate/attendanceDate in customData',
       );
+    }
+
+    if (fields.customerContactDate !== undefined) {
+      body.customerContactDate = fields.customerContactDate;
     }
 
     if (fields.assignedToUserId !== undefined) {

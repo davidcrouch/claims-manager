@@ -9,6 +9,17 @@ import type { Claim, Job } from '@/types/api';
 
 const BUILDER_MAKE_SAFE_TYPE_NAME = 'builder make safe';
 
+/** Match API outbound rule: seed-/direct-/internal- refs cannot publish to CW. */
+function isCwUsableJobTypeRef(externalReference?: string | null): boolean {
+  const ref = externalReference?.trim().toLowerCase() ?? '';
+  if (!ref) return false;
+  return !(
+    ref.startsWith('seed-') ||
+    ref.startsWith('direct-') ||
+    ref.startsWith('internal-')
+  );
+}
+
 function findExistingMakeSafeJob(params: {
   currentJobId: string;
   internalNumber?: string | null;
@@ -138,9 +149,14 @@ export default async function JobDetailPage({
     ...jobTypeLookups.crunchwork,
     ...jobTypeLookups.direct,
   ].filter((row) => (row.name ?? '').trim().toLowerCase() === 'builder make safe');
+  // Prefer a lookup CW will accept (e.g. MS). Seeded seed-job-type-ms rows fail create.
   const makeSafeJobTypeRow =
-    makeSafeMatches.find((row) => row.providerCode === 'crunchwork') ??
-    makeSafeMatches[0] ??
+    makeSafeMatches.find(
+      (row) =>
+        row.providerCode === 'crunchwork' &&
+        isCwUsableJobTypeRef(row.externalReference),
+    ) ??
+    makeSafeMatches.find((row) => isCwUsableJobTypeRef(row.externalReference)) ??
     null;
   const makeSafeJobType = makeSafeJobTypeRow
     ? {

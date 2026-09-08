@@ -61,6 +61,10 @@ function jobListAddress(job: Job): string {
   });
 }
 
+function jobListContactDate(job: Job): string | null | undefined {
+  return job.customerContactDate;
+}
+
 function jobListRef(job: Job): string {
   return jobDisplayName(job);
 }
@@ -83,6 +87,7 @@ const TABLE_COLUMNS: ColDef[] = [
   { key: 'assignee', label: 'Assigned', filterable: true },
   { key: 'insured', label: 'Client / Insured', sortable: false },
   { key: 'address', label: 'Address' },
+  { key: 'contact_date', label: 'Customer Contact', sortable: false },
   { key: 'request_date', label: 'Requested' },
   { key: 'updated_at', label: 'Updated' },
 ];
@@ -919,6 +924,11 @@ export function JobsListClient({
                       {isVisible('address') && (
                         <td className="px-4 py-3 text-slate-600">
                           {jobListAddress(job)}
+                        </td>
+                      )}
+                      {isVisible('contact_date') && (
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                          {formatDate(jobListContactDate(job))}
                         </td>
                       )}
                       {isVisible('request_date') && (

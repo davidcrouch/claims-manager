@@ -39,10 +39,7 @@ const LOOKUP_SPECS: readonly LookupSpec[] = [
   { domain: 'job_type', name: 'Repair', ref: 'job-type-repair', providerCode: 'direct' },
   { domain: 'job_type', name: 'Remodel', ref: 'job-type-remodel', providerCode: 'direct' },
   { domain: 'job_type', name: 'New Construction', ref: 'job-type-new-construction', providerCode: 'direct' },
-  // Crunchwork — users may only create Builder Make Safe; CW may sync more types later
-  { domain: 'job_type', name: 'Builder Assessment', ref: 'job-type-ba', providerCode: 'crunchwork' },
-  { domain: 'job_type', name: 'Builder Make Safe', ref: 'job-type-ms', providerCode: 'crunchwork' },
-  { domain: 'job_type', name: 'Builder Works', ref: 'job-type-bw', providerCode: 'crunchwork' },
+  // Crunchwork job types use CW_JOB_TYPE_LOOKUPS (real BA/MS/BW codes — not seed- refs)
   { domain: 'job_status', name: 'Pending', ref: 'job-status-pending' },
   { domain: 'job_status', name: 'Completed', ref: 'job-status-completed' },
   { domain: 'job_status', name: 'Archived', ref: 'job-status-archived' },
@@ -102,7 +99,20 @@ const LOOKUP_SPECS: readonly LookupSpec[] = [
  * Crunchwork Insurance REST lookup codes observed on inbound claim payloads.
  * `externalReference` is the CW code (not the seed- prefixed internal catalogue).
  * Kept separate so LOOKUP_SPECS can stay prefixed for direct/manual flows.
+ *
+ * Crunchwork job types must use real CW codes (BA/MS/BW) — seed-prefixed refs
+ * are rejected by outbound create (isCwUsableLookupRef).
  */
+const CW_JOB_TYPE_LOOKUPS: ReadonlyArray<{
+  domain: string;
+  name: string;
+  externalReference: string;
+}> = [
+  { domain: 'job_type', name: 'Builder Assessment', externalReference: 'BA' },
+  { domain: 'job_type', name: 'Builder Make Safe', externalReference: 'MS' },
+  { domain: 'job_type', name: 'Builder Works', externalReference: 'BW' },
+];
+
 /** Vendor-set line scope statuses sent to Crunchwork via lineScopeStatus.externalReference. */
 const CW_LINE_SCOPE_STATUSES: ReadonlyArray<{
   domain: string;
@@ -249,6 +259,16 @@ export async function seedLookupsForTenant(params: {
     })),
   );
   logger.info(`lookups ready (${LOOKUP_SPECS.length} specs)`);
+  await insertMissing(
+    { db, tenantId, stats, existing },
+    CW_JOB_TYPE_LOOKUPS.map((spec) => ({
+      domain: spec.domain,
+      name: spec.name,
+      externalReference: spec.externalReference,
+      providerCode: 'crunchwork',
+    })),
+  );
+  logger.info(`crunchwork job types ready (${CW_JOB_TYPE_LOOKUPS.length})`);
   await insertMissing(
     { db, tenantId, stats, existing },
     CW_CLAIM_LOOKUPS.map((spec) => ({

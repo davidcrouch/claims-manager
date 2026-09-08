@@ -70,6 +70,7 @@ type JobFieldsSnapshot = {
 };
 
 const EMPTY_OVERVIEW: JobOverviewDraft = {
+  customerContactDate: '',
   bookedDate: '',
   attendanceDate: '',
   statusLookupId: '',

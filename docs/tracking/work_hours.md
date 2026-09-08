@@ -1185,3 +1185,14 @@
   Admin and manager roles include those permissions by default after RBAC seed.
   Role settings keep unknown permission groups visible so new catalogue entries are not hidden.
   Outcome: Help-based feedback works for day-to-day users while admins still control who can review and update items.
+
+- `2026-09-08` `PENDING` **2 h**
+  `17 files | +369 −35 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  Lay summary: Jobs can store a customer contact date on the list and overview, Crunchwork job types use the right codes so Make Safe publish works, Help chat no longer fails after tool replies, and catalogue drag-and-drop highlighting is steadier.
+  **Customer contact date, Crunchwork job-type codes, chat and catalogue fixes.**
+  Jobs store and show a customer contact date on the overview and jobs list.
+  Crunchwork Builder Assessment, Make Safe, and Works types use the real external codes so outbound create succeeds.
+  Existing seed job-type rows are remapped so Make Safe publish no longer fails on older tenants.
+  Help chat rebuilds mixed tool-call turns so the assistant can continue after a tool reply.
+  Catalogue drop zones keep a clearer highlight when dragging into nested scopes and assemblies.
+  Outcome: smoother job contact tracking, reliable Make Safe create, and fewer chat and catalogue drag glitches.

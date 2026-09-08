@@ -722,6 +722,20 @@
       "when": 1793900000000,
       "tag": "0103_feedback_items",
       "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1794000000000,
+      "tag": "0104_fix_cw_job_type_external_refs",
+      "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1794100000000,
+      "tag": "0105_job_customer_contact_date",
+      "breakpoints": true
     }
   ]
 }

@@ -25,6 +25,7 @@ export type JobSortField =
   | 'job_type'
   | 'assignee'
   | 'address'
+  | 'contact_date'
   | 'request_date'
   | 'updated_at';
 
