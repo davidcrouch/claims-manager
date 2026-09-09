@@ -28,6 +28,7 @@ import { PurchaseOrdersModule } from './modules/purchase-orders/purchase-orders.
 import { WorkOrdersModule } from './modules/work-orders/work-orders.module';
 import { InvoicesModule } from './modules/invoices/invoices.module';
 import { MessagesModule } from './modules/messages/messages.module';
+import { NotesModule } from './modules/notes/notes.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { AppointmentsModule } from './modules/appointments/appointments.module';
 import { ReportsModule } from './modules/reports/reports.module';
@@ -127,6 +128,7 @@ import { OfficeModule } from './common/office/office.module';
     WorkOrdersModule,
     InvoicesModule,
     MessagesModule,
+    NotesModule,
     TasksModule,
     AppointmentsModule,
     ReportsModule,

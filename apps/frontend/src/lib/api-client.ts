@@ -28,6 +28,7 @@ import type {
   Report,
   Task,
   Message,
+  JobNote,
   Vendor,
   Appointment,
   Attachment,
@@ -381,6 +382,8 @@ export function createApiClient(options?: ApiClientOptions) {
       assignedToUserId?: string;
       assignedToUserIds?: string;
       refs?: string;
+      provider?: string;
+      account?: string;
     }): Promise<PaginatedResponse<Job>> {
       const sp = new URLSearchParams();
       if (params.page != null) sp.set('page', String(params.page));
@@ -393,6 +396,8 @@ export function createApiClient(options?: ApiClientOptions) {
       if (params.assignedToUserId) sp.set('assignedToUserId', params.assignedToUserId);
       if (params.assignedToUserIds) sp.set('assignedToUserIds', params.assignedToUserIds);
       if (params.refs) sp.set('refs', params.refs);
+      if (params.provider) sp.set('provider', params.provider);
+      if (params.account) sp.set('account', params.account);
       return fetchApi<PaginatedResponse<Job>>(`/jobs?${sp}`);
     },
 
@@ -520,6 +525,33 @@ export function createApiClient(options?: ApiClientOptions) {
 
     getClaimMessages(claimId: string): Promise<PaginatedResponse<Message>> {
       return fetchApi<PaginatedResponse<Message>>(`/messages?claimId=${claimId}&limit=100`);
+    },
+
+    getNotes(params?: {
+      page?: number;
+      limit?: number;
+      jobId?: string;
+      jobIds?: string[];
+      search?: string;
+      sort?: string;
+    }): Promise<PaginatedResponse<JobNote>> {
+      const sp = new URLSearchParams();
+      if (params?.page != null) sp.set('page', String(params.page));
+      if (params?.limit != null) sp.set('limit', String(params.limit));
+      if (params?.jobId) sp.set('jobId', params.jobId);
+      if (params?.jobIds?.length) sp.set('jobIds', params.jobIds.join(','));
+      if (params?.search) sp.set('search', params.search);
+      if (params?.sort) sp.set('sort', params.sort);
+      const qs = sp.toString();
+      return fetchApi<PaginatedResponse<JobNote>>(`/notes${qs ? `?${qs}` : ''}`);
+    },
+
+    createNote(body: { jobId: string; body: string }): Promise<JobNote> {
+      return fetchApi<JobNote>('/notes', { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    deleteNote(id: string): Promise<{ deleted: true }> {
+      return fetchApi<{ deleted: true }>(`/notes/${id}`, { method: 'DELETE' });
     },
 
     getJobReports(jobId: string): Promise<Report[]> {

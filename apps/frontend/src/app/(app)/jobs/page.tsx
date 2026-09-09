@@ -23,6 +23,8 @@ export default async function JobsPage({
     jobType?: string;
     tab?: string;
     refs?: string;
+    provider?: string;
+    account?: string;
     archiveState?: string;
     assignedToUserId?: string;
     assignedToUserIds?: string;
@@ -35,13 +37,14 @@ export default async function JobsPage({
   const emptyJobs: PaginatedResponse<Job> = { data: [], total: 0 };
   const tab = parseJobsListTab(params.tab ?? null);
 
-  const [statusLookupsRes, jobTypesRes, jobTypesAllRes, orgUsers, session] = await Promise.all([
+  const [statusLookupsRes, jobTypesRes, jobTypesAllRes, accountLookupsRes, orgUsers, session] = await Promise.all([
     api.getLookupsByDomain('job_status').catch(() => []),
     Promise.all([
       api.getLookupsByDomain('job_type', { providerCode: 'direct' }).catch(() => []),
       api.getLookupsByDomain('job_type', { providerCode: 'crunchwork' }).catch(() => []),
     ]).then(([direct, crunchwork]) => [...direct, ...crunchwork]),
     api.getLookupsByDomain('job_type').catch(() => []),
+    api.getLookupsByDomain('account').catch(() => []),
     api.listOrgUsersForSelect().catch((err: unknown) => {
       console.error(
         'frontend:JobsPage - listOrgUsersForSelect failed:',
@@ -85,6 +88,8 @@ export default async function JobsPage({
     page: params.page,
     status: initialStatus,
     jobType: params.jobType,
+    provider: params.provider,
+    account: params.account,
     refs: params.refs,
     assignedToUserId: initialAssignedToUserId,
     assignedToUserIds: initialAssignedToUserIds,
@@ -100,6 +105,8 @@ export default async function JobsPage({
         sort: params.sort,
         status: initialStatus,
         jobType: params.jobType,
+        provider: params.provider,
+        account: params.account,
         refs: params.refs,
         assignedToUserId: initialAssignedToUserId,
         assignedToUserIds: initialAssignedToUserIds,
@@ -136,6 +143,12 @@ export default async function JobsPage({
       name: row.name?.trim() ? row.name.trim() : 'Unknown',
     }),
   );
+  const accountOptions = (Array.isArray(accountLookupsRes) ? accountLookupsRes : []).map(
+    (row) => ({
+      id: row.id,
+      name: row.name?.trim() ? row.name.trim() : 'Unknown',
+    }),
+  );
   const claims = (claimsRes?.data ?? []).map(toJobFormClaimOption);
 
   return (
@@ -144,6 +157,7 @@ export default async function JobsPage({
       initialFetchKey={jobsSsrOk ? initialFetchKey : undefined}
       jobTypes={jobTypes}
       jobTypeFilterOptions={jobTypeFilterOptions}
+      accountOptions={accountOptions}
       claims={claims}
       statusOptions={statusOptions}
       unreadJobIds={unreadJobIds}

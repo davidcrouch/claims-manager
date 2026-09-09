@@ -19,6 +19,7 @@ export interface JobsPageClientProps {
   /** Claims for the Create Job claim dropdown. */
   claims?: JobFormClaimOption[];
   statusOptions: { id: string; name: string }[];
+  accountOptions?: { id: string; name: string }[];
   unreadJobIds?: string[];
   currentUserId?: string | null;
 }
@@ -30,6 +31,7 @@ export function JobsPageClient({
   jobTypeFilterOptions,
   claims = [],
   statusOptions,
+  accountOptions = [],
   unreadJobIds,
   currentUserId,
 }: JobsPageClientProps) {
@@ -52,6 +54,7 @@ export function JobsPageClient({
         initialData={initialData}
         initialFetchKey={initialFetchKey}
         statusOptions={statusOptions}
+        accountOptions={accountOptions}
         jobTypes={jobTypeFilterOptions ?? jobTypes}
         unreadJobIds={unreadJobIds}
         refreshNonce={refreshNonce}

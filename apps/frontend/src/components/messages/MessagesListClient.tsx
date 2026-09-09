@@ -2,13 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Mail, MessageSquare } from 'lucide-react';
+import { Mail, MessageSquare, StickyNote } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
 import { PrintButton } from '@/components/shared/PrintButton';
 import { EntityPageHeader } from '@/components/shared/EntityPageHeader';
 import { MessageFormDrawer } from '@/components/forms/MessageFormDrawer';
+import { NoteFormDrawer } from '@/components/forms/NoteFormDrawer';
+import { NotesListPanel } from '@/components/notes/NotesListPanel';
 import {
   SortTabs,
   SearchInput,
@@ -132,6 +135,11 @@ export function MessagesListClient({
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
+  const [noteComposeOpen, setNoteComposeOpen] = useState(false);
+  const [notesTotal, setNotesTotal] = useState(0);
+  const [notesShowing, setNotesShowing] = useState(0);
+  const [notesReloadToken, setNotesReloadToken] = useState(0);
+  const activeTab = searchParams.get('tab') === 'notes' ? 'notes' : 'messages';
   const limit = 20;
   const { isVisible, toggle, visibleCount } = useColumnVisibility(
     'messages',
@@ -170,6 +178,14 @@ export function MessagesListClient({
     () => toServerJobFetchParams(selectedJobIds),
     [selectedJobIds],
   );
+  const jobInContext = Boolean(fetchJobId || job?.id);
+
+  const handleTabChange = (val: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (val === 'notes') params.set('tab', 'notes');
+    else params.delete('tab');
+    router.replace(`/messages?${params.toString()}`, { scroll: false });
+  };
 
   const fromNamesParam = useMemo(
     () => columnFilterToValuesParam(fromFilterActive, fromFilter),
@@ -347,15 +363,15 @@ export function MessagesListClient({
         <EntityPageHeader
           icon={MessageSquare}
           title="Communications"
-          total={total}
-          showing={visibleMessages.length}
+          total={activeTab === 'notes' ? notesTotal : total}
+          showing={activeTab === 'notes' ? notesShowing : visibleMessages.length}
           accent="slate"
           job={job}
           parentClaim={parentClaim}
         />
       </SetPageHeader>
       <SetHeaderActions>
-        {(fetchJobId || job?.id) ? (
+        {activeTab === 'messages' && jobInContext ? (
           <Button
             size="default"
             onClick={() => setComposeOpen(true)}
@@ -365,9 +381,48 @@ export function MessagesListClient({
             Send Message
           </Button>
         ) : null}
-        <PrintButton documentType="messages_list" entityId="list" />
+        {activeTab === 'notes' && jobInContext ? (
+          <Button
+            size="default"
+            onClick={() => setNoteComposeOpen(true)}
+            className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+          >
+            <StickyNote className="h-3.5 w-3.5" />
+            Add Note
+          </Button>
+        ) : null}
+        {activeTab === 'messages' ? (
+          <PrintButton documentType="messages_list" entityId="list" />
+        ) : null}
       </SetHeaderActions>
 
+      <div className="flex flex-col gap-4 px-6 pb-2 pt-1">
+        <Tabs value={activeTab} onValueChange={handleTabChange}>
+          <TabsList>
+            <TabsTrigger value="messages">Messages</TabsTrigger>
+            <TabsTrigger value="notes">Notes</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+
+      {activeTab === 'notes' ? (
+        <NotesListPanel
+          jobNameById={jobNameById}
+          jobTypeById={jobTypeById}
+          fetchJobId={fetchJobId}
+          fetchJobIds={fetchJobIds}
+          uniqueJobs={uniqueJobs}
+          jobFilter={jobFilter}
+          jobFilterActive={jobFilterActive}
+          onApplyJobFilter={applyJobFilter}
+          onStatsChange={({ total: nextTotal, showing }) => {
+            setNotesTotal(nextTotal);
+            setNotesShowing(showing);
+          }}
+          reloadToken={notesReloadToken}
+        />
+      ) : (
+        <>
       <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
           <SortTabs
@@ -584,6 +639,8 @@ export function MessagesListClient({
           />
         </div>
       </div>
+        </>
+      )}
 
       <MessageDetailDrawer
         open={detailOpen}
@@ -597,6 +654,16 @@ export function MessagesListClient({
           onOpenChange={(open) => {
             setComposeOpen(open);
             if (!open) void load();
+          }}
+          jobId={fetchJobId || job?.id || ''}
+        />
+      )}
+      {jobInContext && (
+        <NoteFormDrawer
+          open={noteComposeOpen}
+          onOpenChange={(open) => {
+            setNoteComposeOpen(open);
+            if (!open) setNotesReloadToken((n) => n + 1);
           }}
           jobId={fetchJobId || job?.id || ''}
         />

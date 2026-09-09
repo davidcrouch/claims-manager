@@ -131,6 +131,8 @@ export interface Job {
 
   /** Provider that created this job: 'crunchwork' for webhook-originated, 'internal' for manual. */
   provider?: 'crunchwork' | 'internal' | string;
+  /** Claim insurer account (from parent claim). Absent on internal jobs without a claim. */
+  account?: LookupRef;
 
   vendorSnapshot?: Record<string, unknown>;
   temporaryAccommodationDetails?: Record<string, unknown>;
@@ -592,6 +594,17 @@ export interface Message {
   originType?: string | null;
   createdByUserId?: string | null;
   messagePayload?: Record<string, unknown> | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface JobNote {
+  id: string;
+  tenantId: string;
+  jobId: string;
+  body: string;
+  createdByUserId?: string | null;
+  createdByName?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }

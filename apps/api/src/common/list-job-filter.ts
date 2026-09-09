@@ -20,6 +20,33 @@ export function normalizeListJobIds(params: {
   return [...new Set(raw)];
 }
 
+export const JOB_ACCOUNT_INTERNAL_FILTER_ID = '__internal__';
+
+export type JobProviderFilterCode = 'internal' | 'crunchwork';
+
+/**
+ * Parse CSV job provider filter (`internal`, `direct`, `crunchwork`).
+ * - undefined/empty → no filter
+ * - `__none__` or only unknown values → empty list (caller returns zero rows)
+ */
+export function parseJobProviderFilter(
+  csv?: string | string[] | null,
+): JobProviderFilterCode[] | undefined {
+  const raw = parseCsvFilterValues(csv);
+  if (raw === undefined) return undefined;
+  if (raw.length === 0) return [];
+  const codes = new Set<JobProviderFilterCode>();
+  for (const value of raw) {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'internal' || normalized === 'direct') {
+      codes.add('internal');
+    } else if (normalized === 'crunchwork') {
+      codes.add('crunchwork');
+    }
+  }
+  return [...codes];
+}
+
 /**
  * Parse a CSV list query param (or repeated query values as string[]).
  * - undefined/empty → no filter
@@ -61,4 +88,4 @@ export function normalizeListUserIds(params: {
   if (raw.includes('__none__')) return [];
   return [...new Set(raw)];
 }
-
+

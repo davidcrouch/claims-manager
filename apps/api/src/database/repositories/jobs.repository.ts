@@ -1,11 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
 import { eq, and, isNull, desc, asc, sql, gte, ilike, or, inArray, notInArray, ne, aliasedTable, getTableColumns, exists } from 'drizzle-orm';
-import { normalizeListUserIds, parseCsvFilterValues } from '../../common/list-job-filter';
+import { normalizeListUserIds, parseCsvFilterValues, parseJobProviderFilter, JOB_ACCOUNT_INTERNAL_FILTER_ID } from '../../common/list-job-filter';
 import { addressSearchText, parseSearchTokens } from '../../common/address-search';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
 import {
   claimContacts,
+  claims,
   jobs,
   lookupValues,
   vendors,
@@ -36,6 +37,9 @@ import {
 export type { JobRelatedCounts };
 
 const assigneeJoinOn = sql`${jobs.assignedToUserId} = ${users.id}::text`;
+
+/** Matches API `job.provider`: missing / `direct` → `internal`. */
+const jobProviderNormalized = sql<string>`lower(coalesce(nullif(${integrationConnections.providerCode}, 'direct'), 'internal'))`;
 
 /** Matches frontend jobListRef: internalNumber ?? name ?? externalJobId ?? externalReference ?? id */
 const jobDisplayRef = sql`COALESCE(${jobs.internalNumber}, ${jobs.name}, ${jobs.externalJobId}, ${jobs.externalReference}, ${jobs.id}::text)`;
@@ -100,6 +104,9 @@ export interface JobViewRow extends JobRow {
   vendorExternalReference: string | null;
   connectionProviderCode: string | null;
   assigneeName: string | null;
+  accountLookupId?: string | null;
+  accountName?: string | null;
+  accountExternalReference?: string | null;
 }
 
 export type ClaimJobSummary = {
@@ -137,6 +144,10 @@ export class JobsRepository {
     assignedToUserIds?: string;
     /** Comma-separated display refs (name / externalJobId / externalReference / id) */
     refs?: string;
+    /** Comma-separated provider codes (`internal`, `direct`, `crunchwork`) */
+    provider?: string;
+    /** Comma-separated claim account lookup IDs, plus `__internal__` */
+    account?: string;
   }): Promise<{ data: JobViewRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
@@ -144,6 +155,11 @@ export class JobsRepository {
 
     const statusLookup = aliasedTable(lookupValues, 'status_lookup');
     const jobTypeLookup = aliasedTable(lookupValues, 'job_type_lookup');
+    const accountLookup = aliasedTable(lookupValues, 'account_lookup');
+    const jobAccountDisplayName = sql<string>`coalesce(
+      nullif(btrim(${accountLookup.name}), ''),
+      case when ${jobProviderNormalized} = 'internal' then 'Internal' else '' end
+    )`;
 
     const statusIds = params.status
       ? params.status
@@ -258,6 +274,40 @@ export class JobsRepository {
       whereParts.push(inArray(jobs.jobTypeLookupId, jobTypeIds));
     }
 
+    const providerCodes = parseJobProviderFilter(params.provider);
+    if (providerCodes) {
+      if (providerCodes.length === 0) {
+        return { data: [], total: 0 };
+      }
+      whereParts.push(
+        sql`${jobProviderNormalized} IN (${sql.join(
+          providerCodes.map((code) => sql`${code}`),
+          sql`, `,
+        )})`,
+      );
+    }
+
+    const accountIds = parseCsvFilterValues(params.account);
+    if (accountIds) {
+      if (accountIds.length === 0) {
+        return { data: [], total: 0 };
+      }
+      const includeInternal = accountIds.includes(JOB_ACCOUNT_INTERNAL_FILTER_ID);
+      const realIds = accountIds.filter((id) => id !== JOB_ACCOUNT_INTERNAL_FILTER_ID);
+      if (includeInternal && realIds.length > 0) {
+        whereParts.push(
+          or(
+            sql`${jobAccountDisplayName} = 'Internal'`,
+            inArray(claims.accountLookupId, realIds),
+          )!,
+        );
+      } else if (includeInternal) {
+        whereParts.push(sql`${jobAccountDisplayName} = 'Internal'`);
+      } else {
+        whereParts.push(inArray(claims.accountLookupId, realIds));
+      }
+    }
+
     const refs = parseCsvFilterValues(params.refs);
     if (refs) {
       if (refs.length === 0) {
@@ -308,6 +358,18 @@ export class JobsRepository {
       case 'job_type_desc':
         orderBy = [desc(jobTypeLookup.name)];
         break;
+      case 'provider_asc':
+        orderBy = [asc(jobProviderNormalized)];
+        break;
+      case 'provider_desc':
+        orderBy = [desc(jobProviderNormalized)];
+        break;
+      case 'account_asc':
+        orderBy = [asc(jobAccountDisplayName)];
+        break;
+      case 'account_desc':
+        orderBy = [desc(jobAccountDisplayName)];
+        break;
       default:
         orderBy = buildJobOrderBy(params.sort);
     }
@@ -324,6 +386,9 @@ export class JobsRepository {
           vendorExternalReference: vendors.externalReference,
           connectionProviderCode: integrationConnections.providerCode,
           assigneeName: users.name,
+          accountLookupId: claims.accountLookupId,
+          accountName: accountLookup.name,
+          accountExternalReference: accountLookup.externalReference,
         })
         .from(jobs)
         .leftJoin(statusLookup, eq(jobs.statusLookupId, statusLookup.id))
@@ -331,6 +396,8 @@ export class JobsRepository {
         .leftJoin(vendors, eq(jobs.vendorId, vendors.id))
         .leftJoin(integrationConnections, eq(jobs.connectionId, integrationConnections.id))
         .leftJoin(users, assigneeJoinOn)
+        .leftJoin(claims, eq(jobs.claimId, claims.id))
+        .leftJoin(accountLookup, eq(claims.accountLookupId, accountLookup.id))
         .where(whereClause)
         .orderBy(...orderBy)
         .limit(limit)
@@ -338,6 +405,9 @@ export class JobsRepository {
       this.db
         .select({ count: sql<number>`count(*)::int` })
         .from(jobs)
+        .leftJoin(integrationConnections, eq(jobs.connectionId, integrationConnections.id))
+        .leftJoin(claims, eq(jobs.claimId, claims.id))
+        .leftJoin(accountLookup, eq(claims.accountLookupId, accountLookup.id))
         .where(whereClause),
     ]);
 
@@ -386,6 +456,7 @@ export class JobsRepository {
   }): Promise<JobViewRow | null> {
     const statusLookup = aliasedTable(lookupValues, 'status_lookup');
     const jobTypeLookup = aliasedTable(lookupValues, 'job_type_lookup');
+    const accountLookup = aliasedTable(lookupValues, 'account_lookup');
 
     const [row] = await this.db
       .select({
@@ -398,6 +469,9 @@ export class JobsRepository {
         vendorExternalReference: vendors.externalReference,
         connectionProviderCode: integrationConnections.providerCode,
         assigneeName: users.name,
+        accountLookupId: claims.accountLookupId,
+        accountName: accountLookup.name,
+        accountExternalReference: accountLookup.externalReference,
       })
       .from(jobs)
       .leftJoin(statusLookup, eq(jobs.statusLookupId, statusLookup.id))
@@ -405,6 +479,8 @@ export class JobsRepository {
       .leftJoin(vendors, eq(jobs.vendorId, vendors.id))
       .leftJoin(integrationConnections, eq(jobs.connectionId, integrationConnections.id))
       .leftJoin(users, assigneeJoinOn)
+      .leftJoin(claims, eq(jobs.claimId, claims.id))
+      .leftJoin(accountLookup, eq(claims.accountLookupId, accountLookup.id))
       .where(and(eq(jobs.id, params.id), eq(jobs.tenantId, params.tenantId)))
       .limit(1);
     return (row as JobViewRow) ?? null;

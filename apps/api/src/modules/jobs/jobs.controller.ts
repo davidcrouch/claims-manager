@@ -35,6 +35,8 @@ export class JobsController {
     @Query('assignedToUserId') assignedToUserId?: string,
     @Query('assignedToUserIds') assignedToUserIds?: string,
     @Query('refs') refs?: string,
+    @Query('provider') provider?: string,
+    @Query('account') account?: string,
   ) {
     return this.jobsService.findAll({
       page: page ? parseInt(page, 10) : 1,
@@ -47,6 +49,8 @@ export class JobsController {
       assignedToUserId,
       assignedToUserIds,
       refs,
+      provider,
+      account,
     });
   }
 

@@ -1196,3 +1196,13 @@
   Help chat rebuilds mixed tool-call turns so the assistant can continue after a tool reply.
   Catalogue drop zones keep a clearer highlight when dragging into nested scopes and assemblies.
   Outcome: smoother job contact tracking, reliable Make Safe create, and fewer chat and catalogue drag glitches.
+
+- `2026-09-09` `PENDING` **2.5 h**
+  `33 files | +1 705 −94 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  Lay summary: Staff can add and review job notes from Messages, and the jobs list can filter by provider with clearer Internal and Crunchwork labels.
+  **Job notes and jobs-list provider filtering.**
+  Staff can create, view, and delete job notes from the Messages screen, including a Notes tab and a formatted create-note form.
+  Notes belong to a job and show author and date so the team can keep a written record alongside messages.
+  The jobs list supports filtering by provider and shows Internal versus Crunchwork more clearly on the list, header, and overview.
+  Job filters used across lists were aligned so provider and account choices behave consistently.
+  Outcome: a dedicated place for job notes plus easier scanning of jobs by provider.

@@ -834,6 +834,29 @@ export const messages = pgTable(
   ],
 );
 
+// Job notes (internal notes on a job; distinct from inbound/outbound messages)
+export const jobNotes = pgTable(
+  'job_notes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    jobId: uuid('job_id')
+      .notNull()
+      .references(() => jobs.id, { onDelete: 'cascade' }),
+    body: text('body').notNull(),
+    createdByUserId: text('created_by_user_id'),
+    createdByName: text('created_by_name'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_job_notes_tenant_job').on(t.tenantId, t.jobId),
+    index('idx_job_notes_created_at').on(t.tenantId, t.createdAt),
+  ],
+);
+
 // Appointments
 export const appointments = pgTable(
   'appointments',

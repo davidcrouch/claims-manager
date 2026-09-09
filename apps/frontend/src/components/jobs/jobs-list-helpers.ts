@@ -11,6 +11,23 @@ const ARCHIVED_STATUS_NAMES = new Set(['archived', 'closed']);
 export const JOBS_PAGE_SIZE = 20;
 export const DEFAULT_JOBS_SORT = 'updated_at_desc';
 
+export const JOB_PROVIDER_FILTER_OPTIONS: { id: string; name: string }[] = [
+  { id: 'crunchwork', name: 'Crunchwork' },
+  { id: 'internal', name: 'Internal' },
+];
+
+export const JOB_ACCOUNT_INTERNAL_FILTER_ID = '__internal__';
+export const JOB_ACCOUNT_INTERNAL_LABEL = 'Internal';
+
+export function withInternalAccountOption(
+  accountOptions: { id: string; name: string }[],
+): { id: string; name: string }[] {
+  return [
+    { id: JOB_ACCOUNT_INTERNAL_FILTER_ID, name: JOB_ACCOUNT_INTERNAL_LABEL },
+    ...accountOptions,
+  ];
+}
+
 export const JOB_ARCHIVE_STATE_OPTIONS = ['Active', 'Archived'] as const;
 export type JobArchiveState = (typeof JOB_ARCHIVE_STATE_OPTIONS)[number];
 
@@ -22,6 +39,8 @@ export type JobSortField =
   | 'insured'
   | 'status'
   | 'archive_state'
+  | 'provider'
+  | 'account'
   | 'job_type'
   | 'assignee'
   | 'address'
@@ -33,6 +52,8 @@ const JOB_SORT_FIELDS = new Set<JobSortField>([
   'external_reference',
   'external_job_id',
   'status',
+  'provider',
+  'account',
   'job_type',
   'assignee',
   'address',
@@ -147,6 +168,8 @@ export function buildJobsListFetchKey(params: {
   page?: string | number;
   status?: string | null;
   jobType?: string | null;
+  provider?: string | null;
+  account?: string | null;
   refs?: string | null;
   assignedToUserId?: string | null;
   assignedToUserIds?: string | null;
@@ -154,6 +177,8 @@ export function buildJobsListFetchKey(params: {
 }): string {
   const statusKey = params.status === null ? '__none__' : (params.status ?? '');
   const typeKey = params.jobType === null ? '__none__' : (params.jobType ?? '');
+  const providerKey = params.provider === null ? '__none__' : (params.provider ?? '');
+  const accountKey = params.account === null ? '__none__' : (params.account ?? '');
   const refsKey = params.refs === null ? '__none__' : (params.refs ?? '');
   const assigneeKey =
     params.assignedToUserId === null ? '__none__' : (params.assignedToUserId ?? '');
@@ -163,7 +188,7 @@ export function buildJobsListFetchKey(params: {
   const sort = params.sort ?? DEFAULT_JOBS_SORT;
   const tab = params.tab ?? 'active';
   const refreshNonce = params.refreshNonce ?? 0;
-  return `${params.search ?? ''}|${sort}|${tab}|${page}|${statusKey}|${typeKey}|${refsKey}|${assigneeKey}|${assigneesKey}|${refreshNonce}`;
+  return `${params.search ?? ''}|${sort}|${tab}|${page}|${statusKey}|${typeKey}|${providerKey}|${accountKey}|${refsKey}|${assigneeKey}|${assigneesKey}|${refreshNonce}`;
 }
 
 export function buildJobsListFetchKeyFromPageParams(params: {
@@ -173,6 +198,8 @@ export function buildJobsListFetchKeyFromPageParams(params: {
   page?: string;
   status?: string;
   jobType?: string;
+  provider?: string;
+  account?: string;
   refs?: string;
   assignedToUserId?: string;
   assignedToUserIds?: string;
@@ -186,6 +213,8 @@ export function buildJobsListFetchKeyFromPageParams(params: {
     page: params.page ?? '1',
     status: params.status,
     jobType: params.jobType,
+    provider: params.provider,
+    account: params.account,
     refs: params.refs,
     assignedToUserId: params.assignedToUserId,
     assignedToUserIds: params.assignedToUserIds,

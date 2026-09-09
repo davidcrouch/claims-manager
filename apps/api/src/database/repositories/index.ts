@@ -63,6 +63,11 @@ export {
   type MessageInsert,
 } from './messages.repository';
 export {
+  JobNotesRepository,
+  type JobNoteRow,
+  type JobNoteInsert,
+} from './job-notes.repository';
+export {
   AppointmentsRepository,
   type AppointmentRow,
   type AppointmentInsert,

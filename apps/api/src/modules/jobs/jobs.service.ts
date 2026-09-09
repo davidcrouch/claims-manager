@@ -111,6 +111,8 @@ export class JobsService {
     assignedToUserId?: string;
     assignedToUserIds?: string;
     refs?: string;
+    provider?: string;
+    account?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
     this.logger.debug(`JobsService.findAll — tenantId=${tenantId} claimId=${params.claimId ?? 'all'}`);
@@ -126,6 +128,8 @@ export class JobsService {
       assignedToUserId: params.assignedToUserId,
       assignedToUserIds: params.assignedToUserIds,
       refs: params.refs,
+      provider: params.provider,
+      account: params.account,
     });
     const jobIds = result.data.map((row) => row.id);
     const claimIds = [
@@ -182,7 +186,7 @@ export class JobsService {
   }
 
   private shapeJobResponse(row: JobViewRow) {
-    const { statusName, statusExternalReference, jobTypeName, jobTypeExternalReference, vendorName, vendorExternalReference, connectionProviderCode, assigneeName, ...rest } = row;
+    const { statusName, statusExternalReference, jobTypeName, jobTypeExternalReference, vendorName, vendorExternalReference, connectionProviderCode, assigneeName, accountLookupId, accountName, accountExternalReference, ...rest } = row;
     const payload = (rest.apiPayload ?? {}) as Record<string, unknown>;
     const payloadId = typeof payload.id === 'string' ? payload.id.trim() : '';
     const externalRef = (rest.externalReference ?? '').trim() || payloadId;
@@ -198,6 +202,9 @@ export class JobsService {
       jobType: { id: row.jobTypeLookupId, name: jobTypeName ?? undefined, externalReference: jobTypeExternalReference ?? undefined },
       vendor: row.vendorId
         ? { id: row.vendorId, name: vendorName ?? undefined, externalReference: vendorExternalReference ?? undefined }
+        : undefined,
+      account: accountLookupId
+        ? { id: accountLookupId, name: accountName ?? undefined, externalReference: accountExternalReference ?? undefined }
         : undefined,
     };
   }

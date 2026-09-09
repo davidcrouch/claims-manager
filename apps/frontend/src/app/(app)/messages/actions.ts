@@ -2,7 +2,7 @@
 
 import { getSession, getAccessToken } from '@/lib/auth';
 import { createApiClient, ApiError } from '@/lib/api-client';
-import type { Message } from '@/types/api';
+import type { Message, JobNote } from '@/types/api';
 
 function isNotImplemented(err: unknown): boolean {
   if (err instanceof ApiError) {
@@ -87,6 +87,61 @@ export async function fetchEntityMessagesAction(
       data: [],
       phaseUnavailable: false,
       error: err instanceof Error ? err.message : 'Failed to load messages',
+    };
+  }
+}
+
+export async function fetchNotesAction(params?: {
+  page?: number;
+  limit?: number;
+  jobId?: string;
+  jobIds?: string[];
+  search?: string;
+  sort?: string;
+}): Promise<{ data: JobNote[]; total: number }> {
+  const api = await getApi();
+  if (!api) return { data: [], total: 0 };
+  try {
+    const res = await api.getNotes(params);
+    return { data: res?.data ?? [], total: res?.total ?? 0 };
+  } catch (err) {
+    console.error('[messages/actions.fetchNotesAction]', err);
+    return { data: [], total: 0 };
+  }
+}
+
+export async function createNoteAction(params: {
+  jobId: string;
+  body: string;
+}): Promise<{ success: boolean; note?: JobNote; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const note = await api.createNote(params);
+    return { success: true, note };
+  } catch (err) {
+    console.error('[messages/actions.createNoteAction]', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to add note',
+    };
+  }
+}
+
+export async function deleteNoteAction(id: string): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    await api.deleteNote(id);
+    return { success: true };
+  } catch (err) {
+    console.error('[messages/actions.deleteNoteAction]', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to delete note',
     };
   }
 }

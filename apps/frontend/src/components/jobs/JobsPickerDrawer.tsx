@@ -29,6 +29,7 @@ type Bootstrap = {
   jobs: PaginatedResponse<Job>;
   statusOptions: StatusOption[];
   jobTypes: { id: string; name: string }[];
+  accountOptions: { id: string; name: string }[];
   unreadJobIds: string[];
   initialFetchKey?: string;
 };
@@ -112,6 +113,7 @@ export function JobsPickerDrawer({
             initialFetchKey={bootstrap.initialFetchKey}
             statusOptions={bootstrap.statusOptions}
             jobTypes={bootstrap.jobTypes}
+            accountOptions={bootstrap.accountOptions}
             unreadJobIds={bootstrap.unreadJobIds}
             selectedJobId={selectedJobId}
             onJobSelect={handleSelect}

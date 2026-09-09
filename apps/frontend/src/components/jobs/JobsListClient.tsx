@@ -6,6 +6,7 @@ import { Briefcase, Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { TypeBadge } from '@/components/ui/type-badge';
+import { ProviderBadge } from '@/components/ui/provider-badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import {
@@ -31,7 +32,7 @@ import {
 import { ListArchiveButton, LIST_ARCHIVE_TH_CLASS, LIST_ARCHIVE_TD_CLASS, LIST_ARCHIVE_SPACER_TD_CLASS } from '@/components/shared/ListArchiveButton';
 import { formatAddress } from '@/components/shared/detail';
 import { SyncStatusIndicator } from '@/components/shared/SyncStatusIndicator';
-import { jobDisplayName, jobInsurerReference } from '@/components/shared/job-label';
+import { jobDisplayName, jobInsurerReference, jobAccountLabel } from '@/components/shared/job-label';
 import { fetchJobsAction, fetchJobFilterOptionsAction } from '@/app/(app)/jobs/actions';
 import {
   buildJobsListFetchKey,
@@ -39,6 +40,8 @@ import {
   columnFilterFromValuesParam,
   DEFAULT_JOBS_SORT,
   JOBS_PAGE_SIZE,
+  JOB_PROVIDER_FILTER_OPTIONS,
+  withInternalAccountOption,
   isJobsMineTab,
   jobArchiveStateLabel,
   parseJobsColumnSort,
@@ -69,6 +72,14 @@ function jobListRef(job: Job): string {
   return jobDisplayName(job);
 }
 
+function jobListAccountBadge(job: Job) {
+  const label = jobAccountLabel(job);
+  if (label === 'Internal') {
+    return <ProviderBadge provider="internal" />;
+  }
+  return <TypeBadge type={label === '—' ? null : label} />;
+}
+
 interface ColDef {
   key: JobSortField;
   label: string;
@@ -81,6 +92,8 @@ interface ColDef {
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'external_reference', label: 'Job #', locked: true, filterable: true },
   { key: 'external_job_id', label: 'Insurer Ref', defaultHidden: true },
+  { key: 'provider', label: 'Provider', filterable: true, defaultHidden: true },
+  { key: 'account', label: 'Account', filterable: true },
   { key: 'job_type', label: 'Type', filterable: true },
   { key: 'status', label: 'Status', filterable: true },
   { key: 'archive_state', label: 'State', filterable: true, sortable: false },
@@ -97,6 +110,7 @@ export interface JobsListClientProps {
   /** Skip the first client fetch when it matches SSR / picker bootstrap. */
   initialFetchKey?: string;
   statusOptions: StatusOption[];
+  accountOptions?: { id: string; name: string }[];
   jobTypes?: { id: string; name?: string }[];
   unreadJobIds?: string[];
   headerAction?: React.ReactNode;
@@ -121,6 +135,7 @@ export function JobsListClient({
   initialData,
   initialFetchKey,
   statusOptions,
+  accountOptions = [],
   jobTypes = [],
   unreadJobIds,
   headerAction,
@@ -151,6 +166,24 @@ export function JobsListClient({
         ? { selected: new Set<string>(), active: false }
         : columnFilterFromValuesParam(searchParams.get('refs')),
     [isPicker, searchParams],
+  );
+  const initialProviderFilter = useMemo(
+    () =>
+      isPicker
+        ? { selected: new Set<string>(), active: false }
+        : columnFilterFromIdsParam(searchParams.get('provider'), JOB_PROVIDER_FILTER_OPTIONS),
+    [isPicker, searchParams],
+  );
+  const accountFilterOptions = useMemo(
+    () => withUniqueNamedFilterOptions(withInternalAccountOption(accountOptions)),
+    [accountOptions],
+  );
+  const initialAccountFilter = useMemo(
+    () =>
+      isPicker
+        ? { selected: new Set<string>(), active: false }
+        : columnFilterFromIdsParam(searchParams.get('account'), accountFilterOptions),
+    [isPicker, searchParams, accountFilterOptions],
   );
   const [search, setSearch] = useState(() =>
     isPicker ? '' : (searchParams.get('search') ?? ''),
@@ -189,6 +222,14 @@ export function JobsListClient({
   );
   const [refFilter, setRefFilter] = useState(initialRefFilter.selected);
   const [refFilterActive, setRefFilterActive] = useState(initialRefFilter.active);
+  const [providerFilter, setProviderFilter] = useState(initialProviderFilter.selected);
+  const [providerFilterActive, setProviderFilterActive] = useState(
+    initialProviderFilter.active,
+  );
+  const [accountFilter, setAccountFilter] = useState(initialAccountFilter.selected);
+  const [accountFilterActive, setAccountFilterActive] = useState(
+    initialAccountFilter.active,
+  );
   const [assigneeFilter, setAssigneeFilter] = useState<Set<string>>(new Set());
   const [assigneeFilterActive, setAssigneeFilterActive] = useState(false);
   const [filtersHydrated, setFiltersHydrated] = useState(isPicker);
@@ -239,7 +280,7 @@ export function JobsListClient({
   );
 
   const { isVisible, toggle } = useColumnVisibility(
-    'jobs-v2',
+    'jobs-v3',
     listColumns,
   );
 
@@ -281,6 +322,24 @@ export function JobsListClient({
   const refsParam = useMemo(
     () => columnFilterToValuesParam(refFilterActive, refFilter),
     [refFilterActive, refFilter],
+  );
+  const providerParam = useMemo(
+    () =>
+      columnFilterToIdsParam(
+        providerFilterActive,
+        providerFilter,
+        JOB_PROVIDER_FILTER_OPTIONS,
+      ),
+    [providerFilterActive, providerFilter],
+  );
+  const accountParam = useMemo(
+    () =>
+      columnFilterToIdsParam(
+        accountFilterActive,
+        accountFilter,
+        accountFilterOptions,
+      ),
+    [accountFilterActive, accountFilter, accountFilterOptions],
   );
   const assigneeFilterOptions = useMemo(
     () => withUniqueNamedFilterOptions(filterOptions.assignees),
@@ -360,6 +419,8 @@ export function JobsListClient({
     if (
       statusParam === null ||
       jobTypeParam === null ||
+      providerParam === null ||
+      accountParam === null ||
       refsParam === null ||
       assignedToUserIdsParam === null ||
       (isMineTab && !currentUserId)
@@ -375,6 +436,8 @@ export function JobsListClient({
       sort: sortParam,
       status: statusParam,
       jobType: jobTypeParam,
+      provider: providerParam,
+      account: accountParam,
       refs: refsParam,
       assignedToUserId: assignedToUserIdParam,
       assignedToUserIds: assignedToUserIdsParam,
@@ -392,6 +455,8 @@ export function JobsListClient({
     page,
     statusParam,
     jobTypeParam,
+    providerParam,
+    accountParam,
     refsParam,
     assignedToUserIdParam,
     assignedToUserIdsParam,
@@ -411,6 +476,8 @@ export function JobsListClient({
     page,
     status: statusParam,
     jobType: jobTypeParam,
+    provider: providerParam,
+    account: accountParam,
     refs: refsParam,
     assignedToUserId: assignedToUserIdParam,
     assignedToUserIds: assignedToUserIdsParam,
@@ -435,6 +502,10 @@ export function JobsListClient({
     else params.delete('status');
     if (jobTypeParam) params.set('jobType', jobTypeParam);
     else params.delete('jobType');
+    if (providerParam) params.set('provider', providerParam);
+    else params.delete('provider');
+    if (accountParam) params.set('account', accountParam);
+    else params.delete('account');
     if (refsParam) params.set('refs', refsParam);
     else params.delete('refs');
     const archiveStateValuesParam = isMineTab
@@ -473,6 +544,8 @@ export function JobsListClient({
     if (
       statusParam === null ||
       jobTypeParam === null ||
+      providerParam === null ||
+      accountParam === null ||
       refsParam === null ||
       assignedToUserIdsParam === null ||
       (isMineTab && !currentUserId)
@@ -487,6 +560,8 @@ export function JobsListClient({
         sort: sortParam,
         status: statusParam,
         jobType: jobTypeParam,
+        provider: providerParam,
+        account: accountParam,
         refs: refsParam,
         assignedToUserId: assignedToUserIdParam,
         assignedToUserIds: assignedToUserIdsParam,
@@ -507,6 +582,8 @@ export function JobsListClient({
     sortParam,
     statusParam,
     jobTypeParam,
+    providerParam,
+    accountParam,
     refsParam,
     assignedToUserIdParam,
     assignedToUserIdsParam,
@@ -524,7 +601,10 @@ export function JobsListClient({
       return {
         field,
         order:
-          field === 'external_reference' || field === 'external_job_id'
+          field === 'external_reference' ||
+          field === 'external_job_id' ||
+          field === 'provider' ||
+          field === 'account'
             ? 'asc'
             : 'desc',
       };
@@ -657,6 +737,54 @@ export function JobsListClient({
     onApply: applyTypeFilter,
     menuTitle: 'Filter by type',
     itemNoun: { singular: 'type', plural: 'types' },
+  };
+
+  const providerNames = useMemo(
+    () => JOB_PROVIDER_FILTER_OPTIONS.map((option) => option.name),
+    [],
+  );
+
+  const applyProviderFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: providerNames.length,
+    });
+    setProviderFilter(committed.selected);
+    setProviderFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const providerFilterProps = {
+    options: providerNames,
+    selected: providerFilter,
+    active: providerFilterActive,
+    onApply: applyProviderFilter,
+    menuTitle: 'Filter by provider',
+    itemNoun: { singular: 'provider', plural: 'providers' },
+  };
+
+  const accountNames = useMemo(
+    () => accountFilterOptions.map((option) => option.name),
+    [accountFilterOptions],
+  );
+
+  const applyAccountFilter = (next: Set<string>) => {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: accountNames.length,
+    });
+    setAccountFilter(committed.selected);
+    setAccountFilterActive(committed.active);
+    setPage(1);
+  };
+
+  const accountFilterProps = {
+    options: accountNames,
+    selected: accountFilter,
+    active: accountFilterActive,
+    onApply: applyAccountFilter,
+    menuTitle: 'Filter by account',
+    itemNoun: { singular: 'account', plural: 'accounts' },
   };
 
   const archiveStateNames = useMemo(() => ['Active', 'Archived'], []);
@@ -831,11 +959,15 @@ export function JobsListClient({
                             ? refFilterProps
                             : col.key === 'status'
                               ? statusFilterProps
-                              : col.key === 'job_type'
-                                ? typeFilterProps
-                                : col.key === 'assignee'
-                                  ? assigneeFilterProps
-                                  : undefined
+                              : col.key === 'provider'
+                                ? providerFilterProps
+                                : col.key === 'account'
+                                  ? accountFilterProps
+                                  : col.key === 'job_type'
+                                  ? typeFilterProps
+                                  : col.key === 'assignee'
+                                    ? assigneeFilterProps
+                                    : undefined
                         }
                       />
                     );
@@ -891,6 +1023,16 @@ export function JobsListClient({
                       {isVisible('external_job_id') && (
                         <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                           {jobInsurerReference(job) || '—'}
+                        </td>
+                      )}
+                      {isVisible('provider') && (
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <ProviderBadge provider={job.provider} />
+                        </td>
+                      )}
+                      {isVisible('account') && (
+                        <td className="whitespace-nowrap px-4 py-3">
+                          {jobListAccountBadge(job)}
                         </td>
                       )}
                       {isVisible('job_type') && (

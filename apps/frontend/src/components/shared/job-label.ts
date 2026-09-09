@@ -62,6 +62,19 @@ export function jobHeaderTitle(job: JobLabelSource): string {
   return job.internalNumber?.trim() || job.id;
 }
 
+export function jobAccountLabel(job: {
+  provider?: string | null;
+  account?: { name?: string | null } | null;
+}): string {
+  const name = job.account?.name?.trim();
+  if (name) return name;
+  const provider = (job.provider ?? '').trim().toLowerCase();
+  if (!provider || provider === 'internal' || provider === 'direct') {
+    return 'Internal';
+  }
+  return '—';
+}
+
 /** Merge job labels from list rows so cells work when the jobs page fetch is capped. */
 export function mergeJobLabelsFromRows(
   jobNameById: Record<string, string> | undefined,

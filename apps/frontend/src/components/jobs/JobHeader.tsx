@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { TypeBadge } from '@/components/ui/type-badge';
+import { ProviderBadge } from '@/components/ui/provider-badge';
 import { BackButton } from '@/components/layout/BackButton';
 import {
   PageHeaderField,
@@ -21,7 +22,7 @@ import {
 import { JobsPickerDrawer } from '@/components/jobs/JobsPickerDrawer';
 import { formatDate, formatDateTime, formatCurrency, formatAddress, BoolPill } from '@/components/shared/detail';
 import { SyncStatusIndicator } from '@/components/shared/SyncStatusIndicator';
-import { jobHeaderSubtitle, jobHeaderTitle } from '@/components/shared/job-label';
+import { jobHeaderSubtitle, jobHeaderTitle, jobAccountLabel } from '@/components/shared/job-label';
 import type { Job, Claim } from '@/types/api';
 
 type Dict = Record<string, unknown>;
@@ -157,6 +158,7 @@ export function JobPageHeader({
             {syncStatus && (
               <SyncStatusIndicator syncStatus={syncStatus} compact />
             )}
+            <ProviderBadge provider={job.provider} />
             {jobTypeName && <TypeBadge type={jobTypeName} />}
             {address && (
               <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
@@ -181,6 +183,7 @@ export function JobPageHeader({
         bottomRow={
           <>
             <PageHeaderField label="Request">{formatDate(job.requestDate)}</PageHeaderField>
+            <PageHeaderField label="Account">{jobAccountLabel(job)}</PageHeaderField>
             <PageHeaderField label="Updated">{formatDateTime(job.updatedAt)}</PageHeaderField>
             {job.excess != null && job.excess !== '' && (
               <PageHeaderField label="Excess">{formatCurrency(job.excess)}</PageHeaderField>

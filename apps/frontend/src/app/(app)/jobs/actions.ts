@@ -38,6 +38,8 @@ export async function fetchJobsAction(params: {
   assignedToUserId?: string;
   assignedToUserIds?: string;
   refs?: string;
+  provider?: string;
+  account?: string;
 }): Promise<PaginatedResponse<Job> | null> {
   const session = await getSession();
   if (!session.authenticated) return null;
@@ -62,6 +64,8 @@ export async function fetchJobsAction(params: {
       assignedToUserId: params.assignedToUserId,
       assignedToUserIds: params.assignedToUserIds,
       refs: params.refs,
+      provider: params.provider,
+      account: params.account,
     });
   } catch (err) {
     console.error(
@@ -99,6 +103,7 @@ export async function fetchJobsPickerBootstrapAction(): Promise<{
   jobs: PaginatedResponse<Job>;
   statusOptions: { id: string; name: string }[];
   jobTypes: { id: string; name: string }[];
+  accountOptions: { id: string; name: string }[];
   unreadJobIds: string[];
   initialFetchKey?: string;
 } | null> {
@@ -115,7 +120,7 @@ export async function fetchJobsPickerBootstrapAction(): Promise<{
   const api = createApiClient({ token, tenantId });
   const emptyJobs: PaginatedResponse<Job> = { data: [], total: 0 };
 
-  const [statusLookupsRes, jobTypesAllRes, unreadJobIds] = await Promise.all([
+  const [statusLookupsRes, jobTypesAllRes, accountLookupsRes, unreadJobIds] = await Promise.all([
     api.getLookupsByDomain('job_status').catch((err: unknown) => {
       console.error(
         'frontend:fetchJobsPickerBootstrapAction - job_status lookups failed:',
@@ -126,6 +131,13 @@ export async function fetchJobsPickerBootstrapAction(): Promise<{
     api.getLookupsByDomain('job_type').catch((err: unknown) => {
       console.error(
         'frontend:fetchJobsPickerBootstrapAction - job_type lookups failed:',
+        err instanceof Error ? err.message : err,
+      );
+      return [];
+    }),
+    api.getLookupsByDomain('account').catch((err: unknown) => {
+      console.error(
+        'frontend:fetchJobsPickerBootstrapAction - account lookups failed:',
         err instanceof Error ? err.message : err,
       );
       return [];
@@ -175,6 +187,10 @@ export async function fetchJobsPickerBootstrapAction(): Promise<{
     jobs,
     statusOptions,
     jobTypes: (Array.isArray(jobTypesAllRes) ? jobTypesAllRes : []).map((row) => ({
+      id: row.id,
+      name: row.name?.trim() ? row.name.trim() : 'Unknown',
+    })),
+    accountOptions: (Array.isArray(accountLookupsRes) ? accountLookupsRes : []).map((row) => ({
       id: row.id,
       name: row.name?.trim() ? row.name.trim() : 'Unknown',
     })),

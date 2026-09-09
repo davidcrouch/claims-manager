@@ -16,6 +16,7 @@ import {
 import { LocationMap } from '@/components/shared/LocationMap';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { TypeBadge } from '@/components/ui/type-badge';
+import { ProviderBadge } from '@/components/ui/provider-badge';
 import { Input } from '@/components/ui/input';
 import {
   EditLookupSelect,
@@ -23,7 +24,7 @@ import {
   EditTextarea,
 } from '@/components/jobs/JobEditControls';
 import type { JobEditPending, JobOverviewDraft, LookupOption } from '@/components/jobs/job-edit.types';
-import { jobInsurerReference } from '@/components/shared/job-label';
+import { jobInsurerReference, jobAccountLabel } from '@/components/shared/job-label';
 import type { Job, Claim } from '@/types/api';
 import type { JobKindCapabilities } from '@/lib/job-kind-registry';
 
@@ -410,6 +411,8 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
           <DefRow label="Job number" value={job.internalNumber ?? '—'} />
           <DefRow label="Name" value={job.name ?? '—'} />
           <DefRow label="Job type" value={<TypeBadge type={jobTypeName} />} />
+          <DefRow label="Provider" value={<ProviderBadge provider={job.provider} />} />
+          <DefRow label="Account" value={jobAccountLabel(job)} />
           <DefRow
             label="Status"
             value={
@@ -465,15 +468,6 @@ export const JobOverviewTab = forwardRef(function JobOverviewTab(
                 className="overflow-hidden"
               >
                 <DefRow label="External reference" value={job.externalReference ?? '—'} />
-                <DefRow label="Provider" value={
-                  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                    caps.job.providerBadge.visible
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'bg-slate-100 text-slate-700'
-                  }`}>
-                    {caps.providerLabel}
-                  </span>
-                } />
                 {caps.job.parentClaim.visible && parentClaimCw && parentClaimCw !== job.claimId && (
                   <DefRow label="Parent claim (Crunchwork)" value={<span className="font-mono text-xs">{parentClaimCw}</span>} />
                 )}
