@@ -1197,7 +1197,7 @@
   Catalogue drop zones keep a clearer highlight when dragging into nested scopes and assemblies.
   Outcome: smoother job contact tracking, reliable Make Safe create, and fewer chat and catalogue drag glitches.
 
-- `2026-09-09` `PENDING` **2.5 h**
+- `2026-09-09` `8e3ad4b` **2.5 h**
   `33 files | +1 705 −94 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Staff can add and review job notes from Messages, and the jobs list can filter by provider with clearer Internal and Crunchwork labels.
   **Job notes and jobs-list provider filtering.**
