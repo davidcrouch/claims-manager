@@ -1238,8 +1238,8 @@
   Outcome: smoother day-to-day permissions, document reuse, estimate publishing, and connection sync.
 
 
-- `2026-09-11` `PENDING` **0.5 h**
-  `3 files | +14 −10 | Tier 2 standard | Light orchestration`
+- `2026-09-11` `a4fc2ab` **0.5 h**
+  `4 files | +24 −10 | Tier 2 standard | Light orchestration`
   Lay summary: Build checks pass again after small type fixes so the permission and document updates can deploy.
   **Type-check fixes so the release can deploy.**
   Corrected stream typing for local document downloads.
