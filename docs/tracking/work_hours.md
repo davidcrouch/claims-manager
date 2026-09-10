@@ -1217,7 +1217,7 @@
   User administration supports editing member details and roles from one place.
   Lists, headers, and related records show consistent job names and numbers so work is easier to scan.
 
-- `2026-09-10` `PENDING` **0.5 h**
+- `2026-09-10` `1d314a5` **0.5 h**
   `3 files | +12 −3 | Tier 2 standard | Light orchestration`
   Lay summary: Build checks now pass so the latest invoice, feedback, and connection updates can go out to the hosted environment.
   **Type-check fixes so the latest release can deploy.**
