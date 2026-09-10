@@ -63,7 +63,7 @@ export interface MessageFormDrawerProps {
   onOpenChange: (open: boolean) => void;
   /** Job-scoped send (CW fromJobId/toJobId). */
   jobId?: string | null;
-  /** Claim-scoped send (CW fromClaimId/toClaimId). Ignored when jobId is set. */
+  /** Also send matching claim pair (CW fromClaimId/toClaimId) when known. */
   claimId?: string | null;
 }
 
@@ -188,6 +188,10 @@ export function MessageFormDrawer({
       if (jobId) {
         payload.fromJobId = jobId;
         payload.toJobId = jobId;
+        if (claimId) {
+          payload.fromClaimId = claimId;
+          payload.toClaimId = claimId;
+        }
       } else if (claimId) {
         payload.fromClaimId = claimId;
         payload.toClaimId = claimId;

@@ -66,7 +66,7 @@ import {
 import { DetailUndoButton } from '@/components/shared/DetailAutosaveActions';
 import { HeaderSaveStatus } from '@/components/shared/HeaderSaveStatus';
 import { billDisplayTitle, billVendorName, billStatusName, billHasPositiveAmount, billIsRejected } from '@/components/bills/bill-label';
-import { useHasPermission } from '@/components/providers/PermissionsProvider';
+import { useRequirePermission } from '@/components/providers/PermissionsProvider';
 
 // ---------- header ----------------------------------------------------------
 
@@ -376,9 +376,12 @@ export function BillDetail({ bill, job }: { bill: Bill; job?: Job | null }) {
   const [rejecting, setRejecting] = useState(false);
   const saveLineItemsRef = useRef<(() => void) | null>(null);
   const lineItemsRef = useRef<BillLineItemsTabHandle | null>(null);
-  const canApprovePermission = useHasPermission('bills.approve');
-  const canRejectPermission = useHasPermission('bills.reject');
-  const canManageProcurement = useHasPermission('procurement.manage');
+  const requireApprove = useRequirePermission('bills.approve', 'approve this bill');
+  const requireReject = useRequirePermission('bills.reject', 'reject this bill');
+  const requireManageProcurement = useRequirePermission(
+    'procurement.manage',
+    'update this bill',
+  );
 
   const title = billDisplayTitle(bill);
   const status = billStatusName(bill);
@@ -386,10 +389,11 @@ export function BillDetail({ bill, job }: { bill: Bill; job?: Job | null }) {
   const isReviewed = status === 'Reviewed';
   const isRejected = billIsRejected(bill);
   const hasPositiveAmount = billHasPositiveAmount(bill);
-  const showApprove = canApprovePermission && isReceived;
+  const showApprove = isReceived;
   const approveEnabled = showApprove && hasPositiveAmount && !approving;
-  const showReject = canRejectPermission && isReceived;
-  const showEditBill = canManageProcurement && (isReviewed || isRejected);
+  const showReject = isReceived;
+  const showEditBill = isReviewed || isRejected;
+  const showMarkPaid = isReviewed || status === 'Approved';
   const canUndo = lineItemsDirty || undoStack.length > 0;
 
   useEffect(() => {
@@ -470,6 +474,7 @@ export function BillDetail({ bill, job }: { bill: Bill; job?: Job | null }) {
   }, [lineItemsSaving, lineItemsDirty, undoStack]);
 
   async function handleStatusChange(newStatus: string) {
+    if (!requireManageProcurement()) return;
     setStatusLoading(true);
     const result = await updateBillStatusAction(bill.id, newStatus);
     if (!result.success) {
@@ -480,6 +485,7 @@ export function BillDetail({ bill, job }: { bill: Bill; job?: Job | null }) {
   }
 
   async function handleApproveBill() {
+    if (!requireApprove()) return;
     if (!approveEnabled) return;
     setApproving(true);
     try {
@@ -499,6 +505,7 @@ export function BillDetail({ bill, job }: { bill: Bill; job?: Job | null }) {
   }
 
   async function handleConfirmEditBill() {
+    if (!requireManageProcurement()) return;
     if (!showEditBill || returningToReceived) return;
     setReturningToReceived(true);
     try {
@@ -521,6 +528,7 @@ export function BillDetail({ bill, job }: { bill: Bill; job?: Job | null }) {
   }
 
   async function handleConfirmReject() {
+    if (!requireReject()) return;
     if (!showReject || rejecting) return;
     setRejecting(true);
     try {
@@ -583,7 +591,10 @@ export function BillDetail({ bill, job }: { bill: Bill; job?: Job | null }) {
             size="default"
             disabled={statusLoading || rejecting}
             className="h-9 gap-1.5 px-4 bg-red-600 text-white hover:bg-red-500"
-            onClick={() => setRejectConfirmOpen(true)}
+            onClick={() => {
+              if (!requireReject()) return;
+              setRejectConfirmOpen(true);
+            }}
           >
             Reject
           </Button>
@@ -593,13 +604,16 @@ export function BillDetail({ bill, job }: { bill: Bill; job?: Job | null }) {
             size="default"
             disabled={returningToReceived}
             className="h-9 gap-1.5 px-4 bg-slate-700 text-white hover:bg-slate-600"
-            onClick={() => setEditConfirmOpen(true)}
+            onClick={() => {
+              if (!requireManageProcurement()) return;
+              setEditConfirmOpen(true);
+            }}
           >
             <Pencil className="h-3.5 w-3.5" />
             Edit Bill
           </Button>
         )}
-        {canManageProcurement && (isReviewed || status === 'Approved') && (
+        {showMarkPaid && (
           <Button
             size="default"
             disabled={statusLoading}

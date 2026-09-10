@@ -1225,3 +1225,15 @@
   Job labels on lists and the acting-user record on outgoing requests now type-check cleanly.
   Automated API tests still pass after the change.
   Outcome: the release pipeline can continue through image build and staging deploy.
+
+- `2026-09-11` `PENDING` **6 h**
+  `77 files | +4 523 −937 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  Lay summary: Staff get clearer permission messages, can attach existing project documents to jobs and quotes, publish estimates more reliably, and see helpful notices when a Crunchwork report is not available.
+  **Permission feedback, project-document attachments, estimate publish, and outbound sync.**
+  When a user lacks access, the app shows a clear permission message instead of a generic failure.
+  Staff can pick existing project documents and attach them to jobs, quotes, and invoices without re-uploading.
+  Estimate publish and approval flows are steadier, with shared attachment handling on quote detail.
+  Outbound Crunchwork sync and purchase-order create handle more cases, with clearer report-unavailable messaging.
+  Invoice publish checks, messaging, and admin user editing received supporting fixes.
+  Outcome: smoother day-to-day permissions, document reuse, estimate publishing, and connection sync.
+

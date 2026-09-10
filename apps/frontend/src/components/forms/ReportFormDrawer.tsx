@@ -1,178 +1,24 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
-import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
-import { z } from 'zod';
-import { ClipboardList, Loader2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  BottomFormDrawer,
-  BottomFormDrawerBody,
-  BottomFormDrawerError,
-  BottomFormDrawerFooter,
-} from '@/components/forms/BottomFormDrawer';
-import { createReportAction } from '@/app/(app)/mutations';
-import {
-  CreateSubmitOverlay,
-  useCreateSubmitPhase,
-} from '@/components/forms/CreateSubmitOverlay';
-
-const reportFormSchema = z.object({
-  jobId: z.string().min(1, 'Job is required'),
-  claimId: z.string().optional(),
-  title: z.string().min(1, 'Title is required'),
-  reportData: z.string().optional(),
-});
-
-type ReportFormValues = z.infer<typeof reportFormSchema>;
+import { CrunchworkReportUnavailableDialog } from '@/components/reports/CrunchworkReportUnavailableDialog';
 
 export interface ReportFormDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  jobId: string;
+  jobId?: string;
   claimId?: string | null;
 }
 
+/**
+ * Report creation currently depends on the Crunchwork Report API, which is
+ * not operational. Callers keep the same open/onOpenChange contract; we show
+ * an information dialog instead of a create form.
+ */
 export function ReportFormDrawer({
   open,
   onOpenChange,
-  jobId,
-  claimId,
 }: ReportFormDrawerProps) {
-  const router = useRouter();
-  const { phase, busy, startCreating, resetPhase } =
-    useCreateSubmitPhase();
-  const [error, setError] = useState<string | null>(null);
-
-  const form = useForm<ReportFormValues>({
-    resolver: standardSchemaResolver(reportFormSchema),
-    defaultValues: {
-      jobId,
-      claimId: claimId ?? undefined,
-      title: '',
-      reportData: '',
-    },
-  });
-
-  useEffect(() => {
-    if (open) {
-      form.reset({ jobId, claimId: claimId ?? undefined, title: '', reportData: '' });
-    }
-  }, [open, jobId, claimId, form]);
-
-  async function onSubmit(values: ReportFormValues) {
-    startCreating();
-    setError(null);
-    try {
-      const reportData = values.reportData
-        ? (() => {
-            try {
-              return JSON.parse(values.reportData) as Record<string, unknown>;
-            } catch {
-              return { notes: values.reportData };
-            }
-          })()
-        : {};
-      const result = await createReportAction({
-        jobId: values.jobId,
-        ...(values.claimId ? { claimId: values.claimId } : {}),
-        title: values.title,
-        reportData,
-      });
-      if (result.success) {
-        if (result.report?.id) {
-          resetPhase();
-          onOpenChange(false);
-          router.push(`/reports/${result.report.id}`);
-          router.refresh();
-          return;
-        }
-        resetPhase();
-        onOpenChange(false);
-        router.refresh();
-      } else {
-        setError(result.error ?? 'Failed to create report');
-        resetPhase();
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create report');
-      resetPhase();
-    }
-  }
-
   return (
-    <>
-    <BottomFormDrawer
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Create Report"
-      description="Create a report for this job. Provide a title and attach any notes as JSON or plain text."
-      icon={<ClipboardList className="h-5 w-5" />}
-      preventClose={busy}
-    >
-      <form
-        onSubmit={form.handleSubmit(onSubmit)}
-        className="flex min-h-0 flex-1 flex-col"
-      >
-        <BottomFormDrawerBody>
-          <div className="grid grid-cols-1 gap-x-6 gap-y-5">
-            <div className="space-y-2">
-              <Label htmlFor="title">Title</Label>
-              <Input
-                id="title"
-                {...form.register('title')}
-                placeholder="Report title"
-              />
-              {form.formState.errors.title && (
-                <p className="text-sm text-destructive">
-                  {form.formState.errors.title.message}
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="reportData">Notes (JSON or plain text)</Label>
-              <Textarea
-                id="reportData"
-                {...form.register('reportData')}
-                placeholder='{"notes": "..."} or plain text'
-                rows={6}
-              />
-            </div>
-          </div>
-
-          <BottomFormDrawerError error={error} />
-        </BottomFormDrawerBody>
-
-        <BottomFormDrawerFooter>
-          <Button
-            type="button"
-            variant="outline"
-            size="lg"
-            disabled={busy}
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
-          <Button type="submit" size="lg" disabled={busy}>
-            {busy ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                {phase === 'opening' ? 'Opening…' : 'Creating…'}
-              </>
-            ) : (
-              'Create Report'
-            )}
-          </Button>
-        </BottomFormDrawerFooter>
-      </form>
-    </BottomFormDrawer>
-    <CreateSubmitOverlay phase={phase} entityLabel="report" />
-    </>
+    <CrunchworkReportUnavailableDialog open={open} onOpenChange={onOpenChange} />
   );
 }

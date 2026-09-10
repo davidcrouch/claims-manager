@@ -614,6 +614,16 @@ export function JobsListClient({
 
   const handlePageChange = (newPage: number) => {
     setPage(newPage);
+    if (isPicker) return;
+    const params = new URLSearchParams(searchParams.toString());
+    if (newPage > 1) params.set('page', String(newPage));
+    else params.delete('page');
+    replaceListQueryIfNeeded({
+      router,
+      pathname: '/jobs',
+      currentQuery: searchParams.toString(),
+      nextQuery: params.toString(),
+    });
   };
 
   const handleSearchChange = (value: string) => {

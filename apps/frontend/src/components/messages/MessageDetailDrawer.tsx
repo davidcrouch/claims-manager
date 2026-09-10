@@ -1,14 +1,17 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import {
   CheckCircle2,
   Clock,
+  Loader2,
   Mail,
   MessageSquare,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { acknowledgeMessageAction } from '@/app/(app)/jobs/[id]/actions';
 import {
   BottomFormDrawer,
   BottomFormDrawerBody,
@@ -23,6 +26,7 @@ export interface MessageDetailDrawerProps {
   onOpenChange: (open: boolean) => void;
   message: Message | null;
   jobNameById?: Record<string, string>;
+  onAcknowledged?: (params: { id: string; acknowledgedAt: string }) => void;
 }
 
 function payloadName(
@@ -88,7 +92,9 @@ export function MessageDetailDrawer({
   onOpenChange,
   message,
   jobNameById,
+  onAcknowledged,
 }: MessageDetailDrawerProps) {
+  const [acking, setAcking] = useState(false);
   if (!message) {
     return (
       <BottomFormDrawer
@@ -111,6 +117,7 @@ export function MessageDetailDrawer({
   }
 
   const subject = message.subject?.trim() || '(No subject)';
+  const messageId = message.id;
   const sender = messageSender(message);
   const recipient = messageRecipient(message);
   const jobId = messageJobId(message);
@@ -125,6 +132,25 @@ export function MessageDetailDrawer({
   ]
     .filter(Boolean)
     .join(' · ');
+
+  async function handleAcknowledge() {
+    setAcking(true);
+    try {
+      const result = await acknowledgeMessageAction(messageId);
+      if (!result.success) {
+        toast.error(result.error ?? 'Failed to acknowledge this message');
+        return;
+      }
+      const acknowledgedAt = new Date().toISOString();
+      onAcknowledged?.({ id: messageId, acknowledgedAt });
+      toast.success('Message acknowledged');
+    } catch (err) {
+      console.error('[frontend:MessageDetailDrawer.handleAcknowledge]', err);
+      toast.error(err instanceof Error ? err.message : 'Failed to acknowledge this message');
+    } finally {
+      setAcking(false);
+    }
+  }
 
   return (
     <BottomFormDrawer
@@ -210,6 +236,23 @@ export function MessageDetailDrawer({
       </BottomFormDrawerBody>
 
       <BottomFormDrawerFooter>
+        {needsAck ? (
+          <Button
+            type="button"
+            size="lg"
+            disabled={acking}
+            onClick={() => void handleAcknowledge()}
+          >
+            {acking ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Acknowledging…
+              </>
+            ) : (
+              'Acknowledge'
+            )}
+          </Button>
+        ) : null}
         <Button
           type="button"
           variant="outline"

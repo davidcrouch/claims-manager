@@ -206,6 +206,18 @@ export class FeedbackService {
     return shaped;
   }
 
+  async remove(params: { id: string }): Promise<{ deleted: true }> {
+    const logPrefix = 'FeedbackService.remove';
+    const tenantId = this.tenantContext.getTenantId();
+    const existing = await this.feedbackRepo.findOne({ id: params.id, tenantId });
+    if (!existing) {
+      throw new NotFoundException(`${logPrefix}: item ${params.id} not found`);
+    }
+    await this.feedbackRepo.delete({ id: params.id, tenantId });
+    this.logger.log(`${logPrefix}: id=${params.id}`);
+    return { deleted: true };
+  }
+
   async addNote(params: {
     feedbackId: string;
     body: string;

@@ -5,6 +5,7 @@ import { CurrentJobProvider } from './CurrentJobProvider';
 import { AppShell } from './AppShell';
 import { ApiConnectionMonitor } from './ApiConnectionMonitor';
 import { PermissionsProvider } from '@/components/providers/PermissionsProvider';
+import { PermissionFeedbackProvider } from '@/components/providers/PermissionFeedbackProvider';
 import type { AppSidebarUser } from './AppSidebar';
 
 export interface AppLayoutClientProps {
@@ -27,14 +28,16 @@ export function AppLayoutClient({
       <CurrentJobProvider>
         <ApiConnectionMonitor />
         <PermissionsProvider permissions={permissions}>
-          <AppShell
-            user={user}
-            features={features}
-            permissions={permissions}
-            orgName={orgName}
-          >
-            {children}
-          </AppShell>
+          <PermissionFeedbackProvider>
+            <AppShell
+              user={user}
+              features={features}
+              permissions={permissions}
+              orgName={orgName}
+            >
+              {children}
+            </AppShell>
+          </PermissionFeedbackProvider>
         </PermissionsProvider>
       </CurrentJobProvider>
     </BreadcrumbProvider>

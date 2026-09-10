@@ -19,6 +19,8 @@ import { TenantContext } from '../../tenant/tenant-context';
 import { CrunchworkService } from '../../crunchwork/crunchwork.service';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
 import { OutboundEventsService } from '../outbound-events/outbound-events.service';
+import { LookupResolutionService } from '../domain/services/lookup-resolution.service';
+import { LOOKUP_DOMAINS } from '../domain/constants/lookup-domains';
 import { RecordNumberService } from '../../common/record-number/record-number.service';
 import { attachJobSummaries } from '../../common/attach-job-summaries';
 
@@ -32,6 +34,7 @@ export class PurchaseOrdersService {
     private readonly tenantContext: TenantContext,
     private readonly crunchworkService: CrunchworkService,
     private readonly recordNumberService: RecordNumberService,
+    private readonly lookupResolution: LookupResolutionService,
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
     @Optional() private readonly connectionResolver?: ConnectionResolverService,
     @Optional() private readonly outboundEvents?: OutboundEventsService,
@@ -126,17 +129,49 @@ export class PurchaseOrdersService {
     return this.purchaseOrdersRepo.findByJob({ jobId: params.jobId, tenantId });
   }
 
+  private async resolveCreateStatusLookupId(params: {
+    tenantId: string;
+    statusLookupId?: unknown;
+  }): Promise<string | null> {
+    if (typeof params.statusLookupId === 'string' && params.statusLookupId.trim()) {
+      return params.statusLookupId;
+    }
+    const byName = await this.lookupResolution.resolve({
+      tenantId: params.tenantId,
+      domain: LOOKUP_DOMAINS.PURCHASE_ORDER_STATUS,
+      externalReference: 'Active',
+      name: 'Active',
+    });
+    if (byName) return byName;
+    return this.lookupResolution.resolve({
+      tenantId: params.tenantId,
+      domain: LOOKUP_DOMAINS.PURCHASE_ORDER_STATUS,
+      externalReference: 'Active',
+      name: 'Active',
+      autoCreate: true,
+    });
+  }
+
   async create(params: { body: Record<string, unknown>; userId?: string }) {
     const tenantId = this.tenantContext.getTenantId();
     this.logger.log(`api:PurchaseOrdersService.create tenantId=${tenantId}`);
     const {
       createdByUserId: _c,
       updatedByUserId: _u,
+      statusLookupId: bodyStatusLookupId,
       internalNumber: bodyInternalNumber,
       purchaseOrderNumber: bodyPurchaseOrderNumber,
       selectedItemIds: rawSelectedItemIds,
       ...rest
     } = params.body;
+
+    const statusLookupId = await this.resolveCreateStatusLookupId({
+      tenantId,
+      statusLookupId: bodyStatusLookupId,
+    });
+    this.logger.log(
+      `api:PurchaseOrdersService.create — default status Active lookupId=${statusLookupId ?? 'none'}`,
+    );
 
     const selectedItemIds = Array.isArray(rawSelectedItemIds)
       ? (rawSelectedItemIds as unknown[]).filter(
@@ -175,6 +210,7 @@ export class PurchaseOrdersService {
           tenantId,
           internalNumber,
           purchaseOrderNumber,
+          statusLookupId,
           createdByUserId: params.userId ?? null,
           updatedByUserId: params.userId ?? null,
         } as any,

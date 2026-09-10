@@ -657,6 +657,16 @@ export function MessagesListClient({
         onOpenChange={handleDetailOpenChange}
         message={selectedMessage}
         jobNameById={resolvedJobNameById}
+        onAcknowledged={({ id, acknowledgedAt }) => {
+          setMessages((prev) =>
+            prev.map((row) =>
+              row.id === id ? { ...row, acknowledgedAt } : row,
+            ),
+          );
+          setSelectedMessage((prev) =>
+            prev?.id === id ? { ...prev, acknowledgedAt } : prev,
+          );
+        }}
       />
       {(fetchJobId || job?.id) && (
         <MessageFormDrawer
@@ -665,7 +675,8 @@ export function MessagesListClient({
             setComposeOpen(open);
             if (!open) void load();
           }}
-          jobId={fetchJobId || job?.id || ''}
+          jobId={job?.id || fetchJobId || undefined}
+          claimId={parentClaim?.id ?? job?.claimId ?? undefined}
         />
       )}
       {jobInContext && (

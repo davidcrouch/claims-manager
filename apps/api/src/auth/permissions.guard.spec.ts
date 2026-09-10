@@ -72,9 +72,16 @@ describe('PermissionsGuard', () => {
       if (key === PERMISSIONS_KEY) return ['claims.read', 'claims.update'];
       return undefined;
     });
-    expect(() =>
-      guard.canActivate(makeContext({ permissions: ['claims.read'] })),
-    ).toThrow(ForbiddenException);
+    try {
+      guard.canActivate(makeContext({ permissions: ['claims.read'] }));
+      fail('expected ForbiddenException');
+    } catch (err) {
+      expect(err).toBeInstanceOf(ForbiddenException);
+      expect((err as ForbiddenException).getResponse()).toMatchObject({
+        message: 'You do not have permission to perform this action.',
+        code: 'PERMISSION_DENIED',
+      });
+    }
   });
 
   it('fails closed when permissions claim is missing', () => {

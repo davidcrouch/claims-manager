@@ -3,15 +3,22 @@ import {
   ExecutionContext,
   ForbiddenException,
   Injectable,
+  Logger,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PERMISSIONS_KEY } from '../decorators/require-permission.decorator';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { AuthenticatedUser } from '../interfaces/authenticated-user.interface';
 import { matchPermission } from '../permission-match';
+import {
+  PERMISSION_DENIED_CODE,
+  PERMISSION_DENIED_MESSAGE,
+} from '../permission-denied';
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {
+  private readonly logger = new Logger(PermissionsGuard.name);
+
   constructor(private reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
@@ -31,9 +38,11 @@ export class PermissionsGuard implements CanActivate {
     const user = request.user as AuthenticatedUser | undefined;
 
     if (!user) {
-      throw new ForbiddenException(
-        '[PermissionsGuard.canActivate] no authenticated user',
-      );
+      this.logger.warn('PermissionsGuard.canActivate - no authenticated user');
+      throw new ForbiddenException({
+        message: PERMISSION_DENIED_MESSAGE,
+        code: PERMISSION_DENIED_CODE,
+      });
     }
 
     const userPermissions = user.permissions;
@@ -42,9 +51,13 @@ export class PermissionsGuard implements CanActivate {
     );
 
     if (!satisfied) {
-      throw new ForbiddenException(
-        `[PermissionsGuard.canActivate] Required permissions: ${requiredPermissions.join(', ')}`,
+      this.logger.warn(
+        `PermissionsGuard.canActivate - missing ${requiredPermissions.join(', ')}`,
       );
+      throw new ForbiddenException({
+        message: PERMISSION_DENIED_MESSAGE,
+        code: PERMISSION_DENIED_CODE,
+      });
     }
 
     return true;

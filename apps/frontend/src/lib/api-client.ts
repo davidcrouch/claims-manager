@@ -12,6 +12,11 @@ import {
   fetchWithTransientRetry,
   isTransientNetworkError,
 } from './transient-network';
+import {
+  isPermissionDeniedMessage,
+  PERMISSION_DENIED_CODE,
+  PERMISSION_DENIED_MESSAGE,
+} from './permission-feedback';
 
 export { isTransientNetworkError };
 import type {
@@ -237,7 +242,17 @@ async function handleResponse<T>(res: Response): Promise<T> {
   }
 
   if (res.status === 403) {
-    throw new ApiError('Forbidden', 403, body);
+    const bodyRec = body as
+      | { message?: string; code?: string; error_description?: string }
+      | undefined;
+    const raw = bodyRec?.message ?? bodyRec?.error_description;
+    const message =
+      bodyRec?.code === PERMISSION_DENIED_CODE ||
+      isPermissionDeniedMessage(raw) ||
+      !raw
+        ? PERMISSION_DENIED_MESSAGE
+        : raw;
+    throw new ApiError(message, 403, body);
   }
 
   if (res.status === 404) {
@@ -626,6 +641,20 @@ export function createApiClient(options?: ApiClientOptions) {
     getEntityAttachments(relatedRecordType: string, entityId: string): Promise<Attachment[]> {
       const sp = new URLSearchParams({ relatedRecordType, relatedRecordId: entityId });
       return fetchApi<Attachment[]>(`/attachments?${sp}`);
+    },
+
+    createAttachmentFromDocument(body: {
+      documentId: string;
+      relatedRecordType: string;
+      relatedRecordId: string;
+      title?: string;
+      description?: string;
+      documentTypeExternalReference?: string;
+    }): Promise<Attachment> {
+      return fetchApi<Attachment>('/attachments/from-document', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
     },
 
     getJobAttachments(jobId: string): Promise<Attachment[]> {
@@ -2511,6 +2540,15 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<FilesystemResponse>(`/filesystems/jobs/${jobId}`);
     },
 
+    resolveJobFolderMapping(params: {
+      jobId: string;
+      role: 'photos';
+    }): Promise<ResolvedFolderMapping> {
+      return fetchApi<ResolvedFolderMapping>(
+        `/filesystems/jobs/${params.jobId}/folder-mapping/${params.role}`,
+      );
+    },
+
     getFilesystemOverview(): Promise<FilesystemOverviewResponse> {
       return fetchApi<FilesystemOverviewResponse>('/filesystems/overview');
     },
@@ -3494,6 +3532,12 @@ export interface FilesystemCategory {
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ResolvedFolderMapping {
+  filesystemId: string | null;
+  categoryId: string | null;
+  slug: string | null;
 }
 
 export interface FilesystemResponse {

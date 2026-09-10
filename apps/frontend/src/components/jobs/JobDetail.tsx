@@ -697,6 +697,7 @@ export function JobDetail({
           <EntityAttachmentsTab
             entityId={job.id}
             relatedRecordType="Job"
+            jobId={job.id}
             entityLabel="this job"
           />
         )}

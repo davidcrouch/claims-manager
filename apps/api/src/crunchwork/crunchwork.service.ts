@@ -225,6 +225,192 @@ export class CrunchworkService {
     return { status, body };
   }
 
+  private async requestMultipart(options: {
+    path: string;
+    connectionId: string;
+    file: Buffer;
+    fileName: string;
+    mimeType: string;
+    fields: Record<string, string>;
+  }): Promise<Record<string, unknown>> {
+    if (!this.connectionResolver) {
+      throw new Error(
+        'CrunchworkService.requestMultipart — connectionResolver not set. Call setConnectionResolver() during module init.',
+      );
+    }
+
+    const creds = await this.connectionResolver.getCredentials({
+      connectionId: options.connectionId,
+    });
+    const token = await this.authService.getAccessToken({
+      connectionId: options.connectionId,
+      credentials: {
+        clientId: creds.clientId,
+        clientSecret: creds.clientSecret,
+        authUrl: creds.authUrl,
+      },
+    });
+
+    const restBase = creds.baseApi || creds.baseUrl;
+    const url = `${restBase.replace(/\/$/, '')}${options.path}`;
+    this.logger.debug(
+      `CrunchworkService.requestMultipart — POST ${url} fileName=${options.fileName} size=${options.file.length}`,
+    );
+
+    const form = new FormData();
+    const fileBytes = new Uint8Array(options.file);
+    form.append(
+      'file',
+      new Blob([fileBytes as BlobPart], {
+        type: options.mimeType || 'application/octet-stream',
+      }),
+      options.fileName,
+    );
+    for (const [key, value] of Object.entries(options.fields)) {
+      if (value !== undefined && value !== '') {
+        form.append(key, value);
+      }
+    }
+
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+      'active-tenant-id': creds.activeTenantId,
+      Accept: 'application/json',
+      // Do not set Content-Type — runtime FormData supplies the multipart boundary.
+    };
+
+    const logBody = {
+      fileName: options.fileName,
+      mimeType: options.mimeType,
+      fileSize: options.file.length,
+      fields: options.fields,
+    };
+
+    const startedAt = Date.now();
+    try {
+      const response = await firstValueFrom(
+        this.httpService.request({
+          method: 'POST',
+          url,
+          headers,
+          data: form,
+          maxBodyLength: Infinity,
+          maxContentLength: Infinity,
+          timeout: 120_000,
+        }),
+      );
+
+      const contentType = String(
+        response.headers?.['content-type'] ?? response.headers?.['Content-Type'] ?? '',
+      ).toLowerCase();
+      const looksLikeHtml =
+        typeof response.data === 'string' &&
+        /^\s*<(?:!doctype|html|head|body)/i.test(response.data);
+
+      if ((contentType && !contentType.includes('json')) || looksLikeHtml) {
+        this.logger.error(
+          `CrunchworkService.requestMultipart — non-JSON response from POST ${url} (content-type="${contentType}").`,
+        );
+        this.recordWebRequest({
+          connectionId: options.connectionId,
+          method: 'POST',
+          path: options.path,
+          url,
+          requestBody: logBody,
+          responseBody: response.data,
+          statusCode: response.status ?? 200,
+          durationMs: Date.now() - startedAt,
+          errorMessage: `expected JSON but received "${contentType || 'unknown'}"`,
+          outcome: 'failed',
+        });
+        throw new InternalServerErrorException(
+          `CrunchworkService.requestMultipart — expected JSON but received "${contentType || 'unknown'}". ` +
+            `Check integration_connections.base_api for connection ${options.connectionId}.`,
+        );
+      }
+
+      this.recordWebRequest({
+        connectionId: options.connectionId,
+        method: 'POST',
+        path: options.path,
+        url,
+        requestBody: logBody,
+        responseBody: response.data,
+        statusCode: response.status ?? 200,
+        durationMs: Date.now() - startedAt,
+        outcome: 'success',
+      });
+      return response.data as Record<string, unknown>;
+    } catch (error: unknown) {
+      if (error instanceof InternalServerErrorException) {
+        throw error;
+      }
+      const { status, body } = this.extractUpstreamDetail(error);
+      this.recordWebRequest({
+        connectionId: options.connectionId,
+        method: 'POST',
+        path: options.path,
+        url,
+        requestBody: logBody,
+        responseBody: body,
+        statusCode: status ?? null,
+        durationMs: Date.now() - startedAt,
+        errorMessage:
+          error instanceof Error ? error.message : 'Outbound multipart request failed',
+        outcome: 'failed',
+      });
+      throw error;
+    }
+  }
+
+  private async requestMultipartWithRetry(options: {
+    path: string;
+    connectionId: string;
+    file: Buffer;
+    fileName: string;
+    mimeType: string;
+    fields: Record<string, string>;
+  }): Promise<Record<string, unknown>> {
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+      try {
+        return await this.requestMultipart(options);
+      } catch (error: unknown) {
+        lastError = error as Error;
+        const status = (error as { response?: { status?: number } })?.response?.status;
+        const headers = (error as { response?: { headers?: Record<string, string> } })?.response
+          ?.headers;
+
+        if (status === 401 && attempt === 0) {
+          this.authService.invalidateToken({ connectionId: options.connectionId });
+          continue;
+        }
+        if (status === 429) {
+          const retryAfter = parseInt(headers?.['retry-after'] || '5', 10);
+          this.logger.warn(
+            `CrunchworkService.requestMultipartWithRetry — 429 rate limited, retrying after ${retryAfter}s`,
+          );
+          await this.sleep(retryAfter * 1000);
+          continue;
+        }
+        if (status && status >= 500 && attempt < this.maxRetries) {
+          const { body } = this.extractUpstreamDetail(error);
+          if (!isRetryableCrunchworkFailure({ status, body })) {
+            throw new BadRequestException(body || 'Crunchwork rejected the request');
+          }
+          const delay = Math.min(1000 * Math.pow(2, attempt), 8000);
+          this.logger.warn(
+            `CrunchworkService.requestMultipartWithRetry — ${status}, retrying in ${delay}ms`,
+          );
+          await this.sleep(delay);
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw lastError ?? new Error('CrunchworkService.requestMultipartWithRetry — exhausted retries');
+  }
+
   private async requestWithRetry<T>(options: {
     method: 'GET' | 'POST';
     path: string;
@@ -595,8 +781,37 @@ export class CrunchworkService {
     return this.requestWithRetry({ method: 'POST', path: `/reports/${params.reportId}`, connectionId: params.connectionId, body: params.body });
   }
 
-  async createAttachment(params: { connectionId: string; body: Record<string, unknown>; formData?: FormData }): Promise<Record<string, unknown>> {
-    return this.requestWithRetry({ method: 'POST', path: '/attachments', connectionId: params.connectionId, body: params.body });
+  /**
+   * Create a CW attachment via multipart form-data (file + flat metadata fields).
+   * Insurance REST §3.4 — JSON create is not supported for uploads.
+   */
+  async createAttachment(params: {
+    connectionId: string;
+    file: Buffer;
+    fileName: string;
+    mimeType: string;
+    relatedRecordType: string;
+    relatedRecordId: string;
+    title?: string;
+    description?: string;
+    documentTypeExternalReference?: string;
+  }): Promise<Record<string, unknown>> {
+    return this.requestMultipartWithRetry({
+      path: '/attachments',
+      connectionId: params.connectionId,
+      file: params.file,
+      fileName: params.fileName,
+      mimeType: params.mimeType,
+      fields: {
+        relatedRecordType: params.relatedRecordType,
+        relatedRecordId: params.relatedRecordId,
+        ...(params.title ? { title: params.title } : {}),
+        ...(params.description ? { description: params.description } : {}),
+        ...(params.documentTypeExternalReference
+          ? { documentTypeExternalReference: params.documentTypeExternalReference }
+          : {}),
+      },
+    });
   }
 
   async getAttachment(params: { connectionId: string; attachmentId: string }): Promise<Record<string, unknown>> {

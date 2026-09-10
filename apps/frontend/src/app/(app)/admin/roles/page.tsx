@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { RolesManagementPage } from '@/components/admin/RolesManagementPage';
+import { AccessDenied } from '@/components/permissions/AccessDenied';
 import { getSession } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
 
@@ -9,7 +10,7 @@ export default async function AdminRolesPage() {
   const session = await getSession();
   if (!session.authenticated) redirect('/api/auth/login');
   if (!hasPermission(session.identity?.permissions, 'org.roles.read')) {
-    redirect('/dashboard');
+    return <AccessDenied />;
   }
   return <RolesManagementPage />;
 }

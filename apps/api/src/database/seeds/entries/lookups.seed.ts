@@ -60,6 +60,7 @@ const LOOKUP_SPECS: readonly LookupSpec[] = [
   { domain: 'line_scope_status', name: 'Rejected', ref: 'line-scope-rejected' },
   { domain: 'line_scope_status', name: 'Amended', ref: 'line-scope-amended' },
   { domain: 'line_scope_status', name: 'Referred', ref: 'line-scope-referred' },
+  { domain: 'purchase_order_status', name: 'Active', ref: 'po-status-active' },
   { domain: 'purchase_order_status', name: 'Issued', ref: 'po-status-issued' },
   { domain: 'purchase_order_status', name: 'Archived', ref: 'purchase-order-status-archived' },
   { domain: 'invoice_status', name: 'Draft', ref: 'invoice-status-draft' },

@@ -316,7 +316,131 @@ describe('applyInvoicedAmountOverridesToGroups', () => {
     });
   });
 
-  it('sets unitCost when allocated without a usable unit cost', () => {
+  it('strips GST from inclusive allocated amounts before deriving quantity (CW percentage tax)', () => {
+    // Staging bug: $300 + 10% GST = $330 inclusive → qty must stay 1, not 1.1
+    const result = applyInvoicedAmountOverridesToGroups({
+      groups: [
+        {
+          id: 'g1',
+          items: [
+            {
+              id: 'f14d55f5-d310-403c-b66b-d9214a08fa03',
+              name: 'description',
+              tax: 10,
+              buyCost: 300,
+              quantity: 1,
+              unitCost: 300,
+              markupType: 'Percentage',
+              markupValue: 0,
+            },
+          ],
+        },
+      ],
+      invoicedAmounts: {
+        'name:description:0': 330,
+      },
+    });
+
+    const item = (result[0].items as Record<string, unknown>[])[0];
+    expect(item).toMatchObject({
+      completed: true,
+      unitCost: 300,
+      quantity: 1,
+      tax: 10,
+    });
+  });
+
+  it('strips GST when tax is stored as a decimal rate', () => {
+    const result = applyInvoicedAmountOverridesToGroups({
+      groups: [
+        {
+          id: 'g1',
+          items: [
+            {
+              id: 'i1',
+              unitCost: 300,
+              quantity: 1,
+              tax: 0.1,
+              markupType: 'Percentage',
+              markupValue: 0,
+            },
+          ],
+        },
+      ],
+      invoicedAmounts: { 'id:i1': 330 },
+    });
+    const item = (result[0].items as Record<string, unknown>[])[0];
+    expect(item.quantity).toBe(1);
+  });
+
+  it('derives partial progress quantity from GST-inclusive allocation', () => {
+    const result = applyInvoicedAmountOverridesToGroups({
+      groups: [
+        {
+          id: 'g1',
+          items: [
+            {
+              id: 'i1',
+              unitCost: 300,
+              quantity: 1,
+              tax: 10,
+              markupType: 'Percentage',
+              markupValue: 0,
+            },
+          ],
+        },
+      ],
+      // Half of $330 GST-inclusive
+      invoicedAmounts: { 'id:i1': 165 },
+    });
+    const item = (result[0].items as Record<string, unknown>[])[0];
+    expect(item.quantity).toBe(0.5);
+  });
+
+  it('accounts for percent markup when deriving quantity from inclusive totals', () => {
+    // unitCost 100, markup 10% → 110 ex-GST; +10% tax → 121 inclusive for qty 1
+    const result = applyInvoicedAmountOverridesToGroups({
+      groups: [
+        {
+          id: 'g1',
+          items: [
+            {
+              id: 'i1',
+              unitCost: 100,
+              quantity: 2,
+              tax: 10,
+              markupType: 'Percentage',
+              markupValue: 0.1,
+            },
+          ],
+        },
+      ],
+      invoicedAmounts: { 'id:i1': 121 },
+    });
+    const item = (result[0].items as Record<string, unknown>[])[0];
+    expect(item.quantity).toBe(1);
+  });
+
+  it('sets ex-GST unitCost when allocated without a usable unit cost', () => {
+    const result = applyInvoicedAmountOverridesToGroups({
+      groups: [
+        {
+          id: 'g1',
+          items: [{ id: 'i1', name: 'Labour', unitCost: 0, quantity: 1, tax: 10 }],
+        },
+      ],
+      invoicedAmounts: { 'id:i1': 330 },
+    });
+    const item = (result[0].items as Record<string, unknown>[])[0];
+    expect(item).toMatchObject({
+      completed: true,
+      quantity: 1,
+      unitCost: 300,
+      buyCost: 300,
+    });
+  });
+
+  it('sets unitCost when allocated without a usable unit cost and no tax', () => {
     const result = applyInvoicedAmountOverridesToGroups({
       groups: [
         {

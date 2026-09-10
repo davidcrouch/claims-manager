@@ -39,6 +39,7 @@ import {
 } from '@/components/shared/column-visibility';
 import { ListArchiveButton, LIST_ARCHIVE_SPACER_TD_CLASS } from '@/components/shared/ListArchiveButton';
 import type { Report, PaginatedResponse } from '@/types/api';
+import { CrunchworkReportUnavailableDialog } from '@/components/reports/CrunchworkReportUnavailableDialog';
 
 type ListTab = 'active' | 'archived' | 'all';
 const VALID_TABS = new Set<ListTab>(['active', 'archived', 'all']);
@@ -125,6 +126,7 @@ export function ReportsListClient({
   const [typeFilterActive, setTypeFilterActive] = useState(false);
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [statusFilterActive, setStatusFilterActive] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const { isVisible, toggle, visibleCount } = useColumnVisibility(
     'reports',
     TABLE_COLUMNS,
@@ -354,7 +356,11 @@ export function ReportsListClient({
             itemNoun={{ singular: 'type', plural: 'types' }}
           />
 
-          <Button size="sm" className="shrink-0" disabled title="Select a job first — create reports from a Job's detail page">
+          <Button
+            size="sm"
+            className="shrink-0"
+            onClick={() => setCreateDialogOpen(true)}
+          >
             <Plus className="mr-1 h-4 w-4" />
             Create Report
           </Button>
@@ -487,6 +493,10 @@ export function ReportsListClient({
             />
           </div>
       </div>
+      <CrunchworkReportUnavailableDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+      />
     </div>
   );
 }

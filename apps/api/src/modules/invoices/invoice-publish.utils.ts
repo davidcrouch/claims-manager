@@ -13,6 +13,11 @@
  */
 
 import { copyUnitCostToBuyCostForCrunchwork } from '../catalog/catalog.utils';
+import {
+  coerceToRate,
+  isFixedMarkupType,
+  isPercentMarkupType,
+} from '../../common/rates';
 
 type JsonObject = Record<string, unknown>;
 
@@ -130,7 +135,10 @@ export function applyLocalPricingToCrunchworkInvoiceGroups(params: {
  * Apply draft `invoicePayload.invoicedAmounts` onto priced CW groups before
  * update. When the map is present:
  * - amount <= 0 or missing → completed: false
- * - amount > 0 → completed: true; quantity = amount/unitCost (or qty=1, unitCost=amount)
+ * - amount > 0 → completed: true; quantity derived from the GST-inclusive
+ *   allocated total (matches frontend `lineTotalFromItem`), after stripping
+ *   tax and percent/fixed markup so CW does not tax the amount twice
+ * - unitCost <= 0 → qty=1 and unitCost set to the ex-GST sell amount
  * When the map is absent, groups are returned unchanged (full-line publish).
  */
 export function applyInvoicedAmountOverridesToGroups(params: {
@@ -153,11 +161,14 @@ export function applyInvoicedAmountOverridesToGroups(params: {
     }
     item.completed = true;
     const unitCost = Number(item.unitCost);
-    if (Number.isFinite(unitCost) && unitCost > 0) {
-      item.quantity = roundMoney(allocated / unitCost);
+    const exTax = gstExclusiveAmount(allocated, item);
+    const perUnitNet = netUnitAmount(item, Number.isFinite(unitCost) ? unitCost : 0);
+
+    if (Number.isFinite(unitCost) && unitCost > 0 && perUnitNet > 0) {
+      item.quantity = roundMoney(exTax / perUnitNet);
     } else {
       item.quantity = 1;
-      item.unitCost = allocated;
+      item.unitCost = roundMoney(unitCostFromInclusive(allocated, item));
       copyUnitCostToBuyCostForCrunchwork(item);
     }
   };
@@ -174,6 +185,47 @@ export function applyInvoicedAmountOverridesToGroups(params: {
 
 function roundMoney(n: number): number {
   return Math.round(n * 10000) / 10000;
+}
+
+/** Strip GST from a GST-inclusive allocated amount (tax may be 10 or 0.10). */
+function gstExclusiveAmount(allocatedInclusive: number, item: JsonObject): number {
+  const taxRate = coerceToRate(item.tax);
+  if (taxRate <= 0) return allocatedInclusive;
+  return allocatedInclusive / (1 + taxRate);
+}
+
+/**
+ * Ex-GST commercial amount per unit of quantity (unitCost ± markup), matching
+ * frontend `computeItemMoney` so qty = exTaxAllocated / perUnitNet.
+ */
+function netUnitAmount(item: JsonObject, unitCost: number): number {
+  const markupType =
+    typeof item.markupType === 'string' ? item.markupType : null;
+  if (isFixedMarkupType(markupType)) {
+    const fixed = Number(item.markupValue);
+    return unitCost + (Number.isFinite(fixed) ? fixed : 0);
+  }
+  if (isPercentMarkupType(markupType)) {
+    return unitCost * (1 + coerceToRate(item.markupValue));
+  }
+  return unitCost;
+}
+
+/** Derive unitCost for qty=1 so CW total equals the GST-inclusive allocation. */
+function unitCostFromInclusive(allocatedInclusive: number, item: JsonObject): number {
+  const taxRate = coerceToRate(item.tax);
+  const exTax = taxRate > 0 ? allocatedInclusive / (1 + taxRate) : allocatedInclusive;
+  const markupType =
+    typeof item.markupType === 'string' ? item.markupType : null;
+  if (isFixedMarkupType(markupType)) {
+    const fixed = Number(item.markupValue);
+    return exTax - (Number.isFinite(fixed) ? fixed : 0);
+  }
+  if (isPercentMarkupType(markupType)) {
+    const markupRate = coerceToRate(item.markupValue);
+    return markupRate > 0 ? exTax / (1 + markupRate) : exTax;
+  }
+  return exTax;
 }
 
 function lookupInvoicedAmount(

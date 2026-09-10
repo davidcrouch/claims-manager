@@ -16,6 +16,7 @@ import {
   Layers,
   Users,
   CheckCircle2,
+  Paperclip,
 } from 'lucide-react';
 import {
   Card,
@@ -65,6 +66,7 @@ import {
 } from '@/components/shared/DetailAssignee';
 import { jobDisplayName } from '@/components/shared/job-label';
 import { entityArchiveLabel, entityDetailHeaderTitles } from '@/components/shared/EntityDetailTitle';
+import { EntityAttachmentsTab } from '@/components/shared/EntityAttachmentsTab';
 import { QuoteLineItemsTabV2 as QuoteLineItemsTab, type LineItemEdits, type QuoteLineItemsTabHandle } from '@/components/line-items/QuoteLineItemsTabV2';
 import {
   QuoteOverviewTab,
@@ -174,6 +176,25 @@ export function getEstimateStatusName(quote: Quote): string {
     approval.statusName ??
     (quote.externalReference ? 'Unknown' : 'Draft')
   );
+}
+
+function getCrunchworkQuoteStatusName(quote: Quote): string | null {
+  const api = getApi(quote);
+  const status = api.status;
+  if (typeof status === 'string' && status.trim()) return status.trim();
+  if (status && typeof status === 'object' && !Array.isArray(status)) {
+    const obj = status as Dict;
+    return asString(obj.externalReference) ?? asString(obj.name) ?? null;
+  }
+  return null;
+}
+
+/** True when the Crunchwork quote exists but is still Draft (create succeeded, publish-status did not). */
+export function isCrunchworkEstimateDraft(quote: Quote): boolean {
+  if (!quote.externalReference) return false;
+  const cwStatus = getCrunchworkQuoteStatusName(quote);
+  if (!cwStatus) return quote.syncStatus === 'failed';
+  return cwStatus.trim().toLowerCase() === 'draft';
 }
 
 export function isEstimateLocked(quote: Quote): boolean {
@@ -340,7 +361,8 @@ type QuoteTab =
   | 'parties'
   | 'activities'
   | 'timeline'
-  | 'journals';
+  | 'journals'
+  | 'attachments';
 
 export function QuoteDetail({
   quote,
@@ -439,8 +461,12 @@ export function QuoteDetail({
     quote.id,
   );
   const statusName = getEstimateStatusName(quote);
-  const canPublish = !locked;
   const publishMode: EstimatePublishMode = caps.publishMode === 'external' ? 'external' : 'internal';
+  const canRepublish =
+    publishMode === 'external' &&
+    isCrunchworkEstimateDraft(quote) &&
+    quote.syncStatus !== 'pending';
+  const canPublish = (!locked || canRepublish) && quote.syncStatus !== 'pending';
   const canApprove = statusName === 'Pending' && caps.estimate.approveButton.visible;
   const canCreateWorkOrder = locked && caps.workOrder.createButton.visible;
   const showTakeOffActions = tab === 'line-items' && !locked;
@@ -618,6 +644,7 @@ export function QuoteDetail({
     { id: 'parties', label: 'Parties', icon: Users },
     { id: 'activities', label: 'Activities', icon: ClipboardList },
     { id: 'journals', label: 'Journals', icon: BookOpen },
+    { id: 'attachments', label: 'Attachments', icon: Paperclip },
     { id: 'timeline', label: 'Timeline', icon: Calendar },
   ];
 
@@ -667,7 +694,10 @@ export function QuoteDetail({
             onUndo={handleUndo}
           />
           {canPublish && (
-            <PublishButton onClick={() => setPublishWizardOpen(true)} />
+            <PublishButton
+              onClick={() => setPublishWizardOpen(true)}
+              title={canRepublish ? 'Publish Crunchwork status' : 'Publish'}
+            />
           )}
           <PrintButton
             documentType="quote"
@@ -697,6 +727,7 @@ export function QuoteDetail({
         job={job}
         claim={claim}
         mode={publishMode}
+        republish={canRepublish}
       />
       <EstimateApprovalWizard
         open={approvalWizardOpen}
@@ -748,8 +779,9 @@ export function QuoteDetail({
       <div className="pt-4">
         {locked && (
           <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-            This estimate has been published and can no longer be edited, except
-            for Assigned.
+            {canRepublish
+              ? 'This estimate exists in Crunchwork as a Draft. You can publish it to set the status to Published. Line items and details stay locked except Assigned.'
+              : 'This estimate has been published and can no longer be edited, except for Assigned.'}
           </div>
         )}
         {saveError && (
@@ -794,6 +826,14 @@ export function QuoteDetail({
           />
         </div>
         {tab === 'activities' && <ActivitiesTab quoteId={quote.id} />}
+        {tab === 'attachments' && (
+          <EntityAttachmentsTab
+            entityId={quote.id}
+            relatedRecordType="Quote"
+            jobId={job?.id ?? quote.jobId}
+            entityLabel="this estimate"
+          />
+        )}
         {tab === 'timeline' && <TimelineTab quote={quote} />}
         {tab === 'journals' && (
           <JournalList

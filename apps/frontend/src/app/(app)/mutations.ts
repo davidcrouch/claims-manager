@@ -42,9 +42,27 @@ export async function publishQuoteAction(id: string): Promise<{
   } catch (err) {
     console.error('[publishQuoteAction]', err);
     if (err instanceof ApiError) {
-      const body = err.body as { message?: string; details?: string } | undefined;
-      const detail = body?.details ?? body?.message ?? err.message;
-      return { success: false, error: detail };
+      const body = err.body as
+        | { message?: string | string[]; details?: unknown }
+        | string
+        | undefined;
+      if (typeof body === 'string' && body.trim()) {
+        return { success: false, error: body };
+      }
+      if (body && typeof body === 'object') {
+        const msg = body.message;
+        if (typeof msg === 'string' && msg.trim()) {
+          return { success: false, error: msg };
+        }
+        if (Array.isArray(msg)) {
+          const joined = msg.filter((m) => typeof m === 'string' && m.trim()).join(', ');
+          if (joined) return { success: false, error: joined };
+        }
+        if (typeof body.details === 'string' && body.details.trim()) {
+          return { success: false, error: body.details };
+        }
+      }
+      return { success: false, error: err.message || 'Failed to publish quote' };
     }
     return { success: false, error: err instanceof Error ? err.message : 'Failed to publish quote' };
   }

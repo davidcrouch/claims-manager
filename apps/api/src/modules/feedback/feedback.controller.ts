@@ -90,6 +90,12 @@ export class FeedbackController {
     });
   }
 
+  @Delete(':id')
+  @RequirePermission(P.feedback.manage)
+  async remove(@Param('id', ParseUUIDPipe) id: string) {
+    return this.feedbackService.remove({ id });
+  }
+
   @Post(':id/notes')
   @RequirePermission(P.feedback.manage)
   async addNote(

@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { getSession } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
+import { AccessDenied } from '@/components/permissions/AccessDenied';
 import { FeaturesPageClient } from '@/components/admin/FeaturesPageClient';
 import { listFeaturesAction } from '../settings/features-actions';
 
@@ -14,7 +15,7 @@ export default async function FeaturesPage() {
   const session = await getSession();
   const permissions = session.identity?.permissions ?? [];
   if (!hasPermission(permissions, 'features.read')) {
-    redirect('/dashboard');
+    return <AccessDenied />;
   }
   const canManage = hasPermission(permissions, 'features.manage');
   const { features, error } = await listFeaturesAction();

@@ -1,5 +1,11 @@
-import { Injectable, Optional, BadRequestException } from '@nestjs/common';
-import { ReportsRepository, JobsRepository, type ReportInsert } from '../../database/repositories';
+import {
+  Injectable,
+  Logger,
+  Optional,
+  BadRequestException,
+  NotImplementedException,
+} from '@nestjs/common';
+import { ReportsRepository, JobsRepository } from '../../database/repositories';
 import { attachJobSummaries } from '../../common/attach-job-summaries';
 import { TenantContext } from '../../tenant/tenant-context';
 import { CrunchworkService } from '../../crunchwork/crunchwork.service';
@@ -7,6 +13,8 @@ import { ConnectionResolverService } from '../external/connection-resolver.servi
 
 @Injectable()
 export class ReportsService {
+  private readonly logger = new Logger(ReportsService.name);
+
   constructor(
     private readonly reportsRepo: ReportsRepository,
     private readonly jobsRepo: JobsRepository,
@@ -72,26 +80,12 @@ export class ReportsService {
   }
 
   async create(params: { body: Record<string, unknown>; userId?: string }) {
-    const tenantId = this.tenantContext.getTenantId();
-    const connectionId = await this.resolveConnectionId(tenantId);
-    const apiReport = await this.crunchworkService.createReport({
-      connectionId,
-      body: params.body,
-    });
-
-    const apiObj = apiReport as Record<string, unknown>;
-    const insertData: ReportInsert = {
-      tenantId,
-      claimId: (apiObj.claimId ?? params.body?.claimId) as string,
-      jobId: (apiObj.jobId ?? params.body?.jobId) as string,
-      title: apiObj.title as string,
-      reportData: (apiObj.reportData ?? params.body?.reportData ?? {}) as Record<string, unknown>,
-      reportMeta: (apiObj.reportMeta ?? {}) as Record<string, unknown>,
-      apiPayload: apiReport as Record<string, unknown>,
-      createdByUserId: params.userId ?? null,
-      updatedByUserId: params.userId ?? null,
-    };
-    return this.reportsRepo.create({ data: insertData });
+    this.logger.warn(
+      `ReportsService.create — Crunchwork Report API is not yet operational user=${params.userId ?? 'unknown'}`,
+    );
+    throw new NotImplementedException(
+      'The Crunchwork Report API is not yet operational. Report creation is unavailable.',
+    );
   }
 
   async update(params: {

@@ -124,7 +124,11 @@ export class QuotesController {
     @Param('id') id: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.quotesService.publish({ id, userId: user.sub });
+    return this.quotesService.publish({
+      id,
+      userId: user.sub,
+      userEmail: user.email,
+    });
   }
 
   @Post(':id/approve')

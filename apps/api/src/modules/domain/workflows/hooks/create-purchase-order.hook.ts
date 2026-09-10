@@ -40,14 +40,22 @@ export class CreatePurchaseOrderHook implements OnEnterHook {
     const rfqId = proposal.rfqId;
     const vendorId = (proposal as any).vendorId ?? null;
 
-    const statusLookupId = await this.lookupResolution.resolve({
-      tenantId: context.tenantId,
-      domain: 'purchase_order_status',
-      externalReference: 'Draft',
-      name: 'Draft',
-      autoCreate: true,
-      tx: context.tx,
-    });
+    const statusLookupId =
+      (await this.lookupResolution.resolve({
+        tenantId: context.tenantId,
+        domain: 'purchase_order_status',
+        externalReference: 'Active',
+        name: 'Active',
+        tx: context.tx,
+      })) ??
+      (await this.lookupResolution.resolve({
+        tenantId: context.tenantId,
+        domain: 'purchase_order_status',
+        externalReference: 'Active',
+        name: 'Active',
+        autoCreate: true,
+        tx: context.tx,
+      }));
 
     const internalNumber = await this.recordNumberService.next({
       tenantId: context.tenantId,

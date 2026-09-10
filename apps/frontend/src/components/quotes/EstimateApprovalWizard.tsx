@@ -12,6 +12,7 @@ import {
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
 import { approveQuoteAction } from '@/app/(app)/mutations';
+import { consumePermissionDeniedError } from '@/lib/permission-feedback';
 
 export interface EstimateApprovalWizardProps {
   open: boolean;
@@ -49,6 +50,9 @@ export function EstimateApprovalWizard({
     try {
       const result = await approveQuoteAction(quoteId);
       if (!result.success) {
+        if (consumePermissionDeniedError(result.error, { action: 'approve this estimate' })) {
+          return;
+        }
         setError(result.error ?? 'Failed to approve estimate');
         return;
       }

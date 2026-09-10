@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   Pencil,
   Banknote,
+  Paperclip,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -47,6 +48,7 @@ import { PublishButton } from '@/components/shared/PublishButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { jobDisplayName } from '@/components/shared/job-label';
 import { entityArchiveLabel, entityDetailHeaderTitles } from '@/components/shared/EntityDetailTitle';
+import { EntityAttachmentsTab } from '@/components/shared/EntityAttachmentsTab';
 import { invoiceInsurerRef, invoiceStatusName, invoiceHasPositiveAmount, invoiceIsPaid, invoiceIsInvoiced, invoiceIsPartiallyPaid, invoiceAmountReceived, invoiceRemainingAmount } from '@/components/invoices/invoice-label';
 import {
   InvoicePublishWizard,
@@ -70,7 +72,7 @@ import {
 import { DetailUndoButton } from '@/components/shared/DetailAutosaveActions';
 import { HeaderSaveStatus } from '@/components/shared/HeaderSaveStatus';
 import { approveInvoiceAction, returnInvoiceToDraftAction, receiveInvoicePaymentAction } from '@/app/(app)/mutations';
-import { useHasPermission } from '@/components/providers/PermissionsProvider';
+import { useRequirePermission } from '@/components/providers/PermissionsProvider';
 
 // ---------- header ----------------------------------------------------------
 
@@ -194,7 +196,7 @@ function TimelineTab({ invoice }: { invoice: Invoice }) {
 
 // ---------- container -------------------------------------------------------
 
-type InvTab = 'overview' | 'line-items' | 'payments' | 'timeline';
+type InvTab = 'overview' | 'line-items' | 'payments' | 'attachments' | 'timeline';
 
 type LineItemsUndoEntry = { kind: 'line-items'; edits: InvoiceLineItemEdits };
 
@@ -230,9 +232,18 @@ export function InvoiceDetail({
   const saveLineItemsRef = useRef<(() => void) | null>(null);
   const lineItemsRef = useRef<InvoiceLineItemsTabHandle | null>(null);
   const router = useRouter();
-  const canApprovePermission = useHasPermission('invoices.approve');
-  const canUpdateInvoice = useHasPermission('invoices.update');
-  const canPublishPermission = useHasPermission('invoices.publish');
+  const requireApprove = useRequirePermission(
+    'invoices.approve',
+    'approve this invoice',
+  );
+  const requireUpdateInvoice = useRequirePermission(
+    'invoices.update',
+    'update this invoice',
+  );
+  const requirePublish = useRequirePermission(
+    'invoices.publish',
+    'publish this invoice',
+  );
 
   const statusName = invoiceStatusName(invoice);
   const isLocalInvoice = !invoice.sourceExternalReference;
@@ -240,14 +251,13 @@ export function InvoiceDetail({
   const isReviewed = statusName === 'Reviewed';
   const isPaid = invoiceIsPaid(invoice);
   const hasPositiveAmount = invoiceHasPositiveAmount(invoice);
-  const showApprove = canApprovePermission && isLocalInvoice && isDraft;
+  const showApprove = isLocalInvoice && isDraft;
   const approveEnabled = showApprove && hasPositiveAmount && !approving;
-  const showEditInvoice = canUpdateInvoice && isLocalInvoice && isReviewed;
-  const canPublish = canPublishPermission && isLocalInvoice && isReviewed;
+  const showEditInvoice = isLocalInvoice && isReviewed;
+  const canPublish = isLocalInvoice && isReviewed;
   const remainingAmount = invoiceRemainingAmount(invoice);
   const receivedAmount = invoiceAmountReceived(invoice);
   const showReceivedPayment =
-    canUpdateInvoice &&
     !isPaid &&
     (invoiceIsInvoiced(invoice) ||
       invoiceIsPartiallyPaid(invoice) ||
@@ -338,6 +348,7 @@ export function InvoiceDetail({
   }, [canEditLineItems, lineItemsSaving, lineItemsDirty, undoStack]);
 
   async function handleApproveInvoice() {
+    if (!requireApprove()) return;
     if (!approveEnabled) return;
     setApproving(true);
     try {
@@ -357,6 +368,7 @@ export function InvoiceDetail({
   }
 
   async function handleConfirmEditInvoice() {
+    if (!requireUpdateInvoice()) return;
     if (!showEditInvoice || returningToDraft) return;
     setReturningToDraft(true);
     try {
@@ -379,6 +391,7 @@ export function InvoiceDetail({
   }
 
   function openPaymentDialog() {
+    if (!requireUpdateInvoice()) return;
     if (!showReceivedPayment || recordingPayment) return;
     setPaymentAmountInput(remainingAmount > 0 ? remainingAmount.toFixed(2) : '');
     setPaymentDialogOpen(true);
@@ -421,6 +434,7 @@ export function InvoiceDetail({
     { id: 'overview', label: 'Overview', icon: FileSignature },
     { id: 'line-items', label: 'Line Items', icon: Package },
     { id: 'payments', label: 'Payments', icon: Banknote },
+    { id: 'attachments', label: 'Attachments', icon: Paperclip },
     { id: 'timeline', label: 'Timeline', icon: Calendar },
   ];
 
@@ -458,7 +472,10 @@ export function InvoiceDetail({
             size="default"
             disabled={returningToDraft}
             className="h-9 gap-1.5 px-4 bg-slate-700 text-white hover:bg-slate-600"
-            onClick={() => setEditConfirmOpen(true)}
+            onClick={() => {
+              if (!requireUpdateInvoice()) return;
+              setEditConfirmOpen(true);
+            }}
           >
             <Pencil className="h-3.5 w-3.5" />
             Edit Invoice
@@ -484,7 +501,12 @@ export function InvoiceDetail({
             />
           )}
           {canPublish && (
-            <PublishButton onClick={() => setPublishWizardOpen(true)} />
+            <PublishButton
+              onClick={() => {
+                if (!requirePublish()) return;
+                setPublishWizardOpen(true);
+              }}
+            />
           )}
           <PrintButton documentType="invoice" entityId={invoice.id} jobId={job?.id} />
           <ArchiveEntityButton
@@ -670,6 +692,14 @@ export function InvoiceDetail({
           </div>
         )}
         {tab === 'payments' && <InvoicePaymentsTab invoice={invoice} />}
+        {tab === 'attachments' && (
+          <EntityAttachmentsTab
+            entityId={invoice.id}
+            relatedRecordType="Invoice"
+            jobId={job?.id ?? invoice.jobId}
+            entityLabel="this invoice"
+          />
+        )}
         {tab === 'timeline' && <TimelineTab invoice={invoice} />}
       </div>
     </div>

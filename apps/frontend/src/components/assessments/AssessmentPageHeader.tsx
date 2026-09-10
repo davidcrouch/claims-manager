@@ -11,7 +11,7 @@ import {
 import { StatusBadge } from '@/components/ui/status-badge';
 import { formatDate } from '@/components/shared/list-filters';
 import { jobDisplayName } from '@/components/shared/job-label';
-import { isAssessmentLocked } from '@/components/assessments/assessment-sections';
+import { isAssessmentLocked, formatAssessmentStatus } from '@/components/assessments/assessment-sections';
 import type { Assessment, Job } from '@/types/api';
 
 export function AssessmentPageHeader({
@@ -58,7 +58,7 @@ export function AssessmentPageHeader({
         <>
           <div className="flex items-baseline gap-1.5">
             <span className="text-muted-foreground">Status:</span>
-            <StatusBadge status={assessment.status} />
+            <StatusBadge status={formatAssessmentStatus(assessment.status)} />
           </div>
           <PageHeaderField label="Created">{formatDate(assessment.createdAt)}</PageHeaderField>
         </>

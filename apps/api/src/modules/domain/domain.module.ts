@@ -58,7 +58,7 @@ import { UseCaseRegistry } from './use-cases/use-case.registry';
     forwardRef(() => WorkflowModule),
     ActivitiesModule,
     forwardRef(() => TasksModule),
-    OutboundModule,
+    forwardRef(() => OutboundModule),
   ],
   controllers: [OutboundRetryController],
   providers: [

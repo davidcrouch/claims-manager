@@ -13,6 +13,7 @@ export interface ErrorResponse {
   statusCode: number;
   message: string;
   error: string;
+  code?: string;
   details?: unknown;
   timestamp: string;
   path: string;
@@ -36,6 +37,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
         : (exceptionResponse as { message?: string | string[] })?.message;
     const msg = Array.isArray(message) ? message.join(', ') : (message as string);
 
+    const extra =
+      typeof exceptionResponse === 'object' && exceptionResponse
+        ? (exceptionResponse as { code?: string; details?: unknown })
+        : undefined;
+
     const errorResponse: ErrorResponse = {
       statusCode: status,
       message: msg ?? 'An error occurred',
@@ -45,8 +51,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
       requestId: (request.headers['x-request-id'] as string) ?? uuid(),
     };
 
-    if (typeof exceptionResponse === 'object' && 'details' in exceptionResponse) {
-      errorResponse.details = (exceptionResponse as { details?: unknown }).details;
+    if (extra?.code) {
+      errorResponse.code = extra.code;
+    }
+    if (extra && 'details' in extra) {
+      errorResponse.details = extra.details;
     }
 
     this.logger.error(
@@ -76,10 +85,16 @@ export class AllExceptionsFilter implements ExceptionFilter {
           : (exceptionResponse as { message?: string | string[] })?.message;
       const msg = Array.isArray(message) ? message.join(', ') : (message as string);
 
+      const extra =
+        typeof exceptionResponse === 'object' && exceptionResponse
+          ? (exceptionResponse as { code?: string; details?: unknown })
+          : undefined;
       response.status(status).json({
         statusCode: status,
         message: msg ?? 'An error occurred',
         error: HttpStatus[status] ?? 'Error',
+        ...(extra?.code ? { code: extra.code } : {}),
+        ...(extra && 'details' in extra ? { details: extra.details } : {}),
         timestamp: new Date().toISOString(),
         path: request.url,
         requestId,

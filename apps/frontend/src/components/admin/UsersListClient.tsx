@@ -39,7 +39,7 @@ import {
   resendInviteAction,
   updateOrgUserStatusAction,
 } from '@/app/(app)/admin/users/actions';
-import { useHasPermission } from '@/components/providers/PermissionsProvider';
+import { useRequirePermission } from '@/components/providers/PermissionsProvider';
 import type { AvailableRole, OrgMember } from '@/types/api';
 import { InviteUserDrawer } from './InviteUserDrawer';
 import { EditUserDrawer } from './EditUserDrawer';
@@ -90,9 +90,9 @@ function normalizeStatus(status: string): string {
 }
 
 export function UsersListClient() {
-  const canInvite = useHasPermission('org.users.invite');
-  const canManage = useHasPermission('org.users.manage');
-  const canRemove = useHasPermission('org.users.remove');
+  const requireInvite = useRequirePermission('org.users.invite', 'invite users');
+  const requireManage = useRequirePermission('org.users.manage', 'manage users');
+  const requireRemove = useRequirePermission('org.users.remove', 'remove users');
   const [members, setMembers] = useState<OrgMember[]>([]);
   const [roles, setRoles] = useState<AvailableRole[]>([]);
   const [loading, setLoading] = useState(true);
@@ -131,6 +131,7 @@ export function UsersListClient() {
   }
 
   function handleResend(member: OrgMember) {
+    if (!requireInvite()) return;
     startTransition(async () => {
       const result = await resendInviteAction(member);
       if (!result.success) {
@@ -143,6 +144,7 @@ export function UsersListClient() {
   }
 
   function handleToggleStatus(member: OrgMember) {
+    if (!requireManage()) return;
     const nextStatus = normalizeStatus(member.status) === 'Disabled' ? 'Active' : 'Disabled';
     startTransition(async () => {
       const result = await updateOrgUserStatusAction(member.id, nextStatus);
@@ -155,6 +157,7 @@ export function UsersListClient() {
   }
 
   function handleRemove(member: OrgMember) {
+    if (!requireRemove()) return;
     if (!window.confirm(`Remove ${displayName(member)} from this organisation?`)) {
       return;
     }
@@ -237,11 +240,13 @@ export function UsersListClient() {
         />
       </SetPageHeader>
 
-      {canInvite && (
-        <SetHeaderActions>
+      <SetHeaderActions>
           <Button
             size="default"
-            onClick={() => setInviteOpen(true)}
+            onClick={() => {
+              if (!requireInvite()) return;
+              setInviteOpen(true);
+            }}
             disabled={isPending}
             className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
           >
@@ -249,7 +254,6 @@ export function UsersListClient() {
             Invite User
           </Button>
         </SetHeaderActions>
-      )}
 
       <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
@@ -387,30 +391,25 @@ export function UsersListClient() {
                                 <UserCog className="h-3.5 w-3.5" />
                                 Edit user
                               </DropdownMenuItem>
-                              {canInvite &&
-                                normalizeStatus(member.status) === 'Invited' && (
+                              {normalizeStatus(member.status) === 'Invited' && (
                                   <DropdownMenuItem onClick={() => handleResend(member)}>
                                     <Mail className="h-3.5 w-3.5" />
                                     Resend invite
                                   </DropdownMenuItem>
                                 )}
-                              {canManage && (
-                                <DropdownMenuItem onClick={() => handleToggleStatus(member)}>
-                                  <UserX className="h-3.5 w-3.5" />
-                                  {normalizeStatus(member.status) === 'Disabled'
-                                    ? 'Enable user'
-                                    : 'Disable user'}
-                                </DropdownMenuItem>
-                              )}
-                              {canRemove && (
-                                <DropdownMenuItem
-                                  variant="destructive"
-                                  onClick={() => handleRemove(member)}
-                                >
-                                  <UserMinus className="h-3.5 w-3.5" />
-                                  Remove
-                                </DropdownMenuItem>
-                              )}
+                              <DropdownMenuItem onClick={() => handleToggleStatus(member)}>
+                                <UserX className="h-3.5 w-3.5" />
+                                {normalizeStatus(member.status) === 'Disabled'
+                                  ? 'Enable user'
+                                  : 'Disable user'}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onClick={() => handleRemove(member)}
+                              >
+                                <UserMinus className="h-3.5 w-3.5" />
+                                Remove
+                              </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </td>

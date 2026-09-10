@@ -114,6 +114,22 @@ export class FeedbackItemsRepository {
     return row;
   }
 
+  async delete(params: {
+    id: string;
+    tenantId: string;
+  }): Promise<FeedbackItemRow | undefined> {
+    const [row] = await this.db
+      .delete(feedbackItems)
+      .where(
+        and(
+          eq(feedbackItems.id, params.id),
+          eq(feedbackItems.tenantId, params.tenantId),
+        ),
+      )
+      .returning();
+    return row;
+  }
+
   async countByStatus(params: {
     tenantId: string;
   }): Promise<Record<string, number>> {

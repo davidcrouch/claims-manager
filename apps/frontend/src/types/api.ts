@@ -190,14 +190,21 @@ export interface Attachment {
   tenantId?: string;
   relatedRecordType?: string;
   relatedRecordId?: string;
+  sourceDocumentId?: string | null;
   title?: string | null;
   filename?: string | null;
+  fileName?: string | null;
   documentType?: string | null;
   fileUrl?: string | null;
   fileSize?: number | string | null;
   mimeType?: string | null;
   uploadedBy?: string | null;
   uploadedByName?: string | null;
+  attachmentMeta?: {
+    pendingCrunchworkSync?: boolean;
+    documentTypeExternalReference?: string;
+    [key: string]: unknown;
+  } | null;
   createdAt?: string | null;
   updatedAt?: string | null;
 }

@@ -7,7 +7,22 @@ export type JobLabelSource = Pick<
 > & {
   jobType?: { name?: string | null } | null;
   jobTypeName?: string | null;
+  customData?: Job['customData'];
+  apiPayload?: Job['apiPayload'];
 };
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Human job identifier — never the CW job UUID stored on `jobs.external_reference`. */
+function humanJobRef(
+  value?: string | null,
+  cwJobId?: string | null,
+): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed || trimmed === cwJobId || UUID_RE.test(trimmed)) return undefined;
+  return trimmed;
+}
 
 export type JobOption = {
   id: string;
@@ -37,24 +52,34 @@ export function jobTypeDisplayName(job?: JobLabelSource | null): string | undefi
   return name || undefined;
 }
 
-/** Same value as job overview "Insurer reference". Hidden when it is just the CW job id. */
+/**
+ * Same value as job overview "Insurer reference".
+ * Prefers CW `externalReference` (e.g. cc:280401), then CW `reference`
+ * (e.g. DP2600116-BMS3). Hidden when the only stored value is the CW job UUID.
+ */
 export function jobInsurerReference(
-  job: Pick<Job, 'externalReference' | 'customData' | 'apiPayload'>,
+  job: Pick<Job, 'externalReference' | 'customData' | 'apiPayload'> & {
+    externalJobId?: string | null;
+  },
 ): string | undefined {
   const custom = (job.customData as Record<string, unknown> | undefined) ?? {};
   const api = (job.apiPayload as Record<string, unknown> | undefined) ?? {};
-  const insurerRef = asString(
-    pick(custom, 'insurerExternalReference') ?? pick(api, 'externalReference'),
+  const cwId = job.externalReference;
+  return (
+    humanJobRef(asString(pick(custom, 'insurerExternalReference')), cwId) ||
+    humanJobRef(asString(pick(api, 'externalReference')), cwId) ||
+    humanJobRef(job.externalJobId, cwId) ||
+    humanJobRef(asString(pick(custom, 'reference')), cwId) ||
+    humanJobRef(asString(pick(api, 'reference')), cwId)
   );
-  if (!insurerRef || insurerRef === job.externalReference) return undefined;
-  return insurerRef;
 }
 
-/** CW / insurer reference (or job name) shown above the internal number on job headers. */
+/** Insurer / CW reference shown above the internal number on job headers. */
 export function jobHeaderSubtitle(job: JobLabelSource): string | undefined {
-  const cwLabel =
-    job.externalJobId?.trim() || job.externalReference?.trim() || undefined;
-  return cwLabel || job.name?.trim() || undefined;
+  return (
+    jobInsurerReference(job) ||
+    humanJobRef(job.name, job.externalReference)
+  );
 }
 
 /** Primary job title on detail/list headers (internal number). */

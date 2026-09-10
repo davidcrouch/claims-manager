@@ -968,6 +968,7 @@ export const attachments = pgTable(
       .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
     relatedRecordType: text('related_record_type').notNull(),
     relatedRecordId: uuid('related_record_id').notNull(),
+    sourceDocumentId: uuid('source_document_id'),
     documentTypeLookupId: uuid('document_type_lookup_id'),
     title: text('title'),
     description: text('description'),

@@ -1,13 +1,21 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy, Inject } from '@nestjs/common';
+import { ContextIdFactory, ModuleRef } from '@nestjs/core';
 import { eq, and, lte, sql, inArray } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
 import { outboundSyncQueue, integrationConnections, jobs, tasks, appointments, quotes, invoices } from '../../../database/schema';
-import type { OutboundAdapter, OutboundPushResult } from './outbound-adapter.interface';
+import {
+  OutboundPartialSuccessError,
+  type OutboundAdapter,
+  type OutboundProgressUpdate,
+  type OutboundPushResult,
+} from './outbound-adapter.interface';
 import { runWithRequestActor } from '../../../common/request-actor.store';
 import {
   hasAnyPartyData,
   partyBucketsFromCwPayload,
 } from '../transformers/quote-party-buckets';
+import { TenantContext } from '../../../tenant/tenant-context';
+import type { AttachmentsService } from '../../attachments/attachments.service';
 
 interface OutboundQueueRow {
   id: string;
@@ -31,7 +39,10 @@ export class OutboundWorkerService implements OnModuleInit, OnModuleDestroy {
   private pollInterval: ReturnType<typeof setInterval> | null = null;
   private adapters: Map<string, OutboundAdapter> = new Map();
 
-  constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: DrizzleDB,
+    private readonly moduleRef: ModuleRef,
+  ) {}
 
   registerAdapter(providerCode: string, adapter: OutboundAdapter): void {
     this.adapters.set(providerCode, adapter);
@@ -169,6 +180,7 @@ export class OutboundWorkerService implements OnModuleInit, OnModuleDestroy {
           entityId: record.entityId,
           action: record.action,
           payload: record.payload,
+          persistProgress: (update) => this.persistOutboundProgress({ record, update }),
         }),
       );
 
@@ -176,6 +188,15 @@ export class OutboundWorkerService implements OnModuleInit, OnModuleDestroy {
       await this.patchEntity(record, result);
       this.logger.log(`${logPrefix} — sent ${record.entityType}:${record.entityId} action=${record.action}`);
     } catch (err: unknown) {
+      if (err instanceof OutboundPartialSuccessError) {
+        try {
+          await this.persistOutboundProgress({ record, update: err.progress });
+        } catch (persistErr) {
+          this.logger.error(
+            `${logPrefix} — persistOutboundProgress failed: ${persistErr instanceof Error ? persistErr.message : persistErr}`,
+          );
+        }
+      }
       const errorMsg = err instanceof Error ? err.message : String(err);
       this.logger.warn(`${logPrefix} — failed: ${errorMsg}`);
 
@@ -188,32 +209,57 @@ export class OutboundWorkerService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async patchEntity(record: OutboundQueueRow, result: OutboundPushResult): Promise<void> {
+  private async persistOutboundProgress(params: {
+    record: OutboundQueueRow;
+    update: OutboundProgressUpdate;
+  }): Promise<void> {
+    const { record, update } = params;
+    this.logger.log(
+      `OutboundWorker.persistOutboundProgress — ${record.entityType}:${record.entityId} ` +
+        `externalReference=${update.result.externalReference ?? 'none'}`,
+    );
+    await this.db
+      .update(outboundSyncQueue)
+      .set({ payload: update.nextPayload })
+      .where(eq(outboundSyncQueue.id, record.id));
+    await this.patchEntity(record, update.result, { markSynced: false });
+  }
+
+  private async patchEntity(
+    record: OutboundQueueRow,
+    result: OutboundPushResult,
+    options?: { markSynced?: boolean },
+  ): Promise<void> {
     const now = new Date();
+    const markSynced = options?.markSynced !== false;
     switch (record.entityType) {
       case 'job': {
-        const patch: Record<string, unknown> = { syncStatus: 'synced', updatedAt: now };
+        const patch: Record<string, unknown> = { updatedAt: now };
+        if (markSynced) patch.syncStatus = 'synced';
         if (result.externalReference) patch.externalReference = result.externalReference;
         if (result.responsePayload) patch.apiPayload = result.responsePayload;
         await this.db.update(jobs).set(patch).where(eq(jobs.id, record.entityId));
         break;
       }
       case 'task': {
-        const patch: Record<string, unknown> = { syncStatus: 'synced', updatedAt: now };
+        const patch: Record<string, unknown> = { updatedAt: now };
+        if (markSynced) patch.syncStatus = 'synced';
         if (result.externalReference) patch.externalReference = result.externalReference;
         if (result.responsePayload) patch.taskPayload = result.responsePayload;
         await this.db.update(tasks).set(patch).where(eq(tasks.id, record.entityId));
         break;
       }
       case 'appointment': {
-        const patch: Record<string, unknown> = { syncStatus: 'synced', updatedAt: now };
+        const patch: Record<string, unknown> = { updatedAt: now };
+        if (markSynced) patch.syncStatus = 'synced';
         if (result.externalReference) patch.externalReference = result.externalReference;
         if (result.responsePayload) patch.appointmentPayload = result.responsePayload;
         await this.db.update(appointments).set(patch).where(eq(appointments.id, record.entityId));
         break;
       }
       case 'quote': {
-        const patch: Record<string, unknown> = { syncStatus: 'synced', updatedAt: now };
+        const patch: Record<string, unknown> = { updatedAt: now };
+        if (markSynced) patch.syncStatus = 'synced';
         if (result.externalReference) patch.externalReference = result.externalReference;
         if (result.responsePayload) {
           patch.apiPayload = result.responsePayload;
@@ -236,7 +282,8 @@ export class OutboundWorkerService implements OnModuleInit, OnModuleDestroy {
         break;
       }
       case 'invoice': {
-        const patch: Record<string, unknown> = { syncStatus: 'synced', updatedAt: now };
+        const patch: Record<string, unknown> = { updatedAt: now };
+        if (markSynced) patch.syncStatus = 'synced';
         if (result.externalReference) patch.sourceExternalReference = result.externalReference;
         if (result.responsePayload) {
           const [existing] = await this.db
@@ -266,6 +313,73 @@ export class OutboundWorkerService implements OnModuleInit, OnModuleDestroy {
         await this.db.update(invoices).set(patch).where(eq(invoices.id, record.entityId));
         break;
       }
+    }
+
+    if (result.externalReference) {
+      await this.flushPendingAttachments(record);
+    }
+  }
+
+  private async flushPendingAttachments(record: OutboundQueueRow): Promise<void> {
+    const relatedRecordType =
+      record.entityType === 'quote'
+        ? 'Quote'
+        : record.entityType === 'job'
+          ? 'Job'
+          : record.entityType === 'invoice'
+            ? 'Invoice'
+            : null;
+    if (!relatedRecordType) return;
+
+    let attachmentsService: AttachmentsService;
+    try {
+      const { AttachmentsService: AttachmentsServiceToken } = await import(
+        '../../attachments/attachments.service'
+      );
+      // AttachmentsService is request-scoped (via TenantContext) — resolve a DI
+      // context instead of get(), then seed tenant for the synthetic request.
+      const contextId = ContextIdFactory.create();
+      this.moduleRef.registerRequestByContextId(
+        { tenantId: record.tenantId },
+        contextId,
+      );
+      const tenantContext = await this.moduleRef.resolve(TenantContext, contextId, {
+        strict: false,
+      });
+      tenantContext.setTenant({ tenantId: record.tenantId });
+      attachmentsService = await this.moduleRef.resolve(AttachmentsServiceToken, contextId, {
+        strict: false,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `OutboundWorker.flushPendingAttachments — AttachmentsService unavailable for ${relatedRecordType}/${record.entityId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return;
+    }
+
+    try {
+      const result = await attachmentsService.pushPendingForRelatedRecord({
+        tenantId: record.tenantId,
+        relatedRecordType,
+        relatedRecordId: record.entityId,
+      });
+      if (result.pushed > 0 || result.failed > 0) {
+        this.logger.log(
+          `OutboundWorker.flushPendingAttachments — ${relatedRecordType}/${record.entityId} pushed=${result.pushed} failed=${result.failed}`,
+        );
+      } else {
+        this.logger.debug(
+          `OutboundWorker.flushPendingAttachments — ${relatedRecordType}/${record.entityId} nothing pending`,
+        );
+      }
+    } catch (err) {
+      this.logger.warn(
+        `OutboundWorker.flushPendingAttachments — ${relatedRecordType}/${record.entityId} failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
     }
   }
 

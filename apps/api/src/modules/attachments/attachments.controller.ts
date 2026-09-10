@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Param, Post, Query, Res, NotFoundException, Logger } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  Res,
+  BadRequestException,
+  NotFoundException,
+  Logger,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { AttachmentsService } from './attachments.service';
@@ -60,6 +71,39 @@ export class AttachmentsController {
   @RequirePermission(P.documents.read)
   async findOne(@Param('id') id: string) {
     return this.attachmentsService.findOne({ id });
+  }
+
+  @Post('from-document')
+  @RequirePermission(P.documents.manage)
+  async createFromDocument(
+    @Body()
+    body: {
+      documentId?: string;
+      relatedRecordType?: string;
+      relatedRecordId?: string;
+      title?: string;
+      description?: string;
+      documentTypeExternalReference?: string;
+    },
+    @CurrentUser('sub') userId: string,
+  ) {
+    this.logger.log(
+      `AttachmentsController.createFromDocument — documentId=${body.documentId} related=${body.relatedRecordType}/${body.relatedRecordId}`,
+    );
+    if (!body.documentId || !body.relatedRecordType || !body.relatedRecordId) {
+      throw new BadRequestException(
+        'documentId, relatedRecordType, and relatedRecordId are required',
+      );
+    }
+    return this.attachmentsService.createFromDocument({
+      documentId: body.documentId,
+      relatedRecordType: body.relatedRecordType,
+      relatedRecordId: body.relatedRecordId,
+      title: body.title,
+      description: body.description,
+      documentTypeExternalReference: body.documentTypeExternalReference,
+      userId,
+    });
   }
 
   @Post()

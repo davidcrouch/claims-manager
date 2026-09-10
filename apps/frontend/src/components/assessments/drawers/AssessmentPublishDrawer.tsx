@@ -21,7 +21,7 @@ import {
   publishAssessmentAction,
   validateAssessmentAction,
 } from '@/app/(app)/assessments/actions';
-import { asBool, asStr, sectionDict } from '../assessment-sections';
+import { asBool, asStr, formatAssessmentStatus, sectionDict } from '../assessment-sections';
 import type { Assessment, Claim, Job } from '@/types/api';
 
 export interface AssessmentPublishDrawerProps {
@@ -160,7 +160,7 @@ export function AssessmentPublishDrawer({
 
           <PublishSummaryCard title="Assessment summary">
             <PublishSummaryRow label="Name" value={assessment.name} />
-            <PublishSummaryRow label="Status" value={assessment.status} />
+            <PublishSummaryRow label="Status" value={formatAssessmentStatus(assessment.status)} />
             <PublishSummaryRow
               label="Recommendation"
               value={asStr(rec.claimRecommendation) || '—'}

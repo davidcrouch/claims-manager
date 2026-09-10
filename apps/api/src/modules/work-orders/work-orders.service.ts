@@ -139,13 +139,23 @@ export class WorkOrdersService {
         ? statusLookupId
         : null;
     if (!resolvedStatusId) {
-      resolvedStatusId = await this.lookupResolution.resolve({
-        tenantId,
-        domain: LOOKUP_DOMAINS.WORK_ORDER_STATUS,
-        externalReference: 'Open',
-        name: 'Open',
-        autoCreate: true,
-      });
+      resolvedStatusId =
+        (await this.lookupResolution.resolve({
+          tenantId,
+          domain: LOOKUP_DOMAINS.WORK_ORDER_STATUS,
+          externalReference: 'Draft',
+          name: 'Draft',
+        })) ??
+        (await this.lookupResolution.resolve({
+          tenantId,
+          domain: LOOKUP_DOMAINS.WORK_ORDER_STATUS,
+          externalReference: 'Draft',
+          name: 'Draft',
+          autoCreate: true,
+        }));
+      this.logger.log(
+        `api:WorkOrdersService.create — default status Draft lookupId=${resolvedStatusId ?? 'none'}`,
+      );
     }
 
     return this.db.transaction(async (tx) => {

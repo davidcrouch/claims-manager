@@ -50,3 +50,36 @@ export async function fetchEntityAttachmentsAction(
     };
   }
 }
+
+export async function attachDocumentToEntityAction(params: {
+  documentId: string;
+  relatedRecordType: string;
+  relatedRecordId: string;
+  title?: string;
+  description?: string;
+  documentTypeExternalReference?: string;
+}): Promise<{ success: boolean; attachment?: Attachment; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const attachment = await api.createAttachmentFromDocument(params);
+    return { success: true, attachment };
+  } catch (err) {
+    console.error('[attachments/actions.attachDocumentToEntityAction]', err);
+    let message = 'Failed to attach document';
+    if (err instanceof ApiError) {
+      const body = err.body;
+      if (typeof body === 'string' && body.trim()) message = body;
+      else if (body && typeof body === 'object') {
+        const msg = (body as { message?: unknown }).message;
+        if (typeof msg === 'string' && msg.trim()) message = msg;
+        else if (Array.isArray(msg) && typeof msg[0] === 'string') message = msg[0];
+      } else if (err.message) {
+        message = err.message;
+      }
+    } else if (err instanceof Error) {
+      message = err.message;
+    }
+    return { success: false, error: message };
+  }
+}

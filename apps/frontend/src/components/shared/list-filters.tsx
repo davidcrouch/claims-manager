@@ -494,6 +494,7 @@ export function ValueFilterMenu(props: {
   emptyLabel?: string;
   menuTitle?: string;
   itemNoun?: { singular: string; plural: string };
+  formatOption?: (name: string) => string;
 }) {
   const {
     options,
@@ -504,6 +505,7 @@ export function ValueFilterMenu(props: {
     emptyLabel = 'All',
     menuTitle = 'Filter',
     itemNoun = { singular: 'item', plural: 'items' },
+    formatOption,
   } = props;
   const filterActive = selected.size > 0;
   return (
@@ -513,7 +515,7 @@ export function ValueFilterMenu(props: {
           {selected.size === 0
             ? emptyLabel
             : selected.size === 1
-              ? [...selected][0]
+              ? (formatOption ? formatOption([...selected][0]) : [...selected][0])
               : `${selected.size} ${itemNoun.plural}`}
         </span>
         {filterActive ? (
@@ -559,7 +561,7 @@ export function ValueFilterMenu(props: {
                 className="justify-between"
               >
                 <span className={cn('text-sm', !isChecked && 'text-slate-400')}>
-                  {name}
+                  {formatOption ? formatOption(name) : name}
                 </span>
                 {isChecked ? (
                   <CheckSquare className="h-4 w-4 shrink-0 text-blue-600" />
@@ -593,6 +595,7 @@ export interface ColumnValueFilter {
   onApply: (next: Set<string>) => void;
   menuTitle?: string;
   itemNoun?: { singular: string; plural: string };
+  formatOption?: (name: string) => string;
 }
 
 function ColumnFilterButton(props: ColumnValueFilter) {
@@ -603,6 +606,7 @@ function ColumnFilterButton(props: ColumnValueFilter) {
     onApply,
     menuTitle = 'Filter',
     itemNoun = { singular: 'item', plural: 'items' },
+    formatOption,
   } = props;
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<Set<string>>(() => new Set(selected));
@@ -700,7 +704,7 @@ function ColumnFilterButton(props: ColumnValueFilter) {
                 className="justify-between"
               >
                 <span className={cn('text-sm', !isChecked && 'text-slate-400')}>
-                  {name}
+                  {formatOption ? formatOption(name) : name}
                 </span>
                 {isChecked ? (
                   <CheckSquare className="h-4 w-4 shrink-0 text-blue-600" />

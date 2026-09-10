@@ -86,12 +86,15 @@ export function JournalFileUploadDrawer({
     return '';
   }, [journalIdProp, id, pageContext.entityType, pageContext.entityId]);
 
-  const entryName = (typeof nameProp === 'string' && nameProp.trim()) || 'Inspection photos';
-  const entryKind =
-    (typeof entryKindProp === 'string' && entryKindProp.trim()) || 'observation';
+  const resolvedJobId = useMemo(() => {
+    const fromProp = typeof jobId === 'string' ? jobId.trim() : '';
+    if (fromProp) return fromProp;
+    return pageContext.jobId ?? '';
+  }, [jobId, pageContext.jobId]);
 
-  const folderMode = Boolean(categoryId);
-
+  const [photosCategoryId, setPhotosCategoryId] = useState<string | null>(
+    typeof categoryId === 'string' && categoryId.trim() ? categoryId.trim() : null,
+  );
   const [files, setFiles] = useState<StagedFile[]>([]);
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -99,6 +102,53 @@ export function JournalFileUploadDrawer({
   const [submitting, setSubmitting] = useState(false);
   const [pageCreated, setPageCreated] = useState(false);
   const [attachmentsLinked, setAttachmentsLinked] = useState(false);
+
+  const entryName = (typeof nameProp === 'string' && nameProp.trim()) || 'Inspection photos';
+  const entryKind =
+    (typeof entryKindProp === 'string' && entryKindProp.trim()) || 'observation';
+
+  const folderMode = Boolean(photosCategoryId);
+
+  useEffect(() => {
+    if (!open) return;
+    const fromProp = typeof categoryId === 'string' ? categoryId.trim() : '';
+    if (fromProp) {
+      setPhotosCategoryId(fromProp);
+      return;
+    }
+    if (!resolvedJobId) {
+      setPhotosCategoryId(null);
+      return;
+    }
+    let cancelled = false;
+    void api
+      .resolveJobFolderMapping({ jobId: resolvedJobId, role: 'photos' })
+      .then((mapping) => {
+        if (cancelled) return;
+        if (mapping.categoryId) {
+          setPhotosCategoryId(mapping.categoryId);
+          setError(null);
+        } else {
+          setPhotosCategoryId(null);
+          setError(
+            'Photos folder is not configured. Set the Photos folder under Filesystem Categories, then try again.',
+          );
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setPhotosCategoryId(null);
+        console.error('[frontend:JournalFileUploadDrawer.resolvePhotosFolder]', err);
+        setError(
+          err instanceof Error
+            ? err.message
+            : 'Could not resolve the Photos folder for this job.',
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, categoryId, resolvedJobId, api]);
 
   const pendingPageRef = useRef<JournalPage | null>(null);
   const pendingBlocksRef = useRef<JournalPageBlock[]>([]);
@@ -112,13 +162,13 @@ export function JournalFileUploadDrawer({
   const { addFiles, tasks: uploadTasks, isUploading } = useDocumentUpload(
     folderMode
       ? {
-          categoryId: categoryId || undefined,
-          jobId: jobId || null,
+          categoryId: photosCategoryId || undefined,
+          jobId: resolvedJobId || null,
         }
       : {
           relatedRecordType: 'Journal',
           relatedRecordId: journalId || undefined,
-          jobId: jobId || null,
+          jobId: resolvedJobId || null,
         },
   );
 
@@ -431,7 +481,12 @@ export function JournalFileUploadDrawer({
       open={open}
       onOpenChange={handleOpenChange}
       title={folderMode ? 'Upload inspection photos' : 'Upload to journal'}
-      description={prompt?.trim() || (folderMode ? 'Drop inspection photos. They are saved to the project folder.' : 'Drop inspection photos or files. They are saved as a journal entry.')}
+      description={
+        prompt?.trim() ||
+        (folderMode
+          ? 'Drop inspection photos. They are saved to the Photos folder configured in Filesystem Categories.'
+          : 'Drop inspection photos or files. They are saved as a journal entry.')
+      }
       icon={<Upload className="h-5 w-5" />}
       companionChatOpen={companionChatOpen}
       preventClose={submitting || isUploading}

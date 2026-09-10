@@ -7,7 +7,12 @@ import {
   crunchworkInvoiceGroupsFromPayload,
   toInvoiceUpdateGroups,
 } from '../../../invoices/invoice-publish.utils';
-import type { OutboundAdapter, OutboundAdapterPushParams, OutboundPushResult } from '../outbound-adapter.interface';
+import {
+  OutboundPartialSuccessError,
+  type OutboundAdapter,
+  type OutboundAdapterPushParams,
+  type OutboundPushResult,
+} from '../outbound-adapter.interface';
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -31,7 +36,7 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
       case 'invoice':
         return this.pushInvoice(connectionId, entityId, action, payload);
       case 'quote':
-        return this.pushQuote(connectionId, entityId, action, payload);
+        return this.pushQuote(connectionId, entityId, action, payload, params.persistProgress);
       case 'purchase_order':
         return this.pushPurchaseOrder(connectionId, entityId, action, payload);
       case 'task':
@@ -189,24 +194,86 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
     entityId: string,
     action: string,
     payload: Record<string, unknown>,
+    persistProgress?: OutboundAdapterPushParams['persistProgress'],
   ): Promise<OutboundPushResult> {
     if (action === 'publish') {
-      const createBody = (payload.createBody ?? payload) as Record<string, unknown>;
-      const publishBody = (payload.publishBody ?? { status: 'Published' }) as Record<string, unknown>;
+      let publishBody = this.quotePublishBody(payload);
+      let cwQuoteId = this.existingCrunchworkQuoteId(payload);
 
-      const createResponse = await this.crunchwork.createQuote({ connectionId, body: createBody });
-      const createObj = createResponse as Record<string, unknown>;
-      const cwQuoteId = createObj.id as string;
       if (!cwQuoteId) {
-        throw new Error('Crunchwork did not return a quote id after upload');
+        const createBody = (payload.createBody ?? payload) as Record<string, unknown>;
+        this.logger.log(
+          `CrunchworkOutboundAdapter.pushQuote — creating quote ${entityId}`,
+        );
+        const createResponse = await this.crunchwork.createQuote({ connectionId, body: createBody });
+        const createObj = createResponse as Record<string, unknown>;
+        cwQuoteId = typeof createObj.id === 'string' ? createObj.id.trim() : '';
+        if (!cwQuoteId) {
+          throw new Error('Crunchwork did not return a quote id after upload');
+        }
+        publishBody = this.quotePublishBody({
+          ...payload,
+          createBody: {
+            ...((payload.createBody && typeof payload.createBody === 'object'
+              ? payload.createBody
+              : {}) as Record<string, unknown>),
+            ...createObj,
+          },
+        });
+
+        const nextPayload: Record<string, unknown> = {
+          ...payload,
+          cwQuoteId,
+          publishBody,
+        };
+        if (persistProgress) {
+          try {
+            await persistProgress({
+              result: {
+                externalReference: cwQuoteId,
+                responsePayload: createObj,
+              },
+              nextPayload,
+            });
+          } catch (err) {
+            this.logger.error(
+              `CrunchworkOutboundAdapter.pushQuote — persistProgress failed after create for ${entityId} cwQuoteId=${cwQuoteId}: ${err instanceof Error ? err.message : err}`,
+            );
+          }
+        }
+
+        try {
+          const updateResponse = await this.crunchwork.updateQuote({
+            connectionId,
+            quoteId: cwQuoteId,
+            body: publishBody,
+          });
+          return {
+            externalReference: cwQuoteId,
+            responsePayload: updateResponse as Record<string, unknown>,
+          };
+        } catch (err) {
+          throw new OutboundPartialSuccessError({
+            message: err instanceof Error ? err.message : String(err),
+            progress: {
+              result: {
+                externalReference: cwQuoteId,
+                responsePayload: createObj,
+              },
+              nextPayload,
+            },
+          });
+        }
       }
 
+      this.logger.log(
+        `CrunchworkOutboundAdapter.pushQuote — skipping create for ${entityId}, updating existing CW quote ${cwQuoteId}`,
+      );
       const updateResponse = await this.crunchwork.updateQuote({
         connectionId,
         quoteId: cwQuoteId,
         body: publishBody,
       });
-
       return {
         externalReference: cwQuoteId,
         responsePayload: updateResponse as Record<string, unknown>,
@@ -286,6 +353,33 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
       body,
     });
     return { responsePayload: response as Record<string, unknown> };
+  }
+
+  private quotePublishBody(payload: Record<string, unknown>): Record<string, unknown> {
+    const base =
+      payload.publishBody && typeof payload.publishBody === 'object' && !Array.isArray(payload.publishBody)
+        ? (payload.publishBody as Record<string, unknown>)
+        : { status: 'Published' };
+    const publishBody: Record<string, unknown> = { ...base };
+    const createBody =
+      payload.createBody && typeof payload.createBody === 'object' && !Array.isArray(payload.createBody)
+        ? (payload.createBody as Record<string, unknown>)
+        : {};
+    for (const [key, value] of Object.entries(createBody)) {
+      if (!key.startsWith('from')) continue;
+      if (value === undefined || value === null || value === '') continue;
+      if (publishBody[key] === undefined || publishBody[key] === null || publishBody[key] === '') {
+        publishBody[key] = value;
+      }
+    }
+    return publishBody;
+  }
+
+  private existingCrunchworkQuoteId(payload: Record<string, unknown>): string | null {
+    const raw = payload.cwQuoteId;
+    if (typeof raw !== 'string') return null;
+    const id = raw.trim();
+    return id || null;
   }
 
   private cwTaskId(payload: Record<string, unknown>): string | null {
@@ -499,7 +593,39 @@ export class CrunchworkOutboundAdapter implements OutboundAdapter {
   ): Promise<OutboundPushResult> {
     const externalId = (payload.externalId as string) ?? entityId;
     if (action === 'create') {
-      const response = await this.crunchwork.createAttachment({ connectionId, body: payload });
+      const fileBuffer = payload.fileBuffer;
+      const fileName = typeof payload.fileName === 'string' ? payload.fileName : null;
+      const mimeType = typeof payload.mimeType === 'string' ? payload.mimeType : 'application/octet-stream';
+      const relatedRecordType =
+        typeof payload.relatedRecordType === 'string' ? payload.relatedRecordType : null;
+      const relatedRecordId =
+        typeof payload.relatedRecordId === 'string' ? payload.relatedRecordId : null;
+
+      if (
+        !Buffer.isBuffer(fileBuffer) ||
+        !fileName ||
+        !relatedRecordType ||
+        !relatedRecordId
+      ) {
+        throw new Error(
+          'CrunchworkOutboundAdapter.pushAttachment — create requires fileBuffer, fileName, relatedRecordType, relatedRecordId',
+        );
+      }
+
+      const response = await this.crunchwork.createAttachment({
+        connectionId,
+        file: fileBuffer,
+        fileName,
+        mimeType,
+        relatedRecordType,
+        relatedRecordId,
+        title: typeof payload.title === 'string' ? payload.title : undefined,
+        description: typeof payload.description === 'string' ? payload.description : undefined,
+        documentTypeExternalReference:
+          typeof payload.documentTypeExternalReference === 'string'
+            ? payload.documentTypeExternalReference
+            : undefined,
+      });
       const responseObj = response as Record<string, unknown>;
       return {
         externalReference: (responseObj.id as string) ?? null,

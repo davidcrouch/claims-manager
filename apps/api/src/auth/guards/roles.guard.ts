@@ -3,13 +3,20 @@ import {
   ExecutionContext,
   Injectable,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import { AuthenticatedUser } from '../interfaces/authenticated-user.interface';
+import {
+  PERMISSION_DENIED_CODE,
+  PERMISSION_DENIED_MESSAGE,
+} from '../permission-denied';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
+  private readonly logger = new Logger(RolesGuard.name);
+
   constructor(private reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
@@ -22,16 +29,22 @@ export class RolesGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const user = request.user as AuthenticatedUser;
     if (!user?.roles) {
-      throw new ForbiddenException(
-        '[RolesGuard.canActivate] User has no roles assigned',
-      );
+      this.logger.warn('RolesGuard.canActivate - user has no roles assigned');
+      throw new ForbiddenException({
+        message: PERMISSION_DENIED_MESSAGE,
+        code: PERMISSION_DENIED_CODE,
+      });
     }
 
     const hasRole = requiredRoles.some((role) => user.roles.includes(role));
     if (!hasRole) {
-      throw new ForbiddenException(
-        `[RolesGuard.canActivate] Required roles: ${requiredRoles.join(', ')}`,
+      this.logger.warn(
+        `RolesGuard.canActivate - missing roles ${requiredRoles.join(', ')}`,
       );
+      throw new ForbiddenException({
+        message: PERMISSION_DENIED_MESSAGE,
+        code: PERMISSION_DENIED_CODE,
+      });
     }
     return true;
   }

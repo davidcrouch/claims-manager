@@ -119,6 +119,26 @@ export class AttachmentsRepository {
       .orderBy(desc(attachments.createdAt));
   }
 
+  async findPendingCrunchworkSync(params: {
+    tenantId: string;
+    relatedRecordType: string;
+    relatedRecordId: string;
+  }): Promise<AttachmentRow[]> {
+    return this.db
+      .select()
+      .from(attachments)
+      .where(
+        and(
+          eq(attachments.tenantId, params.tenantId),
+          eq(attachments.relatedRecordType, params.relatedRecordType),
+          eq(attachments.relatedRecordId, params.relatedRecordId),
+          isNull(attachments.deletedAt),
+          sql`(${attachments.attachmentMeta}->>'pendingCrunchworkSync') = 'true'`,
+        ),
+      )
+      .orderBy(desc(attachments.createdAt));
+  }
+
   async create(params: { data: AttachmentInsert; tx?: DrizzleDbOrTx }): Promise<AttachmentRow> {
     const db = params.tx ?? this.db;
     const [inserted] = await db.insert(attachments).values(params.data).returning();

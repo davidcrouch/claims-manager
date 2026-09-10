@@ -118,7 +118,9 @@ export function ChatDrawer({
   useEffect(() => {
     if (!open) return;
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onOpenChange(false);
+      if (e.key !== 'Escape') return;
+      if (besideForm) return;
+      onOpenChange(false);
     };
     document.addEventListener('keydown', handleKey);
 

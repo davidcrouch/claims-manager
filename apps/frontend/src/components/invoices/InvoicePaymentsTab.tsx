@@ -19,7 +19,7 @@ import { SectionCard, formatCurrency, formatDateTime } from '@/components/shared
 import type { Invoice, InvoicePayment } from '@/types/api';
 import { invoiceAmountReceived, invoiceRemainingAmount } from '@/components/invoices/invoice-label';
 import { updateInvoicePaymentAction, deleteInvoicePaymentAction } from '@/app/(app)/mutations';
-import { useHasPermission } from '@/components/providers/PermissionsProvider';
+import { useRequirePermission } from '@/components/providers/PermissionsProvider';
 
 function paymentAmount(payment: InvoicePayment): number {
   const amount = Number(payment.amount ?? 0);
@@ -28,7 +28,10 @@ function paymentAmount(payment: InvoicePayment): number {
 
 export function InvoicePaymentsTab({ invoice }: { invoice: Invoice }) {
   const router = useRouter();
-  const canUpdate = useHasPermission('invoices.update');
+  const requireUpdate = useRequirePermission(
+    'invoices.update',
+    'update invoice payments',
+  );
   const payments = invoice.payments ?? [];
   const received = invoiceAmountReceived(invoice);
   const remaining = invoiceRemainingAmount(invoice);
@@ -39,11 +42,13 @@ export function InvoicePaymentsTab({ invoice }: { invoice: Invoice }) {
   const [deleting, setDeleting] = useState(false);
 
   function openEdit(payment: InvoicePayment) {
+    if (!requireUpdate()) return;
     setEditAmount(paymentAmount(payment).toFixed(2));
     setEditPayment(payment);
   }
 
   async function handleSaveEdit() {
+    if (!requireUpdate()) return;
     if (!editPayment || saving) return;
     const amount = Math.round(Number(editAmount) * 100) / 100;
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -73,6 +78,7 @@ export function InvoicePaymentsTab({ invoice }: { invoice: Invoice }) {
   }
 
   async function handleConfirmDelete() {
+    if (!requireUpdate()) return;
     if (!deletePayment || deleting) return;
     setDeleting(true);
     try {
@@ -107,14 +113,14 @@ export function InvoicePaymentsTab({ invoice }: { invoice: Invoice }) {
               <th className="px-3 py-2">Received</th>
               <th className="px-3 py-2 text-right">Amount</th>
               <th className="px-3 py-2">Recorded by</th>
-              {canUpdate && <th className="w-24 px-3 py-2 text-right">Actions</th>}
+              <th className="w-24 px-3 py-2 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 bg-white">
             {payments.length === 0 ? (
               <tr>
                 <td
-                  colSpan={canUpdate ? 4 : 3}
+                  colSpan={4}
                   className="px-3 py-8 text-center text-slate-500"
                 >
                   No payments recorded yet.
@@ -132,8 +138,7 @@ export function InvoicePaymentsTab({ invoice }: { invoice: Invoice }) {
                   <td className="px-3 py-2 text-slate-700">
                     {payment.createdByName?.trim() || '—'}
                   </td>
-                  {canUpdate && (
-                    <td className="px-3 py-2">
+                  <td className="px-3 py-2">
                       <div className="flex justify-end gap-0.5">
                         <Button
                           type="button"
@@ -152,14 +157,16 @@ export function InvoicePaymentsTab({ invoice }: { invoice: Invoice }) {
                           variant="ghost"
                           className="h-7 w-7 text-destructive"
                           disabled={saving || deleting}
-                          onClick={() => setDeletePayment(payment)}
+                          onClick={() => {
+                            if (!requireUpdate()) return;
+                            setDeletePayment(payment);
+                          }}
                           aria-label="Delete payment"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </div>
                     </td>
-                  )}
                 </tr>
               ))
             )}
@@ -172,7 +179,7 @@ export function InvoicePaymentsTab({ invoice }: { invoice: Invoice }) {
               </td>
               <td
                 className="px-3 py-2 text-slate-500"
-                colSpan={canUpdate ? 2 : 1}
+                colSpan={2}
               >
                 Remaining {formatCurrency(remaining)}
               </td>

@@ -18,7 +18,8 @@ import {
   BottomFormDrawerFooter,
 } from '@/components/forms/BottomFormDrawer';
 import { updateOrgUserAction } from '@/app/(app)/admin/users/actions';
-import { useHasPermission } from '@/components/providers/PermissionsProvider';
+import { useHasPermission, useRequirePermission } from '@/components/providers/PermissionsProvider';
+import { consumePermissionDeniedError } from '@/lib/permission-feedback';
 import type { AvailableRole, OrgMember, UpdateOrgUserPayload } from '@/types/api';
 
 interface EditUserDrawerProps {
@@ -52,6 +53,7 @@ export function EditUserDrawer({
   onSaved,
 }: EditUserDrawerProps) {
   const canManage = useHasPermission('org.users.manage');
+  const requireManage = useRequirePermission('org.users.manage', 'update this user');
   const [givenName, setGivenName] = useState('');
   const [familyName, setFamilyName] = useState('');
   const [roles, setRoles] = useState<string[]>([]);
@@ -84,6 +86,7 @@ export function EditUserDrawer({
   }
 
   function handleSubmit() {
+    if (!requireManage()) return;
     if (!member) return;
     if (roles.length === 0) {
       setError('Select at least one role');
@@ -104,6 +107,9 @@ export function EditUserDrawer({
     startTransition(async () => {
       const result = await updateOrgUserAction(member.id, payload);
       if (!result.success || !result.member) {
+        if (consumePermissionDeniedError(result.error, { action: 'update this user' })) {
+          return;
+        }
         setError(result.error ?? 'Failed to update user');
         return;
       }
@@ -249,11 +255,9 @@ export function EditUserDrawer({
         <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
           {canManage ? 'Cancel' : 'Close'}
         </Button>
-        {canManage && (
-          <Button onClick={handleSubmit} disabled={isPending || !member}>
-            {isPending ? 'Saving…' : 'Save'}
-          </Button>
-        )}
+        <Button onClick={handleSubmit} disabled={isPending || !member}>
+          {isPending ? 'Saving…' : 'Save'}
+        </Button>
       </BottomFormDrawerFooter>
     </BottomFormDrawer>
   );

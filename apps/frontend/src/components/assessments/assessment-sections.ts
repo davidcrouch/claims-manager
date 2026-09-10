@@ -65,6 +65,22 @@ export function isAssessmentLocked(status?: string | null): boolean {
   return value === 'published' || value === 'archived';
 }
 
+const ASSESSMENT_STATUS_LABELS: Record<string, string> = {
+  draft: 'Draft',
+  in_progress: 'In Progress',
+  submitted: 'Submitted',
+  reviewed: 'Reviewed',
+  published: 'Published',
+  archived: 'Archived',
+};
+
+/** Title-case label for stored assessment statuses (`draft` → Draft). */
+export function formatAssessmentStatus(status?: string | null): string {
+  if (!status) return 'Unknown';
+  const key = status.trim().toLowerCase();
+  return ASSESSMENT_STATUS_LABELS[key] ?? status;
+}
+
 export function additionalStructuresFromFlags(flags: {
   detachedGarage?: boolean;
   sheds?: boolean;

@@ -49,6 +49,7 @@ import type { JobOption } from '@/components/shared/job-label';
 import { jobDisplayName } from '@/components/shared/job-label';
 import { JobCellLink } from '@/components/shared/JobCellLink';
 import { useResolvedJobLabels } from '@/components/shared/use-resolved-job-labels';
+import { formatAssessmentStatus } from './assessment-sections';
 
 type ListTab = ArchiveListTab;
 
@@ -272,7 +273,9 @@ export function AssessmentsPageClient({
 
   const visibleRows = data.data;
 
-  const breakdown = computeStatusBreakdown(visibleRows, (a) => a.status);
+  const breakdown = computeStatusBreakdown(visibleRows, (a) =>
+    formatAssessmentStatus(a.status),
+  );
 
   const statusColors: Record<string, string> = {
     draft: 'bg-amber-100 text-amber-700',
@@ -355,6 +358,7 @@ export function AssessmentsPageClient({
             emptyLabel="All statuses"
             menuTitle="Filter by status"
             itemNoun={{ singular: 'status', plural: 'statuses' }}
+            formatOption={formatAssessmentStatus}
           />
         </div>
       </div>
@@ -391,7 +395,8 @@ export function AssessmentsPageClient({
                               active: statusFilterActive,
                               onApply: applyStatusFilter,
                               menuTitle: 'Filter by status',
-                              itemNoun: { singular: 'status', plural: 'statuses' } }
+                              itemNoun: { singular: 'status', plural: 'statuses' },
+                              formatOption: formatAssessmentStatus }
                           : undefined
                     }
                   />
@@ -437,7 +442,7 @@ export function AssessmentsPageClient({
                         <span
                           className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${statusColors[assessment.status] ?? 'bg-slate-100 text-slate-700'}`}
                         >
-                          {assessment.status}
+                          {formatAssessmentStatus(assessment.status)}
                         </span>
                       </td>
                     )}

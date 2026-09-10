@@ -126,9 +126,6 @@ export class AssessmentsService {
       }
     }
     if (userId) updateData.updatedByUserId = userId;
-    if (existing.status === 'draft' && updateData.status === undefined) {
-      updateData.status = 'in_progress';
-    }
 
     const updated = await this.assessmentsRepo.update({ id, tenantId, data: updateData });
     if (!updated) throw new NotFoundException('Assessment not found');

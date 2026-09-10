@@ -5,8 +5,10 @@ import { Mail, MessageSquare, CheckCircle2, Clock, ChevronDown, ChevronUp } from
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { fetchEntityMessagesAction } from '@/app/(app)/messages/actions';
+import { acknowledgeMessageAction } from '@/app/(app)/jobs/[id]/actions';
 import { formatDateTime, PhaseUnavailable } from '@/components/shared/detail';
 import type { Message } from '@/types/api';
+import { toast } from 'sonner';
 
 interface EntityMessagesTabProps {
   entityId: string;
@@ -14,8 +16,15 @@ interface EntityMessagesTabProps {
   onSendMessage?: () => void;
 }
 
-function MessageRow({ message }: { message: Message }) {
+function MessageRow({
+  message,
+  onAcknowledged,
+}: {
+  message: Message;
+  onAcknowledged: (params: { id: string; acknowledgedAt: string }) => void;
+}) {
   const [expanded, setExpanded] = useState(false);
+  const [acking, setAcking] = useState(false);
 
   const payload = message.messagePayload ?? {};
   const createdBy = (payload.createdByUser as Record<string, unknown> | undefined)?.name
@@ -79,10 +88,47 @@ function MessageRow({ message }: { message: Message }) {
             <p className="text-sm text-muted-foreground italic">No message content.</p>
           )}
           {message.acknowledgementRequired && (
-            <div className="mt-2 text-xs text-muted-foreground">
-              {isAcknowledged
-                ? `Acknowledged ${formatDateTime(message.acknowledgedAt)}`
-                : 'Acknowledgement required'}
+            <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+              {isAcknowledged ? (
+                `Acknowledged ${formatDateTime(message.acknowledgedAt)}`
+              ) : (
+                <>
+                  <span>Acknowledgement required</span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-7"
+                    disabled={acking}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      setAcking(true);
+                      try {
+                        const result = await acknowledgeMessageAction(message.id);
+                        if (!result.success) {
+                          toast.error(result.error ?? 'Failed to acknowledge this message');
+                          return;
+                        }
+                        onAcknowledged({
+                          id: message.id,
+                          acknowledgedAt: new Date().toISOString(),
+                        });
+                        toast.success('Message acknowledged');
+                      } catch (err) {
+                        console.error('[frontend:EntityMessagesTab.acknowledge]', err);
+                        toast.error(
+                          err instanceof Error
+                            ? err.message
+                            : 'Failed to acknowledge this message',
+                        );
+                      } finally {
+                        setAcking(false);
+                      }
+                    }}
+                  >
+                    {acking ? 'Acknowledging…' : 'Acknowledge'}
+                  </Button>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -152,7 +198,17 @@ export function EntityMessagesTab({
         ) : (
           <div>
             {messages.map((m) => (
-              <MessageRow key={m.id} message={m} />
+              <MessageRow
+                key={m.id}
+                message={m}
+                onAcknowledged={({ id, acknowledgedAt }) => {
+                  setMessages((prev) =>
+                    prev.map((row) =>
+                      row.id === id ? { ...row, acknowledgedAt } : row,
+                    ),
+                  );
+                }}
+              />
             ))}
           </div>
         )}

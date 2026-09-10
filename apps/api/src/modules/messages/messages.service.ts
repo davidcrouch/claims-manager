@@ -8,7 +8,6 @@ import {
 import {
   MessagesRepository,
   JobsRepository,
-  ClaimsRepository,
   ExternalLinksRepository,
   ExternalObjectsRepository,
   type MessageInsert,
@@ -27,7 +26,6 @@ export class MessagesService {
   constructor(
     private readonly messagesRepo: MessagesRepository,
     private readonly jobsRepo: JobsRepository,
-    private readonly claimsRepo: ClaimsRepository,
     private readonly externalLinksRepo: ExternalLinksRepository,
     private readonly externalObjectsRepo: ExternalObjectsRepository,
     private readonly tenantContext: TenantContext,
@@ -35,18 +33,30 @@ export class MessagesService {
     @Optional() private readonly connectionResolver?: ConnectionResolverService,
   ) {}
 
-  private async resolveConnectionId(tenantId: string): Promise<string> {
+  private async resolveConnection(params: { tenantId: string }): Promise<{
+    connectionId: string;
+    fromTenantId: string;
+  }> {
+    const logPrefix = 'MessagesService.resolveConnection';
     if (!this.connectionResolver) {
       throw new BadRequestException(
-        'MessagesService.resolveConnectionId — ConnectionResolverService not available',
+        `${logPrefix} — ConnectionResolverService not available`,
       );
     }
     this.crunchworkService.setConnectionResolver(this.connectionResolver);
-    const connection = await this.connectionResolver.resolveForTenant({ tenantId });
+    const connection = await this.connectionResolver.resolveForTenant({
+      tenantId: params.tenantId,
+    });
     if (!connection) {
-      throw new BadRequestException('No active CW connection for tenant');
+      throw new BadRequestException(`${logPrefix} — no active CW connection for tenant`);
     }
-    return connection.id;
+    const fromTenantId = connection.providerTenantId?.trim() ?? '';
+    if (!fromTenantId) {
+      throw new BadRequestException(
+        `${logPrefix} — connection missing providerTenantId`,
+      );
+    }
+    return { connectionId: connection.id, fromTenantId };
   }
 
   private async resolveProviderJobId(params: {
@@ -59,18 +69,6 @@ export class MessagesService {
       tenantId: params.tenantId,
     });
     return job?.externalReference ?? job?.externalJobId ?? undefined;
-  }
-
-  private async resolveProviderClaimId(params: {
-    tenantId: string;
-    internalClaimId?: string | null;
-  }): Promise<string | undefined> {
-    if (!params.internalClaimId) return undefined;
-    const claim = await this.claimsRepo.findByIdAndTenant({
-      id: params.internalClaimId,
-      tenantId: params.tenantId,
-    });
-    return claim?.externalReference ?? claim?.externalClaimId ?? undefined;
   }
 
   async findAll(params: {
@@ -131,28 +129,29 @@ export class MessagesService {
   async create(params: { body: Record<string, unknown>; userId?: string }) {
     const logPrefix = 'MessagesService.create';
     const tenantId = this.tenantContext.getTenantId();
-    const connectionId = await this.resolveConnectionId(tenantId);
+    const { connectionId, fromTenantId } = await this.resolveConnection({ tenantId });
 
     const internalFromJobId = (params.body.fromJobId as string | undefined) ?? undefined;
     const internalToJobId = (params.body.toJobId as string | undefined) ?? undefined;
     const internalFromClaimId = (params.body.fromClaimId as string | undefined) ?? undefined;
     const internalToClaimId = (params.body.toClaimId as string | undefined) ?? undefined;
+    this.logger.log(
+      `${logPrefix} — incoming keys=${Object.keys(params.body).join(',')} fromJobId=${internalFromJobId ?? 'none'} toJobId=${internalToJobId ?? 'none'} fromClaimId=${internalFromClaimId ?? 'none'} toClaimId=${internalToClaimId ?? 'none'}`,
+    );
 
-    const [cwFromJobId, cwToJobId, cwFromClaimId, cwToClaimId] = await Promise.all([
+    const [cwFromJobId, cwToJobId] = await Promise.all([
       this.resolveProviderJobId({ tenantId, internalJobId: internalFromJobId }),
       this.resolveProviderJobId({ tenantId, internalJobId: internalToJobId }),
-      this.resolveProviderClaimId({ tenantId, internalClaimId: internalFromClaimId }),
-      this.resolveProviderClaimId({ tenantId, internalClaimId: internalToClaimId }),
     ]);
 
-    if (!cwFromJobId && !cwFromClaimId) {
+    if (!cwFromJobId) {
       throw new BadRequestException(
-        `${logPrefix} — fromJobId/fromClaimId must resolve to a provider external reference`,
+        `${logPrefix} — fromJobId must resolve to a provider external reference`,
       );
     }
-    if (!cwToJobId && !cwToClaimId) {
+    if (!cwToJobId) {
       throw new BadRequestException(
-        `${logPrefix} — toJobId/toClaimId must resolve to a provider external reference`,
+        `${logPrefix} — toJobId must resolve to a provider external reference`,
       );
     }
 
@@ -176,30 +175,17 @@ export class MessagesService {
     }
     const subject = subjectRaw;
 
-    // CW maps messageType.externalReference to an internal lookup. Subject
-    // values are the allowed external references (API-validated, not DB).
-    const messageTypeExtRef =
-      (params.body.messageType as { externalReference?: string } | undefined)?.externalReference ??
-      (typeof params.body.messageTypeExternalReference === 'string'
-        ? params.body.messageTypeExternalReference
-        : undefined) ??
-      subject;
-
     const cwBody: Record<string, unknown> = {
-      messageType: { externalReference: messageTypeExtRef },
+      messageType: { externalReference: subject },
       text,
       acknowledgementRequired: params.body.acknowledgementRequired === true,
+      fromJobId: cwFromJobId,
+      toJobId: cwToJobId,
+      fromTenantId,
     };
-    if (cwFromJobId) cwBody.fromJobId = cwFromJobId;
-    if (cwToJobId) cwBody.toJobId = cwToJobId;
-    if (cwFromClaimId) cwBody.fromClaimId = cwFromClaimId;
-    if (cwToClaimId) cwBody.toClaimId = cwToClaimId;
-    if (params.body.toAssigneeRole) {
-      cwBody.toAssigneeRole = params.body.toAssigneeRole;
-    }
 
     this.logger.log(
-      `${logPrefix} — posting to CW connectionId=${connectionId} messageType=${messageTypeExtRef} fromJob=${cwFromJobId ?? 'none'} toJob=${cwToJobId ?? 'none'} fromClaim=${cwFromClaimId ?? 'none'} toClaim=${cwToClaimId ?? 'none'}`,
+      `${logPrefix} — posting to CW connectionId=${connectionId} messageType=${subject} fromJob=${cwFromJobId} toJob=${cwToJobId} fromTenantId=${fromTenantId}`,
     );
 
     const apiMessage = await this.crunchworkService.createMessage({
@@ -279,7 +265,7 @@ export class MessagesService {
     if (!existing) return null;
 
     const tenantId = this.tenantContext.getTenantId();
-    const connectionId = await this.resolveConnectionId(tenantId);
+    const { connectionId } = await this.resolveConnection({ tenantId });
 
     const links = await this.externalLinksRepo.findByInternalEntity({
       internalEntityType: 'message',

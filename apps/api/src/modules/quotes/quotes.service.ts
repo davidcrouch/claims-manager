@@ -361,6 +361,267 @@ export class QuotesService {
     return out;
   }
 
+  private resolveQuoteFromParty(quote: {
+    quoteFrom?: unknown;
+    apiPayload?: unknown;
+  }): Record<string, unknown> {
+    const fromApi = partyBucketsFromCwPayload(
+      quote.apiPayload && typeof quote.apiPayload === 'object' && !Array.isArray(quote.apiPayload)
+        ? (quote.apiPayload as Record<string, unknown>)
+        : {},
+    ).quoteFrom;
+    const fromBucket =
+      quote.quoteFrom && typeof quote.quoteFrom === 'object' && !Array.isArray(quote.quoteFrom)
+        ? (quote.quoteFrom as Record<string, unknown>)
+        : {};
+    return { ...fromApi, ...fromBucket };
+  }
+
+  private async resolveOrganisationAbn(params: { tenantId: string }): Promise<string | null> {
+    const [org] = await this.db
+      .select({ abn: organizations.abn })
+      .from(organizations)
+      .where(eq(organizations.id, params.tenantId))
+      .limit(1);
+    const abn = org?.abn?.trim();
+    return abn || null;
+  }
+
+  private async resolveOrganisationPhone(params: { tenantId: string }): Promise<string | null> {
+    const [org] = await this.db
+      .select({ phone: organizations.phone })
+      .from(organizations)
+      .where(eq(organizations.id, params.tenantId))
+      .limit(1);
+    const phone = org?.phone?.trim();
+    return phone || null;
+  }
+
+  /**
+   * Company settings store a single address string in organizations.config.address
+   * (e.g. "8/20 Tucks Road, Seven Hills, NSW, 2147"). Parse into CW From party fields.
+   */
+  private parseOrganisationAddressLine(line: string): Record<string, string> {
+    const bits = line
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (bits.length === 0) return {};
+
+    const out: Record<string, string> = { country: 'Australia' };
+    const primary = bits[0] ?? '';
+    const unitStreet = primary.match(/^(\d+[a-zA-Z]?)\s*\/\s*(\d+[a-zA-Z]?)\s+(.+)$/);
+    if (unitStreet) {
+      out.unitNumber = unitStreet[1];
+      out.streetNumber = unitStreet[2];
+      out.streetName = unitStreet[3].trim();
+    } else {
+      const numbered = primary.match(/^(\d+[a-zA-Z]?)\s+(.+)$/);
+      if (numbered) {
+        out.streetNumber = numbered[1];
+        out.streetName = numbered[2].trim();
+      } else if (primary) {
+        out.streetName = primary;
+      }
+    }
+
+    for (let i = 1; i < bits.length; i++) {
+      const bit = bits[i]!;
+      const upper = bit.toUpperCase();
+      if (/^\d{4}$/.test(bit) && !out.postCode) {
+        out.postCode = bit;
+        continue;
+      }
+      if (
+        /^(NSW|VIC|QLD|SA|WA|TAS|NT|ACT)$/i.test(bit) &&
+        !out.state
+      ) {
+        out.state = upper;
+        continue;
+      }
+      if (!out.suburb && !/^\d{4}$/.test(bit)) {
+        out.suburb = bit;
+      }
+    }
+    return out;
+  }
+
+  private async resolveOrganisationAddressParts(params: {
+    tenantId: string;
+  }): Promise<Record<string, string>> {
+    const [org] = await this.db
+      .select({ config: organizations.config })
+      .from(organizations)
+      .where(eq(organizations.id, params.tenantId))
+      .limit(1);
+    const config =
+      org?.config && typeof org.config === 'object' && !Array.isArray(org.config)
+        ? (org.config as Record<string, unknown>)
+        : {};
+    const structured = config.addressParts;
+    if (structured && typeof structured === 'object' && !Array.isArray(structured)) {
+      const parts = structured as Record<string, unknown>;
+      const out: Record<string, string> = {};
+      const map: Array<[string, string]> = [
+        ['unitNumber', 'unitNumber'],
+        ['streetNumber', 'streetNumber'],
+        ['streetName', 'streetName'],
+        ['suburb', 'suburb'],
+        ['postcode', 'postCode'],
+        ['postCode', 'postCode'],
+        ['state', 'state'],
+        ['country', 'country'],
+      ];
+      for (const [src, dest] of map) {
+        const val = parts[src];
+        if (typeof val === 'string' && val.trim() && !out[dest]) {
+          out[dest] = val.trim();
+        }
+      }
+      if (Object.keys(out).length > 0) {
+        if (!out.country) out.country = 'Australia';
+        return out;
+      }
+    }
+    const address = typeof config.address === 'string' ? config.address.trim() : '';
+    if (!address) return {};
+    return this.parseOrganisationAddressLine(address);
+  }
+
+  private partyFieldString(value: unknown): string {
+    return typeof value === 'string' ? value.trim() : '';
+  }
+
+  /**
+   * CW rejects Published status when From address fields are missing
+   * (e.g. "Unable to publish revision - fromStreetName is not present").
+   */
+  private async ensureFromAddress(params: {
+    tenantId: string;
+    quoteFrom: Record<string, unknown>;
+  }): Promise<Record<string, unknown>> {
+    const fromParty = { ...params.quoteFrom };
+    const orgAddress = await this.resolveOrganisationAddressParts({
+      tenantId: params.tenantId,
+    });
+    const fields = [
+      'unitNumber',
+      'streetNumber',
+      'streetName',
+      'suburb',
+      'postCode',
+      'state',
+      'country',
+    ] as const;
+    for (const field of fields) {
+      if (!this.partyFieldString(fromParty[field]) && orgAddress[field]) {
+        fromParty[field] = orgAddress[field];
+      }
+    }
+    if (!this.partyFieldString(fromParty.streetName)) {
+      throw new BadRequestException(
+        'Crunchwork cannot publish this estimate: From street name is missing. Add it on the Parties tab or set the organisation address in Company settings.',
+      );
+    }
+    return fromParty;
+  }
+
+  /**
+   * CW rejects Published status when the From ABN is missing
+   * ("Unable to publish revision - fromCompanyRegistrationNumber is not present").
+   */
+  private async ensureFromCompanyRegistrationNumber(params: {
+    tenantId: string;
+    quoteFrom: Record<string, unknown>;
+  }): Promise<string> {
+    const existing = typeof params.quoteFrom.companyRegistrationNumber === 'string'
+      ? params.quoteFrom.companyRegistrationNumber.trim()
+      : '';
+    if (existing) return existing;
+    const abn = await this.resolveOrganisationAbn({ tenantId: params.tenantId });
+    if (abn) return abn;
+    throw new BadRequestException(
+      'Crunchwork cannot publish this estimate: From company registration number (ABN) is missing. Add it on the Parties tab or set the organisation ABN in Company settings.',
+    );
+  }
+
+  /**
+   * CW rejects Published status when the From phone is missing
+   * ("Unable to publish revision - fromPhoneNumber is not present").
+   */
+  private async ensureFromPhoneNumber(params: {
+    tenantId: string;
+    quoteFrom: Record<string, unknown>;
+  }): Promise<string> {
+    const existing =
+      typeof params.quoteFrom.phoneNumber === 'string'
+        ? params.quoteFrom.phoneNumber.trim()
+        : '';
+    if (existing) return existing;
+    const phone = await this.resolveOrganisationPhone({ tenantId: params.tenantId });
+    if (phone) return phone;
+    throw new BadRequestException(
+      'Crunchwork cannot publish this estimate: From phone number is missing. Add it on the Parties tab or set the organisation phone in Company settings.',
+    );
+  }
+
+  /**
+   * CW rejects Published status when the From email is missing
+   * ("Unable to publish revision - fromEmail is not present").
+   * Prefer the publishing user's email over company/org defaults.
+   */
+  private ensureFromEmail(params: { publisherEmail?: string | null }): string {
+    const email = params.publisherEmail?.trim();
+    if (email) return email;
+    throw new BadRequestException(
+      'Crunchwork cannot publish this estimate: your user account has no email address.',
+    );
+  }
+
+  private async enrichFromPartyFromOrganisation(params: {
+    tenantId: string;
+    quoteFrom: Record<string, unknown>;
+    publisherEmail?: string | null;
+  }): Promise<Record<string, unknown>> {
+    let fromParty = { ...params.quoteFrom };
+    fromParty.companyRegistrationNumber = await this.ensureFromCompanyRegistrationNumber({
+      tenantId: params.tenantId,
+      quoteFrom: fromParty,
+    });
+    fromParty.phoneNumber = await this.ensureFromPhoneNumber({
+      tenantId: params.tenantId,
+      quoteFrom: fromParty,
+    });
+    fromParty.email = this.ensureFromEmail({
+      publisherEmail: params.publisherEmail,
+    });
+    fromParty = await this.ensureFromAddress({
+      tenantId: params.tenantId,
+      quoteFrom: fromParty,
+    });
+    return fromParty;
+  }
+
+  private async buildQuotePublishBody(params: {
+    tenantId: string;
+    quoteFrom: unknown;
+    apiPayload?: unknown;
+    publisherEmail?: string | null;
+  }): Promise<Record<string, unknown>> {
+    const fromParty = await this.enrichFromPartyFromOrganisation({
+      tenantId: params.tenantId,
+      quoteFrom: this.resolveQuoteFromParty({
+        quoteFrom: params.quoteFrom,
+        apiPayload: params.apiPayload,
+      }),
+      publisherEmail: params.publisherEmail,
+    });
+    return {
+      status: (await this.resolvePublishedStatus({ tenantId: params.tenantId })).outbound,
+      ...this.flattenPartyForOutbound('from', fromParty),
+    };
+  }
+
   private contactToParty(params: {
     firstName: string | null;
     lastName: string | null;
@@ -414,6 +675,7 @@ export class QuotesService {
         abn: organizations.abn,
         primaryEmail: organizations.primaryEmail,
         phone: organizations.phone,
+        config: organizations.config,
       })
       .from(organizations)
       .where(eq(organizations.id, params.tenantId))
@@ -432,6 +694,15 @@ export class QuotesService {
       if (org.abn?.trim()) quoteFrom.companyRegistrationNumber = org.abn.trim();
       if (org.primaryEmail?.trim()) quoteFrom.email = org.primaryEmail.trim();
       if (org.phone?.trim()) quoteFrom.phoneNumber = org.phone.trim();
+      const config =
+        org.config && typeof org.config === 'object' && !Array.isArray(org.config)
+          ? (org.config as Record<string, unknown>)
+          : {};
+      const addressLine =
+        typeof config.address === 'string' ? config.address.trim() : '';
+      if (addressLine) {
+        Object.assign(quoteFrom, this.parseOrganisationAddressLine(addressLine));
+      }
     }
 
     if (!params.jobId) {
@@ -658,7 +929,11 @@ export class QuotesService {
     });
   }
 
-  async publish(params: { id: string; userId?: string }): Promise<PublishResult> {
+  async publish(params: {
+    id: string;
+    userId?: string;
+    userEmail?: string | null;
+  }): Promise<PublishResult> {
     const tenantId = this.tenantContext.getTenantId();
     const existing = await this.quotesRepo.findOne({ id: params.id, tenantId });
     if (!existing) {
@@ -666,13 +941,6 @@ export class QuotesService {
     }
 
     const pendingStatus = await this.resolvePendingStatus({ tenantId });
-    if (existing.statusLookupId === pendingStatus.lookupId) {
-      throw new BadRequestException('Estimate already published');
-    }
-    if (existing.externalReference) {
-      throw new BadRequestException('Quote already published to Crunchwork');
-    }
-
     const job = existing.jobId
       ? await this.jobsRepo.findOne({ id: existing.jobId, tenantId })
       : null;
@@ -680,6 +948,9 @@ export class QuotesService {
 
     // INTERNAL: mark Pending only (PDF generation is handled by the client wizard).
     if (!isExternal) {
+      if (existing.statusLookupId === pendingStatus.lookupId) {
+        throw new BadRequestException('Estimate already published');
+      }
       this.logger.log(
         `QuotesService.publish — internal publish setting status Pending (quoteId=${params.id})`,
       );
@@ -738,6 +1009,16 @@ export class QuotesService {
       };
     }
 
+    const cwQuoteId = this.crunchworkQuoteId(existing);
+    const cwStatus = this.crunchworkQuoteStatusName(existing.apiPayload);
+    if (cwQuoteId && cwStatus && !this.isCrunchworkDraftStatus(cwStatus)) {
+      throw new BadRequestException('Quote already published to Crunchwork');
+    }
+    const statusOnly = Boolean(cwQuoteId);
+    if (!statusOnly && existing.statusLookupId === pendingStatus.lookupId) {
+      throw new BadRequestException('Estimate already published');
+    }
+
     if (existing.jobId && !job?.externalReference) {
       throw new BadRequestException('Job has no external reference — sync the job to Crunchwork first');
     }
@@ -752,6 +1033,22 @@ export class QuotesService {
       );
     }
 
+    if (statusOnly && cwQuoteId) {
+      return this.publishCrunchworkStatus({
+        id: params.id,
+        tenantId,
+        userId: params.userId,
+        userEmail: params.userEmail,
+        jobId: existing.jobId,
+        connectionId,
+        cwQuoteId,
+        pendingStatusLookupId: pendingStatus.lookupId,
+        alreadyPending: existing.statusLookupId === pendingStatus.lookupId,
+        quoteFrom: existing.quoteFrom,
+        apiPayload: existing.apiPayload,
+      });
+    }
+
     const claim = existing.claimId
       ? await this.claimsRepo.findOne({ id: existing.claimId, tenantId })
       : null;
@@ -763,6 +1060,11 @@ export class QuotesService {
     const jobApiPayload = (job?.apiPayload ?? {}) as Record<string, unknown>;
     const claimApiPayload = (claim?.apiPayload ?? {}) as Record<string, unknown>;
     const schedule = (existing.scheduleInfo ?? {}) as Record<string, unknown>;
+    const fromParty = await this.enrichFromPartyFromOrganisation({
+      tenantId,
+      quoteFrom: this.resolveQuoteFromParty(existing),
+      publisherEmail: params.userEmail,
+    });
     const outboundBody: Record<string, unknown> = {
       jobId: (jobApiPayload.id as string) ?? job?.externalReference ?? null,
       claimId: (claimApiPayload.id as string) ?? claim?.externalReference ?? null,
@@ -777,7 +1079,7 @@ export class QuotesService {
         (schedule.reasonForVariation as string | undefined) ?? undefined,
       ...this.flattenPartyForOutbound('to', existing.quoteTo),
       ...this.flattenPartyForOutbound('for', existing.quoteFor),
-      ...this.flattenPartyForOutbound('from', existing.quoteFrom),
+      ...this.flattenPartyForOutbound('from', fromParty),
     };
     if (custom.quoteType) {
       const qt = custom.quoteType;
@@ -836,10 +1138,15 @@ export class QuotesService {
         entityType: 'quote',
         entityId: params.id,
         action: 'publish',
-        payload: {
-          createBody: enriched,
-          publishBody: { status: (await this.resolvePublishedStatus({ tenantId })).outbound },
-        },
+          payload: {
+            createBody: enriched,
+            publishBody: await this.buildQuotePublishBody({
+              tenantId,
+              quoteFrom: existing.quoteFrom,
+              apiPayload: existing.apiPayload,
+              publisherEmail: params.userEmail,
+            }),
+          },
         sourceEvent: 'api:publish',
         idempotencyKey: `quote:${params.id}:publish`,
         tx: this.outboundSync['db'],
@@ -932,6 +1239,130 @@ export class QuotesService {
         sentCombos,
         excludedItems,
         excludedCombos,
+      },
+    };
+  }
+
+  private crunchworkQuoteId(quote: { externalReference?: string | null }): string | null {
+    const raw = quote.externalReference;
+    if (typeof raw !== 'string') return null;
+    const id = raw.trim();
+    return id || null;
+  }
+
+  private crunchworkQuoteStatusName(payload: unknown): string | null {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+    const status = (payload as Record<string, unknown>).status;
+    if (typeof status === 'string' && status.trim()) return status.trim();
+    if (status && typeof status === 'object' && !Array.isArray(status)) {
+      const obj = status as Record<string, unknown>;
+      for (const key of ['externalReference', 'name'] as const) {
+        const raw = obj[key];
+        if (typeof raw === 'string' && raw.trim()) return raw.trim();
+      }
+    }
+    return null;
+  }
+
+  private isCrunchworkDraftStatus(statusName: string | null): boolean {
+    return (statusName ?? '').trim().toLowerCase() === 'draft';
+  }
+
+  /**
+   * Create already succeeded on Crunchwork; only update status to Published.
+   */
+  private async publishCrunchworkStatus(params: {
+    id: string;
+    tenantId: string;
+    userId?: string;
+    userEmail?: string | null;
+    jobId: string | null;
+    connectionId: string;
+    cwQuoteId: string;
+    pendingStatusLookupId: string;
+    alreadyPending: boolean;
+    quoteFrom?: unknown;
+    apiPayload?: unknown;
+  }): Promise<PublishResult> {
+    const outboundSync = this.outboundSync;
+    if (!outboundSync) {
+      throw new BadRequestException(
+        'Cannot publish to provider: outbound sync is not configured',
+      );
+    }
+
+    this.logger.log(
+      `QuotesService.publishCrunchworkStatus — quote ${params.id} cwQuoteId=${params.cwQuoteId}`,
+    );
+
+    await this.quotesRepo.update({
+      id: params.id,
+      data: {
+        ...(params.alreadyPending ? {} : { statusLookupId: params.pendingStatusLookupId }),
+        syncStatus: 'pending',
+        ...(params.userId ? { updatedByUserId: params.userId } : {}),
+      },
+    });
+
+    try {
+      const queueId = await outboundSync.enqueue({
+        tenantId: params.tenantId,
+        connectionId: params.connectionId,
+        entityType: 'quote',
+        entityId: params.id,
+        action: 'publish',
+        payload: {
+          cwQuoteId: params.cwQuoteId,
+          publishBody: await this.buildQuotePublishBody({
+            tenantId: params.tenantId,
+            quoteFrom: params.quoteFrom,
+            apiPayload: params.apiPayload,
+            publisherEmail: params.userEmail,
+          }),
+        },
+        sourceEvent: 'api:publish-status',
+        idempotencyKey: `quote:${params.id}:publish-status`,
+        tx: outboundSync['db'],
+      });
+      this.logger.log(
+        `QuotesService.publishCrunchworkStatus — enqueued status update for quote ${params.id} queueId=${queueId || 'none'}`,
+      );
+    } catch (err) {
+      this.logger.error(
+        `QuotesService.publishCrunchworkStatus — failed to enqueue status update for quote ${params.id}: ${err instanceof Error ? err.message : err}`,
+      );
+      throw new BadRequestException(
+        `Failed to queue estimate status update for Crunchwork: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    this.activitiesService?.log({
+      tenantId: params.tenantId,
+      entityType: 'quote',
+      entityId: params.id,
+      action: 'published',
+      actorType: 'user',
+      actorId: params.userId,
+      summary: 'Updated Crunchwork estimate status to Published',
+      detail: {
+        publishMode: 'external',
+        statusOnly: true,
+        cwQuoteId: params.cwQuoteId,
+      },
+      relatedEntityType: params.jobId ? 'job' : undefined,
+      relatedEntityId: params.jobId ?? undefined,
+      source: 'internal',
+    }).catch(() => {});
+
+    const updated = await this.quotesRepo.findOne({ id: params.id, tenantId: params.tenantId });
+    return {
+      quote: updated ? this.shapeQuoteResponse(updated) : null,
+      publishMode: 'external',
+      provider: {
+        confirmed: false,
+        sentGroups: 0,
+        sentItems: 0,
+        sentCombos: 0,
       },
     };
   }
