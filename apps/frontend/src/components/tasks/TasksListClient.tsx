@@ -44,6 +44,7 @@ import {
   type JobOption,
 } from '@/components/shared/job-label';
 import { JobCellLink } from '@/components/shared/JobCellLink';
+import { useResolvedJobLabels } from '@/components/shared/use-resolved-job-labels';
 import {
   createListFetchSession,
   replaceListQueryIfNeeded,
@@ -288,17 +289,22 @@ export function TasksListClient({
     () => parseSelectedJobIds(jobId, jobIdsParam),
     [jobId, jobIdsParam],
   );
+  const { resolvedJobNameById, resolvedJobTypeById } = useResolvedJobLabels(
+    jobNameById,
+    jobTypeById,
+    tasks,
+  );
   const filterJobs = useMemo(
     () =>
       buildListJobFilterOptions({
         jobs: jobs?.map((j) => ({ id: j.id, label: j.label })),
-        jobNameById,
+        jobNameById: resolvedJobNameById,
         currentJob: job
           ? { id: job.id, label: jobDisplayName(job) }
           : null,
         jobId,
       }),
-    [jobs, jobNameById, job, jobId],
+    [jobs, resolvedJobNameById, job, jobId],
   );
   const uniqueJobs = useMemo(
     () => buildServerJobFilterOptions(filterJobs),
@@ -1014,7 +1020,7 @@ export function TasksListClient({
                       )}
                       {isVisible('job') && (
                         <td className="px-4 py-3 text-slate-600">
-                          <JobCellLink jobId={task.jobId} jobNameById={jobNameById} jobTypeById={jobTypeById} />
+                          <JobCellLink jobId={task.jobId} jobNameById={resolvedJobNameById} jobTypeById={resolvedJobTypeById} />
                         </td>
                       )}
                       {isVisible('status') && (

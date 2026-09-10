@@ -19,7 +19,7 @@ related_guides:
   - agents
   - features
 version: 1
-last_updated: 2026-08-31
+last_updated: 2026-09-10
 ---
 
 # AI Audit
@@ -76,7 +76,7 @@ There is no export button on this screen. Copy values from the table if you need
 
 ## Reading the table
 
-Each row is one request. Open or scan rows for status icons, model, duration, and tools. Use **error** rows when a user reports that chat stopped or a tool failed.
+Each row is one request. Columns include **Time**, **User** (who made the request), **Agent**, **Model**, tokens, tools, duration, and status. Use **error** rows when a user reports that chat stopped or a tool failed.
 
 Page controls move through the result set (**limit** is 25 per page unless you change it in filters).
 

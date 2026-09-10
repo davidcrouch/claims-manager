@@ -52,6 +52,7 @@ import type {
   ConnectionSummary,
   ConnectionDetail,
   WebhookEvent,
+  WebRequest,
   CreateConnectionPayload,
   UpdateConnectionPayload,
   AddressPayload,
@@ -1176,6 +1177,34 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<Invoice>(`/invoices/${id}/publish`, { method: 'POST' });
     },
 
+    approveInvoice(id: string): Promise<Invoice> {
+      return fetchApi<Invoice>(`/invoices/${id}/approve`, { method: 'POST' });
+    },
+
+    returnInvoiceToDraft(id: string): Promise<Invoice> {
+      return fetchApi<Invoice>(`/invoices/${id}/return-to-draft`, { method: 'POST' });
+    },
+
+    receiveInvoicePayment(id: string, amount: number): Promise<Invoice> {
+      return fetchApi<Invoice>(`/invoices/${id}/received-payment`, {
+        method: 'POST',
+        body: JSON.stringify({ amount }),
+      });
+    },
+
+    updateInvoicePayment(id: string, paymentId: string, amount: number): Promise<Invoice> {
+      return fetchApi<Invoice>(`/invoices/${id}/payments/${paymentId}`, {
+        method: 'POST',
+        body: JSON.stringify({ amount }),
+      });
+    },
+
+    deleteInvoicePayment(id: string, paymentId: string): Promise<Invoice> {
+      return fetchApi<Invoice>(`/invoices/${id}/payments/${paymentId}`, {
+        method: 'DELETE',
+      });
+    },
+
     createMessage(body: Record<string, unknown>): Promise<Message> {
       return fetchApi<Message>('/messages', { method: 'POST', body: JSON.stringify(body) });
     },
@@ -1558,6 +1587,18 @@ export function createApiClient(options?: ApiClientOptions) {
       return fetchApi<Bill>(`/bills/${id}`, { method: 'POST', body: JSON.stringify(body) });
     },
 
+    approveBill(id: string): Promise<Bill> {
+      return fetchApi<Bill>(`/bills/${id}/approve`, { method: 'POST' });
+    },
+
+    rejectBill(id: string): Promise<Bill> {
+      return fetchApi<Bill>(`/bills/${id}/reject`, { method: 'POST' });
+    },
+
+    returnBillToReceived(id: string): Promise<Bill> {
+      return fetchApi<Bill>(`/bills/${id}/return-to-received`, { method: 'POST' });
+    },
+
     // Finance
     getFinanceAr(): Promise<{ buckets: AgingBucket[]; totalOutstanding: number; totalOverdue: number; totalPaid: number }> {
       return fetchApi('/finance/ar');
@@ -1659,6 +1700,34 @@ export function createApiClient(options?: ApiClientOptions) {
     getConnectionWebhookEventFilterOptions(id: string): Promise<{ eventTypes: string[] }> {
       return fetchApi<{ eventTypes: string[] }>(
         `/connections/${id}/webhook-events/filter-options`,
+      );
+    },
+
+    getConnectionWebRequests(id: string, params?: {
+      page?: number;
+      limit?: number;
+      outcome?: string;
+      method?: string;
+      entityType?: string;
+      user?: string;
+      search?: string;
+      sort?: string;
+    }): Promise<PaginatedResponse<WebRequest>> {
+      const sp = new URLSearchParams();
+      if (params?.page != null) sp.set('page', String(params.page));
+      if (params?.limit != null) sp.set('limit', String(params.limit));
+      if (params?.outcome) sp.set('outcome', params.outcome);
+      if (params?.method) sp.set('method', params.method);
+      if (params?.entityType) sp.set('entityType', params.entityType);
+      if (params?.user) sp.set('user', params.user);
+      if (params?.search) sp.set('search', params.search);
+      if (params?.sort) sp.set('sort', params.sort);
+      return fetchApi<PaginatedResponse<WebRequest>>(`/connections/${id}/web-requests?${sp}`);
+    },
+
+    getConnectionWebRequestFilterOptions(id: string): Promise<{ entityTypes: string[]; users: string[] }> {
+      return fetchApi<{ entityTypes: string[]; users: string[] }>(
+        `/connections/${id}/web-requests/filter-options`,
       );
     },
 
@@ -3159,6 +3228,16 @@ export function createApiClient(options?: ApiClientOptions) {
       });
     },
 
+    updateOrgUser(
+      userId: string,
+      body: import('@/types/api').UpdateOrgUserPayload,
+    ): Promise<import('@/types/api').OrgMember> {
+      return fetchApi(`/admin/users/${userId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      });
+    },
+
     updateOrgUserRoles(
       userId: string,
       roles: string[],
@@ -3357,6 +3436,37 @@ export function createApiClient(options?: ApiClientOptions) {
         method: 'PATCH',
         body: JSON.stringify(body),
       });
+    },
+
+    addFeedbackNote(id: string, body: string): Promise<FeedbackItem> {
+      return fetchApi<FeedbackItem>(`/feedback/${id}/notes`, {
+        method: 'POST',
+        body: JSON.stringify({ body }),
+      });
+    },
+
+    updateFeedbackNote(params: {
+      id: string;
+      noteId: string;
+      body: string;
+    }): Promise<FeedbackItem> {
+      return fetchApi<FeedbackItem>(
+        `/feedback/${params.id}/notes/${params.noteId}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ body: params.body }),
+        },
+      );
+    },
+
+    deleteFeedbackNote(params: {
+      id: string;
+      noteId: string;
+    }): Promise<FeedbackItem> {
+      return fetchApi<FeedbackItem>(
+        `/feedback/${params.id}/notes/${params.noteId}`,
+        { method: 'DELETE' },
+      );
     },
   };
 }

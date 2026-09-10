@@ -2,15 +2,31 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Receipt,
   ExternalLink,
   Calendar,
   FileSignature,
   Package,
+  CheckCircle2,
+  Pencil,
+  Banknote,
 } from 'lucide-react';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { BackButton } from '@/components/layout/BackButton';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   PageHeaderField,
   PageHeaderIcon,
@@ -31,7 +47,7 @@ import { PublishButton } from '@/components/shared/PublishButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
 import { jobDisplayName } from '@/components/shared/job-label';
 import { entityArchiveLabel, entityDetailHeaderTitles } from '@/components/shared/EntityDetailTitle';
-import { invoiceInsurerRef } from '@/components/invoices/invoice-label';
+import { invoiceInsurerRef, invoiceStatusName, invoiceHasPositiveAmount, invoiceIsPaid, invoiceIsInvoiced, invoiceIsPartiallyPaid, invoiceAmountReceived, invoiceRemainingAmount } from '@/components/invoices/invoice-label';
 import {
   InvoicePublishWizard,
   type InvoicePublishMode,
@@ -43,6 +59,7 @@ import {
   type InvoiceLineItemEdits,
   type InvoiceLineItemsTabHandle,
 } from '@/components/invoices/InvoiceLineItemsTab';
+import { InvoicePaymentsTab } from '@/components/invoices/InvoicePaymentsTab';
 import {
   AUTOSAVE_DEBOUNCE_MS,
   MAX_UNDO,
@@ -52,6 +69,8 @@ import {
 } from '@/components/shared/detail-autosave';
 import { DetailUndoButton } from '@/components/shared/DetailAutosaveActions';
 import { HeaderSaveStatus } from '@/components/shared/HeaderSaveStatus';
+import { approveInvoiceAction, returnInvoiceToDraftAction, receiveInvoicePaymentAction } from '@/app/(app)/mutations';
+import { useHasPermission } from '@/components/providers/PermissionsProvider';
 
 // ---------- header ----------------------------------------------------------
 
@@ -65,15 +84,16 @@ export function InvoicePageHeader({
   workOrder?: WorkOrder | null;
   purchaseOrder?: PurchaseOrder | null;
 }) {
-  const statusName = invoice.status?.name ?? 'Unknown';
+  const statusName = invoiceStatusName(invoice);
   const titles = entityDetailHeaderTitles({
     internalNumber: invoice.internalNumber,
-    secondaryLabel: invoice.invoiceNumber,
+    secondaryLabel: invoiceInsurerRef(invoice) ?? invoice.invoiceNumber,
     fallbackId: invoice.id,
   });
 
   return (
     <PageHeaderLayout
+      job={job}
       leading={<BackButton href={job ? `/invoices?jobId=${job.id}` : '/invoices'} label="Back to invoices" />}
       icon={
         <PageHeaderIcon
@@ -123,6 +143,9 @@ export function InvoicePageHeader({
       bottomRow={
         <>
           <PageHeaderField label="Amount">{formatCurrency(invoice.totalAmount)}</PageHeaderField>
+          {invoiceAmountReceived(invoice) > 0 && (
+            <PageHeaderField label="Received">{formatCurrency(invoice.amountReceived)}</PageHeaderField>
+          )}
           <PageHeaderField label="Issue date">{formatDate(invoice.issueDate)}</PageHeaderField>
           <PageHeaderField label="Updated">{formatDateTime(invoice.updatedAt)}</PageHeaderField>
         </>
@@ -134,7 +157,7 @@ export function InvoicePageHeader({
 // ---------- tabs ------------------------------------------------------------
 
 function OverviewTab({ invoice }: { invoice: Invoice }) {
-  const status = invoice.status?.name ?? 'Unknown';
+  const status = invoiceStatusName(invoice);
 
   return (
     <SectionCard
@@ -145,6 +168,8 @@ function OverviewTab({ invoice }: { invoice: Invoice }) {
       <DefRow label="Insurer Ref" value={invoiceInsurerRef(invoice) ?? '—'} />
       <DefRow label="Status" value={<StatusBadge status={status} />} />
       <DefRow label="Total amount" value={formatCurrency(invoice.totalAmount)} />
+      <DefRow label="Amount received" value={formatCurrency(invoice.amountReceived ?? 0)} />
+      <DefRow label="Remaining" value={formatCurrency(invoiceRemainingAmount(invoice))} />
       <DefRow label="Sub-total" value={formatCurrency(invoice.subTotal)} />
       <DefRow label="Tax" value={formatCurrency(invoice.tax)} />
       <DefRow label="Excess amount" value={formatCurrency(invoice.excessAmount)} />
@@ -169,7 +194,7 @@ function TimelineTab({ invoice }: { invoice: Invoice }) {
 
 // ---------- container -------------------------------------------------------
 
-type InvTab = 'overview' | 'line-items' | 'timeline';
+type InvTab = 'overview' | 'line-items' | 'payments' | 'timeline';
 
 type LineItemsUndoEntry = { kind: 'line-items'; edits: InvoiceLineItemEdits };
 
@@ -196,12 +221,38 @@ export function InvoiceDetail({
   const [lineItemsEditTick, setLineItemsEditTick] = useState(0);
   const [undoStack, setUndoStack] = useState<LineItemsUndoEntry[]>([]);
   const [publishWizardOpen, setPublishWizardOpen] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [editConfirmOpen, setEditConfirmOpen] = useState(false);
+  const [returningToDraft, setReturningToDraft] = useState(false);
+  const [recordingPayment, setRecordingPayment] = useState(false);
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [paymentAmountInput, setPaymentAmountInput] = useState('');
   const saveLineItemsRef = useRef<(() => void) | null>(null);
   const lineItemsRef = useRef<InvoiceLineItemsTabHandle | null>(null);
+  const router = useRouter();
+  const canApprovePermission = useHasPermission('invoices.approve');
+  const canUpdateInvoice = useHasPermission('invoices.update');
+  const canPublishPermission = useHasPermission('invoices.publish');
 
-  const statusName = invoice.status?.name ?? 'Unknown';
-  const canPublish = !invoice.sourceExternalReference;
-  const canEditLineItems = !invoice.sourceExternalReference;
+  const statusName = invoiceStatusName(invoice);
+  const isLocalInvoice = !invoice.sourceExternalReference;
+  const isDraft = statusName === 'Draft';
+  const isReviewed = statusName === 'Reviewed';
+  const isPaid = invoiceIsPaid(invoice);
+  const hasPositiveAmount = invoiceHasPositiveAmount(invoice);
+  const showApprove = canApprovePermission && isLocalInvoice && isDraft;
+  const approveEnabled = showApprove && hasPositiveAmount && !approving;
+  const showEditInvoice = canUpdateInvoice && isLocalInvoice && isReviewed;
+  const canPublish = canPublishPermission && isLocalInvoice && isReviewed;
+  const remainingAmount = invoiceRemainingAmount(invoice);
+  const receivedAmount = invoiceAmountReceived(invoice);
+  const showReceivedPayment =
+    canUpdateInvoice &&
+    !isPaid &&
+    (invoiceIsInvoiced(invoice) ||
+      invoiceIsPartiallyPaid(invoice) ||
+      Boolean(invoice.sourceExternalReference));
+  const canEditLineItems = isLocalInvoice;
   const publishMode: InvoicePublishMode =
     caps.publishMode === 'external' ? 'external' : 'internal';
   const canUndo = canEditLineItems && (lineItemsDirty || undoStack.length > 0);
@@ -286,9 +337,90 @@ export function InvoiceDetail({
     lineItemsRef.current?.save(entry.edits);
   }, [canEditLineItems, lineItemsSaving, lineItemsDirty, undoStack]);
 
+  async function handleApproveInvoice() {
+    if (!approveEnabled) return;
+    setApproving(true);
+    try {
+      const result = await approveInvoiceAction(invoice.id);
+      if (!result.success) {
+        toast.error(result.error ?? 'Failed to approve invoice');
+        return;
+      }
+      toast.success('Invoice approved');
+      router.refresh();
+    } catch (err) {
+      console.error('[frontend:InvoiceDetail.handleApproveInvoice]', err);
+      toast.error(err instanceof Error ? err.message : 'Failed to approve invoice');
+    } finally {
+      setApproving(false);
+    }
+  }
+
+  async function handleConfirmEditInvoice() {
+    if (!showEditInvoice || returningToDraft) return;
+    setReturningToDraft(true);
+    try {
+      const result = await returnInvoiceToDraftAction(invoice.id);
+      if (!result.success) {
+        toast.error(result.error ?? 'Failed to return invoice to draft');
+        return;
+      }
+      toast.success('Invoice returned to draft');
+      setEditConfirmOpen(false);
+      router.refresh();
+    } catch (err) {
+      console.error('[frontend:InvoiceDetail.handleConfirmEditInvoice]', err);
+      toast.error(
+        err instanceof Error ? err.message : 'Failed to return invoice to draft',
+      );
+    } finally {
+      setReturningToDraft(false);
+    }
+  }
+
+  function openPaymentDialog() {
+    if (!showReceivedPayment || recordingPayment) return;
+    setPaymentAmountInput(remainingAmount > 0 ? remainingAmount.toFixed(2) : '');
+    setPaymentDialogOpen(true);
+  }
+
+  async function handleReceivedPayment() {
+    if (!showReceivedPayment || recordingPayment) return;
+    const amount = Math.round(Number(paymentAmountInput) * 100) / 100;
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error('Enter a payment amount greater than 0');
+      return;
+    }
+    setRecordingPayment(true);
+    try {
+      const result = await receiveInvoicePaymentAction(invoice.id, amount);
+      if (!result.success) {
+        toast.error(result.error ?? 'Failed to record payment');
+        return;
+      }
+      const nextStatus = result.invoice
+        ? invoiceStatusName(result.invoice)
+        : amount >= remainingAmount
+          ? 'Paid'
+          : 'Partially Paid';
+      toast.success(
+        nextStatus === 'Paid' ? 'Payment recorded — invoice is paid' : 'Payment recorded — invoice is partially paid',
+      );
+      setPaymentDialogOpen(false);
+      setTab('payments');
+      router.refresh();
+    } catch (err) {
+      console.error('[frontend:InvoiceDetail.handleReceivedPayment]', err);
+      toast.error(err instanceof Error ? err.message : 'Failed to record payment');
+    } finally {
+      setRecordingPayment(false);
+    }
+  }
+
   const tabs: Array<{ id: InvTab; label: string; icon: typeof Calendar }> = [
     { id: 'overview', label: 'Overview', icon: FileSignature },
     { id: 'line-items', label: 'Line Items', icon: Package },
+    { id: 'payments', label: 'Payments', icon: Banknote },
     { id: 'timeline', label: 'Timeline', icon: Calendar },
   ];
 
@@ -301,6 +433,48 @@ export function InvoiceDetail({
         dirty={lineItemsDirty}
       />
       <SetHeaderActions>
+        {showApprove && (
+          <span
+            title={
+              hasPositiveAmount
+                ? 'Approve Invoice'
+                : 'Add an amount greater than 0 to approve this invoice'
+            }
+            className="inline-flex"
+          >
+            <Button
+              size="default"
+              disabled={!approveEnabled}
+              className="h-9 gap-1.5 px-4 bg-emerald-600 text-white hover:bg-emerald-500"
+              onClick={handleApproveInvoice}
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              {approving ? 'Approving…' : 'Approve Invoice'}
+            </Button>
+          </span>
+        )}
+        {showEditInvoice && (
+          <Button
+            size="default"
+            disabled={returningToDraft}
+            className="h-9 gap-1.5 px-4 bg-slate-700 text-white hover:bg-slate-600"
+            onClick={() => setEditConfirmOpen(true)}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            Edit Invoice
+          </Button>
+        )}
+        {showReceivedPayment && (
+          <Button
+            size="default"
+            disabled={recordingPayment}
+            className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+            onClick={openPaymentDialog}
+          >
+            <Banknote className="h-3.5 w-3.5" />
+            Receive Payment
+          </Button>
+        )}
         <HeaderActionToolbar>
           {canEditLineItems && (
             <DetailUndoButton
@@ -327,6 +501,124 @@ export function InvoiceDetail({
           />
         </HeaderActionToolbar>
       </SetHeaderActions>
+      <Dialog
+        open={editConfirmOpen}
+        onOpenChange={(next) => {
+          if (!returningToDraft) setEditConfirmOpen(next);
+        }}
+      >
+        <DialogContent showCloseButton={false} className="sm:max-w-lg">
+          <DialogHeader>
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700">
+                <Pencil className="h-6 w-6" />
+              </div>
+              <div className="space-y-2 pt-0.5">
+                <DialogTitle className="text-xl">Edit invoice</DialogTitle>
+                <DialogDescription className="text-sm leading-relaxed">
+                  Editing this invoice will set its status back to{' '}
+                  <span className="font-medium text-foreground">Draft</span>. You will need
+                  to approve it again before it can be published.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          <DialogFooter className="mt-2 gap-2 sm:gap-2">
+            <Button
+              variant="outline"
+              disabled={returningToDraft}
+              onClick={() => setEditConfirmOpen(false)}
+              className="h-9 px-4"
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={returningToDraft}
+              onClick={handleConfirmEditInvoice}
+              className="h-9 px-4"
+            >
+              {returningToDraft ? 'Updating…' : 'Edit invoice'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={paymentDialogOpen}
+        onOpenChange={(next) => {
+          if (!recordingPayment) setPaymentDialogOpen(next);
+        }}
+      >
+        <DialogContent showCloseButton={false} className="sm:max-w-lg">
+          <DialogHeader>
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+                <Banknote className="h-6 w-6" />
+              </div>
+              <div className="space-y-2 pt-0.5">
+                <DialogTitle className="text-xl">Receive payment</DialogTitle>
+                <DialogDescription className="text-sm leading-relaxed">
+                  Enter the amount received. A payment greater than 0 marks the invoice{' '}
+                  <span className="font-medium text-foreground">Partially Paid</span>. When the
+                  total received covers the invoice amount, status becomes{' '}
+                  <span className="font-medium text-foreground">Paid</span>.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          <div className="space-y-4 px-1">
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <p className="text-muted-foreground">Invoice total</p>
+                <p className="font-medium">{formatCurrency(invoice.totalAmount)}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Already received</p>
+                <p className="font-medium">{formatCurrency(receivedAmount)}</p>
+              </div>
+              <div className="col-span-2">
+                <p className="text-muted-foreground">Remaining</p>
+                <p className="font-medium">{formatCurrency(remainingAmount)}</p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="invoice-payment-amount">Payment amount</Label>
+              <Input
+                id="invoice-payment-amount"
+                type="number"
+                inputMode="decimal"
+                min="0.01"
+                step="0.01"
+                value={paymentAmountInput}
+                disabled={recordingPayment}
+                onChange={(e) => setPaymentAmountInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    void handleReceivedPayment();
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <DialogFooter className="mt-2 gap-2 sm:gap-2">
+            <Button
+              variant="outline"
+              disabled={recordingPayment}
+              onClick={() => setPaymentDialogOpen(false)}
+              className="h-9 px-4"
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={recordingPayment}
+              onClick={handleReceivedPayment}
+              className="h-9 px-4 bg-blue-600 text-white hover:bg-blue-500"
+            >
+              {recordingPayment ? 'Recording…' : 'Record payment'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <InvoicePublishWizard
         open={publishWizardOpen}
         onOpenChange={setPublishWizardOpen}
@@ -377,6 +669,7 @@ export function InvoiceDetail({
             />
           </div>
         )}
+        {tab === 'payments' && <InvoicePaymentsTab invoice={invoice} />}
         {tab === 'timeline' && <TimelineTab invoice={invoice} />}
       </div>
     </div>

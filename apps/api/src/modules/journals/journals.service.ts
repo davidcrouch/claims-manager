@@ -11,7 +11,9 @@ import {
   JournalsRepository,
   JournalPagesRepository,
   JournalPageAttachmentsRepository,
+  JobsRepository,
 } from '../../database/repositories';
+import { attachJobSummaries } from '../../common/attach-job-summaries';
 import { DocumentsRepository } from '../../database/repositories/documents.repository';
 import { TenantContext } from '../../tenant/tenant-context';
 import { GcsStorageService } from '../../common/gcs/gcs-storage.service';
@@ -44,6 +46,7 @@ export class JournalsService {
 
   constructor(
     private readonly journalsRepo: JournalsRepository,
+    private readonly jobsRepo: JobsRepository,
     private readonly pagesRepo: JournalPagesRepository,
     private readonly attachmentsRepo: JournalPageAttachmentsRepository,
     private readonly documentsRepo: DocumentsRepository,
@@ -66,7 +69,15 @@ export class JournalsService {
     this.logger.debug(
       `[JournalsService.findAll] tenantId=${tenantId} jobId=${params.jobId ?? 'none'} jobIds=${params.jobIds?.length ?? 0}`,
     );
-    return this.journalsRepo.findAll({ tenantId, ...params });
+    const result = await this.journalsRepo.findAll({ tenantId, ...params });
+    return {
+      data: await attachJobSummaries({
+        tenantId,
+        rows: result.data,
+        jobsRepo: this.jobsRepo,
+      }),
+      total: result.total,
+    };
   }
 
   async findOne(params: { id: string }) {

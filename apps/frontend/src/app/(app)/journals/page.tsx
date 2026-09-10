@@ -4,7 +4,9 @@ import { JournalsPageClient } from '@/components/journals/JournalsPageClient';
 import {buildJobNameById, buildJobTypeById, toJobOptions,
   mergeCurrentJobIntoNameById,
   mergeCurrentJobIntoTypeById,
-  mergeCurrentJobIntoOptions } from '@/components/shared/job-label';
+  mergeCurrentJobIntoOptions,
+  mergeJobLabelsFromRows,
+  mergeJobTypesFromRows } from '@/components/shared/job-label';
 import type { Metadata } from 'next';
 import type { Job, Claim, PaginatedResponse } from '@/types/api';
 
@@ -63,14 +65,22 @@ export default async function JournalsPage({
   }
 
   const jobs = jobsRes?.data ?? [];
+  const jobNameById = mergeJobLabelsFromRows(
+    mergeCurrentJobIntoNameById(buildJobNameById(jobs), job),
+    result.data,
+  );
+  const jobTypeById = mergeJobTypesFromRows(
+    mergeCurrentJobIntoTypeById(buildJobTypeById(jobs), job),
+    result.data,
+  );
 
   return (
     <JournalsPageClient
       initialData={result}
       job={job}
       parentClaim={parentClaim}
-      jobNameById={mergeCurrentJobIntoNameById(buildJobNameById(jobs), job)}
-      jobTypeById={mergeCurrentJobIntoTypeById(buildJobTypeById(jobs), job)}
+      jobNameById={jobNameById}
+      jobTypeById={jobTypeById}
       jobs={mergeCurrentJobIntoOptions(toJobOptions(jobs), job)}
     />
   );

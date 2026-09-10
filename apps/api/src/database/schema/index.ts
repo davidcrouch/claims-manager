@@ -686,6 +686,7 @@ export const invoices = pgTable(
     subTotal: numeric('sub_total', { precision: 14, scale: 2 }),
     totalTax: numeric('total_tax', { precision: 14, scale: 2 }),
     totalAmount: numeric('total_amount', { precision: 14, scale: 2 }),
+    amountReceived: numeric('amount_received', { precision: 14, scale: 2 }),
     excessAmount: numeric('excess_amount', { precision: 14, scale: 2 }),
     isDeleted: boolean('is_deleted').notNull().default(false),
     invoicePayload: jsonb('invoice_payload').notNull().default({}),
@@ -723,6 +724,28 @@ export const invoices = pgTable(
       .where(sql`internal_number IS NOT NULL`),
     index('idx_invoices_source_tenant').on(t.sourceTenantId),
     index('idx_invoices_work_order').on(t.tenantId, t.workOrderId),
+  ],
+);
+
+export const invoicePayments = pgTable(
+  'invoice_payments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    invoiceId: uuid('invoice_id')
+      .notNull()
+      .references(() => invoices.id, { onDelete: 'cascade' }),
+    amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
+    receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+    createdByUserId: text('created_by_user_id'),
+    createdByName: text('created_by_name'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_invoice_payments_tenant_invoice').on(t.tenantId, t.invoiceId),
+    index('idx_invoice_payments_received_at').on(t.tenantId, t.receivedAt),
   ],
 );
 
@@ -1267,6 +1290,40 @@ export const inboundWebhookEvents = pgTable(
     index('idx_webhooks_status').on(t.processingStatus, t.createdAt),
     index('idx_webhooks_connection_type_entity').on(t.connectionId, t.eventType, t.payloadEntityId),
     index('idx_webhooks_provider_code_entity').on(t.providerCode, t.providerEntityType),
+  ],
+);
+
+// Outbound HTTP calls to the connected external application
+export const outboundWebRequests = pgTable(
+  'outbound_web_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    connectionId: uuid('connection_id')
+      .notNull()
+      .references(() => integrationConnections.id, { onDelete: 'cascade' }),
+    httpMethod: text('http_method').notNull(),
+    path: text('path').notNull(),
+    url: text('url').notNull(),
+    queryParams: jsonb('query_params').notNull().default({}),
+    entityType: text('entity_type'),
+    entityId: text('entity_id'),
+    statusCode: integer('status_code'),
+    outcome: text('outcome').notNull(),
+    durationMs: integer('duration_ms').notNull(),
+    requestBody: jsonb('request_body'),
+    responseBody: jsonb('response_body'),
+    errorMessage: text('error_message'),
+    initiatedByUserId: text('initiated_by_user_id'),
+    initiatedByName: text('initiated_by_name'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_outbound_web_requests_connection_created').on(t.connectionId, t.createdAt),
+    index('idx_outbound_web_requests_connection_outcome').on(t.connectionId, t.outcome),
+    index('idx_outbound_web_requests_connection_entity').on(t.connectionId, t.entityType),
   ],
 );
 
@@ -1943,6 +2000,8 @@ export const outboundSyncQueue = pgTable(
 
     sourceEvent: text('source_event'),
     idempotencyKey: text('idempotency_key'),
+    initiatedByUserId: text('initiated_by_user_id'),
+    initiatedByName: text('initiated_by_name'),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     processedAt: timestamp('processed_at', { withTimezone: true }),
@@ -3752,6 +3811,28 @@ export const feedbackItems = pgTable(
       'feedback_items_status_check',
       sql`${t.status} IN ('open', 'in_progress', 'resolved', 'closed')`,
     ),
+  ],
+);
+
+export const feedbackNotes = pgTable(
+  'feedback_notes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict', onUpdate: 'cascade' }),
+    feedbackItemId: uuid('feedback_item_id')
+      .notNull()
+      .references(() => feedbackItems.id, { onDelete: 'cascade' }),
+    body: text('body').notNull(),
+    createdByUserId: text('created_by_user_id'),
+    createdByName: text('created_by_name'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_feedback_notes_tenant_item').on(t.tenantId, t.feedbackItemId),
+    index('idx_feedback_notes_created_at').on(t.tenantId, t.createdAt),
   ],
 );
 

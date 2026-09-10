@@ -83,7 +83,7 @@ export function ClaimsAdminPanel({ initialClaims, initialGhosts }: ClaimsAdminPa
     <>
       <SetPageHeader>
         <AdminPageHeader
-          icon={Building2}
+          icon="building"
           title="Organisation Claims"
           description="Review and approve ownership claims from organisations wanting to take custody of their ghost profiles and associated purchase orders."
         />

@@ -33,3 +33,10 @@ export type UpdateUserRolesInput = {
 export type UpdateUserStatusInput = {
   status: 'Active' | 'Disabled';
 };
+
+export type UpdateUserInput = {
+  givenName?: string;
+  familyName?: string;
+  roles?: string[];
+  status?: 'Active' | 'Disabled';
+};

@@ -30,6 +30,7 @@ import { TablePagination } from '@/components/shared/table-pagination';
 import { formatDateTime } from '@/components/shared/detail';
 import { jobDisplayName } from '@/components/shared/job-label';
 import { JobCellLink } from '@/components/shared/JobCellLink';
+import { useResolvedJobLabels } from '@/components/shared/use-resolved-job-labels';
 import { buildServerJobFilterOptions,
   resolveServerJobFilterSelection,
   selectedJobFilterLabels,
@@ -150,15 +151,24 @@ export function MessagesListClient({
     () => parseSelectedJobIds(jobId, jobIdsParam),
     [jobId, jobIdsParam],
   );
+  const messageJobRows = useMemo(
+    () => messages.map((message) => ({ jobId: messageJobId(message), job: message.job })),
+    [messages],
+  );
+  const { resolvedJobNameById, resolvedJobTypeById } = useResolvedJobLabels(
+    jobNameById,
+    jobTypeById,
+    messageJobRows,
+  );
   const filterJobs = useMemo(
     () =>
       buildListJobFilterOptions({
-        jobNameById,
+        jobNameById: resolvedJobNameById,
         currentJob: job
           ? { id: job.id, label: jobDisplayName(job) }
           : null,
         jobId }),
-    [jobNameById, job, jobId],
+    [resolvedJobNameById, job, jobId],
   );
   const uniqueJobs = useMemo(
     () => buildServerJobFilterOptions(filterJobs),
@@ -407,8 +417,8 @@ export function MessagesListClient({
 
       {activeTab === 'notes' ? (
         <NotesListPanel
-          jobNameById={jobNameById}
-          jobTypeById={jobTypeById}
+          jobNameById={resolvedJobNameById}
+          jobTypeById={resolvedJobTypeById}
           fetchJobId={fetchJobId}
           fetchJobIds={fetchJobIds}
           uniqueJobs={uniqueJobs}
@@ -576,8 +586,8 @@ export function MessagesListClient({
                         <td className="px-4 py-3 text-slate-700">
                           <JobCellLink
                             jobId={messageJobId(message)}
-                            jobNameById={jobNameById ?? {}}
-                            jobTypeById={jobTypeById}
+                            jobNameById={resolvedJobNameById}
+                            jobTypeById={resolvedJobTypeById}
                           />
                         </td>
                       )}
@@ -646,7 +656,7 @@ export function MessagesListClient({
         open={detailOpen}
         onOpenChange={handleDetailOpenChange}
         message={selectedMessage}
-        jobNameById={jobNameById}
+        jobNameById={resolvedJobNameById}
       />
       {(fetchJobId || job?.id) && (
         <MessageFormDrawer

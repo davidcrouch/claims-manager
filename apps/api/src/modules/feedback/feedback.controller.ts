@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Param,
   Body,
   Query,
@@ -11,6 +12,8 @@ import {
 import { FeedbackService } from './feedback.service';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
 import { UpdateFeedbackDto } from './dto/update-feedback.dto';
+import { CreateFeedbackNoteDto } from './dto/create-feedback-note.dto';
+import { UpdateFeedbackNoteDto } from './dto/update-feedback-note.dto';
 import { RequirePermission } from '../../auth/decorators/require-permission.decorator';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { P } from '../../auth/permission-constants';
@@ -23,6 +26,7 @@ export class FeedbackController {
   @Get()
   @RequirePermission(P.feedback.read)
   async findAll(
+    @CurrentUser() user: AuthenticatedUser,
     @Query('type') type?: string,
     @Query('status') status?: string,
     @Query('priority') priority?: string,
@@ -37,6 +41,7 @@ export class FeedbackController {
       search,
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
+      actor: { userId: user.sub, email: user.email },
     });
   }
 
@@ -48,8 +53,14 @@ export class FeedbackController {
 
   @Get(':id')
   @RequirePermission(P.feedback.read)
-  async findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.feedbackService.findOne(id);
+  async findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.feedbackService.findOne({
+      id,
+      actor: { userId: user.sub, email: user.email },
+    });
   }
 
   @Post()
@@ -70,7 +81,56 @@ export class FeedbackController {
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateFeedbackDto,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.feedbackService.update({ id, dto });
+    return this.feedbackService.update({
+      id,
+      dto,
+      actor: { userId: user.sub, email: user.email },
+    });
+  }
+
+  @Post(':id/notes')
+  @RequirePermission(P.feedback.manage)
+  async addNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateFeedbackNoteDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.feedbackService.addNote({
+      feedbackId: id,
+      body: dto.body,
+      actor: { userId: user.sub, email: user.email },
+    });
+  }
+
+  @Patch(':id/notes/:noteId')
+  @RequirePermission(P.feedback.manage)
+  async updateNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('noteId', ParseUUIDPipe) noteId: string,
+    @Body() dto: UpdateFeedbackNoteDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.feedbackService.updateNote({
+      feedbackId: id,
+      noteId,
+      body: dto.body,
+      actor: { userId: user.sub, email: user.email },
+    });
+  }
+
+  @Delete(':id/notes/:noteId')
+  @RequirePermission(P.feedback.manage)
+  async deleteNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('noteId', ParseUUIDPipe) noteId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.feedbackService.deleteNote({
+      feedbackId: id,
+      noteId,
+      actor: { userId: user.sub, email: user.email },
+    });
   }
 }

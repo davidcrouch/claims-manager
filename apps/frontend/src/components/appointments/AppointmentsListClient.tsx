@@ -22,6 +22,7 @@ import {
   AppointmentsTable } from '@/components/appointments/AppointmentsTable';
 import { AppointmentFormDrawer } from '@/components/forms/AppointmentFormDrawer';
 import { type JobOption, jobDisplayName } from '@/components/shared/job-label';
+import { useResolvedJobLabels } from '@/components/shared/use-resolved-job-labels';
 import { buildServerJobFilterOptions,
   resolveServerJobFilterSelection,
   selectedJobFilterLabels,
@@ -103,16 +104,22 @@ export function AppointmentsListClient({
     }
     return map;
   }, [jobs]);
+  const { resolvedJobNameById, resolvedJobTypeById } = useResolvedJobLabels(
+    jobNameById,
+    jobTypeById,
+    appointments,
+  );
 
   const filterJobs = useMemo(
     () =>
       buildListJobFilterOptions({
         jobs: jobs.map((j) => ({ id: j.id, label: j.label })),
+        jobNameById: resolvedJobNameById,
         currentJob: job
           ? { id: job.id, label: jobDisplayName(job) }
           : null,
         jobId }),
-    [jobs, job, jobId],
+    [jobs, resolvedJobNameById, job, jobId],
   );
   const uniqueJobs = useMemo(
     () => buildServerJobFilterOptions(filterJobs),
@@ -411,8 +418,8 @@ export function AppointmentsListClient({
           sortField={sortField}
           sortOrder={sortOrder}
           onSort={handleSort}
-          jobNameById={jobNameById}
-          jobTypeById={jobTypeById}
+          jobNameById={resolvedJobNameById}
+          jobTypeById={resolvedJobTypeById}
           statusColumnFilter={{
             options: uniqueStatuses,
             selected: statusColumnSelected,

@@ -2,7 +2,7 @@
 
 import { getSession, getAccessToken } from '@/lib/auth';
 import { createApiClient } from '@/lib/api-client';
-import type { AvailableRole, InviteUserPayload, OrgMember } from '@/types/api';
+import type { AvailableRole, InviteUserPayload, OrgMember, UpdateOrgUserPayload } from '@/types/api';
 
 async function getApi() {
   const session = await getSession();
@@ -51,6 +51,24 @@ export async function inviteOrgUserAction(
     return {
       success: false,
       error: err instanceof Error ? err.message : 'Failed to invite user',
+    };
+  }
+}
+
+export async function updateOrgUserAction(
+  userId: string,
+  payload: UpdateOrgUserPayload,
+): Promise<{ success: boolean; member?: OrgMember; error?: string }> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const member = await api.updateOrgUser(userId, payload);
+    return { success: true, member };
+  } catch (err) {
+    console.error('[admin/users/actions.updateOrgUserAction]', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to update user',
     };
   }
 }

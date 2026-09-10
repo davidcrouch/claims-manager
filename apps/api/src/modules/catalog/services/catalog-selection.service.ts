@@ -1367,12 +1367,16 @@ export class CatalogSelectionService {
           updates.unitTypeLookupId = lookupId ?? null;
         }
 
-        const totals = computeLineTotals({
-          quantity: item.quantity ?? '0',
-          unitCost: item.unitCost ?? '0',
-          taxRate: item.tax,
-        });
-        updates.totals = totals;
+        const shouldRecomputeTotals =
+          item.unitCost !== undefined || item.tax !== undefined;
+        if (shouldRecomputeTotals) {
+          const totals = computeLineTotals({
+            quantity: item.quantity ?? '0',
+            unitCost: item.unitCost ?? '0',
+            taxRate: item.tax,
+          });
+          updates.totals = totals;
+        }
 
         await tx
           .update(purchaseOrderItems)

@@ -4,7 +4,9 @@ import { RfqsPageClient } from '@/components/rfqs/RfqsPageClient';
 import {buildJobNameById, buildJobTypeById, toJobOptions,
   mergeCurrentJobIntoNameById,
   mergeCurrentJobIntoTypeById,
-  mergeCurrentJobIntoOptions } from '@/components/shared/job-label';
+  mergeCurrentJobIntoOptions,
+  mergeJobLabelsFromRows,
+  mergeJobTypesFromRows } from '@/components/shared/job-label';
 import type { Job, Claim, PaginatedResponse, Rfq } from '@/types/api';
 
 export const metadata = { title: 'RFQs — EnsureOS' };
@@ -108,8 +110,14 @@ export default async function RfqsPage({
     id: vendor.id,
     name: vendor.name?.trim() ? vendor.name : 'Unknown' }));
   const jobs = jobsRes?.data ?? [];
-  const jobNameById = mergeCurrentJobIntoNameById(buildJobNameById(jobs), job);
-  const jobTypeById = mergeCurrentJobIntoTypeById(buildJobTypeById(jobs), job);
+  const jobNameById = mergeJobLabelsFromRows(
+    mergeCurrentJobIntoNameById(buildJobNameById(jobs), job),
+    initialData.data,
+  );
+  const jobTypeById = mergeJobTypesFromRows(
+    mergeCurrentJobIntoTypeById(buildJobTypeById(jobs), job),
+    initialData.data,
+  );
 
   return (
     <RfqsPageClient

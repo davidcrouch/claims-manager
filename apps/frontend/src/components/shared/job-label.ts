@@ -1,7 +1,7 @@
 import type { AddressPayload, Job } from '@/types/api';
 import { asString, pick } from '@/components/shared/detail';
 
-type JobLabelSource = Pick<
+export type JobLabelSource = Pick<
   Job,
   'id' | 'name' | 'internalNumber' | 'externalJobId' | 'externalReference'
 > & {

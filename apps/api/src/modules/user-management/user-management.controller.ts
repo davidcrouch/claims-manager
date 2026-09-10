@@ -18,6 +18,7 @@ import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user
 import { UserManagementService } from './user-management.service';
 import type {
   InviteUserInput,
+  UpdateUserInput,
   UpdateUserRolesInput,
   UpdateUserStatusInput,
 } from './user-management.types';
@@ -89,6 +90,24 @@ export class UserManagementController {
     @Body() body: UpdateUserStatusInput,
   ) {
     return this.service.updateStatus(user.tenantId, userId, body, user.sub);
+  }
+
+  @Patch(':userId')
+  @RequirePermission(P.org.users.manage)
+  @ApiOperation({ summary: 'Update an organization user' })
+  async updateUser(
+    @Req() req: Request,
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('userId') userId: string,
+    @Body() body: UpdateUserInput,
+  ) {
+    return this.service.updateUser({
+      organizationId: user.tenantId,
+      userId,
+      input: body,
+      actorUserId: user.sub,
+      accessToken: extractBearerToken(req),
+    });
   }
 
   @Delete(':userId')

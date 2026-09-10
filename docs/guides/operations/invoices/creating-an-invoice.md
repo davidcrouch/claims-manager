@@ -13,6 +13,7 @@ permissions_discussed:
   - invoices.read
   - invoices.update
   - invoices.approve
+  - invoices.publish
 tags:
   - invoices
   - publish
@@ -37,7 +38,7 @@ Create a **draft** invoice against an active work order, review totals and line 
 - **Draft invoice** — created from **Create Invoice**; still editable enough to publish. Header **Publish** is available until the invoice has an upstream source reference.
 - **Work order (required)** — every invoice is raised against an active (non-archived) work order. Archived work orders do not appear in the picker.
 - **Purchase order** — if the work order has a PO, create attaches that PO automatically; you do not pick it on the form.
-- **Publish** — locks the invoice and sets status to **Submitted**. Internal jobs stay in EnsureOS; Crunchwork jobs send the invoice to the insurer.
+- **Publish** — locks the invoice and sets status to **Invoiced**. Internal jobs stay in EnsureOS; Crunchwork jobs send the invoice to the insurer.
 
 ## Accessing Create Invoice
 
@@ -54,7 +55,7 @@ You can start from either place:
 2. Click **Create Invoice**.
 3. That work order is pre-selected.
 
-> **Required permission:** `invoices.create` to open and submit the create drawer. `invoices.read` to open the resulting record. Publishing requires `invoices.update`.
+> **Required permission:** `invoices.create` to open and submit the create drawer. `invoices.read` to open the resulting record. Publishing requires `invoices.publish`.
 
 ## Creating the Draft
 
@@ -99,13 +100,13 @@ If the total is wrong, fix the work order / PO or create a new invoice — do no
 **Internal**
 
 - The invoice will be locked after publish.
-- Status changes to **Submitted**.
+- Status changes to **Invoiced**.
 - Invoice details cannot be edited afterwards.
 
 **External (insurer)**
 
 - Submitting creates the invoice for the insurer against the linked work order.
-- Status changes to **Submitted** and the invoice locks.
+- Status changes to **Invoiced** and the invoice locks.
 - This cannot be undone from this screen.
 
 ### Step 2 — Review the summary
@@ -134,9 +135,10 @@ On success, a toast reads **Invoice published** or **Invoice sent to Insurer**, 
 
 ## After Publish
 
-- Status is **Submitted** (or the equivalent lookup your organisation uses).
+- Status is **Invoiced**.
+- **Receive Payment** appears on the header. Click it and enter the amount received. Any payment greater than 0 marks the invoice **Partially Paid**. When the total received is 100% of the invoice amount, status becomes **Paid**.
 - The invoice is locked.
-- It appears on [Accounts Receivable](../finance/accounts-receivable.md) ageing once it is outstanding.
+- It appears on [Accounts Receivable](../finance/accounts-receivable.md) ageing until it is paid.
 - Dashboard **AR overdue** will include it if it ages past your overdue rules.
 
 If you need a file copy, use **Print** and choose a template and folder (or download). See [Reports](../finance/reports.md).
@@ -147,10 +149,11 @@ If you need a file copy, use **Print** and choose a template and folder (or down
 |------------|-----------------|
 | `invoices.read` | List and detail |
 | `invoices.create` | **Create Invoice** drawer |
-| `invoices.update` | Publish and other updates |
-| `invoices.approve` | Approve/reject where that workflow is enabled for your organisation |
+| `invoices.update` | **Edit Invoice**, **Receive Payment**, and other updates |
+| `invoices.approve` | **Approve Invoice** on the invoice header (Draft → Reviewed) |
+| `invoices.publish` | **Publish** on a reviewed invoice (sets Invoiced) |
 
-Members often have read-only invoice access. Estimators typically cannot create invoices; Manager and Organisation Admin can.
+Members often have read-only invoice access. Estimators typically cannot create or approve invoices; Manager and Organisation Admin can.
 
 ## Best Practices
 

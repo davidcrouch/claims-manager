@@ -13,6 +13,7 @@ permissions_discussed:
   - invoices.create
   - invoices.update
   - invoices.approve
+  - invoices.publish
 tags:
   - invoices
   - accounts receivable
@@ -51,7 +52,7 @@ This guide covers the invoices list, detail tabs, header actions including **Pub
 
 From a work order, click **Create Invoice** to open the same create drawer with that work order selected.
 
-> **Required permission:** `invoices.read` to view the list and detail. `invoices.create` to use **Create Invoice**. Publishing uses `invoices.update` (and insurer submit as part of publish). `invoices.approve` is reserved for approve/reject workflows where your organisation enables them — the live invoice header today centres on **Publish**, print, and archive.
+> **Required permission:** `invoices.read` to view the list and detail. `invoices.create` to use **Create Invoice**. **Approve Invoice** requires `invoices.approve` and is only shown to users who hold it. **Publish** requires `invoices.publish`. **Receive Payment** and **Edit Invoice** use `invoices.update`.
 
 ## The Invoices List
 
@@ -83,23 +84,26 @@ Click a row to open detail. Archive from the row without opening the record.
 
 ## Opening an Invoice
 
-The detail header shows status, optional sync status, and links:
+The detail header shows the **insurer ref** above the invoice number when one exists, plus status, optional sync status, and links:
 
 - **View PO** when a purchase order is linked
 - **View work order** when a work order is linked (and no PO link is shown in that slot)
 - Job name link
 
-Header fields: **Amount**, **Issue date**, **Updated**.
+Header fields: **Amount**, **Received** (once a payment is recorded), **Issue date**, **Updated**.
 
 ### Header actions
 
 | Control | When | What it does |
 |---------|------|----------------|
-| **Publish** | Invoice has no `sourceExternalReference` (typically still a local draft) | Opens the publish wizard |
+| **Approve Invoice** | Draft, `invoices.approve` | Sets status to **Reviewed** |
+| **Edit Invoice** | Reviewed, `invoices.update` | Returns status to **Draft** |
+| **Publish** | Reviewed, `invoices.publish` | Opens the publish wizard; status becomes **Invoiced** |
+| **Receive Payment** | Published (**Invoiced** or **Partially Paid**), `invoices.update` | Opens a dialog to enter the amount received. Greater than 0 sets **Partially Paid**; 100% or more sets **Paid** |
 | **Print** | Always | Generate a PDF of this invoice |
 | **Archive** | Always | Archive the invoice |
 
-Once an invoice has been submitted upstream, **Publish** is hidden — the record is treated as already issued.
+Once an invoice has been published, **Publish** is hidden. **Receive Payment** stays until the invoice is marked **Paid**.
 
 ## Detail Tabs
 
@@ -109,6 +113,7 @@ Live tabs (this page is thinner than estimates):
 |-----|---------|
 | **Overview** | Invoice number, insurer ref, status, totals, tax, excess, issue date |
 | **Line Items** | Read-only lines from the linked PO, work order, or invoice payload |
+| **Payments** | Each payment received against the invoice, with date, amount, and who recorded it. Edit or delete a row to revise the amount or remove it. |
 | **Timeline** | Local created / updated audit |
 
 There are no Parties, Take Off, or Communications tabs on the invoice.
@@ -118,6 +123,8 @@ There are no Parties, Take Off, or Communications tabs on the invoice.
 | Field | Meaning |
 |-------|---------|
 | **Total amount** | Inclusive total |
+| **Amount received** | Payments recorded against this invoice |
+| **Remaining** | Total minus amount received |
 | **Sub-total** | Amount before tax |
 | **Tax** | Tax component |
 | **Excess amount** | Excess (policy excess) when present |

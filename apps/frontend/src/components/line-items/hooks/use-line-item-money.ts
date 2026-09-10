@@ -27,6 +27,7 @@ export function useGrandTotals(
   showGst: boolean,
   selectedIds?: Set<string>,
   hideUnselected = false,
+  lockSaleTotal = false,
 ): GrandTotals {
   return useMemo(() => {
     let extended = 0;
@@ -45,9 +46,10 @@ export function useGrandTotals(
       markup += money.markupAmt;
       totalTax += money.gstAmt;
       // Prefer full commercial total (incl. markup + GST) so invoice/WO headers match.
-      total += editInputs[rowKey]
-        ? money.total
-        : lineTotalFromItem(item);
+      // Cost-mode POs keep sale price locked to the stored/source total.
+      total += lockSaleTotal || !editInputs[rowKey]
+        ? lineTotalFromItem(item)
+        : money.total;
       invoiced += resolveInvoicedAmount(item, editInputs[rowKey]);
       previouslyInvoiced += resolvePreviouslyInvoicedAmount(item);
     }
@@ -87,5 +89,5 @@ export function useGrandTotals(
 
     const subTotal = extended + (showMarkup ? markup : 0) + (showGst ? totalTax : 0);
     return { subTotal, extendedCost, markup, totalTax, total, invoiced, previouslyInvoiced };
-  }, [groups, editInputs, showMarkup, showGst, selectedIds, hideUnselected]);
+  }, [groups, editInputs, showMarkup, showGst, selectedIds, hideUnselected, lockSaleTotal]);
 }

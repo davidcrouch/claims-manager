@@ -1,10 +1,13 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { and, count, desc, eq, gte, ilike, lte, type SQL } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../drizzle.module';
-import { aiMessageAudit } from '../schema';
+import { aiMessageAudit, users } from '../schema';
 
 export type AiMessageAuditRow = typeof aiMessageAudit.$inferSelect;
 export type AiMessageAuditInsert = typeof aiMessageAudit.$inferInsert;
+export type AiMessageAuditViewRow = AiMessageAuditRow & {
+  userName: string | null;
+};
 
 export interface AiAuditListFilters {
   tenantId: string;
@@ -41,7 +44,7 @@ export class AiMessageAuditRepository {
 
   async findAuditLog(
     filters: AiAuditListFilters,
-  ): Promise<{ rows: AiMessageAuditRow[]; total: number }> {
+  ): Promise<{ rows: AiMessageAuditViewRow[]; total: number }> {
     const page = Math.max(filters.page ?? 1, 1);
     const limit = Math.min(Math.max(filters.limit ?? 25, 1), 500);
     const offset = (page - 1) * limit;
@@ -69,8 +72,13 @@ export class AiMessageAuditRepository {
 
     const [rows, totalResult] = await Promise.all([
       this.db
-        .select()
+        .select({
+          audit: aiMessageAudit,
+          userName: users.name,
+          userEmail: users.email,
+        })
         .from(aiMessageAudit)
+        .leftJoin(users, eq(aiMessageAudit.userId, users.id))
         .where(where)
         .orderBy(desc(aiMessageAudit.createdAt))
         .limit(limit)
@@ -81,16 +89,24 @@ export class AiMessageAuditRepository {
         .where(where),
     ]);
 
-    return { rows, total: totalResult[0]?.count ?? 0 };
+    return {
+      rows: rows.map((row) => this.toViewRow(row)),
+      total: totalResult[0]?.count ?? 0,
+    };
   }
 
   async findById(params: {
     tenantId: string;
     id: string;
-  }): Promise<AiMessageAuditRow | null> {
+  }): Promise<AiMessageAuditViewRow | null> {
     const [row] = await this.db
-      .select()
+      .select({
+        audit: aiMessageAudit,
+        userName: users.name,
+        userEmail: users.email,
+      })
       .from(aiMessageAudit)
+      .leftJoin(users, eq(aiMessageAudit.userId, users.id))
       .where(
         and(
           eq(aiMessageAudit.tenantId, params.tenantId),
@@ -98,16 +114,21 @@ export class AiMessageAuditRepository {
         ),
       )
       .limit(1);
-    return row ?? null;
+    return row ? this.toViewRow(row) : null;
   }
 
   async findByConversation(params: {
     tenantId: string;
     conversationId: string;
-  }): Promise<AiMessageAuditRow[]> {
-    return this.db
-      .select()
+  }): Promise<AiMessageAuditViewRow[]> {
+    const rows = await this.db
+      .select({
+        audit: aiMessageAudit,
+        userName: users.name,
+        userEmail: users.email,
+      })
       .from(aiMessageAudit)
+      .leftJoin(users, eq(aiMessageAudit.userId, users.id))
       .where(
         and(
           eq(aiMessageAudit.tenantId, params.tenantId),
@@ -115,5 +136,19 @@ export class AiMessageAuditRepository {
         ),
       )
       .orderBy(desc(aiMessageAudit.createdAt));
+    return rows.map((row) => this.toViewRow(row));
+  }
+
+  private toViewRow(row: {
+    audit: AiMessageAuditRow;
+    userName: string | null;
+    userEmail: string | null;
+  }): AiMessageAuditViewRow {
+    const name = row.userName?.trim() || null;
+    const email = row.userEmail?.trim() || null;
+    return {
+      ...row.audit,
+      userName: name || email,
+    };
   }
 }

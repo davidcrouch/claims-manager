@@ -94,7 +94,7 @@ interface ColDef {
 
 const TABLE_COLUMNS: ColDef[] = [
   { key: 'quote_number', label: 'Estimate #', locked: true },
-  { key: 'insurer_ref', label: 'Insurer Ref' },
+  { key: 'insurer_ref', label: 'Insurer Ref', defaultHidden: true },
   { key: 'job', label: 'Job', filterable: true },
   { key: 'assignee', label: 'Assigned', filterable: true },
   { key: 'reference', label: 'Reference', defaultHidden: true },
@@ -153,7 +153,7 @@ export function QuotesTable({
     [showAssigneeColumn, showArchiveStateColumn],
   );
   const { isVisible, toggle, visibleCount } = useColumnVisibility(
-    'quotes-v3',
+    'quotes-v4',
     listColumns,
   );
   const visibleColumns = listColumns.filter((col) => isVisible(col.key));

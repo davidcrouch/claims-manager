@@ -6,6 +6,7 @@ import {
   RfqsRepository,
   LookupsRepository,
   ContactsRepository,
+  JobsRepository,
 } from '../../database/repositories';
 import {
   rfqGroups,
@@ -22,6 +23,7 @@ import {
 import { TenantContext } from '../../tenant/tenant-context';
 import { isScopeComboPayload } from '../catalog/catalog.utils';
 import { RecordNumberService } from '../../common/record-number/record-number.service';
+import { attachJobSummaries } from '../../common/attach-job-summaries';
 
 function parseDecimal(value: string | null | undefined): number | undefined {
   if (value == null) return undefined;
@@ -44,6 +46,7 @@ export class RfqsService {
     private readonly rfqsRepo: RfqsRepository,
     private readonly lookupsRepo: LookupsRepository,
     private readonly contactsRepo: ContactsRepository,
+    private readonly jobsRepo: JobsRepository,
     private readonly tenantContext: TenantContext,
     private readonly recordNumberService: RecordNumberService,
   ) {}
@@ -61,7 +64,7 @@ export class RfqsService {
   }) {
     const tenantId = this.tenantContext.getTenantId();
     this.logger.debug(`api:RfqsService.findAll tenantId=${tenantId}`);
-    return this.rfqsRepo.findAll({
+    const result = await this.rfqsRepo.findAll({
       tenantId,
       page: params.page,
       limit: params.limit,
@@ -73,6 +76,14 @@ export class RfqsService {
       search: params.search,
       sort: params.sort,
     });
+    return {
+      data: await attachJobSummaries({
+        tenantId,
+        rows: result.data,
+        jobsRepo: this.jobsRepo,
+      }),
+      total: result.total,
+    };
   }
 
   async findOne(params: { id: string }) {
@@ -84,13 +95,21 @@ export class RfqsService {
   async findByJob(params: { jobId: string }) {
     const tenantId = this.tenantContext.getTenantId();
     this.logger.debug(`api:RfqsService.findByJob jobId=${params.jobId} tenantId=${tenantId}`);
-    return this.rfqsRepo.findByJob({ jobId: params.jobId, tenantId });
+    return attachJobSummaries({
+      tenantId,
+      rows: await this.rfqsRepo.findByJob({ jobId: params.jobId, tenantId }),
+      jobsRepo: this.jobsRepo,
+    });
   }
 
   async findByQuote(params: { quoteId: string }) {
     const tenantId = this.tenantContext.getTenantId();
     this.logger.debug(`api:RfqsService.findByQuote quoteId=${params.quoteId} tenantId=${tenantId}`);
-    return this.rfqsRepo.findByQuote({ quoteId: params.quoteId, tenantId });
+    return attachJobSummaries({
+      tenantId,
+      rows: await this.rfqsRepo.findByQuote({ quoteId: params.quoteId, tenantId }),
+      jobsRepo: this.jobsRepo,
+    });
   }
 
   async findSentToContact(params: { contactId: string; jobId?: string }) {
@@ -115,10 +134,14 @@ export class RfqsService {
       );
       return [];
     }
-    return this.rfqsRepo.findSentToEmail({
+    return attachJobSummaries({
       tenantId,
-      email,
-      jobId: params.jobId,
+      rows: await this.rfqsRepo.findSentToEmail({
+        tenantId,
+        email,
+        jobId: params.jobId,
+      }),
+      jobsRepo: this.jobsRepo,
     });
   }
 

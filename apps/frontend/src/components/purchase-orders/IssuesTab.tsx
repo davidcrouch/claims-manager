@@ -141,7 +141,7 @@ export function IssuesTab({
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              Click &ldquo;Issue&rdquo; to issue this purchase order to vendors via email.
+              Click &ldquo;Send PO&rdquo; to issue this purchase order to vendors via email.
             </p>
           </CardContent>
         </Card>

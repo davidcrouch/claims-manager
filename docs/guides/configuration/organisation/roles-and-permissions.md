@@ -195,7 +195,6 @@ Core insurance claim and job management permissions.
 
 | Permission | Label | Description | UI Impact |
 |------------|-------|-------------|-----------|
-| `claims.create` | Create Claims | Create new insurance claims | **New Claim** button on the Claims list page |
 | `claims.read` | Read Claims | View claims | Claims list page; claim detail pages |
 | `claims.update` | Update Claims | Edit existing claims | Edit fields on claim detail pages |
 | `claims.delete` | Delete Claims | Delete claims | Delete action on claim records |
@@ -212,8 +211,9 @@ Permissions for invoices, finance ledgers, and reports.
 |------------|-------|-------------|-----------|
 | `invoices.create` | Create Invoices | Create invoices | **New Invoice** button on the Invoices list page |
 | `invoices.read` | Read Invoices | View invoices | Invoices list page; invoice detail pages |
-| `invoices.update` | Update Invoices | Edit existing invoices | Edit fields on invoice detail pages |
-| `invoices.approve` | Approve Invoices | Approve or reject invoices | Approve/reject actions on invoice records |
+| `invoices.update` | Update Invoices | Edit existing invoices | Edit fields on invoice detail pages; **Edit Invoice** and **Receive Payment** |
+| `invoices.approve` | Approve Invoices | Approve a draft invoice (sets Reviewed) | **Approve Invoice** on the invoice detail header |
+| `invoices.publish` | Publish Invoice | Publish a reviewed invoice (sets Invoiced) | **Publish** on the invoice detail header |
 | `finance.read` | Read Finance | View finance summaries and ledgers | **Accounts Receivable** and **Accounts Payable** pages |
 | `finance.manage` | Manage Finance | Update finance records | Edit controls on finance pages |
 | `reports.read` | Read Reports | View reports and dashboards | **Reports** page; report detail and generation |
@@ -262,7 +262,9 @@ Permissions for estimates, RFQs, proposals, work orders, purchase orders, and bi
 | Permission | Label | Description | UI Impact |
 |------------|-------|-------------|-----------|
 | `procurement.read` | Read Procurement | View quotes, RFQs, proposals, work orders, and bills | **Estimates**, **RFQs**, **Proposals**, **Work Orders**, **Purchase Orders**, and **Bills** list and detail pages |
-| `procurement.manage` | Manage Procurement | Create and update procurement records | Create and edit actions across all procurement entity pages |
+| `procurement.manage` | Manage Procurement | Create and update procurement records | Create and edit actions across all procurement entity pages; **Edit Bill** (returns a bill to Received) |
+| `bills.approve` | Approve Bills | Approve a received bill (sets Reviewed) | **Approve Bill** on the bill detail header |
+| `bills.reject` | Reject Bills | Reject a received bill | **Reject** on the bill detail header |
 
 ### Domain — Vendors
 
@@ -326,7 +328,6 @@ The table below shows which permissions are included in each pre-configured role
 | `features.read` | | Yes | | | | | |
 | `features.manage` | | Yes | | | | | |
 | `roles.grant.admin` | | Yes | | | | | |
-| `claims.create` | | Yes | Yes | | | Yes | |
 | `claims.read` | | Yes | Yes | Yes | Yes | Yes | Yes |
 | `claims.update` | | Yes | Yes | | | Yes | |
 | `claims.delete` | | Yes | | | | | |
@@ -338,6 +339,7 @@ The table below shows which permissions are included in each pre-configured role
 | `invoices.read` | | Yes | Yes | Yes | Yes | Yes | Yes |
 | `invoices.update` | | Yes | Yes | | | | |
 | `invoices.approve` | | Yes | Yes | | | | |
+| `invoices.publish` | | Yes | Yes | | | | |
 | `finance.read` | | Yes | Yes | Yes | Yes | Yes | Yes |
 | `finance.manage` | | Yes | Yes | | | | |
 | `reports.read` | | Yes | Yes | Yes | Yes | Yes | Yes |
@@ -356,6 +358,8 @@ The table below shows which permissions are included in each pre-configured role
 | `assessments.manage` | | Yes | Yes | Yes | Yes | Yes | |
 | `procurement.read` | | Yes | Yes | Yes | Yes | Yes | Yes |
 | `procurement.manage` | | Yes | Yes | Yes | Yes | Yes | |
+| `bills.approve` | | Yes | Yes | | | | |
+| `bills.reject` | | Yes | Yes | | | | |
 | `vendors.read` | | Yes | Yes | Yes | Yes | Yes | Yes |
 | `vendors.manage` | | Yes | Yes | | | | |
 | `messaging.read` | | Yes | Yes | Yes | Yes | Yes | Yes |

@@ -103,6 +103,7 @@ export function RfqPageHeader({ rfq, job }: { rfq: Rfq; job?: Job | null }) {
 
   return (
     <PageHeaderLayout
+      job={job}
       leading={<BackButton href={job ? `/rfqs?jobId=${job.id}` : '/rfqs'} label="Back to RFQs" />}
       icon={
         <PageHeaderIcon

@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { AgentsListPanel } from '@/components/agents/AgentsListPanel';
-import { Bot } from 'lucide-react';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { AdminPageHeader } from '@/components/layout/PageHeaderLayout';
 
@@ -15,7 +14,7 @@ export default async function AgentsPage() {
     <div className="flex flex-col px-6 pb-6">
       <SetPageHeader>
         <AdminPageHeader
-          icon={Bot}
+          icon="bot"
           title="AI Agents"
           description="Configure chat agents, models, and tool access."
         />

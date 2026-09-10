@@ -1,8 +1,10 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import {
   WorkOrdersRepository,
+  JobsRepository,
   type WorkOrderViewRow,
 } from '../../database/repositories';
+import { attachJobSummaries } from '../../common/attach-job-summaries';
 import { DRIZZLE, type DrizzleDB } from '../../database/drizzle.module';
 import { TenantContext } from '../../tenant/tenant-context';
 import { LookupResolutionService } from '../domain/services/lookup-resolution.service';
@@ -15,6 +17,7 @@ export class WorkOrdersService {
 
   constructor(
     private readonly workOrdersRepo: WorkOrdersRepository,
+    private readonly jobsRepo: JobsRepository,
     private readonly tenantContext: TenantContext,
     private readonly lookupResolution: LookupResolutionService,
     private readonly recordNumberService: RecordNumberService,
@@ -50,7 +53,11 @@ export class WorkOrdersService {
       sort: params.sort,
     });
     return {
-      data: result.data.map((row) => this.shapeWorkOrderListItem(row)),
+      data: await attachJobSummaries({
+        tenantId,
+        rows: result.data.map((row) => this.shapeWorkOrderListItem(row)),
+        jobsRepo: this.jobsRepo,
+      }),
       total: result.total,
     };
   }

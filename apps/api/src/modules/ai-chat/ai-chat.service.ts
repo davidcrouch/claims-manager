@@ -4,7 +4,7 @@ import { and, eq, inArray, isNull, or } from 'drizzle-orm';
 import type { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface';
 import {
   AiMessageAuditRepository,
-  type AiMessageAuditRow,
+  type AiMessageAuditViewRow,
 } from '../../database/repositories/ai-message-audit.repository';
 import { AiUserMemoryRepository } from '../../database/repositories/ai-user-memory.repository';
 import type {
@@ -157,11 +157,13 @@ export class AiChatService {
     return rows.map((row) => this.toAuditRecord(row));
   }
 
-  private toAuditRecord(row: AiMessageAuditRow) {
+  private toAuditRecord(row: AiMessageAuditViewRow) {
     return {
       id: row.id,
       conversationId: row.conversationId,
       messageId: null,
+      userId: row.userId,
+      userName: row.userName,
       agentId: row.agentId,
       agentName: row.agentName,
       agentAvatarColor: null,

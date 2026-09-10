@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { SkillsListPanel } from '@/components/skills/SkillsListPanel';
-import { Sparkles } from 'lucide-react';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { AdminPageHeader } from '@/components/layout/PageHeaderLayout';
 
@@ -15,7 +14,7 @@ export default async function SkillsPage() {
     <div className="flex flex-col px-6 pb-6">
       <SetPageHeader>
         <AdminPageHeader
-          icon={Sparkles}
+          icon="sparkles"
           title="AI Skills"
           description="Define reusable instruction prompts triggered by keywords or agent pins."
         />

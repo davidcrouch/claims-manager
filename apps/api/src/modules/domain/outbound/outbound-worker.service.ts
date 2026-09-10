@@ -3,6 +3,7 @@ import { eq, and, lte, sql, inArray } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../../database/drizzle.module';
 import { outboundSyncQueue, integrationConnections, jobs, tasks, appointments, quotes, invoices } from '../../../database/schema';
 import type { OutboundAdapter, OutboundPushResult } from './outbound-adapter.interface';
+import { runWithRequestActor } from '../../../common/request-actor.store';
 import {
   hasAnyPartyData,
   partyBucketsFromCwPayload,
@@ -19,6 +20,8 @@ interface OutboundQueueRow {
   status: string;
   attempts: number;
   maxAttempts: number;
+  initiatedByUserId: string | null;
+  initiatedByName: string | null;
 }
 
 @Injectable()
@@ -92,6 +95,8 @@ export class OutboundWorkerService implements OnModuleInit, OnModuleDestroy {
           status: outboundSyncQueue.status,
           attempts: outboundSyncQueue.attempts,
           maxAttempts: outboundSyncQueue.maxAttempts,
+          initiatedByUserId: outboundSyncQueue.initiatedByUserId,
+          initiatedByName: outboundSyncQueue.initiatedByName,
         })
         .from(outboundSyncQueue)
         .where(
@@ -150,13 +155,22 @@ export class OutboundWorkerService implements OnModuleInit, OnModuleDestroy {
     }
 
     try {
-      const result = await adapter.push({
-        connectionId: record.connectionId,
-        entityType: record.entityType,
-        entityId: record.entityId,
-        action: record.action,
-        payload: record.payload,
-      });
+      const actor =
+        record.initiatedByUserId || record.initiatedByName
+          ? {
+              userId: record.initiatedByUserId ?? '',
+              userName: record.initiatedByName || record.initiatedByUserId || '',
+            }
+          : undefined;
+      const result = await runWithRequestActor(actor, () =>
+        adapter.push({
+          connectionId: record.connectionId,
+          entityType: record.entityType,
+          entityId: record.entityId,
+          action: record.action,
+          payload: record.payload,
+        }),
+      );
 
       await this.markSent(record.id);
       await this.patchEntity(record, result);

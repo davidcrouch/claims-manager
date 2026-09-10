@@ -43,10 +43,10 @@ describe('pack-tool-matcher', () => {
   it('matches glob patterns', () => {
     expect(
       matchToolNames({
-        toolNames: ['search_claims', 'get_claim', 'create_claim', 'list_quotes'],
+        toolNames: ['search_claims', 'get_claim', 'update_claim', 'list_quotes'],
         patterns: ['*_claim', 'search_*'],
       }).sort(),
-    ).toEqual(['create_claim', 'get_claim', 'search_claims']);
+    ).toEqual(['get_claim', 'search_claims', 'update_claim']);
   });
 
   it('returns empty when no patterns', () => {

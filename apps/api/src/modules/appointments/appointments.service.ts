@@ -5,6 +5,7 @@ import { CrunchworkService } from '../../crunchwork/crunchwork.service';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
 import { OutboundEventsService } from '../outbound-events/outbound-events.service';
 import { OutboundSyncService } from '../domain/outbound/outbound-sync.service';
+import { attachJobSummaries } from '../../common/attach-job-summaries';
 
 @Injectable()
 export class AppointmentsService {
@@ -55,7 +56,15 @@ export class AppointmentsService {
     jobIds?: string[];
   }) {
     const tenantId = this.tenantContext.getTenantId();
-    return this.appointmentsRepo.findAll({ tenantId, ...params });
+    const result = await this.appointmentsRepo.findAll({ tenantId, ...params });
+    return {
+      data: await attachJobSummaries({
+        tenantId,
+        rows: result.data,
+        jobsRepo: this.jobsRepo,
+      }),
+      total: result.total,
+    };
   }
 
   async findFilterLocations() {

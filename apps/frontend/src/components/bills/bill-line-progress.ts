@@ -1,7 +1,7 @@
 import type { ApiGroup, ApiItem } from '@/components/line-items/lib/types';
 import { computeItemMoney } from '@/components/line-items/lib/money';
 import { groupsFromDocumentPayload } from '@/components/line-items/lib/parse';
-import type { Bill } from '@/types/api';
+import type { Bill, PurchaseOrder } from '@/types/api';
 
 const PREFIX = 'frontend:bill-line-progress';
 
@@ -83,10 +83,39 @@ function billTimestamp(bill: Bill): number {
   return Number.isNaN(t) ? 0 : t;
 }
 
-function isRejectedBill(bill: Bill): boolean {
+export function isRejectedBill(bill: Bill): boolean {
   const name = (bill.status?.name ?? '').trim().toLowerCase();
   const ext = (bill.status?.externalReference ?? '').trim().toLowerCase();
   return REJECTED_STATUSES.has(name) || REJECTED_STATUSES.has(ext);
+}
+
+/** Header sum of prior bills on the same purchase order (excludes rejected). */
+export function sumPriorBillTotals(bills: Bill[]): number {
+  let sum = 0;
+  for (const bill of bills) {
+    if (isRejectedBill(bill)) continue;
+    const n = asNumber(bill.totalAmount);
+    if (n != null) sum += n;
+  }
+  return sum;
+}
+
+/**
+ * Billable PO total for billing — prefer line-item sum when loaded, else header columns.
+ */
+export function purchaseOrderHeaderTotal(
+  po: Pick<PurchaseOrder, 'totalAmount' | 'adjustedTotal'> | null | undefined,
+  lineSum?: number,
+): number {
+  if (lineSum != null && lineSum > 0) return Math.round(lineSum * 100) / 100;
+
+  const total = asNumber(po?.totalAmount);
+  if (total != null && total > 0) return Math.round(total * 100) / 100;
+
+  const adjusted = asNumber(po?.adjustedTotal);
+  if (adjusted != null && adjusted > 0) return Math.round(adjusted * 100) / 100;
+
+  return total ?? adjusted ?? 0;
 }
 
 function lookupAmount(map: Map<string, number>, item: ApiItem): number {
@@ -121,6 +150,19 @@ function collectBillInvoicedAmounts(bill: Bill): Map<string, number> {
   const payload = (bill.billPayload ?? {}) as Record<string, unknown>;
   const fromGroups = collectItemAmounts(groupsFromDocumentPayload(payload));
   return mergeAmountMaps(fromGroups, readInvoicedAmountOverrides(payload));
+}
+
+/** Aggregate previously-billed amounts from sibling bills' payload maps. */
+export function buildPreviouslyBilledMap(siblingBills: Bill[]): Map<string, number> {
+  const previouslyByKey = new Map<string, number>();
+  for (const bill of siblingBills) {
+    if (isRejectedBill(bill)) continue;
+    const amounts = collectBillInvoicedAmounts(bill);
+    for (const [key, amount] of amounts) {
+      previouslyByKey.set(key, (previouslyByKey.get(key) ?? 0) + amount);
+    }
+  }
+  return previouslyByKey;
 }
 
 /**

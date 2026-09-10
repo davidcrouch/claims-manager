@@ -20,6 +20,7 @@ import {
 import { statusIdsForArchiveListTab, mergeStatusParamWithTab } from '@/components/shared/archive-list';
 import { TablePagination } from '@/components/shared/table-pagination';
 import { JobCellLink } from '@/components/shared/JobCellLink';
+import { useResolvedJobLabels } from '@/components/shared/use-resolved-job-labels';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import {
   ListPageHeader,
@@ -100,6 +101,11 @@ export function ReportsListClient({
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data, setData, beginFetch, abortFetch } = useListPageData(initialData);
+  const { resolvedJobNameById, resolvedJobTypeById } = useResolvedJobLabels(
+    jobNameById,
+    jobTypeById,
+    data.data,
+  );
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [tab, setTab] = usePersistedListTab<ListTab>({
@@ -421,8 +427,8 @@ export function ReportsListClient({
                         <td className="px-4 py-3 text-slate-600">
                           <JobCellLink
                             jobId={report.jobId}
-                            jobNameById={jobNameById}
-                            jobTypeById={jobTypeById}
+                            jobNameById={resolvedJobNameById}
+                            jobTypeById={resolvedJobTypeById}
                           />
                         </td>
                       )}

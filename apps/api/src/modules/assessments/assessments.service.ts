@@ -24,6 +24,7 @@ import {
   validateAgainstSchema,
   type ReportSchemaField,
 } from './assessment-report.mapper';
+import { attachJobSummaries } from '../../common/attach-job-summaries';
 
 @Injectable()
 export class AssessmentsService {
@@ -53,7 +54,15 @@ export class AssessmentsService {
     this.logger.debug(
       `[AssessmentsService.findAll] tenantId=${tenantId} jobId=${params.jobId ?? 'none'} jobIds=${params.jobIds?.length ?? 0}`,
     );
-    return this.assessmentsRepo.findAll({ tenantId, ...params });
+    const result = await this.assessmentsRepo.findAll({ tenantId, ...params });
+    return {
+      data: await attachJobSummaries({
+        tenantId,
+        rows: result.data,
+        jobsRepo: this.jobsRepo,
+      }),
+      total: result.total,
+    };
   }
 
   async findOne(params: { id: string }) {

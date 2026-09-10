@@ -45,6 +45,17 @@ export async function fetchFeedbackStatsAction(): Promise<FeedbackStats> {
   }
 }
 
+export async function fetchFeedbackByIdAction(id: string): Promise<FeedbackItem | null> {
+  const api = await getApi();
+  if (!api) return null;
+  try {
+    return await api.getFeedbackById(id);
+  } catch (err) {
+    console.error('[admin/feedback/actions.fetchFeedbackByIdAction]', err);
+    return null;
+  }
+}
+
 export async function updateFeedbackAction(
   id: string,
   body: Partial<
@@ -54,4 +65,32 @@ export async function updateFeedbackAction(
   const api = await getApi();
   if (!api) throw new Error('Not authenticated');
   return api.updateFeedback(id, body);
+}
+
+export async function addFeedbackNoteAction(
+  id: string,
+  body: string,
+): Promise<FeedbackItem> {
+  const api = await getApi();
+  if (!api) throw new Error('Not authenticated');
+  return api.addFeedbackNote(id, body);
+}
+
+export async function updateFeedbackNoteAction(params: {
+  id: string;
+  noteId: string;
+  body: string;
+}): Promise<FeedbackItem> {
+  const api = await getApi();
+  if (!api) throw new Error('Not authenticated');
+  return api.updateFeedbackNote(params);
+}
+
+export async function deleteFeedbackNoteAction(params: {
+  id: string;
+  noteId: string;
+}): Promise<FeedbackItem> {
+  const api = await getApi();
+  if (!api) throw new Error('Not authenticated');
+  return api.deleteFeedbackNote(params);
 }

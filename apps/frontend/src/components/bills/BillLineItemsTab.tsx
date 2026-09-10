@@ -35,6 +35,7 @@ import {
   lineAmountFromItem,
   mergeInvoicedAmountsIntoPayload,
 } from '@/components/bills/bill-line-progress';
+import { sumUniqueInvoicedAmounts } from '@/components/invoices/invoice-line-progress';
 import type { Bill } from '@/types/api';
 
 const PREFIX = 'frontend:BillLineItemsTab';
@@ -188,7 +189,21 @@ function BillLineItemsTabInner(
           amountsByItem,
         });
 
-        const result = await updateBillAction(localBill.id, { billPayload: nextPayload });
+        const amountsMap = new Map<string, number>();
+        for (const [key, value] of Object.entries(
+          (nextPayload.invoicedAmounts ?? {}) as Record<string, number>,
+        )) {
+          amountsMap.set(key, value);
+        }
+        const headerTotal = sumUniqueInvoicedAmounts(
+          amountsMap,
+          groupsRef.current,
+        );
+
+        const result = await updateBillAction(localBill.id, {
+          billPayload: nextPayload,
+          totalAmount: headerTotal,
+        });
         if (!result.success) {
           console.error(`${PREFIX}.handleSave`, result.error);
           onSaveStateChangeRef.current?.(
@@ -205,7 +220,11 @@ function BillLineItemsTabInner(
         if (result.bill) {
           setLocalBill(result.bill);
         } else {
-          setLocalBill((prev) => ({ ...prev, billPayload: nextPayload }));
+          setLocalBill((prev) => ({
+            ...prev,
+            billPayload: nextPayload,
+            totalAmount: String(headerTotal),
+          }));
         }
         setResetEditsKey((k) => k + 1);
         onSaveStateChangeRef.current?.('saved');

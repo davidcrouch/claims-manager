@@ -2,7 +2,9 @@ import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { loadClaim, loadJob } from '@/lib/cached-entity-loaders';
 import { InvoicesPageClient } from '@/components/invoices/InvoicesPageClient';
-import {buildJobNameById, buildJobTypeById, jobDisplayName, jobTypeDisplayName } from '@/components/shared/job-label';
+import {buildJobNameById, buildJobTypeById, jobDisplayName, jobTypeDisplayName,
+  mergeJobLabelsFromRows,
+  mergeJobTypesFromRows } from '@/components/shared/job-label';
 import type { Claim, Invoice, Job, PaginatedResponse, WorkOrder } from '@/types/api';
 
 export default async function InvoicesPage({
@@ -62,13 +64,19 @@ export default async function InvoicesPage({
 
   const workOrders = workOrdersRes?.data ?? [];
   const jobsList = jobsRes?.data ?? [];
-  const jobNameById = job
-    ? { [job.id]: jobDisplayName(job) }
-    : buildJobNameById(jobsList);
+  const jobNameById = mergeJobLabelsFromRows(
+    job
+      ? { [job.id]: jobDisplayName(job) }
+      : buildJobNameById(jobsList),
+    initialInvoices.data,
+  );
   const scopedType = job ? jobTypeDisplayName(job) : undefined;
-  const jobTypeById = job
-    ? (scopedType ? { [job.id]: scopedType } : {})
-    : buildJobTypeById(jobsList);
+  const jobTypeById = mergeJobTypesFromRows(
+    job
+      ? (scopedType ? { [job.id]: scopedType } : {})
+      : buildJobTypeById(jobsList),
+    initialInvoices.data,
+  );
   const jobById: Record<string, Job> = job
     ? { [job.id]: job }
     : Object.fromEntries(jobsList.map((j) => [j.id, j]));

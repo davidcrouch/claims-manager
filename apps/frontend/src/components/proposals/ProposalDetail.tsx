@@ -131,6 +131,7 @@ export function ProposalPageHeader({ proposal, job }: { proposal: Proposal; job?
         </HeaderActionToolbar>
       </SetHeaderActions>
       <PageHeaderLayout
+        job={job}
         leading={<BackButton href={job ? `/proposals?jobId=${job.id}` : '/proposals'} label="Back to proposals" />}
         icon={
           <PageHeaderIcon

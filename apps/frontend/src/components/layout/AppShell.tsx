@@ -1,12 +1,13 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useState, Suspense } from 'react';
 import { usePathname } from 'next/navigation';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { ChatDrawer } from '@/components/chat/ChatDrawer';
 import { EntityDrawerProvider } from '@/components/layout/EntityDrawerHost';
 import { hasFeature } from '@/lib/features';
 import { AppHeader } from './AppHeader';
+import { CurrentJobUrlBridge } from './CurrentJobProvider';
 import {
   AppSidebar,
   hasAdminNavAccess,
@@ -75,6 +76,9 @@ export function AppShell({
           onMenuOverrideChange={handleMenuOverrideChange}
         />
         <SidebarInset>
+          <Suspense fallback={null}>
+            <CurrentJobUrlBridge />
+          </Suspense>
           <AppHeader
             user={user}
             showAdminSettings={showAdminSettings}

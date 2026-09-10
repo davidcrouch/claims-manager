@@ -11,6 +11,8 @@ audience: member
 permissions_discussed:
   - procurement.read
   - procurement.manage
+  - bills.approve
+  - bills.reject
   - finance.read
   - vendors.read
 tags:
@@ -26,12 +28,12 @@ related_guides:
   - vendors-overview
   - dashboard
 version: 1
-last_updated: 2026-08-31
+last_updated: 2026-09-09
 ---
 
 # Bills
 
-A bill is a **vendor invoice payable by you**. The vendor has charged your organisation for work or materials on a job. You receive the bill, approve or reject it, then mark it paid.
+A bill is a **vendor invoice payable by you**. The vendor has charged your organisation for work or materials on a job. You receive the bill, **Approve Bill** when the amount is correct, then mark it paid.
 
 This is the opposite of an **Invoice** under **Customers**, which is what **you** bill the insurer or customer (accounts receivable).
 
@@ -40,14 +42,16 @@ This is the opposite of an **Invoice** under **Customers**, which is what **you*
 - **Bill** — payable vendor invoice (bill number, amount, received date, due date).
 - **Invoice** — receivable document you issue. Different sidebar group (`/invoices`).
 - **Accounts Payable (AP)** — finance view of money you owe, including overdue bills. Dashboard **AP overdue** opens AP, not this list.
-- **Payment status** — separate from workflow status (for example Received vs Paid).
+- **Payment status** — separate from workflow status (for example Received vs Reviewed vs Paid).
 - **Linked PO** — optional purchase order this bill is charging against.
+- **Received** — status of a newly entered bill (same role as **Draft** on an invoice). It is not yet approved.
+- **Reviewed** — status after **Approve Bill**. You can **Edit Bill** to move it back to Received if corrections are needed.
 
 ## Bills vs Invoices vs Accounts Payable
 
 | Record | Who is owed | Sidebar | Typical action |
 |--------|-------------|---------|----------------|
-| **Bill** | The vendor | **Vendors** → Bills | Approve, then **Mark Paid** |
+| **Bill** | The vendor | **Vendors** → Bills | **Approve Bill**, then **Mark Paid** |
 | **Invoice** | Your organisation | **Customers** → Invoices | Submit / collect |
 | **Accounts Payable** | Summary of payables | **Finance** → Accounts Payable | Ageing and overdue totals |
 
@@ -59,7 +63,7 @@ This is the opposite of an **Invoice** under **Customers**, which is what **you*
 2. Click a row to open `/bills/[id]`.
 3. Use **Back to bills** to return to the list.
 
-> **Required permission:** You need `procurement.read` to view bills. **Create Bill**, **Approve**, **Reject**, and **Mark Paid** require `procurement.manage`. Dashboard **AP overdue** also needs `finance.read`.
+> **Required permission:** You need `procurement.read` to view bills. **Create Bill**, **Edit Bill**, and **Mark Paid** require `procurement.manage`. **Approve Bill** requires `bills.approve` and **Reject** requires `bills.reject`; each is only shown to users who hold it. Dashboard **AP overdue** also needs `finance.read`.
 
 ## Job Filter
 
@@ -98,6 +102,8 @@ Empty state: **No bills found.** (If you expected rows, clear the job filter or 
 4. Optionally enter **Bill #**, **Total Amount**, **Issue Date**, **Received Date**, and comments.
 5. Click **Create Bill**.
 
+EnsureOS opens the new bill in **Received** status.
+
 > **Note:** The create drawer is titled **Create Bill** and describes recording a vendor bill against an invoice. You can still open an existing bill that was linked from a purchase order via **View PO** on detail.
 
 ## Bill Detail
@@ -108,14 +114,19 @@ Workflow buttons depend on status:
 
 | Current status | Header actions |
 |----------------|----------------|
-| **Received** | **Approve** or **Reject** |
-| **Approved** | **Mark Paid** |
+| **Received** | **Approve Bill** (when amount is greater than 0 and you have `bills.approve`) and **Reject** (confirm first; requires `bills.reject`) |
+| **Reviewed** | **Edit Bill** and **Mark Paid** |
+| **Rejected** | **Edit Bill** (returns status to Received) |
+| **Approved** | **Mark Paid** (legacy status still used on older bills) |
 | Other | Print and archive only |
+
+**Approve Bill** is disabled until the bill total is greater than 0. Hover the button for the reason.
 
 1. Open a bill in **Received**.
 2. Review Overview amounts and the **Line Items** tab.
-3. Click **Approve** if the charge matches the PO and the work, or **Reject** if it does not.
-4. After approval, click **Mark Paid** when payment has been made.
+3. Click **Approve Bill** if the charge matches the PO and the work, or **Reject** if it does not. Reject asks for confirmation first.
+4. Status becomes **Reviewed**. Click **Mark Paid** when payment has been made.
+5. If you need to correct a reviewed or rejected bill, click **Edit Bill**. Confirm the dialog — status returns to **Received** and you must approve it again.
 
 | Tab | What you do here |
 |-----|------------------|
@@ -130,6 +141,17 @@ Print and archive are in the header toolbar. The vendor chip opens `/vendors/[id
 
 > **Warning:** **Mark Paid** records that your organisation has paid the vendor. Do not use it as a substitute for approving. Approve first so rejected bills never show as paid.
 
+## Permissions Recap
+
+| Permission | What it unlocks |
+|------------|-----------------|
+| `procurement.read` | List and detail |
+| `procurement.manage` | **Create Bill**, **Edit Bill**, **Mark Paid** |
+| `bills.approve` | **Approve Bill** on the bill header (Received → Reviewed) |
+| `bills.reject` | **Reject** on the bill header (Received → Rejected) |
+
+Members can typically view bills. Estimators can create and edit bills but do not receive `bills.approve` or `bills.reject` by default. Manager and Organisation Admin can approve and reject.
+
 ## How Bills Connect to Accounts Payable
 
 Overdue approved (or received) bills roll into **Finance** → **Accounts Payable** and the Dashboard **AP overdue** tile. Processing on this page is what keeps AP accurate. If AP looks wrong, start with the bill’s due date and **Mark Paid** state.
@@ -140,7 +162,7 @@ Overdue approved (or received) bills roll into **Finance** → **Accounts Payabl
 
 2. **Do not confuse bills with invoices.** Invoices are money owed *to* you; bills are money you owe.
 
-3. **Approve against scope**, not just the total. Check **Line Items** before **Approve**.
+3. **Approve against scope**, not just the total. Check **Line Items** before **Approve Bill**.
 
 4. **Set a due date** so AP ageing and the Dashboard tile are meaningful.
 

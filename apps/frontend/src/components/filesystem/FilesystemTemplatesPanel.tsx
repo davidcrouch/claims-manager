@@ -176,7 +176,7 @@ export function FilesystemTemplatesPanel({
     <>
       <SetPageHeader>
         <AdminPageHeader
-          icon={ListTree}
+          icon="list-tree"
           title="Filesystem Templates"
           description="Company templates set up the organisation document library. Project templates define the folder structure for each job."
         />

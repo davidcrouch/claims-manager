@@ -35,6 +35,9 @@ const CATEGORY_LABELS: Record<string, string> = {
   integrations: 'Integrations',
 };
 
+/** Not assignable in-app: claims are ingested via Crunchwork webhook. */
+const HIDDEN_PERMISSION_NAMES = new Set(['claims.create']);
+
 function permissionGroup(perm: PermissionDef): string {
   if (perm.resourceGroup) return perm.resourceGroup;
   const name = perm.permissionName;
@@ -72,7 +75,9 @@ export function RolesManagementPage() {
         listPermissionsAction(),
       ]);
       setRoles(roleRows);
-      setPermissions(permRows);
+      setPermissions(
+        permRows.filter((p) => !HIDDEN_PERMISSION_NAMES.has(p.permissionName)),
+      );
       setError(null);
     } catch (err) {
       setRoles([]);
@@ -92,7 +97,13 @@ export function RolesManagementPage() {
   const loadRolePermissions = useCallback((roleId: string) => {
     startTransition(async () => {
       const perms = await getRolePermissionsAction(roleId);
-      setRolePermissionIds(new Set(perms.map((p) => p.id)));
+      setRolePermissionIds(
+        new Set(
+          perms
+            .filter((p) => !HIDDEN_PERMISSION_NAMES.has(p.permissionName))
+            .map((p) => p.id),
+        ),
+      );
       setError(null);
     });
   }, []);

@@ -29,6 +29,7 @@ import {
   formatDateTime,
 } from '@/components/shared/detail';
 import { ConnectionWebhookEventsTable } from './ConnectionWebhookEventsTable';
+import { ConnectionWebRequestsTable } from './ConnectionWebRequestsTable';
 import { ConnectionEditDrawer } from './ConnectionEditDrawer';
 import {
   fetchConnectionAction,
@@ -66,7 +67,7 @@ function ConnectionPageHeader({
   );
 }
 
-type Tab = 'events' | 'details';
+type Tab = 'events' | 'requests' | 'details';
 
 export interface ConnectionDetailContentProps {
   connectionId: string;
@@ -118,7 +119,7 @@ export function ConnectionDetailContent({
       </SetHeaderActions>
 
       <div className="flex gap-0 border-b border-slate-200 bg-white px-8">
-        {(['events', 'details'] as const).map((t) => (
+        {(['events', 'requests', 'details'] as const).map((t) => (
           <button
             key={t}
             type="button"
@@ -131,7 +132,9 @@ export function ConnectionDetailContent({
           >
             {t === 'events'
               ? `Webhook Events (${connection.totalWebhookEvents})`
-              : 'Details'}
+              : t === 'requests'
+                ? `Web Requests (${connection.totalWebRequests ?? 0})`
+                : 'Details'}
           </button>
         ))}
       </div>
@@ -140,6 +143,18 @@ export function ConnectionDetailContent({
         {tab === 'events' && (
           <div className="px-6 pb-6 pt-4">
             <ConnectionWebhookEventsTable connectionId={connection.id} />
+          </div>
+        )}
+        {tab === 'requests' && (
+          <div className="px-6 pb-6 pt-4">
+            <ConnectionWebRequestsTable
+              connectionId={connection.id}
+              onTotalChange={(total) =>
+                setConnection((current) =>
+                  current ? { ...current, totalWebRequests: total } : current,
+                )
+              }
+            />
           </div>
         )}
         {tab === 'details' && (

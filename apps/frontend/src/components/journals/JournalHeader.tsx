@@ -44,6 +44,7 @@ export function JournalPageHeader({
 
   return (
     <PageHeaderLayout
+      job={job}
       leading={<BackButton href={backHref} label="Back to journals" />}
       icon={
         <PageHeaderIcon

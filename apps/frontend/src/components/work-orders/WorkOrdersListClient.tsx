@@ -2,8 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ClipboardCheck, PackagePlus, Search, X } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { ClipboardCheck, Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { TypeBadge } from '@/components/ui/type-badge';
@@ -34,6 +33,7 @@ import {
 } from '@/components/work-orders/work-orders-list-helpers';
 import { jobDisplayName } from '@/components/shared/job-label';
 import { JobCellLink } from '@/components/shared/JobCellLink';
+import { useResolvedJobLabels } from '@/components/shared/use-resolved-job-labels';
 import { buildServerJobFilterOptions,
   resolveServerJobFilterSelection,
   selectedJobFilterLabels,
@@ -55,7 +55,6 @@ import {
   EntityPageHeader,
 } from '@/components/shared/EntityPageHeader';
 import { computeStatusBreakdown } from '@/components/layout/ListPageHeader';
-import { CapturePoDrawer } from '@/components/forms/CapturePoDrawer';
 import {
   fetchWorkOrdersAction,
   fetchWorkOrderFilterAssigneesAction,
@@ -182,7 +181,6 @@ export function WorkOrdersListClient({
   const [assigneeOptions, setAssigneeOptions] = useState<
     { id: string; name: string }[]
   >([]);
-  const [captureDrawerOpen, setCaptureDrawerOpen] = useState(false);
 
   const isMineTab = isWorkOrdersMineTab(tab);
   const showAssigneeColumn = !isMineTab;
@@ -206,15 +204,20 @@ export function WorkOrdersListClient({
     () => parseSelectedJobIds(jobId, jobIdsParam),
     [jobId, jobIdsParam],
   );
+  const { resolvedJobNameById, resolvedJobTypeById } = useResolvedJobLabels(
+    jobNameById,
+    jobTypeById,
+    data.data,
+  );
   const filterJobs = useMemo(
     () =>
       buildListJobFilterOptions({
-        jobNameById,
+        jobNameById: resolvedJobNameById,
         currentJob: job
           ? { id: job.id, label: jobDisplayName(job) }
           : null,
         jobId }),
-    [jobNameById, job, jobId],
+    [resolvedJobNameById, job, jobId],
   );
   const uniqueJobs = useMemo(
     () => buildServerJobFilterOptions(filterJobs),
@@ -656,16 +659,6 @@ export function WorkOrdersListClient({
             menuTitle="Filter by type"
             itemNoun={{ singular: 'type', plural: 'types' }}
           />
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCaptureDrawerOpen(true)}
-            className="ml-auto shrink-0"
-          >
-            <PackagePlus className="mr-2 h-4 w-4" />
-            Capture External PO
-          </Button>
         </div>
       </div>
 
@@ -764,7 +757,7 @@ export function WorkOrdersListClient({
                       )}
                       {isVisible('job') && (
                         <td className="px-4 py-3 text-slate-600">
-                          <JobCellLink jobId={wo.jobId} jobNameById={jobNameById} jobTypeById={jobTypeById} />
+                          <JobCellLink jobId={wo.jobId} jobNameById={resolvedJobNameById} jobTypeById={resolvedJobTypeById} />
                         </td>
                       )}
                       {showAssigneeColumn && isVisible('assignee') && (
@@ -849,11 +842,6 @@ export function WorkOrdersListClient({
             />
           </div>
       </div>
-
-      <CapturePoDrawer
-        open={captureDrawerOpen}
-        onOpenChange={setCaptureDrawerOpen}
-      />
     </div>
   );
 }

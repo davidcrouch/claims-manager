@@ -10,7 +10,6 @@ routes:
 audience: member
 permissions_discussed:
   - claims.read
-  - claims.create
   - claims.update
   - claims.delete
   - jobs.create

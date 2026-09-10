@@ -173,8 +173,15 @@ export function getEditableFields(
   invoiceProgressEditable = false,
   showBuyCost = false,
   showUnitCost = true,
+  buyCostEditable = false,
 ): EditableFieldKey[] {
   if (invoiceProgressEditable) return ['invoiced'];
+  if (buyCostEditable) {
+    const fields: EditableFieldKey[] = [];
+    if (showQuantities) fields.push('quantity');
+    if (showPricing && showBuyCost) fields.push('buyCost');
+    return fields.length > 0 ? fields : ['buyCost'];
+  }
   const fields: EditableFieldKey[] = hideComponent ? ['name', 'description'] : ['name', 'component', 'description'];
   if (showQuantities) fields.push('quantity', 'unitType');
   if (showPricing) {
@@ -217,6 +224,7 @@ export function nearestEditableField(
   invoiceProgressEditable = false,
   showBuyCost = false,
   showUnitCost = true,
+  buyCostEditable = false,
 ): EditableFieldKey {
   const editableFields = getEditableFields(
     showMarkup,
@@ -227,6 +235,7 @@ export function nearestEditableField(
     invoiceProgressEditable,
     showBuyCost,
     showUnitCost,
+    buyCostEditable,
   );
   if ((editableFields as string[]).includes(clicked)) return clicked as EditableFieldKey;
   if (invoiceProgressEditable) return 'invoiced';

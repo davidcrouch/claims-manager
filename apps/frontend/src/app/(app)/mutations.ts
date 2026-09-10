@@ -100,6 +100,135 @@ export async function updateInvoiceAction(
   }
 }
 
+export async function approveInvoiceAction(id: string): Promise<{
+  success: boolean;
+  invoice?: Invoice;
+  error?: string;
+}> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const invoice = await api.approveInvoice(id);
+    revalidatePath('/invoices');
+    revalidatePath(`/invoices/${id}`);
+    return { success: true, invoice };
+  } catch (err) {
+    console.error('[approveInvoiceAction]', err);
+    if (err instanceof ApiError) {
+      const body = err.body as { message?: string; details?: string } | undefined;
+      const detail = body?.details ?? body?.message ?? err.message;
+      return { success: false, error: detail };
+    }
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to approve invoice' };
+  }
+}
+
+export async function returnInvoiceToDraftAction(id: string): Promise<{
+  success: boolean;
+  invoice?: Invoice;
+  error?: string;
+}> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const invoice = await api.returnInvoiceToDraft(id);
+    revalidatePath('/invoices');
+    revalidatePath(`/invoices/${id}`);
+    return { success: true, invoice };
+  } catch (err) {
+    console.error('[returnInvoiceToDraftAction]', err);
+    if (err instanceof ApiError) {
+      const body = err.body as { message?: string; details?: string } | undefined;
+      const detail = body?.details ?? body?.message ?? err.message;
+      return { success: false, error: detail };
+    }
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to return invoice to draft' };
+  }
+}
+
+export async function receiveInvoicePaymentAction(
+  id: string,
+  amount: number,
+): Promise<{
+  success: boolean;
+  invoice?: Invoice;
+  error?: string;
+}> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const invoice = await api.receiveInvoicePayment(id, amount);
+    revalidatePath('/invoices');
+    revalidatePath(`/invoices/${id}`);
+    return { success: true, invoice };
+  } catch (err) {
+    console.error('[receiveInvoicePaymentAction]', err);
+    if (err instanceof ApiError) {
+      const body = err.body as { message?: string; details?: string } | undefined;
+      const detail = body?.details ?? body?.message ?? err.message;
+      return { success: false, error: detail };
+    }
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to record payment' };
+  }
+}
+
+export async function updateInvoicePaymentAction(params: {
+  invoiceId: string;
+  paymentId: string;
+  amount: number;
+}): Promise<{
+  success: boolean;
+  invoice?: Invoice;
+  error?: string;
+}> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const invoice = await api.updateInvoicePayment(
+      params.invoiceId,
+      params.paymentId,
+      params.amount,
+    );
+    revalidatePath('/invoices');
+    revalidatePath(`/invoices/${params.invoiceId}`);
+    return { success: true, invoice };
+  } catch (err) {
+    console.error('[updateInvoicePaymentAction]', err);
+    if (err instanceof ApiError) {
+      const body = err.body as { message?: string; details?: string } | undefined;
+      const detail = body?.details ?? body?.message ?? err.message;
+      return { success: false, error: detail };
+    }
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to update payment' };
+  }
+}
+
+export async function deleteInvoicePaymentAction(params: {
+  invoiceId: string;
+  paymentId: string;
+}): Promise<{
+  success: boolean;
+  invoice?: Invoice;
+  error?: string;
+}> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const invoice = await api.deleteInvoicePayment(params.invoiceId, params.paymentId);
+    revalidatePath('/invoices');
+    revalidatePath(`/invoices/${params.invoiceId}`);
+    return { success: true, invoice };
+  } catch (err) {
+    console.error('[deleteInvoicePaymentAction]', err);
+    if (err instanceof ApiError) {
+      const body = err.body as { message?: string; details?: string } | undefined;
+      const detail = body?.details ?? body?.message ?? err.message;
+      return { success: false, error: detail };
+    }
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to delete payment' };
+  }
+}
+
 export async function publishInvoiceAction(id: string): Promise<{ success: boolean; invoice?: Invoice; error?: string }> {
   const api = await getApi();
   if (!api) return { success: false, error: 'Not authenticated' };
@@ -365,6 +494,75 @@ export async function createBillAction(body: Record<string, unknown>): Promise<{
   } catch (err) {
     console.error('[createBillAction]', err);
     return { success: false, error: err instanceof Error ? err.message : 'Failed to create bill' };
+  }
+}
+
+export async function approveBillAction(id: string): Promise<{
+  success: boolean;
+  bill?: Bill;
+  error?: string;
+}> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const bill = await api.approveBill(id);
+    revalidatePath('/bills');
+    revalidatePath(`/bills/${id}`);
+    return { success: true, bill };
+  } catch (err) {
+    console.error('[approveBillAction]', err);
+    if (err instanceof ApiError) {
+      const body = err.body as { message?: string; details?: string } | undefined;
+      const detail = body?.details ?? body?.message ?? err.message;
+      return { success: false, error: detail };
+    }
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to approve bill' };
+  }
+}
+
+export async function rejectBillAction(id: string): Promise<{
+  success: boolean;
+  bill?: Bill;
+  error?: string;
+}> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const bill = await api.rejectBill(id);
+    revalidatePath('/bills');
+    revalidatePath(`/bills/${id}`);
+    return { success: true, bill };
+  } catch (err) {
+    console.error('[rejectBillAction]', err);
+    if (err instanceof ApiError) {
+      const body = err.body as { message?: string; details?: string } | undefined;
+      const detail = body?.details ?? body?.message ?? err.message;
+      return { success: false, error: detail };
+    }
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to reject bill' };
+  }
+}
+
+export async function returnBillToReceivedAction(id: string): Promise<{
+  success: boolean;
+  bill?: Bill;
+  error?: string;
+}> {
+  const api = await getApi();
+  if (!api) return { success: false, error: 'Not authenticated' };
+  try {
+    const bill = await api.returnBillToReceived(id);
+    revalidatePath('/bills');
+    revalidatePath(`/bills/${id}`);
+    return { success: true, bill };
+  } catch (err) {
+    console.error('[returnBillToReceivedAction]', err);
+    if (err instanceof ApiError) {
+      const body = err.body as { message?: string; details?: string } | undefined;
+      const detail = body?.details ?? body?.message ?? err.message;
+      return { success: false, error: detail };
+    }
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to return bill to received' };
   }
 }
 

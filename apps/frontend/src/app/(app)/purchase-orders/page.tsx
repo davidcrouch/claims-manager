@@ -4,7 +4,9 @@ import { PurchaseOrdersPageClient } from '@/components/purchase-orders/PurchaseO
 import {buildJobNameById, buildJobTypeById, toJobOptions,
   mergeCurrentJobIntoNameById,
   mergeCurrentJobIntoTypeById,
-  mergeCurrentJobIntoOptions } from '@/components/shared/job-label';
+  mergeCurrentJobIntoOptions,
+  mergeJobLabelsFromRows,
+  mergeJobTypesFromRows } from '@/components/shared/job-label';
 import type { Job, PaginatedResponse, PurchaseOrder, Claim } from '@/types/api';
 
 export default async function PurchaseOrdersPage({
@@ -69,8 +71,14 @@ export default async function PurchaseOrdersPage({
     id: vendor.id,
     name: vendor.name?.trim() ? vendor.name : 'Unknown' }));
   const jobs = jobsRes?.data ?? [];
-  const jobNameById = mergeCurrentJobIntoNameById(buildJobNameById(jobs), job);
-  const jobTypeById = mergeCurrentJobIntoTypeById(buildJobTypeById(jobs), job);
+  const jobNameById = mergeJobLabelsFromRows(
+    mergeCurrentJobIntoNameById(buildJobNameById(jobs), job),
+    initialPOs.data,
+  );
+  const jobTypeById = mergeJobTypesFromRows(
+    mergeCurrentJobIntoTypeById(buildJobTypeById(jobs), job),
+    initialPOs.data,
+  );
 
   return (
     <PurchaseOrdersPageClient

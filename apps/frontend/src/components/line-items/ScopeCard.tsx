@@ -18,7 +18,7 @@ import { useLineItems } from './LineItemsProvider';
 import { DropIndicatorLine, useDropIndicatorBorder } from './DropIndicatorLine';
 import { useDropTargetHighlight } from './lib/drop-highlight';
 import { useCatalogDrop } from './hooks/use-catalog-drop';
-import { computeItemMoney, initScopeInputs, resolveInvoicedAmount, resolvePreviouslyInvoicedAmount } from './lib/money';
+import { computeItemMoney, initScopeInputs, lineTotalFromItem, resolveInvoicedAmount, resolvePreviouslyInvoicedAmount } from './lib/money';
 import { LineScopeStatusBadge } from './lib/badges';
 import { displayLabelText } from './lib/display';
 import { RowLeadCheckbox, RowLeadDrag, RowLeadExpand, ROW_LEAD_ROW_CLS } from './lib/row-lead';
@@ -152,12 +152,14 @@ export const ScopeCard = memo(function ScopeCard({
         sum += resolveInvoicedAmount(item, editInputs[itemKey]);
         return;
       }
-      sum += computeItemMoney(
-        item,
-        editInputs[itemKey],
-        config.pricingDetail === 'cost' ? true : showMarkup,
-        config.pricingDetail === 'cost' ? true : showGst,
-      ).total;
+      sum += config.pricingDetail === 'cost'
+        ? lineTotalFromItem(item)
+        : computeItemMoney(
+            item,
+            editInputs[itemKey],
+            showMarkup,
+            showGst,
+          ).total;
     }
     for (let idx = 0; idx < scopeItems.length; idx++) {
       addItem(scopeItems[idx], `${scopeKey}-item-${scopeItems[idx].id ?? idx}`);

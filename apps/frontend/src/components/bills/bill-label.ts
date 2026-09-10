@@ -40,3 +40,19 @@ export function billDisplayTitle(bill: Bill): string {
   if (hasDate) return `Bill · ${dateLabel}`;
   return 'Bill';
 }
+
+export function billStatusName(bill: Pick<Bill, 'status'>): string {
+  const name = bill.status?.name?.trim();
+  if (name) return name;
+  return 'Received';
+}
+
+export function billHasPositiveAmount(bill: Pick<Bill, 'totalAmount'>): boolean {
+  const amount = Number(bill.totalAmount ?? 0);
+  return Number.isFinite(amount) && amount > 0;
+}
+
+export function billIsRejected(bill: Pick<Bill, 'status'>): boolean {
+  const name = billStatusName(bill).toLowerCase();
+  return name === 'rejected' || name === 'declined';
+}

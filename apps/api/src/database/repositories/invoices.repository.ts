@@ -1,12 +1,28 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, desc, asc, sql, inArray, or, ilike } from 'drizzle-orm';
+import {
+  eq,
+  and,
+  desc,
+  asc,
+  sql,
+  inArray,
+  or,
+  ilike,
+  aliasedTable,
+  getTableColumns,
+} from 'drizzle-orm';
 import { normalizeListJobIds } from '../../common/list-job-filter';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
-import { invoices } from '../schema';
+import { invoices, lookupValues } from '../schema';
 
 export type InvoiceRow = typeof invoices.$inferSelect;
 export type InvoiceInsert = typeof invoices.$inferInsert;
+
+export interface InvoiceViewRow extends InvoiceRow {
+  statusName: string | null;
+  statusExternalReference: string | null;
+}
 
 /** CW insurer invoice # (e.g. 781) on invoice_payload.invoiceNumber. */
 const insurerInvoiceNumber = sql`(NULLIF(${invoices.invoicePayload}->>'invoiceNumber', ''))::numeric`;
@@ -63,10 +79,11 @@ export class InvoicesRepository {
     statusId?: string;
     search?: string;
     sort?: string;
-  }): Promise<{ data: InvoiceRow[]; total: number }> {
+  }): Promise<{ data: InvoiceViewRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
     const skip = (page - 1) * limit;
+    const statusLookup = aliasedTable(lookupValues, 'status_lookup');
 
     const statusIds = (params.status ?? params.statusId)
       ?.split(',')
@@ -106,8 +123,13 @@ export class InvoicesRepository {
 
     const [data, countResult] = await Promise.all([
       this.db
-        .select()
+        .select({
+          ...getTableColumns(invoices),
+          statusName: statusLookup.name,
+          statusExternalReference: statusLookup.externalReference,
+        })
         .from(invoices)
+        .leftJoin(statusLookup, eq(invoices.statusLookupId, statusLookup.id))
         .where(whereClause)
         .orderBy(...buildInvoicesOrderBy(params.sort))
         .limit(limit)
@@ -119,25 +141,37 @@ export class InvoicesRepository {
     ]);
 
     const total = countResult[0]?.count ?? 0;
-    return { data, total };
+    return { data: data as InvoiceViewRow[], total };
   }
 
-  async findOne(params: { id: string; tenantId: string }): Promise<InvoiceRow | null> {
+  async findOne(params: { id: string; tenantId: string }): Promise<InvoiceViewRow | null> {
+    const statusLookup = aliasedTable(lookupValues, 'status_lookup');
     const [row] = await this.db
-      .select()
+      .select({
+        ...getTableColumns(invoices),
+        statusName: statusLookup.name,
+        statusExternalReference: statusLookup.externalReference,
+      })
       .from(invoices)
+      .leftJoin(statusLookup, eq(invoices.statusLookupId, statusLookup.id))
       .where(and(eq(invoices.id, params.id), eq(invoices.tenantId, params.tenantId)))
       .limit(1);
-    return row ?? null;
+    return (row as InvoiceViewRow) ?? null;
   }
 
   async findByPurchaseOrder(params: {
     purchaseOrderId: string;
     tenantId: string;
-  }): Promise<InvoiceRow[]> {
-    return this.db
-      .select()
+  }): Promise<InvoiceViewRow[]> {
+    const statusLookup = aliasedTable(lookupValues, 'status_lookup');
+    const data = await this.db
+      .select({
+        ...getTableColumns(invoices),
+        statusName: statusLookup.name,
+        statusExternalReference: statusLookup.externalReference,
+      })
       .from(invoices)
+      .leftJoin(statusLookup, eq(invoices.statusLookupId, statusLookup.id))
       .where(
         and(
           eq(invoices.purchaseOrderId, params.purchaseOrderId),
@@ -145,15 +179,22 @@ export class InvoicesRepository {
         ),
       )
       .orderBy(desc(invoices.updatedAt));
+    return data as InvoiceViewRow[];
   }
 
   async findByJob(params: {
     jobId: string;
     tenantId: string;
-  }): Promise<InvoiceRow[]> {
-    return this.db
-      .select()
+  }): Promise<InvoiceViewRow[]> {
+    const statusLookup = aliasedTable(lookupValues, 'status_lookup');
+    const data = await this.db
+      .select({
+        ...getTableColumns(invoices),
+        statusName: statusLookup.name,
+        statusExternalReference: statusLookup.externalReference,
+      })
       .from(invoices)
+      .leftJoin(statusLookup, eq(invoices.statusLookupId, statusLookup.id))
       .where(
         and(
           eq(invoices.jobId, params.jobId),
@@ -161,6 +202,7 @@ export class InvoicesRepository {
         ),
       )
       .orderBy(desc(invoices.updatedAt));
+    return data as InvoiceViewRow[];
   }
 
   async create(params: { data: InvoiceInsert; tx?: DrizzleDbOrTx }): Promise<InvoiceRow> {

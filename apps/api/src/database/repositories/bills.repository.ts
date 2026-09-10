@@ -1,12 +1,28 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { eq, and, desc, asc, sql, inArray, or, ilike } from 'drizzle-orm';
+import {
+  eq,
+  and,
+  desc,
+  asc,
+  sql,
+  inArray,
+  or,
+  ilike,
+  aliasedTable,
+  getTableColumns,
+} from 'drizzle-orm';
 import { normalizeListJobIds } from '../../common/list-job-filter';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../drizzle.module';
-import { bills } from '../schema';
+import { bills, lookupValues } from '../schema';
 
 export type BillRow = typeof bills.$inferSelect;
 export type BillInsert = typeof bills.$inferInsert;
+
+export interface BillViewRow extends BillRow {
+  statusName: string | null;
+  statusExternalReference: string | null;
+}
 
 function buildBillsOrderBy(sort?: string) {
   switch (sort) {
@@ -46,6 +62,18 @@ function buildBillsOrderBy(sort?: string) {
   }
 }
 
+function billStatusLookup() {
+  const statusLookup = aliasedTable(lookupValues, 'status_lookup');
+  return {
+    statusLookup,
+    columns: {
+      ...getTableColumns(bills),
+      statusName: statusLookup.name,
+      statusExternalReference: statusLookup.externalReference,
+    },
+  };
+}
+
 @Injectable()
 export class BillsRepository {
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
@@ -62,10 +90,11 @@ export class BillsRepository {
     vendorId?: string;
     search?: string;
     sort?: string;
-  }): Promise<{ data: BillRow[]; total: number }> {
+  }): Promise<{ data: BillViewRow[]; total: number }> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 20, 100);
     const skip = (page - 1) * limit;
+    const { statusLookup, columns } = billStatusLookup();
 
     let whereClause = and(
       eq(bills.tenantId, params.tenantId),
@@ -105,8 +134,9 @@ export class BillsRepository {
 
     const [data, countResult] = await Promise.all([
       this.db
-        .select()
+        .select(columns)
         .from(bills)
+        .leftJoin(statusLookup, eq(bills.statusLookupId, statusLookup.id))
         .where(whereClause)
         .orderBy(...buildBillsOrderBy(params.sort))
         .limit(limit)
@@ -118,30 +148,34 @@ export class BillsRepository {
     ]);
 
     const total = countResult[0]?.count ?? 0;
-    return { data, total };
+    return { data: data as BillViewRow[], total };
   }
 
   async findOne(params: {
     id: string;
     tenantId: string;
-  }): Promise<BillRow | null> {
+  }): Promise<BillViewRow | null> {
+    const { statusLookup, columns } = billStatusLookup();
     const [row] = await this.db
-      .select()
+      .select(columns)
       .from(bills)
+      .leftJoin(statusLookup, eq(bills.statusLookupId, statusLookup.id))
       .where(
         and(eq(bills.id, params.id), eq(bills.tenantId, params.tenantId)),
       )
       .limit(1);
-    return row ?? null;
+    return (row as BillViewRow) ?? null;
   }
 
   async findByJob(params: {
     jobId: string;
     tenantId: string;
-  }): Promise<BillRow[]> {
-    return this.db
-      .select()
+  }): Promise<BillViewRow[]> {
+    const { statusLookup, columns } = billStatusLookup();
+    const data = await this.db
+      .select(columns)
       .from(bills)
+      .leftJoin(statusLookup, eq(bills.statusLookupId, statusLookup.id))
       .where(
         and(
           eq(bills.jobId, params.jobId),
@@ -149,15 +183,18 @@ export class BillsRepository {
         ),
       )
       .orderBy(desc(bills.updatedAt));
+    return data as BillViewRow[];
   }
 
   async findByPurchaseOrder(params: {
     purchaseOrderId: string;
     tenantId: string;
-  }): Promise<BillRow[]> {
-    return this.db
-      .select()
+  }): Promise<BillViewRow[]> {
+    const { statusLookup, columns } = billStatusLookup();
+    const data = await this.db
+      .select(columns)
       .from(bills)
+      .leftJoin(statusLookup, eq(bills.statusLookupId, statusLookup.id))
       .where(
         and(
           eq(bills.purchaseOrderId, params.purchaseOrderId),
@@ -165,15 +202,18 @@ export class BillsRepository {
         ),
       )
       .orderBy(desc(bills.updatedAt));
+    return data as BillViewRow[];
   }
 
   async findByVendor(params: {
     vendorId: string;
     tenantId: string;
-  }): Promise<BillRow[]> {
-    return this.db
-      .select()
+  }): Promise<BillViewRow[]> {
+    const { statusLookup, columns } = billStatusLookup();
+    const data = await this.db
+      .select(columns)
       .from(bills)
+      .leftJoin(statusLookup, eq(bills.statusLookupId, statusLookup.id))
       .where(
         and(
           eq(bills.vendorId, params.vendorId),
@@ -181,6 +221,7 @@ export class BillsRepository {
         ),
       )
       .orderBy(desc(bills.updatedAt));
+    return data as BillViewRow[];
   }
 
   async create(params: { data: BillInsert; tx?: DrizzleDbOrTx }): Promise<BillRow> {

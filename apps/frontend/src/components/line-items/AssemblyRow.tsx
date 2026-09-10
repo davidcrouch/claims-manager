@@ -18,7 +18,7 @@ import { useLineItems } from './LineItemsProvider';
 import { DropIndicatorLine, useDropIndicatorBorder } from './DropIndicatorLine';
 import { useDropTargetHighlight } from './lib/drop-highlight';
 import { useCatalogDrop } from './hooks/use-catalog-drop';
-import { computeItemMoney, initComboInputs, resolveInvoicedAmount, resolvePreviouslyInvoicedAmount } from './lib/money';
+import { computeItemMoney, initComboInputs, lineTotalFromItem, resolveInvoicedAmount, resolvePreviouslyInvoicedAmount } from './lib/money';
 import { PublishStatusBadge } from './lib/badges';
 import { LineScopeStatusAssemblyField } from './LineScopeStatusField';
 import { displayLabelText } from './lib/display';
@@ -134,12 +134,14 @@ export const AssemblyRow = memo(function AssemblyRow({
       if (showInvoiceProgress) {
         sum += resolveInvoicedAmount(item, editInputs[itemKey]);
       } else {
-        sum += computeItemMoney(
-          item,
-          editInputs[itemKey],
-          config.pricingDetail === 'cost' ? true : showMarkup,
-          config.pricingDetail === 'cost' ? true : showGst,
-        ).total;
+        sum += config.pricingDetail === 'cost'
+          ? lineTotalFromItem(item)
+          : computeItemMoney(
+              item,
+              editInputs[itemKey],
+              showMarkup,
+              showGst,
+            ).total;
       }
     }
     return sum;

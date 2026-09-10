@@ -28,7 +28,7 @@ Document customer invoices, AR/AP ledgers, and the Reports experience (run/print
 
 ## 1. Invoices — Overview
 
-**Sources:** invoice list/detail, `PublishButton` on `InvoiceDetail.tsx`. Permissions: `invoices.read`, `invoices.create`, `invoices.update`, `invoices.approve`.
+**Sources:** invoice list/detail, `PublishButton` on `InvoiceDetail.tsx`. Permissions: `invoices.read`, `invoices.create`, `invoices.update`, `invoices.approve`, `invoices.publish`.
 
 ### Outline
 
@@ -36,7 +36,7 @@ Document customer invoices, AR/AP ledgers, and the Reports experience (run/print
 2. Key Concepts — invoice vs bill vs AR; statuses; job link.
 3. Accessing — Customers → **Invoices**. Job filter.
 4. List — columns, filters, New Invoice.
-5. Detail tour — header, line items if any, publish, approve/reject if `invoices.approve`.
+5. Detail tour — header, line items if any, publish if `invoices.publish`, approve if `invoices.approve`.
 6. Dashboard AR overdue tile → this list / finance AR.
 7. Best practices — don’t invoice before the job milestone (report submitted / works complete); match PO amounts.
 

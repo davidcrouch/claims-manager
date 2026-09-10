@@ -37,6 +37,7 @@ import { DocumentIssuanceService } from '../domain/services/document-issuance.se
 import { OutboundEventsService } from '../outbound-events/outbound-events.service';
 import { ActivitiesService } from '../activities/activities.service';
 import { RecordNumberService } from '../../common/record-number/record-number.service';
+import { attachJobSummaries as attachListJobSummaries } from '../../common/attach-job-summaries';
 import { OutboundSyncService } from '../domain/outbound/outbound-sync.service';
 import {
   hasAnyPartyData,
@@ -517,26 +518,11 @@ export class QuotesService {
 
   private async attachJobSummaries(rows: QuoteViewRow[]) {
     const tenantId = this.tenantContext.getTenantId();
-    const jobIds = [
-      ...new Set(rows.map((row) => row.jobId).filter((id): id is string => !!id)),
-    ];
-    const jobs = await this.jobsRepo.findByIds({ tenantId, ids: jobIds });
-    const jobById = new Map(jobs.map((job) => [job.id, job]));
-    return rows.map((row) => {
-      const shaped = this.shapeQuoteResponse(row);
-      const job = row.jobId ? jobById.get(row.jobId) : undefined;
-      if (!job) return shaped;
-      return {
-        ...shaped,
-        job: {
-          id: job.id,
-          internalNumber: job.internalNumber,
-          name: job.name,
-          externalJobId: job.externalJobId,
-          externalReference: job.externalReference,
-          jobType: job.jobTypeName ? { name: job.jobTypeName } : null,
-        },
-      };
+    const shaped = rows.map((row) => this.shapeQuoteResponse(row));
+    return attachListJobSummaries({
+      tenantId,
+      rows: shaped,
+      jobsRepo: this.jobsRepo,
     });
   }
 

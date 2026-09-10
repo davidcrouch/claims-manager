@@ -39,7 +39,13 @@ export {
   InvoicesRepository,
   type InvoiceRow,
   type InvoiceInsert,
+  type InvoiceViewRow,
 } from './invoices.repository';
+export {
+  InvoicePaymentsRepository,
+  type InvoicePaymentRow,
+  type InvoicePaymentInsert,
+} from './invoice-payments.repository';
 export {
   PurchaseOrdersRepository,
   type PurchaseOrderRow,
@@ -87,6 +93,11 @@ export {
   type InboundWebhookEventRow,
   type InboundWebhookEventInsert,
 } from './inbound-webhook-events.repository';
+export {
+  OutboundWebRequestsRepository,
+  type OutboundWebRequestRow,
+  type OutboundWebRequestInsert,
+} from './outbound-web-requests.repository';
 export {
   UsersRepository,
   type UserRow,
@@ -141,6 +152,7 @@ export {
   BillsRepository,
   type BillRow,
   type BillInsert,
+  type BillViewRow,
 } from './bills.repository';
 export {
   JobContactsRepository,
@@ -264,6 +276,7 @@ export {
   AiMessageAuditRepository,
   type AiMessageAuditRow,
   type AiMessageAuditInsert,
+  type AiMessageAuditViewRow,
 } from './ai-message-audit.repository';
 export {
   AiSettingsRepository,
@@ -326,3 +339,8 @@ export {
   type FeedbackItemRow,
   type FeedbackItemInsert,
 } from './feedback-items.repository';
+export {
+  FeedbackNotesRepository,
+  type FeedbackNoteRow,
+  type FeedbackNoteInsert,
+} from './feedback-notes.repository';

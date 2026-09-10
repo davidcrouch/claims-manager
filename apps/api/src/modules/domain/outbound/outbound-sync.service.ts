@@ -2,6 +2,7 @@ import { Injectable, Logger, Inject } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../../../database/drizzle.module';
 import { outboundSyncQueue, integrationConnections } from '../../../database/schema';
+import { getRequestActor } from '../../../common/request-actor.store';
 
 @Injectable()
 export class OutboundSyncService {
@@ -22,6 +23,7 @@ export class OutboundSyncService {
     scheduledAt?: Date;
     tx: DrizzleDbOrTx;
   }): Promise<string> {
+    const actor = getRequestActor();
     const [row] = await params.tx
       .insert(outboundSyncQueue)
       .values({
@@ -36,6 +38,8 @@ export class OutboundSyncService {
         priority: params.priority ?? 0,
         scheduledAt: params.scheduledAt ?? new Date(),
         status: 'pending',
+        initiatedByUserId: actor?.userId ?? null,
+        initiatedByName: actor?.userName ?? null,
       })
       .onConflictDoNothing()
       .returning({ id: outboundSyncQueue.id });

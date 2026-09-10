@@ -70,6 +70,33 @@ export class BillsController {
     return this.billsService.create({ body, userId });
   }
 
+  @Post(':id/approve')
+  @RequirePermission(P.bills.approve)
+  async approve(
+    @Param('id') id: string,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.billsService.approve({ id, userId });
+  }
+
+  @Post(':id/reject')
+  @RequirePermission(P.bills.reject)
+  async reject(
+    @Param('id') id: string,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.billsService.reject({ id, userId });
+  }
+
+  @Post(':id/return-to-received')
+  @RequirePermission(P.procurement.manage)
+  async returnToReceived(
+    @Param('id') id: string,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.billsService.returnToReceived({ id, userId });
+  }
+
   @Post(':id')
   @RequirePermission(P.procurement.manage)
   async update(

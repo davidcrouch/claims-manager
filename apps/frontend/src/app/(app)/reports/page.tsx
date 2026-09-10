@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getServerApiClient } from '@/lib/server-api';
 import { ReportsListClient } from '@/components/reports/ReportsListClient';
-import { buildJobNameById, buildJobTypeById } from '@/components/shared/job-label';
+import { buildJobNameById, buildJobTypeById, mergeJobLabelsFromRows, mergeJobTypesFromRows } from '@/components/shared/job-label';
 import type { Job, PaginatedResponse, Report } from '@/types/api';
 
 export default async function ReportsPage({
@@ -61,8 +61,8 @@ export default async function ReportsPage({
       initialData={initialReports}
       statusOptions={statusOptions}
       reportTypes={reportTypes}
-      jobNameById={buildJobNameById(jobs)}
-      jobTypeById={buildJobTypeById(jobs)}
+      jobNameById={mergeJobLabelsFromRows(buildJobNameById(jobs), initialReports.data)}
+      jobTypeById={mergeJobTypesFromRows(buildJobTypeById(jobs), initialReports.data)}
     />
   );
 }

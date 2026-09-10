@@ -1206,3 +1206,13 @@
   The jobs list supports filtering by provider and shows Internal versus Crunchwork more clearly on the list, header, and overview.
   Job filters used across lists were aligned so provider and account choices behave consistently.
   Outcome: a dedicated place for job notes plus easier scanning of jobs by provider.
+
+- `2026-09-10` `PENDING` **4 h**
+  `164 files | +9 236 −1 824 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  Lay summary: Staff can record invoice payments, add notes on feedback, inspect outgoing connection requests, edit user details, and see consistent job names across lists.
+  **Invoice payments, feedback notes, connection request history, and clearer job labels.**
+  Staff can record, edit, and remove payments on invoices, with amount received, remaining balance, and a Partially Paid status.
+  Administrators can add notes on feedback items, open a dedicated detail view, and send a clearer feedback email.
+  Connection screens show outgoing web requests so staff can inspect what was sent and received, including who triggered the call.
+  User administration supports editing member details and roles from one place.
+  Lists, headers, and related records show consistent job names and numbers so work is easier to scan.

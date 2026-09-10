@@ -291,10 +291,19 @@ export class PoIssuesService {
     }
 
     const pdfKey = generatedDoc.s3KeyPdf?.trim();
-    if (!pdfKey) {
-      this.logger.warn(`${logPrefix} - No PDF key on generated doc ${generatedDoc.id}; skipping`);
+    const docxKey = generatedDoc.s3KeyDocx?.trim();
+    const objectKey = pdfKey || docxKey;
+    if (!objectKey) {
+      this.logger.warn(
+        `${logPrefix} - No PDF/DOCX key on generated doc ${generatedDoc.id}; skipping`,
+      );
       return;
     }
+    const isPdf = !!pdfKey;
+    const ext = isPdf ? 'pdf' : 'docx';
+    const mimeType = isPdf
+      ? 'application/pdf'
+      : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
     try {
       const filesystem = await this.filesystemsRepo.findByJob(tenantId, po.jobId);
@@ -328,7 +337,7 @@ export class PoIssuesService {
         return;
       }
 
-      const pdfBuffer = await this.gcsStorage.downloadBuffer(pdfKey);
+      const fileBuffer = await this.gcsStorage.downloadBuffer(objectKey);
       const dateStamp = new Date().toISOString().slice(0, 10);
       const safeNumber = (
         po.purchaseOrderNumber ??
@@ -336,12 +345,12 @@ export class PoIssuesService {
         po.name ??
         po.id
       ).replace(/[^a-zA-Z0-9._-]+/g, '-');
-      const fileName = `Purchase-Order-${safeNumber}-${dateStamp}.pdf`;
+      const fileName = `Purchase-Order-${safeNumber}-${dateStamp}.${ext}`;
 
       await this.documentsService.createFromBuffer({
         fileName,
-        mimeType: 'application/pdf',
-        buffer: pdfBuffer,
+        mimeType,
+        buffer: fileBuffer,
         categoryId: category.id,
         relatedRecordType: 'PURCHASE_ORDER',
         relatedRecordId: po.id,
@@ -350,7 +359,7 @@ export class PoIssuesService {
       });
 
       this.logger.log(
-        `${logPrefix} - Saved PDF to category ${category.slug} (${category.id}) on job ${po.jobId}`,
+        `${logPrefix} - Saved ${ext.toUpperCase()} to category ${category.slug} (${category.id}) on job ${po.jobId}`,
       );
     } catch (err: unknown) {
       this.logger.warn(
@@ -397,14 +406,38 @@ export class PoIssuesService {
   ): Promise<void> {
     const logPrefix = 'api:PoIssuesService.executeDispatch';
 
-    let pdfBuffer: Buffer | null = null;
-    const pdfKey = generatedDoc.s3KeyPdf;
+    let attachment:
+      | { filename: string; content: Buffer; contentType: string }
+      | undefined;
+
+    const poNumber = po.purchaseOrderNumber ?? po.internalNumber ?? po.name ?? '';
+    const pdfKey = generatedDoc.s3KeyPdf?.trim();
+    const docxKey = generatedDoc.s3KeyDocx?.trim();
     if (pdfKey) {
       try {
-        pdfBuffer = await this.gcsStorage.downloadBuffer(pdfKey);
+        const pdfBuffer = await this.gcsStorage.downloadBuffer(pdfKey);
+        attachment = {
+          filename: `${poNumber || 'Purchase-Order'}.pdf`,
+          content: pdfBuffer,
+          contentType: 'application/pdf',
+        };
       } catch (err: unknown) {
         this.logger.error(
           `${logPrefix} - Failed to download PDF: ${err instanceof Error ? err.message : err}`,
+        );
+      }
+    } else if (docxKey) {
+      try {
+        const docxBuffer = await this.gcsStorage.downloadBuffer(docxKey);
+        attachment = {
+          filename: `${poNumber || 'Purchase-Order'}.docx`,
+          content: docxBuffer,
+          contentType:
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        };
+      } catch (err: unknown) {
+        this.logger.error(
+          `${logPrefix} - Failed to download DOCX: ${err instanceof Error ? err.message : err}`,
         );
       }
     }
@@ -426,7 +459,6 @@ export class PoIssuesService {
     const senderName = (poFromObj.name as string) ?? 'Team';
     const companyName =
       (poFromObj.companyName as string) ?? (poFromObj.name as string) ?? '';
-    const poNumber = po.purchaseOrderNumber ?? po.internalNumber ?? po.name ?? '';
 
     let sentCount = 0;
     let failCount = 0;
@@ -456,15 +488,7 @@ export class PoIssuesService {
           html: renderedTemplate.bodyHtml,
           text: renderedTemplate.bodyText,
           replyTo,
-          attachments: pdfBuffer
-            ? [
-                {
-                  filename: `${poNumber || 'Purchase-Order'}.pdf`,
-                  content: pdfBuffer,
-                  contentType: 'application/pdf',
-                },
-              ]
-            : undefined,
+          attachments: attachment ? [attachment] : undefined,
           tags: [
             { name: 'category', value: 'po-send' },
             ...(poNumber

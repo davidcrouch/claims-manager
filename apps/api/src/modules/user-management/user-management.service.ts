@@ -12,6 +12,7 @@ import type {
   AvailableRoleDto,
   InviteUserInput,
   OrgMemberDto,
+  UpdateUserInput,
   UpdateUserStatusInput,
 } from './user-management.types';
 
@@ -225,5 +226,107 @@ export class UserManagementService {
       throw new NotFoundException(`${LOG_PREFIX}:updateStatus - Member not found after status update`);
     }
     return member;
+  }
+
+  async updateUser(params: {
+    organizationId: string;
+    userId: string;
+    input: UpdateUserInput;
+    actorUserId: string;
+    accessToken: string;
+  }): Promise<OrgMemberDto> {
+    const { organizationId, userId, input, actorUserId, accessToken } = params;
+
+    const membership = await this.usersRepository.findOrgMembership({
+      userId,
+      organizationId,
+    });
+    if (!membership) {
+      throw new NotFoundException(
+        `${LOG_PREFIX}:updateUser - User is not a member of this organization`,
+      );
+    }
+
+    if (input.status === 'Disabled' && userId === actorUserId) {
+      throw new ForbiddenException(`${LOG_PREFIX}:updateUser - Cannot disable yourself`);
+    }
+
+    if (input.status !== undefined && input.status !== 'Active' && input.status !== 'Disabled') {
+      throw new BadRequestException(
+        `${LOG_PREFIX}:updateUser - status must be Active or Disabled`,
+      );
+    }
+
+    if (input.roles !== undefined && (!Array.isArray(input.roles) || input.roles.length === 0)) {
+      throw new BadRequestException(
+        `${LOG_PREFIX}:updateUser - roles must be a non-empty array`,
+      );
+    }
+
+    const existing = await this.usersRepository.findById({ id: userId });
+    if (!existing) {
+      throw new NotFoundException(`${LOG_PREFIX}:updateUser - User not found`);
+    }
+
+    const namePatch =
+      input.givenName !== undefined || input.familyName !== undefined
+        ? this.buildUpdatedName({
+            currentName: existing.name,
+            givenName: input.givenName,
+            familyName: input.familyName,
+          })
+        : undefined;
+
+    const currentStatus = (existing.status || '').toLowerCase();
+    const nameChanged =
+      namePatch !== undefined && (namePatch ?? '') !== (existing.name ?? '');
+    const statusChanged =
+      input.status !== undefined && currentStatus !== input.status.toLowerCase();
+
+    if (nameChanged || statusChanged) {
+      await this.usersRepository.update({
+        id: userId,
+        data: {
+          ...(nameChanged ? { name: namePatch } : {}),
+          ...(statusChanged
+            ? { status: input.status, isActive: input.status === 'Active' }
+            : {}),
+        },
+      });
+    }
+
+    if (input.roles) {
+      this.log.log(
+        `${LOG_PREFIX}:updateUser - Setting roles for user ${userId} in org ${organizationId}`,
+      );
+      await this.authServerClient.setUserRoles(
+        userId,
+        organizationId,
+        input.roles,
+        accessToken,
+      );
+    }
+
+    this.log.log(`${LOG_PREFIX}:updateUser - Updated user ${userId}`);
+
+    const members = await this.listOrgMembers(organizationId);
+    const member = members.find((m) => m.id === userId);
+    if (!member) {
+      throw new NotFoundException(`${LOG_PREFIX}:updateUser - Member not found after update`);
+    }
+    return member;
+  }
+
+  private buildUpdatedName(params: {
+    currentName: string | null;
+    givenName?: string;
+    familyName?: string;
+  }): string | null {
+    const current = splitName(params.currentName);
+    const givenName =
+      params.givenName !== undefined ? params.givenName.trim() : (current.givenName ?? '');
+    const familyName =
+      params.familyName !== undefined ? params.familyName.trim() : (current.familyName ?? '');
+    return [givenName, familyName].filter(Boolean).join(' ') || null;
   }
 }

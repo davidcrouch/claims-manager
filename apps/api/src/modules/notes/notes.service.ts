@@ -12,6 +12,7 @@ import {
 } from '../../database/repositories';
 import { TenantContext } from '../../tenant/tenant-context';
 import { CreateNoteDto } from './dto/create-note.dto';
+import { attachJobSummaries } from '../../common/attach-job-summaries';
 
 function formatAuthorLabel(params: {
   name?: string | null;
@@ -49,7 +50,7 @@ export class NotesService {
     sort?: string;
   }): Promise<{ data: JobNoteRow[]; total: number }> {
     const tenantId = this.tenantContext.getTenantId();
-    return this.notesRepo.findAll({
+    const result = await this.notesRepo.findAll({
       tenantId,
       page: params.page,
       limit: params.limit,
@@ -58,6 +59,14 @@ export class NotesService {
       search: params.search,
       sort: params.sort,
     });
+    return {
+      data: await attachJobSummaries({
+        tenantId,
+        rows: result.data,
+        jobsRepo: this.jobsRepo,
+      }),
+      total: result.total,
+    };
   }
 
   async findOne(params: { id: string }): Promise<JobNoteRow> {

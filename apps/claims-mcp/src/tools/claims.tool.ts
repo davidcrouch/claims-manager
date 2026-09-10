@@ -54,21 +54,6 @@ export function registerClaimsTools(server: McpServer, api: ClaimsApiClient): vo
   );
 
   server.tool(
-    'create_claim',
-    categoryDesc(CAT, 'Create a new claim. Pass API body fields as data.'),
-    {
-      data: z.record(z.unknown()).describe('Claim create payload (API body)'),
-    },
-    async ({ data }) => {
-      try {
-        return toolResult(await api.request('/claims', { method: 'POST', body: data }));
-      } catch (err) {
-        return toolError(err);
-      }
-    },
-  );
-
-  server.tool(
     'update_claim',
     categoryDesc(CAT, 'Update an existing claim. Pass API body fields as data.'),
     {

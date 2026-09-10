@@ -42,6 +42,12 @@ export interface ApiItem {
   previouslyInvoiced?: number;
   /** Invoice/bill payload flag — line excluded from claim when false. */
   completed?: boolean;
+  /** Work-order line this PO item was copied from. */
+  sourceWorkOrderItemId?: string;
+  /** Proposal line this PO item was copied from. */
+  sourceProposalItemId?: string;
+  /** Source (work order / proposal) quantity — PO qty cannot exceed this. */
+  maxQuantity?: number;
 }
 
 export interface ApiCombo {
@@ -254,6 +260,8 @@ export interface LineItemsConfig {
   showItemTypeColumn: boolean;
   /** Allow inline edit of Invoiced only (bill progress). */
   invoiceProgressEditable: boolean;
+  /** Allow inline edit of quantity and Buy Cost when the table is otherwise read-only (sourced PO). Units and sale price stay locked. */
+  buyCostEditable: boolean;
   showCategory: boolean;
   hideComponent: boolean;
   enableLineNotes: boolean;

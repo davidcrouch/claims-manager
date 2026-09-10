@@ -10,6 +10,7 @@ import {
   VendorsRepository,
   QuotesRepository,
   InvoicesRepository,
+  InvoicePaymentsRepository,
   PurchaseOrdersRepository,
   TasksRepository,
   MessagesRepository,
@@ -18,6 +19,7 @@ import {
   ReportsRepository,
   AttachmentsRepository,
   InboundWebhookEventsRepository,
+  OutboundWebRequestsRepository,
   UsersRepository,
   IntegrationConnectionsRepository,
   ExternalObjectsRepository,
@@ -60,6 +62,7 @@ import {
   EmailTemplatesRepository,
   EntityActivitiesRepository,
   FeedbackItemsRepository,
+  FeedbackNotesRepository,
 } from './repositories';
 
 const repositories = [
@@ -72,6 +75,7 @@ const repositories = [
   VendorsRepository,
   QuotesRepository,
   InvoicesRepository,
+  InvoicePaymentsRepository,
   PurchaseOrdersRepository,
   TasksRepository,
   MessagesRepository,
@@ -80,6 +84,7 @@ const repositories = [
   ReportsRepository,
   AttachmentsRepository,
   InboundWebhookEventsRepository,
+  OutboundWebRequestsRepository,
   UsersRepository,
   IntegrationConnectionsRepository,
   ExternalObjectsRepository,
@@ -122,6 +127,7 @@ const repositories = [
   EmailTemplatesRepository,
   EntityActivitiesRepository,
   FeedbackItemsRepository,
+  FeedbackNotesRepository,
 ];
 
 @Global()

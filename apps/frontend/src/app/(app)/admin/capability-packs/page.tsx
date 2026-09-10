@@ -3,7 +3,6 @@ import { getServerApiClient } from '@/lib/server-api';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { AdminPageHeader } from '@/components/layout/PageHeaderLayout';
 import { CapabilityPacksPanel } from '@/components/capability-packs/CapabilityPacksPanel';
-import { Package } from 'lucide-react';
 
 export const metadata = { title: 'Capability Packs — EnsureOS' };
 
@@ -15,7 +14,7 @@ export default async function CapabilityPacksPage() {
     <div className="flex flex-col px-6 pb-6">
       <SetPageHeader>
         <AdminPageHeader
-          icon={Package}
+          icon="package"
           title="Capability Packs"
           description="Functional packs of agents, skills, and MCP tools for workflows."
         />

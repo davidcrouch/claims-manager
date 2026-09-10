@@ -80,6 +80,7 @@ export const ItemRow = memo(function ItemRow({
     showBuyCost,
     showInvoiceProgress,
     invoiceProgressEditable,
+    buyCostEditable,
     showPreviouslyInvoiced,
     showItemTypeColumn,
     showColumnVisibilityToggles,
@@ -113,7 +114,9 @@ export const ItemRow = memo(function ItemRow({
     (showColumnVisibilityToggles && parentPrice && !resolvedItem.showPricing);
   /** Invoice-only edit mode: other fields stay display-only even when mode is edit. */
   const invoiceOnlyEdit = invoiceProgressEditable && showInvoiceProgress;
-  const canStartEdit = !isReadOnly || invoiceOnlyEdit;
+  /** Sourced PO: quantity and buy cost stay editable; units and sale price stay locked. */
+  const poProcurementEdit = buyCostEditable && isReadOnly;
+  const canStartEdit = !isReadOnly || invoiceOnlyEdit || poProcurementEdit;
   const showCatalogLink = !!item.catalogItemId && !item.catalogMissing;
   const showDeleteAction = !isReadOnly && !!actions.onDeleteItem;
   const showRowActionsMenu = showColumnVisibilityToggles || showCatalogLink || showDeleteAction;
@@ -122,8 +125,9 @@ export const ItemRow = memo(function ItemRow({
   const isPrimaryEdit = editState?.rowKey === rowKey;
   const selectedField = editState?.rowKey === rowKey ? editState.field : null;
   const inputs = editInputs[rowKey] ?? null;
-  /** Show inline inputs for normal fields (not in invoice-only edit mode). */
-  const showNormalInputs = isEditing && !!inputs && !invoiceOnlyEdit;
+  /** Show inline inputs for normal fields (not in invoice-only or sourced-PO procurement edit). */
+  const showNormalInputs = isEditing && !!inputs && !invoiceOnlyEdit && !poProcurementEdit;
+  const showProcurementInputs = isEditing && !!inputs && (showNormalInputs || poProcurementEdit);
   const isDirtyRow = dirtyRowKeys.has(rowKey);
   const isMultiSelected = selectedRows.size > 1 && selectedRows.has(rowKey);
   const isPicked = !showSelect || (!!item.id && !!selection?.selectedIds.has(item.id));
@@ -164,10 +168,10 @@ export const ItemRow = memo(function ItemRow({
 
   const displayLineTotal = useMemo(
     () =>
-      pricingDetail === 'total-only' || showInvoiceProgress
+      pricingDetail === 'total-only' || showInvoiceProgress || isCostPricing
         ? lineTotalFromItem(item)
         : money.total,
-    [item, money.total, pricingDetail, showInvoiceProgress],
+    [item, money.total, pricingDetail, showInvoiceProgress, isCostPricing],
   );
 
   // Auto-focus on edit
@@ -184,12 +188,26 @@ export const ItemRow = memo(function ItemRow({
 
   const handleRowClick = (e: React.MouseEvent) => {
     if (!canStartEdit) return;
+    const td = (e.target as HTMLElement).closest('td');
+    const col = (td?.dataset.col as ColumnKey) ?? null;
+
+    if (poProcurementEdit && isPicked) {
+      const qtyField = col === 'quantity' && !qtyDisabled;
+      const buyField = col === 'buyCost' && showBuyCostCol && !priceDisabled;
+      if (qtyField || buyField) {
+        setEditInputs((prev) => {
+          if (prev[rowKey]) return prev;
+          return { ...prev, [rowKey]: initItemInputs(item) };
+        });
+        setEditState({ rowKey, field: col as EditableFieldKey });
+        return;
+      }
+    }
+
     if (showSelect) {
       if (item.id) selection?.onChange(toggleId(selection.selectedIds, item.id));
       return;
     }
-    const td = (e.target as HTMLElement).closest('td');
-    const col = (td?.dataset.col as ColumnKey) ?? null;
 
     if (invoiceOnlyEdit) {
       if (col !== 'invoiced') return;
@@ -232,6 +250,35 @@ export const ItemRow = memo(function ItemRow({
       e.stopPropagation();
       setEditState({ rowKey, field });
     }
+  };
+
+  const procurementCellClick = (field: EditableFieldKey) => (e: React.MouseEvent) => {
+    if (showSelect && !isPicked) return;
+    e.stopPropagation();
+    setEditInputs((prev) => {
+      if (prev[rowKey]) return prev;
+      return { ...prev, [rowKey]: initItemInputs(item) };
+    });
+    setEditState({ rowKey, field });
+  };
+
+  const maxQuantity = poProcurementEdit ? item.maxQuantity : undefined;
+  const handleQuantityChange = (raw: string) => {
+    if (maxQuantity == null) {
+      handleInputChange(rowKey, 'quantity', raw);
+      return;
+    }
+    if (raw.trim() === '' || raw.endsWith('.')) {
+      handleInputChange(rowKey, 'quantity', raw);
+      return;
+    }
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) {
+      handleInputChange(rowKey, 'quantity', raw);
+      return;
+    }
+    const clamped = Math.min(Math.max(0, parsed), maxQuantity);
+    handleInputChange(rowKey, 'quantity', clamped === parsed ? raw : String(clamped));
   };
 
   const editCellCls = (field: EditableFieldKey) =>
@@ -466,15 +513,29 @@ export const ItemRow = memo(function ItemRow({
 
       {/* Quantity */}
       {showQuantities && (
-        <td data-col="quantity" className={cn(editRightCellCls('quantity'), qtyDisabled && 'opacity-30')} onClick={qtyDisabled ? undefined : cellClick('quantity')}>
+        <td
+          data-col="quantity"
+          className={cn(editRightCellCls('quantity'), qtyDisabled && 'opacity-30')}
+          onClick={qtyDisabled ? undefined : poProcurementEdit ? procurementCellClick('quantity') : cellClick('quantity')}
+        >
           {qtyDisabled ? (
             <span className="block text-right font-mono text-sm text-slate-400">—</span>
-          ) : showNormalInputs ? (
+          ) : showProcurementInputs ? (
             <input
               ref={(el) => { inputRefs.current.quantity = el; }}
               className={inputCls()}
               value={inputs.quantity}
-              onChange={(e) => handleInputChange(rowKey, 'quantity', e.target.value)}
+              onChange={(e) => handleQuantityChange(e.target.value)}
+              onBlur={() => {
+                if (maxQuantity == null || !inputs) return;
+                const parsed = Number(inputs.quantity);
+                if (!Number.isFinite(parsed)) {
+                  handleInputChange(rowKey, 'quantity', String(Math.max(0, item.quantity ?? 0)));
+                  return;
+                }
+                const clamped = Math.min(Math.max(0, parsed), maxQuantity);
+                if (clamped !== parsed) handleInputChange(rowKey, 'quantity', String(clamped));
+              }}
               onKeyDown={handleCellKeyDown}
               onFocus={() => setEditState({ rowKey, field: 'quantity' })}
             />
@@ -488,7 +549,14 @@ export const ItemRow = memo(function ItemRow({
 
       {/* Unit Type */}
       {showQuantities && (
-        <td data-col="unitType" className={cn(editRightCellCls('unitType'), qtyDisabled && 'opacity-30')} onClick={qtyDisabled ? undefined : cellClick('unitType')}>
+        <td
+          data-col="unitType"
+          className={cn(
+            poProcurementEdit ? LI_TD_CELL_RIGHT : editRightCellCls('unitType'),
+            qtyDisabled && 'opacity-30',
+          )}
+          onClick={qtyDisabled || poProcurementEdit ? undefined : cellClick('unitType')}
+        >
           {qtyDisabled ? (
             <span className="block text-right text-xs text-slate-400">—</span>
           ) : showNormalInputs ? (
@@ -514,10 +582,20 @@ export const ItemRow = memo(function ItemRow({
 
       {/* Buy Cost */}
       {showBuyCostCol && (
-        <td data-col="buyCost" className={cn(editMoneyCellCls('buyCost'), priceDisabled && 'opacity-30')} onClick={priceDisabled ? undefined : cellClick('buyCost')}>
+        <td
+          data-col="buyCost"
+          className={cn(editMoneyCellCls('buyCost'), priceDisabled && 'opacity-30')}
+          onClick={
+            priceDisabled
+              ? undefined
+              : poProcurementEdit
+                ? procurementCellClick('buyCost')
+                : cellClick('buyCost')
+          }
+        >
           {priceDisabled ? (
             <span className="block text-right font-mono text-sm text-slate-400">—</span>
-          ) : showNormalInputs ? (
+          ) : showProcurementInputs ? (
             <input
               ref={(el) => { inputRefs.current.buyCost = el; }}
               className={LI_TD_MONEY_INPUT}

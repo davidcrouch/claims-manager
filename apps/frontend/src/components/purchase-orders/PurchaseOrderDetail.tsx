@@ -142,6 +142,7 @@ export function PurchaseOrderPageHeader({ po, job }: { po: PurchaseOrder; job?: 
 
   return (
     <PageHeaderLayout
+      job={job}
       leading={<BackButton href={job ? `/purchase-orders?jobId=${job.id}` : '/purchase-orders'} label="Back to purchase orders" />}
       icon={
         <PageHeaderIcon
@@ -658,7 +659,7 @@ export function PurchaseOrderDetail({
             }}
           >
             <Send className="h-3.5 w-3.5" />
-            Issue
+            Send PO
           </Button>
         )}
         {showLineItemActions && (

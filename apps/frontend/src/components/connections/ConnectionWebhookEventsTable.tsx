@@ -25,6 +25,7 @@ import {
   useListFetchGate,
 } from '@/components/shared/use-list-page-data';
 import type { WebhookEvent, PaginatedResponse } from '@/types/api';
+import { CopyablePayload, CopyIconButton } from './CopyablePayload';
 
 const SORT_OPTIONS: SortOption[] = [
   { key: 'created_at', label: 'Created' },
@@ -395,20 +396,19 @@ function EventRow({
         <tr className="bg-slate-50">
           <td colSpan={6} className="px-4 py-3">
             {event.processingError && (
-              <p className="mb-2 text-sm text-rose-700">
-                Error: {event.processingError}
+              <p className="mb-2 flex items-start gap-1 text-sm text-rose-700">
+                <span className="min-w-0 flex-1">Error: {event.processingError}</span>
+                <CopyIconButton text={event.processingError} label="Error" />
               </p>
             )}
-            <details open>
-              <summary className="mb-1 cursor-pointer text-xs font-medium text-slate-500">
-                Raw Payload
-              </summary>
-              <pre className="max-h-64 overflow-auto rounded bg-slate-900 p-3 text-xs text-slate-200">
-                {event.rawBodyJson
+            <CopyablePayload
+              label="Raw Payload"
+              text={
+                event.rawBodyJson
                   ? JSON.stringify(event.rawBodyJson, null, 2)
-                  : 'No payload data'}
-              </pre>
-            </details>
+                  : 'No payload data'
+              }
+            />
           </td>
         </tr>
       )}

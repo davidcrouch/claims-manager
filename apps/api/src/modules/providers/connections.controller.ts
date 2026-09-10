@@ -96,6 +96,44 @@ export class ConnectionsController {
     });
   }
 
+  @Get(':id/web-requests/filter-options')
+  @RequirePermission(P.integrations.read)
+  async findWebRequestFilterOptions(@Param('id') id: string) {
+    const tenantId = this.tenantContext.getTenantId();
+    return this.providersService.findWebRequestFilterOptionsByConnection({
+      connectionId: id,
+      tenantId,
+    });
+  }
+
+  @Get(':id/web-requests')
+  @RequirePermission(P.integrations.read)
+  async findWebRequests(
+    @Param('id') id: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('outcome') outcome?: string,
+    @Query('method') method?: string,
+    @Query('entityType') entityType?: string,
+    @Query('user') user?: string,
+    @Query('search') search?: string,
+    @Query('sort') sort?: string,
+  ) {
+    const tenantId = this.tenantContext.getTenantId();
+    return this.providersService.findWebRequestsByConnection({
+      connectionId: id,
+      tenantId,
+      outcome,
+      method,
+      entityType,
+      user,
+      search,
+      sort,
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+    });
+  }
+
   @Get(':id/docs-url')
   @RequirePermission(P.integrations.read)
   async getDocsUrl(@Param('id') id: string) {

@@ -1,6 +1,7 @@
 'use client';
 
 import { BreadcrumbProvider } from './BreadcrumbProvider';
+import { CurrentJobProvider } from './CurrentJobProvider';
 import { AppShell } from './AppShell';
 import { ApiConnectionMonitor } from './ApiConnectionMonitor';
 import { PermissionsProvider } from '@/components/providers/PermissionsProvider';
@@ -23,17 +24,19 @@ export function AppLayoutClient({
 }: AppLayoutClientProps) {
   return (
     <BreadcrumbProvider>
-      <ApiConnectionMonitor />
-      <PermissionsProvider permissions={permissions}>
-        <AppShell
-          user={user}
-          features={features}
-          permissions={permissions}
-          orgName={orgName}
-        >
-          {children}
-        </AppShell>
-      </PermissionsProvider>
+      <CurrentJobProvider>
+        <ApiConnectionMonitor />
+        <PermissionsProvider permissions={permissions}>
+          <AppShell
+            user={user}
+            features={features}
+            permissions={permissions}
+            orgName={orgName}
+          >
+            {children}
+          </AppShell>
+        </PermissionsProvider>
+      </CurrentJobProvider>
     </BreadcrumbProvider>
   );
 }

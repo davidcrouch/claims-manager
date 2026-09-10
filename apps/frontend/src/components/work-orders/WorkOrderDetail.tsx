@@ -48,7 +48,7 @@ import { InvoiceFormDrawer } from '@/components/forms/InvoiceFormDrawer';
 import type { WorkOrder, Job } from '@/types/api';
 import { PrintButton } from '@/components/shared/PrintButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
-import { entityArchiveLabel, entityDetailName, entityDetailHeaderTitles } from '@/components/shared/EntityDetailTitle';
+import { entityArchiveLabel, entityDetailHeaderTitles } from '@/components/shared/EntityDetailTitle';
 import { workOrderInsurerPo } from '@/components/work-orders/work-order-label';
 import { jobDisplayName, toJobOptions } from '@/components/shared/job-label';
 import { PagedLineItemsTable } from '@/components/quotes/PagedLineItemsTable';
@@ -103,11 +103,6 @@ export function WorkOrderPageHeader({ wo, job }: { wo: WorkOrder; job?: Job | nu
   const [loading, setLoading] = useState(false);
   const [showInvoiceForm, setShowInvoiceForm] = useState(false);
   const payload = getPayload(wo);
-  const displayName = entityDetailName(
-    wo.name,
-    wo.workOrderNumber ?? wo.externalId,
-    wo.id,
-  );
   const status = lookupName(wo.status, payload, 'status') ?? 'Unknown';
   const woType = lookupName(wo.workOrderType, payload, 'workOrderType');
   const source = sourceOrgName(wo);
@@ -115,8 +110,7 @@ export function WorkOrderPageHeader({ wo, job }: { wo: WorkOrder; job?: Job | nu
   const titles = entityDetailHeaderTitles({
     internalNumber: wo.internalNumber,
     name: wo.name,
-    secondaryLabel: wo.workOrderNumber ?? wo.externalId,
-    fallbackId: wo.id,
+    secondaryLabel: wo.workOrderNumber,
   });
   const jobName = job?.name?.trim() || job?.externalReference?.trim() || undefined;
   const jobNameById =
@@ -210,6 +204,7 @@ export function WorkOrderPageHeader({ wo, job }: { wo: WorkOrder; job?: Job | nu
         defaultWorkOrderId={wo.id}
       />
       <PageHeaderLayout
+        job={job}
         leading={<BackButton href={job ? `/work-orders?jobId=${job.id}` : '/work-orders'} label="Back to work orders" />}
         icon={
           <PageHeaderIcon
@@ -223,9 +218,6 @@ export function WorkOrderPageHeader({ wo, job }: { wo: WorkOrder; job?: Job | nu
         titleMono={titles.titleMono}
         topRow={
           <>
-            {wo.externalId && wo.externalId !== displayName && (
-              <span className="font-mono text-xs text-muted-foreground">· {wo.externalId}</span>
-            )}
             <StatusBadge status={status} />
             {woType && (
               <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
@@ -292,10 +284,8 @@ function OverviewTab({ wo }: { wo: WorkOrder }) {
           icon={<FileSignature className="h-4 w-4 text-muted-foreground" />}
         >
           <DefRow label="Insurer PO" value={workOrderInsurerPo(wo) ?? '—'} />
-          <DefRow label="WO / PO number" value={wo.workOrderNumber ?? '—'} />
-          <DefRow label="External ID" value={wo.externalId ?? '—'} />
           <DefRow label="Name" value={wo.name ?? '—'} />
-          <DefRow label="Status" value={status} />
+          <DefRow label="Status" value={<StatusBadge status={status} />} />
           <DefRow label="Type" value={woType} />
           <DefRow label="Vendor (this tenant)" value={vendorName ?? '—'} />
         </SectionCard>

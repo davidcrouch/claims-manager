@@ -12,6 +12,7 @@ import { ConnectionResolverService } from '../external/connection-resolver.servi
 import { OutboundEventsService } from '../outbound-events/outbound-events.service';
 import { OutboundSyncService } from '../domain/outbound/outbound-sync.service';
 import { CW_TASK_TYPES } from './cw-task-types';
+import { attachJobSummaries } from '../../common/attach-job-summaries';
 
 function parseOptionalUserId(value: unknown): string | null | undefined {
   if (value === undefined) return undefined;
@@ -249,7 +250,14 @@ export class TasksService {
       overdue: params.overdue,
       sort: params.sort,
     });
-    return { ...result, data: this.shapeTasks(result.data) };
+    return {
+      ...result,
+      data: await attachJobSummaries({
+        tenantId,
+        rows: this.shapeTasks(result.data),
+        jobsRepo: this.jobsRepo,
+      }),
+    };
   }
 
   async findFilterOptions() {

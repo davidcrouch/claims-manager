@@ -37,6 +37,7 @@ export interface UseKeyboardNavOptions {
   showUnitCost?: boolean;
   hideComponent: boolean;
   invoiceProgressEditable?: boolean;
+  buyCostEditable?: boolean;
   selectedRows: Set<string>;
   setSelectedRows: React.Dispatch<React.SetStateAction<Set<string>>>;
   initRow: (rowKey: string, entry: RowEntry) => void;
@@ -58,6 +59,7 @@ export function useKeyboardNav({
   showUnitCost = true,
   hideComponent,
   invoiceProgressEditable = false,
+  buyCostEditable = false,
   selectedRows,
   setSelectedRows,
   initRow,
@@ -66,7 +68,7 @@ export function useKeyboardNav({
     (rowIdx: number, field: EditableFieldKey) => {
       if (rowIdx < 0 || rowIdx >= visibleRowIndex.length) return;
       const target = visibleRowIndex[rowIdx];
-      if (invoiceProgressEditable && target.kind !== 'item') return;
+      if ((invoiceProgressEditable || buyCostEditable) && target.kind !== 'item') return;
 
       const assemblyFields = showQuantities
         ? getAssemblyEditableFields(hideComponent)
@@ -74,9 +76,24 @@ export function useKeyboardNav({
       const scopeFields = showQuantities
         ? getScopeEditableFields(hideComponent)
         : getScopeEditableFields(hideComponent).filter((f) => f !== 'quantity');
+      const itemFields = getEditableFields(
+        showMarkup,
+        showGst,
+        showQuantities,
+        showPricing,
+        hideComponent,
+        invoiceProgressEditable,
+        showBuyCost,
+        showUnitCost,
+        buyCostEditable,
+      );
 
       let effectiveField: EditableFieldKey = invoiceProgressEditable ? 'invoiced' : field;
-      if (!invoiceProgressEditable) {
+      if (invoiceProgressEditable) {
+        // stay on invoiced
+      } else if (buyCostEditable) {
+        effectiveField = itemFields.includes(field) ? field : (itemFields[0] ?? 'quantity');
+      } else {
         if (hideComponent && field === 'component') effectiveField = 'name';
         if (target.kind === 'assembly') {
           effectiveField = assemblyFields.includes(effectiveField) ? effectiveField : 'name';
@@ -88,7 +105,7 @@ export function useKeyboardNav({
       initRow(target.key, target);
       setEditState({ rowKey: target.key, field: effectiveField });
     },
-    [visibleRowIndex, showQuantities, hideComponent, invoiceProgressEditable, initRow, setEditState],
+    [visibleRowIndex, showQuantities, showMarkup, showGst, showPricing, showBuyCost, showUnitCost, hideComponent, invoiceProgressEditable, buyCostEditable, initRow, setEditState],
   );
 
   const handleCellKeyDown = useCallback(
@@ -117,14 +134,19 @@ export function useKeyboardNav({
                 invoiceProgressEditable,
                 showBuyCost,
                 showUnitCost,
+                buyCostEditable,
               );
+
+      const restrictedField: EditableFieldKey | null = invoiceProgressEditable
+        ? 'invoiced'
+        : null;
 
       const colIdx = fields.indexOf(editState.field);
       const inNameCol = nameColFields.includes(editState.field);
 
       switch (e.key) {
         case 'ArrowLeft':
-          if (invoiceProgressEditable) break;
+          if (restrictedField) break;
           e.preventDefault();
           if (!hideComponent && editState.field === 'component') {
             setEditState({ ...editState, field: 'name' });
@@ -137,7 +159,7 @@ export function useKeyboardNav({
           break;
 
         case 'ArrowRight':
-          if (invoiceProgressEditable) break;
+          if (restrictedField) break;
           e.preventDefault();
           if (editState.field === 'name') {
             setEditState({ ...editState, field: hideComponent ? 'description' : 'component' });
@@ -158,9 +180,9 @@ export function useKeyboardNav({
           const rowIdx = visibleRowIndex.findIndex((r) => r.key === editState.rowKey);
           if (rowIdx < 0) break;
 
-          if (invoiceProgressEditable) {
+          if (restrictedField) {
             const prevIdx = findAdjacentRowIndex(visibleRowIndex, rowIdx, -1, 'item');
-            if (prevIdx >= 0) navigateToRow(prevIdx, 'invoiced');
+            if (prevIdx >= 0) navigateToRow(prevIdx, restrictedField);
             break;
           }
 
@@ -186,9 +208,9 @@ export function useKeyboardNav({
           const rowIdx = visibleRowIndex.findIndex((r) => r.key === editState.rowKey);
           if (rowIdx < 0) break;
 
-          if (invoiceProgressEditable) {
+          if (restrictedField) {
             const nextIdx = findAdjacentRowIndex(visibleRowIndex, rowIdx, 1, 'item');
-            if (nextIdx >= 0) navigateToRow(nextIdx, 'invoiced');
+            if (nextIdx >= 0) navigateToRow(nextIdx, restrictedField);
             break;
           }
 
@@ -210,15 +232,15 @@ export function useKeyboardNav({
 
         case 'Tab': {
           e.preventDefault();
-          if (invoiceProgressEditable) {
+          if (restrictedField) {
             const rowIdx = visibleRowIndex.findIndex((r) => r.key === editState.rowKey);
             if (rowIdx < 0) break;
             if (e.shiftKey) {
               const prevIdx = findAdjacentRowIndex(visibleRowIndex, rowIdx, -1, 'item');
-              if (prevIdx >= 0) navigateToRow(prevIdx, 'invoiced');
+              if (prevIdx >= 0) navigateToRow(prevIdx, restrictedField);
             } else {
               const nextIdx = findAdjacentRowIndex(visibleRowIndex, rowIdx, 1, 'item');
-              if (nextIdx >= 0) navigateToRow(nextIdx, 'invoiced');
+              if (nextIdx >= 0) navigateToRow(nextIdx, restrictedField);
             }
             break;
           }
@@ -268,7 +290,7 @@ export function useKeyboardNav({
           break;
       }
     },
-    [editState, setEditState, visibleRowIndex, showMarkup, showGst, showQuantities, showPricing, showBuyCost, showUnitCost, hideComponent, invoiceProgressEditable, selectedRows, setSelectedRows, navigateToRow],
+    [editState, setEditState, visibleRowIndex, showMarkup, showGst, showQuantities, showPricing, showBuyCost, showUnitCost, hideComponent, invoiceProgressEditable, buyCostEditable, selectedRows, setSelectedRows, navigateToRow],
   );
 
   return { handleCellKeyDown, navigateToRow };

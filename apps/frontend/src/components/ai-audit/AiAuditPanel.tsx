@@ -218,6 +218,7 @@ export default function AiAuditPanel() {
             <thead className="border-b border-slate-100 bg-slate-50">
               <tr>
                 <th className="px-4 py-3 text-left font-medium text-slate-600">Time</th>
+                <th className="px-4 py-3 text-left font-medium text-slate-600">User</th>
                 <th className="px-4 py-3 text-left font-medium text-slate-600">Agent</th>
                 <th className="px-4 py-3 text-left font-medium text-slate-600">Model</th>
                 <th className="px-4 py-3 text-right font-medium text-slate-600">Tokens</th>
@@ -229,13 +230,13 @@ export default function AiAuditPanel() {
             <tbody className="divide-y divide-slate-50">
               {loading && safeRows.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-slate-400">
+                  <td colSpan={8} className="px-4 py-12 text-center text-slate-400">
                     <Loader2 className="mx-auto h-6 w-6 animate-spin" />
                   </td>
                 </tr>
               ) : safeRows.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-slate-400">
+                  <td colSpan={8} className="px-4 py-12 text-center text-slate-400">
                     No audit records found
                   </td>
                 </tr>
@@ -247,6 +248,9 @@ export default function AiAuditPanel() {
                   >
                     <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                       {formatDate(row.createdAt)}
+                    </td>
+                    <td className="px-4 py-3 text-slate-800">
+                      {row.userName?.trim() || '—'}
                     </td>
                     <td className="px-4 py-3 font-medium text-slate-800">
                       {row.agentName ?? '—'}

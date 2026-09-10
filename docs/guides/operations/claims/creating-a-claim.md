@@ -10,7 +10,6 @@ routes:
 audience: member
 permissions_discussed:
   - claims.read
-  - claims.create
   - jobs.create
   - jobs.read
 tags:
@@ -46,7 +45,7 @@ This guide explains how new claims appear, how to confirm you have the right rec
 1. In the left sidebar, open **Customers**.
 2. Click **Claims**.
 
-> **Required permission:** You need `claims.read` to see the register. Starting a job needs `jobs.create`. The `claims.create` permission exists for integrations; there is no in-app **New Claim** control today.
+> **Required permission:** You need `claims.read` to see the register. Starting a job needs `jobs.create`. Insurance claims cannot be created in the UI — they arrive from the insurer connection (Crunchwork webhook).
 
 > **Warning:** **Gear icon → Organisation → Organisation Claims** is a different product. Approving a custody request there does not create an insurance claim under **Customers → Claims**.
 

@@ -37,7 +37,7 @@ export class FinanceService {
           ELSE '90+ days'
         END AS bucket,
         COUNT(*)::int AS count,
-        COALESCE(SUM(i.total_amount::numeric), 0)::numeric AS total_amount
+        COALESCE(SUM(GREATEST(i.total_amount::numeric - COALESCE(i.amount_received::numeric, 0), 0)), 0)::numeric AS total_amount
       FROM invoices i
       LEFT JOIN lookup_values ls ON i.status_lookup_id = ls.id
       WHERE i.tenant_id = ${tenantId}

@@ -1,7 +1,35 @@
+'use client';
+
 import type { ComponentType, ReactNode, SVGProps } from 'react';
+import Link from 'next/link';
+import {
+  Bot,
+  Building2,
+  Cable,
+  ListTree,
+  Package,
+  Server,
+  Sparkles,
+} from 'lucide-react';
+import { SidebarTrigger } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
+import { SetCurrentJob } from './CurrentJobProvider';
+import { jobHeaderTitle } from '@/components/shared/job-label';
+import type { Job } from '@/types/api';
 
 type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
+
+const ADMIN_PAGE_HEADER_ICONS = {
+  bot: Bot,
+  sparkles: Sparkles,
+  package: Package,
+  server: Server,
+  cable: Cable,
+  'list-tree': ListTree,
+  building: Building2,
+} as const;
+
+export type AdminPageHeaderIcon = keyof typeof ADMIN_PAGE_HEADER_ICONS;
 
 export function PageHeaderIcon({
   icon: Icon,
@@ -76,9 +104,9 @@ function renderSubtitle(subtitle: ReactNode) {
 }
 
 export interface PageHeaderLayoutProps {
-  /** Back button or other control; spans both rows. */
+  /** Back button or other control; sits beside the menu collapse. */
   leading?: ReactNode;
-  /** Entity icon; spans both rows. */
+  /** Entity icon; sits to the right of the chrome cluster. */
   icon: ReactNode;
   /** Top of the title column (CW / external reference). */
   topTitle?: ReactNode;
@@ -96,13 +124,53 @@ export interface PageHeaderLayoutProps {
   bottomRow?: ReactNode;
   titleColumnClassName?: string;
   className?: string;
+  /** When set on a detail page, shows the internal job number above collapse + back. */
+  job?: Job | null;
 }
 
 /**
  * Shared app-header content grid:
- * icon (full height) | CW title / record title | badges / fields.
+ * chrome (job / collapse / back) | entity icon | titles | badges / fields.
  * Page actions and the user menu live in `AppHeader` as sibling full-height columns.
  */
+function HeaderSidebarTrigger() {
+  return (
+    <SidebarTrigger className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground" />
+  );
+}
+
+function HeaderChrome({
+  job,
+  leading,
+}: {
+  job?: Job | null;
+  leading?: ReactNode;
+}) {
+  const controls = (
+    <div className="flex items-center">
+      <HeaderSidebarTrigger />
+      {leading}
+    </div>
+  );
+
+  if (!job) {
+    return <div className="flex items-center self-stretch">{controls}</div>;
+  }
+
+  return (
+    <div className="flex flex-col items-start justify-center gap-0.5">
+      <Link
+        href={`/jobs/${job.id}`}
+        className="max-w-48 truncate font-mono text-xs font-semibold uppercase leading-tight tracking-wide text-sidebar-foreground outline-none transition-colors hover:text-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+        title="View current job"
+      >
+        {jobHeaderTitle(job)}
+      </Link>
+      {controls}
+    </div>
+  );
+}
+
 export function PageHeaderLayout({
   leading,
   icon,
@@ -115,8 +183,8 @@ export function PageHeaderLayout({
   bottomRow,
   titleColumnClassName,
   className,
+  job,
 }: PageHeaderLayoutProps) {
-  const hasLeading = leading != null && leading !== false;
   const hasActions = titleActions != null && titleActions !== false;
   const hasTopTitle = topTitle != null && topTitle !== false && topTitle !== '';
   const hasSubtitle =
@@ -125,15 +193,12 @@ export function PageHeaderLayout({
   const hasBottomRow = bottomRow != null && bottomRow !== false;
   const twoRows = hasTopTitle || hasSubtitle || hasBottomRow;
 
-  const cols: string[] = [];
-  if (hasLeading) cols.push('auto');
-  cols.push('auto');
-  cols.push('minmax(0,auto)');
+  const cols: string[] = ['auto', 'auto', 'minmax(0,auto)'];
   if (hasActions) cols.push('auto');
   cols.push('minmax(0,1fr)');
 
   let nextCol = 1;
-  const leadingCol = hasLeading ? nextCol++ : 0;
+  const chromeCol = nextCol++;
   const iconCol = nextCol++;
   const titleCol = nextCol++;
   const actionsCol = hasActions ? nextCol++ : 0;
@@ -145,94 +210,96 @@ export function PageHeaderLayout({
   );
 
   return (
-    <div
-      data-slot="page-header-layout"
-      className={cn('grid w-full min-w-0 items-center gap-x-3 gap-y-0.5', className)}
-      style={{
-        gridTemplateColumns: cols.join(' '),
-        gridTemplateRows: twoRows ? 'auto auto' : 'auto',
-      }}
-    >
-      {hasLeading ? (
-        <div
-          className="flex items-center self-stretch"
-          style={{ gridColumn: leadingCol, gridRow: rowSpan }}
-        >
-          {leading}
-        </div>
-      ) : null}
-
+    <>
+      {job ? <SetCurrentJob job={job} /> : null}
       <div
-        className="flex items-center self-stretch"
-        style={{ gridColumn: iconCol, gridRow: rowSpan }}
+        data-slot="page-header-layout"
+        className={cn('grid w-full min-w-0 items-center gap-x-3 gap-y-0.5', className)}
+        style={{
+          gridTemplateColumns: cols.join(' '),
+          gridTemplateRows: twoRows ? 'auto auto' : 'auto',
+        }}
       >
-        {icon}
-      </div>
-
-      {hasTopTitle ? (
-        <>
-          <div className={titleCellClass} style={{ gridColumn: titleCol, gridRow: 1 }}>
-            {renderCwTitle(topTitle)}
-          </div>
-          <div className={titleCellClass} style={{ gridColumn: titleCol, gridRow: 2 }}>
-            {renderMainTitle(title, titleMono)}
-          </div>
-        </>
-      ) : (
-        <>
-          <div className={titleCellClass} style={{ gridColumn: titleCol, gridRow: 1 }}>
-            {renderMainTitle(title, titleMono)}
-          </div>
-          {hasSubtitle ? (
-            <div
-              className={cn(titleCellClass, 'max-w-2xl')}
-              style={{ gridColumn: titleCol, gridRow: 2 }}
-            >
-              {renderSubtitle(subtitle)}
-            </div>
-          ) : null}
-        </>
-      )}
-
-      {hasActions ? (
         <div
           className="flex items-center self-stretch"
-          style={{ gridColumn: actionsCol, gridRow: rowSpan }}
+          style={{ gridColumn: chromeCol, gridRow: rowSpan }}
         >
-          {titleActions}
+          <HeaderChrome job={job} leading={leading} />
         </div>
-      ) : null}
 
-      {hasTopRow ? (
         <div
-          className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 self-center"
-          style={{ gridColumn: metaCol, gridRow: 1 }}
+          className="flex items-center self-stretch"
+          style={{ gridColumn: iconCol, gridRow: rowSpan }}
         >
-          {topRow}
+          {icon}
         </div>
-      ) : null}
 
-      {hasBottomRow ? (
-        <div
-          className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-1 self-center text-xs"
-          style={{ gridColumn: metaCol, gridRow: twoRows ? 2 : 1 }}
-        >
-          {bottomRow}
-        </div>
-      ) : null}
-    </div>
+        {hasTopTitle ? (
+          <>
+            <div className={titleCellClass} style={{ gridColumn: titleCol, gridRow: 1 }}>
+              {renderCwTitle(topTitle)}
+            </div>
+            <div className={titleCellClass} style={{ gridColumn: titleCol, gridRow: 2 }}>
+              {renderMainTitle(title, titleMono)}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className={titleCellClass} style={{ gridColumn: titleCol, gridRow: 1 }}>
+              {renderMainTitle(title, titleMono)}
+            </div>
+            {hasSubtitle ? (
+              <div
+                className={cn(titleCellClass, 'max-w-2xl')}
+                style={{ gridColumn: titleCol, gridRow: 2 }}
+              >
+                {renderSubtitle(subtitle)}
+              </div>
+            ) : null}
+          </>
+        )}
+
+        {hasActions ? (
+          <div
+            className="flex items-center self-stretch"
+            style={{ gridColumn: actionsCol, gridRow: rowSpan }}
+          >
+            {titleActions}
+          </div>
+        ) : null}
+
+        {hasTopRow ? (
+          <div
+            className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 self-center"
+            style={{ gridColumn: metaCol, gridRow: 1 }}
+          >
+            {topRow}
+          </div>
+        ) : null}
+
+        {hasBottomRow ? (
+          <div
+            className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-1 self-center text-xs"
+            style={{ gridColumn: metaCol, gridRow: twoRows ? 2 : 1 }}
+          >
+            {bottomRow}
+          </div>
+        ) : null}
+      </div>
+    </>
   );
 }
 
 export function AdminPageHeader({
-  icon: Icon,
+  icon,
   title,
   description,
 }: {
-  icon: IconComponent;
+  icon: AdminPageHeaderIcon;
   title: string;
   description?: string;
 }) {
+  const Icon = ADMIN_PAGE_HEADER_ICONS[icon];
   return (
     <PageHeaderLayout
       icon={

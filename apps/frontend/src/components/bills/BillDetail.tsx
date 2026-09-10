@@ -14,11 +14,23 @@ import {
   ClipboardList,
   MessageSquare,
   Paperclip,
+  CheckCircle2,
+  Pencil,
+  AlertTriangle,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { BackButton } from '@/components/layout/BackButton';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   PageHeaderField,
   PageHeaderIcon,
@@ -34,6 +46,7 @@ import {
   formatCurrency,
 } from '@/components/shared/detail';
 import { updateBillStatusAction } from '@/app/(app)/mutations-status';
+import { approveBillAction, rejectBillAction, returnBillToReceivedAction } from '@/app/(app)/mutations';
 import type { Bill, Job } from '@/types/api';
 import { PrintButton } from '@/components/shared/PrintButton';
 import { ArchiveEntityButton } from '@/components/shared/ArchiveEntityButton';
@@ -52,17 +65,19 @@ import {
 } from '@/components/shared/detail-autosave';
 import { DetailUndoButton } from '@/components/shared/DetailAutosaveActions';
 import { HeaderSaveStatus } from '@/components/shared/HeaderSaveStatus';
-import { billDisplayTitle, billVendorName } from '@/components/bills/bill-label';
+import { billDisplayTitle, billVendorName, billStatusName, billHasPositiveAmount, billIsRejected } from '@/components/bills/bill-label';
+import { useHasPermission } from '@/components/providers/PermissionsProvider';
 
 // ---------- header ----------------------------------------------------------
 
 export function BillPageHeader({ bill, job }: { bill: Bill; job?: Job | null }) {
   const title = billDisplayTitle(bill);
-  const status = bill.status?.name ?? 'Unknown';
+  const status = billStatusName(bill);
   const vendor = billVendorName(bill);
 
   return (
     <PageHeaderLayout
+      job={job}
       leading={<BackButton href={job ? `/bills?jobId=${job.id}` : '/bills'} label="Back to bills" />}
       icon={
         <PageHeaderIcon
@@ -115,7 +130,7 @@ export function BillPageHeader({ bill, job }: { bill: Bill; job?: Job | null }) 
 // ---------- tabs ------------------------------------------------------------
 
 function OverviewTab({ bill }: { bill: Bill }) {
-  const status = bill.status?.name ?? 'Unknown';
+  const status = billStatusName(bill);
   const paymentStatus = bill.paymentStatus?.name;
   const vendor = billVendorName(bill);
 
@@ -354,11 +369,27 @@ export function BillDetail({ bill, job }: { bill: Bill; job?: Job | null }) {
   const [lineItemsEditTick, setLineItemsEditTick] = useState(0);
   const [undoStack, setUndoStack] = useState<LineItemsUndoEntry[]>([]);
   const [statusLoading, setStatusLoading] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [editConfirmOpen, setEditConfirmOpen] = useState(false);
+  const [returningToReceived, setReturningToReceived] = useState(false);
+  const [rejectConfirmOpen, setRejectConfirmOpen] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
   const saveLineItemsRef = useRef<(() => void) | null>(null);
   const lineItemsRef = useRef<BillLineItemsTabHandle | null>(null);
+  const canApprovePermission = useHasPermission('bills.approve');
+  const canRejectPermission = useHasPermission('bills.reject');
+  const canManageProcurement = useHasPermission('procurement.manage');
 
   const title = billDisplayTitle(bill);
-  const status = bill.status?.name ?? 'Unknown';
+  const status = billStatusName(bill);
+  const isReceived = status === 'Received';
+  const isReviewed = status === 'Reviewed';
+  const isRejected = billIsRejected(bill);
+  const hasPositiveAmount = billHasPositiveAmount(bill);
+  const showApprove = canApprovePermission && isReceived;
+  const approveEnabled = showApprove && hasPositiveAmount && !approving;
+  const showReject = canRejectPermission && isReceived;
+  const showEditBill = canManageProcurement && (isReviewed || isRejected);
   const canUndo = lineItemsDirty || undoStack.length > 0;
 
   useEffect(() => {
@@ -448,6 +479,67 @@ export function BillDetail({ bill, job }: { bill: Bill; job?: Job | null }) {
     setStatusLoading(false);
   }
 
+  async function handleApproveBill() {
+    if (!approveEnabled) return;
+    setApproving(true);
+    try {
+      const result = await approveBillAction(bill.id);
+      if (!result.success) {
+        toast.error(result.error ?? 'Failed to approve bill');
+        return;
+      }
+      toast.success('Bill approved');
+      router.refresh();
+    } catch (err) {
+      console.error('[frontend:BillDetail.handleApproveBill]', err);
+      toast.error(err instanceof Error ? err.message : 'Failed to approve bill');
+    } finally {
+      setApproving(false);
+    }
+  }
+
+  async function handleConfirmEditBill() {
+    if (!showEditBill || returningToReceived) return;
+    setReturningToReceived(true);
+    try {
+      const result = await returnBillToReceivedAction(bill.id);
+      if (!result.success) {
+        toast.error(result.error ?? 'Failed to return bill to received');
+        return;
+      }
+      toast.success('Bill returned to received');
+      setEditConfirmOpen(false);
+      router.refresh();
+    } catch (err) {
+      console.error('[frontend:BillDetail.handleConfirmEditBill]', err);
+      toast.error(
+        err instanceof Error ? err.message : 'Failed to return bill to received',
+      );
+    } finally {
+      setReturningToReceived(false);
+    }
+  }
+
+  async function handleConfirmReject() {
+    if (!showReject || rejecting) return;
+    setRejecting(true);
+    try {
+      const result = await rejectBillAction(bill.id);
+      if (!result.success) {
+        toast.error(result.error ?? 'Failed to reject bill');
+        return;
+      }
+      toast.success('Bill rejected');
+      setRejectConfirmOpen(false);
+      router.refresh();
+    } catch (err) {
+      console.error('[frontend:BillDetail.handleConfirmReject]', err);
+      toast.error(err instanceof Error ? err.message : 'Failed to reject bill');
+    } finally {
+      setRejecting(false);
+    }
+  }
+
   const tabs: Array<{ id: BillTab; label: string; icon: typeof Calendar }> = [
     { id: 'overview', label: 'Overview', icon: FileSignature },
     { id: 'line-items', label: 'Line Items', icon: Package },
@@ -466,28 +558,48 @@ export function BillDetail({ bill, job }: { bill: Bill; job?: Job | null }) {
         dirty={lineItemsDirty}
       />
       <SetHeaderActions>
-        {status === 'Received' && (
-          <>
+        {showApprove && (
+          <span
+            title={
+              hasPositiveAmount
+                ? 'Approve Bill'
+                : 'Add an amount greater than 0 to approve this bill'
+            }
+            className="inline-flex"
+          >
             <Button
               size="default"
-              disabled={statusLoading}
-              className="h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
-              onClick={() => handleStatusChange('Approved')}
+              disabled={!approveEnabled}
+              className="h-9 gap-1.5 px-4 bg-emerald-600 text-white hover:bg-emerald-500"
+              onClick={handleApproveBill}
             >
-              Approve
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              {approving ? 'Approving…' : 'Approve Bill'}
             </Button>
-            <Button
-              size="default"
-              variant="destructive"
-              disabled={statusLoading}
-              className="h-9 gap-1.5 px-4"
-              onClick={() => handleStatusChange('Rejected')}
-            >
-              Reject
-            </Button>
-          </>
+          </span>
         )}
-        {status === 'Approved' && (
+        {showReject && (
+          <Button
+            size="default"
+            disabled={statusLoading || rejecting}
+            className="h-9 gap-1.5 px-4 bg-red-600 text-white hover:bg-red-500"
+            onClick={() => setRejectConfirmOpen(true)}
+          >
+            Reject
+          </Button>
+        )}
+        {showEditBill && (
+          <Button
+            size="default"
+            disabled={returningToReceived}
+            className="h-9 gap-1.5 px-4 bg-slate-700 text-white hover:bg-slate-600"
+            onClick={() => setEditConfirmOpen(true)}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            Edit Bill
+          </Button>
+        )}
+        {canManageProcurement && (isReviewed || status === 'Approved') && (
           <Button
             size="default"
             disabled={statusLoading}
@@ -513,6 +625,91 @@ export function BillDetail({ bill, job }: { bill: Bill; job?: Job | null }) {
           />
         </HeaderActionToolbar>
       </SetHeaderActions>
+      <Dialog
+        open={editConfirmOpen}
+        onOpenChange={(next) => {
+          if (!returningToReceived) setEditConfirmOpen(next);
+        }}
+      >
+        <DialogContent showCloseButton={false} className="sm:max-w-lg">
+          <DialogHeader>
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700">
+                <Pencil className="h-6 w-6" />
+              </div>
+              <div className="space-y-2 pt-0.5">
+                <DialogTitle className="text-xl">Edit bill</DialogTitle>
+                <DialogDescription className="text-sm leading-relaxed">
+                  Editing this bill will set its status back to{' '}
+                  <span className="font-medium text-foreground">Received</span>.
+                  {isRejected
+                    ? ' You can then approve or reject it again.'
+                    : ' You will need to approve it again after making changes.'}
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          <DialogFooter className="mt-2 gap-2 sm:gap-2">
+            <Button
+              variant="outline"
+              disabled={returningToReceived}
+              onClick={() => setEditConfirmOpen(false)}
+              className="h-9 px-4"
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={returningToReceived}
+              onClick={handleConfirmEditBill}
+              className="h-9 px-4"
+            >
+              {returningToReceived ? 'Updating…' : 'Edit bill'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={rejectConfirmOpen}
+        onOpenChange={(next) => {
+          if (!rejecting) setRejectConfirmOpen(next);
+        }}
+      >
+        <DialogContent showCloseButton={false} className="sm:max-w-lg">
+          <DialogHeader>
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600">
+                <AlertTriangle className="h-6 w-6" />
+              </div>
+              <div className="space-y-2 pt-0.5">
+                <DialogTitle className="text-xl">Reject bill</DialogTitle>
+                <DialogDescription className="text-sm leading-relaxed">
+                  Rejecting this bill will set its status to{' '}
+                  <span className="font-medium text-foreground">Rejected</span>. You can use{' '}
+                  <span className="font-medium text-foreground">Edit Bill</span> later to return it
+                  to Received if the charge should be processed after all.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          <DialogFooter className="mt-2 gap-2 sm:gap-2">
+            <Button
+              variant="outline"
+              disabled={rejecting}
+              onClick={() => setRejectConfirmOpen(false)}
+              className="h-9 px-4"
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={rejecting}
+              onClick={handleConfirmReject}
+              className="h-9 px-4 bg-red-600 text-white hover:bg-red-500"
+            >
+              {rejecting ? 'Rejecting…' : 'Reject bill'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <div className="flex flex-wrap gap-0 border-b border-slate-200">
         {tabs.map((t) => {
           const Icon = t.icon;

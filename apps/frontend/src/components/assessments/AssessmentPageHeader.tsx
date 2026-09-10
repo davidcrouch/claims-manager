@@ -25,6 +25,7 @@ export function AssessmentPageHeader({
 }) {
   return (
     <PageHeaderLayout
+      job={job}
       leading={<BackButton href={backHref} label="Back to assessments" />}
       icon={
         <PageHeaderIcon

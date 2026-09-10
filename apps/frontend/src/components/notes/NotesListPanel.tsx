@@ -20,6 +20,7 @@ import {
 import { TablePagination } from '@/components/shared/table-pagination';
 import { formatDateTime } from '@/components/shared/detail';
 import { JobCellLink } from '@/components/shared/JobCellLink';
+import { useResolvedJobLabels } from '@/components/shared/use-resolved-job-labels';
 import { NoteDetailDrawer } from '@/components/notes/NoteDetailDrawer';
 import { deleteNoteAction, fetchNotesAction } from '@/app/(app)/messages/actions';
 import type { JobNote } from '@/types/api';
@@ -73,6 +74,11 @@ export function NotesListPanel({
   const loadGenRef = useRef(0);
   const limit = 20;
   const sortParam = `${sortField}_${sortOrder}`;
+  const { resolvedJobNameById, resolvedJobTypeById } = useResolvedJobLabels(
+    jobNameById,
+    jobTypeById,
+    notes,
+  );
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -241,8 +247,8 @@ export function NotesListPanel({
                       <td className="px-4 py-3 text-slate-700">
                         <JobCellLink
                           jobId={note.jobId}
-                          jobNameById={jobNameById ?? {}}
-                          jobTypeById={jobTypeById}
+                          jobNameById={resolvedJobNameById}
+                          jobTypeById={resolvedJobTypeById}
                         />
                       </td>
                       <td className="px-4 py-3">
@@ -297,7 +303,7 @@ export function NotesListPanel({
         open={detailOpen}
         onOpenChange={handleDetailOpenChange}
         note={selectedNote}
-        jobNameById={jobNameById}
+        jobNameById={resolvedJobNameById}
       />
 
       <Dialog

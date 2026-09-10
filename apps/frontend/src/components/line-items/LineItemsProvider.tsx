@@ -192,6 +192,8 @@ export interface LineItemsProviderProps {
   showPreviouslyInvoiced?: boolean;
   showItemTypeColumn?: boolean;
   invoiceProgressEditable?: boolean;
+  /** Allow quantity and Buy Cost edits when the table is otherwise read-only (sourced PO). Units and sale price stay locked. */
+  buyCostEditable?: boolean;
   labels?: Partial<LineItemLabels>;
   hideComponent?: boolean;
   showLineScopeStatusColumn?: boolean;
@@ -221,6 +223,7 @@ export function LineItemsProvider({
   showPreviouslyInvoiced,
   showItemTypeColumn,
   invoiceProgressEditable = false,
+  buyCostEditable = false,
   labels: labelOverrides,
   hideComponent = false,
   showLineScopeStatusColumn = false,
@@ -265,6 +268,7 @@ export function LineItemsProvider({
       showPreviouslyInvoiced: effectiveShowPreviouslyInvoiced,
       showItemTypeColumn: effectiveShowItemTypeColumn,
       invoiceProgressEditable,
+      buyCostEditable,
       showCategory,
       hideComponent,
       enableLineNotes,
@@ -273,7 +277,7 @@ export function LineItemsProvider({
       labels,
       showColumnVisibilityToggles: showColumnToggles,
     }),
-    [mode, showMarkup, showGst, showQuantities, showPricing, pricingDetail, showInvoiceProgress, effectiveShowPreviouslyInvoiced, effectiveShowItemTypeColumn, invoiceProgressEditable, showCategory, hideComponent, enableLineNotes, showLineScopeStatusColumn, compact, labels, showColumnToggles],
+    [mode, showMarkup, showGst, showQuantities, showPricing, pricingDetail, showInvoiceProgress, effectiveShowPreviouslyInvoiced, effectiveShowItemTypeColumn, invoiceProgressEditable, buyCostEditable, showCategory, hideComponent, enableLineNotes, showLineScopeStatusColumn, compact, labels, showColumnToggles],
   );
 
   // --- Structural dirty ---
@@ -397,6 +401,7 @@ export function LineItemsProvider({
     showUnitCost: pricingDetail === 'full',
     hideComponent,
     invoiceProgressEditable,
+    buyCostEditable: buyCostEditable && isReadOnly,
     selectedRows,
     setSelectedRows,
     initRow: edit.initRow,
@@ -410,6 +415,7 @@ export function LineItemsProvider({
     showGst,
     selection?.selectedIds,
     hideUnselected,
+    pricingDetail === 'cost',
   );
 
   // --- Bulk selection ---

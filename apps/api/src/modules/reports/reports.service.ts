@@ -1,5 +1,6 @@
 import { Injectable, Optional, BadRequestException } from '@nestjs/common';
-import { ReportsRepository, type ReportInsert } from '../../database/repositories';
+import { ReportsRepository, JobsRepository, type ReportInsert } from '../../database/repositories';
+import { attachJobSummaries } from '../../common/attach-job-summaries';
 import { TenantContext } from '../../tenant/tenant-context';
 import { CrunchworkService } from '../../crunchwork/crunchwork.service';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
@@ -8,6 +9,7 @@ import { ConnectionResolverService } from '../external/connection-resolver.servi
 export class ReportsService {
   constructor(
     private readonly reportsRepo: ReportsRepository,
+    private readonly jobsRepo: JobsRepository,
     private readonly tenantContext: TenantContext,
     private readonly crunchworkService: CrunchworkService,
     @Optional() private readonly connectionResolver?: ConnectionResolverService,
@@ -33,7 +35,7 @@ export class ReportsService {
     sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
-    return this.reportsRepo.findAll({
+    const result = await this.reportsRepo.findAll({
       tenantId,
       page: params.page,
       limit: params.limit,
@@ -44,6 +46,14 @@ export class ReportsService {
       search: params.search,
       sort: params.sort,
     });
+    return {
+      data: await attachJobSummaries({
+        tenantId,
+        rows: result.data,
+        jobsRepo: this.jobsRepo,
+      }),
+      total: result.total,
+    };
   }
 
   async findOne(params: { id: string }) {

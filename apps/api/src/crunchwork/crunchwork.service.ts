@@ -1,14 +1,17 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { HttpService } from '@nestjs/axios';
-import { firstValueFrom } from 'rxjs';
-import { CrunchworkAuthService } from './crunchwork-auth.service';
-import { isRetryableCrunchworkFailure } from './crunchwork-errors';
 import {
+  Injectable,
+  Logger,
+  Optional,
   BadRequestException,
   InternalServerErrorException,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { HttpService } from '@nestjs/axios';
+import { firstValueFrom } from 'rxjs';
+import { CrunchworkAuthService } from './crunchwork-auth.service';
+import { isRetryableCrunchworkFailure } from './crunchwork-errors';
+import { OutboundWebRequestsRepository } from '../database/repositories/outbound-web-requests.repository';
 
 export interface CrunchworkRequestParams {
   connectionId: string;
@@ -53,6 +56,7 @@ export class CrunchworkService {
   constructor(
     private readonly httpService: HttpService,
     private readonly authService: CrunchworkAuthService,
+    @Optional() private readonly webRequestsRepo?: OutboundWebRequestsRepository,
   ) {}
 
   setConnectionResolver(resolver: { getCredentials(p: { connectionId: string }): Promise<{ clientId: string; clientSecret: string; authUrl: string; baseUrl: string; baseApi: string; activeTenantId: string }> }): void {
@@ -99,35 +103,106 @@ export class CrunchworkService {
       headers['Content-Type'] = 'application/json';
     }
 
-    const response = await firstValueFrom(
-      this.httpService.request({
+    const startedAt = Date.now();
+    try {
+      const response = await firstValueFrom(
+        this.httpService.request({
+          method: options.method,
+          url,
+          headers,
+          ...(options.body !== undefined ? { data: options.body } : {}),
+          params: options.params,
+        }),
+      );
+
+      const contentType = String(
+        response.headers?.['content-type'] ?? response.headers?.['Content-Type'] ?? '',
+      ).toLowerCase();
+      const looksLikeHtml =
+        typeof response.data === 'string' &&
+        /^\s*<(?:!doctype|html|head|body)/i.test(response.data);
+
+      if ((contentType && !contentType.includes('json')) || looksLikeHtml) {
+        this.logger.error(
+          `CrunchworkService.request — non-JSON response from ${options.method} ${url} (content-type="${contentType}"). ` +
+            `Likely baseApi is misconfigured on the connection (falling back to the web SPA host).`,
+        );
+        this.recordWebRequest({
+          connectionId: options.connectionId,
+          method: options.method,
+          path: options.path,
+          url,
+          queryParams: options.params,
+          requestBody: options.body,
+          responseBody: response.data,
+          statusCode: response.status ?? 200,
+          durationMs: Date.now() - startedAt,
+          errorMessage: `expected JSON but received "${contentType || 'unknown'}"`,
+          outcome: 'failed',
+        });
+        throw new InternalServerErrorException(
+          `CrunchworkService.request — expected JSON but received "${contentType || 'unknown'}". ` +
+            `Check integration_connections.base_api for connection ${options.connectionId}.`,
+        );
+      }
+
+      this.recordWebRequest({
+        connectionId: options.connectionId,
         method: options.method,
+        path: options.path,
         url,
-        headers,
-        ...(options.body !== undefined ? { data: options.body } : {}),
-        params: options.params,
-      }),
-    );
-
-    const contentType = String(
-      response.headers?.['content-type'] ?? response.headers?.['Content-Type'] ?? '',
-    ).toLowerCase();
-    const looksLikeHtml =
-      typeof response.data === 'string' &&
-      /^\s*<(?:!doctype|html|head|body)/i.test(response.data);
-
-    if ((contentType && !contentType.includes('json')) || looksLikeHtml) {
-      this.logger.error(
-        `CrunchworkService.request — non-JSON response from ${options.method} ${url} (content-type="${contentType}"). ` +
-          `Likely baseApi is misconfigured on the connection (falling back to the web SPA host).`,
-      );
-      throw new InternalServerErrorException(
-        `CrunchworkService.request — expected JSON but received "${contentType || 'unknown'}". ` +
-          `Check integration_connections.base_api for connection ${options.connectionId}.`,
-      );
+        queryParams: options.params,
+        requestBody: options.body,
+        responseBody: response.data,
+        statusCode: response.status ?? 200,
+        durationMs: Date.now() - startedAt,
+        outcome: 'success',
+      });
+      return response.data;
+    } catch (error: unknown) {
+      if (error instanceof InternalServerErrorException) {
+        throw error;
+      }
+      const { status, body } = this.extractUpstreamDetail(error);
+      this.recordWebRequest({
+        connectionId: options.connectionId,
+        method: options.method,
+        path: options.path,
+        url,
+        queryParams: options.params,
+        requestBody: options.body,
+        responseBody: body,
+        statusCode: status ?? null,
+        durationMs: Date.now() - startedAt,
+        errorMessage:
+          error instanceof Error ? error.message : 'Outbound request failed',
+        outcome: 'failed',
+      });
+      throw error;
     }
+  }
 
-    return response.data;
+  private recordWebRequest(params: {
+    connectionId: string;
+    method: string;
+    path: string;
+    url: string;
+    queryParams?: Record<string, string>;
+    requestBody?: unknown;
+    responseBody?: unknown;
+    statusCode: number | null;
+    durationMs: number;
+    errorMessage?: string | null;
+    outcome: 'success' | 'failed';
+  }): void {
+    if (!this.webRequestsRepo) return;
+    void this.webRequestsRepo.recordHttpCall(params).catch((error: unknown) => {
+      this.logger.warn(
+        `CrunchworkService.recordWebRequest — ${params.method} ${params.path} log failed: ${
+          error instanceof Error ? error.message : 'unknown error'
+        }`,
+      );
+    });
   }
 
   private sleep(ms: number): Promise<void> {
@@ -597,22 +672,50 @@ export class CrunchworkService {
     });
 
     const restBase = creds.baseApi || creds.baseUrl;
-    const url = `${restBase.replace(/\/$/, '')}/attachments/${params.attachmentId}/download`;
+    const path = `/attachments/${params.attachmentId}/download`;
+    const url = `${restBase.replace(/\/$/, '')}${path}`;
     this.logger.debug(`CrunchworkService.downloadAttachmentStream — GET ${url}`);
 
-    const response = await firstValueFrom(
-      this.httpService.request({
-        method: 'GET',
-        url,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'active-tenant-id': creds.activeTenantId,
-        },
-        responseType: 'stream',
-      }),
-    );
+    const startedAt = Date.now();
+    try {
+      const response = await firstValueFrom(
+        this.httpService.request({
+          method: 'GET',
+          url,
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'active-tenant-id': creds.activeTenantId,
+          },
+          responseType: 'stream',
+        }),
+      );
 
-    return response.data as import('stream').Readable;
+      this.recordWebRequest({
+        connectionId: params.connectionId,
+        method: 'GET',
+        path,
+        url,
+        statusCode: response.status ?? 200,
+        durationMs: Date.now() - startedAt,
+        outcome: 'success',
+      });
+      return response.data as import('stream').Readable;
+    } catch (error: unknown) {
+      const { status, body } = this.extractUpstreamDetail(error);
+      this.recordWebRequest({
+        connectionId: params.connectionId,
+        method: 'GET',
+        path,
+        url,
+        responseBody: body,
+        statusCode: status ?? null,
+        durationMs: Date.now() - startedAt,
+        errorMessage:
+          error instanceof Error ? error.message : 'Attachment download failed',
+        outcome: 'failed',
+      });
+      throw error;
+    }
   }
 
   async postEvent(params: { connectionId: string; body: Record<string, unknown> }): Promise<Record<string, unknown>> {

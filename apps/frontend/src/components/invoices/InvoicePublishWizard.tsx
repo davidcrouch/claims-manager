@@ -19,6 +19,7 @@ import {
 } from '@/components/shared/PublishEntityContext';
 import { publishInvoiceAction } from '@/app/(app)/mutations';
 import { entityDisplayLabel } from '@/components/shared/entity-label';
+import { invoiceStatusName } from '@/components/invoices/invoice-label';
 import { workOrderInsurerPo } from '@/components/work-orders/work-order-label';
 import type { Claim, Invoice, Job, PurchaseOrder, WorkOrder } from '@/types/api';
 
@@ -91,7 +92,7 @@ export function InvoicePublishWizard({
     }
   }
 
-  const statusName = invoice.status?.name ?? (invoice.sourceExternalReference ? 'Unknown' : 'Draft');
+  const statusName = invoiceStatusName(invoice);
   const invoiceNumber = entityDisplayLabel(invoice.internalNumber, invoice.invoiceNumber);
   const workOrderNumber = entityDisplayLabel(workOrder?.internalNumber);
   const purchaseOrderNumber =
@@ -124,7 +125,7 @@ export function InvoicePublishWizard({
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-950">
               <p className="font-medium">This invoice will be locked after publish</p>
               <p className="mt-2 text-amber-900/80">
-                Status will change to Submitted. Invoice details cannot be edited
+                Status will change to Invoiced. Invoice details cannot be edited
                 afterwards.
               </p>
             </div>
@@ -133,7 +134,7 @@ export function InvoicePublishWizard({
               <p className="font-medium">This will be pushed to Insurer</p>
               <p className="mt-2 text-amber-900/80">
                 Submitting creates the invoice in Crunchwork for Insurer against the
-                linked work order. Status will change to Submitted and the invoice
+                linked work order. Status will change to Invoiced and the invoice
                 will be locked. This cannot be undone from this screen.
               </p>
             </div>

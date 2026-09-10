@@ -4,7 +4,9 @@ import { ProposalsPageClient } from '@/components/proposals/ProposalsPageClient'
 import {buildJobNameById, buildJobTypeById, toJobOptions,
   mergeCurrentJobIntoNameById,
   mergeCurrentJobIntoTypeById,
-  mergeCurrentJobIntoOptions } from '@/components/shared/job-label';
+  mergeCurrentJobIntoOptions,
+  mergeJobLabelsFromRows,
+  mergeJobTypesFromRows } from '@/components/shared/job-label';
 import type { Job, PaginatedResponse, Proposal, Claim } from '@/types/api';
 
 export const metadata = { title: 'Proposals — EnsureOS' };
@@ -71,8 +73,14 @@ export default async function ProposalsPage({
     id: vendor.id,
     name: vendor.name?.trim() ? vendor.name : 'Unknown' }));
   const jobs = jobsRes?.data ?? [];
-  const jobNameById = mergeCurrentJobIntoNameById(buildJobNameById(jobs), job);
-  const jobTypeById = mergeCurrentJobIntoTypeById(buildJobTypeById(jobs), job);
+  const jobNameById = mergeJobLabelsFromRows(
+    mergeCurrentJobIntoNameById(buildJobNameById(jobs), job),
+    initialData.data,
+  );
+  const jobTypeById = mergeJobTypesFromRows(
+    mergeCurrentJobIntoTypeById(buildJobTypeById(jobs), job),
+    initialData.data,
+  );
 
   return (
     <ProposalsPageClient

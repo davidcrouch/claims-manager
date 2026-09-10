@@ -18,6 +18,7 @@ import {
 import { statusIdsForArchiveListTab, mergeStatusParamWithTab } from '@/components/shared/archive-list';
 import { jobDisplayName } from '@/components/shared/job-label';
 import { JobCellLink } from '@/components/shared/JobCellLink';
+import { useResolvedJobLabels } from '@/components/shared/use-resolved-job-labels';
 import { buildServerJobFilterOptions,
   resolveServerJobFilterSelection,
   selectedJobFilterLabels,
@@ -36,7 +37,7 @@ import { EntityPageHeader, type EntityBreakdownItem } from '@/components/shared/
 import { computeStatusBreakdown } from '@/components/layout/ListPageHeader';
 import { fetchInvoicesAction } from '@/app/(app)/invoices/actions';
 import { entityDisplayLabel } from '@/components/shared/entity-label';
-import { invoiceInsurerRef } from '@/components/invoices/invoice-label';
+import { invoiceInsurerRef, invoiceStatusName } from '@/components/invoices/invoice-label';
 import {
   ColumnSettingsHeaderCell,
   useColumnVisibility } from '@/components/shared/column-visibility';
@@ -122,15 +123,20 @@ export function InvoicesListClient({
     () => parseSelectedJobIds(jobId, jobIdsParam),
     [jobId, jobIdsParam],
   );
+  const { resolvedJobNameById, resolvedJobTypeById } = useResolvedJobLabels(
+    jobNameById,
+    jobTypeById,
+    data.data,
+  );
   const filterJobs = useMemo(
     () =>
       buildListJobFilterOptions({
-        jobNameById,
+        jobNameById: resolvedJobNameById,
         currentJob: job
           ? { id: job.id, label: jobDisplayName(job) }
           : null,
         jobId }),
-    [jobNameById, job, jobId],
+    [resolvedJobNameById, job, jobId],
   );
   const uniqueJobs = useMemo(
     () => buildServerJobFilterOptions(filterJobs),
@@ -443,7 +449,7 @@ export function InvoicesListClient({
                 ) : (
                   visibleRows.map((inv) => {
                   const num = entityDisplayLabel(inv.internalNumber, inv.invoiceNumber, inv.id);
-                  const statusName = inv.status?.name ?? 'Unknown';
+                  const statusName = invoiceStatusName(inv);
                   return (
                     <tr
                       key={inv.id}
@@ -469,7 +475,7 @@ export function InvoicesListClient({
                       )}
                       {isVisible('job') && (
                         <td className="px-4 py-3 text-slate-600">
-                          <JobCellLink jobId={inv.jobId} jobNameById={jobNameById} jobTypeById={jobTypeById} />
+                          <JobCellLink jobId={inv.jobId} jobNameById={resolvedJobNameById} jobTypeById={resolvedJobTypeById} />
                         </td>
                       )}
                       {isVisible('status') && (

@@ -147,7 +147,7 @@ const PERMISSIONS: PermissionDef[] = [
   { permissionName: 'roles.grant.admin', label: 'Grant Organisation Admin', description: 'Grant or revoke the admin role', category: 'meta', scope: 'org' },
 
   // Domain permissions
-  { permissionName: 'claims.create', label: 'Create Claims', description: 'Create new insurance claims', category: 'domain', scope: 'org' },
+  // claims.create is retired: claims are ingested via Crunchwork webhook, not created in-app.
   { permissionName: 'claims.read', label: 'Read Claims', description: 'View claims', category: 'domain', scope: 'org' },
   { permissionName: 'claims.update', label: 'Update Claims', description: 'Edit existing claims', category: 'domain', scope: 'org' },
   { permissionName: 'claims.delete', label: 'Delete Claims', description: 'Delete claims', category: 'domain', scope: 'org' },
@@ -158,7 +158,8 @@ const PERMISSIONS: PermissionDef[] = [
   { permissionName: 'invoices.create', label: 'Create Invoices', description: 'Create invoices', category: 'domain', scope: 'org' },
   { permissionName: 'invoices.read', label: 'Read Invoices', description: 'View invoices', category: 'domain', scope: 'org' },
   { permissionName: 'invoices.update', label: 'Update Invoices', description: 'Edit existing invoices', category: 'domain', scope: 'org' },
-  { permissionName: 'invoices.approve', label: 'Approve Invoices', description: 'Approve/reject invoices', category: 'domain', scope: 'org' },
+  { permissionName: 'invoices.approve', label: 'Approve Invoices', description: 'Approve a draft invoice (sets Reviewed)', category: 'domain', scope: 'org' },
+  { permissionName: 'invoices.publish', label: 'Publish Invoice', description: 'Publish a reviewed invoice (sets Invoiced)', category: 'domain', scope: 'org' },
   { permissionName: 'finance.read', label: 'Read Finance', description: 'View finance summaries and ledgers', category: 'domain', scope: 'org' },
   { permissionName: 'finance.manage', label: 'Manage Finance', description: 'Update finance records', category: 'domain', scope: 'org' },
   { permissionName: 'reports.read', label: 'Read Reports', description: 'View reports and dashboards', category: 'domain', scope: 'org' },
@@ -177,6 +178,8 @@ const PERMISSIONS: PermissionDef[] = [
   { permissionName: 'assessments.manage', label: 'Manage Assessments', description: 'Create, publish, and delete assessments', category: 'domain', scope: 'org' },
   { permissionName: 'procurement.read', label: 'Read Procurement', description: 'View quotes, RFQs, proposals, work orders, and bills', category: 'domain', scope: 'org' },
   { permissionName: 'procurement.manage', label: 'Manage Procurement', description: 'Create and update procurement records', category: 'domain', scope: 'org' },
+  { permissionName: 'bills.approve', label: 'Approve Bills', description: 'Approve a received bill (sets Reviewed)', category: 'domain', scope: 'org' },
+  { permissionName: 'bills.reject', label: 'Reject Bills', description: 'Reject a received bill', category: 'domain', scope: 'org' },
   { permissionName: 'vendors.read', label: 'Read Vendors', description: 'View vendors', category: 'domain', scope: 'org' },
   { permissionName: 'vendors.manage', label: 'Manage Vendors', description: 'Update vendor links', category: 'domain', scope: 'org' },
   { permissionName: 'messaging.read', label: 'Read Messaging', description: 'View messages and notifications', category: 'domain', scope: 'org' },
@@ -227,9 +230,9 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'org.roles.create', 'org.roles.update', 'org.roles.delete', 'org.roles.read',
     'org.settings.manage', 'org.integrations.manage',
     'features.read', 'features.manage', 'roles.grant.admin',
-    'claims.create', 'claims.read', 'claims.update', 'claims.delete',
+    'claims.read', 'claims.update', 'claims.delete',
     'jobs.create', 'jobs.read', 'jobs.update', 'jobs.assign',
-    'invoices.create', 'invoices.read', 'invoices.update', 'invoices.approve',
+    'invoices.create', 'invoices.read', 'invoices.update', 'invoices.approve', 'invoices.publish',
     'finance.read', 'finance.manage', 'reports.read',
     'documents.read', 'documents.manage',
     'filesystems.read', 'filesystems.manage',
@@ -237,7 +240,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'contacts.read', 'contacts.manage',
     'journals.read', 'journals.manage',
     'assessments.read', 'assessments.manage',
-    'procurement.read', 'procurement.manage',
+    'procurement.read', 'procurement.manage', 'bills.approve', 'bills.reject',
     'vendors.read', 'vendors.manage',
     'messaging.read', 'messaging.send',
     'workflows.read', 'workflows.manage',
@@ -248,9 +251,9 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
   ],
   manager: [
     'org.users.read', 'org.roles.read',
-    'claims.create', 'claims.read', 'claims.update',
+    'claims.read', 'claims.update',
     'jobs.create', 'jobs.read', 'jobs.update', 'jobs.assign',
-    'invoices.create', 'invoices.read', 'invoices.update', 'invoices.approve',
+    'invoices.create', 'invoices.read', 'invoices.update', 'invoices.approve', 'invoices.publish',
     'finance.read', 'finance.manage', 'reports.read',
     'documents.read', 'documents.manage',
     'filesystems.read', 'filesystems.manage',
@@ -258,7 +261,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'contacts.read', 'contacts.manage',
     'journals.read', 'journals.manage',
     'assessments.read', 'assessments.manage',
-    'procurement.read', 'procurement.manage',
+    'procurement.read', 'procurement.manage', 'bills.approve', 'bills.reject',
     'vendors.read', 'vendors.manage',
     'messaging.read', 'messaging.send',
     'workflows.read', 'workflows.manage',
@@ -275,7 +278,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     ...ESTIMATOR_PERMISSIONS,
   ],
   member: [
-    'claims.create', 'claims.read', 'claims.update',
+    'claims.read', 'claims.update',
     'jobs.read', 'jobs.update',
     'invoices.read', 'finance.read', 'reports.read',
     'documents.read', 'documents.manage',
@@ -350,6 +353,17 @@ async function seed() {
         updated_at = NOW()
     `;
     console.log(`  Permission: ${perm.permissionName}`);
+  }
+
+  // Permissions no longer in the catalogue (cascade removes role_permissions rows).
+  const RETIRED_PERMISSIONS = ['claims.create'];
+  for (const permissionName of RETIRED_PERMISSIONS) {
+    const deleted = await sql`
+      DELETE FROM permissions WHERE permission_name = ${permissionName} RETURNING permission_name
+    `;
+    if (deleted.length > 0) {
+      console.log(`  Retired permission: ${permissionName}`);
+    }
   }
 
   // Seed role-permission mappings

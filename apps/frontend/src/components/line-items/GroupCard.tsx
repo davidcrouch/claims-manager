@@ -24,7 +24,7 @@ import {
 import { useLineItems } from './LineItemsProvider';
 import { useCatalogDrop } from './hooks/use-catalog-drop';
 import { useDropTargetHighlight } from './lib/drop-highlight';
-import { computeItemMoney, groupLabel, resolveInvoicedAmount, resolvePreviouslyInvoicedAmount } from './lib/money';
+import { computeItemMoney, groupLabel, lineTotalFromItem, resolveInvoicedAmount, resolvePreviouslyInvoicedAmount } from './lib/money';
 import { groupDropKey } from './lib/row-keys';
 import { RowLeadCheckbox, RowLeadDrag, RowLeadExpand, ROW_LEAD_ROW_CLS } from './lib/row-lead';
 import { GroupDimensionFields } from './GroupDimensionFields';
@@ -152,12 +152,14 @@ export const GroupCard = memo(function GroupCard({ group, groupIndex, totalGroup
         sum += resolveInvoicedAmount(item, editInputs[rowKey]);
         return;
       }
-      sum += computeItemMoney(
-        item,
-        editInputs[rowKey],
-        config.pricingDetail === 'cost' ? true : showMarkup,
-        config.pricingDetail === 'cost' ? true : showGst,
-      ).total;
+      sum += config.pricingDetail === 'cost'
+        ? lineTotalFromItem(item)
+        : computeItemMoney(
+            item,
+            editInputs[rowKey],
+            showMarkup,
+            showGst,
+          ).total;
     };
     for (let ii = 0; ii < items.length; ii++) {
       const item = items[ii];

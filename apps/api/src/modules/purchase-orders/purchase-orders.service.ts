@@ -1,6 +1,6 @@
 import { Injectable, Optional, BadRequestException, Logger, Inject, NotFoundException } from '@nestjs/common';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
-import { PurchaseOrdersRepository } from '../../database/repositories';
+import { PurchaseOrdersRepository, JobsRepository } from '../../database/repositories';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../../database/drizzle.module';
 import {
   lookupValues,
@@ -20,6 +20,7 @@ import { CrunchworkService } from '../../crunchwork/crunchwork.service';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
 import { OutboundEventsService } from '../outbound-events/outbound-events.service';
 import { RecordNumberService } from '../../common/record-number/record-number.service';
+import { attachJobSummaries } from '../../common/attach-job-summaries';
 
 @Injectable()
 export class PurchaseOrdersService {
@@ -27,6 +28,7 @@ export class PurchaseOrdersService {
 
   constructor(
     private readonly purchaseOrdersRepo: PurchaseOrdersRepository,
+    private readonly jobsRepo: JobsRepository,
     private readonly tenantContext: TenantContext,
     private readonly crunchworkService: CrunchworkService,
     private readonly recordNumberService: RecordNumberService,
@@ -57,7 +59,7 @@ export class PurchaseOrdersService {
     sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
-    return this.purchaseOrdersRepo.findAll({
+    const result = await this.purchaseOrdersRepo.findAll({
       tenantId,
       page: params.page,
       limit: params.limit,
@@ -70,6 +72,14 @@ export class PurchaseOrdersService {
       search: params.search,
       sort: params.sort,
     });
+    return {
+      data: await attachJobSummaries({
+        tenantId,
+        rows: result.data,
+        jobsRepo: this.jobsRepo,
+      }),
+      total: result.total,
+    };
   }
 
   async findOne(params: { id: string }) {

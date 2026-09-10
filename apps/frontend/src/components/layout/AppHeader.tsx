@@ -1,10 +1,7 @@
 'use client';
 
 import { CircleHelp, Settings } from 'lucide-react';
-import {
-  SidebarTrigger,
-  SidebarRail,
-} from '@/components/ui/sidebar';
+import { SidebarRail } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import {
   BreadcrumbConsumer,
@@ -36,7 +33,6 @@ export function AppHeader({
       className="sticky top-0 z-20 flex min-h-20 items-stretch gap-4 border-b border-sidebar-border px-4 py-2 text-sidebar-foreground"
     >
       <HeaderStatusConsumer />
-      <SidebarTrigger className="self-center text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground" />
       <SidebarRail />
       <div className="flex min-w-0 flex-1 items-stretch gap-4">
         <BreadcrumbConsumer />

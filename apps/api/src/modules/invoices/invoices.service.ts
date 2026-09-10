@@ -4,15 +4,23 @@ import {
   WorkOrdersRepository,
   PurchaseOrdersRepository,
   LookupsRepository,
+  JobsRepository,
+  InvoicePaymentsRepository,
+  UsersRepository,
   type InvoiceInsert,
+  type InvoiceViewRow,
+  type InvoicePaymentRow,
+  type JobRow,
+  type JobViewRow,
 } from '../../database/repositories';
-import { DRIZZLE, type DrizzleDB } from '../../database/drizzle.module';
+import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../../database/drizzle.module';
 import { TenantContext } from '../../tenant/tenant-context';
 import { CrunchworkService } from '../../crunchwork/crunchwork.service';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
 import { LookupResolver } from '../external/lookup-resolver.service';
 import { OutboundEventsService } from '../outbound-events/outbound-events.service';
 import { RecordNumberService } from '../../common/record-number/record-number.service';
+import { attachJobSummaries } from '../../common/attach-job-summaries';
 import { CatalogSelectionService } from '../catalog/services/catalog-selection.service';
 import { CatalogOutboundService } from '../catalog/services/catalog-outbound.service';
 import { OutboundSyncService } from '../domain/outbound/outbound-sync.service';
@@ -25,15 +33,26 @@ import {
   toInvoiceUpdateGroups,
 } from './invoice-publish.utils';
 
+const INVOICE_STATUS = {
+  DRAFT: 'Draft',
+  REVIEWED: 'Reviewed',
+  INVOICED: 'Invoiced',
+  PARTIALLY_PAID: 'Partially Paid',
+  PAID: 'Paid',
+} as const;
+
 @Injectable()
 export class InvoicesService {
   private readonly logger = new Logger('InvoicesService');
 
   constructor(
     private readonly invoicesRepo: InvoicesRepository,
+    private readonly invoicePaymentsRepo: InvoicePaymentsRepository,
     private readonly workOrdersRepo: WorkOrdersRepository,
     private readonly purchaseOrdersRepo: PurchaseOrdersRepository,
+    private readonly jobsRepo: JobsRepository,
     private readonly lookupsRepo: LookupsRepository,
+    private readonly usersRepo: UsersRepository,
     private readonly tenantContext: TenantContext,
     private readonly crunchworkService: CrunchworkService,
     private readonly lookupResolver: LookupResolver,
@@ -76,6 +95,33 @@ export class InvoicesService {
     );
   }
 
+  /** External jobs sync to an insurance provider (e.g. Crunchwork); internal/direct do not. */
+  private isExternalJob(job: JobViewRow | JobRow | null | undefined): boolean {
+    if (!job) return false;
+    const connectionId = (job as JobViewRow).connectionId;
+    if (!connectionId) return false;
+    const code = (job as JobViewRow).connectionProviderCode;
+    if (!code || code === 'direct' || code === 'internal') return false;
+    return true;
+  }
+
+  private async resolveInvoiceJob(params: {
+    tenantId: string;
+    jobId?: string | null;
+    workOrderId?: string | null;
+  }): Promise<JobViewRow | null> {
+    let jobId = params.jobId ?? null;
+    if (!jobId && params.workOrderId) {
+      const wo = await this.workOrdersRepo.findOne({
+        id: params.workOrderId,
+        tenantId: params.tenantId,
+      });
+      jobId = wo?.jobId ?? null;
+    }
+    if (!jobId) return null;
+    return this.jobsRepo.findOne({ id: jobId, tenantId: params.tenantId });
+  }
+
   private async resolveProviderPurchaseOrderId(params: {
     tenantId: string;
     workOrderId?: string | null;
@@ -114,7 +160,7 @@ export class InvoicesService {
     sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
-    return this.invoicesRepo.findAll({
+    const result = await this.invoicesRepo.findAll({
       tenantId,
       page: params.page,
       limit: params.limit,
@@ -127,27 +173,212 @@ export class InvoicesService {
       search: params.search,
       sort: params.sort,
     });
+    return {
+      data: await attachJobSummaries({
+        tenantId,
+        rows: result.data.map((row) => this.shapeInvoice(row)),
+        jobsRepo: this.jobsRepo,
+      }),
+      total: result.total,
+    };
   }
 
   async findOne(params: { id: string }) {
     const tenantId = this.tenantContext.getTenantId();
-    return this.invoicesRepo.findOne({ id: params.id, tenantId });
+    const row = await this.invoicesRepo.findOne({ id: params.id, tenantId });
+    if (!row) return null;
+    const payments = await this.invoicePaymentsRepo.findByInvoice({
+      invoiceId: params.id,
+      tenantId,
+    });
+    return this.shapeInvoice(row, payments);
   }
 
   async findByPurchaseOrder(params: { purchaseOrderId: string }) {
     const tenantId = this.tenantContext.getTenantId();
-    return this.invoicesRepo.findByPurchaseOrder({
+    const rows = await this.invoicesRepo.findByPurchaseOrder({
       purchaseOrderId: params.purchaseOrderId,
       tenantId,
     });
+    return rows.map((row) => this.shapeInvoice(row));
   }
 
   async findByJob(params: { jobId: string }) {
     const tenantId = this.tenantContext.getTenantId();
-    return this.invoicesRepo.findByJob({
+    const rows = await this.invoicesRepo.findByJob({
       jobId: params.jobId,
       tenantId,
     });
+    return rows.map((row) => this.shapeInvoice(row));
+  }
+
+  private shapeInvoice(row: InvoiceViewRow, payments: InvoicePaymentRow[] = []) {
+    const { statusName, statusExternalReference, ...rest } = row;
+    return {
+      ...rest,
+      status: row.statusLookupId
+        ? {
+            id: row.statusLookupId,
+            name: statusName ?? undefined,
+            externalReference: statusExternalReference ?? undefined,
+          }
+        : undefined,
+      payments: payments.map((payment) => this.shapePayment(payment)),
+    };
+  }
+
+  private shapePayment(payment: InvoicePaymentRow) {
+    const receivedAt =
+      payment.receivedAt instanceof Date
+        ? payment.receivedAt.toISOString()
+        : String(payment.receivedAt);
+    const createdAt =
+      payment.createdAt instanceof Date
+        ? payment.createdAt.toISOString()
+        : String(payment.createdAt);
+    return {
+      id: payment.id,
+      amount: payment.amount,
+      receivedAt,
+      createdByUserId: payment.createdByUserId,
+      createdByName: payment.createdByName,
+      createdAt,
+    };
+  }
+
+  private async loadShaped(params: { id: string; tenantId: string }) {
+    const row = await this.invoicesRepo.findOne({
+      id: params.id,
+      tenantId: params.tenantId,
+    });
+    if (!row) return null;
+    const payments = await this.invoicePaymentsRepo.findByInvoice({
+      invoiceId: params.id,
+      tenantId: params.tenantId,
+    });
+    return this.shapeInvoice(row, payments);
+  }
+
+  private invoiceStatusName(row: {
+    statusName?: string | null;
+    sourceExternalReference?: string | null;
+  }): string {
+    const name = (row.statusName ?? '').trim();
+    if (name) return name;
+    return row.sourceExternalReference ? '' : INVOICE_STATUS.DRAFT;
+  }
+
+  private isInvoicedStatus(name: string): boolean {
+    const normalised = name.trim().toLowerCase();
+    return (
+      normalised === INVOICE_STATUS.INVOICED.toLowerCase() ||
+      normalised === 'submitted'
+    );
+  }
+
+  private isPaidStatus(name: string): boolean {
+    return name.trim().toLowerCase() === INVOICE_STATUS.PAID.toLowerCase();
+  }
+
+  private isPartiallyPaidStatus(name: string): boolean {
+    return name.trim().toLowerCase() === INVOICE_STATUS.PARTIALLY_PAID.toLowerCase();
+  }
+
+  private roundMoney(value: number): number {
+    return Math.round(value * 100) / 100;
+  }
+
+  private async resolvePaymentAuthorName(userId?: string): Promise<string | null> {
+    if (!userId) return null;
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        userId,
+      )
+    ) {
+      return null;
+    }
+    try {
+      const user = await this.usersRepo.findById({ id: userId });
+      const name = user?.name?.trim();
+      if (name) return name;
+      const email = user?.email?.trim();
+      return email || null;
+    } catch {
+      return null;
+    }
+  }
+
+  private parsePaymentAmount(raw: unknown): number {
+    const value = typeof raw === 'number' ? raw : Number(raw);
+    if (!Number.isFinite(value)) {
+      throw new BadRequestException('Payment amount must be a number');
+    }
+    const rounded = this.roundMoney(value);
+    if (rounded <= 0) {
+      throw new BadRequestException('Payment amount must be greater than 0');
+    }
+    return rounded;
+  }
+
+  private sumPayments(payments: InvoicePaymentRow[]): number {
+    return this.roundMoney(
+      payments.reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0),
+    );
+  }
+
+  private statusFromReceived(params: {
+    totalAmount: number;
+    received: number;
+  }): (typeof INVOICE_STATUS)[keyof typeof INVOICE_STATUS] {
+    if (params.received <= 0) return INVOICE_STATUS.INVOICED;
+    const fullyPaid =
+      params.totalAmount <= 0
+        ? params.received > 0
+        : Math.round(params.received * 100) >= Math.round(params.totalAmount * 100);
+    return fullyPaid ? INVOICE_STATUS.PAID : INVOICE_STATUS.PARTIALLY_PAID;
+  }
+
+  private latestReceivedAt(payments: InvoicePaymentRow[]): Date | null {
+    const first = payments[0];
+    if (!first?.receivedAt) return null;
+    return first.receivedAt instanceof Date
+      ? first.receivedAt
+      : new Date(first.receivedAt);
+  }
+
+  private async applyPaymentTotals(params: {
+    invoiceId: string;
+    tenantId: string;
+    totalAmount: number;
+    payments: InvoicePaymentRow[];
+    userId?: string;
+    tx: DrizzleDbOrTx;
+  }): Promise<string> {
+    const received = this.sumPayments(params.payments);
+    const nextStatus = this.statusFromReceived({
+      totalAmount: params.totalAmount,
+      received,
+    });
+    const nextStatusId = await this.resolveStatusLookupId({
+      tenantId: params.tenantId,
+      name: nextStatus,
+    });
+    if (!nextStatusId) {
+      throw new BadRequestException(
+        `Could not resolve ${nextStatus} invoice status`,
+      );
+    }
+    await this.invoicesRepo.update({
+      id: params.invoiceId,
+      data: {
+        statusLookupId: nextStatusId,
+        amountReceived: String(received),
+        receivedDate: this.latestReceivedAt(params.payments),
+        ...(params.userId ? { updatedByUserId: params.userId } : {}),
+      },
+      tx: params.tx,
+    });
+    return nextStatus;
   }
 
   /**
@@ -192,8 +423,11 @@ export class InvoicesService {
 
     const draftStatusId = await this.resolveStatusLookupId({
       tenantId,
-      name: 'Draft',
+      name: INVOICE_STATUS.DRAFT,
     });
+    if (!draftStatusId) {
+      throw new BadRequestException('Could not resolve Draft invoice status');
+    }
 
     const issueDateRaw = body.issueDate;
     const issueDate =
@@ -268,13 +502,301 @@ export class InvoicesService {
         `${logPrefix} — local draft workOrderId=${workOrderId ?? 'none'} purchaseOrderId=${purchaseOrderId ?? 'none'} internalNumber=${internalNumber}`,
       );
 
-      return this.invoicesRepo.create({ data: insertData, tx });
+      const inserted = await this.invoicesRepo.create({ data: insertData, tx });
+      return this.shapeInvoice({
+        ...inserted,
+        statusName: INVOICE_STATUS.DRAFT,
+        statusExternalReference: INVOICE_STATUS.DRAFT,
+      });
     });
   }
 
   /**
-   * Publish a draft invoice to the external provider (e.g. Crunchwork),
-   * matching the estimate/quote create-then-publish flow.
+   * Internal approval: Draft → Reviewed. Requires a positive amount.
+   */
+  async approve(params: { id: string; userId?: string }) {
+    const logPrefix = 'InvoicesService.approve';
+    const tenantId = this.tenantContext.getTenantId();
+    const existing = await this.invoicesRepo.findOne({ id: params.id, tenantId });
+    if (!existing) {
+      throw new BadRequestException('Invoice not found');
+    }
+    if (existing.sourceExternalReference) {
+      throw new BadRequestException(
+        'Published invoices cannot be approved locally',
+      );
+    }
+
+    const statusName = this.invoiceStatusName(existing);
+    if (statusName.toLowerCase() !== INVOICE_STATUS.DRAFT.toLowerCase()) {
+      throw new BadRequestException(
+        'Only draft invoices can be approved',
+      );
+    }
+
+    const amount = Number(existing.totalAmount ?? 0);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new BadRequestException(
+        'Invoice amount must be greater than 0 to approve',
+      );
+    }
+
+    const reviewedStatusId = await this.resolveStatusLookupId({
+      tenantId,
+      name: INVOICE_STATUS.REVIEWED,
+    });
+    if (!reviewedStatusId) {
+      throw new BadRequestException(
+        'Could not resolve Reviewed invoice status',
+      );
+    }
+
+    this.logger.log(
+      `${logPrefix} — invoice=${params.id} amount=${amount} Draft → Reviewed`,
+    );
+
+    await this.invoicesRepo.update({
+      id: params.id,
+      data: {
+        statusLookupId: reviewedStatusId,
+        ...(params.userId ? { updatedByUserId: params.userId } : {}),
+      },
+    });
+
+    return this.loadShaped({ id: params.id, tenantId });
+  }
+
+  /**
+   * Return a reviewed invoice to Draft so it can be edited and re-approved.
+   */
+  async returnToDraft(params: { id: string; userId?: string }) {
+    const logPrefix = 'InvoicesService.returnToDraft';
+    const tenantId = this.tenantContext.getTenantId();
+    const existing = await this.invoicesRepo.findOne({ id: params.id, tenantId });
+    if (!existing) {
+      throw new BadRequestException('Invoice not found');
+    }
+    if (existing.sourceExternalReference) {
+      throw new BadRequestException(
+        'Published invoices cannot be returned to draft',
+      );
+    }
+
+    const statusName = this.invoiceStatusName(existing);
+    if (statusName.toLowerCase() !== INVOICE_STATUS.REVIEWED.toLowerCase()) {
+      throw new BadRequestException(
+        'Only reviewed invoices can be returned to draft',
+      );
+    }
+
+    const draftStatusId = await this.resolveStatusLookupId({
+      tenantId,
+      name: INVOICE_STATUS.DRAFT,
+    });
+    if (!draftStatusId) {
+      throw new BadRequestException('Could not resolve Draft invoice status');
+    }
+
+    this.logger.log(
+      `${logPrefix} — invoice=${params.id} Reviewed → Draft`,
+    );
+
+    await this.invoicesRepo.update({
+      id: params.id,
+      data: {
+        statusLookupId: draftStatusId,
+        ...(params.userId ? { updatedByUserId: params.userId } : {}),
+      },
+    });
+
+    return this.loadShaped({ id: params.id, tenantId });
+  }
+
+  /**
+   * Record a payment amount. Invoiced/partially paid → Partially Paid when
+   * some amount is received, or Paid when received total covers the invoice.
+   */
+  async receivePayment(params: { id: string; amount: unknown; userId?: string }) {
+    const logPrefix = 'InvoicesService.receivePayment';
+    const tenantId = this.tenantContext.getTenantId();
+    const paymentAmount = this.parsePaymentAmount(params.amount);
+    const existing = await this.invoicesRepo.findOne({
+      id: params.id,
+      tenantId,
+    });
+    if (!existing) {
+      throw new BadRequestException('Invoice not found');
+    }
+
+    const statusName = this.invoiceStatusName(existing);
+    if (this.isPaidStatus(statusName)) {
+      throw new BadRequestException('Invoice is already marked as paid');
+    }
+
+    const published =
+      this.isInvoicedStatus(statusName) ||
+      this.isPartiallyPaidStatus(statusName) ||
+      Boolean(existing.sourceExternalReference);
+    if (!published) {
+      throw new BadRequestException(
+        'Only published invoices can record received payment',
+      );
+    }
+
+    const totalAmount = this.roundMoney(Number(existing.totalAmount ?? 0));
+    const receivedAt = new Date();
+    const createdByName = await this.resolvePaymentAuthorName(params.userId);
+
+    await this.db.transaction(async (tx) => {
+      await this.invoicePaymentsRepo.create({
+        data: {
+          tenantId,
+          invoiceId: params.id,
+          amount: String(paymentAmount),
+          receivedAt,
+          createdByUserId: params.userId ?? null,
+          createdByName,
+        },
+        tx,
+      });
+      const payments = await this.invoicePaymentsRepo.findByInvoice({
+        invoiceId: params.id,
+        tenantId,
+        tx,
+      });
+      const nextStatus = await this.applyPaymentTotals({
+        invoiceId: params.id,
+        tenantId,
+        totalAmount,
+        payments,
+        userId: params.userId,
+        tx,
+      });
+      this.logger.log(
+        `${logPrefix} — invoice=${params.id} amount=${paymentAmount} received=${this.sumPayments(payments)}/${totalAmount} ${statusName || 'published'} → ${nextStatus}`,
+      );
+    });
+
+    return this.loadShaped({ id: params.id, tenantId });
+  }
+
+  /**
+   * Revise a recorded payment amount and refresh invoice totals/status.
+   */
+  async updatePayment(params: {
+    id: string;
+    paymentId: string;
+    amount: unknown;
+    userId?: string;
+  }) {
+    const logPrefix = 'InvoicesService.updatePayment';
+    const tenantId = this.tenantContext.getTenantId();
+    const paymentAmount = this.parsePaymentAmount(params.amount);
+    const existing = await this.invoicesRepo.findOne({
+      id: params.id,
+      tenantId,
+    });
+    if (!existing) {
+      throw new BadRequestException('Invoice not found');
+    }
+
+    const payment = await this.invoicePaymentsRepo.findOne({
+      id: params.paymentId,
+      invoiceId: params.id,
+      tenantId,
+    });
+    if (!payment) {
+      throw new BadRequestException('Payment not found');
+    }
+
+    const totalAmount = this.roundMoney(Number(existing.totalAmount ?? 0));
+    await this.db.transaction(async (tx) => {
+      await this.invoicePaymentsRepo.update({
+        id: params.paymentId,
+        tenantId,
+        data: { amount: String(paymentAmount) },
+        tx,
+      });
+      const payments = await this.invoicePaymentsRepo.findByInvoice({
+        invoiceId: params.id,
+        tenantId,
+        tx,
+      });
+      const nextStatus = await this.applyPaymentTotals({
+        invoiceId: params.id,
+        tenantId,
+        totalAmount,
+        payments,
+        userId: params.userId,
+        tx,
+      });
+      this.logger.log(
+        `${logPrefix} — invoice=${params.id} payment=${params.paymentId} amount=${paymentAmount} received=${this.sumPayments(payments)}/${totalAmount} → ${nextStatus}`,
+      );
+    });
+
+    return this.loadShaped({ id: params.id, tenantId });
+  }
+
+  /**
+   * Remove a recorded payment and refresh invoice totals/status.
+   */
+  async deletePayment(params: {
+    id: string;
+    paymentId: string;
+    userId?: string;
+  }) {
+    const logPrefix = 'InvoicesService.deletePayment';
+    const tenantId = this.tenantContext.getTenantId();
+    const existing = await this.invoicesRepo.findOne({
+      id: params.id,
+      tenantId,
+    });
+    if (!existing) {
+      throw new BadRequestException('Invoice not found');
+    }
+
+    const payment = await this.invoicePaymentsRepo.findOne({
+      id: params.paymentId,
+      invoiceId: params.id,
+      tenantId,
+    });
+    if (!payment) {
+      throw new BadRequestException('Payment not found');
+    }
+
+    const totalAmount = this.roundMoney(Number(existing.totalAmount ?? 0));
+    await this.db.transaction(async (tx) => {
+      await this.invoicePaymentsRepo.delete({
+        id: params.paymentId,
+        invoiceId: params.id,
+        tenantId,
+        tx,
+      });
+      const payments = await this.invoicePaymentsRepo.findByInvoice({
+        invoiceId: params.id,
+        tenantId,
+        tx,
+      });
+      const nextStatus = await this.applyPaymentTotals({
+        invoiceId: params.id,
+        tenantId,
+        totalAmount,
+        payments,
+        userId: params.userId,
+        tx,
+      });
+      this.logger.log(
+        `${logPrefix} — invoice=${params.id} payment=${params.paymentId} received=${this.sumPayments(payments)}/${totalAmount} → ${nextStatus}`,
+      );
+    });
+
+    return this.loadShaped({ id: params.id, tenantId });
+  }
+
+  /**
+   * Publish a reviewed invoice. Internal jobs lock locally (Invoiced).
+   * External jobs enqueue outbound sync to the provider (e.g. Crunchwork).
    */
   async publish(params: { id: string; userId?: string }) {
     const logPrefix = 'InvoicesService.publish';
@@ -282,6 +804,40 @@ export class InvoicesService {
     const existing = await this.invoicesRepo.findOne({ id: params.id, tenantId });
     if (!existing) {
       throw new BadRequestException('Invoice not found');
+    }
+
+    const currentStatus = this.invoiceStatusName(existing);
+    if (currentStatus.toLowerCase() !== INVOICE_STATUS.REVIEWED.toLowerCase()) {
+      throw new BadRequestException(
+        'Invoice must be in Reviewed status before publishing',
+      );
+    }
+
+    const invoicedStatusId = await this.resolveStatusLookupId({
+      tenantId,
+      name: INVOICE_STATUS.INVOICED,
+    });
+    if (!invoicedStatusId) {
+      throw new BadRequestException('Could not resolve Invoiced invoice status');
+    }
+
+    const job = await this.resolveInvoiceJob({
+      tenantId,
+      jobId: existing.jobId,
+      workOrderId: existing.workOrderId,
+    });
+    if (!this.isExternalJob(job)) {
+      this.logger.log(
+        `${logPrefix} — internal publish invoice=${params.id} Reviewed → Invoiced`,
+      );
+      await this.invoicesRepo.update({
+        id: params.id,
+        data: {
+          statusLookupId: invoicedStatusId,
+          ...(params.userId ? { updatedByUserId: params.userId } : {}),
+        },
+      });
+      return this.loadShaped({ id: params.id, tenantId });
     }
 
     const providerPurchaseOrderId = await this.resolveProviderPurchaseOrderId({
@@ -319,11 +875,6 @@ export class InvoicesService {
         (reusedCwInvoiceId ? ` reusingCwInvoiceId=${reusedCwInvoiceId}` : ' invoiceType=Invoice'),
     );
 
-    const submittedStatusId = await this.resolveStatusLookupId({
-      tenantId,
-      name: 'Submitted',
-    });
-
     let localGroups = await this.catalogSelectionService.buildOutboundInvoiceGroups({
       purchaseOrderId: existing.purchaseOrderId,
       workOrderId: existing.workOrderId,
@@ -350,7 +901,7 @@ export class InvoicesService {
     await this.invoicesRepo.update({
       id: params.id,
       data: {
-        statusLookupId: submittedStatusId ?? existing.statusLookupId,
+        statusLookupId: invoicedStatusId ?? existing.statusLookupId,
         syncStatus: 'pending',
         ...(params.userId ? { updatedByUserId: params.userId } : {}),
       },
@@ -388,7 +939,7 @@ export class InvoicesService {
       );
     }
 
-    return this.invoicesRepo.findOne({ id: params.id, tenantId });
+    return this.loadShaped({ id: params.id, tenantId });
   }
 
   private async resolveExistingCrunchworkInvoiceId(params: {
@@ -554,7 +1105,7 @@ export class InvoicesService {
       data.invoicePayload = params.body.invoicePayload as InvoiceInsert['invoicePayload'];
     }
 
-    const updated = await this.invoicesRepo.update({
+    await this.invoicesRepo.update({
       id: params.id,
       data,
     });
@@ -568,7 +1119,8 @@ export class InvoicesService {
       }).catch(() => {});
     }
 
-    return updated;
+    const tenantId = this.tenantContext.getTenantId();
+    return this.loadShaped({ id: params.id, tenantId });
   }
 
   private async checkAndEmitInvoiceApproved(params: {

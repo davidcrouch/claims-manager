@@ -18,12 +18,16 @@ import { getProposalLineItemsAction } from '@/app/(app)/proposals/actions';
 import {
   getPurchaseOrderLineItemsAction,
   replacePurchaseOrderLineItemsAction,
+  savePurchaseOrderLineItemsAction,
 } from '@/app/(app)/purchase-orders/actions';
 import {
   LineItemsProvider,
   LineItemsTable,
+  parseRowKey,
   syncLineItemSelectionAncestors,
   type ApiGroup,
+  type ApiItem,
+  type EditableFieldKey,
 } from '@/components/line-items';
 
 const PREFIX = 'frontend:PurchaseOrderSourceSelection';
@@ -66,7 +70,10 @@ export const PurchaseOrderSourceSelection = forwardRef(function PurchaseOrderSou
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
+  const [costDirty, setCostDirty] = useState(false);
+  const [resetEditsKey, setResetEditsKey] = useState(0);
   const pageDirtyRef = useRef(false);
+  const latestEditsRef = useRef<Record<string, Record<EditableFieldKey, string>>>({});
   const onDirtyChangeRef = useRef(onDirtyChange);
   const onSaveStateChangeRef = useRef(onSaveStateChange);
   onDirtyChangeRef.current = onDirtyChange;
@@ -145,7 +152,10 @@ export const PurchaseOrderSourceSelection = forwardRef(function PurchaseOrderSou
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by committedKey
   }, [committedKey]);
 
-  const displayGroups = sourceGroups ?? poGroups;
+  const displayGroups = useMemo(
+    () => overlayPoProcurementFields(sourceGroups ?? poGroups, poGroups),
+    [sourceGroups, poGroups],
+  );
 
   const selectionDirty = useMemo(() => {
     if (selectedIds.size !== committedSourceIds.size) return true;
@@ -155,31 +165,68 @@ export const PurchaseOrderSourceSelection = forwardRef(function PurchaseOrderSou
     return false;
   }, [selectedIds, committedSourceIds]);
 
-  pageDirtyRef.current = selectionDirty;
+  pageDirtyRef.current = (selectionDirty || costDirty) && !readOnly;
+
+  const handleTableDirtyChange = useCallback(
+    (dirty: boolean, edits: Record<string, Record<EditableFieldKey, string>>) => {
+      latestEditsRef.current = edits;
+      setCostDirty(dirty);
+    },
+    [],
+  );
 
   const handleSave = useCallback(async () => {
     if (readOnly || saving) return;
+    const edits = latestEditsRef.current;
+    const hasCostEdits = Object.keys(edits).length > 0;
     if (selectionDirty && selectedIds.size === 0) {
       onSaveStateChangeRef.current?.('error', 'Select at least one line item');
       return;
     }
-    if (!selectionDirty) return;
+    if (!selectionDirty && !hasCostEdits) return;
     setSaving(true);
     onSaveStateChangeRef.current?.('saving');
     try {
-      const synced = syncLineItemSelectionAncestors(displayGroups ?? [], selectedIds);
-      const result = await replacePurchaseOrderLineItemsAction(
-        purchaseOrder.id,
-        Array.from(synced),
-      );
-      if (!result.success) {
-        onSaveStateChangeRef.current?.(
-          'error',
-          result.error ?? 'Failed to update purchase order line items',
+      let nextPoGroups = poGroups ?? [];
+      if (selectionDirty) {
+        const synced = syncLineItemSelectionAncestors(displayGroups, selectedIds);
+        const result = await replacePurchaseOrderLineItemsAction(
+          purchaseOrder.id,
+          Array.from(synced),
         );
-        return;
+        if (!result.success) {
+          onSaveStateChangeRef.current?.(
+            'error',
+            result.error ?? 'Failed to update purchase order line items',
+          );
+          return;
+        }
+        nextPoGroups = (result.groups as ApiGroup[] | undefined) ?? [];
+        setPoGroups(nextPoGroups);
       }
-      setPoGroups((result.groups as ApiGroup[] | undefined) ?? []);
+
+      const costItems = collectPoFieldUpdates(edits, nextPoGroups, sourceGroups);
+      if (costItems.length > 0) {
+        const costResult = await savePurchaseOrderLineItemsAction({
+          purchaseOrderId: purchaseOrder.id,
+          items: costItems,
+          combos: [],
+        });
+        if (!costResult.success) {
+          console.error(`${PREFIX}.handleSave — procurement field save failed`, costResult.error);
+          onSaveStateChangeRef.current?.(
+            'error',
+            costResult.error ?? 'Failed to save purchase order line items',
+          );
+          return;
+        }
+        nextPoGroups = applyPoFieldUpdates(nextPoGroups, costItems);
+        setPoGroups(nextPoGroups);
+      }
+
+      latestEditsRef.current = {};
+      setCostDirty(false);
+      setResetEditsKey((k) => k + 1);
       onSaveStateChangeRef.current?.('saved');
     } catch (err) {
       console.error(`${PREFIX}.handleSave`, err);
@@ -190,7 +237,16 @@ export const PurchaseOrderSourceSelection = forwardRef(function PurchaseOrderSou
     } finally {
       setSaving(false);
     }
-  }, [displayGroups, purchaseOrder.id, readOnly, saving, selectedIds, selectionDirty]);
+  }, [
+    displayGroups,
+    poGroups,
+    sourceGroups,
+    purchaseOrder.id,
+    readOnly,
+    saving,
+    selectedIds,
+    selectionDirty,
+  ]);
 
   const handleSaveRef = useRef(handleSave);
   handleSaveRef.current = handleSave;
@@ -201,14 +257,19 @@ export const PurchaseOrderSourceSelection = forwardRef(function PurchaseOrderSou
     },
     resetEdits: () => {
       setSelectedIds(new Set(committedSourceIds));
+      latestEditsRef.current = {};
+      setCostDirty(false);
+      setResetEditsKey((k) => k + 1);
     },
   }), [committedSourceIds]);
 
+  const pageDirty = (selectionDirty || costDirty) && !readOnly;
+
   useEffect(() => {
-    onDirtyChangeRef.current?.(selectionDirty && !readOnly, () => {
+    onDirtyChangeRef.current?.(pageDirty, () => {
       void handleSaveRef.current();
     });
-  }, [readOnly, selectionDirty]);
+  }, [pageDirty]);
 
   const canSelect = !!sourceGroups && !readOnly && !loading && !error;
 
@@ -276,6 +337,11 @@ export const PurchaseOrderSourceSelection = forwardRef(function PurchaseOrderSou
         showColumnToggles
         initialShowUnselected={false}
         pricingDetail="cost"
+        buyCostEditable={!readOnly}
+        resetEditsKey={resetEditsKey}
+        actions={{
+          onDirtyChange: readOnly ? undefined : handleTableDirtyChange,
+        }}
         selection={
           canSelect
             ? {
@@ -331,4 +397,139 @@ function collectPoSourceIds(groups: ApiGroup[]): Set<string> {
     }
   }
   return ids;
+}
+
+function walkItems(groups: ApiGroup[], visit: (item: ApiItem) => void) {
+  const visitCombo = (combo: NonNullable<ApiGroup['combos']>[number]) => {
+    for (const item of combo.items ?? []) visit(item);
+  };
+  for (const group of groups) {
+    for (const item of group.items ?? []) visit(item);
+    for (const combo of group.combos ?? []) visitCombo(combo);
+    for (const scope of group.scopes ?? []) {
+      for (const item of scope.items ?? []) visit(item);
+      for (const combo of scope.combos ?? []) visitCombo(combo);
+    }
+  }
+}
+
+function mapItems(groups: ApiGroup[], mapItem: (item: ApiItem) => ApiItem): ApiGroup[] {
+  const mapCombo = (combo: NonNullable<ApiGroup['combos']>[number]) => ({
+    ...combo,
+    items: (combo.items ?? []).map(mapItem),
+  });
+  return groups.map((group) => ({
+    ...group,
+    items: (group.items ?? []).map(mapItem),
+    combos: (group.combos ?? []).map(mapCombo),
+    scopes: (group.scopes ?? []).map((scope) => ({
+      ...scope,
+      items: (scope.items ?? []).map(mapItem),
+      combos: (scope.combos ?? []).map(mapCombo),
+    })),
+  }));
+}
+
+function sourceIdOf(item: ApiItem): string | undefined {
+  return item.sourceWorkOrderItemId ?? item.sourceProposalItemId;
+}
+
+function overlayPoProcurementFields(
+  displayGroups: ApiGroup[] | null,
+  poGroups: ApiGroup[] | null,
+): ApiGroup[] {
+  if (!displayGroups) return [];
+  if (!poGroups || poGroups === displayGroups) return displayGroups;
+
+  const overlayBySourceId = new Map<string, Pick<ApiItem, 'buyCost' | 'quantity'>>();
+  walkItems(poGroups, (item) => {
+    const src = sourceIdOf(item);
+    if (!src) return;
+    overlayBySourceId.set(src, {
+      buyCost: item.buyCost,
+      quantity: item.quantity,
+    });
+  });
+
+  return mapItems(displayGroups, (item) => {
+    const overlay = item.id ? overlayBySourceId.get(item.id) : undefined;
+    const sourceQty = item.quantity;
+    const poQty = overlay?.quantity;
+    const quantity =
+      poQty != null && sourceQty != null
+        ? Math.min(poQty, sourceQty)
+        : (poQty ?? sourceQty);
+    return {
+      ...item,
+      maxQuantity: sourceQty,
+      ...(overlay?.buyCost != null ? { buyCost: overlay.buyCost } : {}),
+      ...(quantity != null ? { quantity } : {}),
+    };
+  });
+}
+
+function findPoItem(groups: ApiGroup[], sourceOrPoItemId: string): ApiItem | null {
+  let found: ApiItem | null = null;
+  walkItems(groups, (item) => {
+    if (found) return;
+    if (item.id === sourceOrPoItemId) {
+      found = item;
+      return;
+    }
+    if (sourceIdOf(item) === sourceOrPoItemId) found = item;
+  });
+  return found;
+}
+
+type PoFieldUpdate = {
+  id: string;
+  buyCost?: string;
+  quantity?: string;
+};
+
+function clampQuantity(value: string | undefined, maxQuantity: number | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return value;
+  const min = 0;
+  const max = maxQuantity != null && Number.isFinite(maxQuantity) ? maxQuantity : parsed;
+  return String(Math.min(Math.max(min, parsed), max));
+}
+
+function collectPoFieldUpdates(
+  edits: Record<string, Record<string, string>>,
+  poGroups: ApiGroup[],
+  sourceGroups: ApiGroup[] | null,
+): PoFieldUpdate[] {
+  const items: PoFieldUpdate[] = [];
+  for (const [rowKey, fields] of Object.entries(edits)) {
+    const parsed = parseRowKey(rowKey);
+    if (!parsed || parsed.type !== 'item') continue;
+    const poItem = findPoItem(poGroups, parsed.id);
+    if (!poItem?.id) continue;
+    const sourceItem = sourceGroups ? findPoItem(sourceGroups, parsed.id) : null;
+    const maxQuantity = sourceItem?.quantity ?? sourceItem?.maxQuantity;
+    items.push({
+      id: poItem.id,
+      buyCost: fields.buyCost,
+      quantity: clampQuantity(fields.quantity, maxQuantity),
+    });
+  }
+  return items;
+}
+
+function applyPoFieldUpdates(groups: ApiGroup[], updates: PoFieldUpdate[]): ApiGroup[] {
+  const byId = new Map(updates.map((u) => [u.id, u]));
+  return mapItems(groups, (item) => {
+    if (!item.id) return item;
+    const update = byId.get(item.id);
+    if (!update) return item;
+    const buy = update.buyCost != null ? parseFloat(update.buyCost) : undefined;
+    const qty = update.quantity != null ? parseFloat(update.quantity) : undefined;
+    return {
+      ...item,
+      ...(buy != null && !Number.isNaN(buy) ? { buyCost: buy } : {}),
+      ...(qty != null && !Number.isNaN(qty) ? { quantity: qty } : {}),
+    };
+  });
 }

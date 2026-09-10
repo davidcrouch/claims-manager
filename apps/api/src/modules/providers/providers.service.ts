@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { IntegrationConnectionsRepository } from '../../database/repositories/integration-connections.repository';
 import { InboundWebhookEventsRepository } from '../../database/repositories/inbound-webhook-events.repository';
+import { OutboundWebRequestsRepository } from '../../database/repositories/outbound-web-requests.repository';
 import { CredentialsCipher } from '../../common/credentials-cipher';
 import { CrunchworkAuthService } from '../../crunchwork/crunchwork-auth.service';
 import {
@@ -47,6 +48,7 @@ export interface ConnectionListItem {
   createdAt: string;
   updatedAt: string;
   totalWebhookEvents: number;
+  totalWebRequests: number;
   recentErrorCount: number;
   lastEventAt: string | null;
 }
@@ -65,6 +67,7 @@ export class ProvidersService {
   constructor(
     private readonly connectionsRepo: IntegrationConnectionsRepository,
     private readonly webhookEventsRepo: InboundWebhookEventsRepository,
+    private readonly webRequestsRepo: OutboundWebRequestsRepository,
     private readonly cipher: CredentialsCipher,
     private readonly crunchworkAuth: CrunchworkAuthService,
   ) {}
@@ -379,13 +382,74 @@ export class ProvidersService {
     return { eventTypes };
   }
 
+  async findWebRequestsByConnection(params: {
+    connectionId: string;
+    tenantId: string;
+    outcome?: string;
+    method?: string;
+    entityType?: string;
+    user?: string;
+    search?: string;
+    sort?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    this.logger.debug(
+      `[ProvidersService.findWebRequestsByConnection] connectionId=${params.connectionId}`,
+    );
+    const conn = await this.connectionsRepo.findById({ id: params.connectionId });
+    if (!conn || conn.tenantId !== params.tenantId) {
+      throw new NotFoundException(`Connection ${params.connectionId} not found`);
+    }
+    return this.webRequestsRepo.findByConnectionId({
+      connectionId: params.connectionId,
+      tenantId: params.tenantId,
+      outcome: params.outcome,
+      method: params.method,
+      entityType: params.entityType,
+      user: params.user,
+      search: params.search,
+      sort: params.sort,
+      page: params.page,
+      limit: params.limit,
+    });
+  }
+
+  async findWebRequestFilterOptionsByConnection(params: {
+    connectionId: string;
+    tenantId: string;
+  }): Promise<{ entityTypes: string[]; users: string[] }> {
+    this.logger.debug(
+      `[ProvidersService.findWebRequestFilterOptionsByConnection] connectionId=${params.connectionId}`,
+    );
+    const conn = await this.connectionsRepo.findById({ id: params.connectionId });
+    if (!conn || conn.tenantId !== params.tenantId) {
+      throw new NotFoundException(`Connection ${params.connectionId} not found`);
+    }
+    const [entityTypes, users] = await Promise.all([
+      this.webRequestsRepo.distinctEntityTypesByConnectionId({
+        connectionId: params.connectionId,
+        tenantId: params.tenantId,
+      }),
+      this.webRequestsRepo.distinctUsersByConnectionId({
+        connectionId: params.connectionId,
+        tenantId: params.tenantId,
+      }),
+    ]);
+    return { entityTypes, users };
+  }
+
   private async enrichConnection(params: {
     connection: Awaited<ReturnType<IntegrationConnectionsRepository['findById']>>;
   }): Promise<ConnectionListItem> {
     const conn = params.connection!;
     const entry = findProviderByCode(conn.providerCode);
-    const [totalEvents, errorCount, lastEventAt] = await Promise.all([
+    const [totalEvents, totalWebRequests, errorCount, lastEventAt] = await Promise.all([
       this.webhookEventsRepo.countByConnectionId({
+        connectionId: conn.id,
+        tenantId: conn.tenantId,
+      }),
+      this.webRequestsRepo.countByConnectionId({
         connectionId: conn.id,
         tenantId: conn.tenantId,
       }),
@@ -418,6 +482,7 @@ export class ProvidersService {
       createdAt: conn.createdAt.toISOString(),
       updatedAt: conn.updatedAt.toISOString(),
       totalWebhookEvents: totalEvents,
+      totalWebRequests,
       recentErrorCount: errorCount,
       lastEventAt: lastEventAt?.toISOString() ?? null,
     };

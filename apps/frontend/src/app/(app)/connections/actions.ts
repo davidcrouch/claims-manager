@@ -6,6 +6,7 @@ import type {
   ConnectionSummary,
   ConnectionDetail,
   WebhookEvent,
+  WebRequest,
   PaginatedResponse,
   CreateConnectionPayload,
   UpdateConnectionPayload,
@@ -67,6 +68,40 @@ export async function fetchConnectionWebhookEventFilterOptionsAction(
       err,
     );
     return { eventTypes: [] };
+  }
+}
+
+export async function fetchConnectionWebRequestsAction(
+  connectionId: string,
+  params?: {
+    page?: number;
+    limit?: number;
+    outcome?: string;
+    method?: string;
+    entityType?: string;
+    user?: string;
+    search?: string;
+    sort?: string;
+  },
+): Promise<PaginatedResponse<WebRequest> | null> {
+  const api = await getApi();
+  if (!api) return null;
+  return api.getConnectionWebRequests(connectionId, params);
+}
+
+export async function fetchConnectionWebRequestFilterOptionsAction(
+  connectionId: string,
+): Promise<{ entityTypes: string[]; users: string[] } | null> {
+  const api = await getApi();
+  if (!api) return null;
+  try {
+    return await api.getConnectionWebRequestFilterOptions(connectionId);
+  } catch (err) {
+    console.error(
+      '[connections/actions.fetchConnectionWebRequestFilterOptionsAction]',
+      err,
+    );
+    return { entityTypes: [], users: [] };
   }
 }
 

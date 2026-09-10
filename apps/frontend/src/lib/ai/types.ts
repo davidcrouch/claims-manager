@@ -120,6 +120,8 @@ export interface AiAuditRecord {
   id: string;
   conversationId: string | null;
   messageId: string | null;
+  userId: string | null;
+  userName: string | null;
   agentId: string | null;
   agentName: string | null;
   agentAvatarColor: string | null;

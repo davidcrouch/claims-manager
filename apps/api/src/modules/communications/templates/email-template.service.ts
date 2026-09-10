@@ -5,6 +5,7 @@ import type { DrizzleDB } from '../../../database/drizzle.module';
 import { emailTemplates } from '../../../database/schema';
 import { DEFAULT_RFQ_EMAIL_TEMPLATE } from './default-rfq-email';
 import { DEFAULT_PO_EMAIL_TEMPLATE } from './default-po-email';
+import { defaultFeedbackEmailTemplate } from './default-feedback-email';
 
 export interface ResolvedEmailTemplate {
   subject: string;
@@ -33,6 +34,8 @@ export class EmailTemplateService {
 
   private defaultForType(templateType: string): ResolvedEmailTemplate {
     if (templateType === 'po_send') return DEFAULT_PO_EMAIL_TEMPLATE;
+    const feedback = defaultFeedbackEmailTemplate(templateType);
+    if (feedback) return feedback;
     return DEFAULT_RFQ_EMAIL_TEMPLATE;
   }
 

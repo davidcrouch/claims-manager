@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard,
@@ -62,6 +62,7 @@ import { hasFeature } from '@/lib/features';
 import { hasPermission } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
 import { useApiClient } from '@/hooks/useApiClient';
+import { useCurrentJob } from './CurrentJobProvider';
 import type { JobRelatedCounts } from '@/types/api';
 
 export interface AppSidebarUser {
@@ -79,9 +80,6 @@ export interface AppSidebarProps {
   menuOverride: 'main' | 'admin' | null;
   onMenuOverrideChange: (view: 'main' | 'admin' | null) => void;
 }
-
-const JOB_ID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface NavItem {
   title: string;
@@ -239,13 +237,9 @@ export function AppSidebar({
   onMenuOverrideChange,
 }: AppSidebarProps) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const api = useApiClient();
+  const { jobId } = useCurrentJob();
   const [relatedCounts, setRelatedCounts] = useState<JobRelatedCounts | null>(null);
-
-  const jobMatch = pathname.match(/^\/jobs\/([^/?]+)/);
-  const rawJobId = jobMatch?.[1] ?? searchParams.get('jobId');
-  const jobId = rawJobId && JOB_ID_RE.test(rawJobId) ? rawJobId : null;
   const menuView = menuOverride ?? (isAdminPath(pathname) ? 'admin' : 'main');
 
   useEffect(() => {

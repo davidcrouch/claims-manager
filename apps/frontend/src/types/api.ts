@@ -30,6 +30,16 @@ export interface LookupRef {
   externalReference?: string;
 }
 
+/** Nested parent job on list rows — not a table column. */
+export interface ListJobSummary {
+  id: string;
+  internalNumber?: string | null;
+  name?: string | null;
+  externalJobId?: string | null;
+  externalReference?: string | null;
+  jobType?: { name?: string | null } | null;
+}
+
 export interface AddressPayload {
   unitNumber?: string;
   streetNumber?: string;
@@ -284,14 +294,7 @@ export interface Quote {
   status?: LookupRef;
   quoteType?: LookupRef;
   /** Resolved parent job for list cells — not a quotes table column. */
-  job?: {
-    id: string;
-    internalNumber?: string | null;
-    name?: string | null;
-    externalJobId?: string | null;
-    externalReference?: string | null;
-    jobType?: { name?: string | null } | null;
-  } | null;
+  job?: ListJobSummary | null;
 }
 
 /**
@@ -370,6 +373,16 @@ export interface PurchaseOrder {
   status?: LookupRef;
   purchaseOrderType?: LookupRef;
   vendor?: LookupRef;
+  job?: ListJobSummary | null;
+}
+
+export interface InvoicePayment {
+  id: string;
+  amount: string;
+  receivedAt: string;
+  createdByUserId?: string | null;
+  createdByName?: string | null;
+  createdAt?: string;
 }
 
 export interface Invoice {
@@ -382,9 +395,11 @@ export interface Invoice {
   internalNumber?: string | null;
   statusLookupId?: string | null;
   issueDate?: string | null;
+  receivedDate?: string | null;
   subTotal?: string | null;
   tax?: string | null;
   totalAmount?: string | null;
+  amountReceived?: string | null;
   excessAmount?: string | null;
   sourceExternalReference?: string | null;
   invoicePayload?: Record<string, unknown> | null;
@@ -393,6 +408,8 @@ export interface Invoice {
   createdAt?: string;
   updatedAt?: string;
   status?: LookupRef;
+  payments?: InvoicePayment[];
+  job?: ListJobSummary | null;
 }
 
 export interface WorkOrder {
@@ -436,6 +453,7 @@ export interface WorkOrder {
   workOrderType?: LookupRef;
   assignedToUserId?: string | null;
   assigneeName?: string | null;
+  job?: ListJobSummary | null;
 }
 
 export interface Rfq {
@@ -466,6 +484,8 @@ export interface Rfq {
   updatedAt?: string;
   deletedAt?: string | null;
   status?: LookupRef;
+  /** Resolved parent job for list cells — not an rfqs table column. */
+  job?: ListJobSummary | null;
 }
 
 export interface Proposal {
@@ -504,6 +524,7 @@ export interface Proposal {
   deletedAt?: string | null;
   status?: LookupRef;
   proposalType?: LookupRef;
+  job?: ListJobSummary | null;
 }
 
 export interface Bill {
@@ -534,6 +555,7 @@ export interface Bill {
   updatedAt?: string;
   status?: LookupRef;
   paymentStatus?: LookupRef;
+  job?: ListJobSummary | null;
 }
 
 export interface Report {
@@ -549,6 +571,7 @@ export interface Report {
   status?: LookupRef;
   reportType?: LookupRef;
   reportData?: Record<string, unknown>;
+  job?: ListJobSummary | null;
 }
 
 export interface Task {
@@ -578,6 +601,7 @@ export interface Task {
   externalReference?: string | null;
   createdAt?: string;
   updatedAt?: string;
+  job?: ListJobSummary | null;
 }
 
 export interface Message {
@@ -596,6 +620,7 @@ export interface Message {
   messagePayload?: Record<string, unknown> | null;
   createdAt?: string;
   updatedAt?: string;
+  job?: ListJobSummary | null;
 }
 
 export interface JobNote {
@@ -607,6 +632,7 @@ export interface JobNote {
   createdByName?: string | null;
   createdAt?: string;
   updatedAt?: string;
+  job?: ListJobSummary | null;
 }
 
 export interface Vendor {
@@ -700,10 +726,10 @@ export interface Appointment {
   externalReference?: string | null;
   createdAt?: string;
   updatedAt?: string;
+  job?: ListJobSummary | null;
 }
 
 /**
- * Provider identifier is the stable slug (e.g. 'crunchwork'), not a UUID.
  * Providers are hardcoded in `apps/api/src/modules/providers/provider-registry.ts`;
  * the `id` field mirrors `code` for historical URL compatibility.
  */
@@ -776,6 +802,7 @@ export interface ConnectionSummary {
   createdAt: string;
   updatedAt: string;
   totalWebhookEvents: number;
+  totalWebRequests: number;
   recentErrorCount: number;
   lastEventAt: string | null;
 }
@@ -807,6 +834,27 @@ export interface WebhookEvent {
   providerCode: string | null;
   providerEntityType: string | null;
   retryCount: number;
+  createdAt: string;
+}
+
+export interface WebRequest {
+  id: string;
+  tenantId: string;
+  connectionId: string;
+  httpMethod: string;
+  path: string;
+  url: string;
+  queryParams: unknown;
+  entityType: string | null;
+  entityId: string | null;
+  statusCode: number | null;
+  outcome: string;
+  durationMs: number;
+  requestBody: unknown;
+  responseBody: unknown;
+  errorMessage: string | null;
+  initiatedByUserId: string | null;
+  initiatedByName: string | null;
   createdAt: string;
 }
 
@@ -1055,6 +1103,7 @@ export interface Journal {
   deletedAt: string | null;
   pageCount?: number;
   entityLinks?: JournalEntityLink[];
+  job?: ListJobSummary | null;
 }
 
 export interface JournalPageAttachment {
@@ -1286,6 +1335,13 @@ export interface InviteUserPayload {
   roles: string[];
 }
 
+export interface UpdateOrgUserPayload {
+  givenName?: string;
+  familyName?: string;
+  roles?: string[];
+  status?: 'Active' | 'Disabled';
+}
+
 export interface RoleDef {
   id: string;
   key: string;
@@ -1343,6 +1399,7 @@ export interface Assessment {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  job?: ListJobSummary | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1371,6 +1428,16 @@ export interface FeedbackPageContext {
   activeTab?: string;
 }
 
+export interface FeedbackNote {
+  id: string;
+  body: string;
+  createdByUserId: string | null;
+  createdByName: string | null;
+  createdAt: string;
+  updatedAt: string;
+  canEdit: boolean;
+}
+
 export interface FeedbackItem {
   id: string;
   tenantId: string;
@@ -1387,6 +1454,7 @@ export interface FeedbackItem {
   conversationId: string | null;
   tags: string[];
   resolution: string | null;
+  notes: FeedbackNote[];
   payload: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;

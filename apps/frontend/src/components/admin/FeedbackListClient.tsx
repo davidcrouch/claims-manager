@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState, useTransition } from 'react';
-import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Loader2,
   MessageSquareWarning,
@@ -10,9 +10,7 @@ import {
   HelpCircle,
   MessageCircle,
   Sparkles,
-  ExternalLink,
   ChevronDown,
-  ChevronUp,
   Search,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -27,8 +25,10 @@ import {
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { ListPageHeader } from '@/components/layout/ListPageHeader';
 import { TablePagination } from '@/components/shared/table-pagination';
+import { FeedbackDetailDrawer } from '@/components/admin/FeedbackDetailDrawer';
 import {
   fetchFeedbackAction,
+  fetchFeedbackByIdAction,
   fetchFeedbackStatsAction,
   updateFeedbackAction,
 } from '@/app/(app)/admin/feedback/actions';
@@ -109,9 +109,14 @@ function looksLikeUuid(value: string): boolean {
   );
 }
 
+function stripTrailingEmail(label: string): string {
+  const stripped = label.replace(/\s*\([^)]*@[^)]*\)\s*$/, '').trim();
+  return stripped || label;
+}
+
 function formatReporter(item: FeedbackItem): string {
   const label = item.reportedByName?.trim();
-  if (label && !looksLikeUuid(label)) return label;
+  if (label && !looksLikeUuid(label)) return stripTrailingEmail(label);
   const id = item.reportedByUserId?.trim();
   if (id && !looksLikeUuid(id)) return id;
   return 'Unknown user';
@@ -132,6 +137,9 @@ function Badge({ label, className }: { label: string; className: string }) {
 // ---------------------------------------------------------------------------
 
 export function FeedbackListClient() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const openIdFromUrl = searchParams.get('open');
   const [items, setItems] = useState<FeedbackItem[]>([]);
   const [stats, setStats] = useState<FeedbackStats | null>(null);
   const [total, setTotal] = useState(0);
@@ -146,8 +154,8 @@ export function FeedbackListClient() {
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
 
-  // Expanded row
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedItem, setSelectedItem] = useState<FeedbackItem | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   const PAGE_SIZE = 20;
 
@@ -179,17 +187,54 @@ export function FeedbackListClient() {
     void loadData();
   }, [loadData]);
 
+  useEffect(() => {
+    if (!openIdFromUrl) return;
+    let cancelled = false;
+    const match = items.find((item) => item.id === openIdFromUrl);
+    const openFromUrl = async () => {
+      const item = match ?? (await fetchFeedbackByIdAction(openIdFromUrl));
+      if (cancelled || !item) return;
+      setSelectedItem(item);
+      setDetailOpen(true);
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete('open');
+      const qs = params.toString();
+      router.replace(qs ? `/admin/feedback?${qs}` : '/admin/feedback', { scroll: false });
+    };
+    void openFromUrl();
+    return () => {
+      cancelled = true;
+    };
+    // Open once per `open` query value; list contents are read inside.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openIdFromUrl]);
+
   function handleSearchSubmit(e: React.FormEvent) {
     e.preventDefault();
     setPage(1);
     setSearch(searchInput);
   }
 
+  function applyUpdatedItem(updated: FeedbackItem) {
+    setItems((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+    setSelectedItem((prev) => (prev?.id === updated.id ? updated : prev));
+  }
+
+  function openFeedback(item: FeedbackItem) {
+    setSelectedItem(item);
+    setDetailOpen(true);
+  }
+
+  function handleDetailOpenChange(open: boolean) {
+    setDetailOpen(open);
+    if (!open) setSelectedItem(null);
+  }
+
   function handleStatusChange(id: string, newStatus: FeedbackStatus) {
     startTransition(async () => {
       try {
         const updated = await updateFeedbackAction(id, { status: newStatus });
-        setItems((prev) => prev.map((item) => (item.id === id ? updated : item)));
+        applyUpdatedItem(updated);
         void fetchFeedbackStatsAction().then(setStats);
         toast.success(`Status updated to ${STATUS_LABELS[newStatus]}`);
       } catch {
@@ -202,7 +247,7 @@ export function FeedbackListClient() {
     startTransition(async () => {
       try {
         const updated = await updateFeedbackAction(id, { priority: newPriority });
-        setItems((prev) => prev.map((item) => (item.id === id ? updated : item)));
+        applyUpdatedItem(updated);
         toast.success(`Priority updated to ${newPriority}`);
       } catch {
         toast.error('Failed to update priority');
@@ -356,7 +401,6 @@ export function FeedbackListClient() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/60 text-left">
-                  <th className="w-8 px-3 py-3" />
                   <th className="px-4 py-3 font-medium text-slate-600">Title</th>
                   <th className="px-4 py-3 font-medium text-slate-600">Type</th>
                   <th className="px-4 py-3 font-medium text-slate-600">Priority</th>
@@ -369,112 +413,92 @@ export function FeedbackListClient() {
               <tbody className="divide-y divide-slate-100">
                 {items.map((item) => {
                   const TypeIcon = TYPE_ICONS[item.type] ?? MessageCircle;
-                  const isExpanded = expandedId === item.id;
+                  const isSelected = selectedItem?.id === item.id && detailOpen;
                   return (
-                    <>
-                      <tr
-                        key={item.id}
-                        className="cursor-pointer hover:bg-slate-50/50"
-                        onClick={() => setExpandedId(isExpanded ? null : item.id)}
-                      >
-                        <td className="px-3 py-3 text-slate-400">
-                          {isExpanded ? (
-                            <ChevronUp className="h-4 w-4" />
-                          ) : (
-                            <ChevronDown className="h-4 w-4" />
-                          )}
-                        </td>
-                        <td className="px-4 py-3 font-medium text-slate-900">
-                          <div className="flex items-center gap-2">
-                            <TypeIcon className="h-4 w-4 shrink-0 text-slate-400" />
-                            <span className="truncate max-w-xs">{item.title}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <Badge label={TYPE_LABELS[item.type]} className={TYPE_COLORS[item.type]} />
-                        </td>
-                        <td className="px-4 py-3">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger
-                              render={
-                                <button
-                                  type="button"
-                                  className="cursor-pointer"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <Badge
-                                    label={item.priority.charAt(0).toUpperCase() + item.priority.slice(1)}
-                                    className={PRIORITY_COLORS[item.priority]}
-                                  />
-                                </button>
-                              }
-                            />
-                            <DropdownMenuContent align="start" className="min-w-28">
-                              {ALL_PRIORITIES.map((p) => (
-                                <DropdownMenuItem
-                                  key={p}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handlePriorityChange(item.id, p);
-                                  }}
-                                >
-                                  {p.charAt(0).toUpperCase() + p.slice(1)}
-                                </DropdownMenuItem>
-                              ))}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </td>
-                        <td className="px-4 py-3">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger
-                              render={
-                                <button
-                                  type="button"
-                                  className="cursor-pointer"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <Badge
-                                    label={STATUS_LABELS[item.status]}
-                                    className={STATUS_COLORS[item.status]}
-                                  />
-                                </button>
-                              }
-                            />
-                            <DropdownMenuContent align="start" className="min-w-28">
-                              {ALL_STATUSES.map((s) => (
-                                <DropdownMenuItem
-                                  key={s}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleStatusChange(item.id, s);
-                                  }}
-                                >
-                                  {STATUS_LABELS[s]}
-                                </DropdownMenuItem>
-                              ))}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </td>
-                        <td className="px-4 py-3 text-slate-600">
-                          {formatReporter(item)}
-                        </td>
-                        <td className="px-4 py-3 text-slate-600">
-                          {item.pageContext?.pageLabel || item.pageContext?.pathname || '—'}
-                        </td>
-                        <td className="px-4 py-3 text-slate-600">{formatDate(item.createdAt)}</td>
-                      </tr>
-                      {isExpanded && (
-                        <tr key={`${item.id}-detail`} className="bg-slate-50/40">
-                          <td colSpan={8} className="px-6 py-4">
-                            <ExpandedDetail
-                              item={item}
-                              isPending={isPending}
-                              onStatusChange={handleStatusChange}
-                            />
-                          </td>
-                        </tr>
-                      )}
-                    </>
+                    <tr
+                      key={item.id}
+                      className={`cursor-pointer hover:bg-slate-50/50 ${isSelected ? 'bg-slate-50' : ''}`}
+                      onClick={() => openFeedback(item)}
+                    >
+                      <td className="px-4 py-3 font-medium text-slate-900">
+                        <div className="flex items-center gap-2">
+                          <TypeIcon className="h-4 w-4 shrink-0 text-slate-400" />
+                          <span className="truncate max-w-xs">{item.title}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge label={TYPE_LABELS[item.type]} className={TYPE_COLORS[item.type]} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            render={
+                              <button
+                                type="button"
+                                className="cursor-pointer"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Badge
+                                  label={item.priority.charAt(0).toUpperCase() + item.priority.slice(1)}
+                                  className={PRIORITY_COLORS[item.priority]}
+                                />
+                              </button>
+                            }
+                          />
+                          <DropdownMenuContent align="start" className="min-w-28">
+                            {ALL_PRIORITIES.map((p) => (
+                              <DropdownMenuItem
+                                key={p}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handlePriorityChange(item.id, p);
+                                }}
+                              >
+                                {p.charAt(0).toUpperCase() + p.slice(1)}
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </td>
+                      <td className="px-4 py-3">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            render={
+                              <button
+                                type="button"
+                                className="cursor-pointer"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Badge
+                                  label={STATUS_LABELS[item.status]}
+                                  className={STATUS_COLORS[item.status]}
+                                />
+                              </button>
+                            }
+                          />
+                          <DropdownMenuContent align="start" className="min-w-28">
+                            {ALL_STATUSES.map((s) => (
+                              <DropdownMenuItem
+                                key={s}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleStatusChange(item.id, s);
+                                }}
+                              >
+                                {STATUS_LABELS[s]}
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {formatReporter(item)}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {item.pageContext?.pageLabel || item.pageContext?.pathname || '—'}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{formatDate(item.createdAt)}</td>
+                    </tr>
                   );
                 })}
               </tbody>
@@ -488,162 +512,15 @@ export function FeedbackListClient() {
           </div>
         )}
       </div>
-    </div>
-  );
-}
 
-// ---------------------------------------------------------------------------
-// Expanded detail panel
-// ---------------------------------------------------------------------------
-
-function ExpandedDetail({
-  item,
-  isPending,
-  onStatusChange,
-}: {
-  item: FeedbackItem;
-  isPending: boolean;
-  onStatusChange: (id: string, status: FeedbackStatus) => void;
-}) {
-  const [resolution, setResolution] = useState(item.resolution ?? '');
-  const [saving, startSave] = useTransition();
-
-  function saveResolution() {
-    startSave(async () => {
-      try {
-        await updateFeedbackAction(item.id, { resolution });
-        toast.success('Resolution saved');
-      } catch {
-        toast.error('Failed to save resolution');
-      }
-    });
-  }
-
-  return (
-    <div className="space-y-4">
-      {/* Description */}
-      <div>
-        <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Description
-        </h4>
-        <p className="whitespace-pre-wrap text-sm text-slate-700">{item.description}</p>
-      </div>
-
-      {/* Context row */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        {item.pageContext?.pathname && (
-          <div>
-            <h4 className="mb-0.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Source Page
-            </h4>
-            <Link
-              href={item.pageContext.pathname}
-              className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"
-            >
-              {item.pageContext.pageLabel || item.pageContext.pathname}
-              <ExternalLink className="h-3 w-3" />
-            </Link>
-          </div>
-        )}
-
-        {item.relatedEntityType && (
-          <div>
-            <h4 className="mb-0.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Related Entity
-            </h4>
-            <p className="text-sm text-slate-700">
-              {item.relatedEntityType}
-              {item.relatedEntityId ? `: ${item.relatedEntityId.slice(0, 8)}…` : ''}
-            </p>
-          </div>
-        )}
-
-        {item.conversationId && (
-          <div>
-            <h4 className="mb-0.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Conversation
-            </h4>
-            <p className="text-sm font-mono text-slate-600">
-              {item.conversationId.slice(0, 8)}…
-            </p>
-          </div>
-        )}
-
-        {item.tags.length > 0 && (
-          <div>
-            <h4 className="mb-0.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Tags
-            </h4>
-            <div className="flex flex-wrap gap-1">
-              {item.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700"
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Resolution */}
-      <div>
-        <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Resolution Notes
-        </h4>
-        <textarea
-          value={resolution}
-          onChange={(e) => setResolution(e.target.value)}
-          rows={3}
-          placeholder="Add resolution notes..."
-          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-blue-300 focus:outline-none focus:ring-1 focus:ring-blue-300"
-        />
-        <div className="mt-2 flex items-center gap-2">
-          <Button
-            size="sm"
-            onClick={saveResolution}
-            disabled={saving}
-            className="h-7 px-3 text-xs bg-blue-600 text-white hover:bg-blue-500"
-          >
-            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save Notes'}
-          </Button>
-          {item.status !== 'resolved' && item.status !== 'closed' && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onStatusChange(item.id, 'resolved')}
-              disabled={isPending}
-              className="h-7 px-3 text-xs"
-            >
-              Mark Resolved
-            </Button>
-          )}
-          {item.status !== 'closed' && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onStatusChange(item.id, 'closed')}
-              disabled={isPending}
-              className="h-7 px-3 text-xs"
-            >
-              Close
-            </Button>
-          )}
-          {item.status === 'closed' && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onStatusChange(item.id, 'open')}
-              disabled={isPending}
-              className="h-7 px-3 text-xs"
-            >
-              Reopen
-            </Button>
-          )}
-        </div>
-      </div>
+      <FeedbackDetailDrawer
+        open={detailOpen}
+        onOpenChange={handleDetailOpenChange}
+        item={selectedItem}
+        isPending={isPending}
+        onStatusChange={handleStatusChange}
+        onUpdated={applyUpdatedItem}
+      />
     </div>
   );
 }

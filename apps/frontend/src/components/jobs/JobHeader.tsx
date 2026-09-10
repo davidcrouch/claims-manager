@@ -96,6 +96,7 @@ export function JobPageHeader({
   return (
     <>
       <PageHeaderLayout
+        job={job}
         leading={<BackButton href="/jobs" label="Back to jobs" />}
         icon={
           <PageHeaderIcon

@@ -9,6 +9,7 @@ import {
 } from 'react';
 import type { BreadcrumbItem } from '@/components/ui/breadcrumbs';
 import { Breadcrumbs } from '@/components/ui/breadcrumbs';
+import { SidebarTrigger } from '@/components/ui/sidebar';
 
 interface BreadcrumbContextValue {
   items: BreadcrumbItem[];
@@ -90,7 +91,12 @@ export function BreadcrumbConsumer() {
   if (headerNode) {
     return <div className="flex min-w-0 flex-1 items-center">{headerNode}</div>;
   }
-  return <Breadcrumbs items={items} />;
+  return (
+    <div className="flex min-w-0 flex-1 items-center gap-3">
+      <SidebarTrigger className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground" />
+      <Breadcrumbs items={items} />
+    </div>
+  );
 }
 
 /**

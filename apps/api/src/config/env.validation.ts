@@ -199,6 +199,11 @@ export class EnvironmentVariables {
   @IsString()
   @IsOptional()
   EMAIL_REPLY_TO?: string;
+
+  /** Public app origin used in outbound email links. e.g. http://localhost:5000 */
+  @IsString()
+  @IsOptional()
+  FRONTEND_URL?: string;
 }
 
 export function validate(config: Record<string, unknown>) {

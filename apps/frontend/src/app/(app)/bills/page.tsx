@@ -4,7 +4,9 @@ import { BillsPageClient } from '@/components/bills/BillsPageClient';
 import {buildJobNameById, buildJobTypeById, toJobOptions,
   mergeCurrentJobIntoNameById,
   mergeCurrentJobIntoTypeById,
-  mergeCurrentJobIntoOptions } from '@/components/shared/job-label';
+  mergeCurrentJobIntoOptions,
+  mergeJobLabelsFromRows,
+  mergeJobTypesFromRows } from '@/components/shared/job-label';
 import type { Bill, Job, Claim, PaginatedResponse } from '@/types/api';
 
 export const metadata = { title: 'Bills — EnsureOS' };
@@ -71,8 +73,14 @@ export default async function BillsPage({
     id: vendor.id,
     name: vendor.name?.trim() ? vendor.name : 'Unknown' }));
   const jobs = jobsRes?.data ?? [];
-  const jobNameById = mergeCurrentJobIntoNameById(buildJobNameById(jobs), job);
-  const jobTypeById = mergeCurrentJobIntoTypeById(buildJobTypeById(jobs), job);
+  const jobNameById = mergeJobLabelsFromRows(
+    mergeCurrentJobIntoNameById(buildJobNameById(jobs), job),
+    initialData.data,
+  );
+  const jobTypeById = mergeJobTypesFromRows(
+    mergeCurrentJobIntoTypeById(buildJobTypeById(jobs), job),
+    initialData.data,
+  );
 
   return (
     <BillsPageClient

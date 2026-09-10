@@ -1,7 +1,8 @@
 import { Injectable, Logger, BadRequestException, Inject } from '@nestjs/common';
 import { and, eq, inArray } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../database/drizzle.module';
-import { LookupsRepository, ProposalsRepository } from '../../database/repositories';
+import { LookupsRepository, ProposalsRepository, JobsRepository } from '../../database/repositories';
+import { attachJobSummaries } from '../../common/attach-job-summaries';
 import { proposalCombos, proposalGroups, proposalItems } from '../../database/schema';
 import { TenantContext } from '../../tenant/tenant-context';
 import { LookupResolutionService } from '../domain/services/lookup-resolution.service';
@@ -51,6 +52,7 @@ export class ProposalsService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
     private readonly proposalsRepo: ProposalsRepository,
+    private readonly jobsRepo: JobsRepository,
     private readonly lookupsRepo: LookupsRepository,
     private readonly tenantContext: TenantContext,
     private readonly lookupResolution: LookupResolutionService,
@@ -68,7 +70,7 @@ export class ProposalsService {
     sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
-    return this.proposalsRepo.findAll({
+    const result = await this.proposalsRepo.findAll({
       tenantId,
       page: params.page,
       limit: params.limit,
@@ -80,6 +82,14 @@ export class ProposalsService {
       search: params.search,
       sort: params.sort,
     });
+    return {
+      data: await attachJobSummaries({
+        tenantId,
+        rows: result.data,
+        jobsRepo: this.jobsRepo,
+      }),
+      total: result.total,
+    };
   }
 
   async findOne(params: { id: string }) {

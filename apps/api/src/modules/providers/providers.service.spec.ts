@@ -48,11 +48,19 @@ describe('ProvidersService', () => {
     const crunchworkAuth = {
       getAccessToken: jest.fn().mockResolvedValue('mock-token'),
     };
+    const webRequestsRepo = {
+      countByConnectionId: jest.fn().mockResolvedValue(0),
+      lastRequestAtByConnectionId: jest.fn().mockResolvedValue(null),
+      findByConnectionId: jest.fn().mockResolvedValue({ data: [], total: 0 }),
+      distinctEntityTypesByConnectionId: jest.fn().mockResolvedValue([]),
+      distinctUsersByConnectionId: jest.fn().mockResolvedValue([]),
+    };
 
     return {
       service: new ProvidersService(
         connectionsRepo as never,
         webhookEventsRepo as never,
+        webRequestsRepo as never,
         cipher as never,
         crunchworkAuth as never,
       ),

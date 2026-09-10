@@ -16,7 +16,6 @@ integrationRefs:
 enabledTools:
   - search_claims
   - get_claim
-  - create_claim
   - update_claim
   - search_jobs
   - get_job

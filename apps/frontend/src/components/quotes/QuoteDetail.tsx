@@ -223,6 +223,7 @@ export function QuotePageHeader({
 
   return (
     <PageHeaderLayout
+      job={job}
       leading={<BackButton href={job ? `/quotes?jobId=${job.id}` : '/quotes'} label="Back to estimates" />}
       icon={
         <PageHeaderIcon

@@ -3,7 +3,6 @@ import { getServerApiClient } from '@/lib/server-api';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { AdminPageHeader } from '@/components/layout/PageHeaderLayout';
 import { McpIntegrationsPanel } from '@/components/integrations/McpIntegrationsPanel';
-import { Server } from 'lucide-react';
 
 export const metadata = { title: 'MCP Servers — EnsureOS' };
 
@@ -15,7 +14,7 @@ export default async function McpServersPage() {
     <div className="flex flex-col px-6 pb-6">
       <SetPageHeader>
         <AdminPageHeader
-          icon={Server}
+          icon="server"
           title="MCP Servers"
           description="Register MCP integrations available to your organisation."
         />

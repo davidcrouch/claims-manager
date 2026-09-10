@@ -17,6 +17,7 @@ import { TenantContext } from '../../tenant/tenant-context';
 import { CrunchworkService } from '../../crunchwork/crunchwork.service';
 import { ConnectionResolverService } from '../external/connection-resolver.service';
 import { MESSAGE_SUBJECTS, isMessageSubject } from './message-subjects';
+import { attachJobSummaries } from '../../common/attach-job-summaries';
 
 @Injectable()
 export class MessagesService {
@@ -89,7 +90,7 @@ export class MessagesService {
     sort?: string;
   }) {
     const tenantId = this.tenantContext.getTenantId();
-    return this.messagesRepo.findAll({
+    const result = await this.messagesRepo.findAll({
       tenantId,
       page: params.page,
       limit: params.limit,
@@ -106,6 +107,15 @@ export class MessagesService {
       search: params.search,
       sort: params.sort,
     });
+    return {
+      data: await attachJobSummaries({
+        tenantId,
+        rows: result.data,
+        jobsRepo: this.jobsRepo,
+        jobIdOf: (row) => row.toJobId ?? row.fromJobId,
+      }),
+      total: result.total,
+    };
   }
 
   async findFilterOptions() {

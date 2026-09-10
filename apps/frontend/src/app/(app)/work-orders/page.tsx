@@ -11,7 +11,9 @@ import {
 import {buildJobNameById, buildJobTypeById, toJobOptions,
   mergeCurrentJobIntoNameById,
   mergeCurrentJobIntoTypeById,
-  mergeCurrentJobIntoOptions } from '@/components/shared/job-label';
+  mergeCurrentJobIntoOptions,
+  mergeJobLabelsFromRows,
+  mergeJobTypesFromRows } from '@/components/shared/job-label';
 import type { Job, Claim, PaginatedResponse, WorkOrder } from '@/types/api';
 
 export const metadata = { title: 'Work Orders — EnsureOS' };
@@ -119,8 +121,14 @@ export default async function WorkOrdersPage({
   }
 
   const jobs = jobsRes?.data ?? [];
-  const jobNameById = mergeCurrentJobIntoNameById(buildJobNameById(jobs), job);
-  const jobTypeById = mergeCurrentJobIntoTypeById(buildJobTypeById(jobs), job);
+  const jobNameById = mergeJobLabelsFromRows(
+    mergeCurrentJobIntoNameById(buildJobNameById(jobs), job),
+    initialData.data,
+  );
+  const jobTypeById = mergeJobTypesFromRows(
+    mergeCurrentJobIntoTypeById(buildJobTypeById(jobs), job),
+    initialData.data,
+  );
 
   return (
     <WorkOrdersPageClient

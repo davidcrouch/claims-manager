@@ -58,6 +58,7 @@ export const P = {
     read: 'invoices.read',
     update: 'invoices.update',
     approve: 'invoices.approve',
+    publish: 'invoices.publish',
   },
   finance: {
     read: 'finance.read',
@@ -94,6 +95,10 @@ export const P = {
   procurement: {
     read: 'procurement.read',
     manage: 'procurement.manage',
+  },
+  bills: {
+    approve: 'bills.approve',
+    reject: 'bills.reject',
   },
   vendors: {
     read: 'vendors.read',

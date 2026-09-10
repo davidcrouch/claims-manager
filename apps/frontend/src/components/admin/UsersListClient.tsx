@@ -1,12 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import {
   Loader2,
   Mail,
   MoreHorizontal,
   Plus,
-  Shield,
   UserCog,
   UserMinus,
   UserX,
@@ -20,7 +19,19 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
-import { ListPageHeader } from '@/components/layout/ListPageHeader';
+import {
+  ListPageHeader,
+  computeStatusBreakdown,
+} from '@/components/layout/ListPageHeader';
+import {
+  SearchInput,
+  SortTabs,
+  StatusFilterMenu,
+  TableEmptyRow,
+  compareValues,
+  type SortOption,
+  type StatusOption,
+} from '@/components/shared/list-filters';
 import {
   listOrgRolesAction,
   listOrgUsersAction,
@@ -28,10 +39,23 @@ import {
   resendInviteAction,
   updateOrgUserStatusAction,
 } from '@/app/(app)/admin/users/actions';
+import { useHasPermission } from '@/components/providers/PermissionsProvider';
 import type { AvailableRole, OrgMember } from '@/types/api';
 import { InviteUserDrawer } from './InviteUserDrawer';
-import { EditUserRolesDrawer } from './EditUserRolesDrawer';
+import { EditUserDrawer } from './EditUserDrawer';
 import { toast } from 'sonner';
+
+const SORT_OPTIONS: SortOption[] = [
+  { key: 'name', label: 'Name' },
+  { key: 'lastLoginAt', label: 'Last login' },
+  { key: 'status', label: 'Status' },
+];
+
+const STATUS_OPTIONS: StatusOption[] = [
+  { id: 'Active', name: 'Active' },
+  { id: 'Invited', name: 'Invited' },
+  { id: 'Disabled', name: 'Disabled' },
+];
 
 function statusBadgeClass(status: string): string {
   const normalized = status.toLowerCase();
@@ -57,13 +81,29 @@ function displayName(member: OrgMember): string {
   );
 }
 
+function normalizeStatus(status: string): string {
+  const lower = status.toLowerCase();
+  if (lower === 'active') return 'Active';
+  if (lower === 'invited') return 'Invited';
+  if (lower === 'disabled') return 'Disabled';
+  return status;
+}
+
 export function UsersListClient() {
+  const canInvite = useHasPermission('org.users.invite');
+  const canManage = useHasPermission('org.users.manage');
+  const canRemove = useHasPermission('org.users.remove');
   const [members, setMembers] = useState<OrgMember[]>([]);
   const [roles, setRoles] = useState<AvailableRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editMember, setEditMember] = useState<OrgMember | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [search, setSearch] = useState('');
+  const [sortField, setSortField] = useState('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [roleFilter, setRoleFilter] = useState<Set<string>>(new Set());
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -94,20 +134,20 @@ export function UsersListClient() {
     startTransition(async () => {
       const result = await resendInviteAction(member);
       if (!result.success) {
-        alert(result.error ?? 'Failed to resend invite');
+        toast.error(result.error ?? 'Failed to resend invite');
         return;
       }
       if (result.member) upsertMember(result.member);
-      alert('Invitation resent');
+      toast.success('Invitation resent');
     });
   }
 
   function handleToggleStatus(member: OrgMember) {
-    const nextStatus = member.status.toLowerCase() === 'disabled' ? 'Active' : 'Disabled';
+    const nextStatus = normalizeStatus(member.status) === 'Disabled' ? 'Active' : 'Disabled';
     startTransition(async () => {
       const result = await updateOrgUserStatusAction(member.id, nextStatus);
       if (!result.success || !result.member) {
-        alert(result.error ?? 'Failed to update status');
+        toast.error(result.error ?? 'Failed to update status');
         return;
       }
       upsertMember(result.member);
@@ -121,12 +161,66 @@ export function UsersListClient() {
     startTransition(async () => {
       const result = await removeOrgUserAction(member.id);
       if (!result.success) {
-        alert(result.error ?? 'Failed to remove user');
+        toast.error(result.error ?? 'Failed to remove user');
         return;
       }
       setMembers((current) => current.filter((m) => m.id !== member.id));
+      if (editMember?.id === member.id) setEditMember(null);
     });
   }
+
+  function handleSort(field: string) {
+    if (sortField === field) {
+      setSortOrder((current) => (current === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortField(field);
+    setSortOrder(field === 'name' ? 'asc' : 'desc');
+  }
+
+  const roleOptions: StatusOption[] = useMemo(
+    () => roles.map((role) => ({ id: role.key, name: role.name })),
+    [roles],
+  );
+
+  const filteredMembers = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    const rows = members.filter((member) => {
+      if (query) {
+        const name = displayName(member).toLowerCase();
+        const email = (member.email ?? '').toLowerCase();
+        if (!name.includes(query) && !email.includes(query)) return false;
+      }
+      if (statusFilter.size > 0 && !statusFilter.has(normalizeStatus(member.status))) {
+        return false;
+      }
+      if (roleFilter.size > 0 && !member.roles.some((role) => roleFilter.has(role))) {
+        return false;
+      }
+      return true;
+    });
+
+    rows.sort((a, b) => {
+      if (sortField === 'lastLoginAt') {
+        return compareValues(a.lastLoginAt, b.lastLoginAt, sortOrder);
+      }
+      if (sortField === 'status') {
+        return compareValues(
+          normalizeStatus(a.status),
+          normalizeStatus(b.status),
+          sortOrder,
+        );
+      }
+      return compareValues(displayName(a), displayName(b), sortOrder);
+    });
+
+    return rows;
+  }, [members, search, statusFilter, roleFilter, sortField, sortOrder]);
+
+  const breakdown = useMemo(
+    () => computeStatusBreakdown(members, (member) => normalizeStatus(member.status)),
+    [members],
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={{ height: '100%' }}>
@@ -135,119 +229,195 @@ export function UsersListClient() {
           icon={UserCog}
           title="Users"
           total={members.length}
+          showing={filteredMembers.length}
+          search={search}
+          statusSelectedCount={statusFilter.size}
+          breakdown={breakdown}
           accent="slate"
         />
       </SetPageHeader>
 
-      <SetHeaderActions>
-        <Button
-          size="default"
-          onClick={() => setInviteOpen(true)}
-          disabled={isPending}
-          className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Invite User
-        </Button>
-      </SetHeaderActions>
+      {canInvite && (
+        <SetHeaderActions>
+          <Button
+            size="default"
+            onClick={() => setInviteOpen(true)}
+            disabled={isPending}
+            className="mr-3 h-9 gap-1.5 px-4 bg-blue-600 text-white hover:bg-blue-500"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Invite User
+          </Button>
+        </SetHeaderActions>
+      )}
 
-      <div className="flex-1 px-6 pb-6 pt-1" style={{ minHeight: 0, overflow: 'auto' }}>
+      <div className="flex flex-col gap-4 px-6 pb-4 pt-1">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+          <SortTabs
+            options={SORT_OPTIONS}
+            activeField={sortField}
+            sortOrder={sortOrder}
+            onSort={handleSort}
+          />
+          <SearchInput
+            placeholder="Search users by name or email..."
+            value={search}
+            onChange={setSearch}
+          />
+          <StatusFilterMenu
+            options={STATUS_OPTIONS}
+            selected={statusFilter}
+            onSelectionChange={(id, checked) => {
+              setStatusFilter((prev) => {
+                const next = new Set(prev);
+                if (checked) next.add(id);
+                else next.delete(id);
+                return next;
+              });
+            }}
+            onClearAll={() => setStatusFilter(new Set())}
+            onSelectAll={() => setStatusFilter(new Set(STATUS_OPTIONS.map((o) => o.id)))}
+            triggerEmptyLabel="All statuses"
+            menuTitle="Filter by status"
+            itemNoun={{ singular: 'status', plural: 'statuses' }}
+          />
+          <StatusFilterMenu
+            options={roleOptions}
+            selected={roleFilter}
+            onSelectionChange={(id, checked) => {
+              setRoleFilter((prev) => {
+                const next = new Set(prev);
+                if (checked) next.add(id);
+                else next.delete(id);
+                return next;
+              });
+            }}
+            onClearAll={() => setRoleFilter(new Set())}
+            onSelectAll={() => setRoleFilter(new Set(roleOptions.map((o) => o.id)))}
+            triggerEmptyLabel="All roles"
+            menuTitle="Filter by role"
+            itemNoun={{ singular: 'role', plural: 'roles' }}
+          />
+        </div>
+      </div>
+
+      <div className="flex-1 px-6 pb-6" style={{ minHeight: 0, overflow: 'auto' }}>
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
           </div>
-        ) : members.length === 0 ? (
-          <div className="rounded-lg border border-slate-200 bg-white px-5 py-12 text-center">
-            <UserCog className="mx-auto mb-4 h-12 w-12 text-muted-foreground/30" />
-            <h2 className="text-lg font-semibold">No users yet</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Invite teammates to join this organisation.
-            </p>
-          </div>
         ) : (
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50/60 text-left">
-                  <th className="px-4 py-3 font-medium text-slate-600">Name</th>
-                  <th className="px-4 py-3 font-medium text-slate-600">Email</th>
-                  <th className="px-4 py-3 font-medium text-slate-600">Role</th>
-                  <th className="px-4 py-3 font-medium text-slate-600">Status</th>
-                  <th className="px-4 py-3 font-medium text-slate-600">Last login</th>
-                  <th className="px-4 py-3 text-right font-medium text-slate-600">Actions</th>
+            <table className="min-w-full divide-y divide-slate-200 text-sm">
+              <thead className="bg-slate-50">
+                <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                  <th className="px-4 py-3">Name</th>
+                  <th className="px-4 py-3">Email</th>
+                  <th className="px-4 py-3">Role</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Last login</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {members.map((member) => (
-                  <tr key={member.id} className="hover:bg-slate-50/50">
-                    <td className="px-4 py-3 font-medium text-slate-900">
-                      {displayName(member)}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600">{member.email ?? '—'}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1">
-                        {member.roles.length === 0 ? (
-                          <span className="text-slate-400">—</span>
-                        ) : (
-                          member.roles.map((role) => (
-                            <span
-                              key={role}
-                              className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700"
-                            >
-                              {roles.find((r) => r.key === role)?.name ?? role}
-                            </span>
-                          ))
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${statusBadgeClass(member.status)}`}
+                {filteredMembers.length === 0 ? (
+                  <TableEmptyRow
+                    colSpan={6}
+                    label={
+                      members.length === 0
+                        ? 'No users yet. Invite teammates to join this organisation.'
+                        : 'No users match the current search or filters.'
+                    }
+                  />
+                ) : (
+                  filteredMembers.map((member) => {
+                    const isSelected = editMember?.id === member.id;
+                    return (
+                      <tr
+                        key={member.id}
+                        onClick={() => setEditMember(member)}
+                        className={`cursor-pointer transition-colors hover:bg-slate-50 ${
+                          isSelected ? 'bg-slate-50' : ''
+                        }`}
                       >
-                        {member.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-slate-600">
-                      {formatDate(member.lastLoginAt)}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          render={
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          }
-                        />
-                        <DropdownMenuContent align="end" className="w-48 min-w-48">
-                          <DropdownMenuItem onClick={() => setEditMember(member)}>
-                            <Shield className="h-3.5 w-3.5" />
-                            Edit roles
-                          </DropdownMenuItem>
-                          {member.status.toLowerCase() === 'invited' && (
-                            <DropdownMenuItem onClick={() => handleResend(member)}>
-                              <Mail className="h-3.5 w-3.5" />
-                              Resend invite
-                            </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem onClick={() => handleToggleStatus(member)}>
-                            <UserX className="h-3.5 w-3.5" />
-                            {member.status.toLowerCase() === 'disabled'
-                              ? 'Enable user'
-                              : 'Disable user'}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            variant="destructive"
-                            onClick={() => handleRemove(member)}
+                        <td className="px-4 py-3 font-medium text-slate-900">
+                          {displayName(member)}
+                        </td>
+                        <td className="px-4 py-3 text-slate-600">{member.email ?? '—'}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap gap-1">
+                            {member.roles.length === 0 ? (
+                              <span className="text-slate-400">—</span>
+                            ) : (
+                              member.roles.map((role) => (
+                                <span
+                                  key={role}
+                                  className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700"
+                                >
+                                  {roles.find((r) => r.key === role)?.name ?? role}
+                                </span>
+                              ))
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${statusBadgeClass(member.status)}`}
                           >
-                            <UserMinus className="h-3.5 w-3.5" />
-                            Remove
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </td>
-                  </tr>
-                ))}
+                            {normalizeStatus(member.status)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-600">
+                          {formatDate(member.lastLoginAt)}
+                        </td>
+                        <td
+                          className="px-4 py-3 text-right"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              render={
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              }
+                            />
+                            <DropdownMenuContent align="end" className="w-48 min-w-48">
+                              <DropdownMenuItem onClick={() => setEditMember(member)}>
+                                <UserCog className="h-3.5 w-3.5" />
+                                Edit user
+                              </DropdownMenuItem>
+                              {canInvite &&
+                                normalizeStatus(member.status) === 'Invited' && (
+                                  <DropdownMenuItem onClick={() => handleResend(member)}>
+                                    <Mail className="h-3.5 w-3.5" />
+                                    Resend invite
+                                  </DropdownMenuItem>
+                                )}
+                              {canManage && (
+                                <DropdownMenuItem onClick={() => handleToggleStatus(member)}>
+                                  <UserX className="h-3.5 w-3.5" />
+                                  {normalizeStatus(member.status) === 'Disabled'
+                                    ? 'Enable user'
+                                    : 'Disable user'}
+                                </DropdownMenuItem>
+                              )}
+                              {canRemove && (
+                                <DropdownMenuItem
+                                  variant="destructive"
+                                  onClick={() => handleRemove(member)}
+                                >
+                                  <UserMinus className="h-3.5 w-3.5" />
+                                  Remove
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
@@ -263,14 +433,17 @@ export function UsersListClient() {
           toast.success(`Invitation sent to ${member.email}`);
         }}
       />
-      <EditUserRolesDrawer
+      <EditUserDrawer
         open={!!editMember}
         onOpenChange={(open) => {
           if (!open) setEditMember(null);
         }}
         member={editMember}
         availableRoles={roles}
-        onSaved={(member) => upsertMember(member)}
+        onSaved={(member) => {
+          upsertMember(member);
+          toast.success(`Updated ${displayName(member)}`);
+        }}
       />
     </div>
   );
