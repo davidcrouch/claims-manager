@@ -125,7 +125,7 @@ export class AttachmentsService {
         `AttachmentsService.getDownloadStream — local GCS stream for attachment=${params.id} document=${doc.id}`,
       );
       return {
-        stream: this.gcsStorage.getReadStream(doc.gcsObjectPath),
+        stream: this.gcsStorage.getReadStream(doc.gcsObjectPath) as Readable,
         contentType: doc.mimeType || contentType,
         contentDisposition,
       };

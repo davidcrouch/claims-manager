@@ -187,9 +187,16 @@ function roundMoney(n: number): number {
   return Math.round(n * 10000) / 10000;
 }
 
+function jsonRate(value: unknown): number {
+  if (typeof value === 'string' || typeof value === 'number') {
+    return coerceToRate(value);
+  }
+  return coerceToRate(undefined);
+}
+
 /** Strip GST from a GST-inclusive allocated amount (tax may be 10 or 0.10). */
 function gstExclusiveAmount(allocatedInclusive: number, item: JsonObject): number {
-  const taxRate = coerceToRate(item.tax);
+  const taxRate = jsonRate(item.tax);
   if (taxRate <= 0) return allocatedInclusive;
   return allocatedInclusive / (1 + taxRate);
 }
@@ -206,14 +213,14 @@ function netUnitAmount(item: JsonObject, unitCost: number): number {
     return unitCost + (Number.isFinite(fixed) ? fixed : 0);
   }
   if (isPercentMarkupType(markupType)) {
-    return unitCost * (1 + coerceToRate(item.markupValue));
+    return unitCost * (1 + jsonRate(item.markupValue));
   }
   return unitCost;
 }
 
 /** Derive unitCost for qty=1 so CW total equals the GST-inclusive allocation. */
 function unitCostFromInclusive(allocatedInclusive: number, item: JsonObject): number {
-  const taxRate = coerceToRate(item.tax);
+  const taxRate = jsonRate(item.tax);
   const exTax = taxRate > 0 ? allocatedInclusive / (1 + taxRate) : allocatedInclusive;
   const markupType =
     typeof item.markupType === 'string' ? item.markupType : null;
@@ -222,7 +229,7 @@ function unitCostFromInclusive(allocatedInclusive: number, item: JsonObject): nu
     return exTax - (Number.isFinite(fixed) ? fixed : 0);
   }
   if (isPercentMarkupType(markupType)) {
-    const markupRate = coerceToRate(item.markupValue);
+    const markupRate = jsonRate(item.markupValue);
     return markupRate > 0 ? exTax / (1 + markupRate) : exTax;
   }
   return exTax;

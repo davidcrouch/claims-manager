@@ -15,7 +15,7 @@ import {
   partyBucketsFromCwPayload,
 } from '../transformers/quote-party-buckets';
 import { TenantContext } from '../../../tenant/tenant-context';
-import type { AttachmentsService } from '../../attachments/attachments.service';
+import { AttachmentsService } from '../../attachments/attachments.service';
 
 interface OutboundQueueRow {
   id: string;
@@ -333,9 +333,6 @@ export class OutboundWorkerService implements OnModuleInit, OnModuleDestroy {
 
     let attachmentsService: AttachmentsService;
     try {
-      const { AttachmentsService: AttachmentsServiceToken } = await import(
-        '../../attachments/attachments.service'
-      );
       // AttachmentsService is request-scoped (via TenantContext) — resolve a DI
       // context instead of get(), then seed tenant for the synthetic request.
       const contextId = ContextIdFactory.create();
@@ -347,7 +344,7 @@ export class OutboundWorkerService implements OnModuleInit, OnModuleDestroy {
         strict: false,
       });
       tenantContext.setTenant({ tenantId: record.tenantId });
-      attachmentsService = await this.moduleRef.resolve(AttachmentsServiceToken, contextId, {
+      attachmentsService = await this.moduleRef.resolve(AttachmentsService, contextId, {
         strict: false,
       });
     } catch (err) {

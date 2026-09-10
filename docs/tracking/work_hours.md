@@ -1237,3 +1237,13 @@
   Invoice publish checks, messaging, and admin user editing received supporting fixes.
   Outcome: smoother day-to-day permissions, document reuse, estimate publishing, and connection sync.
 
+
+- `2026-09-11` `PENDING` **0.5 h**
+  `3 files | +14 −10 | Tier 2 standard | Light orchestration`
+  Lay summary: Build checks pass again after small type fixes so the permission and document updates can deploy.
+  **Type-check fixes so the release can deploy.**
+  Corrected stream typing for local document downloads.
+  Outbound sync resolves the attachments service without a broken dynamic import.
+  Invoice publish rate helpers accept JSON field values cleanly.
+  Outcome: automated checks can proceed to image build and staging deploy.
+
