@@ -1207,8 +1207,8 @@
   Job filters used across lists were aligned so provider and account choices behave consistently.
   Outcome: a dedicated place for job notes plus easier scanning of jobs by provider.
 
-- `2026-09-10` `PENDING` **4 h**
-  `164 files | +9 236 −1 824 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+- `2026-09-10` `eb9cb99` **4 h**
+  `164 files | +9 234 −1 824 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Staff can record invoice payments, add notes on feedback, inspect outgoing connection requests, edit user details, and see consistent job names across lists.
   **Invoice payments, feedback notes, connection request history, and clearer job labels.**
   Staff can record, edit, and remove payments on invoices, with amount received, remaining balance, and a Partially Paid status.
