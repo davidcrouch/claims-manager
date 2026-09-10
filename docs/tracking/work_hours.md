@@ -1226,8 +1226,8 @@
   Automated API tests still pass after the change.
   Outcome: the release pipeline can continue through image build and staging deploy.
 
-- `2026-09-11` `PENDING` **6 h**
-  `77 files | +4 523 −937 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+- `2026-09-11` `a902409` **6 h**
+  `78 files | +4 535 −937 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Staff get clearer permission messages, can attach existing project documents to jobs and quotes, publish estimates more reliably, and see helpful notices when a Crunchwork report is not available.
   **Permission feedback, project-document attachments, estimate publish, and outbound sync.**
   When a user lacks access, the app shows a clear permission message instead of a generic failure.
