@@ -44,7 +44,7 @@ export class TenantInterceptor implements NestInterceptor {
     user: AuthenticatedUser | undefined,
   ): Promise<{ userId: string; userName: string } | undefined> {
     const userId = user?.sub?.trim();
-    if (!userId) return undefined;
+    if (!user || !userId) return undefined;
 
     const email = user.email?.trim() || '';
     let userName = email || userId;

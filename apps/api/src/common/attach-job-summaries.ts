@@ -44,10 +44,10 @@ export async function attachJobSummaries<T>(params: {
     ids: jobIds,
   });
   const jobById = new Map(jobs.map((job) => [job.id, job]));
-  return params.rows.map((row) => {
+  return params.rows.map((row): T & { job?: ListJobSummary } => {
     const jobId = jobIdOf(row);
     const job = jobId ? jobById.get(jobId) : undefined;
-    if (!job) return row;
+    if (!job) return row as T & { job?: ListJobSummary };
     return { ...row, job: toListJobSummary(job) };
   });
 }

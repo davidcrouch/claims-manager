@@ -1216,3 +1216,12 @@
   Connection screens show outgoing web requests so staff can inspect what was sent and received, including who triggered the call.
   User administration supports editing member details and roles from one place.
   Lists, headers, and related records show consistent job names and numbers so work is easier to scan.
+
+- `2026-09-10` `PENDING` **0.5 h**
+  `3 files | +12 −3 | Tier 2 standard | Light orchestration`
+  Lay summary: Build checks now pass so the latest invoice, feedback, and connection updates can go out to the hosted environment.
+  **Type-check fixes so the latest release can deploy.**
+  Corrected two compile issues that stopped the automated quality check.
+  Job labels on lists and the acting-user record on outgoing requests now type-check cleanly.
+  Automated API tests still pass after the change.
+  Outcome: the release pipeline can continue through image build and staging deploy.
