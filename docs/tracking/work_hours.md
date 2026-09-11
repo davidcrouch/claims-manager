@@ -1248,7 +1248,7 @@
   Outcome: automated checks can proceed to image build and staging deploy.
 
 
-- `2026-09-11` `PENDING` **3 h**
+- `2026-09-11` `52c29fc` **3 h**
   `26 files | +1 851 −117 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
   Lay summary: Staff can set default print format and folders per document type, and progress invoices publish correctly to Crunchwork.
   **Document template scenario settings and progress invoice publish.**
