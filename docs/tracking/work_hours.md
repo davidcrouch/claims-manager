@@ -1258,3 +1258,11 @@
   Supporting tests cover progress versus full invoice publish behaviour.
   Small list and layout fixes keep admin users, catalog, and line-item displays consistent.
   Outcome: clearer document defaults and reliable progress billing to the connected system.
+
+- `2026-09-11` `PENDING` **0.5 h**
+  `1 file | +3 −3 | Tier 2 standard | Light orchestration`
+  Lay summary: Build checks pass again after a small type fix so the document and invoice updates can deploy.
+  **Type-check fix so the release can deploy.**
+  Corrected status-filter Set typing on the users list.
+  Frontend production build type-check completes cleanly.
+  Outcome: automated checks can proceed to image build and staging deploy.

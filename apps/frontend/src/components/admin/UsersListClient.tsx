@@ -291,16 +291,16 @@ export function UsersListClient() {
           />
           <StatusFilterMenu
             options={STATUS_OPTIONS}
-            selected={statusFilterActive ? statusFilter : new Set()}
+            selected={statusFilterActive ? statusFilter : new Set<string>()}
             onSelectionChange={(id, checked) => {
               const working = statusFilterActive
                 ? new Set(statusFilter)
-                : new Set();
+                : new Set<string>();
               if (checked) working.add(id);
               else working.delete(id);
               applyStatusFilter(working);
             }}
-            onClearAll={() => applyStatusFilter(new Set())}
+            onClearAll={() => applyStatusFilter(new Set<string>())}
             onSelectAll={() => applyStatusFilter(new Set(statusFilterOptions))}
             triggerEmptyLabel="All statuses"
             menuTitle="Filter by status"
