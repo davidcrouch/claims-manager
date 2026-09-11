@@ -1,10 +1,15 @@
 import {
   applyInvoicedAmountOverridesToGroups,
   applyLocalPricingToCrunchworkInvoiceGroups,
+  buildCrunchworkProgressInvoiceBody,
   buildCrunchworkVendorTaxInvoiceCreateBody,
+  computeProgressInvoiceMoney,
   crunchworkInvoiceGroupsFromPayload,
+  itemInclusiveLineTotal,
   pickCrunchworkInvoiceIdForPurchaseOrder,
   preferExistingAmount,
+  shouldUseCrunchworkProgressInvoice,
+  sumLocalGroupsInclusiveTotal,
   toInvoiceUpdateGroups,
 } from './invoice-publish.utils';
 
@@ -30,6 +35,138 @@ describe('buildCrunchworkVendorTaxInvoiceCreateBody', () => {
       purchaseOrderId: 'po-1',
       invoiceType: { externalReference: 'Invoice' },
     });
+  });
+});
+
+describe('buildCrunchworkProgressInvoiceBody', () => {
+  it('builds CreateTradeInvoiceInput header fields', () => {
+    expect(
+      buildCrunchworkProgressInvoiceBody({
+        purchaseOrderId: 'po-cw',
+        invoiceNumber: 'INV-200009',
+        issueDate: '2026-09-10T00:00:00.000Z',
+        comments: 'Progress claim 1',
+        total: 165,
+        totalTax: 15,
+      }),
+    ).toEqual({
+      purchaseOrderId: 'po-cw',
+      invoiceNumber: 'INV-200009',
+      issueDate: '2026-09-10T00:00:00.000Z',
+      comments: 'Progress claim 1',
+      total: 165,
+      totalTax: 15,
+    });
+  });
+});
+
+describe('shouldUseCrunchworkProgressInvoice', () => {
+  it('uses progress when a sibling was already published', () => {
+    expect(
+      shouldUseCrunchworkProgressInvoice({
+        invoiceTotal: 330,
+        billableTotal: 330,
+        hasPriorPublishedSibling: true,
+      }),
+    ).toBe(true);
+  });
+
+  it('uses progress when the invoice is short of the billable total', () => {
+    expect(
+      shouldUseCrunchworkProgressInvoice({
+        invoiceTotal: 165,
+        billableTotal: 330,
+        hasPriorPublishedSibling: false,
+      }),
+    ).toBe(true);
+  });
+
+  it('uses vendor-tax for a full first claim', () => {
+    expect(
+      shouldUseCrunchworkProgressInvoice({
+        invoiceTotal: 330,
+        billableTotal: 330,
+        hasPriorPublishedSibling: false,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('computeProgressInvoiceMoney', () => {
+  it('splits GST from inclusive allocated amounts', () => {
+    expect(
+      computeProgressInvoiceMoney({
+        groups: [
+          {
+            items: [
+              {
+                id: 'i1',
+                name: 'description',
+                index: 0,
+                unitCost: 300,
+                quantity: 1,
+                tax: 10,
+                markupType: 'Percentage',
+                markupValue: 0,
+              },
+            ],
+          },
+        ],
+        invoicedAmounts: { 'name:description:0': 165 },
+        headerTotal: 165,
+      }),
+    ).toEqual({ total: 165, totalTax: 15, subTotal: 150 });
+  });
+
+  it('falls back to header total when no allocations are present', () => {
+    expect(
+      computeProgressInvoiceMoney({
+        groups: [
+          {
+            items: [
+              {
+                id: 'i1',
+                unitCost: 300,
+                quantity: 1,
+                tax: 10,
+                markupType: 'Percentage',
+                markupValue: 0,
+              },
+            ],
+          },
+        ],
+        headerTotal: 165,
+      }),
+    ).toEqual({ total: 165, totalTax: 15, subTotal: 150 });
+  });
+});
+
+describe('sumLocalGroupsInclusiveTotal', () => {
+  it('sums GST-inclusive line totals', () => {
+    expect(
+      sumLocalGroupsInclusiveTotal([
+        {
+          items: [
+            {
+              unitCost: 300,
+              quantity: 1,
+              tax: 10,
+              markupType: 'Percentage',
+              markupValue: 0,
+            },
+          ],
+        },
+      ]),
+    ).toBe(330);
+    expect(
+      itemInclusiveLineTotal({
+        unitCost: 100,
+        quantity: 2,
+        tax: 10,
+        markupType: 'Percentage',
+        markupValue: 10,
+      }),
+    ).toBe(242);
   });
 });
 

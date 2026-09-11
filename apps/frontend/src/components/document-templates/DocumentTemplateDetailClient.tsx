@@ -6,6 +6,7 @@ import {
   FileCode2,
   FileText,
   Files,
+  Settings2,
 } from 'lucide-react';
 import { SetPageHeader } from '@/components/layout/SetPageHeader';
 import { SetHeaderActions } from '@/components/layout/SetHeaderActions';
@@ -21,14 +22,16 @@ import type {
   FilesystemCategory,
   FSDocument,
 } from '@/lib/api-client';
+import { ConfigurationTab } from './ConfigurationTab';
 import { TransformEditor } from './transform/TransformEditor';
 import { TemplateEditorTab } from './template/TemplateEditorTab';
 import { DataSourcesTab } from './data-context/DataSourcesTab';
 import { ReportBuilderButton } from './ReportBuilderButton';
 
-type TabValue = 'data-sources' | 'transform' | 'template';
+type TabValue = 'configuration' | 'data-sources' | 'transform' | 'template';
 
 const TABS: Array<{ id: TabValue; label: string; icon: typeof FileCode2 }> = [
+  { id: 'configuration', label: 'Configuration', icon: Settings2 },
   { id: 'data-sources', label: 'Data Sources', icon: Database },
   { id: 'transform', label: 'Transform', icon: FileCode2 },
   { id: 'template', label: 'Template', icon: FileText },
@@ -48,7 +51,7 @@ export function DocumentTemplateDetailClient({
   folderSetting: initialFolder,
 }: DocumentTemplateDetailClientProps) {
   const [setting, setSetting] = useState(initialSetting);
-  const [activeTab, setActiveTab] = useState<TabValue>('data-sources');
+  const [activeTab, setActiveTab] = useState<TabValue>('configuration');
 
   const isDefault = setting.documentType === 'default';
 
@@ -115,6 +118,14 @@ export function DocumentTemplateDetailClient({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4">
+          {activeTab === 'configuration' && (
+            <ConfigurationTab
+              setting={setting}
+              companyCategories={companyCategories}
+              onSettingChange={setSetting}
+            />
+          )}
+
           {activeTab === 'data-sources' && (
             isDefault ? (
               <div className="rounded-lg border border-slate-200 bg-white px-5 py-6">

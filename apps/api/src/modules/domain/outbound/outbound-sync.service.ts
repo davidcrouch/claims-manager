@@ -1,5 +1,5 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB, type DrizzleDbOrTx } from '../../../database/drizzle.module';
 import { outboundSyncQueue, integrationConnections } from '../../../database/schema';
 import { getRequestActor } from '../../../common/request-actor.store';
@@ -132,7 +132,9 @@ export class OutboundSyncService {
           eq(outboundSyncQueue.tenantId, params.tenantId),
           eq(outboundSyncQueue.entityType, params.entityType),
           eq(outboundSyncQueue.entityId, params.entityId),
-          eq(outboundSyncQueue.status, 'pending'),
+          // Cancel both pending retries and exhausted failed rows so a corrected
+          // publish can replace a stale vendorTax payload.
+          sql`${outboundSyncQueue.status} IN ('pending', 'failed')`,
         ),
       )
       .returning({ id: outboundSyncQueue.id });

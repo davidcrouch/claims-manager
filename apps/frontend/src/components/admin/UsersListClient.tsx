@@ -26,8 +26,10 @@ import {
 import {
   SearchInput,
   SortTabs,
+  SortableColumnHeader,
   StatusFilterMenu,
   TableEmptyRow,
+  commitColumnFilterSelection,
   compareValues,
   type SortOption,
   type StatusOption,
@@ -47,6 +49,7 @@ import { toast } from 'sonner';
 
 const SORT_OPTIONS: SortOption[] = [
   { key: 'name', label: 'Name' },
+  { key: 'email', label: 'Email' },
   { key: 'lastLoginAt', label: 'Last login' },
   { key: 'status', label: 'Status' },
 ];
@@ -103,7 +106,13 @@ export function UsersListClient() {
   const [sortField, setSortField] = useState('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [statusFilterActive, setStatusFilterActive] = useState(false);
   const [roleFilter, setRoleFilter] = useState<Set<string>>(new Set());
+
+  const statusFilterOptions = useMemo(
+    () => STATUS_OPTIONS.map((option) => option.id),
+    [],
+  );
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -178,7 +187,16 @@ export function UsersListClient() {
       return;
     }
     setSortField(field);
-    setSortOrder(field === 'name' ? 'asc' : 'desc');
+    setSortOrder(field === 'name' || field === 'email' ? 'asc' : 'desc');
+  }
+
+  function applyStatusFilter(next: Set<string>) {
+    const committed = commitColumnFilterSelection({
+      next,
+      optionCount: statusFilterOptions.length,
+    });
+    setStatusFilter(committed.selected);
+    setStatusFilterActive(committed.active);
   }
 
   const roleOptions: StatusOption[] = useMemo(
@@ -194,7 +212,7 @@ export function UsersListClient() {
         const email = (member.email ?? '').toLowerCase();
         if (!name.includes(query) && !email.includes(query)) return false;
       }
-      if (statusFilter.size > 0 && !statusFilter.has(normalizeStatus(member.status))) {
+      if (statusFilterActive && !statusFilter.has(normalizeStatus(member.status))) {
         return false;
       }
       if (roleFilter.size > 0 && !member.roles.some((role) => roleFilter.has(role))) {
@@ -204,6 +222,9 @@ export function UsersListClient() {
     });
 
     rows.sort((a, b) => {
+      if (sortField === 'email') {
+        return compareValues(a.email, b.email, sortOrder);
+      }
       if (sortField === 'lastLoginAt') {
         return compareValues(a.lastLoginAt, b.lastLoginAt, sortOrder);
       }
@@ -218,7 +239,7 @@ export function UsersListClient() {
     });
 
     return rows;
-  }, [members, search, statusFilter, roleFilter, sortField, sortOrder]);
+  }, [members, search, statusFilter, statusFilterActive, roleFilter, sortField, sortOrder]);
 
   const breakdown = useMemo(
     () => computeStatusBreakdown(members, (member) => normalizeStatus(member.status)),
@@ -234,7 +255,7 @@ export function UsersListClient() {
           total={members.length}
           showing={filteredMembers.length}
           search={search}
-          statusSelectedCount={statusFilter.size}
+          statusSelectedCount={statusFilterActive ? statusFilter.size : 0}
           breakdown={breakdown}
           accent="slate"
         />
@@ -270,17 +291,17 @@ export function UsersListClient() {
           />
           <StatusFilterMenu
             options={STATUS_OPTIONS}
-            selected={statusFilter}
+            selected={statusFilterActive ? statusFilter : new Set()}
             onSelectionChange={(id, checked) => {
-              setStatusFilter((prev) => {
-                const next = new Set(prev);
-                if (checked) next.add(id);
-                else next.delete(id);
-                return next;
-              });
+              const working = statusFilterActive
+                ? new Set(statusFilter)
+                : new Set();
+              if (checked) working.add(id);
+              else working.delete(id);
+              applyStatusFilter(working);
             }}
-            onClearAll={() => setStatusFilter(new Set())}
-            onSelectAll={() => setStatusFilter(new Set(STATUS_OPTIONS.map((o) => o.id)))}
+            onClearAll={() => applyStatusFilter(new Set())}
+            onSelectAll={() => applyStatusFilter(new Set(statusFilterOptions))}
             triggerEmptyLabel="All statuses"
             menuTitle="Filter by status"
             itemNoun={{ singular: 'status', plural: 'statuses' }}
@@ -315,11 +336,45 @@ export function UsersListClient() {
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50">
                 <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                  <th className="px-4 py-3">Name</th>
-                  <th className="px-4 py-3">Email</th>
+                  <SortableColumnHeader
+                    columnKey="name"
+                    label="Name"
+                    activeField={sortField}
+                    sortOrder={sortOrder}
+                    onSort={handleSort}
+                  />
+                  <SortableColumnHeader
+                    columnKey="email"
+                    label="Email"
+                    activeField={sortField}
+                    sortOrder={sortOrder}
+                    onSort={handleSort}
+                  />
                   <th className="px-4 py-3">Role</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Last login</th>
+                  <SortableColumnHeader
+                    columnKey="status"
+                    label="Status"
+                    activeField={sortField}
+                    sortOrder={sortOrder}
+                    onSort={handleSort}
+                    filter={{
+                      options: statusFilterOptions,
+                      selected: statusFilterActive
+                        ? statusFilter
+                        : new Set(statusFilterOptions),
+                      active: statusFilterActive,
+                      onApply: applyStatusFilter,
+                      menuTitle: 'Filter by status',
+                      itemNoun: { singular: 'status', plural: 'statuses' },
+                    }}
+                  />
+                  <SortableColumnHeader
+                    columnKey="lastLoginAt"
+                    label="Last login"
+                    activeField={sortField}
+                    sortOrder={sortOrder}
+                    onSort={handleSort}
+                  />
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>

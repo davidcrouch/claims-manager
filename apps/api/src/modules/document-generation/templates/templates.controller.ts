@@ -14,6 +14,7 @@ import { TemplateRegistryService } from '../services/template-registry.service';
 import { TemplateEngineService } from '../services/template-engine.service';
 import { AssignTemplateDto } from '../dto/assign-template.dto';
 import { UpdateTemplatesFolderDto } from '../dto/update-templates-folder.dto';
+import { UpdateScenarioConfigDto } from '../dto/update-scenario-config.dto';
 import { RequirePermission } from '../../../auth/decorators/require-permission.decorator';
 import { P } from '../../../auth/permission-constants';
 import {
@@ -124,6 +125,37 @@ export class TemplatesController {
       tenantId,
       documentType,
       templateEngineService: this.templateEngine,
+    });
+  }
+
+  @Put(':documentType/config')
+  @RequirePermission(P.documents.manage)
+  @ApiOperation({
+    summary: 'Update output format and completed-reports folder for a scenario',
+  })
+  async setConfig(
+    @Param('documentType') documentType: string,
+    @Body() dto: UpdateScenarioConfigDto,
+  ) {
+    this.assertDocumentType(documentType);
+    const tenantId = this.tenantContext.getTenantId();
+    this.logger.debug(
+      `TemplatesController.setConfig — tenantId=${tenantId} documentType=${documentType}` +
+        ` outputFormat=${dto.outputFormat ?? 'unchanged'}` +
+        ` folderKind=${dto.completedReportsFolderKind ?? 'unchanged'}` +
+        ` folderSlug=${
+          dto.completedReportsFolderSlug === undefined
+            ? 'unchanged'
+            : (dto.completedReportsFolderSlug ?? 'cleared')
+        }`,
+    );
+    return this.templateRegistry.setScenarioConfig({
+      tenantId,
+      documentType,
+      outputFormat: dto.outputFormat,
+      completedReportsFolderCategoryId: dto.completedReportsFolderCategoryId,
+      completedReportsFolderSlug: dto.completedReportsFolderSlug,
+      completedReportsFolderKind: dto.completedReportsFolderKind,
     });
   }
 

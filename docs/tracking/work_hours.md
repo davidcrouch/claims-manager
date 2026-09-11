@@ -1247,3 +1247,14 @@
   Invoice publish rate helpers accept JSON field values cleanly.
   Outcome: automated checks can proceed to image build and staging deploy.
 
+
+- `2026-09-11` `PENDING` **3 h**
+  `26 files | +1 851 −117 | Tier 2 standard / Tier 3 complex | Moderate orchestration`
+  Lay summary: Staff can set default print format and folders per document type, and progress invoices publish correctly to Crunchwork.
+  **Document template scenario settings and progress invoice publish.**
+  Administrators can choose Word or PDF output and a completed-reports folder for each document scenario.
+  Print flows pick up those defaults so staff spend less time re-selecting format and destination.
+  Partial and progress invoices use the correct Crunchwork progress-invoice path instead of reusing a full tax invoice.
+  Supporting tests cover progress versus full invoice publish behaviour.
+  Small list and layout fixes keep admin users, catalog, and line-item displays consistent.
+  Outcome: clearer document defaults and reliable progress billing to the connected system.

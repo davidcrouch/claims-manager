@@ -298,6 +298,8 @@ export class OutboundWorkerService implements OnModuleInit, OnModuleDestroy {
               ? (existing.invoicePayload as Record<string, unknown>)
               : {};
           const response = result.responsePayload as Record<string, unknown>;
+          const payloadKind = (record.payload as Record<string, unknown> | null)?.cwInvoiceKind;
+          const cwInvoiceKind = prior.cwInvoiceKind ?? payloadKind;
           patch.invoicePayload = {
             ...response,
             ...(prior.workOrderId != null ? { workOrderId: prior.workOrderId } : {}),
@@ -308,6 +310,7 @@ export class OutboundWorkerService implements OnModuleInit, OnModuleDestroy {
             ...(prior.invoicedAmounts != null
               ? { invoicedAmounts: prior.invoicedAmounts }
               : {}),
+            ...(cwInvoiceKind != null ? { cwInvoiceKind } : {}),
           };
         }
         await this.db.update(invoices).set(patch).where(eq(invoices.id, record.entityId));

@@ -98,7 +98,7 @@ export function FolderTreePickerDrawer({
 
           {!hasAnyFolders ? (
             <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-4 text-sm text-slate-500">
-              No folders found. Set up the company filesystem first.
+              No folders found. Set up the company or project filesystem first.
             </p>
           ) : (
             sectionTrees.map((section) =>

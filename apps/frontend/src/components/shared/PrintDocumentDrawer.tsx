@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle,
@@ -225,17 +225,49 @@ export function PrintDocumentDrawer({
   );
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
   const [createPdf, setCreatePdf] = useState(false);
+  const selectedTypeRef = useRef(selectedType);
+  selectedTypeRef.current = selectedType;
 
   const reset = useCallback(() => {
     setSelectedType(documentType);
     setLoadingContext(false);
     setGenerating(false);
     setError(null);
+    setSettings([]);
     setSelectedTemplateId('');
     setDestinationCategoryId(null);
     setFolderPickerOpen(false);
     setCreatePdf(false);
   }, [documentType]);
+
+  const applyScenarioDefaults = useCallback(
+    (
+      rows: DocumentTemplateSetting[],
+      documentTypeKey: string,
+      jobCats: FilesystemCategory[] = [],
+      companyCats: FilesystemCategory[] = [],
+    ) => {
+      const row = rows.find((s) => s.documentType === documentTypeKey);
+      setCreatePdf(row?.outputFormat === 'pdf');
+
+      const folder = row?.completedReportsFolder?.folder;
+      if (folder?.kind === 'project' && folder.slug) {
+        const match = jobCats.find((cat) => cat.slug === folder.slug);
+        setDestinationCategoryId(match?.id ?? null);
+        return;
+      }
+      if (folder?.kind === 'company' && folder.slug) {
+        const match = companyCats.find((cat) => cat.slug === folder.slug);
+        setDestinationCategoryId(match?.id ?? null);
+        return;
+      }
+
+      setDestinationCategoryId(
+        row?.completedReportsFolder?.filesystemCategoryId ?? null,
+      );
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!open) {
@@ -243,7 +275,6 @@ export function PrintDocumentDrawer({
       return;
     }
     setSelectedType(documentType);
-    setDestinationCategoryId(null);
     setError(null);
   }, [open, documentType, reset]);
 
@@ -283,11 +314,20 @@ export function PrintDocumentDrawer({
             : null;
 
         if (cancelled) return;
-        setSettings(Array.isArray(nextSettings) ? nextSettings : []);
+        const settingsList = Array.isArray(nextSettings) ? nextSettings : [];
+        setSettings(settingsList);
         setDocxDocuments((docsPayload.data ?? []).filter(isDocx));
         setTemplatesFolder(nextFolder);
         setCompanyCategories(companyFs?.categories ?? []);
-        setJobCategories(jobFs?.categories ?? []);
+        const nextCompanyCategories = companyFs?.categories ?? [];
+        const nextJobCategories = jobFs?.categories ?? [];
+        setJobCategories(nextJobCategories);
+        applyScenarioDefaults(
+          settingsList,
+          selectedTypeRef.current,
+          nextJobCategories,
+          nextCompanyCategories,
+        );
       } catch (err) {
         if (!cancelled) {
           setError(
@@ -303,7 +343,9 @@ export function PrintDocumentDrawer({
     return () => {
       cancelled = true;
     };
-  }, [open, jobId]);
+    // selectedType intentionally omitted — type changes apply defaults via the effect below
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload when drawer opens / job changes
+  }, [open, jobId, applyScenarioDefaults]);
 
   const assigned = useMemo(
     () => assignedFilesystemDocId(settings, selectedType),
@@ -349,6 +391,24 @@ export function PrintDocumentDrawer({
     setSelectedTemplateId(assigned?.id ?? templateOptions[0]?.id ?? '');
   }, [assigned?.id, loadingContext, open, selectedType, templateOptions]);
 
+  useEffect(() => {
+    if (!open || loadingContext || settings.length === 0) return;
+    applyScenarioDefaults(settings, selectedType, jobCategories, companyCategories);
+  }, [
+    applyScenarioDefaults,
+    companyCategories,
+    jobCategories,
+    loadingContext,
+    open,
+    selectedType,
+    settings,
+  ]);
+
+  const selectedScenario = useMemo(
+    () => settings.find((row) => row.documentType === selectedType) ?? null,
+    [settings, selectedType],
+  );
+
   const templateItems = useMemo(() => {
     const items: Record<string, string> = {};
     for (const doc of templateOptions) {
@@ -373,13 +433,32 @@ export function PrintDocumentDrawer({
   }, [companyCategories, jobCategories]);
 
   const destinationLabel = useMemo(() => {
-    if (!destinationCategoryId) return 'Download to this computer';
+    if (!destinationCategoryId) {
+      const configured = selectedScenario?.completedReportsFolder?.folder;
+      if (configured?.kind === 'project' && configured.slug) {
+        return `Project folder “${configured.displayName}” is not available on this job`;
+      }
+      if (configured?.kind === 'company' && configured.slug) {
+        return `Company folder “${configured.displayName}” is not available`;
+      }
+      return 'Download to this computer';
+    }
     const jobPath = resolveFolderPath(jobCategories, destinationCategoryId);
     if (jobPath) return `Job files / ${jobPath}`;
     const companyPath = resolveFolderPath(companyCategories, destinationCategoryId);
     if (companyPath) return `Company files / ${companyPath}`;
+    const configured = selectedScenario?.completedReportsFolder?.folder;
+    if (configured?.path) {
+      if (configured.kind === 'project') return `Project / ${configured.path}`;
+      if (configured.kind === 'company') return `Company / ${configured.path}`;
+    }
     return 'Selected folder';
-  }, [companyCategories, destinationCategoryId, jobCategories]);
+  }, [
+    companyCategories,
+    destinationCategoryId,
+    jobCategories,
+    selectedScenario?.completedReportsFolder,
+  ]);
 
   const selectedTemplateName = useMemo(() => {
     if (!selectedTemplateId) return null;

@@ -28,9 +28,13 @@ import {
   applyInvoicedAmountOverridesToGroups,
   applyLocalPricingToCrunchworkInvoiceGroups,
   buildCrunchworkVendorTaxInvoiceCreateBody,
+  computeProgressInvoiceMoney,
   crunchworkInvoiceGroupsFromPayload,
   preferExistingAmount,
+  shouldUseCrunchworkProgressInvoice,
+  sumLocalGroupsInclusiveTotal,
   toInvoiceUpdateGroups,
+  type CrunchworkInvoiceKind,
 } from './invoice-publish.utils';
 
 const INVOICE_STATUS = {
@@ -807,9 +811,18 @@ export class InvoicesService {
     }
 
     const currentStatus = this.invoiceStatusName(existing);
-    if (currentStatus.toLowerCase() !== INVOICE_STATUS.REVIEWED.toLowerCase()) {
+    const statusLower = currentStatus.toLowerCase();
+    const syncFailed = existing.syncStatus === 'failed';
+    const canPublish =
+      statusLower === INVOICE_STATUS.REVIEWED.toLowerCase() ||
+      (syncFailed &&
+        (statusLower === INVOICE_STATUS.INVOICED.toLowerCase() ||
+          statusLower === INVOICE_STATUS.REVIEWED.toLowerCase()));
+    if (!canPublish) {
       throw new BadRequestException(
-        'Invoice must be in Reviewed status before publishing',
+        syncFailed
+          ? 'Invoice sync failed but status is not recoverable for republish'
+          : 'Invoice must be in Reviewed status before publishing',
       );
     }
 
@@ -870,11 +883,6 @@ export class InvoicesService {
       invoice: existing,
     });
 
-    this.logger.log(
-      `${logPrefix} — publishing invoice=${params.id} via outbox connectionId=${connectionId} purchaseOrderId=${providerPurchaseOrderId}` +
-        (reusedCwInvoiceId ? ` reusingCwInvoiceId=${reusedCwInvoiceId}` : ' invoiceType=Invoice'),
-    );
-
     let localGroups = await this.catalogSelectionService.buildOutboundInvoiceGroups({
       purchaseOrderId: existing.purchaseOrderId,
       workOrderId: existing.workOrderId,
@@ -898,16 +906,89 @@ export class InvoicesService {
         ? (payloadInvoiced as Record<string, number>)
         : undefined;
 
+    const priorPayload =
+      existing.invoicePayload &&
+      typeof existing.invoicePayload === 'object' &&
+      !Array.isArray(existing.invoicePayload)
+        ? (existing.invoicePayload as Record<string, unknown>)
+        : {};
+    const storedKind =
+      priorPayload.cwInvoiceKind === 'progress' || priorPayload.cwInvoiceKind === 'vendorTax'
+        ? (priorPayload.cwInvoiceKind as CrunchworkInvoiceKind)
+        : undefined;
+    // Only trust a stored kind after a successful CW publish. A failed attempt
+    // may have stamped vendorTax and would otherwise lock retries onto /invoices.
+    const lockedKind = existing.sourceExternalReference ? storedKind : undefined;
+
+    const invoiceTotal = Number(existing.totalAmount ?? 0);
+    const billableFromGroups = sumLocalGroupsInclusiveTotal(localGroups);
+    let billableTotal = billableFromGroups;
+    if (!(billableTotal > 0) && existing.workOrderId) {
+      const wo = await this.workOrdersRepo.findOne({
+        id: existing.workOrderId,
+        tenantId,
+      });
+      const woTotal = Number(wo?.totalAmount ?? wo?.adjustedTotal ?? 0);
+      if (Number.isFinite(woTotal) && woTotal > 0) billableTotal = woTotal;
+    }
+
+    const hasPriorPublishedSibling = await this.hasPriorPublishedSiblingInvoice({
+      tenantId,
+      invoiceId: params.id,
+      purchaseOrderId: existing.purchaseOrderId,
+    });
+
+    const detectedProgress = shouldUseCrunchworkProgressInvoice({
+      invoiceTotal,
+      billableTotal,
+      hasPriorPublishedSibling,
+    });
+    const cwInvoiceKind: CrunchworkInvoiceKind =
+      lockedKind ?? (detectedProgress ? 'progress' : 'vendorTax');
+
+    const progressMoney =
+      cwInvoiceKind === 'progress'
+        ? computeProgressInvoiceMoney({
+            groups: localGroups,
+            invoicedAmounts,
+            headerTotal: invoiceTotal,
+          })
+        : null;
+
+    this.logger.log(
+      `${logPrefix} — publishing invoice=${params.id} via outbox connectionId=${connectionId} ` +
+        `purchaseOrderId=${providerPurchaseOrderId} cwInvoiceKind=${cwInvoiceKind}` +
+        (lockedKind ? ` lockedKind=${lockedKind}` : ` detectedProgress=${detectedProgress}`) +
+        (reusedCwInvoiceId ? ` reusingCwInvoiceId=${reusedCwInvoiceId}` : '') +
+        ` billableTotal=${billableTotal} invoiceTotal=${invoiceTotal}` +
+        (progressMoney
+          ? ` progressTotal=${progressMoney.total} progressTax=${progressMoney.totalTax}`
+          : ''),
+    );
+
+    const nextPayload: Record<string, unknown> = {
+      ...priorPayload,
+      cwInvoiceKind,
+      ...(invoicedAmounts ? { invoicedAmounts } : {}),
+    };
+
     await this.invoicesRepo.update({
       id: params.id,
       data: {
         statusLookupId: invoicedStatusId ?? existing.statusLookupId,
         syncStatus: 'pending',
+        invoicePayload: nextPayload,
         ...(params.userId ? { updatedByUserId: params.userId } : {}),
       },
     });
 
     try {
+      await this.outboundSync.cancelPending({
+        tenantId,
+        entityType: 'invoice',
+        entityId: params.id,
+        tx: this.outboundSync['db'],
+      });
       await this.outboundSync.enqueue({
         tenantId,
         connectionId,
@@ -918,8 +999,16 @@ export class InvoicesService {
           purchaseOrderId: providerPurchaseOrderId,
           reusedCwInvoiceId,
           invoiceId: params.id,
-          localGroups,
-          ...(invoicedAmounts ? { invoicedAmounts } : {}),
+          cwInvoiceKind,
+          ...(cwInvoiceKind === 'vendorTax'
+            ? {
+                localGroups,
+                ...(invoicedAmounts ? { invoicedAmounts } : {}),
+              }
+            : {
+                total: progressMoney!.total,
+                totalTax: progressMoney!.totalTax,
+              }),
           vendorInvoiceNumber: existing.invoiceNumber ?? existing.internalNumber ?? null,
           issueDate: existing.issueDate
             ? new Date(existing.issueDate as string | Date).toISOString()
@@ -927,7 +1016,7 @@ export class InvoicesService {
           note: existing.comments ?? null,
         },
         sourceEvent: 'api:publish',
-        idempotencyKey: `invoice:${params.id}:publish`,
+        idempotencyKey: `invoice:${params.id}:publish:${cwInvoiceKind}`,
         tx: this.outboundSync['db'],
       });
     } catch (err) {
@@ -942,6 +1031,34 @@ export class InvoicesService {
     return this.loadShaped({ id: params.id, tenantId });
   }
 
+  private async hasPriorPublishedSiblingInvoice(params: {
+    tenantId: string;
+    invoiceId: string;
+    purchaseOrderId?: string | null;
+  }): Promise<boolean> {
+    if (!params.purchaseOrderId) return false;
+
+    const rejected = new Set(['rejected', 'declined', 'cancelled', 'canceled']);
+    const published = new Set([
+      INVOICE_STATUS.INVOICED.toLowerCase(),
+      INVOICE_STATUS.PARTIALLY_PAID.toLowerCase(),
+      INVOICE_STATUS.PAID.toLowerCase(),
+    ]);
+
+    const siblings = await this.invoicesRepo.findByPurchaseOrder({
+      purchaseOrderId: params.purchaseOrderId,
+      tenantId: params.tenantId,
+    });
+
+    return siblings.some((row) => {
+      if (row.id === params.invoiceId) return false;
+      const status = (row.statusName ?? '').trim().toLowerCase();
+      if (rejected.has(status)) return false;
+      if (row.sourceExternalReference) return true;
+      return published.has(status);
+    });
+  }
+
   private async resolveExistingCrunchworkInvoiceId(params: {
     tenantId: string;
     invoice: {
@@ -950,23 +1067,11 @@ export class InvoicesService {
       sourceExternalReference?: string | null;
     };
   }): Promise<string | undefined> {
+    // Only reuse this invoice's own CW id (retries / re-publish). Never adopt a
+    // sibling's id — that overwrote progress claims onto one vendor-tax invoice.
     if (params.invoice.sourceExternalReference) {
       return params.invoice.sourceExternalReference;
     }
-
-    if (params.invoice.purchaseOrderId) {
-      const siblings = await this.invoicesRepo.findByPurchaseOrder({
-        purchaseOrderId: params.invoice.purchaseOrderId,
-        tenantId: params.tenantId,
-      });
-      const siblingRef = siblings.find(
-        (row) => row.id !== params.invoice.id && row.sourceExternalReference,
-      )?.sourceExternalReference;
-      if (siblingRef) return siblingRef;
-    }
-
-    // GET /jobs/{id}/invoices is Phase 2 Insurance-only (REST API v17 §3.2.2).
-    // Vendor credentials return 500 "Not Authorised!" — do not call it.
     return undefined;
   }
 

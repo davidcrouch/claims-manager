@@ -21,6 +21,9 @@ interface TemplatesFolderPickerDialogProps {
   categories: FilesystemCategory[];
   selectedCategoryId: string | null;
   onConfirm: (categoryId: string) => void;
+  title?: string;
+  description?: string;
+  confirmLabel?: string;
 }
 
 export function TemplatesFolderPickerDialog({
@@ -29,6 +32,9 @@ export function TemplatesFolderPickerDialog({
   categories,
   selectedCategoryId,
   onConfirm,
+  title = 'Select templates folder',
+  description = 'Choose a folder in the company filesystem. Word templates in this folder (and its subfolders) appear in the assignment lists.',
+  confirmLabel = 'Use this folder',
 }: TemplatesFolderPickerDialogProps) {
   const tree = useMemo(
     () => buildCategoryTree(categories.filter((cat) => !cat.archivedAt)),
@@ -52,11 +58,8 @@ export function TemplatesFolderPickerDialog({
     >
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Select templates folder</DialogTitle>
-          <DialogDescription>
-            Choose a folder in the company filesystem. Word templates in this folder
-            (and its subfolders) appear in the assignment lists.
-          </DialogDescription>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
         {tree.length === 0 ? (
@@ -96,7 +99,7 @@ export function TemplatesFolderPickerDialog({
               onOpenChange(false);
             }}
           >
-            Use this folder
+            {confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

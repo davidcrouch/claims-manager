@@ -45,6 +45,34 @@ function resolveLocalTemplatesDir(): string | null {
     ) ?? null
   );
 }
+export type ScenarioOutputFormat = 'docx' | 'pdf';
+
+export interface ScenarioConfigStored {
+  outputFormat?: ScenarioOutputFormat;
+  /**
+   * Legacy absolute category id. Migrated to slug+kind on read when still present.
+   * @deprecated Prefer completedReportsFolderSlug + completedReportsFolderKind.
+   */
+  completedReportsFolderCategoryId?: string | null;
+  /** Template folder slug; resolved against company or job filesystem at print time. */
+  completedReportsFolderSlug?: string | null;
+  completedReportsFolderKind?: 'company' | 'project' | null;
+}
+
+export interface TemplatesFolderInfo {
+  id: string;
+  displayName: string;
+  slug: string;
+  path: string;
+  kind?: 'company' | 'project';
+  jobId?: string | null;
+}
+
+export interface TemplatesFolderSetting {
+  filesystemCategoryId: string | null;
+  folder: TemplatesFolderInfo | null;
+}
+
 export interface ScenarioTemplateSetting {
   documentType: AssignableTemplateType;
   label: string;
@@ -56,23 +84,14 @@ export interface ScenarioTemplateSetting {
     mimeType: string;
     uploadStatus: string;
   } | null;
-}
-
-export interface TemplatesFolderInfo {
-  id: string;
-  displayName: string;
-  slug: string;
-  path: string;
-}
-
-export interface TemplatesFolderSetting {
-  filesystemCategoryId: string | null;
-  folder: TemplatesFolderInfo | null;
+  outputFormat: ScenarioOutputFormat;
+  completedReportsFolder: TemplatesFolderSetting;
 }
 
 interface OrgConfig extends Record<string, unknown> {
   documentTemplates?: {
     folderCategoryId?: string | null;
+    scenarios?: Partial<Record<string, ScenarioConfigStored>>;
   };
 }
 
@@ -251,6 +270,8 @@ export class TemplateRegistryService {
   async getSettings(params: { tenantId: string }): Promise<ScenarioTemplateSetting[]> {
     const templates = await this.templatesRepo.findByTenant({ tenantId: params.tenantId });
     const byType = new Map(templates.map((t) => [t.documentType, t]));
+    const orgConfig = await this.readOrgConfig(params.tenantId);
+    const scenarioConfigs = orgConfig.documentTemplates?.scenarios ?? {};
 
     const documentIds = [
       ...new Set(
@@ -263,6 +284,32 @@ export class TemplateRegistryService {
         ? await this.documentsRepo.findByIds(documentIds, params.tenantId)
         : [];
     const docsById = new Map(docs.map((doc) => [doc.id, doc]));
+
+    const completedFolderIds = [
+      ...new Set(
+        ASSIGNABLE_TEMPLATE_TYPES.map((documentType) => {
+          const id = scenarioConfigs[documentType]?.completedReportsFolderCategoryId;
+          return typeof id === 'string' && id.length > 0 ? id : null;
+        }).filter((id): id is string => id != null),
+      ),
+    ];
+    const folderInfoById = new Map<string, TemplatesFolderInfo | null>();
+    await Promise.all(
+      completedFolderIds.map(async (categoryId) => {
+        folderInfoById.set(categoryId, await this.resolveFolderInfo(categoryId));
+      }),
+    );
+
+    const [companyTemplateCats, projectTemplateCats] = await Promise.all([
+      this.filesystemService.getDefaultTemplateCategories('company'),
+      this.filesystemService.getDefaultTemplateCategories('project'),
+    ]);
+    const companyTemplateBySlug = new Map(
+      companyTemplateCats.map((cat) => [cat.slug, cat] as const),
+    );
+    const projectTemplateBySlug = new Map(
+      projectTemplateCats.map((cat) => [cat.slug, cat] as const),
+    );
 
     const settings: ScenarioTemplateSetting[] = [];
     for (const documentType of ASSIGNABLE_TEMPLATE_TYPES) {
@@ -281,16 +328,244 @@ export class TemplateRegistryService {
         }
       }
 
+      const scenarioConfig = scenarioConfigs[documentType];
+      const completedFolder = this.buildCompletedReportsFolderSetting({
+        scenarioConfig,
+        folderInfoById,
+        companyTemplateBySlug,
+        projectTemplateBySlug,
+      });
+
       settings.push({
         documentType,
         label: SCENARIO_META[documentType].label,
         description: SCENARIO_META[documentType].description,
         template,
         filesystemDocument,
+        outputFormat: scenarioConfig?.outputFormat === 'pdf' ? 'pdf' : 'docx',
+        completedReportsFolder: completedFolder,
       });
     }
 
     return settings;
+  }
+
+  private buildCompletedReportsFolderSetting(params: {
+    scenarioConfig: ScenarioConfigStored | undefined;
+    folderInfoById: Map<string, TemplatesFolderInfo | null>;
+    companyTemplateBySlug: Map<
+      string,
+      { id: string; displayName: string; slug: string }
+    >;
+    projectTemplateBySlug: Map<
+      string,
+      { id: string; displayName: string; slug: string }
+    >;
+  }): TemplatesFolderSetting {
+    const {
+      scenarioConfig,
+      folderInfoById,
+      companyTemplateBySlug,
+      projectTemplateBySlug,
+    } = params;
+
+    const completedFolderId =
+      typeof scenarioConfig?.completedReportsFolderCategoryId === 'string' &&
+      scenarioConfig.completedReportsFolderCategoryId.length > 0
+        ? scenarioConfig.completedReportsFolderCategoryId
+        : null;
+    const fromId =
+      completedFolderId != null
+        ? folderInfoById.get(completedFolderId) ?? null
+        : null;
+
+    let kind = scenarioConfig?.completedReportsFolderKind ?? null;
+    let slug =
+      typeof scenarioConfig?.completedReportsFolderSlug === 'string' &&
+      scenarioConfig.completedReportsFolderSlug.length > 0
+        ? scenarioConfig.completedReportsFolderSlug
+        : null;
+
+    // Migrate legacy absolute category ids → slug + kind.
+    if (!slug && fromId?.slug) {
+      slug = fromId.slug;
+      kind = fromId.kind ?? kind;
+    }
+    if (!kind && slug) {
+      if (projectTemplateBySlug.has(slug)) kind = 'project';
+      else if (companyTemplateBySlug.has(slug)) kind = 'company';
+      else if (fromId?.kind) kind = fromId.kind;
+    }
+
+    if (!slug || (kind !== 'company' && kind !== 'project')) {
+      return { filesystemCategoryId: null, folder: null };
+    }
+
+    const templateCat =
+      kind === 'project'
+        ? projectTemplateBySlug.get(slug)
+        : companyTemplateBySlug.get(slug);
+    const displayName =
+      templateCat?.displayName ?? fromId?.displayName ?? slug;
+
+    return {
+      filesystemCategoryId: null,
+      folder: {
+        id: templateCat?.id ?? fromId?.id ?? '',
+        displayName,
+        slug,
+        path: displayName,
+        kind,
+        jobId: null,
+      },
+    };
+  }
+
+  async setScenarioConfig(params: {
+    tenantId: string;
+    documentType: AssignableTemplateType;
+    outputFormat?: ScenarioOutputFormat;
+    completedReportsFolderCategoryId?: string | null;
+    completedReportsFolderSlug?: string | null;
+    completedReportsFolderKind?: 'company' | 'project' | null;
+  }): Promise<ScenarioTemplateSetting> {
+    const logPrefix = 'TemplateRegistryService.setScenarioConfig';
+
+    if (!isAssignableTemplateType(params.documentType)) {
+      throw new BadRequestException(`Invalid document type "${params.documentType}"`);
+    }
+
+    const config = await this.readOrgConfig(params.tenantId);
+    const existingScenario =
+      config.documentTemplates?.scenarios?.[params.documentType] ?? {};
+
+    const nextScenario: ScenarioConfigStored = {
+      ...existingScenario,
+    };
+
+    if (params.outputFormat !== undefined) {
+      nextScenario.outputFormat = params.outputFormat;
+    }
+
+    const explicitClear =
+      (params.completedReportsFolderSlug === null &&
+        params.completedReportsFolderKind === null &&
+        params.completedReportsFolderCategoryId === null) ||
+      (params.completedReportsFolderSlug === null &&
+        params.completedReportsFolderKind === null &&
+        params.completedReportsFolderCategoryId === undefined);
+
+    if (explicitClear) {
+      nextScenario.completedReportsFolderCategoryId = null;
+      nextScenario.completedReportsFolderSlug = null;
+      nextScenario.completedReportsFolderKind = null;
+    } else if (
+      params.completedReportsFolderKind === 'company' ||
+      params.completedReportsFolderKind === 'project'
+    ) {
+      const kind = params.completedReportsFolderKind;
+      let slug = params.completedReportsFolderSlug?.trim() || null;
+
+      // Allow legacy clients to send an instance/template category id; convert to slug.
+      if (!slug && params.completedReportsFolderCategoryId) {
+        const fromInstance = await this.resolveFolderInfo(
+          params.completedReportsFolderCategoryId,
+        );
+        if (fromInstance?.slug) {
+          slug = fromInstance.slug;
+        } else {
+          const templateCats =
+            await this.filesystemService.getDefaultTemplateCategories(kind);
+          const match = templateCats.find(
+            (cat) => cat.id === params.completedReportsFolderCategoryId,
+          );
+          slug = match?.slug ?? null;
+        }
+      }
+
+      if (!slug) {
+        throw new BadRequestException(
+          'completedReportsFolderSlug is required when setting a folder',
+        );
+      }
+
+      const templateCats =
+        await this.filesystemService.getDefaultTemplateCategories(kind);
+      const match = templateCats.find((cat) => cat.slug === slug);
+      if (!match) {
+        throw new BadRequestException(
+          `Folder slug "${slug}" was not found on the default ${kind} filesystem template`,
+        );
+      }
+
+      nextScenario.completedReportsFolderKind = kind;
+      nextScenario.completedReportsFolderSlug = match.slug;
+      nextScenario.completedReportsFolderCategoryId = null;
+    } else if (params.completedReportsFolderCategoryId) {
+      // Legacy: category id only — infer kind/slug from instance or templates.
+      const fromInstance = await this.resolveFolderInfo(
+        params.completedReportsFolderCategoryId,
+      );
+      if (fromInstance?.slug && fromInstance.kind) {
+        nextScenario.completedReportsFolderKind = fromInstance.kind;
+        nextScenario.completedReportsFolderSlug = fromInstance.slug;
+        nextScenario.completedReportsFolderCategoryId = null;
+      } else {
+        const [companyCats, projectCats] = await Promise.all([
+          this.filesystemService.getDefaultTemplateCategories('company'),
+          this.filesystemService.getDefaultTemplateCategories('project'),
+        ]);
+        const companyMatch = companyCats.find(
+          (cat) => cat.id === params.completedReportsFolderCategoryId,
+        );
+        const projectMatch = projectCats.find(
+          (cat) => cat.id === params.completedReportsFolderCategoryId,
+        );
+        if (projectMatch) {
+          nextScenario.completedReportsFolderKind = 'project';
+          nextScenario.completedReportsFolderSlug = projectMatch.slug;
+          nextScenario.completedReportsFolderCategoryId = null;
+        } else if (companyMatch) {
+          nextScenario.completedReportsFolderKind = 'company';
+          nextScenario.completedReportsFolderSlug = companyMatch.slug;
+          nextScenario.completedReportsFolderCategoryId = null;
+        } else {
+          throw new BadRequestException(
+            'Folder not found in the default company or project filesystem template',
+          );
+        }
+      }
+    }
+
+    const nextConfig: OrgConfig = {
+      ...config,
+      documentTemplates: {
+        ...(config.documentTemplates ?? {}),
+        scenarios: {
+          ...(config.documentTemplates?.scenarios ?? {}),
+          [params.documentType]: nextScenario,
+        },
+      },
+    };
+
+    await this.db
+      .update(organizations)
+      .set({ config: nextConfig })
+      .where(eq(organizations.id, params.tenantId));
+
+    this.logger.log(
+      `${logPrefix} — tenantId=${params.tenantId} documentType=${params.documentType}` +
+        ` outputFormat=${nextScenario.outputFormat ?? 'docx'}` +
+        ` folderKind=${nextScenario.completedReportsFolderKind ?? 'none'}` +
+        ` folderSlug=${nextScenario.completedReportsFolderSlug ?? 'none'}`,
+    );
+
+    const settings = await this.getSettings({ tenantId: params.tenantId });
+    const updated = settings.find((row) => row.documentType === params.documentType);
+    if (!updated) {
+      throw new NotFoundException(`Document type "${params.documentType}" not found`);
+    }
+    return updated;
   }
 
   async getFolderSetting(params: { tenantId: string }): Promise<TemplatesFolderSetting> {
@@ -314,7 +589,9 @@ export class TemplateRegistryService {
     let folder: TemplatesFolderInfo | null = null;
 
     if (params.filesystemCategoryId) {
-      folder = await this.resolveFolderInfo(params.filesystemCategoryId);
+      folder = await this.filesystemService.resolveCompanyCategoryInfo(
+        params.filesystemCategoryId,
+      );
       if (!folder) {
         throw new BadRequestException(
           'Folder not found in the company filesystem',
@@ -603,13 +880,17 @@ export class TemplateRegistryService {
     return this.templatesRepo.findById({ id: params.id, tenantId: params.tenantId });
   }
 
-  private async readFolderCategoryId(tenantId: string): Promise<string | null> {
+  private async readOrgConfig(tenantId: string): Promise<OrgConfig> {
     const [row] = await this.db
       .select({ config: organizations.config })
       .from(organizations)
       .where(eq(organizations.id, tenantId))
       .limit(1);
-    const config = (row?.config ?? {}) as OrgConfig;
+    return (row?.config ?? {}) as OrgConfig;
+  }
+
+  private async readFolderCategoryId(tenantId: string): Promise<string | null> {
+    const config = await this.readOrgConfig(tenantId);
     const id = config.documentTemplates?.folderCategoryId;
     return typeof id === 'string' && id.length > 0 ? id : null;
   }
@@ -617,7 +898,7 @@ export class TemplateRegistryService {
   private async resolveFolderInfo(
     categoryId: string,
   ): Promise<TemplatesFolderInfo | null> {
-    return this.filesystemService.resolveCompanyCategoryInfo(categoryId);
+    return this.filesystemService.resolveCategoryInfo(categoryId);
   }
 
   private async downloadFilesystemDocument(params: {

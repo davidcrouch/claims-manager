@@ -139,6 +139,11 @@ function HeaderSidebarTrigger() {
   );
 }
 
+function isInternalJobProvider(provider?: string | null): boolean {
+  const normalized = (provider ?? '').trim().toLowerCase();
+  return !normalized || normalized === 'internal' || normalized === 'direct';
+}
+
 function HeaderChrome({
   job,
   leading,
@@ -157,11 +162,18 @@ function HeaderChrome({
     return <div className="flex items-center self-stretch">{controls}</div>;
   }
 
+  const internal = isInternalJobProvider(job.provider);
+
   return (
     <div className="flex flex-col items-start justify-center gap-0.5">
       <Link
         href={`/jobs/${job.id}`}
-        className="max-w-48 truncate font-mono text-xs font-semibold uppercase leading-tight tracking-wide text-sidebar-foreground outline-none transition-colors hover:text-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+        className={cn(
+          'max-w-48 truncate rounded-md px-2 py-0.5 font-mono text-xs font-semibold uppercase leading-tight tracking-wide text-white outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-offset-1',
+          internal
+            ? 'bg-emerald-600 focus-visible:ring-emerald-500/40'
+            : 'bg-blue-600 focus-visible:ring-blue-500/40',
+        )}
         title="View current job"
       >
         {jobHeaderTitle(job)}

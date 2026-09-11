@@ -1,15 +1,17 @@
 /**
  * Crunchwork Insurance REST API invoice helpers.
  *
- * POST /invoices accepts oneOf:
+ * Full-amount vendor tax invoices — POST /invoices oneOf:
  *   - CreateVendorTaxInvoiceInput { invoiceType, purchaseOrderId }
- *     clones PO groups/items but does not invoice them — group totals stay 0
- *     until items are updated with completed + unitCost/quantity/tax.
+ *     clones PO groups/items; then POST /invoices/{id} with completed + pricing.
  *   - CreateInvoiceInput { name, account, invoiceType, groups[] }
  *
- * InvoiceGroup.subTotal/total/totalTax are response-only; CW computes them
- * from completed line items. Do not send header totals on vendor-tax create
- * (they are not on CreateVendorTaxInvoiceInput and can prevent the PO clone).
+ * Partial / progress claims — POST /progress-invoices (CreateTradeInvoiceInput):
+ *   header totals only ({ purchaseOrderId, invoiceNumber, total, totalTax, … }).
+ *   Do not reuse a sibling vendor-tax invoice id for a new progress claim.
+ *
+ * InvoiceGroup.subTotal/total/totalTax are response-only on vendor-tax invoices.
+ * Do not send header totals on vendor-tax create (not on CreateVendorTaxInvoiceInput).
  */
 
 import { copyUnitCostToBuyCostForCrunchwork } from '../catalog/catalog.utils';
@@ -54,6 +56,143 @@ export function buildCrunchworkVendorTaxInvoiceCreateBody(params: {
     // Omitting invoiceType causes upstream: Cannot read properties of undefined (reading 'externalReference').
     invoiceType: { externalReference: 'Invoice' },
   };
+}
+
+export type CrunchworkInvoiceKind = 'progress' | 'vendorTax';
+
+/**
+ * CreateTradeInvoiceInput / UpdateTradeInvoiceInput for POST /progress-invoices.
+ * Header-level progress claim (no line groups).
+ */
+export function buildCrunchworkProgressInvoiceBody(params: {
+  purchaseOrderId: string;
+  invoiceNumber?: string | null;
+  issueDate?: string | null;
+  comments?: string | null;
+  total: number;
+  totalTax?: number | null;
+}): JsonObject {
+  const body: JsonObject = {
+    purchaseOrderId: params.purchaseOrderId,
+    total: roundCents(params.total),
+  };
+  if (params.invoiceNumber) body.invoiceNumber = params.invoiceNumber;
+  if (params.issueDate) body.issueDate = params.issueDate;
+  if (params.comments) body.comments = params.comments;
+  if (params.totalTax != null && Number.isFinite(params.totalTax)) {
+    body.totalTax = roundCents(params.totalTax);
+  }
+  return body;
+}
+
+/**
+ * Publish as a CW progress invoice when invoice total < WO/PO billable total,
+ * or when a sibling has already been published to Crunchwork.
+ */
+export function shouldUseCrunchworkProgressInvoice(params: {
+  invoiceTotal: number;
+  billableTotal: number;
+  hasPriorPublishedSibling: boolean;
+}): boolean {
+  if (params.hasPriorPublishedSibling) return true;
+  const invoiceTotal = Number(params.invoiceTotal);
+  const billableTotal = Number(params.billableTotal);
+  if (!Number.isFinite(invoiceTotal) || invoiceTotal <= 0) return false;
+  if (!Number.isFinite(billableTotal) || billableTotal <= 0) return false;
+  return invoiceTotal + 0.02 < billableTotal;
+}
+
+/** GST-inclusive commercial total for a priced line (qty × unit ± markup + tax). */
+export function itemInclusiveLineTotal(item: JsonObject): number {
+  const qty = Number(item.quantity);
+  const unitCost = Number(item.unitCost);
+  if (!Number.isFinite(qty) || qty <= 0) return 0;
+  if (!Number.isFinite(unitCost) || unitCost < 0) return 0;
+  const perUnitNet = netUnitAmount(item, unitCost);
+  if (!(perUnitNet > 0)) return 0;
+  const taxRate = jsonRate(item.tax);
+  return roundCents(qty * perUnitNet * (1 + taxRate));
+}
+
+/** Sum GST-inclusive line totals across outbound invoice groups. */
+export function sumLocalGroupsInclusiveTotal(groups: JsonObject[]): number {
+  let sum = 0;
+  for (const item of walkInvoiceItems(groups)) {
+    sum += itemInclusiveLineTotal(item);
+  }
+  return roundCents(sum);
+}
+
+/**
+ * Resolve progress-invoice total + tax from header and/or per-line allocations.
+ * Prefer unique allocated amounts; fall back to header total with tax inferred
+ * from allocated / priced lines.
+ */
+export function computeProgressInvoiceMoney(params: {
+  groups: JsonObject[];
+  invoicedAmounts?: Record<string, number> | null;
+  headerTotal?: number | null;
+}): { total: number; totalTax: number; subTotal: number } {
+  const amounts = params.invoicedAmounts;
+  const allocatedRows: { inclusive: number; taxRate: number }[] = [];
+
+  if (amounts && typeof amounts === 'object' && !Array.isArray(amounts)) {
+    const seen = new Set<string>();
+    for (const item of walkInvoiceItems(params.groups)) {
+      const keys = invoiceItemMatchKeys(item);
+      const primary = keys[0];
+      if (!primary || seen.has(primary)) continue;
+      seen.add(primary);
+      const inclusive = lookupInvoicedAmount(amounts, item);
+      if (inclusive == null || inclusive <= 0) continue;
+      allocatedRows.push({ inclusive, taxRate: jsonRate(item.tax) });
+    }
+  }
+
+  if (allocatedRows.length > 0) {
+    let total = 0;
+    let totalTax = 0;
+    for (const row of allocatedRows) {
+      total += row.inclusive;
+      const ex = row.taxRate > 0 ? row.inclusive / (1 + row.taxRate) : row.inclusive;
+      totalTax += row.inclusive - ex;
+    }
+    total = roundCents(total);
+    totalTax = roundCents(totalTax);
+    return { total, totalTax, subTotal: roundCents(total - totalTax) };
+  }
+
+  const header = Number(params.headerTotal);
+  const total =
+    Number.isFinite(header) && header > 0
+      ? roundCents(header)
+      : sumLocalGroupsInclusiveTotal(params.groups);
+  const taxRate = inferGroupsTaxRate(params.groups);
+  const subTotal = taxRate > 0 ? roundCents(total / (1 + taxRate)) : total;
+  return { total, totalTax: roundCents(total - subTotal), subTotal };
+}
+
+function walkInvoiceItems(groups: JsonObject[]): JsonObject[] {
+  const items: JsonObject[] = [];
+  for (const group of groups) {
+    for (const item of asObjectArray(group.items)) items.push(item);
+    for (const combo of asObjectArray(group.combos)) {
+      for (const item of asObjectArray(combo.items)) items.push(item);
+    }
+  }
+  return items;
+}
+
+function inferGroupsTaxRate(groups: JsonObject[]): number {
+  for (const item of walkInvoiceItems(groups)) {
+    const rate = jsonRate(item.tax);
+    if (rate > 0) return rate;
+  }
+  return 0;
+}
+
+function roundCents(n: number): number {
+  return Math.round(n * 100) / 100;
 }
 
 export function crunchworkInvoiceGroupsFromPayload(

@@ -497,14 +497,14 @@ export const ItemRow = memo(function ItemRow({
 
       {/* Category */}
       {showCategory && (
-        <td data-col="category" className={cn('whitespace-nowrap', LI_TD_CELL)}>
+        <td data-col="category" className="whitespace-nowrap px-2 py-2.5">
           <LineItemMetaBadge label={category === '—' ? null : category} tone="slate" />
         </td>
       )}
 
       {/* Type */}
       {showItemTypeColumn && (
-        <td data-col="type" className={cn('whitespace-nowrap', LI_TD_CELL)}>
+        <td data-col="type" className="whitespace-nowrap px-2 py-2.5">
           <LineItemMetaBadge label={item.type} tone="blue" />
         </td>
       )}

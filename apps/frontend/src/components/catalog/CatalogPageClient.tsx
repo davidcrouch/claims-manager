@@ -299,7 +299,7 @@ export function CatalogPageClient({
           </HeaderActionToolbar>
         </SetHeaderActions>
 
-        <div className="flex shrink-0 flex-col border-b border-slate-200 bg-background px-6 pb-3">
+        <div className="flex shrink-0 flex-col border-b border-slate-200 bg-background px-2 pb-3">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
             <div className="relative flex-1">
               <Search
@@ -325,7 +325,7 @@ export function CatalogPageClient({
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-6 pt-4">
           {unresolvedReferences.length > 0 && (
             <div className="mb-4">
               <CatalogUnresolvedPanel

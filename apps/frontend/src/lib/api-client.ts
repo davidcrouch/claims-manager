@@ -2906,6 +2906,22 @@ export function createApiClient(options?: ApiClientOptions) {
       });
     },
 
+    updateDocumentTemplateConfig(
+      documentType: string,
+      body: {
+        outputFormat?: 'docx' | 'pdf';
+        completedReportsFolderCategoryId?: string | null;
+      },
+    ): Promise<DocumentTemplateSetting> {
+      return fetchApi<DocumentTemplateSetting>(
+        `/document-templates/${documentType}/config`,
+        {
+          method: 'PUT',
+          body: JSON.stringify(body),
+        },
+      );
+    },
+
     // ── MCP Integrations ──
 
     listMcpIntegrations(): Promise<import('@/types/api').McpIntegration[]> {
@@ -3765,6 +3781,10 @@ export interface DocumentTemplateSetting {
     mimeType: string;
     uploadStatus: string;
   } | null;
+  /** Default generation format for this scenario. */
+  outputFormat?: 'docx' | 'pdf';
+  /** Default folder for saving completed reports of this type. */
+  completedReportsFolder?: DocumentTemplatesFolderSetting | null;
 }
 
 export interface DocumentTemplatesFolderInfo {
@@ -3772,6 +3792,8 @@ export interface DocumentTemplatesFolderInfo {
   displayName: string;
   slug: string;
   path: string;
+  kind?: 'company' | 'project';
+  jobId?: string | null;
 }
 
 export interface DocumentTemplatesFolderSetting {

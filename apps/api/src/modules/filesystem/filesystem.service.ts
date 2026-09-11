@@ -89,18 +89,37 @@ export class FilesystemService {
     slug: string;
     path: string;
   } | null> {
+    const resolved = await this.resolveCategoryInfo(categoryId);
+    if (!resolved || resolved.kind !== 'company') return null;
+    return {
+      id: resolved.id,
+      displayName: resolved.displayName,
+      slug: resolved.slug,
+      path: resolved.path,
+    };
+  }
+
+  /**
+   * Resolve a category in either the company or a project filesystem for this tenant.
+   */
+  async resolveCategoryInfo(categoryId: string): Promise<{
+    id: string;
+    displayName: string;
+    slug: string;
+    path: string;
+    kind: 'company' | 'project';
+    jobId: string | null;
+  } | null> {
     const tenantId = this.tenantContext.getTenantId();
     this.logger.debug(
-      `${LOG}.resolveCompanyCategoryInfo tenantId=${tenantId} categoryId=${categoryId}`,
+      `${LOG}.resolveCategoryInfo tenantId=${tenantId} categoryId=${categoryId}`,
     );
 
-    const company = await this.filesystemsRepo.findCompanyByTenant(tenantId);
-    if (!company) return null;
-
     const cat = await this.filesystemsRepo.findCategoryById(categoryId);
-    if (!cat || cat.filesystemId !== company.id || cat.archivedAt) {
-      return null;
-    }
+    if (!cat || cat.archivedAt) return null;
+
+    const filesystem = await this.filesystemsRepo.findById(tenantId, cat.filesystemId);
+    if (!filesystem) return null;
 
     const parts: string[] = [cat.displayName];
     let parentId = cat.parentCategoryId;
@@ -118,6 +137,8 @@ export class FilesystemService {
       displayName: cat.displayName,
       slug: cat.slug,
       path: parts.join(' / '),
+      kind: filesystem.kind === 'project' ? 'project' : 'company',
+      jobId: filesystem.jobId ?? null,
     };
   }
 
@@ -444,6 +465,49 @@ export class FilesystemService {
       defaultCompanyTemplateId: org?.defaultCompanyFilesystemTemplateId ?? null,
       defaultProjectTemplateId: org?.defaultProjectFilesystemTemplateId ?? null,
     };
+  }
+
+  /**
+   * Categories from the org's default company or project filesystem template
+   * (slug blueprint). Empty when that default template is not set.
+   */
+  async getDefaultTemplateCategories(
+    kind: 'company' | 'project',
+  ): Promise<
+    Array<{
+      id: string;
+      parentCategoryId: string | null;
+      displayName: string;
+      description: string | null;
+      slug: string;
+      sortOrder: number;
+    }>
+  > {
+    const tenantId = this.tenantContext.getTenantId();
+    const defaults = await this.getFilesystemDefaults();
+    const templateId =
+      kind === 'company'
+        ? defaults.defaultCompanyTemplateId
+        : defaults.defaultProjectTemplateId;
+    if (!templateId) return [];
+
+    const template = await this.templatesRepo.findAccessible(templateId, tenantId);
+    if (!template || template.kind !== kind) return [];
+
+    const categories = await this.templatesRepo.getCategories(template.id);
+    return categories.map((cat) => ({
+      id: cat.id,
+      parentCategoryId: cat.parentCategoryId,
+      displayName: cat.displayName,
+      description: cat.description,
+      slug: cat.slug,
+      sortOrder: cat.sortOrder,
+    }));
+  }
+
+  /** @deprecated Prefer getDefaultTemplateCategories('project') */
+  async getDefaultProjectTemplateCategories() {
+    return this.getDefaultTemplateCategories('project');
   }
 
   async updateFilesystemDefaults(input: {
